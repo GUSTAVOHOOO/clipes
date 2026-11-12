@@ -1,0 +1,158 @@
+[
+  {
+    "id": "c1",
+    "titulo": "O término no observatório",
+    "inicio": 23,
+    "fim": 45,
+    "crop": {
+      "cx": 0.5
+    },
+    "nota": {
+      "total": 8,
+      "eixos": [
+        {
+          "nome": "Gancho",
+          "valor": 9,
+          "justificativa": "Abre com um insulto direto: prende nos dois primeiros segundos."
+        },
+        {
+          "nome": "Autossuficiência",
+          "valor": 8,
+          "justificativa": "Briga completa, com começo e fim, sem precisar do resto do filme."
+        },
+        {
+          "nome": "Emoção/energia",
+          "valor": 8,
+          "justificativa": "Discussão acelerada que sobe de tom até a ruptura."
+        },
+        {
+          "nome": "Valor",
+          "valor": 6,
+          "justificativa": "Diverte, mas entrega pouca informação nova."
+        },
+        {
+          "nome": "Fechamento",
+          "valor": 9,
+          "justificativa": "\"We are done.\" encerra o conflito de forma seca."
+        }
+      ]
+    }
+  },
+  {
+    "id": "c2",
+    "titulo": "Contagem regressiva para a ação",
+    "inicio": 2393.5,
+    "fim": 2419.5,
+    "crop": {
+      "cx": 0.46
+    },
+    "nota": {
+      "total": 6.8,
+      "eixos": [
+        {
+          "nome": "Gancho",
+          "valor": 7,
+          "justificativa": "\"Are you ready?\" cria expectativa, mas sem contexto."
+        },
+        {
+          "nome": "Autossuficiência",
+          "valor": 6,
+          "justificativa": "Depende de saber que há uma operação em curso."
+        },
+        {
+          "nome": "Emoção/energia",
+          "valor": 9,
+          "justificativa": "Gritos e ordens em sequência: energia alta do início ao fim."
+        },
+        {
+          "nome": "Valor",
+          "valor": 5,
+          "justificativa": "Pouca informação; vale pela adrenalina."
+        },
+        {
+          "nome": "Fechamento",
+          "valor": 7,
+          "justificativa": "\"Come on, go!\" fecha no auge, sem resolução."
+        }
+      ]
+    }
+  },
+  {
+    "id": "c3",
+    "titulo": "Você me esqueceu na Terra",
+    "inicio": 4761,
+    "fim": 4816,
+    "crop": {
+      "cx": 0.55
+    },
+    "nota": {
+      "total": 7.8,
+      "eixos": [
+        {
+          "nome": "Gancho",
+          "valor": 8,
+          "justificativa": "Confissão logo de cara: \"I was young... and a dick\"."
+        },
+        {
+          "nome": "Autossuficiência",
+          "valor": 7,
+          "justificativa": "Entende-se o conflito do casal sem ver o resto."
+        },
+        {
+          "nome": "Emoção/energia",
+          "valor": 9,
+          "justificativa": "Mistura ação e mágoa; pico em \"You broke my heart\"."
+        },
+        {
+          "nome": "Valor",
+          "valor": 7,
+          "justificativa": "Arco de reconciliação claro em menos de um minuto."
+        },
+        {
+          "nome": "Fechamento",
+          "valor": 8,
+          "justificativa": "\"I am sorry\" seguido de \"Good ad-lib\" fecha com humor."
+        }
+      ]
+    }
+  },
+  {
+    "id": "c4",
+    "titulo": "O mundo mudou, Celia",
+    "inicio": 7100.5,
+    "fim": 7174.5,
+    "crop": {
+      "cx": 0.5
+    },
+    "nota": {
+      "total": 7.4,
+      "eixos": [
+        {
+          "nome": "Gancho",
+          "valor": 6,
+          "justificativa": "Começa no meio do combate; leva alguns segundos para situar."
+        },
+        {
+          "nome": "Autossuficiência",
+          "valor": 6,
+          "justificativa": "Faz mais sentido para quem viu o conflito anterior."
+        },
+        {
+          "nome": "Emoção/energia",
+          "valor": 8,
+          "justificativa": "Clímax com contagem de memória e ordem de abortar."
+        },
+        {
+          "nome": "Valor",
+          "valor": 8,
+          "justificativa": "Traz a mensagem central do filme sobre mudança."
+        },
+        {
+          "nome": "Fechamento",
+          "valor": 9,
+          "justificativa": "\"Could have gone worse\" é um fecho natural e leve."
+        }
+      ]
+    }
+  }
+]

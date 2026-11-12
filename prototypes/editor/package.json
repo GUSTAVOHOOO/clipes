@@ -1,0 +1,16 @@
+{
+  "name": "clipes-editor-prototipo",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "description": "Protótipo descartável do editor de Cortes do Clipes (Tauri 2)",
+  "license": "Apache-2.0",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "preparar": "node scripts/preparar.mjs"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

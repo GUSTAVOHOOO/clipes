@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clipes · editor de Cortes</title>
+  <link rel="stylesheet" href="estilo.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="barra">
+      <div class="marca">
+        <span class="marca-nome">Clipes</span>
+        <span class="marca-fonte" id="fonte-nome">Carregando Fonte…</span>
+      </div>
+      <div class="barra-acoes">
+        <div class="silencio" id="silencio">
+          <label class="interruptor">
+            <input type="checkbox" role="switch" id="silencio-ativo">
+            <span class="interruptor-trilho" aria-hidden="true"></span>
+            <span>Remover silêncios</span>
+          </label>
+          <label class="silencio-limiar">
+            <span class="sr">Pausas acima de</span>
+            <select id="silencio-limiar" title="Pausas acima de">
+              <option value="0.4">acima de 0,4 s</option>
+              <option value="0.7" selected>acima de 0,7 s</option>
+              <option value="1.2">acima de 1,2 s</option>
+            </select>
+          </label>
+          <span class="silencio-resumo" id="silencio-resumo"></span>
+        </div>
+        <button class="botao primario" id="exportar" type="button">Exportar Corte</button>
+      </div>
+    </header>
+
+    <aside class="lateral" id="lista-cortes" aria-label="Cortes"></aside>
+
+    <main class="palco">
+      <section class="fonte-coluna" aria-label="Fonte e enquadramento">
+        <div class="fonte-cabecalho">
+          <h2 class="corte-nome" id="corte-nome">—</h2>
+          <p class="corte-detalhe" id="corte-detalhe"></p>
+        </div>
+        <figure class="fonte-vista" id="fonte-vista">
+          <canvas id="fonte-canvas" width="640" height="360"></canvas>
+          <div class="crop" id="crop" role="slider" tabindex="0" aria-label="Enquadramento 9:16" aria-valuemin="0" aria-valuemax="100">
+            <span class="crop-alca" aria-hidden="true"></span>
+          </div>
+          <figcaption class="fonte-legenda">Fonte 16:9 · arraste o retângulo para enquadrar</figcaption>
+        </figure>
+        <dl class="ficha" id="ficha"></dl>
+        <div class="atalhos" aria-label="Atalhos">
+          <span><kbd>Espaço</kbd> tocar</span>
+          <span><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd> voltar, parar, avançar</span>
+          <span><kbd>←</kbd><kbd>→</kbd> um quadro</span>
+          <span><kbd>I</kbd><kbd>O</kbd> marcar início e fim</span>
+          <span><kbd>Alt</kbd> sem encaixe em Frase</span>
+        </div>
+      </section>
+
+      <section class="preview-coluna" aria-label="Preview 9:16">
+        <div class="preview" id="preview">
+          <video id="video" playsinline preload="auto"></video>
+          <div class="legenda-palco" id="legenda-palco"></div>
+          <div class="borda-aviso" id="borda-aviso" hidden>
+            <span class="borda-aviso-rotulo" id="borda-aviso-rotulo"></span>
+            <span class="borda-aviso-tempo" id="borda-aviso-tempo"></span>
+          </div>
+          <div class="midia-status" id="midia-status">
+            <span class="midia-status-texto" id="midia-status-texto">Fonte direta</span>
+            <span class="midia-status-barra"><span id="midia-status-pct"></span></span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <aside class="painel" aria-label="Transcrição e legenda">
+      <div class="abas" role="tablist">
+        <button class="aba" role="tab" id="aba-transcricao" aria-selected="true" aria-controls="painel-transcricao">Transcrição</button>
+        <button class="aba" role="tab" id="aba-estilo" aria-selected="false" aria-controls="painel-estilo">Estilo da legenda</button>
+      </div>
+      <div class="painel-corpo" id="painel-transcricao" role="tabpanel" aria-labelledby="aba-transcricao"></div>
+      <div class="painel-corpo" id="painel-estilo" role="tabpanel" aria-labelledby="aba-estilo" hidden></div>
+    </aside>
+
+    <section class="edicao" aria-label="Timeline">
+      <div class="transporte">
+        <div class="borda-grupo" aria-label="Início do Corte">
+          <span class="borda-rotulo">Início</span>
+          <span class="tempo" id="tempo-inicio">0:00.00</span>
+          <button class="botao fino" type="button" data-estender="inicio:+1" title="Incluir a Frase anterior">+1 Frase</button>
+          <button class="botao fino" type="button" data-estender="inicio:-1" title="Tirar a primeira Frase">−1 Frase</button>
+        </div>
+        <div class="transporte-centro">
+          <button class="botao icone" type="button" id="ir-inicio" title="Ir ao início do Corte" aria-label="Ir ao início do Corte">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3h2v10H3zM13 3v10L6 8z"/></svg>
+          </button>
+          <button class="botao icone tocar" type="button" id="tocar" title="Tocar (Espaço)" aria-label="Tocar">
+            <svg class="i-tocar" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9.5-5.5z"/></svg>
+            <svg class="i-pausar" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>
+          </button>
+          <button class="botao icone" type="button" id="ir-fim" title="Ir ao fim do Corte" aria-label="Ir ao fim do Corte">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 3h2v10h-2zM3 3v10l7-5z"/></svg>
+          </button>
+          <span class="tempo grande" id="tempo-atual">0:00.00</span>
+          <span class="tempo fraco" id="tempo-duracao">/ 0:00</span>
+          <span class="velocidade" id="velocidade" hidden></span>
+        </div>
+        <div class="borda-grupo fim" aria-label="Fim do Corte">
+          <button class="botao fino" type="button" data-estender="fim:-1" title="Tirar a última Frase">−1 Frase</button>
+          <button class="botao fino" type="button" data-estender="fim:+1" title="Incluir a próxima Frase">+1 Frase</button>
+          <span class="tempo" id="tempo-fim">0:00.00</span>
+          <span class="borda-rotulo">Fim</span>
+        </div>
+        <div class="zoom">
+          <button class="botao icone fino" type="button" id="zoom-menos" aria-label="Diminuir zoom">−</button>
+          <button class="botao fino" type="button" id="zoom-ajustar">Ajustar</button>
+          <button class="botao icone fino" type="button" id="zoom-mais" aria-label="Aumentar zoom">+</button>
+        </div>
+      </div>
+      <div class="timeline" id="timeline"></div>
+    </section>
+  </div>
+
+  <dialog class="exportacao" id="exportacao">
+    <h2 id="exp-titulo">Exportando Corte</h2>
+    <p class="exp-detalhe" id="exp-detalhe"></p>
+    <div class="exp-barra"><span id="exp-pct-barra"></span></div>
+    <p class="exp-linha"><span id="exp-pct">0%</span><span id="exp-encoder"></span></p>
+    <p class="exp-caminho" id="exp-caminho" hidden></p>
+    <div class="exp-acoes">
+      <button class="botao" type="button" id="exp-abrir" hidden>Abrir pasta</button>
+      <button class="botao primario" type="button" id="exp-fechar" hidden>Fechar</button>
+    </div>
+  </dialog>
+</body>
+</html>

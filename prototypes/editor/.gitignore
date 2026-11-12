@@ -1,4 +1,5 @@
 media/
 target/
+node_modules/
 __pycache__/
 src-tauri/gen/
