@@ -1,0 +1,4 @@
+media/
+target/
+__pycache__/
+src-tauri/gen/

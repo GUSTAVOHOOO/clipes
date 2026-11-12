@@ -1,0 +1,1 @@
+{ "$schema":"https://schema.tauri.app/config/2", "productName":"Clipes protótipo", "version":"0.1.0", "identifier":"br.clipes.prototype.editor", "build":{"frontendDist":"web"}, "app":{"windows":[{"title":"Clipes — protótipo", "url":"http://127.0.0.1:4173/", "width":1200,"height":900}],"security":{"csp":null}},"bundle":{"active":false} }
