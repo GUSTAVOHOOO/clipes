@@ -58,6 +58,14 @@ _Evitar_: clipe, short, highlight
 O texto falado da Fonte com timestamps por palavra, registrado no idioma em que foi dito. Os Cortes são escolhidos a partir dela e as legendas saem dela.
 _Evitar_: legenda (legenda é o que aparece no Corte, derivada da Transcrição)
 
+**Frase** (Sentence)
+Menor trecho da Transcrição que pode ser apontado: termina numa pontuação ou numa pausa da fala. As bordas de um Corte sempre coincidem com bordas de Frase.
+_Evitar_: segmento, sentença
+
+**Nota** (Score)
+Avaliação explicável do potencial de um Corte, formada por eixos nomeados (como Gancho, Autossuficiência e Fechamento), cada um com uma justificativa. Não é previsão de views.
+_Evitar_: score viral, pontuação de viralidade
+
 **Motor de transcrição** (Transcription Engine)
 O que produz a Transcrição. Pode ser local, rodando na máquina do usuário (o padrão), ou remoto, via API paga escolhida pelo usuário.
 _Evitar_: modelo de transcrição (o modelo é uma escolha dentro de um Motor)
