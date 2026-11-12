@@ -30,6 +30,14 @@ _Evitar_: voice-over, locução
 **Roteiro** (Script)
 Texto da Narração. Pode ser sugerido pelo Provedor a partir da Transcrição, mas só vale depois que o usuário o revisa.
 
+**Perfil de canal** (Channel Profile)
+Conjunto salvo de escolhas para um canal do usuário: tipo de vídeo padrão, idioma, voz da Narração, estilo de legenda e Fontes permitidas. Um usuário pode ter vários, um por canal.
+_Evitar_: preset, template, conta
+
+**Empacotamento** (Packaging)
+O que acompanha um vídeo na publicação, sugerido a partir da Transcrição e editável: título, descrição com crédito da Fonte, tags, hashtags e ideia de thumbnail.
+_Evitar_: metadados, SEO
+
 **Permissão** (Permission)
 Registro de que o criador da Fonte autorizou o uso do material, com origem e escopo. Protege contra reivindicações de direitos autorais, mas não garante monetização.
 

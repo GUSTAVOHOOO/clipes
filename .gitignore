@@ -4,3 +4,6 @@
 profile*/
 clipes-hars/
 node_modules/
+
+# Clones de projetos open source usados como referência (ver ADR-0002)
+reference/
