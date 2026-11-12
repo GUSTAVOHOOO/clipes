@@ -63,5 +63,5 @@ O que produz a Transcrição. Pode ser local, rodando na máquina do usuário (o
 _Evitar_: modelo de transcrição (o modelo é uma escolha dentro de um Motor)
 
 **Provedor** (Provider)
-O backend de LLM que escolhe e pontua Cortes e escreve títulos e Roteiros. Existe em três tipos: **assinatura via CLI** (um agente como Claude Code ou Codex usando a assinatura do usuário), **chave de API** e **modelo local**.
+O backend de LLM que escolhe e pontua Cortes, sugere o Empacotamento e os Roteiros e traduz legendas. Ele recebe só texto e aponta trechos da Transcrição: nunca define tempos por conta própria. Existe em três tipos: **assinatura via CLI** (um agente como Claude Code ou Codex usando a assinatura do usuário), **chave de API** e **modelo local**.
 _Evitar_: IA, modelo, conta
