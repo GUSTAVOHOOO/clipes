@@ -1,0 +1,6 @@
+# Capturas de tráfego contêm tokens de sessão e credenciais: nunca versionar
+*.har
+*.har.zip
+profile*/
+clipes-hars/
+node_modules/

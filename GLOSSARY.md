@@ -2,6 +2,10 @@
 
 Termos canônicos do domínio. Português na conversa e nos docs; o nome em inglês entre parênteses é o usado no código.
 
+**Canal dark** (Dark Channel)
+Canal de vídeos sem rosto nem identidade do apresentador, que publica Cortes e vídeos produzidos a partir de Fontes de terceiros com permissão (por exemplo, criadores que liberam cortes). É o público-alvo do Clipes: o produto é uma fábrica de Cortes e vídeos para Canais dark.
+_Evitar_: canal faceless, canal de cortes
+
 **Fonte** (Source)
 O vídeo original de onde os Cortes são extraídos: um arquivo local ou uma live já gravada (VOD).
 _Evitar_: vídeo original, input
