@@ -69,3 +69,5 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 
 - `python` pode abrir o alias da Microsoft Store (`Python was not found`). Use `py`.
 - `awk`, `sed` e `grep` não existem no PowerShell; rode-os pelo Git Bash.
+
+- Se `cargo` não estiver no PATH no Windows, use `& "$env:USERPROFILE\.cargo\bin\cargo.exe"` ou acrescente `$env:USERPROFILE\.cargo\bin` ao PATH da sessão.
