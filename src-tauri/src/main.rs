@@ -1,14 +1,21 @@
 use tauri::Emitter;
 
 #[tauri::command]
-fn core_dispatch(
+async fn core_dispatch(
     app: tauri::AppHandle,
     name: String,
     arguments: serde_json::Value,
 ) -> clipes_core::CommandResult {
-    clipes_core::dispatch(&name, arguments, &mut |event| {
-        let _ = app.emit("core-progress", event);
+    tauri::async_runtime::spawn_blocking(move || {
+        clipes_core::dispatch(&name, arguments, &mut |event| {
+            let _ = app.emit("core-progress", event);
+        })
     })
+    .await
+    .map_err(|error| clipes_core::CoreError {
+        code: "dispatch_failed".into(),
+        message: error.to_string(),
+    })?
 }
 
 fn main() {

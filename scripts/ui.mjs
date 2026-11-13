@@ -31,6 +31,14 @@ try {
   assert.match(await page.locator('main').innerText(), /0\.1\.0/);
   assert.match(await page.locator('main').innerText(), /Apache-2\.0/);
   await page.screenshot({ path: 'shots/about.png' });
+  await page.getByRole('button', { name: 'Componentes' }).click();
+  await page.getByRole('heading', { name: 'Componentes' }).waitFor();
+  assert.match(await page.locator('main').innerText(), /GPL-3\.0-or-later/);
+  assert.match(await page.locator('main').innerText(), /Unlicense/);
+  assert.equal(await page.getByLabel('Limite do cache (GB)').inputValue(), '10');
+  page.once('dialog', dialog => dialog.dismiss());
+  await page.getByRole('button', { name: 'Baixar' }).first().click();
+  await page.screenshot({ path: 'shots/components.png' });
   await page.getByRole('button', { name: 'Preferências' }).click();
   await page.getByLabel('Tema').selectOption('claro');
   await page.getByLabel('Idioma').selectOption('en');
