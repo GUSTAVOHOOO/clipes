@@ -1,12 +1,16 @@
-// PROTÓTIPO DESCARTÁVEL (#22): 4 direções de design do Clipes, trocadas por ?variant=A..D e ?tela=importar|cortes|editor.
+// PROTÓTIPO DESCARTÁVEL (#22): 5 direções (E = junção escolhida pelo dev) de design do Clipes, trocadas por ?variant=A..D e ?tela=importar|cortes|editor.
 import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import * as A from './variantes/VarianteA'
 import * as B from './variantes/VarianteB'
 import * as C from './variantes/VarianteC'
 import * as D from './variantes/VarianteD'
+import * as E from './variantes/VarianteE'
+import * as F from './variantes/VarianteF'
+import * as G from './variantes/VarianteG'
+import * as H from './variantes/VarianteH'
 
-const VARIANTES = { A, B, C, D } as const
+const VARIANTES = { A, B, C, D, E, F, G, H } as const
 type K = keyof typeof VARIANTES
 export type Tela = 'importar' | 'cortes' | 'editor'
 export type PropsVariante = { tela: Tela; irPara: (t: Tela) => void }
