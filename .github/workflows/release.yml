@@ -68,4 +68,3 @@ jobs:
           test "${#windows[@]}" -eq 1 && test "${#appimages[@]}" -eq 1 && test "${#debs[@]}" -eq 1
           sha256sum "${windows[@]}" "${appimages[@]}" "${debs[@]}" > SHA256SUMS.txt
           gh release create "$RELEASE_TAG" "${windows[@]}" "${appimages[@]}" "${debs[@]}" SHA256SUMS.txt --generate-notes
-
