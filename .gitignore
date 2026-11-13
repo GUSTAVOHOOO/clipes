@@ -11,5 +11,9 @@ reference/
 /dist/
 core/target/
 src-tauri/gen/
-
 /shots/
+
+# Mídia local do dataset de benchmarks e cache de testes Python
+benchmarks/dataset/local/
+benchmarks/dataset/tests/__pycache__/
+benchmarks/dataset/__pycache__/

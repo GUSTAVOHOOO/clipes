@@ -1,0 +1,6488 @@
+{
+  "status": "provisória até a revisão",
+  "source": "QiwQ62ypdcI",
+  "samples": [
+    {
+      "start": 16.304,
+      "end": 76.736,
+      "language": "pt",
+      "language_probability": 0.9907,
+      "words": [
+        {
+          "start": 16.304,
+          "end": 16.824,
+          "word": " Streamers",
+          "probability": 0.6405
+        },
+        {
+          "start": 16.824,
+          "end": 17.004,
+          "word": " ao",
+          "probability": 0.9829
+        },
+        {
+          "start": 17.004,
+          "end": 17.304,
+          "word": " vivo",
+          "probability": 0.9976
+        },
+        {
+          "start": 17.304,
+          "end": 17.524,
+          "word": " de",
+          "probability": 0.9351
+        },
+        {
+          "start": 17.524,
+          "end": 17.764,
+          "word": " novo,",
+          "probability": 0.999
+        },
+        {
+          "start": 17.824,
+          "end": 17.944,
+          "word": " ó",
+          "probability": 0.6318
+        },
+        {
+          "start": 17.944,
+          "end": 17.984,
+          "word": " o",
+          "probability": 0.7798
+        },
+        {
+          "start": 17.984,
+          "end": 18.684,
+          "word": " Pururuca",
+          "probability": 0.8156
+        },
+        {
+          "start": 18.684,
+          "end": 18.884,
+          "word": " Nossa",
+          "probability": 0.3496
+        },
+        {
+          "start": 18.884,
+          "end": 19.404,
+          "word": " primeira",
+          "probability": 0.9897
+        },
+        {
+          "start": 19.404,
+          "end": 20.224,
+          "word": " vítima",
+          "probability": 0.9873
+        },
+        {
+          "start": 20.224,
+          "end": 20.504,
+          "word": " ali,",
+          "probability": 0.8091
+        },
+        {
+          "start": 20.564,
+          "end": 20.684,
+          "word": " ó",
+          "probability": 0.9946
+        },
+        {
+          "start": 20.684,
+          "end": 21.064,
+          "word": " Olha",
+          "probability": 0.9707
+        },
+        {
+          "start": 21.064,
+          "end": 21.204,
+          "word": " que",
+          "probability": 0.6177
+        },
+        {
+          "start": 21.204,
+          "end": 21.744,
+          "word": " caboclinho",
+          "probability": 0.8274
+        },
+        {
+          "start": 21.744,
+          "end": 22.464,
+          "word": " bonitinho",
+          "probability": 0.9992
+        },
+        {
+          "start": 23.004,
+          "end": 23.404,
+          "word": " Olha",
+          "probability": 0.9839
+        },
+        {
+          "start": 23.404,
+          "end": 23.604,
+          "word": " o",
+          "probability": 0.999
+        },
+        {
+          "start": 23.604,
+          "end": 24.084,
+          "word": " bondão",
+          "probability": 0.9985
+        },
+        {
+          "start": 24.084,
+          "end": 24.204,
+          "word": " que",
+          "probability": 0.9912
+        },
+        {
+          "start": 24.204,
+          "end": 24.344,
+          "word": " eles",
+          "probability": 1.0
+        },
+        {
+          "start": 24.344,
+          "end": 24.524,
+          "word": " estão",
+          "probability": 0.79
+        },
+        {
+          "start": 24.524,
+          "end": 25.064,
+          "word": " reunidos,",
+          "probability": 0.8206
+        },
+        {
+          "start": 25.204,
+          "end": 25.324,
+          "word": " ó",
+          "probability": 1.0
+        },
+        {
+          "start": 25.324,
+          "end": 25.804,
+          "word": " Tamo",
+          "probability": 0.9041
+        },
+        {
+          "start": 25.804,
+          "end": 25.924,
+          "word": " com",
+          "probability": 1.0
+        },
+        {
+          "start": 25.924,
+          "end": 26.084,
+          "word": " esse",
+          "probability": 0.9995
+        },
+        {
+          "start": 26.084,
+          "end": 26.404,
+          "word": " item",
+          "probability": 0.9995
+        },
+        {
+          "start": 26.404,
+          "end": 26.664,
+          "word": " aqui,",
+          "probability": 0.999
+        },
+        {
+          "start": 26.784,
+          "end": 26.844,
+          "word": " ó",
+          "probability": 1.0
+        },
+        {
+          "start": 27.424,
+          "end": 27.824,
+          "word": " Volante",
+          "probability": 0.8669
+        },
+        {
+          "start": 27.824,
+          "end": 28.224,
+          "word": " doidão",
+          "probability": 0.9932
+        },
+        {
+          "start": 28.904,
+          "end": 29.304,
+          "word": " Vamos",
+          "probability": 0.9614
+        },
+        {
+          "start": 29.304,
+          "end": 29.704,
+          "word": " usar",
+          "probability": 0.7422
+        },
+        {
+          "start": 29.704,
+          "end": 29.864,
+          "word": " nesse",
+          "probability": 0.9995
+        },
+        {
+          "start": 29.864,
+          "end": 30.324,
+          "word": " carro",
+          "probability": 1.0
+        },
+        {
+          "start": 31.304,
+          "end": 31.704,
+          "word": " Que",
+          "probability": 0.9497
+        },
+        {
+          "start": 31.704,
+          "end": 31.924,
+          "word": " vai",
+          "probability": 1.0
+        },
+        {
+          "start": 31.924,
+          "end": 32.264,
+          "word": " acontecer",
+          "probability": 1.0
+        },
+        {
+          "start": 32.264,
+          "end": 32.484,
+          "word": " um",
+          "probability": 0.9971
+        },
+        {
+          "start": 32.484,
+          "end": 33.064,
+          "word": " negocinho",
+          "probability": 0.999
+        },
+        {
+          "start": 33.524,
+          "end": 33.924,
+          "word": " Hoje",
+          "probability": 0.5469
+        },
+        {
+          "start": 33.924,
+          "end": 34.104,
+          "word": " é",
+          "probability": 0.9692
+        },
+        {
+          "start": 34.104,
+          "end": 34.284,
+          "word": " ele",
+          "probability": 0.415
+        },
+        {
+          "start": 34.284,
+          "end": 34.544,
+          "word": " pra",
+          "probability": 0.5254
+        },
+        {
+          "start": 34.544,
+          "end": 34.544,
+          "word": " ver",
+          "probability": 0.8496
+        },
+        {
+          "start": 34.544,
+          "end": 34.584,
+          "word": " se",
+          "probability": 0.448
+        },
+        {
+          "start": 34.584,
+          "end": 34.604,
+          "word": " tá",
+          "probability": 0.2927
+        },
+        {
+          "start": 34.604,
+          "end": 34.624,
+          "word": " de",
+          "probability": 0.7329
+        },
+        {
+          "start": 34.624,
+          "end": 35.104,
+          "word": " prateada",
+          "probability": 0.9842
+        },
+        {
+          "start": 35.104,
+          "end": 35.264,
+          "word": " no",
+          "probability": 0.7671
+        },
+        {
+          "start": 35.264,
+          "end": 35.304,
+          "word": " clima",
+          "probability": 0.2312
+        },
+        {
+          "start": 35.304,
+          "end": 35.544,
+          "word": " Não,",
+          "probability": 0.1434
+        },
+        {
+          "start": 35.544,
+          "end": 35.604,
+          "word": " carro",
+          "probability": 0.2529
+        },
+        {
+          "start": 35.604,
+          "end": 35.764,
+          "word": " em",
+          "probability": 0.5181
+        },
+        {
+          "start": 35.764,
+          "end": 35.924,
+          "word": " dojo,",
+          "probability": 0.7698
+        },
+        {
+          "start": 36.064,
+          "end": 36.204,
+          "word": " carro",
+          "probability": 0.98
+        },
+        {
+          "start": 36.204,
+          "end": 36.424,
+          "word": " em",
+          "probability": 1.0
+        },
+        {
+          "start": 36.424,
+          "end": 36.564,
+          "word": " dojo",
+          "probability": 0.9993
+        },
+        {
+          "start": 37.364,
+          "end": 37.764,
+          "word": " Passaram",
+          "probability": 0.9666
+        },
+        {
+          "start": 37.764,
+          "end": 38.064,
+          "word": " bosta",
+          "probability": 0.8879
+        },
+        {
+          "start": 38.064,
+          "end": 38.164,
+          "word": " do",
+          "probability": 0.8076
+        },
+        {
+          "start": 38.164,
+          "end": 38.204,
+          "word": " carro",
+          "probability": 0.9922
+        },
+        {
+          "start": 38.204,
+          "end": 38.504,
+          "word": " Não,",
+          "probability": 0.1982
+        },
+        {
+          "start": 38.624,
+          "end": 38.744,
+          "word": " não,",
+          "probability": 0.8984
+        },
+        {
+          "start": 38.744,
+          "end": 39.044,
+          "word": " vira",
+          "probability": 0.5652
+        },
+        {
+          "start": 39.044,
+          "end": 39.184,
+          "word": " aqui,",
+          "probability": 0.979
+        },
+        {
+          "start": 39.224,
+          "end": 39.584,
+          "word": " ó",
+          "probability": 0.855
+        },
+        {
+          "start": 40.224,
+          "end": 40.624,
+          "word": " Peraí,",
+          "probability": 0.6287
+        },
+        {
+          "start": 40.624,
+          "end": 40.804,
+          "word": " peraí,",
+          "probability": 0.999
+        },
+        {
+          "start": 40.864,
+          "end": 41.124,
+          "word": " peraí",
+          "probability": 0.998
+        },
+        {
+          "start": 45.304,
+          "end": 45.724,
+          "word": " Muito",
+          "probability": 0.0284
+        },
+        {
+          "start": 45.724,
+          "end": 46.144,
+          "word": " respeito,",
+          "probability": 0.9539
+        },
+        {
+          "start": 46.144,
+          "end": 46.304,
+          "word": " deixa",
+          "probability": 0.9546
+        },
+        {
+          "start": 46.304,
+          "end": 46.484,
+          "word": " ele",
+          "probability": 0.7388
+        },
+        {
+          "start": 46.484,
+          "end": 46.584,
+          "word": " ir",
+          "probability": 0.5112
+        },
+        {
+          "start": 46.584,
+          "end": 46.624,
+          "word": " a",
+          "probability": 0.9194
+        },
+        {
+          "start": 46.624,
+          "end": 46.844,
+          "word": " falar",
+          "probability": 0.98
+        },
+        {
+          "start": 46.844,
+          "end": 46.984,
+          "word": " Porque",
+          "probability": 0.0114
+        },
+        {
+          "start": 46.984,
+          "end": 47.064,
+          "word": " eu",
+          "probability": 0.7593
+        },
+        {
+          "start": 47.064,
+          "end": 47.124,
+          "word": " não",
+          "probability": 0.9863
+        },
+        {
+          "start": 47.124,
+          "end": 47.124,
+          "word": " tô",
+          "probability": 0.4165
+        },
+        {
+          "start": 47.124,
+          "end": 47.504,
+          "word": " entendendo",
+          "probability": 0.9973
+        },
+        {
+          "start": 47.504,
+          "end": 47.684,
+          "word": " nada",
+          "probability": 0.9922
+        },
+        {
+          "start": 49.664,
+          "end": 50.084,
+          "word": " Tão",
+          "probability": 0.41
+        },
+        {
+          "start": 50.084,
+          "end": 50.504,
+          "word": " passando",
+          "probability": 0.9097
+        },
+        {
+          "start": 50.504,
+          "end": 50.784,
+          "word": " bosta",
+          "probability": 0.9443
+        },
+        {
+          "start": 50.784,
+          "end": 50.944,
+          "word": " nos",
+          "probability": 0.9639
+        },
+        {
+          "start": 50.944,
+          "end": 51.384,
+          "word": " carros",
+          "probability": 0.9143
+        },
+        {
+          "start": 52.464,
+          "end": 52.884,
+          "word": " Passaram",
+          "probability": 0.6523
+        },
+        {
+          "start": 52.884,
+          "end": 53.164,
+          "word": " bosta",
+          "probability": 0.9915
+        },
+        {
+          "start": 53.164,
+          "end": 53.284,
+          "word": " no",
+          "probability": 0.9771
+        },
+        {
+          "start": 53.284,
+          "end": 53.424,
+          "word": " meu",
+          "probability": 0.9854
+        },
+        {
+          "start": 53.424,
+          "end": 53.604,
+          "word": " carro",
+          "probability": 0.999
+        },
+        {
+          "start": 53.604,
+          "end": 53.824,
+          "word": " aqui,",
+          "probability": 0.9561
+        },
+        {
+          "start": 53.884,
+          "end": 54.044,
+          "word": " ó",
+          "probability": 0.1929
+        },
+        {
+          "start": 54.044,
+          "end": 54.324,
+          "word": " Vou",
+          "probability": 0.7275
+        },
+        {
+          "start": 54.324,
+          "end": 54.604,
+          "word": " passar",
+          "probability": 0.9976
+        },
+        {
+          "start": 54.604,
+          "end": 54.944,
+          "word": " bosta",
+          "probability": 0.991
+        },
+        {
+          "start": 54.944,
+          "end": 55.104,
+          "word": " nesse",
+          "probability": 0.395
+        },
+        {
+          "start": 55.104,
+          "end": 55.344,
+          "word": " carro",
+          "probability": 0.4207
+        },
+        {
+          "start": 55.344,
+          "end": 55.484,
+          "word": " Vou",
+          "probability": 0.3684
+        },
+        {
+          "start": 55.484,
+          "end": 55.704,
+          "word": " passar",
+          "probability": 0.9985
+        },
+        {
+          "start": 55.704,
+          "end": 56.064,
+          "word": " bosta",
+          "probability": 0.9919
+        },
+        {
+          "start": 56.064,
+          "end": 56.324,
+          "word": " nesse,",
+          "probability": 0.9868
+        },
+        {
+          "start": 56.484,
+          "end": 56.684,
+          "word": " então",
+          "probability": 0.9961
+        },
+        {
+          "start": 59.764,
+          "end": 60.184,
+          "word": " No",
+          "probability": 0.2332
+        },
+        {
+          "start": 60.184,
+          "end": 60.604,
+          "word": " L,",
+          "probability": 0.7842
+        },
+        {
+          "start": 60.784,
+          "end": 60.884,
+          "word": " o",
+          "probability": 0.9922
+        },
+        {
+          "start": 60.884,
+          "end": 61.424,
+          "word": " Primo",
+          "probability": 0.515
+        },
+        {
+          "start": 61.424,
+          "end": 61.544,
+          "word": " tá",
+          "probability": 0.9546
+        },
+        {
+          "start": 61.544,
+          "end": 61.664,
+          "word": " no",
+          "probability": 0.9961
+        },
+        {
+          "start": 61.664,
+          "end": 61.824,
+          "word": " L",
+          "probability": 0.9966
+        },
+        {
+          "start": 61.824,
+          "end": 62.324,
+          "word": " Vou",
+          "probability": 0.5649
+        },
+        {
+          "start": 62.324,
+          "end": 62.984,
+          "word": " passar",
+          "probability": 0.9976
+        },
+        {
+          "start": 62.984,
+          "end": 63.404,
+          "word": " bosta",
+          "probability": 0.998
+        },
+        {
+          "start": 63.404,
+          "end": 63.624,
+          "word": " nesse",
+          "probability": 0.9775
+        },
+        {
+          "start": 63.624,
+          "end": 63.964,
+          "word": " também",
+          "probability": 0.9067
+        },
+        {
+          "start": 65.644,
+          "end": 66.064,
+          "word": " Oxe,",
+          "probability": 0.738
+        },
+        {
+          "start": 66.064,
+          "end": 66.164,
+          "word": " meu",
+          "probability": 0.9873
+        },
+        {
+          "start": 66.164,
+          "end": 66.364,
+          "word": " carro",
+          "probability": 0.9106
+        },
+        {
+          "start": 66.364,
+          "end": 66.524,
+          "word": " não",
+          "probability": 0.9541
+        },
+        {
+          "start": 66.524,
+          "end": 66.584,
+          "word": " tá",
+          "probability": 0.9868
+        },
+        {
+          "start": 66.584,
+          "end": 67.044,
+          "word": " virando",
+          "probability": 0.9973
+        },
+        {
+          "start": 68.004,
+          "end": 68.424,
+          "word": " Meu",
+          "probability": 0.8525
+        },
+        {
+          "start": 68.424,
+          "end": 68.844,
+          "word": " carro",
+          "probability": 0.9941
+        },
+        {
+          "start": 68.844,
+          "end": 69.004,
+          "word": " não",
+          "probability": 0.9893
+        },
+        {
+          "start": 69.004,
+          "end": 69.084,
+          "word": " tá",
+          "probability": 0.9971
+        },
+        {
+          "start": 69.084,
+          "end": 69.444,
+          "word": " virando",
+          "probability": 0.9988
+        },
+        {
+          "start": 69.444,
+          "end": 69.604,
+          "word": " Meu",
+          "probability": 0.2107
+        },
+        {
+          "start": 69.604,
+          "end": 69.824,
+          "word": " carro",
+          "probability": 0.9907
+        },
+        {
+          "start": 69.824,
+          "end": 69.944,
+          "word": " não",
+          "probability": 0.9834
+        },
+        {
+          "start": 69.944,
+          "end": 69.964,
+          "word": " tá",
+          "probability": 0.9985
+        },
+        {
+          "start": 69.964,
+          "end": 70.284,
+          "word": " virando",
+          "probability": 0.9993
+        },
+        {
+          "start": 70.284,
+          "end": 70.744,
+          "word": " Pula",
+          "probability": 0.6478
+        },
+        {
+          "start": 70.744,
+          "end": 70.904,
+          "word": " pra",
+          "probability": 0.8198
+        },
+        {
+          "start": 70.904,
+          "end": 71.084,
+          "word": " frente",
+          "probability": 0.3457
+        },
+        {
+          "start": 71.084,
+          "end": 71.224,
+          "word": " Tá",
+          "probability": 0.1119
+        },
+        {
+          "start": 71.224,
+          "end": 71.484,
+          "word": " cheio",
+          "probability": 0.9822
+        },
+        {
+          "start": 71.484,
+          "end": 71.544,
+          "word": " de",
+          "probability": 0.998
+        },
+        {
+          "start": 71.544,
+          "end": 71.884,
+          "word": " bosta",
+          "probability": 0.9326
+        },
+        {
+          "start": 71.884,
+          "end": 72.004,
+          "word": " esse",
+          "probability": 0.2345
+        },
+        {
+          "start": 72.004,
+          "end": 72.204,
+          "word": " carro",
+          "probability": 0.0006
+        },
+        {
+          "start": 72.204,
+          "end": 72.744,
+          "word": " Eu",
+          "probability": 0.0502
+        },
+        {
+          "start": 72.744,
+          "end": 75.124,
+          "word": " troco",
+          "probability": 0.949
+        },
+        {
+          "start": 75.124,
+          "end": 75.204,
+          "word": " a",
+          "probability": 0.3643
+        },
+        {
+          "start": 75.204,
+          "end": 75.504,
+          "word": " bota,",
+          "probability": 0.5176
+        },
+        {
+          "start": 75.504,
+          "end": 75.664,
+          "word": " esse",
+          "probability": 0.6094
+        },
+        {
+          "start": 75.664,
+          "end": 75.864,
+          "word": " também",
+          "probability": 0.9331
+        },
+        {
+          "start": 75.864,
+          "end": 76.084,
+          "word": " tá",
+          "probability": 0.9185
+        }
+      ]
+    },
+    {
+      "start": 147.84,
+      "end": 208.864,
+      "language": "pt",
+      "language_probability": 0.9976,
+      "words": [
+        {
+          "start": 148.66,
+          "end": 149.22,
+          "word": " Olha,",
+          "probability": 0.3665
+        },
+        {
+          "start": 149.78,
+          "end": 149.84,
+          "word": " ele",
+          "probability": 0.9922
+        },
+        {
+          "start": 149.84,
+          "end": 149.94,
+          "word": " não",
+          "probability": 0.9995
+        },
+        {
+          "start": 149.94,
+          "end": 150.58,
+          "word": " percebeu,",
+          "probability": 0.9993
+        },
+        {
+          "start": 150.58,
+          "end": 150.76,
+          "word": " senhor",
+          "probability": 0.584
+        },
+        {
+          "start": 150.76,
+          "end": 150.96,
+          "word": " Ele",
+          "probability": 0.2107
+        },
+        {
+          "start": 150.96,
+          "end": 151.4,
+          "word": " não",
+          "probability": 0.9995
+        },
+        {
+          "start": 151.4,
+          "end": 152.02,
+          "word": " percebeu,",
+          "probability": 0.9998
+        },
+        {
+          "start": 152.02,
+          "end": 152.2,
+          "word": " cara",
+          "probability": 0.9995
+        },
+        {
+          "start": 152.2,
+          "end": 152.98,
+          "word": " Eu",
+          "probability": 0.9497
+        },
+        {
+          "start": 152.98,
+          "end": 153.96,
+          "word": " já",
+          "probability": 0.9985
+        },
+        {
+          "start": 153.96,
+          "end": 154.38,
+          "word": " entreguei",
+          "probability": 0.9976
+        },
+        {
+          "start": 154.38,
+          "end": 154.52,
+          "word": " pra",
+          "probability": 0.8062
+        },
+        {
+          "start": 154.52,
+          "end": 154.66,
+          "word": " ele",
+          "probability": 0.9819
+        },
+        {
+          "start": 154.66,
+          "end": 154.76,
+          "word": " Ele",
+          "probability": 0.0392
+        },
+        {
+          "start": 154.76,
+          "end": 155.58,
+          "word": " não",
+          "probability": 0.9595
+        },
+        {
+          "start": 155.58,
+          "end": 156.12,
+          "word": " percebeu",
+          "probability": 0.9979
+        },
+        {
+          "start": 156.12,
+          "end": 156.52,
+          "word": " Vou",
+          "probability": 0.9922
+        },
+        {
+          "start": 156.52,
+          "end": 157.02,
+          "word": " mandar",
+          "probability": 1.0
+        },
+        {
+          "start": 157.02,
+          "end": 157.32,
+          "word": " mais",
+          "probability": 1.0
+        },
+        {
+          "start": 157.32,
+          "end": 157.6,
+          "word": " um",
+          "probability": 0.9995
+        },
+        {
+          "start": 157.6,
+          "end": 158.42,
+          "word": " Olha,",
+          "probability": 0.4932
+        },
+        {
+          "start": 163.24,
+          "end": 163.36,
+          "word": " ele",
+          "probability": 0.999
+        },
+        {
+          "start": 163.36,
+          "end": 163.44,
+          "word": " não",
+          "probability": 0.9995
+        },
+        {
+          "start": 163.44,
+          "end": 163.58,
+          "word": " tá",
+          "probability": 0.896
+        },
+        {
+          "start": 163.58,
+          "end": 164.22,
+          "word": " percebendo,",
+          "probability": 0.9993
+        },
+        {
+          "start": 164.24,
+          "end": 164.48,
+          "word": " chat",
+          "probability": 0.9585
+        },
+        {
+          "start": 165.3,
+          "end": 165.86,
+          "word": " Nossa,",
+          "probability": 0.8086
+        },
+        {
+          "start": 167.48,
+          "end": 167.58,
+          "word": " tô",
+          "probability": 0.9932
+        },
+        {
+          "start": 167.58,
+          "end": 168.06,
+          "word": " acabando",
+          "probability": 1.0
+        },
+        {
+          "start": 168.06,
+          "end": 168.26,
+          "word": " com",
+          "probability": 0.9956
+        },
+        {
+          "start": 168.26,
+          "end": 168.46,
+          "word": " ele,",
+          "probability": 1.0
+        },
+        {
+          "start": 168.54,
+          "end": 168.82,
+          "word": " turma",
+          "probability": 0.998
+        },
+        {
+          "start": 169.78,
+          "end": 170.34,
+          "word": " Vou",
+          "probability": 0.981
+        },
+        {
+          "start": 170.34,
+          "end": 170.74,
+          "word": " fazer",
+          "probability": 1.0
+        },
+        {
+          "start": 170.74,
+          "end": 170.98,
+          "word": " uma",
+          "probability": 0.9141
+        },
+        {
+          "start": 170.98,
+          "end": 171.48,
+          "word": " loucura",
+          "probability": 0.9977
+        },
+        {
+          "start": 171.48,
+          "end": 171.68,
+          "word": " aqui,",
+          "probability": 0.9761
+        },
+        {
+          "start": 171.78,
+          "end": 171.96,
+          "word": " viu,",
+          "probability": 0.9995
+        },
+        {
+          "start": 172.0,
+          "end": 172.22,
+          "word": " cara",
+          "probability": 0.998
+        },
+        {
+          "start": 172.22,
+          "end": 173.3,
+          "word": " Vou",
+          "probability": 0.543
+        },
+        {
+          "start": 173.3,
+          "end": 173.68,
+          "word": " fazer",
+          "probability": 1.0
+        },
+        {
+          "start": 173.68,
+          "end": 173.92,
+          "word": " uma",
+          "probability": 0.9995
+        },
+        {
+          "start": 173.92,
+          "end": 174.54,
+          "word": " doideira",
+          "probability": 0.9984
+        },
+        {
+          "start": 177.6,
+          "end": 178.08,
+          "word": " Acabaram",
+          "probability": 0.946
+        },
+        {
+          "start": 178.08,
+          "end": 178.22,
+          "word": " de",
+          "probability": 0.9995
+        },
+        {
+          "start": 178.22,
+          "end": 178.4,
+          "word": " dar",
+          "probability": 0.9966
+        },
+        {
+          "start": 178.4,
+          "end": 178.5,
+          "word": " um",
+          "probability": 0.9961
+        },
+        {
+          "start": 178.5,
+          "end": 178.76,
+          "word": " tiro",
+          "probability": 0.999
+        },
+        {
+          "start": 178.76,
+          "end": 178.98,
+          "word": " Olha,",
+          "probability": 0.0063
+        },
+        {
+          "start": 179.2,
+          "end": 179.58,
+          "word": " turma",
+          "probability": 0.9958
+        },
+        {
+          "start": 179.58,
+          "end": 179.98,
+          "word": " Acabaram",
+          "probability": 0.7934
+        },
+        {
+          "start": 179.98,
+          "end": 180.1,
+          "word": " de",
+          "probability": 1.0
+        },
+        {
+          "start": 180.1,
+          "end": 180.24,
+          "word": " meter",
+          "probability": 0.9956
+        },
+        {
+          "start": 180.24,
+          "end": 180.66,
+          "word": " bala",
+          "probability": 0.999
+        },
+        {
+          "start": 180.66,
+          "end": 180.82,
+          "word": " nele",
+          "probability": 0.998
+        },
+        {
+          "start": 180.82,
+          "end": 181.06,
+          "word": " aqui",
+          "probability": 0.998
+        },
+        {
+          "start": 181.06,
+          "end": 181.84,
+          "word": " De",
+          "probability": 0.9697
+        },
+        {
+          "start": 181.84,
+          "end": 182.46,
+          "word": " prateada",
+          "probability": 0.9972
+        },
+        {
+          "start": 183.3,
+          "end": 183.78,
+          "word": " Mas",
+          "probability": 0.998
+        },
+        {
+          "start": 183.78,
+          "end": 183.88,
+          "word": " a",
+          "probability": 0.999
+        },
+        {
+          "start": 183.88,
+          "end": 184.32,
+          "word": " bagunça",
+          "probability": 0.9998
+        },
+        {
+          "start": 184.32,
+          "end": 184.46,
+          "word": " vai",
+          "probability": 0.9937
+        },
+        {
+          "start": 184.46,
+          "end": 184.64,
+          "word": " ser",
+          "probability": 1.0
+        },
+        {
+          "start": 184.64,
+          "end": 184.74,
+          "word": " o",
+          "probability": 0.9966
+        },
+        {
+          "start": 184.74,
+          "end": 185.08,
+          "word": " seguinte,",
+          "probability": 1.0
+        },
+        {
+          "start": 185.46,
+          "end": 185.62,
+          "word": " minha",
+          "probability": 0.9971
+        },
+        {
+          "start": 185.62,
+          "end": 186.08,
+          "word": " turma",
+          "probability": 0.9993
+        },
+        {
+          "start": 186.08,
+          "end": 186.24,
+          "word": " Vai",
+          "probability": 0.998
+        },
+        {
+          "start": 186.24,
+          "end": 186.42,
+          "word": " ser",
+          "probability": 1.0
+        },
+        {
+          "start": 186.42,
+          "end": 186.54,
+          "word": " o",
+          "probability": 1.0
+        },
+        {
+          "start": 186.54,
+          "end": 186.9,
+          "word": " seguinte",
+          "probability": 1.0
+        },
+        {
+          "start": 194.58,
+          "end": 195.06,
+          "word": " Como",
+          "probability": 0.9429
+        },
+        {
+          "start": 195.06,
+          "end": 195.54,
+          "word": " assim?",
+          "probability": 0.9995
+        },
+        {
+          "start": 198.04,
+          "end": 198.52,
+          "word": " Vocês",
+          "probability": 0.9678
+        },
+        {
+          "start": 198.52,
+          "end": 198.78,
+          "word": " têm",
+          "probability": 0.812
+        },
+        {
+          "start": 198.78,
+          "end": 198.92,
+          "word": " uma",
+          "probability": 1.0
+        },
+        {
+          "start": 198.92,
+          "end": 199.34,
+          "word": " missão,",
+          "probability": 1.0
+        },
+        {
+          "start": 199.36,
+          "end": 199.7,
+          "word": " polícia",
+          "probability": 0.9546
+        },
+        {
+          "start": 199.7,
+          "end": 199.98,
+          "word": " Vocês",
+          "probability": 0.9937
+        },
+        {
+          "start": 199.98,
+          "end": 200.14,
+          "word": " têm",
+          "probability": 1.0
+        },
+        {
+          "start": 200.14,
+          "end": 200.26,
+          "word": " uma",
+          "probability": 1.0
+        },
+        {
+          "start": 200.26,
+          "end": 200.72,
+          "word": " missão",
+          "probability": 1.0
+        },
+        {
+          "start": 203.26,
+          "end": 203.74,
+          "word": " Só",
+          "probability": 0.3416
+        },
+        {
+          "start": 203.74,
+          "end": 204.04,
+          "word": " bala",
+          "probability": 0.8953
+        },
+        {
+          "start": 204.04,
+          "end": 204.12,
+          "word": " na",
+          "probability": 0.2937
+        },
+        {
+          "start": 204.12,
+          "end": 204.26,
+          "word": " sua",
+          "probability": 0.2822
+        },
+        {
+          "start": 206.46,
+          "end": 206.8,
+          "word": " Eu",
+          "probability": 0.1033
+        },
+        {
+          "start": 206.8,
+          "end": 206.92,
+          "word": " vou",
+          "probability": 0.3975
+        },
+        {
+          "start": 206.92,
+          "end": 207.14,
+          "word": " puxar",
+          "probability": 0.9808
+        },
+        {
+          "start": 207.14,
+          "end": 207.26,
+          "word": " eles",
+          "probability": 0.813
+        },
+        {
+          "start": 207.26,
+          "end": 207.38,
+          "word": " pra",
+          "probability": 0.4753
+        },
+        {
+          "start": 207.38,
+          "end": 207.64,
+          "word": " baixo",
+          "probability": 0.9941
+        }
+      ]
+    },
+    {
+      "start": 293.728,
+      "end": 354.496,
+      "language": "pt",
+      "language_probability": 0.9834,
+      "words": [
+        {
+          "start": 311.548,
+          "end": 312.228,
+          "word": " eu",
+          "probability": 0.0632
+        },
+        {
+          "start": 312.228,
+          "end": 312.908,
+          "word": " tô",
+          "probability": 0.2203
+        },
+        {
+          "start": 312.908,
+          "end": 314.008,
+          "word": " traindo",
+          "probability": 0.6145
+        },
+        {
+          "start": 314.008,
+          "end": 314.208,
+          "word": " todo",
+          "probability": 0.897
+        },
+        {
+          "start": 314.208,
+          "end": 314.528,
+          "word": " mundo",
+          "probability": 0.9927
+        },
+        {
+          "start": 314.528,
+          "end": 314.788,
+          "word": " hoje",
+          "probability": 0.5376
+        },
+        {
+          "start": 314.788,
+          "end": 315.188,
+          "word": " turma",
+          "probability": 0.6978
+        },
+        {
+          "start": 315.188,
+          "end": 315.428,
+          "word": " ele",
+          "probability": 0.5884
+        },
+        {
+          "start": 315.428,
+          "end": 315.568,
+          "word": " não",
+          "probability": 0.9766
+        },
+        {
+          "start": 315.568,
+          "end": 315.748,
+          "word": " sabe",
+          "probability": 0.9785
+        },
+        {
+          "start": 315.748,
+          "end": 316.128,
+          "word": " mexer",
+          "probability": 0.989
+        },
+        {
+          "start": 316.128,
+          "end": 316.468,
+          "word": " cara",
+          "probability": 0.7036
+        },
+        {
+          "start": 316.468,
+          "end": 318.048,
+          "word": " caralho",
+          "probability": 0.7425
+        },
+        {
+          "start": 318.048,
+          "end": 318.488,
+          "word": " ele",
+          "probability": 0.7651
+        },
+        {
+          "start": 318.488,
+          "end": 318.628,
+          "word": " não",
+          "probability": 0.9019
+        },
+        {
+          "start": 318.628,
+          "end": 318.828,
+          "word": " sabe",
+          "probability": 0.9844
+        },
+        {
+          "start": 318.828,
+          "end": 319.168,
+          "word": " mexer",
+          "probability": 0.9954
+        },
+        {
+          "start": 319.168,
+          "end": 319.468,
+          "word": " ele",
+          "probability": 0.0781
+        },
+        {
+          "start": 319.468,
+          "end": 321.768,
+          "word": " deve",
+          "probability": 0.334
+        },
+        {
+          "start": 321.768,
+          "end": 321.988,
+          "word": " estar",
+          "probability": 0.4255
+        },
+        {
+          "start": 321.988,
+          "end": 322.528,
+          "word": " agachado",
+          "probability": 0.9451
+        },
+        {
+          "start": 322.528,
+          "end": 322.708,
+          "word": " ele",
+          "probability": 0.2949
+        },
+        {
+          "start": 322.708,
+          "end": 322.848,
+          "word": " deve",
+          "probability": 0.5679
+        },
+        {
+          "start": 322.848,
+          "end": 323.008,
+          "word": " estar",
+          "probability": 0.9116
+        },
+        {
+          "start": 323.008,
+          "end": 323.448,
+          "word": " agachado",
+          "probability": 0.9954
+        },
+        {
+          "start": 323.448,
+          "end": 323.888,
+          "word": " não",
+          "probability": 0.1509
+        },
+        {
+          "start": 323.888,
+          "end": 324.408,
+          "word": " tá",
+          "probability": 0.2795
+        },
+        {
+          "start": 324.408,
+          "end": 324.748,
+          "word": " tirando",
+          "probability": 0.6345
+        },
+        {
+          "start": 324.748,
+          "end": 324.968,
+          "word": " mais",
+          "probability": 0.9912
+        },
+        {
+          "start": 324.968,
+          "end": 325.408,
+          "word": " não",
+          "probability": 0.5981
+        },
+        {
+          "start": 325.408,
+          "end": 325.528,
+          "word": " tá",
+          "probability": 0.6602
+        },
+        {
+          "start": 325.528,
+          "end": 325.808,
+          "word": " tirando",
+          "probability": 0.9888
+        },
+        {
+          "start": 325.808,
+          "end": 326.088,
+          "word": " mais",
+          "probability": 0.9902
+        },
+        {
+          "start": 326.088,
+          "end": 326.968,
+          "word": " não",
+          "probability": 0.196
+        },
+        {
+          "start": 326.968,
+          "end": 327.568,
+          "word": " sabe",
+          "probability": 0.8872
+        },
+        {
+          "start": 327.568,
+          "end": 327.788,
+          "word": " usar",
+          "probability": 0.9824
+        },
+        {
+          "start": 327.788,
+          "end": 328.208,
+          "word": " turma",
+          "probability": 0.9194
+        },
+        {
+          "start": 328.208,
+          "end": 328.908,
+          "word": " aprendizou",
+          "probability": 0.5553
+        },
+        {
+          "start": 328.908,
+          "end": 329.008,
+          "word": " o",
+          "probability": 0.5693
+        },
+        {
+          "start": 329.008,
+          "end": 329.228,
+          "word": " negócio",
+          "probability": 0.8311
+        },
+        {
+          "start": 329.228,
+          "end": 329.588,
+          "word": " cara",
+          "probability": 0.938
+        },
+        {
+          "start": 329.588,
+          "end": 329.748,
+          "word": " te",
+          "probability": 0.4526
+        },
+        {
+          "start": 329.748,
+          "end": 329.908,
+          "word": " dei",
+          "probability": 0.9517
+        },
+        {
+          "start": 329.908,
+          "end": 330.108,
+          "word": " cinco",
+          "probability": 0.4294
+        },
+        {
+          "start": 330.108,
+          "end": 330.488,
+          "word": " minutos",
+          "probability": 0.9233
+        },
+        {
+          "start": 330.488,
+          "end": 330.668,
+          "word": " o",
+          "probability": 0.9507
+        },
+        {
+          "start": 330.668,
+          "end": 330.828,
+          "word": " tempo",
+          "probability": 0.9966
+        },
+        {
+          "start": 330.828,
+          "end": 330.988,
+          "word": " tá",
+          "probability": 0.8018
+        },
+        {
+          "start": 330.988,
+          "end": 331.408,
+          "word": " correndo",
+          "probability": 0.99
+        },
+        {
+          "start": 331.408,
+          "end": 331.848,
+          "word": " maluco",
+          "probability": 0.8885
+        },
+        {
+          "start": 331.848,
+          "end": 332.988,
+          "word": " o",
+          "probability": 0.8027
+        },
+        {
+          "start": 332.988,
+          "end": 333.568,
+          "word": " tempo",
+          "probability": 0.9966
+        },
+        {
+          "start": 333.568,
+          "end": 333.728,
+          "word": " tá",
+          "probability": 0.9121
+        },
+        {
+          "start": 333.728,
+          "end": 334.128,
+          "word": " correndo",
+          "probability": 0.998
+        },
+        {
+          "start": 334.128,
+          "end": 334.568,
+          "word": " maluco",
+          "probability": 0.9831
+        },
+        {
+          "start": 334.568,
+          "end": 334.848,
+          "word": " tá",
+          "probability": 0.0922
+        },
+        {
+          "start": 334.848,
+          "end": 335.288,
+          "word": " tirando",
+          "probability": 0.9033
+        },
+        {
+          "start": 335.288,
+          "end": 335.528,
+          "word": " mais",
+          "probability": 0.9868
+        },
+        {
+          "start": 335.528,
+          "end": 336.808,
+          "word": " olha",
+          "probability": 0.5747
+        },
+        {
+          "start": 336.808,
+          "end": 337.288,
+          "word": " aí",
+          "probability": 0.7207
+        },
+        {
+          "start": 337.288,
+          "end": 338.148,
+          "word": " o",
+          "probability": 0.0651
+        },
+        {
+          "start": 338.148,
+          "end": 338.448,
+          "word": " povo",
+          "probability": 0.6323
+        },
+        {
+          "start": 338.448,
+          "end": 338.828,
+          "word": " turma",
+          "probability": 0.958
+        },
+        {
+          "start": 338.828,
+          "end": 339.068,
+          "word": " tudo",
+          "probability": 0.6724
+        },
+        {
+          "start": 339.068,
+          "end": 339.688,
+          "word": " desesperado",
+          "probability": 0.9878
+        },
+        {
+          "start": 339.688,
+          "end": 339.908,
+          "word": " cara",
+          "probability": 0.9238
+        },
+        {
+          "start": 339.908,
+          "end": 340.448,
+          "word": " ó",
+          "probability": 0.4932
+        },
+        {
+          "start": 340.448,
+          "end": 340.588,
+          "word": " o",
+          "probability": 0.9258
+        },
+        {
+          "start": 340.588,
+          "end": 340.828,
+          "word": " plininho",
+          "probability": 0.7091
+        },
+        {
+          "start": 340.828,
+          "end": 340.968,
+          "word": " o",
+          "probability": 0.043
+        },
+        {
+          "start": 340.968,
+          "end": 341.228,
+          "word": " plininho",
+          "probability": 0.9958
+        },
+        {
+          "start": 341.228,
+          "end": 341.328,
+          "word": " o",
+          "probability": 0.6411
+        },
+        {
+          "start": 341.328,
+          "end": 341.628,
+          "word": " plininho",
+          "probability": 0.9961
+        },
+        {
+          "start": 341.628,
+          "end": 341.828,
+          "word": " ó",
+          "probability": 0.645
+        },
+        {
+          "start": 341.828,
+          "end": 341.968,
+          "word": " o",
+          "probability": 0.8428
+        },
+        {
+          "start": 341.968,
+          "end": 342.328,
+          "word": " plininho",
+          "probability": 0.9954
+        },
+        {
+          "start": 342.328,
+          "end": 342.488,
+          "word": " ó",
+          "probability": 0.6514
+        },
+        {
+          "start": 342.488,
+          "end": 342.808,
+          "word": " rende",
+          "probability": 0.5719
+        },
+        {
+          "start": 342.808,
+          "end": 343.028,
+          "word": " ele",
+          "probability": 0.7251
+        },
+        {
+          "start": 343.028,
+          "end": 343.248,
+          "word": " rende",
+          "probability": 0.9341
+        },
+        {
+          "start": 343.248,
+          "end": 344.288,
+          "word": " ó",
+          "probability": 0.2722
+        },
+        {
+          "start": 344.288,
+          "end": 347.148,
+          "word": " o",
+          "probability": 0.9507
+        },
+        {
+          "start": 347.148,
+          "end": 347.308,
+          "word": " plininho",
+          "probability": 0.979
+        },
+        {
+          "start": 347.308,
+          "end": 347.548,
+          "word": " aqui",
+          "probability": 0.7246
+        },
+        {
+          "start": 347.548,
+          "end": 347.668,
+          "word": " ó",
+          "probability": 0.9224
+        },
+        {
+          "start": 347.668,
+          "end": 347.848,
+          "word": " o",
+          "probability": 0.876
+        },
+        {
+          "start": 347.848,
+          "end": 348.108,
+          "word": " plininho",
+          "probability": 0.9967
+        },
+        {
+          "start": 348.108,
+          "end": 348.308,
+          "word": " aqui",
+          "probability": 0.9922
+        },
+        {
+          "start": 348.308,
+          "end": 348.668,
+          "word": " jacaré",
+          "probability": 0.6346
+        },
+        {
+          "start": 348.668,
+          "end": 348.948,
+          "word": " o",
+          "probability": 0.0055
+        },
+        {
+          "start": 348.948,
+          "end": 349.628,
+          "word": " plininho",
+          "probability": 0.0279
+        },
+        {
+          "start": 349.628,
+          "end": 349.748,
+          "word": " aqui",
+          "probability": 0.7939
+        },
+        {
+          "start": 349.748,
+          "end": 350.188,
+          "word": " jacaré",
+          "probability": 0.0241
+        },
+        {
+          "start": 350.188,
+          "end": 351.168,
+          "word": " é",
+          "probability": 0.5737
+        },
+        {
+          "start": 351.168,
+          "end": 351.308,
+          "word": " só",
+          "probability": 0.8984
+        },
+        {
+          "start": 351.308,
+          "end": 351.428,
+          "word": " dar",
+          "probability": 0.7451
+        },
+        {
+          "start": 351.428,
+          "end": 351.788,
+          "word": " gode",
+          "probability": 0.274
+        }
+      ]
+    },
+    {
+      "start": 444.496,
+      "end": 503.52,
+      "language": "pt",
+      "language_probability": 0.98,
+      "words": [
+        {
+          "start": 445.036,
+          "end": 445.436,
+          "word": " Jacaré,",
+          "probability": 0.7615
+        },
+        {
+          "start": 445.576,
+          "end": 445.716,
+          "word": " tu",
+          "probability": 0.8999
+        },
+        {
+          "start": 445.716,
+          "end": 445.896,
+          "word": " vai",
+          "probability": 0.9395
+        },
+        {
+          "start": 445.896,
+          "end": 446.056,
+          "word": " se",
+          "probability": 0.52
+        },
+        {
+          "start": 446.056,
+          "end": 446.456,
+          "word": " f...",
+          "probability": 0.438
+        },
+        {
+          "start": 446.456,
+          "end": 446.696,
+          "word": " na",
+          "probability": 0.3997
+        },
+        {
+          "start": 446.696,
+          "end": 446.836,
+          "word": " minha",
+          "probability": 0.9863
+        },
+        {
+          "start": 446.836,
+          "end": 446.996,
+          "word": " mão",
+          "probability": 0.9966
+        },
+        {
+          "start": 446.996,
+          "end": 447.256,
+          "word": " agora,",
+          "probability": 0.96
+        },
+        {
+          "start": 447.356,
+          "end": 447.676,
+          "word": " Jacaré.",
+          "probability": 0.9524
+        },
+        {
+          "start": 449.836,
+          "end": 450.236,
+          "word": " Jacaré.",
+          "probability": 0.6699
+        },
+        {
+          "start": 451.016,
+          "end": 451.416,
+          "word": " Jacaré,",
+          "probability": 0.7244
+        },
+        {
+          "start": 451.536,
+          "end": 451.596,
+          "word": " eu",
+          "probability": 0.98
+        },
+        {
+          "start": 451.596,
+          "end": 451.716,
+          "word": " sou",
+          "probability": 0.9971
+        },
+        {
+          "start": 451.716,
+          "end": 452.516,
+          "word": " iluminado.",
+          "probability": 0.9795
+        },
+        {
+          "start": 452.856,
+          "end": 453.256,
+          "word": " Eu",
+          "probability": 0.9473
+        },
+        {
+          "start": 453.256,
+          "end": 453.416,
+          "word": " sou",
+          "probability": 0.9985
+        },
+        {
+          "start": 453.416,
+          "end": 454.016,
+          "word": " iluminado.",
+          "probability": 0.9964
+        },
+        {
+          "start": 454.016,
+          "end": 454.196,
+          "word": " Aqui,",
+          "probability": 0.9707
+        },
+        {
+          "start": 454.316,
+          "end": 454.376,
+          "word": " ó.",
+          "probability": 0.9399
+        },
+        {
+          "start": 454.756,
+          "end": 454.976,
+          "word": " Aqui,",
+          "probability": 0.7559
+        },
+        {
+          "start": 454.976,
+          "end": 454.996,
+          "word": " ó.",
+          "probability": 0.999
+        },
+        {
+          "start": 457.476,
+          "end": 457.876,
+          "word": " A",
+          "probability": 0.3662
+        },
+        {
+          "start": 457.876,
+          "end": 458.276,
+          "word": " escola",
+          "probability": 0.9238
+        },
+        {
+          "start": 458.276,
+          "end": 458.396,
+          "word": " que",
+          "probability": 0.9912
+        },
+        {
+          "start": 458.396,
+          "end": 458.436,
+          "word": " tu",
+          "probability": 0.998
+        },
+        {
+          "start": 458.436,
+          "end": 459.896,
+          "word": " estudou,",
+          "probability": 0.9617
+        },
+        {
+          "start": 459.896,
+          "end": 460.636,
+          "word": " já",
+          "probability": 0.9722
+        },
+        {
+          "start": 460.636,
+          "end": 461.096,
+          "word": " nasci,",
+          "probability": 0.5616
+        },
+        {
+          "start": 461.156,
+          "end": 461.336,
+          "word": " meu",
+          "probability": 0.9878
+        },
+        {
+          "start": 461.336,
+          "end": 461.416,
+          "word": " amigo.",
+          "probability": 0.9629
+        },
+        {
+          "start": 461.876,
+          "end": 462.276,
+          "word": " A",
+          "probability": 0.8242
+        },
+        {
+          "start": 462.276,
+          "end": 462.676,
+          "word": " escola",
+          "probability": 0.9995
+        },
+        {
+          "start": 462.676,
+          "end": 462.916,
+          "word": " que",
+          "probability": 1.0
+        },
+        {
+          "start": 462.916,
+          "end": 463.056,
+          "word": " tu",
+          "probability": 1.0
+        },
+        {
+          "start": 463.056,
+          "end": 463.556,
+          "word": " estudou,",
+          "probability": 1.0
+        },
+        {
+          "start": 463.576,
+          "end": 463.696,
+          "word": " meu",
+          "probability": 0.9976
+        },
+        {
+          "start": 463.696,
+          "end": 463.856,
+          "word": " amigo.",
+          "probability": 1.0
+        },
+        {
+          "start": 464.116,
+          "end": 464.316,
+          "word": " Pô,",
+          "probability": 0.6132
+        },
+        {
+          "start": 464.316,
+          "end": 464.416,
+          "word": " já",
+          "probability": 0.9478
+        },
+        {
+          "start": 464.416,
+          "end": 464.556,
+          "word": " tô",
+          "probability": 0.9521
+        },
+        {
+          "start": 464.556,
+          "end": 464.976,
+          "word": " letrado",
+          "probability": 0.9917
+        },
+        {
+          "start": 464.976,
+          "end": 465.096,
+          "word": " há",
+          "probability": 0.9946
+        },
+        {
+          "start": 465.096,
+          "end": 465.216,
+          "word": " muito",
+          "probability": 1.0
+        },
+        {
+          "start": 465.216,
+          "end": 465.556,
+          "word": " tempo,",
+          "probability": 1.0
+        },
+        {
+          "start": 465.756,
+          "end": 465.816,
+          "word": " pô.",
+          "probability": 0.8767
+        },
+        {
+          "start": 465.876,
+          "end": 466.116,
+          "word": " Pelo",
+          "probability": 0.9995
+        },
+        {
+          "start": 466.116,
+          "end": 466.276,
+          "word": " amor",
+          "probability": 1.0
+        },
+        {
+          "start": 466.276,
+          "end": 466.416,
+          "word": " de",
+          "probability": 1.0
+        },
+        {
+          "start": 466.416,
+          "end": 466.636,
+          "word": " Deus,",
+          "probability": 0.9995
+        },
+        {
+          "start": 466.716,
+          "end": 466.856,
+          "word": " cara.",
+          "probability": 0.9995
+        },
+        {
+          "start": 467.116,
+          "end": 467.356,
+          "word": " Tu",
+          "probability": 0.9966
+        },
+        {
+          "start": 467.356,
+          "end": 467.616,
+          "word": " acha",
+          "probability": 0.9995
+        },
+        {
+          "start": 467.616,
+          "end": 468.016,
+          "word": " mesmo",
+          "probability": 0.9976
+        },
+        {
+          "start": 468.016,
+          "end": 468.516,
+          "word": " que",
+          "probability": 0.978
+        },
+        {
+          "start": 468.516,
+          "end": 468.716,
+          "word": " eu",
+          "probability": 0.9985
+        },
+        {
+          "start": 468.716,
+          "end": 468.956,
+          "word": " boto",
+          "probability": 0.7502
+        },
+        {
+          "start": 468.956,
+          "end": 469.136,
+          "word": " mais",
+          "probability": 0.2754
+        },
+        {
+          "start": 469.136,
+          "end": 469.676,
+          "word": " culacho",
+          "probability": 0.5798
+        },
+        {
+          "start": 469.676,
+          "end": 469.976,
+          "word": " teu",
+          "probability": 0.9922
+        },
+        {
+          "start": 469.976,
+          "end": 470.376,
+          "word": " e",
+          "probability": 0.9121
+        },
+        {
+          "start": 470.376,
+          "end": 470.656,
+          "word": " ficar",
+          "probability": 0.9878
+        },
+        {
+          "start": 470.656,
+          "end": 470.836,
+          "word": " com",
+          "probability": 1.0
+        },
+        {
+          "start": 470.836,
+          "end": 470.996,
+          "word": " cara",
+          "probability": 0.77
+        },
+        {
+          "start": 470.996,
+          "end": 471.176,
+          "word": " de",
+          "probability": 1.0
+        },
+        {
+          "start": 471.176,
+          "end": 471.336,
+          "word": " laudo",
+          "probability": 0.5837
+        },
+        {
+          "start": 471.336,
+          "end": 471.656,
+          "word": " escurinho?",
+          "probability": 0.7414
+        },
+        {
+          "start": 472.076,
+          "end": 472.476,
+          "word": " Nunca!",
+          "probability": 0.8599
+        },
+        {
+          "start": 475.236,
+          "end": 475.636,
+          "word": " Agora",
+          "probability": 0.6245
+        },
+        {
+          "start": 475.636,
+          "end": 475.856,
+          "word": " é",
+          "probability": 0.9712
+        },
+        {
+          "start": 475.856,
+          "end": 475.916,
+          "word": " a",
+          "probability": 0.4692
+        },
+        {
+          "start": 475.916,
+          "end": 476.096,
+          "word": " hora",
+          "probability": 0.9961
+        },
+        {
+          "start": 476.096,
+          "end": 476.196,
+          "word": " de",
+          "probability": 0.9902
+        },
+        {
+          "start": 476.196,
+          "end": 476.856,
+          "word": " transformar",
+          "probability": 0.9929
+        },
+        {
+          "start": 476.856,
+          "end": 476.936,
+          "word": " o",
+          "probability": 0.9844
+        },
+        {
+          "start": 476.936,
+          "end": 477.376,
+          "word": " Pururuca",
+          "probability": 0.8179
+        },
+        {
+          "start": 477.376,
+          "end": 477.496,
+          "word": " em",
+          "probability": 0.9897
+        },
+        {
+          "start": 477.496,
+          "end": 478.016,
+          "word": " porco.",
+          "probability": 0.9561
+        },
+        {
+          "start": 478.076,
+          "end": 478.276,
+          "word": " Vamos",
+          "probability": 0.9023
+        },
+        {
+          "start": 478.276,
+          "end": 478.416,
+          "word": " ver",
+          "probability": 0.9976
+        },
+        {
+          "start": 478.416,
+          "end": 478.536,
+          "word": " se",
+          "probability": 0.9971
+        },
+        {
+          "start": 478.536,
+          "end": 478.696,
+          "word": " deu",
+          "probability": 0.9858
+        },
+        {
+          "start": 478.696,
+          "end": 478.976,
+          "word": " certo.",
+          "probability": 0.9985
+        },
+        {
+          "start": 480.776,
+          "end": 481.176,
+          "word": " Deu",
+          "probability": 0.4813
+        },
+        {
+          "start": 481.176,
+          "end": 481.376,
+          "word": " certo.",
+          "probability": 0.9795
+        },
+        {
+          "start": 481.956,
+          "end": 482.356,
+          "word": " Virei",
+          "probability": 0.6754
+        },
+        {
+          "start": 482.356,
+          "end": 482.456,
+          "word": " um",
+          "probability": 0.8989
+        },
+        {
+          "start": 482.456,
+          "end": 482.836,
+          "word": " porco.",
+          "probability": 0.9978
+        },
+        {
+          "start": 482.856,
+          "end": 482.916,
+          "word": " Meu",
+          "probability": 0.5225
+        },
+        {
+          "start": 482.916,
+          "end": 483.196,
+          "word": " Deus,",
+          "probability": 0.958
+        },
+        {
+          "start": 483.276,
+          "end": 483.276,
+          "word": " meu",
+          "probability": 0.9854
+        },
+        {
+          "start": 483.276,
+          "end": 483.476,
+          "word": " Deus.",
+          "probability": 0.9971
+        },
+        {
+          "start": 484.916,
+          "end": 485.316,
+          "word": " Ah,",
+          "probability": 0.4309
+        },
+        {
+          "start": 485.316,
+          "end": 485.396,
+          "word": " eu",
+          "probability": 0.9946
+        },
+        {
+          "start": 485.396,
+          "end": 485.556,
+          "word": " quero",
+          "probability": 0.9995
+        },
+        {
+          "start": 485.556,
+          "end": 485.756,
+          "word": " ser",
+          "probability": 0.9932
+        },
+        {
+          "start": 485.756,
+          "end": 485.916,
+          "word": " um",
+          "probability": 0.9756
+        },
+        {
+          "start": 485.916,
+          "end": 486.336,
+          "word": " porco.",
+          "probability": 0.9922
+        },
+        {
+          "start": 487.196,
+          "end": 487.596,
+          "word": " Eu",
+          "probability": 0.8604
+        },
+        {
+          "start": 487.596,
+          "end": 487.996,
+          "word": " quero",
+          "probability": 0.999
+        },
+        {
+          "start": 487.996,
+          "end": 488.156,
+          "word": " ser",
+          "probability": 0.9995
+        },
+        {
+          "start": 488.156,
+          "end": 488.256,
+          "word": " um",
+          "probability": 0.999
+        },
+        {
+          "start": 488.256,
+          "end": 488.996,
+          "word": " cachorro.",
+          "probability": 0.9995
+        },
+        {
+          "start": 489.636,
+          "end": 490.036,
+          "word": " Vira",
+          "probability": 0.8025
+        },
+        {
+          "start": 490.036,
+          "end": 490.156,
+          "word": " esse",
+          "probability": 0.9253
+        },
+        {
+          "start": 490.156,
+          "end": 490.356,
+          "word": " carro",
+          "probability": 0.9731
+        },
+        {
+          "start": 490.356,
+          "end": 490.476,
+          "word": " da",
+          "probability": 0.9819
+        },
+        {
+          "start": 490.476,
+          "end": 490.736,
+          "word": " frente",
+          "probability": 0.8853
+        },
+        {
+          "start": 490.736,
+          "end": 490.916,
+          "word": " aí.",
+          "probability": 0.9634
+        },
+        {
+          "start": 491.636,
+          "end": 492.036,
+          "word": " Vira",
+          "probability": 0.7927
+        },
+        {
+          "start": 492.036,
+          "end": 492.096,
+          "word": " um",
+          "probability": 0.9282
+        },
+        {
+          "start": 492.096,
+          "end": 492.656,
+          "word": " leitão,",
+          "probability": 0.9987
+        },
+        {
+          "start": 492.656,
+          "end": 492.956,
+          "word": " porra,",
+          "probability": 0.9841
+        },
+        {
+          "start": 492.956,
+          "end": 493.056,
+          "word": " é",
+          "probability": 0.8179
+        },
+        {
+          "start": 493.056,
+          "end": 493.196,
+          "word": " essa.",
+          "probability": 0.9785
+        },
+        {
+          "start": 493.476,
+          "end": 493.796,
+          "word": " Vira",
+          "probability": 0.9907
+        },
+        {
+          "start": 493.796,
+          "end": 493.916,
+          "word": " esse",
+          "probability": 0.9995
+        },
+        {
+          "start": 493.916,
+          "end": 494.056,
+          "word": " carro",
+          "probability": 1.0
+        },
+        {
+          "start": 494.056,
+          "end": 494.196,
+          "word": " da",
+          "probability": 0.9995
+        },
+        {
+          "start": 494.196,
+          "end": 494.456,
+          "word": " frente.",
+          "probability": 1.0
+        },
+        {
+          "start": 494.496,
+          "end": 494.696,
+          "word": " Agora",
+          "probability": 0.9971
+        },
+        {
+          "start": 494.696,
+          "end": 495.476,
+          "word": " sim",
+          "probability": 0.98
+        },
+        {
+          "start": 495.476,
+          "end": 495.616,
+          "word": " é",
+          "probability": 0.8813
+        },
+        {
+          "start": 495.616,
+          "end": 495.636,
+          "word": " um",
+          "probability": 0.9351
+        },
+        {
+          "start": 495.636,
+          "end": 496.296,
+          "word": " Pururuca.",
+          "probability": 0.9806
+        },
+        {
+          "start": 496.536,
+          "end": 496.896,
+          "word": " Tira",
+          "probability": 0.998
+        },
+        {
+          "start": 496.896,
+          "end": 497.016,
+          "word": " o",
+          "probability": 0.9956
+        },
+        {
+          "start": 497.016,
+          "end": 497.296,
+          "word": " carro",
+          "probability": 0.9995
+        },
+        {
+          "start": 497.296,
+          "end": 497.476,
+          "word": " daí,",
+          "probability": 0.9976
+        },
+        {
+          "start": 497.656,
+          "end": 497.836,
+          "word": " gente.",
+          "probability": 0.9502
+        },
+        {
+          "start": 498.056,
+          "end": 498.196,
+          "word": " Tira",
+          "probability": 0.8225
+        },
+        {
+          "start": 498.196,
+          "end": 498.316,
+          "word": " o",
+          "probability": 0.3333
+        },
+        {
+          "start": 498.316,
+          "end": 498.496,
+          "word": " carro",
+          "probability": 0.9995
+        },
+        {
+          "start": 498.496,
+          "end": 498.696,
+          "word": " da",
+          "probability": 0.8208
+        },
+        {
+          "start": 498.696,
+          "end": 498.976,
+          "word": " frente.",
+          "probability": 1.0
+        },
+        {
+          "start": 499.296,
+          "end": 499.556,
+          "word": " Estão",
+          "probability": 0.9658
+        },
+        {
+          "start": 499.556,
+          "end": 499.956,
+          "word": " matando",
+          "probability": 0.9998
+        },
+        {
+          "start": 499.956,
+          "end": 500.256,
+          "word": " ele,",
+          "probability": 0.9985
+        },
+        {
+          "start": 500.396,
+          "end": 500.556,
+          "word": " pô.",
+          "probability": 0.5461
+        },
+        {
+          "start": 501.036,
+          "end": 501.436,
+          "word": " Transformei",
+          "probability": 0.9973
+        },
+        {
+          "start": 501.436,
+          "end": 501.596,
+          "word": " ele",
+          "probability": 1.0
+        },
+        {
+          "start": 501.596,
+          "end": 501.736,
+          "word": " num",
+          "probability": 0.9756
+        },
+        {
+          "start": 501.736,
+          "end": 502.456,
+          "word": " cachorro.",
+          "probability": 1.0
+        }
+      ]
+    },
+    {
+      "start": 594.992,
+      "end": 656.608,
+      "language": "pt",
+      "language_probability": 0.9971,
+      "words": [
+        {
+          "start": 595.692,
+          "end": 596.172,
+          "word": " Eles",
+          "probability": 0.8164
+        },
+        {
+          "start": 596.172,
+          "end": 596.372,
+          "word": " não",
+          "probability": 0.9951
+        },
+        {
+          "start": 596.372,
+          "end": 596.952,
+          "word": " percebem,",
+          "probability": 0.9969
+        },
+        {
+          "start": 597.012,
+          "end": 597.132,
+          "word": " cara",
+          "probability": 0.9448
+        },
+        {
+          "start": 597.132,
+          "end": 597.352,
+          "word": " Eles",
+          "probability": 0.0692
+        },
+        {
+          "start": 597.352,
+          "end": 597.692,
+          "word": " acham",
+          "probability": 0.9988
+        },
+        {
+          "start": 597.692,
+          "end": 597.772,
+          "word": " que",
+          "probability": 0.9995
+        },
+        {
+          "start": 597.772,
+          "end": 597.812,
+          "word": " é",
+          "probability": 0.9966
+        },
+        {
+          "start": 597.812,
+          "end": 598.092,
+          "word": " robô",
+          "probability": 0.9885
+        },
+        {
+          "start": 602.312,
+          "end": 602.792,
+          "word": " Eles",
+          "probability": 0.1693
+        },
+        {
+          "start": 602.792,
+          "end": 603.272,
+          "word": " não",
+          "probability": 0.9995
+        },
+        {
+          "start": 603.272,
+          "end": 610.552,
+          "word": " percebem,",
+          "probability": 0.9997
+        },
+        {
+          "start": 610.592,
+          "end": 610.852,
+          "word": " turma",
+          "probability": 0.877
+        },
+        {
+          "start": 610.852,
+          "end": 611.372,
+          "word": " Olha,",
+          "probability": 0.9297
+        },
+        {
+          "start": 613.132,
+          "end": 613.312,
+          "word": " a",
+          "probability": 0.9941
+        },
+        {
+          "start": 613.312,
+          "end": 613.732,
+          "word": " trocação",
+          "probability": 0.9961
+        },
+        {
+          "start": 613.732,
+          "end": 613.872,
+          "word": " tá",
+          "probability": 0.7104
+        },
+        {
+          "start": 613.872,
+          "end": 614.332,
+          "word": " rolando,",
+          "probability": 0.9998
+        },
+        {
+          "start": 614.412,
+          "end": 614.612,
+          "word": " cara",
+          "probability": 1.0
+        },
+        {
+          "start": 614.612,
+          "end": 615.032,
+          "word": " A",
+          "probability": 0.6377
+        },
+        {
+          "start": 615.032,
+          "end": 615.992,
+          "word": " trocação",
+          "probability": 1.0
+        },
+        {
+          "start": 615.992,
+          "end": 616.152,
+          "word": " tá",
+          "probability": 0.9995
+        },
+        {
+          "start": 616.152,
+          "end": 616.532,
+          "word": " rolando",
+          "probability": 1.0
+        },
+        {
+          "start": 616.532,
+          "end": 616.772,
+          "word": " O",
+          "probability": 0.9365
+        },
+        {
+          "start": 616.772,
+          "end": 616.812,
+          "word": " cara",
+          "probability": 0.999
+        },
+        {
+          "start": 616.812,
+          "end": 616.972,
+          "word": " não",
+          "probability": 1.0
+        },
+        {
+          "start": 616.972,
+          "end": 617.112,
+          "word": " vai",
+          "probability": 1.0
+        },
+        {
+          "start": 617.112,
+          "end": 617.352,
+          "word": " entender",
+          "probability": 1.0
+        },
+        {
+          "start": 617.352,
+          "end": 617.732,
+          "word": " nada",
+          "probability": 1.0
+        },
+        {
+          "start": 618.512,
+          "end": 618.992,
+          "word": " Fica",
+          "probability": 0.9778
+        },
+        {
+          "start": 618.992,
+          "end": 619.252,
+          "word": " vendo,",
+          "probability": 0.9995
+        },
+        {
+          "start": 619.312,
+          "end": 619.432,
+          "word": " ele",
+          "probability": 1.0
+        },
+        {
+          "start": 619.432,
+          "end": 619.552,
+          "word": " não",
+          "probability": 0.5273
+        },
+        {
+          "start": 619.552,
+          "end": 619.592,
+          "word": " vai",
+          "probability": 0.999
+        },
+        {
+          "start": 619.592,
+          "end": 619.832,
+          "word": " entender",
+          "probability": 0.999
+        },
+        {
+          "start": 619.832,
+          "end": 620.252,
+          "word": " nada",
+          "probability": 0.9468
+        },
+        {
+          "start": 620.252,
+          "end": 620.532,
+          "word": " que",
+          "probability": 0.448
+        },
+        {
+          "start": 620.532,
+          "end": 620.632,
+          "word": " tá",
+          "probability": 0.9858
+        },
+        {
+          "start": 620.632,
+          "end": 620.872,
+          "word": " acontecendo",
+          "probability": 0.9995
+        },
+        {
+          "start": 620.872,
+          "end": 621.612,
+          "word": " Olha",
+          "probability": 0.8818
+        },
+        {
+          "start": 621.612,
+          "end": 622.072,
+          "word": " eles",
+          "probability": 0.9863
+        },
+        {
+          "start": 622.072,
+          "end": 622.292,
+          "word": " lá,",
+          "probability": 1.0
+        },
+        {
+          "start": 622.332,
+          "end": 622.652,
+          "word": " turma",
+          "probability": 0.9944
+        },
+        {
+          "start": 642.092,
+          "end": 642.492,
+          "word": " Me",
+          "probability": 0.3467
+        },
+        {
+          "start": 642.492,
+          "end": 642.892,
+          "word": " atropelaram",
+          "probability": 0.9973
+        },
+        {
+          "start": 642.892,
+          "end": 643.452,
+          "word": " Olha",
+          "probability": 0.2202
+        },
+        {
+          "start": 643.452,
+          "end": 643.572,
+          "word": " os",
+          "probability": 0.9961
+        },
+        {
+          "start": 643.572,
+          "end": 643.872,
+          "word": " caras",
+          "probability": 0.9758
+        },
+        {
+          "start": 643.872,
+          "end": 643.932,
+          "word": " do",
+          "probability": 0.9902
+        },
+        {
+          "start": 643.932,
+          "end": 644.072,
+          "word": " meu",
+          "probability": 0.9995
+        },
+        {
+          "start": 644.072,
+          "end": 644.292,
+          "word": " lado",
+          "probability": 1.0
+        },
+        {
+          "start": 644.292,
+          "end": 644.512,
+          "word": " aqui,",
+          "probability": 0.9336
+        },
+        {
+          "start": 644.612,
+          "end": 644.932,
+          "word": " turma",
+          "probability": 0.9497
+        },
+        {
+          "start": 645.772,
+          "end": 646.172,
+          "word": " Olha",
+          "probability": 0.9756
+        },
+        {
+          "start": 646.172,
+          "end": 646.412,
+          "word": " ele",
+          "probability": 0.9966
+        },
+        {
+          "start": 646.412,
+          "end": 646.592,
+          "word": " aqui,",
+          "probability": 0.9985
+        },
+        {
+          "start": 646.612,
+          "end": 646.732,
+          "word": " olha",
+          "probability": 0.9478
+        },
+        {
+          "start": 646.732,
+          "end": 646.812,
+          "word": " ele",
+          "probability": 0.9971
+        },
+        {
+          "start": 646.812,
+          "end": 646.952,
+          "word": " aqui",
+          "probability": 1.0
+        },
+        {
+          "start": 652.652,
+          "end": 653.912,
+          "word": " Me",
+          "probability": 0.0016
+        },
+        {
+          "start": 653.912,
+          "end": 655.052,
+          "word": " atropelaram",
+          "probability": 0.1891
+        }
+      ]
+    },
+    {
+      "start": 743.856,
+      "end": 808.0,
+      "language": "pt",
+      "language_probability": 0.9888,
+      "words": [
+        {
+          "start": 750.156,
+          "end": 750.616,
+          "word": " Não",
+          "probability": 0.5107
+        },
+        {
+          "start": 750.616,
+          "end": 750.796,
+          "word": " sei",
+          "probability": 0.9873
+        },
+        {
+          "start": 750.796,
+          "end": 750.896,
+          "word": " o",
+          "probability": 0.9683
+        },
+        {
+          "start": 750.896,
+          "end": 750.936,
+          "word": " que",
+          "probability": 0.937
+        },
+        {
+          "start": 750.936,
+          "end": 751.016,
+          "word": " eu",
+          "probability": 0.8301
+        },
+        {
+          "start": 751.016,
+          "end": 751.136,
+          "word": " quis",
+          "probability": 0.8486
+        },
+        {
+          "start": 751.136,
+          "end": 751.456,
+          "word": " fazer",
+          "probability": 0.9937
+        },
+        {
+          "start": 751.456,
+          "end": 751.636,
+          "word": " aqui",
+          "probability": 0.8726
+        },
+        {
+          "start": 751.636,
+          "end": 751.816,
+          "word": " não,",
+          "probability": 0.7549
+        },
+        {
+          "start": 751.856,
+          "end": 752.096,
+          "word": " não",
+          "probability": 0.3572
+        },
+        {
+          "start": 752.096,
+          "end": 752.916,
+          "word": " só",
+          "probability": 0.4695
+        },
+        {
+          "start": 752.916,
+          "end": 754.796,
+          "word": " voa",
+          "probability": 0.666
+        },
+        {
+          "start": 754.796,
+          "end": 754.916,
+          "word": " como",
+          "probability": 0.6772
+        },
+        {
+          "start": 754.916,
+          "end": 755.276,
+          "word": " também",
+          "probability": 0.7837
+        },
+        {
+          "start": 755.276,
+          "end": 755.496,
+          "word": " dá",
+          "probability": 0.5493
+        },
+        {
+          "start": 755.496,
+          "end": 755.896,
+          "word": " tiro,",
+          "probability": 0.8726
+        },
+        {
+          "start": 755.996,
+          "end": 756.536,
+          "word": " e",
+          "probability": 0.4949
+        },
+        {
+          "start": 756.536,
+          "end": 757.316,
+          "word": " a",
+          "probability": 0.9814
+        },
+        {
+          "start": 757.316,
+          "end": 757.956,
+          "word": " brincadeira",
+          "probability": 0.9985
+        },
+        {
+          "start": 757.956,
+          "end": 758.076,
+          "word": " vai",
+          "probability": 0.9741
+        },
+        {
+          "start": 758.076,
+          "end": 758.276,
+          "word": " ser",
+          "probability": 0.9946
+        },
+        {
+          "start": 758.276,
+          "end": 758.556,
+          "word": " essa.",
+          "probability": 0.981
+        },
+        {
+          "start": 765.716,
+          "end": 766.176,
+          "word": " Vamos",
+          "probability": 0.8491
+        },
+        {
+          "start": 766.176,
+          "end": 766.636,
+          "word": " ver",
+          "probability": 0.9897
+        },
+        {
+          "start": 766.636,
+          "end": 766.696,
+          "word": " se",
+          "probability": 0.9966
+        },
+        {
+          "start": 766.696,
+          "end": 766.896,
+          "word": " tem",
+          "probability": 0.9907
+        },
+        {
+          "start": 766.896,
+          "end": 767.316,
+          "word": " polícia",
+          "probability": 0.8428
+        },
+        {
+          "start": 767.316,
+          "end": 767.496,
+          "word": " aqui",
+          "probability": 0.9604
+        },
+        {
+          "start": 767.496,
+          "end": 767.636,
+          "word": " na",
+          "probability": 0.9961
+        },
+        {
+          "start": 767.636,
+          "end": 767.936,
+          "word": " área.",
+          "probability": 0.9917
+        },
+        {
+          "start": 775.336,
+          "end": 776.256,
+          "word": " É",
+          "probability": 0.0798
+        },
+        {
+          "start": 776.256,
+          "end": 777.176,
+          "word": " ele",
+          "probability": 0.8735
+        },
+        {
+          "start": 777.176,
+          "end": 777.336,
+          "word": " ali?",
+          "probability": 0.9346
+        },
+        {
+          "start": 778.356,
+          "end": 779.276,
+          "word": " É",
+          "probability": 0.5713
+        },
+        {
+          "start": 779.276,
+          "end": 780.196,
+          "word": " ele",
+          "probability": 0.9775
+        },
+        {
+          "start": 780.196,
+          "end": 780.396,
+          "word": " ali?",
+          "probability": 0.9751
+        },
+        {
+          "start": 791.676,
+          "end": 792.596,
+          "word": " Meu",
+          "probability": 0.8672
+        },
+        {
+          "start": 792.596,
+          "end": 793.516,
+          "word": " Deus!",
+          "probability": 0.9214
+        },
+        {
+          "start": 793.756,
+          "end": 794.316,
+          "word": " Não,",
+          "probability": 0.0089
+        },
+        {
+          "start": 794.776,
+          "end": 794.776,
+          "word": " não",
+          "probability": 0.7227
+        },
+        {
+          "start": 794.776,
+          "end": 794.776,
+          "word": " é",
+          "probability": 0.2042
+        },
+        {
+          "start": 794.776,
+          "end": 794.816,
+          "word": " ele?",
+          "probability": 0.4246
+        },
+        {
+          "start": 794.836,
+          "end": 795.456,
+          "word": " Não,",
+          "probability": 0.3459
+        },
+        {
+          "start": 796.536,
+          "end": 796.536,
+          "word": " não",
+          "probability": 0.9136
+        },
+        {
+          "start": 796.536,
+          "end": 796.536,
+          "word": " é",
+          "probability": 0.9116
+        },
+        {
+          "start": 796.536,
+          "end": 796.816,
+          "word": " ele?",
+          "probability": 0.8335
+        },
+        {
+          "start": 796.816,
+          "end": 797.436,
+          "word": " Não",
+          "probability": 0.4551
+        },
+        {
+          "start": 797.436,
+          "end": 797.436,
+          "word": " é",
+          "probability": 0.1152
+        },
+        {
+          "start": 797.436,
+          "end": 797.476,
+          "word": " ele?",
+          "probability": 0.811
+        },
+        {
+          "start": 797.476,
+          "end": 799.896,
+          "word": " Tchau.",
+          "probability": 0.3635
+        }
+      ]
+    },
+    {
+      "start": 880.144,
+      "end": 940.048,
+      "language": "pt",
+      "language_probability": 0.9873,
+      "words": [
+        {
+          "start": 880.144,
+          "end": 880.504,
+          "word": " turma,",
+          "probability": 0.5883
+        },
+        {
+          "start": 880.504,
+          "end": 880.664,
+          "word": " eles",
+          "probability": 0.1877
+        },
+        {
+          "start": 880.664,
+          "end": 880.884,
+          "word": " querem",
+          "probability": 0.9736
+        },
+        {
+          "start": 880.884,
+          "end": 881.204,
+          "word": " trocar",
+          "probability": 0.9973
+        },
+        {
+          "start": 881.204,
+          "end": 881.504,
+          "word": " tiro",
+          "probability": 0.981
+        },
+        {
+          "start": 898.544,
+          "end": 899.184,
+          "word": " Boa!",
+          "probability": 0.5163
+        },
+        {
+          "start": 904.884,
+          "end": 905.524,
+          "word": " Meu",
+          "probability": 0.6406
+        },
+        {
+          "start": 905.524,
+          "end": 905.764,
+          "word": " Deus,",
+          "probability": 0.9985
+        },
+        {
+          "start": 905.984,
+          "end": 906.464,
+          "word": " turma",
+          "probability": 0.9978
+        },
+        {
+          "start": 920.504,
+          "end": 921.164,
+          "word": " Editor,",
+          "probability": 0.1042
+        },
+        {
+          "start": 923.244,
+          "end": 923.604,
+          "word": " põe",
+          "probability": 0.9513
+        },
+        {
+          "start": 923.604,
+          "end": 923.704,
+          "word": " o",
+          "probability": 0.3896
+        },
+        {
+          "start": 923.704,
+          "end": 923.964,
+          "word": " rock",
+          "probability": 0.6216
+        },
+        {
+          "start": 923.964,
+          "end": 924.184,
+          "word": " na",
+          "probability": 0.9966
+        },
+        {
+          "start": 924.184,
+          "end": 924.784,
+          "word": " caixa",
+          "probability": 0.9795
+        },
+        {
+          "start": 924.784,
+          "end": 925.644,
+          "word": " Agora",
+          "probability": 0.0747
+        },
+        {
+          "start": 925.644,
+          "end": 925.904,
+          "word": " a",
+          "probability": 0.9849
+        },
+        {
+          "start": 925.904,
+          "end": 926.464,
+          "word": " brincadeira",
+          "probability": 0.9989
+        },
+        {
+          "start": 926.464,
+          "end": 926.624,
+          "word": " vai",
+          "probability": 0.9824
+        },
+        {
+          "start": 926.624,
+          "end": 926.884,
+          "word": " ficar",
+          "probability": 0.9951
+        },
+        {
+          "start": 926.884,
+          "end": 927.424,
+          "word": " diferente",
+          "probability": 0.9946
+        },
+        {
+          "start": 928.824,
+          "end": 929.484,
+          "word": " Mudei",
+          "probability": 0.9595
+        },
+        {
+          "start": 929.484,
+          "end": 929.644,
+          "word": " de",
+          "probability": 0.998
+        },
+        {
+          "start": 929.644,
+          "end": 929.944,
+          "word": " ideia",
+          "probability": 0.98
+        },
+        {
+          "start": 929.944,
+          "end": 930.124,
+          "word": " da",
+          "probability": 0.9473
+        },
+        {
+          "start": 930.124,
+          "end": 930.804,
+          "word": " brincadeirinha",
+          "probability": 0.9814
+        },
+        {
+          "start": 931.824,
+          "end": 932.484,
+          "word": " Agora",
+          "probability": 0.5352
+        },
+        {
+          "start": 932.484,
+          "end": 933.124,
+          "word": " vai",
+          "probability": 0.9937
+        },
+        {
+          "start": 933.124,
+          "end": 933.304,
+          "word": " ser",
+          "probability": 0.9595
+        },
+        {
+          "start": 933.304,
+          "end": 933.604,
+          "word": " outra",
+          "probability": 0.8198
+        },
+        {
+          "start": 937.824,
+          "end": 938.324,
+          "word": " E",
+          "probability": 0.4866
+        },
+        {
+          "start": 938.324,
+          "end": 938.624,
+          "word": " assim,",
+          "probability": 0.8882
+        },
+        {
+          "start": 938.824,
+          "end": 938.984,
+          "word": " ó",
+          "probability": 0.9917
+        }
+      ]
+    },
+    {
+      "start": 1041.68,
+      "end": 1101.68,
+      "language": "pt",
+      "language_probability": 0.9961,
+      "words": [
+        {
+          "start": 1041.68,
+          "end": 1042.3,
+          "word": " Ó,",
+          "probability": 0.583
+        },
+        {
+          "start": 1042.44,
+          "end": 1042.62,
+          "word": " já",
+          "probability": 0.8105
+        },
+        {
+          "start": 1042.62,
+          "end": 1042.72,
+          "word": " ele",
+          "probability": 0.9683
+        },
+        {
+          "start": 1042.72,
+          "end": 1042.98,
+          "word": " puxa",
+          "probability": 0.9285
+        },
+        {
+          "start": 1042.98,
+          "end": 1043.08,
+          "word": " outro",
+          "probability": 0.3428
+        },
+        {
+          "start": 1043.08,
+          "end": 1043.5,
+          "word": " catarro,",
+          "probability": 0.9762
+        },
+        {
+          "start": 1043.52,
+          "end": 1043.58,
+          "word": " ó,",
+          "probability": 0.9194
+        },
+        {
+          "start": 1043.58,
+          "end": 1043.68,
+          "word": " fica",
+          "probability": 0.999
+        },
+        {
+          "start": 1043.68,
+          "end": 1043.9,
+          "word": " vendo,",
+          "probability": 1.0
+        },
+        {
+          "start": 1044.0,
+          "end": 1044.14,
+          "word": " fica",
+          "probability": 0.9985
+        },
+        {
+          "start": 1044.14,
+          "end": 1044.4,
+          "word": " vendo",
+          "probability": 1.0
+        },
+        {
+          "start": 1044.4,
+          "end": 1045.08,
+          "word": " Ó,",
+          "probability": 0.1058
+        },
+        {
+          "start": 1046.06,
+          "end": 1046.32,
+          "word": " ele",
+          "probability": 0.9995
+        },
+        {
+          "start": 1046.32,
+          "end": 1046.68,
+          "word": " para",
+          "probability": 0.9888
+        },
+        {
+          "start": 1046.68,
+          "end": 1046.88,
+          "word": " e",
+          "probability": 0.9692
+        },
+        {
+          "start": 1046.88,
+          "end": 1047.12,
+          "word": " puxa",
+          "probability": 0.9995
+        },
+        {
+          "start": 1047.12,
+          "end": 1047.22,
+          "word": " um",
+          "probability": 0.9897
+        },
+        {
+          "start": 1047.22,
+          "end": 1047.66,
+          "word": " catarrão,",
+          "probability": 0.9972
+        },
+        {
+          "start": 1047.78,
+          "end": 1047.86,
+          "word": " ó",
+          "probability": 1.0
+        },
+        {
+          "start": 1049.18,
+          "end": 1049.58,
+          "word": " Nossa",
+          "probability": 0.9941
+        },
+        {
+          "start": 1049.58,
+          "end": 1049.98,
+          "word": " senhora,",
+          "probability": 0.9226
+        },
+        {
+          "start": 1049.98,
+          "end": 1050.36,
+          "word": " turma,",
+          "probability": 0.9771
+        },
+        {
+          "start": 1050.36,
+          "end": 1050.52,
+          "word": " meu",
+          "probability": 1.0
+        },
+        {
+          "start": 1050.52,
+          "end": 1050.84,
+          "word": " pai",
+          "probability": 0.9966
+        },
+        {
+          "start": 1050.84,
+          "end": 1051.24,
+          "word": " amado",
+          "probability": 0.9995
+        },
+        {
+          "start": 1051.24,
+          "end": 1051.86,
+          "word": " O",
+          "probability": 0.9951
+        },
+        {
+          "start": 1051.86,
+          "end": 1052.06,
+          "word": " que",
+          "probability": 1.0
+        },
+        {
+          "start": 1052.06,
+          "end": 1052.18,
+          "word": " eu",
+          "probability": 1.0
+        },
+        {
+          "start": 1052.18,
+          "end": 1052.34,
+          "word": " vou",
+          "probability": 1.0
+        },
+        {
+          "start": 1052.34,
+          "end": 1052.76,
+          "word": " fazer,",
+          "probability": 1.0
+        },
+        {
+          "start": 1052.84,
+          "end": 1053.16,
+          "word": " turma,",
+          "probability": 0.9998
+        },
+        {
+          "start": 1053.16,
+          "end": 1053.28,
+          "word": " é",
+          "probability": 1.0
+        },
+        {
+          "start": 1053.28,
+          "end": 1053.38,
+          "word": " ficar",
+          "probability": 0.9995
+        },
+        {
+          "start": 1053.38,
+          "end": 1053.82,
+          "word": " puxando",
+          "probability": 0.9998
+        },
+        {
+          "start": 1053.82,
+          "end": 1054.0,
+          "word": " ele",
+          "probability": 0.9976
+        },
+        {
+          "start": 1054.0,
+          "end": 1054.12,
+          "word": " pra",
+          "probability": 0.8989
+        },
+        {
+          "start": 1054.12,
+          "end": 1054.38,
+          "word": " baixo",
+          "probability": 1.0
+        },
+        {
+          "start": 1054.38,
+          "end": 1054.58,
+          "word": " do",
+          "probability": 0.9937
+        },
+        {
+          "start": 1054.58,
+          "end": 1054.76,
+          "word": " mapa,",
+          "probability": 0.9966
+        },
+        {
+          "start": 1054.92,
+          "end": 1055.26,
+          "word": " ó",
+          "probability": 1.0
+        },
+        {
+          "start": 1057.84,
+          "end": 1058.24,
+          "word": " Ó",
+          "probability": 0.9922
+        },
+        {
+          "start": 1062.92,
+          "end": 1063.32,
+          "word": " Ó",
+          "probability": 0.9751
+        },
+        {
+          "start": 1066.32,
+          "end": 1066.72,
+          "word": " Tem",
+          "probability": 0.752
+        },
+        {
+          "start": 1066.72,
+          "end": 1067.12,
+          "word": " que",
+          "probability": 0.999
+        },
+        {
+          "start": 1067.12,
+          "end": 1067.5,
+          "word": " montar",
+          "probability": 0.7048
+        },
+        {
+          "start": 1067.5,
+          "end": 1067.64,
+          "word": " isso",
+          "probability": 0.7891
+        },
+        {
+          "start": 1067.64,
+          "end": 1067.8,
+          "word": " aqui,",
+          "probability": 0.8496
+        },
+        {
+          "start": 1067.92,
+          "end": 1067.94,
+          "word": " ele",
+          "probability": 0.981
+        },
+        {
+          "start": 1067.94,
+          "end": 1068.02,
+          "word": " tá",
+          "probability": 0.9873
+        },
+        {
+          "start": 1068.02,
+          "end": 1068.34,
+          "word": " botando",
+          "probability": 0.999
+        },
+        {
+          "start": 1068.34,
+          "end": 1068.7,
+          "word": " música,",
+          "probability": 0.999
+        },
+        {
+          "start": 1068.9,
+          "end": 1069.1,
+          "word": " cara,",
+          "probability": 0.9961
+        },
+        {
+          "start": 1069.12,
+          "end": 1069.24,
+          "word": " ó",
+          "probability": 1.0
+        },
+        {
+          "start": 1070.16,
+          "end": 1070.52,
+          "word": " Deixa",
+          "probability": 0.625
+        },
+        {
+          "start": 1070.52,
+          "end": 1070.8,
+          "word": " ele,",
+          "probability": 0.9946
+        },
+        {
+          "start": 1070.82,
+          "end": 1070.98,
+          "word": " deixa",
+          "probability": 0.9976
+        },
+        {
+          "start": 1070.98,
+          "end": 1071.24,
+          "word": " ele",
+          "probability": 0.9966
+        },
+        {
+          "start": 1071.24,
+          "end": 1071.44,
+          "word": " ir",
+          "probability": 0.6675
+        },
+        {
+          "start": 1071.44,
+          "end": 1071.62,
+          "word": " de",
+          "probability": 0.9736
+        },
+        {
+          "start": 1071.62,
+          "end": 1071.86,
+          "word": " novo",
+          "probability": 1.0
+        },
+        {
+          "start": 1071.86,
+          "end": 1072.1,
+          "word": " na",
+          "probability": 0.9072
+        },
+        {
+          "start": 1072.1,
+          "end": 1072.58,
+          "word": " motinha",
+          "probability": 0.9946
+        },
+        {
+          "start": 1072.58,
+          "end": 1073.04,
+          "word": " Quando",
+          "probability": 0.0334
+        },
+        {
+          "start": 1073.04,
+          "end": 1073.62,
+          "word": " ele",
+          "probability": 0.9995
+        },
+        {
+          "start": 1073.62,
+          "end": 1074.34,
+          "word": " acelerar",
+          "probability": 0.9997
+        },
+        {
+          "start": 1074.34,
+          "end": 1074.38,
+          "word": " a",
+          "probability": 0.9912
+        },
+        {
+          "start": 1074.38,
+          "end": 1074.78,
+          "word": " motinha,",
+          "probability": 0.9922
+        },
+        {
+          "start": 1074.82,
+          "end": 1074.88,
+          "word": " eu",
+          "probability": 0.9727
+        },
+        {
+          "start": 1074.88,
+          "end": 1074.92,
+          "word": " vou",
+          "probability": 0.9995
+        },
+        {
+          "start": 1074.92,
+          "end": 1075.22,
+          "word": " puxar",
+          "probability": 0.9993
+        },
+        {
+          "start": 1075.22,
+          "end": 1075.38,
+          "word": " ele",
+          "probability": 0.9932
+        },
+        {
+          "start": 1075.38,
+          "end": 1075.5,
+          "word": " pra",
+          "probability": 0.9199
+        },
+        {
+          "start": 1075.5,
+          "end": 1075.74,
+          "word": " baixo",
+          "probability": 0.9976
+        },
+        {
+          "start": 1075.74,
+          "end": 1075.9,
+          "word": " do",
+          "probability": 0.9863
+        },
+        {
+          "start": 1075.9,
+          "end": 1076.12,
+          "word": " mapa",
+          "probability": 0.999
+        },
+        {
+          "start": 1076.12,
+          "end": 1076.36,
+          "word": " de",
+          "probability": 0.9829
+        },
+        {
+          "start": 1076.36,
+          "end": 1076.62,
+          "word": " novo",
+          "probability": 1.0
+        },
+        {
+          "start": 1076.62,
+          "end": 1076.84,
+          "word": " Vamos",
+          "probability": 0.8198
+        },
+        {
+          "start": 1076.84,
+          "end": 1077.14,
+          "word": " fazer",
+          "probability": 1.0
+        },
+        {
+          "start": 1077.14,
+          "end": 1077.3,
+          "word": " isso",
+          "probability": 0.9995
+        },
+        {
+          "start": 1077.3,
+          "end": 1077.46,
+          "word": " até",
+          "probability": 0.9614
+        },
+        {
+          "start": 1077.46,
+          "end": 1077.6,
+          "word": " o",
+          "probability": 0.9854
+        },
+        {
+          "start": 1077.6,
+          "end": 1077.82,
+          "word": " cara",
+          "probability": 0.9995
+        },
+        {
+          "start": 1077.82,
+          "end": 1078.02,
+          "word": " que",
+          "probability": 0.9673
+        },
+        {
+          "start": 1078.02,
+          "end": 1078.2,
+          "word": " tá",
+          "probability": 0.9883
+        },
+        {
+          "start": 1078.2,
+          "end": 1078.56,
+          "word": " achando",
+          "probability": 0.9314
+        },
+        {
+          "start": 1078.56,
+          "end": 1078.68,
+          "word": " que",
+          "probability": 0.9951
+        },
+        {
+          "start": 1078.68,
+          "end": 1078.84,
+          "word": " tá",
+          "probability": 0.9995
+        },
+        {
+          "start": 1078.84,
+          "end": 1079.02,
+          "word": " com",
+          "probability": 1.0
+        },
+        {
+          "start": 1079.02,
+          "end": 1079.26,
+          "word": " erro",
+          "probability": 0.9902
+        },
+        {
+          "start": 1079.26,
+          "end": 1079.36,
+          "word": " o",
+          "probability": 0.6587
+        },
+        {
+          "start": 1079.36,
+          "end": 1079.52,
+          "word": " jogo",
+          "probability": 0.999
+        },
+        {
+          "start": 1079.52,
+          "end": 1079.88,
+          "word": " Até",
+          "probability": 0.9614
+        },
+        {
+          "start": 1079.88,
+          "end": 1080.04,
+          "word": " ele",
+          "probability": 1.0
+        },
+        {
+          "start": 1080.04,
+          "end": 1080.4,
+          "word": " fechar",
+          "probability": 1.0
+        },
+        {
+          "start": 1080.4,
+          "end": 1080.5,
+          "word": " o",
+          "probability": 0.9995
+        },
+        {
+          "start": 1080.5,
+          "end": 1080.84,
+          "word": " jogo",
+          "probability": 1.0
+        },
+        {
+          "start": 1080.84,
+          "end": 1081.56,
+          "word": " do",
+          "probability": 0.7744
+        },
+        {
+          "start": 1081.56,
+          "end": 1082.16,
+          "word": " computador",
+          "probability": 1.0
+        },
+        {
+          "start": 1082.16,
+          "end": 1082.58,
+          "word": " E",
+          "probability": 0.9902
+        },
+        {
+          "start": 1082.58,
+          "end": 1082.68,
+          "word": " eu",
+          "probability": 0.979
+        },
+        {
+          "start": 1082.68,
+          "end": 1082.78,
+          "word": " vi",
+          "probability": 0.8555
+        },
+        {
+          "start": 1082.78,
+          "end": 1082.84,
+          "word": " que",
+          "probability": 0.9961
+        },
+        {
+          "start": 1082.84,
+          "end": 1082.92,
+          "word": " o",
+          "probability": 1.0
+        },
+        {
+          "start": 1082.92,
+          "end": 1083.24,
+          "word": " Bagual",
+          "probability": 0.9089
+        },
+        {
+          "start": 1083.24,
+          "end": 1083.5,
+          "word": " também",
+          "probability": 0.998
+        },
+        {
+          "start": 1083.5,
+          "end": 1083.74,
+          "word": " tá",
+          "probability": 0.8989
+        },
+        {
+          "start": 1083.74,
+          "end": 1083.94,
+          "word": " online,",
+          "probability": 0.8784
+        },
+        {
+          "start": 1084.02,
+          "end": 1084.16,
+          "word": " o",
+          "probability": 0.9819
+        },
+        {
+          "start": 1084.16,
+          "end": 1084.4,
+          "word": " próximo",
+          "probability": 1.0
+        },
+        {
+          "start": 1084.4,
+          "end": 1084.56,
+          "word": " é",
+          "probability": 0.9995
+        },
+        {
+          "start": 1084.56,
+          "end": 1084.6,
+          "word": " o",
+          "probability": 1.0
+        },
+        {
+          "start": 1084.6,
+          "end": 1084.96,
+          "word": " Bagual",
+          "probability": 1.0
+        },
+        {
+          "start": 1084.96,
+          "end": 1085.42,
+          "word": " Ó",
+          "probability": 0.1146
+        },
+        {
+          "start": 1085.42,
+          "end": 1085.62,
+          "word": " ele",
+          "probability": 0.998
+        },
+        {
+          "start": 1085.62,
+          "end": 1085.8,
+          "word": " aqui,",
+          "probability": 1.0
+        },
+        {
+          "start": 1085.88,
+          "end": 1086.12,
+          "word": " turma,",
+          "probability": 0.9421
+        },
+        {
+          "start": 1086.12,
+          "end": 1086.24,
+          "word": " ó",
+          "probability": 0.9932
+        },
+        {
+          "start": 1086.24,
+          "end": 1086.3,
+          "word": " ele",
+          "probability": 1.0
+        },
+        {
+          "start": 1086.3,
+          "end": 1086.44,
+          "word": " aqui,",
+          "probability": 1.0
+        },
+        {
+          "start": 1086.52,
+          "end": 1086.74,
+          "word": " ó",
+          "probability": 1.0
+        },
+        {
+          "start": 1092.84,
+          "end": 1093.2,
+          "word": " Ô,",
+          "probability": 0.2944
+        },
+        {
+          "start": 1093.2,
+          "end": 1093.56,
+          "word": " velho,",
+          "probability": 0.7856
+        },
+        {
+          "start": 1093.56,
+          "end": 1093.76,
+          "word": " tem",
+          "probability": 0.6128
+        },
+        {
+          "start": 1093.76,
+          "end": 1094.26,
+          "word": " alguém",
+          "probability": 0.999
+        },
+        {
+          "start": 1094.26,
+          "end": 1094.34,
+          "word": " que",
+          "probability": 0.9966
+        },
+        {
+          "start": 1094.34,
+          "end": 1094.36,
+          "word": " tá",
+          "probability": 1.0
+        },
+        {
+          "start": 1094.36,
+          "end": 1094.56,
+          "word": " fazendo",
+          "probability": 0.9834
+        },
+        {
+          "start": 1094.56,
+          "end": 1094.7,
+          "word": " só",
+          "probability": 0.8574
+        },
+        {
+          "start": 1094.7,
+          "end": 1095.04,
+          "word": " crachá",
+          "probability": 0.8835
+        },
+        {
+          "start": 1095.04,
+          "end": 1095.14,
+          "word": " aqui",
+          "probability": 0.9971
+        },
+        {
+          "start": 1095.14,
+          "end": 1095.28,
+          "word": " toda",
+          "probability": 0.9917
+        },
+        {
+          "start": 1095.28,
+          "end": 1095.46,
+          "word": " hora,",
+          "probability": 1.0
+        },
+        {
+          "start": 1095.6,
+          "end": 1095.72,
+          "word": " velho",
+          "probability": 0.9958
+        },
+        {
+          "start": 1095.72,
+          "end": 1095.9,
+          "word": " Embaixo",
+          "probability": 0.6428
+        },
+        {
+          "start": 1095.9,
+          "end": 1095.96,
+          "word": " da",
+          "probability": 0.9985
+        },
+        {
+          "start": 1095.96,
+          "end": 1096.18,
+          "word": " terra",
+          "probability": 0.9678
+        },
+        {
+          "start": 1096.18,
+          "end": 1096.3,
+          "word": " aqui,",
+          "probability": 0.9995
+        },
+        {
+          "start": 1096.44,
+          "end": 1096.58,
+          "word": " mano,",
+          "probability": 0.9961
+        },
+        {
+          "start": 1096.6,
+          "end": 1096.72,
+          "word": " na",
+          "probability": 0.9927
+        },
+        {
+          "start": 1096.72,
+          "end": 1096.9,
+          "word": " moral",
+          "probability": 1.0
+        },
+        {
+          "start": 1096.9,
+          "end": 1097.18,
+          "word": " Eu",
+          "probability": 0.917
+        },
+        {
+          "start": 1097.18,
+          "end": 1097.38,
+          "word": " tô",
+          "probability": 0.998
+        },
+        {
+          "start": 1097.38,
+          "end": 1097.6,
+          "word": " andando",
+          "probability": 0.9995
+        },
+        {
+          "start": 1097.6,
+          "end": 1097.72,
+          "word": " de",
+          "probability": 0.9995
+        },
+        {
+          "start": 1097.72,
+          "end": 1097.96,
+          "word": " moto,",
+          "probability": 0.9985
+        },
+        {
+          "start": 1098.06,
+          "end": 1098.54,
+          "word": " tô",
+          "probability": 0.9507
+        },
+        {
+          "start": 1098.54,
+          "end": 1098.76,
+          "word": " embaixo",
+          "probability": 0.4871
+        },
+        {
+          "start": 1098.76,
+          "end": 1098.9,
+          "word": " da",
+          "probability": 0.999
+        },
+        {
+          "start": 1098.9,
+          "end": 1099.16,
+          "word": " terra",
+          "probability": 0.9985
+        },
+        {
+          "start": 1099.16,
+          "end": 1099.16,
+          "word": " Eu",
+          "probability": 0.054
+        },
+        {
+          "start": 1099.16,
+          "end": 1099.32,
+          "word": " tô",
+          "probability": 0.014
+        },
+        {
+          "start": 1099.32,
+          "end": 1099.84,
+          "word": " andando",
+          "probability": 0.4979
+        }
+      ]
+    },
+    {
+      "start": 1187.088,
+      "end": 1249.2,
+      "language": "pt",
+      "language_probability": 0.9565,
+      "words": [
+        {
+          "start": 1189.008,
+          "end": 1189.408,
+          "word": " Ah,",
+          "probability": 0.0612
+        },
+        {
+          "start": 1189.568,
+          "end": 1189.828,
+          "word": " mano,",
+          "probability": 0.9692
+        },
+        {
+          "start": 1189.848,
+          "end": 1190.008,
+          "word": " na",
+          "probability": 0.9785
+        },
+        {
+          "start": 1190.008,
+          "end": 1190.448,
+          "word": " moral,",
+          "probability": 0.998
+        },
+        {
+          "start": 1190.508,
+          "end": 1191.028,
+          "word": " velho,",
+          "probability": 0.7842
+        },
+        {
+          "start": 1191.088,
+          "end": 1191.348,
+          "word": " na",
+          "probability": 0.9844
+        },
+        {
+          "start": 1191.348,
+          "end": 1191.888,
+          "word": " moral,",
+          "probability": 0.9976
+        },
+        {
+          "start": 1191.908,
+          "end": 1192.828,
+          "word": " na",
+          "probability": 0.7764
+        },
+        {
+          "start": 1192.828,
+          "end": 1193.728,
+          "word": " moral,",
+          "probability": 0.999
+        },
+        {
+          "start": 1193.748,
+          "end": 1194.208,
+          "word": " velho.",
+          "probability": 0.97
+        },
+        {
+          "start": 1194.548,
+          "end": 1194.948,
+          "word": " Onde",
+          "probability": 0.8
+        },
+        {
+          "start": 1194.948,
+          "end": 1195.068,
+          "word": " eu",
+          "probability": 0.9043
+        },
+        {
+          "start": 1195.068,
+          "end": 1195.488,
+          "word": " parei,",
+          "probability": 0.9868
+        },
+        {
+          "start": 1195.488,
+          "end": 1195.608,
+          "word": " meu",
+          "probability": 0.897
+        },
+        {
+          "start": 1195.608,
+          "end": 1195.868,
+          "word": " motor,",
+          "probability": 0.6284
+        },
+        {
+          "start": 1195.968,
+          "end": 1197.048,
+          "word": " caralho!",
+          "probability": 0.6518
+        },
+        {
+          "start": 1199.868,
+          "end": 1200.268,
+          "word": " Toda",
+          "probability": 0.9893
+        },
+        {
+          "start": 1200.268,
+          "end": 1200.348,
+          "word": " hora",
+          "probability": 0.998
+        },
+        {
+          "start": 1200.348,
+          "end": 1200.448,
+          "word": " ele",
+          "probability": 0.5601
+        },
+        {
+          "start": 1200.448,
+          "end": 1200.488,
+          "word": " me",
+          "probability": 0.9634
+        },
+        {
+          "start": 1200.488,
+          "end": 1200.948,
+          "word": " atrapalhando,",
+          "probability": 0.9969
+        },
+        {
+          "start": 1200.968,
+          "end": 1201.168,
+          "word": " toda",
+          "probability": 0.9961
+        },
+        {
+          "start": 1201.168,
+          "end": 1201.308,
+          "word": " hora",
+          "probability": 1.0
+        },
+        {
+          "start": 1201.308,
+          "end": 1201.408,
+          "word": " ele",
+          "probability": 0.98
+        },
+        {
+          "start": 1201.408,
+          "end": 1201.448,
+          "word": " me",
+          "probability": 0.9995
+        },
+        {
+          "start": 1201.448,
+          "end": 1201.828,
+          "word": " atrapalhando",
+          "probability": 0.9994
+        },
+        {
+          "start": 1201.828,
+          "end": 1201.948,
+          "word": " nessa",
+          "probability": 0.9614
+        },
+        {
+          "start": 1201.948,
+          "end": 1202.248,
+          "word": " porra,",
+          "probability": 0.981
+        },
+        {
+          "start": 1202.308,
+          "end": 1202.468,
+          "word": " toda",
+          "probability": 0.9873
+        },
+        {
+          "start": 1202.468,
+          "end": 1202.688,
+          "word": " hora",
+          "probability": 1.0
+        },
+        {
+          "start": 1202.688,
+          "end": 1202.868,
+          "word": " ele",
+          "probability": 0.9956
+        },
+        {
+          "start": 1202.868,
+          "end": 1202.928,
+          "word": " me",
+          "probability": 1.0
+        },
+        {
+          "start": 1202.928,
+          "end": 1203.268,
+          "word": " atrapalhando,",
+          "probability": 0.9998
+        },
+        {
+          "start": 1203.348,
+          "end": 1203.708,
+          "word": " toda",
+          "probability": 0.9951
+        },
+        {
+          "start": 1203.708,
+          "end": 1203.928,
+          "word": " hora",
+          "probability": 1.0
+        },
+        {
+          "start": 1203.928,
+          "end": 1204.048,
+          "word": " ele",
+          "probability": 0.9961
+        },
+        {
+          "start": 1204.048,
+          "end": 1204.128,
+          "word": " me",
+          "probability": 1.0
+        },
+        {
+          "start": 1204.128,
+          "end": 1204.388,
+          "word": " atrapalhando",
+          "probability": 0.9993
+        },
+        {
+          "start": 1204.388,
+          "end": 1205.488,
+          "word": " nessa",
+          "probability": 0.9771
+        },
+        {
+          "start": 1205.488,
+          "end": 1205.908,
+          "word": " porra.",
+          "probability": 0.9998
+        },
+        {
+          "start": 1205.988,
+          "end": 1206.328,
+          "word": " Caralho,",
+          "probability": 0.7252
+        },
+        {
+          "start": 1206.408,
+          "end": 1206.968,
+          "word": " caralho,",
+          "probability": 0.8226
+        },
+        {
+          "start": 1207.088,
+          "end": 1207.268,
+          "word": " caralho,",
+          "probability": 0.9588
+        },
+        {
+          "start": 1207.448,
+          "end": 1207.748,
+          "word": " caralho.",
+          "probability": 0.9414
+        },
+        {
+          "start": 1207.888,
+          "end": 1208.208,
+          "word": " Que",
+          "probability": 0.8555
+        },
+        {
+          "start": 1208.208,
+          "end": 1208.468,
+          "word": " isso,",
+          "probability": 0.9653
+        },
+        {
+          "start": 1208.628,
+          "end": 1208.768,
+          "word": " cara?",
+          "probability": 0.8179
+        },
+        {
+          "start": 1209.188,
+          "end": 1209.588,
+          "word": " Os",
+          "probability": 0.8755
+        },
+        {
+          "start": 1209.588,
+          "end": 1210.768,
+          "word": " caras",
+          "probability": 0.968
+        },
+        {
+          "start": 1210.768,
+          "end": 1211.368,
+          "word": " estranhos,",
+          "probability": 0.7532
+        },
+        {
+          "start": 1211.408,
+          "end": 1211.828,
+          "word": " os",
+          "probability": 0.9897
+        },
+        {
+          "start": 1211.828,
+          "end": 1212.088,
+          "word": " caras",
+          "probability": 0.9985
+        },
+        {
+          "start": 1212.088,
+          "end": 1212.728,
+          "word": " engraçados",
+          "probability": 0.9984
+        },
+        {
+          "start": 1212.728,
+          "end": 1212.828,
+          "word": " e",
+          "probability": 0.9561
+        },
+        {
+          "start": 1212.828,
+          "end": 1213.228,
+          "word": " estranhos,",
+          "probability": 0.9995
+        },
+        {
+          "start": 1213.248,
+          "end": 1213.328,
+          "word": " meu",
+          "probability": 0.9688
+        },
+        {
+          "start": 1213.328,
+          "end": 1213.468,
+          "word": " Deus.",
+          "probability": 0.9907
+        },
+        {
+          "start": 1216.548,
+          "end": 1216.948,
+          "word": " Mais",
+          "probability": 0.0425
+        },
+        {
+          "start": 1216.948,
+          "end": 1217.348,
+          "word": " umazinha",
+          "probability": 0.3625
+        },
+        {
+          "start": 1217.348,
+          "end": 1217.528,
+          "word": " só,",
+          "probability": 0.7578
+        },
+        {
+          "start": 1217.548,
+          "end": 1217.908,
+          "word": " turma.",
+          "probability": 0.9343
+        },
+        {
+          "start": 1218.048,
+          "end": 1218.248,
+          "word": " Ô,",
+          "probability": 0.2473
+        },
+        {
+          "start": 1218.248,
+          "end": 1218.528,
+          "word": " professor,",
+          "probability": 0.9478
+        },
+        {
+          "start": 1218.748,
+          "end": 1219.048,
+          "word": " puxa",
+          "probability": 0.8875
+        },
+        {
+          "start": 1219.048,
+          "end": 1219.128,
+          "word": " o",
+          "probability": 0.584
+        },
+        {
+          "start": 1219.128,
+          "end": 1219.588,
+          "word": " laranjinho,",
+          "probability": 0.4376
+        },
+        {
+          "start": 1219.688,
+          "end": 1219.808,
+          "word": " que",
+          "probability": 0.3579
+        },
+        {
+          "start": 1219.808,
+          "end": 1219.888,
+          "word": " eu",
+          "probability": 0.7422
+        },
+        {
+          "start": 1219.888,
+          "end": 1220.008,
+          "word": " vou",
+          "probability": 0.4709
+        },
+        {
+          "start": 1220.008,
+          "end": 1220.028,
+          "word": " até",
+          "probability": 0.5674
+        },
+        {
+          "start": 1220.028,
+          "end": 1220.068,
+          "word": " te",
+          "probability": 0.4399
+        },
+        {
+          "start": 1220.068,
+          "end": 1220.348,
+          "word": " dar",
+          "probability": 0.6875
+        },
+        {
+          "start": 1220.348,
+          "end": 1220.588,
+          "word": " aqui.",
+          "probability": 0.7119
+        },
+        {
+          "start": 1221.068,
+          "end": 1221.468,
+          "word": " Ah,",
+          "probability": 0.8652
+        },
+        {
+          "start": 1221.528,
+          "end": 1221.668,
+          "word": " mano,",
+          "probability": 0.9897
+        },
+        {
+          "start": 1221.728,
+          "end": 1221.828,
+          "word": " que",
+          "probability": 0.936
+        },
+        {
+          "start": 1221.828,
+          "end": 1222.048,
+          "word": " isso,",
+          "probability": 0.9829
+        },
+        {
+          "start": 1222.148,
+          "end": 1222.228,
+          "word": " vou",
+          "probability": 0.5396
+        },
+        {
+          "start": 1222.228,
+          "end": 1222.468,
+          "word": " morrer",
+          "probability": 0.9988
+        },
+        {
+          "start": 1222.468,
+          "end": 1222.588,
+          "word": " na",
+          "probability": 0.9971
+        },
+        {
+          "start": 1222.588,
+          "end": 1222.788,
+          "word": " água",
+          "probability": 0.998
+        },
+        {
+          "start": 1222.788,
+          "end": 1222.948,
+          "word": " agora.",
+          "probability": 0.9673
+        },
+        {
+          "start": 1228.368,
+          "end": 1228.768,
+          "word": " Que",
+          "probability": 0.8892
+        },
+        {
+          "start": 1228.768,
+          "end": 1229.168,
+          "word": " isso,",
+          "probability": 0.9863
+        },
+        {
+          "start": 1229.248,
+          "end": 1229.528,
+          "word": " viado.",
+          "probability": 0.9011
+        },
+        {
+          "start": 1230.048,
+          "end": 1230.448,
+          "word": " Ele",
+          "probability": 0.5732
+        },
+        {
+          "start": 1230.448,
+          "end": 1230.568,
+          "word": " vai",
+          "probability": 0.9956
+        },
+        {
+          "start": 1230.568,
+          "end": 1230.948,
+          "word": " chorar,",
+          "probability": 0.9993
+        },
+        {
+          "start": 1230.948,
+          "end": 1231.168,
+          "word": " turma,",
+          "probability": 0.9968
+        },
+        {
+          "start": 1231.188,
+          "end": 1231.288,
+          "word": " vou",
+          "probability": 0.9385
+        },
+        {
+          "start": 1231.288,
+          "end": 1231.508,
+          "word": " parar,",
+          "probability": 0.9976
+        },
+        {
+          "start": 1231.728,
+          "end": 1231.928,
+          "word": " vou",
+          "probability": 0.9956
+        },
+        {
+          "start": 1231.928,
+          "end": 1232.168,
+          "word": " parar.",
+          "probability": 0.9995
+        },
+        {
+          "start": 1232.228,
+          "end": 1232.288,
+          "word": " Que",
+          "probability": 0.9302
+        },
+        {
+          "start": 1232.288,
+          "end": 1232.608,
+          "word": " isso,",
+          "probability": 0.9995
+        },
+        {
+          "start": 1232.728,
+          "end": 1232.928,
+          "word": " viado.",
+          "probability": 0.9976
+        },
+        {
+          "start": 1232.968,
+          "end": 1233.328,
+          "word": " Vou",
+          "probability": 0.9858
+        },
+        {
+          "start": 1233.328,
+          "end": 1233.608,
+          "word": " parar,",
+          "probability": 0.999
+        },
+        {
+          "start": 1233.688,
+          "end": 1233.748,
+          "word": " vou",
+          "probability": 0.9839
+        },
+        {
+          "start": 1233.748,
+          "end": 1233.988,
+          "word": " parar,",
+          "probability": 0.9995
+        },
+        {
+          "start": 1234.048,
+          "end": 1234.108,
+          "word": " ele",
+          "probability": 0.9902
+        },
+        {
+          "start": 1234.108,
+          "end": 1234.188,
+          "word": " vai",
+          "probability": 1.0
+        },
+        {
+          "start": 1234.188,
+          "end": 1234.548,
+          "word": " chorar,",
+          "probability": 1.0
+        },
+        {
+          "start": 1234.568,
+          "end": 1234.768,
+          "word": " pessoal,",
+          "probability": 0.9985
+        },
+        {
+          "start": 1234.948,
+          "end": 1235.248,
+          "word": " ele",
+          "probability": 0.9824
+        },
+        {
+          "start": 1235.248,
+          "end": 1235.388,
+          "word": " vai",
+          "probability": 1.0
+        },
+        {
+          "start": 1235.388,
+          "end": 1235.748,
+          "word": " chorar.",
+          "probability": 0.9998
+        },
+        {
+          "start": 1235.908,
+          "end": 1236.088,
+          "word": " A",
+          "probability": 0.9868
+        },
+        {
+          "start": 1236.088,
+          "end": 1236.368,
+          "word": " nossa",
+          "probability": 0.998
+        },
+        {
+          "start": 1236.368,
+          "end": 1236.928,
+          "word": " próxima",
+          "probability": 0.9971
+        },
+        {
+          "start": 1236.928,
+          "end": 1237.608,
+          "word": " vítima",
+          "probability": 0.9967
+        },
+        {
+          "start": 1237.608,
+          "end": 1237.748,
+          "word": " é",
+          "probability": 0.9956
+        },
+        {
+          "start": 1237.748,
+          "end": 1238.028,
+          "word": " essa",
+          "probability": 0.9922
+        },
+        {
+          "start": 1238.028,
+          "end": 1238.408,
+          "word": " daqui,",
+          "probability": 0.9785
+        },
+        {
+          "start": 1238.648,
+          "end": 1238.828,
+          "word": " ó,",
+          "probability": 0.9458
+        },
+        {
+          "start": 1238.868,
+          "end": 1239.748,
+          "word": " poderoso",
+          "probability": 0.9001
+        },
+        {
+          "start": 1239.748,
+          "end": 1240.568,
+          "word": " bagual.",
+          "probability": 0.6764
+        },
+        {
+          "start": 1241.028,
+          "end": 1241.428,
+          "word": " Meu",
+          "probability": 0.9912
+        },
+        {
+          "start": 1241.428,
+          "end": 1241.828,
+          "word": " braço",
+          "probability": 0.9998
+        },
+        {
+          "start": 1241.828,
+          "end": 1242.168,
+          "word": " direito.",
+          "probability": 0.9995
+        },
+        {
+          "start": 1243.588,
+          "end": 1243.928,
+          "word": " Acabou",
+          "probability": 0.8727
+        },
+        {
+          "start": 1243.928,
+          "end": 1244.068,
+          "word": " de",
+          "probability": 0.9956
+        },
+        {
+          "start": 1244.068,
+          "end": 1244.288,
+          "word": " logar,",
+          "probability": 0.9868
+        },
+        {
+          "start": 1244.468,
+          "end": 1244.628,
+          "word": " vamos",
+          "probability": 0.9614
+        },
+        {
+          "start": 1244.628,
+          "end": 1245.188,
+          "word": " aproveitar",
+          "probability": 0.9978
+        },
+        {
+          "start": 1245.188,
+          "end": 1245.268,
+          "word": " que",
+          "probability": 0.9658
+        },
+        {
+          "start": 1245.268,
+          "end": 1245.368,
+          "word": " ele",
+          "probability": 0.9565
+        },
+        {
+          "start": 1245.368,
+          "end": 1245.548,
+          "word": " nem",
+          "probability": 0.9834
+        },
+        {
+          "start": 1245.548,
+          "end": 1245.668,
+          "word": " na",
+          "probability": 0.9849
+        },
+        {
+          "start": 1245.668,
+          "end": 1246.088,
+          "word": " rádio",
+          "probability": 0.9967
+        },
+        {
+          "start": 1246.088,
+          "end": 1246.188,
+          "word": " não",
+          "probability": 0.9629
+        },
+        {
+          "start": 1246.188,
+          "end": 1246.368,
+          "word": " tá",
+          "probability": 0.332
+        },
+        {
+          "start": 1246.368,
+          "end": 1246.608,
+          "word": " indo,",
+          "probability": 0.7505
+        },
+        {
+          "start": 1246.728,
+          "end": 1246.788,
+          "word": " ó,",
+          "probability": 0.5601
+        },
+        {
+          "start": 1246.788,
+          "end": 1246.868,
+          "word": " não",
+          "probability": 0.9907
+        },
+        {
+          "start": 1246.868,
+          "end": 1247.248,
+          "word": " escutou",
+          "probability": 0.9987
+        },
+        {
+          "start": 1247.248,
+          "end": 1247.328,
+          "word": " o",
+          "probability": 0.9956
+        },
+        {
+          "start": 1247.328,
+          "end": 1247.488,
+          "word": " cara",
+          "probability": 0.999
+        },
+        {
+          "start": 1247.488,
+          "end": 1248.188,
+          "word": " reclamando.",
+          "probability": 0.9995
+        },
+        {
+          "start": 1248.188,
+          "end": 1248.448,
+          "word": " Mano...",
+          "probability": 0.5716
+        }
+      ]
+    },
+    {
+      "start": 1317.088,
+      "end": 1371.712,
+      "language": "pt",
+      "language_probability": 0.9937,
+      "words": [
+        {
+          "start": 1317.088,
+          "end": 1317.708,
+          "word": " O",
+          "probability": 0.037
+        },
+        {
+          "start": 1317.708,
+          "end": 1317.948,
+          "word": " que",
+          "probability": 0.729
+        },
+        {
+          "start": 1317.948,
+          "end": 1318.048,
+          "word": " é",
+          "probability": 0.7349
+        },
+        {
+          "start": 1318.048,
+          "end": 1318.368,
+          "word": " isso,",
+          "probability": 0.9556
+        },
+        {
+          "start": 1318.468,
+          "end": 1318.568,
+          "word": " cara?",
+          "probability": 0.9478
+        },
+        {
+          "start": 1318.928,
+          "end": 1319.448,
+          "word": " Nossa,",
+          "probability": 0.2686
+        },
+        {
+          "start": 1319.788,
+          "end": 1320.068,
+          "word": " doido!",
+          "probability": 0.598
+        },
+        {
+          "start": 1320.148,
+          "end": 1320.228,
+          "word": " O",
+          "probability": 0.5376
+        },
+        {
+          "start": 1320.228,
+          "end": 1320.348,
+          "word": " povo",
+          "probability": 0.5308
+        },
+        {
+          "start": 1320.348,
+          "end": 1320.488,
+          "word": " tá",
+          "probability": 0.6914
+        },
+        {
+          "start": 1320.488,
+          "end": 1320.848,
+          "word": " bravo",
+          "probability": 0.9319
+        },
+        {
+          "start": 1320.848,
+          "end": 1321.128,
+          "word": " hoje,",
+          "probability": 0.8452
+        },
+        {
+          "start": 1321.208,
+          "end": 1321.408,
+          "word": " turma!",
+          "probability": 0.697
+        },
+        {
+          "start": 1321.408,
+          "end": 1321.628,
+          "word": " Gente,",
+          "probability": 0.4802
+        },
+        {
+          "start": 1321.628,
+          "end": 1321.888,
+          "word": " jogo",
+          "probability": 0.7446
+        },
+        {
+          "start": 1321.888,
+          "end": 1322.168,
+          "word": " da",
+          "probability": 0.9619
+        },
+        {
+          "start": 1322.168,
+          "end": 1322.708,
+          "word": " Copa,",
+          "probability": 0.8896
+        },
+        {
+          "start": 1322.708,
+          "end": 1322.908,
+          "word": " cara!",
+          "probability": 0.9946
+        },
+        {
+          "start": 1323.208,
+          "end": 1323.548,
+          "word": " Ê,",
+          "probability": 0.6729
+        },
+        {
+          "start": 1323.708,
+          "end": 1323.908,
+          "word": " ê,",
+          "probability": 0.8701
+        },
+        {
+          "start": 1323.908,
+          "end": 1324.128,
+          "word": " ê!",
+          "probability": 0.9858
+        },
+        {
+          "start": 1324.208,
+          "end": 1324.628,
+          "word": " Parou,",
+          "probability": 0.9736
+        },
+        {
+          "start": 1324.628,
+          "end": 1324.928,
+          "word": " parou!",
+          "probability": 0.9956
+        },
+        {
+          "start": 1327.888,
+          "end": 1328.408,
+          "word": " Nossa,",
+          "probability": 0.6797
+        },
+        {
+          "start": 1330.168,
+          "end": 1330.468,
+          "word": " turma!",
+          "probability": 0.9834
+        },
+        {
+          "start": 1330.468,
+          "end": 1330.848,
+          "word": " Quebrou",
+          "probability": 0.9982
+        },
+        {
+          "start": 1330.848,
+          "end": 1331.028,
+          "word": " tudo!",
+          "probability": 0.9961
+        },
+        {
+          "start": 1332.368,
+          "end": 1332.888,
+          "word": " Quebrou",
+          "probability": 0.9901
+        },
+        {
+          "start": 1332.888,
+          "end": 1333.128,
+          "word": " tudo!",
+          "probability": 0.9761
+        },
+        {
+          "start": 1334.728,
+          "end": 1335.248,
+          "word": " O",
+          "probability": 0.8589
+        },
+        {
+          "start": 1335.248,
+          "end": 1335.428,
+          "word": " povo",
+          "probability": 0.9985
+        },
+        {
+          "start": 1335.428,
+          "end": 1335.708,
+          "word": " tá",
+          "probability": 0.9775
+        },
+        {
+          "start": 1335.708,
+          "end": 1336.068,
+          "word": " bravo",
+          "probability": 0.999
+        },
+        {
+          "start": 1336.068,
+          "end": 1336.468,
+          "word": " hoje,",
+          "probability": 0.9727
+        },
+        {
+          "start": 1336.508,
+          "end": 1336.688,
+          "word": " né,",
+          "probability": 0.8169
+        },
+        {
+          "start": 1336.708,
+          "end": 1336.788,
+          "word": " cara?",
+          "probability": 0.9834
+        },
+        {
+          "start": 1336.848,
+          "end": 1337.368,
+          "word": " Nossa,",
+          "probability": 0.9058
+        },
+        {
+          "start": 1337.508,
+          "end": 1337.768,
+          "word": " turma!",
+          "probability": 0.9958
+        },
+        {
+          "start": 1337.768,
+          "end": 1337.868,
+          "word": " Ele",
+          "probability": 0.9912
+        },
+        {
+          "start": 1337.868,
+          "end": 1338.228,
+          "word": " quebrou",
+          "probability": 0.9992
+        },
+        {
+          "start": 1338.228,
+          "end": 1338.308,
+          "word": " o",
+          "probability": 0.9785
+        },
+        {
+          "start": 1338.308,
+          "end": 1338.388,
+          "word": " fone!",
+          "probability": 0.9375
+        },
+        {
+          "start": 1338.408,
+          "end": 1338.928,
+          "word": " Acho",
+          "probability": 0.0945
+        },
+        {
+          "start": 1338.928,
+          "end": 1341.588,
+          "word": " que...",
+          "probability": 0.9839
+        },
+        {
+          "start": 1342.168,
+          "end": 1342.688,
+          "word": " Nossa,",
+          "probability": 0.9863
+        },
+        {
+          "start": 1342.848,
+          "end": 1343.208,
+          "word": " quebrou",
+          "probability": 0.9984
+        },
+        {
+          "start": 1343.208,
+          "end": 1343.288,
+          "word": " o",
+          "probability": 0.998
+        },
+        {
+          "start": 1343.288,
+          "end": 1343.548,
+          "word": " fone!",
+          "probability": 0.9978
+        },
+        {
+          "start": 1343.548,
+          "end": 1344.228,
+          "word": " Que",
+          "probability": 0.3855
+        },
+        {
+          "start": 1344.228,
+          "end": 1344.608,
+          "word": " povo",
+          "probability": 0.0873
+        },
+        {
+          "start": 1344.608,
+          "end": 1344.808,
+          "word": " mais",
+          "probability": 0.1395
+        },
+        {
+          "start": 1344.808,
+          "end": 1345.408,
+          "word": " amargurado,",
+          "probability": 0.9717
+        },
+        {
+          "start": 1345.568,
+          "end": 1345.768,
+          "word": " turma!",
+          "probability": 0.7903
+        },
+        {
+          "start": 1345.768,
+          "end": 1345.848,
+          "word": " O",
+          "probability": 0.3633
+        },
+        {
+          "start": 1345.848,
+          "end": 1345.988,
+          "word": " povo",
+          "probability": 0.9727
+        },
+        {
+          "start": 1345.988,
+          "end": 1346.048,
+          "word": " tá",
+          "probability": 0.6201
+        },
+        {
+          "start": 1346.048,
+          "end": 1346.228,
+          "word": " muito",
+          "probability": 0.9912
+        },
+        {
+          "start": 1346.228,
+          "end": 1346.648,
+          "word": " bravo!",
+          "probability": 0.8459
+        },
+        {
+          "start": 1346.648,
+          "end": 1346.748,
+          "word": " Vamos",
+          "probability": 0.5498
+        },
+        {
+          "start": 1346.748,
+          "end": 1346.948,
+          "word": " falar",
+          "probability": 0.9907
+        },
+        {
+          "start": 1346.948,
+          "end": 1347.008,
+          "word": " uma",
+          "probability": 0.5957
+        },
+        {
+          "start": 1347.008,
+          "end": 1347.208,
+          "word": " coisa",
+          "probability": 0.9897
+        },
+        {
+          "start": 1347.208,
+          "end": 1347.348,
+          "word": " pra",
+          "probability": 0.6924
+        },
+        {
+          "start": 1347.348,
+          "end": 1347.488,
+          "word": " vocês.",
+          "probability": 0.9258
+        },
+        {
+          "start": 1347.588,
+          "end": 1347.708,
+          "word": " Esse",
+          "probability": 0.9424
+        },
+        {
+          "start": 1347.708,
+          "end": 1347.828,
+          "word": " vídeo",
+          "probability": 0.9868
+        },
+        {
+          "start": 1347.828,
+          "end": 1348.028,
+          "word": " podia",
+          "probability": 0.9419
+        },
+        {
+          "start": 1348.028,
+          "end": 1348.248,
+          "word": " ser",
+          "probability": 0.9976
+        },
+        {
+          "start": 1348.248,
+          "end": 1348.568,
+          "word": " maior,",
+          "probability": 0.9922
+        },
+        {
+          "start": 1348.688,
+          "end": 1349.188,
+          "word": " mas",
+          "probability": 0.9907
+        },
+        {
+          "start": 1349.188,
+          "end": 1349.348,
+          "word": " eu",
+          "probability": 0.9775
+        },
+        {
+          "start": 1349.348,
+          "end": 1349.448,
+          "word": " vou",
+          "probability": 0.9985
+        },
+        {
+          "start": 1349.448,
+          "end": 1349.728,
+          "word": " comer",
+          "probability": 0.9814
+        },
+        {
+          "start": 1349.728,
+          "end": 1349.888,
+          "word": " minha",
+          "probability": 0.6997
+        },
+        {
+          "start": 1349.888,
+          "end": 1350.348,
+          "word": " jantinha,",
+          "probability": 0.9889
+        },
+        {
+          "start": 1350.388,
+          "end": 1350.508,
+          "word": " porque",
+          "probability": 0.9912
+        },
+        {
+          "start": 1350.508,
+          "end": 1350.728,
+          "word": " daqui",
+          "probability": 0.9927
+        },
+        {
+          "start": 1350.728,
+          "end": 1350.808,
+          "word": " a",
+          "probability": 0.9829
+        },
+        {
+          "start": 1350.808,
+          "end": 1351.168,
+          "word": " pouco",
+          "probability": 0.998
+        },
+        {
+          "start": 1351.168,
+          "end": 1351.348,
+          "word": " tem",
+          "probability": 0.9795
+        },
+        {
+          "start": 1351.348,
+          "end": 1351.628,
+          "word": " Jogo",
+          "probability": 0.6678
+        },
+        {
+          "start": 1351.628,
+          "end": 1351.728,
+          "word": " do",
+          "probability": 0.9946
+        },
+        {
+          "start": 1351.728,
+          "end": 1352.068,
+          "word": " Brasil!",
+          "probability": 0.9883
+        },
+        {
+          "start": 1352.148,
+          "end": 1352.508,
+          "word": " Cadê",
+          "probability": 0.9854
+        },
+        {
+          "start": 1352.508,
+          "end": 1352.528,
+          "word": " o",
+          "probability": 0.8936
+        },
+        {
+          "start": 1352.528,
+          "end": 1352.828,
+          "word": " efeito",
+          "probability": 0.5778
+        },
+        {
+          "start": 1352.828,
+          "end": 1352.988,
+          "word": " do",
+          "probability": 0.9385
+        },
+        {
+          "start": 1352.988,
+          "end": 1353.488,
+          "word": " garotão?",
+          "probability": 0.6079
+        },
+        {
+          "start": 1354.368,
+          "end": 1354.728,
+          "word": " É",
+          "probability": 0.708
+        },
+        {
+          "start": 1354.728,
+          "end": 1354.868,
+          "word": " isso",
+          "probability": 0.9976
+        },
+        {
+          "start": 1354.868,
+          "end": 1355.188,
+          "word": " aí,",
+          "probability": 0.9829
+        },
+        {
+          "start": 1355.248,
+          "end": 1355.408,
+          "word": " minha",
+          "probability": 0.9868
+        },
+        {
+          "start": 1355.408,
+          "end": 1355.788,
+          "word": " turma!",
+          "probability": 0.999
+        },
+        {
+          "start": 1355.908,
+          "end": 1356.268,
+          "word": " Hoje",
+          "probability": 0.998
+        },
+        {
+          "start": 1356.268,
+          "end": 1356.448,
+          "word": " o",
+          "probability": 0.5508
+        },
+        {
+          "start": 1356.448,
+          "end": 1356.548,
+          "word": " meu",
+          "probability": 0.9995
+        },
+        {
+          "start": 1356.548,
+          "end": 1357.008,
+          "word": " placar",
+          "probability": 0.9988
+        },
+        {
+          "start": 1357.008,
+          "end": 1357.368,
+          "word": " é",
+          "probability": 0.998
+        },
+        {
+          "start": 1358.048,
+          "end": 1358.408,
+          "word": " 2x1",
+          "probability": 0.9624
+        },
+        {
+          "start": 1358.408,
+          "end": 1358.768,
+          "word": " Brasil.",
+          "probability": 0.9922
+        },
+        {
+          "start": 1358.888,
+          "end": 1359.048,
+          "word": " Vem",
+          "probability": 0.9985
+        },
+        {
+          "start": 1359.048,
+          "end": 1359.148,
+          "word": " pra",
+          "probability": 0.9927
+        },
+        {
+          "start": 1359.148,
+          "end": 1359.548,
+          "word": " cima,",
+          "probability": 1.0
+        },
+        {
+          "start": 1359.668,
+          "end": 1360.028,
+          "word": " pode",
+          "probability": 0.9995
+        },
+        {
+          "start": 1360.028,
+          "end": 1360.168,
+          "word": " me",
+          "probability": 0.9995
+        },
+        {
+          "start": 1360.168,
+          "end": 1360.508,
+          "word": " cobrar",
+          "probability": 0.9998
+        },
+        {
+          "start": 1360.508,
+          "end": 1360.688,
+          "word": " depois.",
+          "probability": 0.9971
+        },
+        {
+          "start": 1361.048,
+          "end": 1361.408,
+          "word": " Até",
+          "probability": 0.999
+        },
+        {
+          "start": 1361.408,
+          "end": 1361.548,
+          "word": " a",
+          "probability": 0.9995
+        },
+        {
+          "start": 1361.548,
+          "end": 1362.028,
+          "word": " próxima!",
+          "probability": 1.0
+        },
+        {
+          "start": 1362.128,
+          "end": 1362.308,
+          "word": " Se",
+          "probability": 0.9873
+        },
+        {
+          "start": 1362.308,
+          "end": 1362.708,
+          "word": " gostam",
+          "probability": 0.8721
+        },
+        {
+          "start": 1362.708,
+          "end": 1362.768,
+          "word": " do",
+          "probability": 0.7949
+        },
+        {
+          "start": 1362.768,
+          "end": 1362.968,
+          "word": " vídeo",
+          "probability": 0.9902
+        },
+        {
+          "start": 1362.968,
+          "end": 1363.108,
+          "word": " de",
+          "probability": 0.3008
+        },
+        {
+          "start": 1363.108,
+          "end": 1363.408,
+          "word": " ADN,",
+          "probability": 0.637
+        },
+        {
+          "start": 1363.408,
+          "end": 1363.908,
+          "word": " comenta,",
+          "probability": 0.9746
+        },
+        {
+          "start": 1363.908,
+          "end": 1364.228,
+          "word": " curte,",
+          "probability": 0.9761
+        },
+        {
+          "start": 1364.228,
+          "end": 1364.348,
+          "word": " deixa",
+          "probability": 0.9839
+        },
+        {
+          "start": 1364.348,
+          "end": 1364.528,
+          "word": " o",
+          "probability": 0.9995
+        },
+        {
+          "start": 1364.528,
+          "end": 1364.728,
+          "word": " like,",
+          "probability": 0.9995
+        },
+        {
+          "start": 1364.868,
+          "end": 1365.528,
+          "word": " comenta",
+          "probability": 0.9893
+        },
+        {
+          "start": 1365.528,
+          "end": 1365.628,
+          "word": " que",
+          "probability": 0.355
+        },
+        {
+          "start": 1365.628,
+          "end": 1365.908,
+          "word": " pessoas",
+          "probability": 0.9956
+        },
+        {
+          "start": 1365.908,
+          "end": 1366.088,
+          "word": " que",
+          "probability": 0.9653
+        },
+        {
+          "start": 1366.088,
+          "end": 1366.208,
+          "word": " vocês",
+          "probability": 0.9663
+        },
+        {
+          "start": 1366.208,
+          "end": 1366.468,
+          "word": " querem",
+          "probability": 1.0
+        },
+        {
+          "start": 1366.468,
+          "end": 1366.588,
+          "word": " que",
+          "probability": 0.8188
+        },
+        {
+          "start": 1366.588,
+          "end": 1367.028,
+          "word": " trola,",
+          "probability": 0.8159
+        },
+        {
+          "start": 1367.028,
+          "end": 1367.128,
+          "word": " que",
+          "probability": 0.9976
+        },
+        {
+          "start": 1367.128,
+          "end": 1367.328,
+          "word": " faz",
+          "probability": 0.9985
+        },
+        {
+          "start": 1367.328,
+          "end": 1367.768,
+          "word": " joeira,",
+          "probability": 0.8372
+        },
+        {
+          "start": 1367.808,
+          "end": 1368.048,
+          "word": " que",
+          "probability": 0.9995
+        },
+        {
+          "start": 1368.048,
+          "end": 1368.288,
+          "word": " faz",
+          "probability": 0.9995
+        },
+        {
+          "start": 1368.288,
+          "end": 1368.668,
+          "word": " resenha,",
+          "probability": 0.7235
+        },
+        {
+          "start": 1368.708,
+          "end": 1368.788,
+          "word": " que",
+          "probability": 0.8569
+        },
+        {
+          "start": 1368.788,
+          "end": 1368.948,
+          "word": " estilo",
+          "probability": 0.6323
+        },
+        {
+          "start": 1368.948,
+          "end": 1369.108,
+          "word": " de",
+          "probability": 0.9995
+        },
+        {
+          "start": 1369.108,
+          "end": 1369.328,
+          "word": " vídeo",
+          "probability": 0.9985
+        },
+        {
+          "start": 1369.328,
+          "end": 1369.428,
+          "word": " que",
+          "probability": 0.9746
+        },
+        {
+          "start": 1369.428,
+          "end": 1369.528,
+          "word": " vocês",
+          "probability": 0.9995
+        },
+        {
+          "start": 1369.528,
+          "end": 1369.748,
+          "word": " também",
+          "probability": 0.9995
+        },
+        {
+          "start": 1369.748,
+          "end": 1370.228,
+          "word": " gostam,",
+          "probability": 0.999
+        },
+        {
+          "start": 1370.248,
+          "end": 1370.548,
+          "word": " fechou?",
+          "probability": 0.9972
+        },
+        {
+          "start": 1370.708,
+          "end": 1371.068,
+          "word": " Tamo",
+          "probability": 0.9995
+        },
+        {
+          "start": 1371.068,
+          "end": 1371.288,
+          "word": " junto!",
+          "probability": 1.0
+        }
+      ]
+    }
+  ]
+}

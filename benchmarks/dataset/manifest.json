@@ -1,0 +1,1506 @@
+{
+  "items": [
+    {
+      "id": "-KY4_vLBhMc",
+      "url": "https://www.youtube.com/watch?v=-KY4_vLBhMc",
+      "title": "Everything You NEED To Know Before You Play GTA 6",
+      "channel": "COLETHEMAN GTA",
+      "duration_seconds": 1250,
+      "published": "2026-11-09",
+      "retrieved": "2026-11-13",
+      "live": false,
+      "file": "-KY4_vLBhMc.webm",
+      "format": "251",
+      "sha256": "6da825abb0e9b4a21d91d2497d46a3ebdbdbbde844b53b49208ae553fdd02688",
+      "clips": [],
+      "samples": [
+        {
+          "start": 5.392,
+          "end": 60.016,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 0.9995,
+          "levels": {
+            "rms_dbfs": -17.9,
+            "peak_dbfs": -2.0
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 136.384,
+          "end": 196.304,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 1.0,
+          "levels": {
+            "rms_dbfs": -18.1,
+            "peak_dbfs": -1.7
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 271.424,
+          "end": 331.616,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 1.0,
+          "levels": {
+            "rms_dbfs": -17.9,
+            "peak_dbfs": -2.3
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 398.272,
+          "end": 460.928,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 1.0,
+          "levels": {
+            "rms_dbfs": -18.1,
+            "peak_dbfs": -1.9
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 534.72,
+          "end": 593.6,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 1.0,
+          "levels": {
+            "rms_dbfs": -18.1,
+            "peak_dbfs": -2.1
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 673.088,
+          "end": 744.688,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 1.0,
+          "levels": {
+            "rms_dbfs": -18.1,
+            "peak_dbfs": -2.1
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 789.216,
+          "end": 849.712,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 1.0,
+          "levels": {
+            "rms_dbfs": -18.0,
+            "peak_dbfs": -2.5
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 926.56,
+          "end": 985.52,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 1.0,
+          "levels": {
+            "rms_dbfs": -18.1,
+            "peak_dbfs": -2.7
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 1058.0,
+          "end": 1119.216,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 1.0,
+          "levels": {
+            "rms_dbfs": -18.2,
+            "peak_dbfs": -2.9
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 1188.56,
+          "end": 1241.248,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 0.9995,
+          "levels": {
+            "rms_dbfs": -18.0,
+            "peak_dbfs": -2.6
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        }
+      ],
+      "idiomas_provisorios": [
+        "en"
+      ],
+      "caracteristicas_audio": {
+        "medicao": "RMS e pico em dBFS por amostra (mono, 16 kHz)",
+        "musica_alta": "não avaliada",
+        "gritos": "não avaliados",
+        "varias_vozes": "não avaliadas",
+        "trechos_en": "detectados nas amostras",
+        "status": "provisório: avaliar na revisão"
+      },
+      "criterio_amostragem": "Alvos uniformes; bordas candidatas em lacunas do Silero VAD; estratificação por condições difíceis ainda precisa ser conferida.",
+      "transcricao": {
+        "file": "transcricoes/-KY4_vLBhMc.json",
+        "sha256": "cbb1874a1d740c88c6d4fbb5cc078ed5c31e85bec649295d9ac9ceb65f3d5676",
+        "origin": "Systran/faster-whisper-large-v3",
+        "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+        "engine": "faster-whisper 1.2.1",
+        "task": "transcribe",
+        "beam_size": 5,
+        "word_timestamps": true,
+        "date": "2026-11-13",
+        "status": "provisória até a revisão"
+      },
+      "clips_status": {
+        "localizados": 0,
+        "motivo": "Busca por título, criador e ID não identificou Cortes completos com correspondência verificável."
+      }
+    },
+    {
+      "id": "0yhO15vKSRs",
+      "url": "https://www.youtube.com/watch?v=0yhO15vKSRs",
+      "title": "TUDO QUE VOCÊ PRECISA SABER ANTES DE COMPRAR GTA 6! (assista antes do lançamento)",
+      "channel": "Davy Jones GTA 6",
+      "duration_seconds": 1918,
+      "published": "2026-09-14",
+      "retrieved": "2026-11-13",
+      "live": false,
+      "file": "0yhO15vKSRs.webm",
+      "format": "251",
+      "sha256": "655bce564e81df8365b046bf9ebce301b2f943bbe119cfc4f7e0ebfb542ad4e6",
+      "clips": [],
+      "samples": [
+        {
+          "start": 0.416,
+          "end": 61.328,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "pt",
+          "language_probability": 1.0,
+          "levels": {
+            "rms_dbfs": -20.3,
+            "peak_dbfs": -1.9
+          },
+          "conditions": [],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 207.12,
+          "end": 265.952,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "pt",
+          "language_probability": 0.9995,
+          "levels": {
+            "rms_dbfs": -20.1,
+            "peak_dbfs": -2.6
+          },
+          "conditions": [],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 423.504,
+          "end": 483.552,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "pt",
+          "language_probability": 1.0,
+          "levels": {
+            "rms_dbfs": -20.8,
+            "peak_dbfs": -2.1
+          },
+          "conditions": [],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 619.904,
+          "end": 675.76,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "pt",
+          "language_probability": 1.0,
+          "levels": {
+            "rms_dbfs": -21.1,
+            "peak_dbfs": -3.3
+          },
+          "conditions": [],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 820.08,
+          "end": 882.368,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "pt",
+          "language_probability": 0.9995,
+          "levels": {
+            "rms_dbfs": -20.7,
+            "peak_dbfs": -2.7
+          },
+          "conditions": [],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 1031.936,
+          "end": 1090.24,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "pt",
+          "language_probability": 1.0,
+          "levels": {
+            "rms_dbfs": -21.1,
+            "peak_dbfs": -2.1
+          },
+          "conditions": [],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 1242.32,
+          "end": 1304.72,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "pt",
+          "language_probability": 0.9995,
+          "levels": {
+            "rms_dbfs": -20.6,
+            "peak_dbfs": -1.8
+          },
+          "conditions": [],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 1450.0,
+          "end": 1511.616,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "pt",
+          "language_probability": 1.0,
+          "levels": {
+            "rms_dbfs": -20.6,
+            "peak_dbfs": -2.1
+          },
+          "conditions": [],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 1649.392,
+          "end": 1706.8,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "pt",
+          "language_probability": 1.0,
+          "levels": {
+            "rms_dbfs": -20.5,
+            "peak_dbfs": -1.8
+          },
+          "conditions": [],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 1856.656,
+          "end": 1913.984,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "pt",
+          "language_probability": 1.0,
+          "levels": {
+            "rms_dbfs": -22.2,
+            "peak_dbfs": -4.0
+          },
+          "conditions": [],
+          "status": "provisória até a revisão"
+        }
+      ],
+      "idiomas_provisorios": [
+        "pt"
+      ],
+      "caracteristicas_audio": {
+        "medicao": "RMS e pico em dBFS por amostra (mono, 16 kHz)",
+        "musica_alta": "não avaliada",
+        "gritos": "não avaliados",
+        "varias_vozes": "não avaliadas",
+        "trechos_en": "não detectados nas amostras",
+        "status": "provisório: avaliar na revisão"
+      },
+      "criterio_amostragem": "Alvos uniformes; bordas candidatas em lacunas do Silero VAD; estratificação por condições difíceis ainda precisa ser conferida.",
+      "transcricao": {
+        "file": "transcricoes/0yhO15vKSRs.json",
+        "sha256": "d5e327b7ca288e41418133fd36f6a4d81cf08ba517027731309e46e75a0e58e2",
+        "origin": "Systran/faster-whisper-large-v3",
+        "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+        "engine": "faster-whisper 1.2.1",
+        "task": "transcribe",
+        "beam_size": 5,
+        "word_timestamps": true,
+        "date": "2026-11-13",
+        "status": "provisória até a revisão"
+      },
+      "clips_status": {
+        "localizados": 0,
+        "motivo": "Busca por título, criador e ID não identificou Cortes completos com correspondência verificável."
+      }
+    },
+    {
+      "id": "PY93Az6EJOY",
+      "url": "https://www.youtube.com/watch?v=PY93Az6EJOY",
+      "title": "GTA 6: O GUIA COMPLETO ANTES DE JOGAR",
+      "channel": "JTM",
+      "duration_seconds": 1207,
+      "published": "2026-11-08",
+      "retrieved": "2026-11-13",
+      "live": false,
+      "file": "PY93Az6EJOY.webm",
+      "format": "251-1",
+      "sha256": "1058e3a95b5075cd1bd346154e770eb8cc44e2b1565b851e9dcfb16e90d3a715",
+      "clips": [],
+      "samples": [
+        {
+          "start": 1.344,
+          "end": 61.376,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "pt",
+          "language_probability": 0.9995,
+          "levels": {
+            "rms_dbfs": -16.9,
+            "peak_dbfs": -2.9
+          },
+          "conditions": [],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 132.864,
+          "end": 194.016,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "pt",
+          "language_probability": 0.999,
+          "levels": {
+            "rms_dbfs": -17.4,
+            "peak_dbfs": -3.0
+          },
+          "conditions": [],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 255.472,
+          "end": 299.792,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "pt",
+          "language_probability": 0.9976,
+          "levels": {
+            "rms_dbfs": -17.0,
+            "peak_dbfs": -2.8
+          },
+          "conditions": [],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 382.352,
+          "end": 442.496,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "pt",
+          "language_probability": 0.9976,
+          "levels": {
+            "rms_dbfs": -17.2,
+            "peak_dbfs": -2.9
+          },
+          "conditions": [],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 510.048,
+          "end": 572.496,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "pt",
+          "language_probability": 0.9995,
+          "levels": {
+            "rms_dbfs": -17.0,
+            "peak_dbfs": -2.6
+          },
+          "conditions": [],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 641.824,
+          "end": 697.312,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "pt",
+          "language_probability": 0.9995,
+          "levels": {
+            "rms_dbfs": -17.2,
+            "peak_dbfs": -2.7
+          },
+          "conditions": [],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 767.088,
+          "end": 840.32,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "pt",
+          "language_probability": 0.999,
+          "levels": {
+            "rms_dbfs": -17.0,
+            "peak_dbfs": -2.7
+          },
+          "conditions": [],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 885.152,
+          "end": 946.848,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "pt",
+          "language_probability": 0.9995,
+          "levels": {
+            "rms_dbfs": -16.8,
+            "peak_dbfs": -2.8
+          },
+          "conditions": [],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 1022.144,
+          "end": 1084.224,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "pt",
+          "language_probability": 0.9995,
+          "levels": {
+            "rms_dbfs": -16.9,
+            "peak_dbfs": -2.7
+          },
+          "conditions": [],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 1153.328,
+          "end": 1194.08,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "pt",
+          "language_probability": 0.999,
+          "levels": {
+            "rms_dbfs": -16.7,
+            "peak_dbfs": -2.3
+          },
+          "conditions": [],
+          "status": "provisória até a revisão"
+        }
+      ],
+      "idiomas_provisorios": [
+        "pt"
+      ],
+      "caracteristicas_audio": {
+        "medicao": "RMS e pico em dBFS por amostra (mono, 16 kHz)",
+        "musica_alta": "não avaliada",
+        "gritos": "não avaliados",
+        "varias_vozes": "não avaliadas",
+        "trechos_en": "não detectados nas amostras",
+        "status": "provisório: avaliar na revisão"
+      },
+      "criterio_amostragem": "Alvos uniformes; bordas candidatas em lacunas do Silero VAD; estratificação por condições difíceis ainda precisa ser conferida.",
+      "transcricao": {
+        "file": "transcricoes/PY93Az6EJOY.json",
+        "sha256": "6c9d48a32403b2e2ff3bc6ac99e4aca97233177fdc18d0f311251adc1860736c",
+        "origin": "Systran/faster-whisper-large-v3",
+        "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+        "engine": "faster-whisper 1.2.1",
+        "task": "transcribe",
+        "beam_size": 5,
+        "word_timestamps": true,
+        "date": "2026-11-13",
+        "status": "provisória até a revisão"
+      },
+      "clips_status": {
+        "localizados": 0,
+        "motivo": "Busca por título, criador e ID não identificou Cortes completos com correspondência verificável."
+      }
+    },
+    {
+      "id": "6quC2VnuHTU",
+      "url": "https://www.youtube.com/watch?v=6quC2VnuHTU",
+      "title": "GTA 6: 100+ CONFIRMED Features You Need To Know Before You Play (Part 1)",
+      "channel": "GrandGecko",
+      "duration_seconds": 1940,
+      "published": "2026-11-10",
+      "retrieved": "2026-11-13",
+      "live": false,
+      "file": "6quC2VnuHTU.webm",
+      "format": "251",
+      "sha256": "2009f85ee049e01f31992caf3dbec9c6c92779dc9eb8188d4f362eec251a1dc6",
+      "clips": [],
+      "samples": [
+        {
+          "start": 2.08,
+          "end": 62.384,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 0.9995,
+          "levels": {
+            "rms_dbfs": -21.0,
+            "peak_dbfs": -3.6
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 210.192,
+          "end": 271.008,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 0.999,
+          "levels": {
+            "rms_dbfs": -21.0,
+            "peak_dbfs": -3.7
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 416.768,
+          "end": 475.84,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 0.9995,
+          "levels": {
+            "rms_dbfs": -21.0,
+            "peak_dbfs": -3.6
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 626.976,
+          "end": 680.768,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 0.9995,
+          "levels": {
+            "rms_dbfs": -21.1,
+            "peak_dbfs": -3.9
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 842.016,
+          "end": 900.896,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 1.0,
+          "levels": {
+            "rms_dbfs": -20.9,
+            "peak_dbfs": -3.2
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 1046.848,
+          "end": 1107.296,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 0.9995,
+          "levels": {
+            "rms_dbfs": -20.8,
+            "peak_dbfs": -3.3
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 1250.624,
+          "end": 1314.032,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 0.9995,
+          "levels": {
+            "rms_dbfs": -20.9,
+            "peak_dbfs": -3.3
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 1458.608,
+          "end": 1520.096,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 0.9995,
+          "levels": {
+            "rms_dbfs": -20.8,
+            "peak_dbfs": -3.7
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 1669.056,
+          "end": 1730.096,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 0.9995,
+          "levels": {
+            "rms_dbfs": -21.0,
+            "peak_dbfs": -3.4
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 1878.144,
+          "end": 1924.56,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 1.0,
+          "levels": {
+            "rms_dbfs": -20.9,
+            "peak_dbfs": -2.9
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        }
+      ],
+      "idiomas_provisorios": [
+        "en"
+      ],
+      "caracteristicas_audio": {
+        "medicao": "RMS e pico em dBFS por amostra (mono, 16 kHz)",
+        "musica_alta": "não avaliada",
+        "gritos": "não avaliados",
+        "varias_vozes": "não avaliadas",
+        "trechos_en": "detectados nas amostras",
+        "status": "provisório: avaliar na revisão"
+      },
+      "criterio_amostragem": "Alvos uniformes; bordas candidatas em lacunas do Silero VAD; estratificação por condições difíceis ainda precisa ser conferida.",
+      "transcricao": {
+        "file": "transcricoes/6quC2VnuHTU.json",
+        "sha256": "a1276e6d49882b21b310409c733aabb45b258cfab490a2d4975cf390ae5b76db",
+        "origin": "Systran/faster-whisper-large-v3",
+        "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+        "engine": "faster-whisper 1.2.1",
+        "task": "transcribe",
+        "beam_size": 5,
+        "word_timestamps": true,
+        "date": "2026-11-13",
+        "status": "provisória até a revisão"
+      },
+      "clips_status": {
+        "localizados": 0,
+        "motivo": "Busca por título, criador e ID não identificou Cortes completos com correspondência verificável."
+      }
+    },
+    {
+      "id": "RUKzeWj1ORY",
+      "url": "https://www.youtube.com/watch?v=RUKzeWj1ORY",
+      "title": "GTA 6 Police: EVERYTHING You Need To Know Before You Play",
+      "channel": "GrandGecko",
+      "duration_seconds": 1372,
+      "published": "2026-11-12",
+      "retrieved": "2026-11-13",
+      "live": false,
+      "file": "RUKzeWj1ORY.webm",
+      "format": "251",
+      "sha256": "e8beaa0d8743873110afa2a2a84ea9ae34240c1aaa213c1a824c6d9359518f16",
+      "clips": [],
+      "samples": [
+        {
+          "start": 5.328,
+          "end": 67.904,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 0.9995,
+          "levels": {
+            "rms_dbfs": -21.0,
+            "peak_dbfs": -3.3
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 146.736,
+          "end": 209.168,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 1.0,
+          "levels": {
+            "rms_dbfs": -21.1,
+            "peak_dbfs": -3.3
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 292.976,
+          "end": 361.728,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 0.9995,
+          "levels": {
+            "rms_dbfs": -20.9,
+            "peak_dbfs": -3.3
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 440.0,
+          "end": 502.336,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 0.9995,
+          "levels": {
+            "rms_dbfs": -20.9,
+            "peak_dbfs": -3.5
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 577.232,
+          "end": 638.704,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 1.0,
+          "levels": {
+            "rms_dbfs": -21.0,
+            "peak_dbfs": -3.8
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 728.256,
+          "end": 788.416,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 0.999,
+          "levels": {
+            "rms_dbfs": -21.1,
+            "peak_dbfs": -3.6
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 874.144,
+          "end": 936.464,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 1.0,
+          "levels": {
+            "rms_dbfs": -21.1,
+            "peak_dbfs": -3.4
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 1018.512,
+          "end": 1081.184,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 0.999,
+          "levels": {
+            "rms_dbfs": -20.9,
+            "peak_dbfs": -3.4
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 1163.84,
+          "end": 1224.448,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 1.0,
+          "levels": {
+            "rms_dbfs": -20.7,
+            "peak_dbfs": -3.5
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        },
+        {
+          "start": 1310.864,
+          "end": 1367.856,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "language_provisional": "en",
+          "language_probability": 0.9995,
+          "levels": {
+            "rms_dbfs": -21.2,
+            "peak_dbfs": -3.3
+          },
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão"
+        }
+      ],
+      "idiomas_provisorios": [
+        "en"
+      ],
+      "caracteristicas_audio": {
+        "medicao": "RMS e pico em dBFS por amostra (mono, 16 kHz)",
+        "musica_alta": "não avaliada",
+        "gritos": "não avaliados",
+        "varias_vozes": "não avaliadas",
+        "trechos_en": "detectados nas amostras",
+        "status": "provisório: avaliar na revisão"
+      },
+      "criterio_amostragem": "Alvos uniformes; bordas candidatas em lacunas do Silero VAD; estratificação por condições difíceis ainda precisa ser conferida.",
+      "transcricao": {
+        "file": "transcricoes/RUKzeWj1ORY.json",
+        "sha256": "30481c7ef4adae5408b3d7b03aac20ddcbd67ab088c5eb595b90ba10c6e68a45",
+        "origin": "Systran/faster-whisper-large-v3",
+        "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+        "engine": "faster-whisper 1.2.1",
+        "task": "transcribe",
+        "beam_size": 5,
+        "word_timestamps": true,
+        "date": "2026-11-13",
+        "status": "provisória até a revisão"
+      },
+      "clips_status": {
+        "localizados": 0,
+        "motivo": "Busca por título, criador e ID não identificou Cortes completos com correspondência verificável."
+      }
+    },
+    {
+      "id": "rtZyZL3FfH4",
+      "url": "https://www.youtube.com/watch?v=rtZyZL3FfH4",
+      "title": "🔴 PAULINHO O LOKO AO VIVO 😂 GTA ANTI RP!",
+      "channel": "PAULINHO O LOKO",
+      "duration_seconds": 13109,
+      "published": "2025-11-16",
+      "retrieved": "2026-11-13",
+      "live": true,
+      "file": "rtZyZL3FfH4.webm",
+      "format": "251",
+      "sha256": "e8aa3cc0a72fff13a97dab0531085dde73e42272b53864f8baf7ed2b2c78bdc1",
+      "clips": [],
+      "samples": [
+        {
+          "start": 4.592,
+          "end": 64.4,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [],
+          "language_provisional": "pt",
+          "language_probability": 0.998
+        },
+        {
+          "start": 1445.632,
+          "end": 1503.424,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [],
+          "language_provisional": "pt",
+          "language_probability": 0.9697
+        },
+        {
+          "start": 2897.536,
+          "end": 2958.976,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [],
+          "language_provisional": "pt",
+          "language_probability": 0.978
+        },
+        {
+          "start": 4351.024,
+          "end": 4410.496,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [],
+          "language_provisional": "pt",
+          "language_probability": 0.9814
+        },
+        {
+          "start": 5801.392,
+          "end": 5859.824,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [],
+          "language_provisional": "pt",
+          "language_probability": 0.9961
+        },
+        {
+          "start": 7249.84,
+          "end": 7310.896,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [],
+          "language_provisional": "pt",
+          "language_probability": 0.9805
+        },
+        {
+          "start": 8698.704,
+          "end": 8755.6,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [],
+          "language_provisional": "pt",
+          "language_probability": 0.9937
+        },
+        {
+          "start": 10147.888,
+          "end": 10212.16,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [],
+          "language_provisional": "pt",
+          "language_probability": 0.9766
+        },
+        {
+          "start": 11599.616,
+          "end": 11659.888,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [],
+          "language_provisional": "pt",
+          "language_probability": 0.9917
+        },
+        {
+          "start": 13047.36,
+          "end": 13107.744,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [],
+          "language_provisional": "pt",
+          "language_probability": 0.9985
+        }
+      ],
+      "idiomas_provisorios": [
+        "pt"
+      ],
+      "caracteristicas_audio": {
+        "musica_alta": "não avaliada",
+        "gritos": "não avaliados",
+        "varias_vozes": "não avaliadas",
+        "trechos_en": "não detectados nas amostras",
+        "status": "provisório: avaliar na revisão"
+      },
+      "criterio_amostragem": "Alvos uniformes; bordas candidatas em lacunas do Silero VAD; estratificação por condições difíceis ainda precisa ser conferida.",
+      "transcricao": {
+        "file": "transcricoes/rtZyZL3FfH4.json",
+        "sha256": "53739559506e7cb43153f1bb757aa4ce90704035484e077a8e67fb95d36642a2",
+        "origin": "Systran/faster-whisper-large-v3",
+        "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+        "engine": "faster-whisper 1.2.1",
+        "task": "transcribe",
+        "beam_size": 5,
+        "word_timestamps": true,
+        "date": "2026-11-13",
+        "status": "provisória até a revisão"
+      },
+      "clips_status": {
+        "localizados": 0,
+        "motivo": "Busca por título, criador e ID não identificou Cortes completos com correspondência verificável."
+      }
+    },
+    {
+      "id": "MX8wnu3xXeM",
+      "url": "https://www.youtube.com/watch?v=MX8wnu3xXeM",
+      "title": "Kai Cenat Beats GTA 5!",
+      "channel": "Kai Cenat Live",
+      "duration_seconds": 3775,
+      "published": "2026-11-11",
+      "retrieved": "2026-11-13",
+      "live": false,
+      "file": "MX8wnu3xXeM.webm",
+      "format": "251",
+      "sha256": "d1169cb3b1b7f06741b4e0839d8040ba1f5cac63361ca4ee914e66eb9836c151",
+      "clips": [],
+      "samples": [
+        {
+          "start": 2.032,
+          "end": 62.176,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão",
+          "language_provisional": "en",
+          "language_probability": 0.9966
+        },
+        {
+          "start": 414.08,
+          "end": 474.208,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão",
+          "language_provisional": "en",
+          "language_probability": 0.9937
+        },
+        {
+          "start": 815.232,
+          "end": 855.504,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão",
+          "language_provisional": "en",
+          "language_probability": 0.9878
+        },
+        {
+          "start": 1238.528,
+          "end": 1297.888,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão",
+          "language_provisional": "en",
+          "language_probability": 0.9946
+        },
+        {
+          "start": 1649.056,
+          "end": 1709.344,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão",
+          "language_provisional": "en",
+          "language_probability": 0.9854
+        },
+        {
+          "start": 2062.464,
+          "end": 2116.304,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão",
+          "language_provisional": "en",
+          "language_probability": 0.8652
+        },
+        {
+          "start": 2477.68,
+          "end": 2545.696,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão",
+          "language_provisional": "en",
+          "language_probability": 0.9956
+        },
+        {
+          "start": 2885.024,
+          "end": 2945.728,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão",
+          "language_provisional": "en",
+          "language_probability": 0.7158
+        },
+        {
+          "start": 3296.272,
+          "end": 3351.568,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão",
+          "language_provisional": "en",
+          "language_probability": 0.9961
+        },
+        {
+          "start": 3710.752,
+          "end": 3769.808,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão",
+          "language_provisional": "en",
+          "language_probability": 0.9966
+        }
+      ],
+      "caracteristicas_audio": {
+        "musica_alta": "não avaliada",
+        "gritos": "não avaliados",
+        "varias_vozes": "não avaliadas",
+        "trechos_en": "detectados nas amostras",
+        "status": "provisório: avaliar na revisão"
+      },
+      "criterio_amostragem": "Alvos uniformes; bordas candidatas em lacunas do Silero VAD; estratificação por condições difíceis ainda precisa ser conferida.",
+      "clips_status": {
+        "localizados": 0,
+        "motivo": "Busca por títulos e canais não identificou Cortes completos com correspondência verificável; legenda automática indisponível ou limitada por HTTP 429 para candidatos recentes."
+      },
+      "transcricao": {
+        "file": "transcricoes/MX8wnu3xXeM.json",
+        "sha256": "f2219712669d0bfc520e3d9385a2e7435d998bf662455eae1a277cbbeace7b89",
+        "origin": "Systran/faster-whisper-large-v3",
+        "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+        "engine": "faster-whisper 1.2.1",
+        "task": "transcribe",
+        "beam_size": 5,
+        "word_timestamps": true,
+        "date": "2026-11-13",
+        "status": "provisória até a revisão"
+      },
+      "idiomas_provisorios": [
+        "en"
+      ]
+    },
+    {
+      "id": "QiwQ62ypdcI",
+      "url": "https://www.youtube.com/watch?v=QiwQ62ypdcI",
+      "title": "IRRITEI STREAMERS AO VIVO no GTA RP 😂 (Paulinho o LOKO)",
+      "channel": "PAULINHO O LOKO",
+      "duration_seconds": 1397,
+      "published": "2026-06-20",
+      "retrieved": "2026-11-13",
+      "live": false,
+      "file": "QiwQ62ypdcI.webm",
+      "format": "251",
+      "sha256": "bf955dc2086646d6d5a6759ce08b651620c3a9a08131d17373cf990cfe6b2441",
+      "clips": [],
+      "samples": [
+        {
+          "start": 16.304,
+          "end": 76.736,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [],
+          "status": "provisória até a revisão",
+          "language_provisional": "pt",
+          "language_probability": 0.9907
+        },
+        {
+          "start": 147.84,
+          "end": 208.864,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [],
+          "status": "provisória até a revisão",
+          "language_provisional": "pt",
+          "language_probability": 0.9976
+        },
+        {
+          "start": 293.728,
+          "end": 354.496,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [],
+          "status": "provisória até a revisão",
+          "language_provisional": "pt",
+          "language_probability": 0.9834
+        },
+        {
+          "start": 444.496,
+          "end": 503.52,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [],
+          "status": "provisória até a revisão",
+          "language_provisional": "pt",
+          "language_probability": 0.98
+        },
+        {
+          "start": 594.992,
+          "end": 656.608,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [],
+          "status": "provisória até a revisão",
+          "language_provisional": "pt",
+          "language_probability": 0.9971
+        },
+        {
+          "start": 743.856,
+          "end": 808.0,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [],
+          "status": "provisória até a revisão",
+          "language_provisional": "pt",
+          "language_probability": 0.9888
+        },
+        {
+          "start": 880.144,
+          "end": 940.048,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [],
+          "status": "provisória até a revisão",
+          "language_provisional": "pt",
+          "language_probability": 0.9873
+        },
+        {
+          "start": 1041.68,
+          "end": 1101.68,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [],
+          "status": "provisória até a revisão",
+          "language_provisional": "pt",
+          "language_probability": 0.9961
+        },
+        {
+          "start": 1187.088,
+          "end": 1249.2,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [],
+          "status": "provisória até a revisão",
+          "language_provisional": "pt",
+          "language_probability": 0.9565
+        },
+        {
+          "start": 1317.088,
+          "end": 1371.712,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [],
+          "status": "provisória até a revisão",
+          "language_provisional": "pt",
+          "language_probability": 0.9937
+        }
+      ],
+      "caracteristicas_audio": {
+        "musica_alta": "não avaliada",
+        "gritos": "não avaliados",
+        "varias_vozes": "não avaliadas",
+        "trechos_en": "não detectados nas amostras",
+        "status": "provisório: avaliar na revisão"
+      },
+      "criterio_amostragem": "Alvos uniformes; bordas candidatas em lacunas do Silero VAD; estratificação por condições difíceis ainda precisa ser conferida.",
+      "clips_status": {
+        "localizados": 0,
+        "motivo": "Busca por títulos e canais não identificou Cortes completos com correspondência verificável; legenda automática indisponível ou limitada por HTTP 429 para candidatos recentes."
+      },
+      "transcricao": {
+        "file": "transcricoes/QiwQ62ypdcI.json",
+        "sha256": "00cc0344539d334e296b3090619c194972f024a139830b0c98a35dd85d9f5400",
+        "origin": "Systran/faster-whisper-large-v3",
+        "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+        "engine": "faster-whisper 1.2.1",
+        "task": "transcribe",
+        "beam_size": 5,
+        "word_timestamps": true,
+        "date": "2026-11-13",
+        "status": "provisória até a revisão"
+      },
+      "idiomas_provisorios": [
+        "pt"
+      ]
+    },
+    {
+      "id": "juFnXA7rhOk",
+      "url": "https://www.youtube.com/watch?v=juFnXA7rhOk",
+      "title": "I Played Every GTA Game Before GTA 6...",
+      "channel": "Kai Cenat Live",
+      "duration_seconds": 3446,
+      "published": "2026-11-13",
+      "retrieved": "2026-11-13",
+      "live": false,
+      "file": "juFnXA7rhOk.webm",
+      "format": "251",
+      "sha256": "11a73bfd0fe4091d7cd5420b0d534b6c2ac1f77da985aea1526d19aff0ccde81",
+      "clips": [],
+      "samples": [
+        {
+          "start": 11.712,
+          "end": 68.672,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão",
+          "language_provisional": "en",
+          "language_probability": 0.9971
+        },
+        {
+          "start": 376.864,
+          "end": 435.76,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão",
+          "language_provisional": "en",
+          "language_probability": 0.9946
+        },
+        {
+          "start": 754.96,
+          "end": 815.968,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão",
+          "language_provisional": "en",
+          "language_probability": 0.998
+        },
+        {
+          "start": 1126.688,
+          "end": 1186.992,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão",
+          "language_provisional": "en",
+          "language_probability": 0.9946
+        },
+        {
+          "start": 1496.288,
+          "end": 1552.016,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão",
+          "language_provisional": "en",
+          "language_probability": 0.9805
+        },
+        {
+          "start": 1882.768,
+          "end": 1957.28,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão",
+          "language_provisional": "en",
+          "language_probability": 0.7227
+        },
+        {
+          "start": 2256.976,
+          "end": 2316.192,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão",
+          "language_provisional": "en",
+          "language_probability": 0.9434
+        },
+        {
+          "start": 2632.448,
+          "end": 2693.648,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão",
+          "language_provisional": "en",
+          "language_probability": 0.9468
+        },
+        {
+          "start": 3009.312,
+          "end": 3067.248,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão",
+          "language_provisional": "en",
+          "language_probability": 0.9951
+        },
+        {
+          "start": 3385.104,
+          "end": 3441.424,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "conditions": [
+            "fala em inglês"
+          ],
+          "status": "provisória até a revisão",
+          "language_provisional": "en",
+          "language_probability": 0.9951
+        }
+      ],
+      "caracteristicas_audio": {
+        "musica_alta": "não avaliada",
+        "gritos": "não avaliados",
+        "varias_vozes": "não avaliadas",
+        "trechos_en": "detectados nas amostras",
+        "status": "provisório: avaliar na revisão"
+      },
+      "criterio_amostragem": "Alvos uniformes; bordas candidatas em lacunas do Silero VAD; estratificação por condições difíceis ainda precisa ser conferida.",
+      "clips_status": {
+        "localizados": 0,
+        "motivo": "Busca por títulos e canais não identificou Cortes completos com correspondência verificável; legenda automática indisponível ou limitada por HTTP 429 para candidatos recentes."
+      },
+      "transcricao": {
+        "file": "transcricoes/juFnXA7rhOk.json",
+        "sha256": "014a40e5610069db7be68cc3253b52cc1a4b16b74664e40b06a2758623e1c3af",
+        "origin": "Systran/faster-whisper-large-v3",
+        "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+        "engine": "faster-whisper 1.2.1",
+        "task": "transcribe",
+        "beam_size": 5,
+        "word_timestamps": true,
+        "date": "2026-11-13",
+        "status": "provisória até a revisão"
+      },
+      "idiomas_provisorios": [
+        "en"
+      ]
+    }
+  ]
+}
