@@ -6,7 +6,8 @@
   "license": "Apache-2.0",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p . && vite build",
+    "build": "node scripts/avisos.ts && tsc -p . && vite build",
+    "avisos": "node scripts/avisos.ts",
     "preview": "vite preview",
     "typecheck": "tsc -p .",
     "contraste": "node scripts/contraste.ts",

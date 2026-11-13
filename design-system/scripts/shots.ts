@@ -49,6 +49,8 @@ for (const [w, h] of tamanhos) {
       const hash = '/' + h
       // tema e query de rota vão no hash; ?tema= vai na URL real (lida antes do primeiro pinte)
       const url = `http://localhost:${porta}/?tema=${tema}#${hash}${q ? '?' + q : ''}`
+      // Cada captura começa com estado de sessão limpo, inclusive quando só muda o hash.
+      await page.goto('about:blank')
       await page.goto(url, { waitUntil: 'networkidle' })
       await page.evaluate(() => document.fonts.ready)
       await page.waitForTimeout(espera)

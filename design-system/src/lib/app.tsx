@@ -1,12 +1,14 @@
 // Estado de demonstração do app (no app real, o núcleo Rust é o dono dos dados e a UI só exibe e edita).
 // Guarda o que precisa sobreviver à troca de tela: Projeto atual, status dos Cortes e edições.
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
-import { cortes, projetos, type Projeto } from '@/data/dados'
+import { cortes, projetos as projetosIniciais, type Projeto } from '@/data/dados'
 
 export type StatusCorte = 'sugerido' | 'aprovado' | 'rejeitado' | 'exportado'
 
 type Ctx = {
   projeto: Projeto
+  projetos: Projeto[]
+  criarProjeto: (dados: Pick<Projeto, 'nome' | 'perfil' | 'pasta'>) => void
   setProjeto: (id: string) => void
   status: Record<string, StatusCorte>
   setStatus: (id: string, s: StatusCorte) => void
@@ -18,19 +20,52 @@ type Ctx = {
 const AppCtx = createContext<Ctx | null>(null)
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [pid, setPid] = useState(projetos[0].id)
-  const [status, setSt] = useState<Record<string, StatusCorte>>(() =>
-    Object.fromEntries(cortes.map(c => [c.id, c.id === 'c1' ? 'aprovado' : 'sugerido'])),
-  )
-  const [edicoes, setEd] = useState<Record<string, Record<string, unknown>>>({})
-  const setStatus = useCallback((id: string, s: StatusCorte) => setSt(m => ({ ...m, [id]: s })), [])
-  const setEdicao = useCallback(
-    <T,>(corteId: string, chave: string, valor: T) => setEd(m => ({ ...m, [corteId]: { ...m[corteId], [chave]: valor } })),
+  const [projetos, setProjetos] = useState(projetosIniciais)
+  const [pid, setPid] = useState(projetosIniciais[0].id)
+  const [statusPorProjeto, setSt] = useState<Record<string, Record<string, StatusCorte>>>({})
+  const [edicoesPorProjeto, setEd] = useState<Record<string, Record<string, Record<string, unknown>>>>({})
+  // Configuração do app e fila multiprojeto não pertencem a um Corte.
+  const [edicoesGlobais, setGlobais] = useState<Record<string, Record<string, unknown>>>({})
+  const statusInicial = useMemo<Record<string, StatusCorte>>(
+    () => Object.fromEntries(cortes.map((c) => [c.id, c.id === 'c1' ? 'aprovado' : 'sugerido'])),
     [],
   )
+  const status = statusPorProjeto[pid] ?? statusInicial
+  const edicoes = useMemo(
+    () => ({ ...edicoesPorProjeto[pid], ...edicoesGlobais }),
+    [pid, edicoesPorProjeto, edicoesGlobais],
+  )
+  const criarProjeto = useCallback((dados: Pick<Projeto, 'nome' | 'perfil' | 'pasta'>) => {
+    const id = crypto.randomUUID()
+    setProjetos((ps) => [...ps, { ...dados, id, fontes: 0, cortes: 4 }])
+    // As amostras de um Projeto novo precisam de uma revisão própria.
+    setSt((m) => ({ ...m, [id]: Object.fromEntries(cortes.map((c) => [c.id, 'sugerido' as const])) }))
+    setPid(id)
+  }, [])
+  const setStatus = useCallback(
+    (id: string, s: StatusCorte) => setSt((m) => ({ ...m, [pid]: { ...(m[pid] ?? statusInicial), [id]: s } })),
+    [pid, statusInicial],
+  )
+  const setEdicao = useCallback(
+    <T,>(corteId: string, chave: string, valor: T) => {
+      if (corteId === 'fontes' || corteId === 'config')
+        setGlobais((m) => ({ ...m, [corteId]: { ...m[corteId], [chave]: valor } }))
+      else setEd((m) => ({ ...m, [pid]: { ...m[pid], [corteId]: { ...m[pid]?.[corteId], [chave]: valor } } }))
+    },
+    [pid],
+  )
   const valor = useMemo<Ctx>(
-    () => ({ projeto: projetos.find(p => p.id === pid)!, setProjeto: setPid, status, setStatus, edicoes, setEdicao }),
-    [pid, status, setStatus, edicoes, setEdicao],
+    () => ({
+      projeto: projetos.find((p) => p.id === pid)!,
+      projetos,
+      criarProjeto,
+      setProjeto: setPid,
+      status,
+      setStatus,
+      edicoes,
+      setEdicao,
+    }),
+    [pid, projetos, criarProjeto, status, setStatus, edicoes, setEdicao],
   )
   return <AppCtx.Provider value={valor}>{children}</AppCtx.Provider>
 }

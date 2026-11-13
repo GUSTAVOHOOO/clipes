@@ -59,8 +59,8 @@ export const perfis: PerfilCanal[] = [
 
 export type Projeto = { id: string; nome: string; perfil: string; pasta: string; fontes: number; cortes: number }
 export const projetos: Projeto[] = [
-  { id: 'p1', nome: 'Canal dark · Ficção', perfil: 'ficcao', pasta: 'D:\Clipes\Canal dark · Ficção', fontes: 3, cortes: 4 },
-  { id: 'p2', nome: 'Canal de cortes', perfil: 'cortes', pasta: 'D:\Clipes\Canal de cortes', fontes: 12, cortes: 87 },
+  { id: 'p1', nome: 'Canal dark · Ficção', perfil: 'ficcao', pasta: String.raw`D:\Clipes\Canal dark · Ficção`, fontes: 3, cortes: 4 },
+  { id: 'p2', nome: 'Canal de cortes', perfil: 'cortes', pasta: String.raw`D:\Clipes\Canal de cortes`, fontes: 12, cortes: 87 },
 ]
 
 export type EstadoFila = 'baixando' | 'transcrevendo' | 'selecionando' | 'na-fila' | 'pronta' | 'erro' | 'offline'

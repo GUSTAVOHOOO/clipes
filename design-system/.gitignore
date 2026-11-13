@@ -1,4 +1,5 @@
 node_modules
 dist
-shots/tmp
+shots/
+public/THIRD_PARTY_NOTICES.md
 *.log
