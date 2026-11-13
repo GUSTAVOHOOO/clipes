@@ -20,7 +20,7 @@ try {
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   await page.goto(url);
-  await page.getByRole('heading', { name: 'Nenhum Projeto aberto' }).waitFor();
+  await page.getByRole('heading', { name: 'Projetos' }).waitFor();
   await mkdir('shots', { recursive: true });
   await page.screenshot({ path: 'shots/home-dark.png' });
   await page.keyboard.press('Control+k');

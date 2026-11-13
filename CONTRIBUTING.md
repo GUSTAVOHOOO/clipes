@@ -68,3 +68,11 @@ Os formulários recebem `template`, `title` e o texto no parâmetro `body` da UR
 A casca usa os tokens e componentes Foco, sem dados demonstrativos. Os textos ficam nas pastas das respectivas features. Uma feature pode contribuir para uma gaveta exportando `drawer` de `src/features/<feature>/drawer.tsx`, conforme o tipo `DrawerContribution` em `src/lib/drawers.ts`; o registro descobre o módulo automaticamente. Comandos da tela são registrados com `useComandos`.
 
 Para executar a interface no navegador com o núcleo simulado, use `VITE_CORE_MOCK=1 bun run dev` (no PowerShell, `$env:VITE_CORE_MOCK='1'; bun run dev`). O núcleo real continua sendo usado pelo Tauri. Para verificar teclado, telas, console e capturas, instale o Chromium com `bunx playwright install chromium` e execute `bun run test:ui`; as capturas ficam em `shots/`. Os tokens da interface são verificados por `bun run test:contrast`.
+
+## Projetos e migrações
+
+Cada Projeto é uma pasta `.clipes` com `project.sqlite`; a biblioteca local é apenas um índice recuperado ao abrir a pasta. Recentes ausentes permanecem listados como indisponíveis. O núcleo é o único escritor; SQLite usa WAL e FTS5. Tempos usam `projects::Microseconds` em µs inteiros.
+
+Registre cada migração SQL com `inventory` como `projects::Migration`. Use um identificador textual único, ordenável, com o número do ticket e um sufixo próprio, por exemplo `0033_001_project`. Nunca renumere migrações de outros tickets. O núcleo aplica todas as migrações ausentes em ordem, mesmo quando uma migração de outro ticket já foi aplicada, e recusa IDs desconhecidos sem fazer downgrade. Antes de aplicar qualquer migração, gera `project.pre-migration.sqlite` pela Online Backup API e verifica sua integridade.
+
+Documentos `clip`, `style`, `script` e `packaging` são objetos JSON com `schemaVersion` igual a 1 e `revision` inteira não negativa. Cada tipo registra seu validador e suas migrações próprias; campos de domínio serão definidos pelos tickets correspondentes. O comando `documents.validate` migra e valida o documento no núcleo; versões futuras são recusadas.
