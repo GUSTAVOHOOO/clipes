@@ -4,6 +4,7 @@ import { version } from '../../package.json';
 let providerMock = { endpoint: '', model: '', nativeSchema: false, keyLastFour: null as string | null, remote: false, confirmed: false };
 export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   if (import.meta.env.VITE_CORE_MOCK === '1' && !isTauri()) {
+    if (name === 'projects.recent') return [] as T;
     if (name === 'app.version') return { version } as T;
     if (name === 'provider.status') return { ...providerMock } as T;
     if (name === 'provider.configure') {
