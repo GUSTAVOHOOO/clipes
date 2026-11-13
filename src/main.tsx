@@ -9,17 +9,19 @@ import { Paleta, GatilhoPaleta } from '@/components/shell/Paleta';
 import { GavetaBorda, ZonaBorda, Puxador, CabecalhoGaveta, useGaveta } from '@/components/shell/Gaveta';
 import { Button } from '@/components/ui/Button';
 import { texts } from '@/features/shell/texts';
+import { Report } from '@/features/report/Report';
 import { About } from '@/features/about/About';
 import { Components } from '@/features/components/Components';
 import { Preferences } from '@/features/preferences/Preferences';
 import '@/styles/index.css';
 
-type Page = 'home' | 'about' | 'preferences' | 'components';
+type Page = 'home' | 'about' | 'preferences' | 'components' | 'report';
 function Shell({ language, setLanguage }: { language: Language; setLanguage: (v: Language) => void }) {
   const t = useText(texts); const [page, setPage] = useState<Page>('home');
   const left = useGaveta(); const right = useGaveta();
   useComandos([
     { id:'home', titulo:t.home, grupo:t.group, executar:() => setPage('home') },
+    { id:'report', titulo:t.report, grupo:t.group, executar:() => setPage('report') },
     { id:'about', titulo:t.about, grupo:t.group, executar:() => setPage('about') },
     { id:'components', titulo:t.components, grupo:t.group, executar:() => setPage('components') },
     { id:'preferences', titulo:t.preferences, grupo:t.group, executar:() => setPage('preferences') },
@@ -32,7 +34,7 @@ function Shell({ language, setLanguage }: { language: Language; setLanguage: (v:
     const contributions = drawers.filter(d => d.side === side);
     return <><ZonaBorda lado={side} g={g} /><Puxador lado={side} g={g} itens={[{id:side, rotulo:label, atalho: side === 'esq' ? '[' : ']', icone:side === 'esq' ? <PanelLeft size={16}/> : <PanelRight size={16}/>, onClick:g.alternar}]} /><GavetaBorda lado={side} g={g} rotulo={label}><CabecalhoGaveta acoes={<Button onClick={g.fechar}>{t.close}</Button>}><h2 className="font-semibold">{label}</h2></CabecalhoGaveta><div className="overflow-y-auto p-4">{contributions.length ? contributions.map((d,i) => <section key={i}><h3>{d.title[language]}</h3><d.component /></section>) : <p className="text-fg-2">{t.emptyDrawer}</p>}</div></GavetaBorda></>;
   };
-  return <div className="flex h-full flex-col bg-canvas text-fg"><header className="flex h-(--topbar-h) shrink-0 items-center gap-2 border-b border-line px-4"><strong className="mr-4">Clipes</strong><nav className="flex flex-1 gap-1" aria-label={t.group}>{(['home','components','preferences','about'] as const).map(p => <Button key={p} variante="fantasma" onClick={() => setPage(p)} aria-current={page === p ? 'page' : undefined}>{t[p]}</Button>)}</nav><GatilhoPaleta /></header><main className="relative min-h-0 flex-1 overflow-y-auto">{page === 'home' ? <section className="mx-auto max-w-4xl px-8 py-10"><h1 className="text-xl font-semibold">{t.empty}</h1><p className="mt-2 text-fg-2">{t.description}</p></section> : page === 'about' ? <About /> : page === 'components' ? <Components /> : <Preferences language={language} setLanguage={setLanguage} />}{drawer('esq',left)}{drawer('dir',right)}</main><Paleta /></div>;
+  return <div className="flex h-full flex-col bg-canvas text-fg"><header className="flex h-(--topbar-h) shrink-0 items-center gap-2 border-b border-line px-4"><strong className="mr-4">Clipes</strong><nav className="flex flex-1 gap-1" aria-label={t.group}>{(['home','components','preferences','about','report'] as const).map(p => <Button key={p} variante="fantasma" onClick={() => setPage(p)} aria-current={page === p ? 'page' : undefined}>{t[p]}</Button>)}</nav><GatilhoPaleta /></header><main className="relative min-h-0 flex-1 overflow-y-auto">{page === 'home' ? <section className="mx-auto max-w-4xl px-8 py-10"><h1 className="text-xl font-semibold">{t.empty}</h1><p className="mt-2 text-fg-2">{t.description}</p></section> : page === 'report' ? <Report /> : page === 'about' ? <About /> : page === 'components' ? <Components /> : <Preferences language={language} setLanguage={setLanguage} />}{drawer('esq',left)}{drawer('dir',right)}</main><Paleta /></div>;
 }
 function App() {
   const [language, updateLanguage] = useState<Language>(() => { try { return localStorage.getItem('clipes.language') === 'en' ? 'en' : 'pt-BR'; } catch { return 'pt-BR'; } });

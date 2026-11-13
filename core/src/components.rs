@@ -210,6 +210,9 @@ fn download(v: Value, events: &mut EventSink<'_>) -> CommandResult {
         });
         Ok(json!({"path": exe}))
     })();
+    if result.is_err() {
+        crate::diagnostic::record(crate::diagnostic::DiagnosticEvent::ComponentFailure);
+    }
     jobs().lock().unwrap().remove(id);
     result
 }
