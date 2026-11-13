@@ -326,11 +326,11 @@ fn hash_source(v: Value, events: &mut EventSink<'_>) -> CommandResult {
         .as_i64()
         .ok_or_else(|| err("source_missing", "Fonte não encontrada"))?;
     let conn = writer(&v)?;
-    let (path, size, part): (String, i64, String) = conn
+    let (path, size, part, previous_hash): (String, i64, String, Option<String>) = conn
         .query_row(
-            "SELECT path,size,partial_hash FROM sources WHERE id=?1",
+            "SELECT path,size,partial_hash,full_hash FROM sources WHERE id=?1",
             [id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
         )
         .map_err(|_| err("source_missing", "Fonte não encontrada"))?;
     drop(conn);
@@ -345,6 +345,12 @@ fn hash_source(v: Value, events: &mut EventSink<'_>) -> CommandResult {
         events,
     )?;
     if partial(&resolved)? != before {
+        return Err(err("source_changed", "A Fonte foi alterada"));
+    }
+    if previous_hash
+        .as_ref()
+        .is_some_and(|previous| previous != &hash)
+    {
         return Err(err("source_changed", "A Fonte foi alterada"));
     }
     let conn = writer(&v)?;

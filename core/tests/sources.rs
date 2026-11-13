@@ -187,6 +187,16 @@ fn local_source_lifecycle() {
         .code,
         "source_mismatch"
     );
+    fs::copy(&impostor, &large).unwrap();
+    assert_eq!(
+        run(
+            "sources.hash",
+            json!({"project":project,"id":large_id,"job":"check-changed"})
+        )
+        .unwrap_err()
+        .code,
+        "source_changed"
+    );
     let moved_project = root.join("Canal-movido.clipes");
     fs::rename(project, &moved_project).unwrap();
     let items = run("sources.list", json!({"project":moved_project})).unwrap();
