@@ -11,3 +11,5 @@ reference/
 /dist/
 core/target/
 src-tauri/gen/
+
+/shots/

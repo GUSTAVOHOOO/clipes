@@ -62,3 +62,9 @@ Após integrar estes arquivos, um administrador precisa:
 4. Confirmar que a label `needs-triage` existe e que os três formulários aparecem no seletor de issues da branch padrão.
 
 Os formulários recebem `template`, `title` e o texto no parâmetro `body` da URL `issues/new`; cada formulário usa o campo `body` para aceitar esse preenchimento. Para textos acima do limite de URL, o usuário pode colar o diagnóstico copiado pelo app. Revise o conteúdo antes de publicar; não envie credenciais ou dados privados.
+
+## Casca e testes de interface
+
+A casca usa os tokens e componentes Foco, sem dados demonstrativos. Os textos ficam nas pastas das respectivas features. Uma feature pode contribuir para uma gaveta exportando `drawer` de `src/features/<feature>/drawer.tsx`, conforme o tipo `DrawerContribution` em `src/lib/drawers.ts`; o registro descobre o módulo automaticamente. Comandos da tela são registrados com `useComandos`.
+
+Para executar a interface no navegador com o núcleo simulado, use `VITE_CORE_MOCK=1 bun run dev` (no PowerShell, `$env:VITE_CORE_MOCK='1'; bun run dev`). O núcleo real continua sendo usado pelo Tauri. Para verificar teclado, telas, console e capturas, instale o Chromium com `bunx playwright install chromium` e execute `bun run test:ui`; as capturas ficam em `shots/`. Os tokens da interface são verificados por `bun run test:contrast`.

@@ -22,3 +22,11 @@ jobs:
       - run: cargo test --workspace
       - run: bun run typecheck
       - run: bun run build
+      - name: Install browser dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: bunx playwright install --with-deps chromium
+      - name: Install browser (Windows)
+        if: runner.os == 'Windows'
+        run: bunx playwright install chromium
+      - run: bun run test:contrast
+      - run: bun run test:ui

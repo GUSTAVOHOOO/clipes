@@ -1,0 +1,1 @@
+export const texts = { 'pt-BR': { title: 'Sobre', version: 'Versão', licenses: 'Licenças e atribuições', loading: 'Carregando versão…', error: 'Não foi possível carregar a versão.' }, en: { title: 'About', version: 'Version', licenses: 'Licenses and attribution', loading: 'Loading version…', error: 'Could not load the version.' } } as const;
