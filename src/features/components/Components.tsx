@@ -26,7 +26,7 @@ export function Components() {
     listen<Progress>('core-progress', e => { if (e.payload.stage === 'download') setProgress(e.payload.percentage); }).then(fn => { unlisten = fn; });
     return () => unlisten?.();
   }, []);
-  async function download(id: string) { if (!window.confirm(t.confirm)) return; setBusy(id); setProgress(0); setStatus(''); try { await coreDispatch('components.download', { id, confirmed: true }); setStatus(t.installed); } catch (e) { setStatus(message(e)); } finally { setBusy(null); } }
+  async function download(id: string) { if (!window.confirm(t.confirm)) return; setBusy(id); setProgress(0); setStatus(''); try { const result = await coreDispatch<{path:string}>('components.download', { id, confirmed: true }); if (id === 'ffmpeg') setSettings(previous => previous && { ...previous, ffmpeg_path: result.path }); setStatus(t.installed); } catch (e) { setStatus(message(e)); } finally { setBusy(null); } }
   async function save() { if (!settings) return; try { const updated = await coreDispatch<Settings>('components.settings.set', settings); setSettings(updated); setStatus(t.saved); } catch (e) { setStatus(message(e)); } }
   async function useSystem() { try { const result = await coreDispatch<{version:string}>('components.ffmpeg.system', { path: path || 'ffmpeg' }); setStatus(result.version); setSettings(await coreDispatch<Settings>('components.settings.get', {})); } catch (e) { setStatus(message(e)); } }
   const input = 'foco mt-2 block w-full rounded-md border border-line-strong bg-field p-2 text-fg';
