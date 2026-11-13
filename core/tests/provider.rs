@@ -225,3 +225,17 @@ fn sends_transcript_as_untrusted_data_and_native_schema() {
     );
     server.join().unwrap();
 }
+
+#[test]
+fn does_not_retry_rate_limit_without_retry_after() {
+    let (url, server) = raw_server(vec![
+        "HTTP/1.1 429 Too Many Requests\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+    ]);
+    let provider = OpenAiProvider::new(url, "model".into(), None).unwrap();
+    assert_eq!(
+        provider.structured(&request()).unwrap_err().code,
+        "rate_limit"
+    );
+    assert_eq!(server.join().unwrap(), 1);
+}

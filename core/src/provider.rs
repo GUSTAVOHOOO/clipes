@@ -68,6 +68,7 @@ pub struct OpenAiProvider {
     model: String,
     key: Option<String>,
     remote_confirmed: bool,
+    timeout: Duration,
 }
 impl OpenAiProvider {
     pub fn new(endpoint: String, model: String, key: Option<String>) -> Result<Self, CoreError> {
@@ -77,6 +78,7 @@ impl OpenAiProvider {
             model,
             key,
             remote_confirmed: false,
+            timeout: Duration::from_secs(60),
         })
     }
     fn request(&self, messages: &[Value], schema: Option<&Value>) -> Result<String, CoreError> {
@@ -87,11 +89,20 @@ impl OpenAiProvider {
                 "Confirm sending text to this provider first",
             ));
         }
+        if self.key.is_some()
+            && url.scheme() == "http"
+            && !addresses.iter().all(|address| address.ip().is_loopback())
+        {
+            return Err(error(
+                "insecure_endpoint",
+                "A key cannot be sent to a remote HTTP endpoint",
+            ));
+        }
         let host = url.host_str().unwrap().trim_matches(['[', ']']).to_string();
         let path = format!("{}/chat/completions", url.path().trim_end_matches('/'));
         url.set_path(&path);
         let client = Client::builder()
-            .timeout(Duration::from_secs(60))
+            .timeout(self.timeout)
             .redirect(reqwest::redirect::Policy::none())
             .no_proxy()
             .resolve_to_addrs(&host, &addresses)
@@ -108,7 +119,13 @@ impl OpenAiProvider {
             }
             let response = match call.send() {
                 Ok(response) => response,
-                Err(ref e) if attempt < 2 && (e.is_connect() || e.is_timeout()) => {
+                Err(ref e) if e.is_timeout() => {
+                    return Err(error(
+                        "timeout_uncertain",
+                        "Provider timed out; the request may have been processed",
+                    ))
+                }
+                Err(ref e) if attempt < 2 && e.is_connect() => {
                     std::thread::sleep(Duration::from_millis(250 * (attempt + 1)));
                     continue;
                 }
@@ -129,7 +146,9 @@ impl OpenAiProvider {
                             })
                         })
                     })
-                    .unwrap_or(1);
+                    .ok_or_else(|| {
+                        error("rate_limit", "Provider did not specify a valid retry delay")
+                    })?;
                 if delay > 30 {
                     return Err(error(
                         "rate_limit",
@@ -145,9 +164,16 @@ impl OpenAiProvider {
             if !response.status().is_success() {
                 return Err(error("provider_http", "Provider rejected the request"));
             }
-            let response: Value = response
-                .json()
-                .map_err(|_| error("invalid_response", "Provider returned an invalid response"))?;
+            let response: Value = response.json().map_err(|e| {
+                if e.is_timeout() {
+                    error(
+                        "timeout_uncertain",
+                        "Provider timed out; the request may have been processed",
+                    )
+                } else {
+                    error("invalid_response", "Provider returned an invalid response")
+                }
+            })?;
             return response
                 .pointer("/choices/0/message/content")
                 .and_then(Value::as_str)
@@ -546,5 +572,70 @@ mod settings {
             server.join().unwrap();
             fs::remove_file(path().unwrap()).unwrap();
         }
+    }
+}
+
+#[cfg(test)]
+mod security_tests {
+    use super::*;
+    use std::{io::Read, net::TcpListener, thread, time::Instant};
+
+    fn input() -> StructuredRequest {
+        StructuredRequest {
+            instruction: "Return JSON".into(),
+            transcript: String::new(),
+            schema: json!({"type":"object"}),
+            native_schema: false,
+        }
+    }
+
+    #[test]
+    fn timeout_after_request_does_not_retry() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = format!("http://{}/v1", listener.local_addr().unwrap());
+        listener.set_nonblocking(true).unwrap();
+        let server = thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(2);
+            let mut connections = Vec::new();
+            while Instant::now() < deadline {
+                if let Ok((mut stream, _)) = listener.accept() {
+                    stream
+                        .set_read_timeout(Some(Duration::from_secs(1)))
+                        .unwrap();
+                    let mut buf = [0; 4096];
+                    let _ = stream.read(&mut buf);
+                    connections.push(stream);
+                }
+                thread::sleep(Duration::from_millis(5));
+            }
+            connections.len()
+        });
+        let mut provider = OpenAiProvider::new(endpoint, "model".into(), None).unwrap();
+        provider.timeout = Duration::from_millis(100);
+        assert_eq!(
+            provider.structured(&input()).unwrap_err().code,
+            "timeout_uncertain"
+        );
+        assert_eq!(server.join().unwrap(), 1);
+    }
+
+    #[test]
+    fn remote_plain_http_with_key_is_rejected_before_connecting() {
+        let mut provider = OpenAiProvider::new(
+            "http://0.0.0.0:1/v1".into(),
+            "model".into(),
+            Some("fixture-value-1234".into()),
+        )
+        .unwrap();
+        provider.remote_confirmed = true;
+        assert_eq!(
+            provider.structured(&input()).unwrap_err().code,
+            "insecure_endpoint"
+        );
+        provider.key = None;
+        assert_ne!(
+            provider.structured(&input()).unwrap_err().code,
+            "insecure_endpoint"
+        );
     }
 }

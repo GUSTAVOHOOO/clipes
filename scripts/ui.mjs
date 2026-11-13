@@ -66,14 +66,22 @@ try {
   await page.getByRole('button', { name: 'Save key' }).click();
   await page.getByText('Key saved, ending in 1234').waitFor();
   assert.equal(await page.getByLabel('API key', { exact: true }).inputValue(), '');
-  let consentText = '';
-  page.once('dialog', async dialog => { consentText = dialog.message(); await dialog.dismiss(); });
   await page.getByRole('button', { name: 'Test connection' }).click();
-  await page.getByRole('button', { name: 'Test connection' }).waitFor();
-  assert.match(consentText, /https:\/\/example\.com\/v1/);
+  const consent = page.getByRole('alertdialog', { name: 'Send text to provider?' });
+  await consent.waitFor({ timeout: 1500 });
+  await page.screenshot({ path: 'shots/provider-consent.png' });
+  assert.match(await consent.innerText(), /https:\/\/example\.com\/v1/);
+  assert.match(await consent.innerText(), /Only text is sent; video and audio are not sent/);
+  for (let i = 0; i < 4; i++) {
+    await page.keyboard.press('Tab');
+    await page.waitForFunction(() => document.querySelector('[role=alertdialog]')?.contains(document.activeElement), null, { timeout: 2000 });
+  }
+  await page.keyboard.press('Escape');
+  await consent.waitFor({ state: 'hidden' });
   assert.equal(await page.getByText('Connection tested successfully.').count(), 0);
-  page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Test connection' }).click();
+  await consent.waitFor();
+  await consent.getByRole('button', { name: 'Send text' }).click();
   await page.getByText('Connection tested successfully.').waitFor();
   await page.getByLabel('Theme').selectOption('escuro');
   await page.screenshot({ path: 'shots/app-dark.png' });
