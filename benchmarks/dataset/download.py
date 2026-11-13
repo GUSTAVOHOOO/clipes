@@ -19,11 +19,23 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--manifest', type=Path, default=Path(__file__).with_name('manifest.json'))
     parser.add_argument('--directory', type=Path, required=True)
+    parser.add_argument('--include-clips', action='store_true',
+                        help='Baixa/confere também o áudio dos Cortes, uma vez por arquivo')
     args = parser.parse_args()
     args.directory.mkdir(parents=True, exist_ok=True)
     manifest = json.loads(args.manifest.read_text(encoding='utf-8'))
-    for item in manifest['items']:
+    files = list(manifest['items'])
+    if args.include_clips:
+        files.extend(clip for item in manifest['items'] for clip in item.get('clips', []))
+    seen = {}
+    for item in files:
         filename = item['file']
+        identity = (item['url'], item['format'], item['sha256'])
+        if filename in seen:
+            if seen[filename] != identity:
+                raise ValueError(f'Metadados conflitantes: {filename}')
+            continue
+        seen[filename] = identity
         if Path(filename).name != filename:
             raise ValueError('Nome de arquivo inválido no manifesto')
         target = args.directory / filename
