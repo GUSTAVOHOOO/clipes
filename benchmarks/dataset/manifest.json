@@ -524,7 +524,7 @@
         "trechos_en": "detectados por segmento; conferir #29",
         "status": "provisório: avaliar na revisão"
       },
-      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
+      "criterio_amostragem": "Até duas amostras por condição candidata: música = >=8 segundos com RMS >= -25 dBFS e VAD <10% de fala; gritos = >=3 segundos com RMS >= -9 dBFS e VAD >60% de fala; inglês = probabilidade >=0,8 por janela de até 15 s; demais alvos uniformes e bordas em lacunas VAD. Sinais provisórios sujeitos à revisão #29.",
       "transcricao": {
         "file": "transcricoes/-KY4_vLBhMc.json",
         "sha256": "cbb1874a1d740c88c6d4fbb5cc078ed5c31e85bec649295d9ac9ceb65f3d5676",
@@ -1046,7 +1046,7 @@
         "trechos_en": "não detectados nos segmentos amostrados; conferir #29",
         "status": "provisório: avaliar na revisão"
       },
-      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
+      "criterio_amostragem": "Até duas amostras por condição candidata: música = >=8 segundos com RMS >= -25 dBFS e VAD <10% de fala; gritos = >=3 segundos com RMS >= -9 dBFS e VAD >60% de fala; inglês = probabilidade >=0,8 por janela de até 15 s; demais alvos uniformes e bordas em lacunas VAD. Sinais provisórios sujeitos à revisão #29.",
       "transcricao": {
         "file": "transcricoes/0yhO15vKSRs.json",
         "sha256": "d5e327b7ca288e41418133fd36f6a4d81cf08ba517027731309e46e75a0e58e2",
@@ -1568,7 +1568,7 @@
         "trechos_en": "não detectados nos segmentos amostrados; conferir #29",
         "status": "provisório: avaliar na revisão"
       },
-      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
+      "criterio_amostragem": "Até duas amostras por condição candidata: música = >=8 segundos com RMS >= -25 dBFS e VAD <10% de fala; gritos = >=3 segundos com RMS >= -9 dBFS e VAD >60% de fala; inglês = probabilidade >=0,8 por janela de até 15 s; demais alvos uniformes e bordas em lacunas VAD. Sinais provisórios sujeitos à revisão #29.",
       "transcricao": {
         "file": "transcricoes/PY93Az6EJOY.json",
         "sha256": "6c9d48a32403b2e2ff3bc6ac99e4aca97233177fdc18d0f311251adc1860736c",
@@ -2110,7 +2110,7 @@
         "trechos_en": "detectados por segmento; conferir #29",
         "status": "provisório: avaliar na revisão"
       },
-      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
+      "criterio_amostragem": "Até duas amostras por condição candidata: música = >=8 segundos com RMS >= -25 dBFS e VAD <10% de fala; gritos = >=3 segundos com RMS >= -9 dBFS e VAD >60% de fala; inglês = probabilidade >=0,8 por janela de até 15 s; demais alvos uniformes e bordas em lacunas VAD. Sinais provisórios sujeitos à revisão #29.",
       "transcricao": {
         "file": "transcricoes/6quC2VnuHTU.json",
         "sha256": "a1276e6d49882b21b310409c733aabb45b258cfab490a2d4975cf390ae5b76db",
@@ -2676,7 +2676,7 @@
         "trechos_en": "detectados por segmento; conferir #29",
         "status": "provisório: avaliar na revisão"
       },
-      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
+      "criterio_amostragem": "Até duas amostras por condição candidata: música = >=8 segundos com RMS >= -25 dBFS e VAD <10% de fala; gritos = >=3 segundos com RMS >= -9 dBFS e VAD >60% de fala; inglês = probabilidade >=0,8 por janela de até 15 s; demais alvos uniformes e bordas em lacunas VAD. Sinais provisórios sujeitos à revisão #29.",
       "transcricao": {
         "file": "transcricoes/RUKzeWj1ORY.json",
         "sha256": "30481c7ef4adae5408b3d7b03aac20ddcbd67ab088c5eb595b90ba10c6e68a45",
@@ -3173,7 +3173,7 @@
         "trechos_en": "não detectados nos segmentos amostrados; conferir #29",
         "status": "provisório: avaliar na revisão"
       },
-      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
+      "criterio_amostragem": "Até duas amostras por condição candidata: música = >=8 segundos com RMS >= -25 dBFS e VAD <10% de fala; gritos = >=3 segundos com RMS >= -9 dBFS e VAD >60% de fala; inglês = probabilidade >=0,8 por janela de até 15 s; demais alvos uniformes e bordas em lacunas VAD. Sinais provisórios sujeitos à revisão #29.",
       "transcricao": {
         "file": "transcricoes/rtZyZL3FfH4.json",
         "sha256": "9190c601e678bbed02217f2dc489c4fed8047d926afb8a3e1c4ba38948ea1117",
@@ -3664,7 +3664,7 @@
         "trechos_en": "detectados por segmento; conferir #29",
         "status": "provisório: avaliar na revisão"
       },
-      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
+      "criterio_amostragem": "Até duas amostras por condição candidata: música = >=8 segundos com RMS >= -25 dBFS e VAD <10% de fala; gritos = >=3 segundos com RMS >= -9 dBFS e VAD >60% de fala; inglês = probabilidade >=0,8 por janela de até 15 s; demais alvos uniformes e bordas em lacunas VAD. Sinais provisórios sujeitos à revisão #29.",
       "clips_status": {
         "localizados": 0,
         "motivo": "Busca por títulos e canais não identificou Cortes completos com correspondência verificável; legenda automática indisponível ou limitada por HTTP 429 para candidatos recentes."
@@ -4175,7 +4175,7 @@
         "trechos_en": "não detectados nos segmentos amostrados; conferir #29",
         "status": "provisório: avaliar na revisão"
       },
-      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
+      "criterio_amostragem": "Até duas amostras por condição candidata: música = >=8 segundos com RMS >= -25 dBFS e VAD <10% de fala; gritos = >=3 segundos com RMS >= -9 dBFS e VAD >60% de fala; inglês = probabilidade >=0,8 por janela de até 15 s; demais alvos uniformes e bordas em lacunas VAD. Sinais provisórios sujeitos à revisão #29.",
       "clips_status": {
         "localizados": 0,
         "motivo": "Busca por títulos e canais não identificou Cortes completos com correspondência verificável; legenda automática indisponível ou limitada por HTTP 429 para candidatos recentes."
@@ -4685,7 +4685,7 @@
         "trechos_en": "detectados por segmento; conferir #29",
         "status": "provisório: avaliar na revisão"
       },
-      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
+      "criterio_amostragem": "Até duas amostras por condição candidata: música = >=8 segundos com RMS >= -25 dBFS e VAD <10% de fala; gritos = >=3 segundos com RMS >= -9 dBFS e VAD >60% de fala; inglês = probabilidade >=0,8 por janela de até 15 s; demais alvos uniformes e bordas em lacunas VAD. Sinais provisórios sujeitos à revisão #29.",
       "clips_status": {
         "localizados": 0,
         "motivo": "Busca por títulos e canais não identificou Cortes completos com correspondência verificável; legenda automática indisponível ou limitada por HTTP 429 para candidatos recentes."
@@ -5218,7 +5218,7 @@
         "trechos_en": "detectados por segmento; conferir #29",
         "status": "provisório: avaliar na revisão"
       },
-      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
+      "criterio_amostragem": "Até duas amostras por condição candidata: música = >=8 segundos com RMS >= -25 dBFS e VAD <10% de fala; gritos = >=3 segundos com RMS >= -9 dBFS e VAD >60% de fala; inglês = probabilidade >=0,8 por janela de até 15 s; demais alvos uniformes e bordas em lacunas VAD. Sinais provisórios sujeitos à revisão #29.",
       "transcricao": {
         "file": "transcricoes/6LB7vibQ5q0.json",
         "sha256": "8adfad1c65ea22ac14150b5091063dc228b5fb0de93ee12641382b64246f7658",
@@ -5721,7 +5721,7 @@
         "trechos_en": "detectados por segmento; conferir #29",
         "status": "provisório: avaliar na revisão"
       },
-      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
+      "criterio_amostragem": "Até duas amostras por condição candidata: música = >=8 segundos com RMS >= -25 dBFS e VAD <10% de fala; gritos = >=3 segundos com RMS >= -9 dBFS e VAD >60% de fala; inglês = probabilidade >=0,8 por janela de até 15 s; demais alvos uniformes e bordas em lacunas VAD. Sinais provisórios sujeitos à revisão #29.",
       "transcricao": {
         "file": "transcricoes/6dhayer-a90.json",
         "sha256": "8bc3bd8c1eee0f85408e58149970d8390e5b171ccb7ff6a685d145044ddad179",
