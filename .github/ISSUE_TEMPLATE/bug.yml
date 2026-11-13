@@ -1,0 +1,11 @@
+name: Relatar problema
+description: Conte o que aconteceu para ajudar a corrigir um problema.
+labels: [needs-triage]
+body:
+  - type: textarea
+    id: body
+    attributes:
+      label: Relato
+      description: Descreva o problema, como reproduzir, o resultado esperado e o observado. Inclua versão e diagnóstico revisado, se possível. Não publique chaves, dados pessoais, nomes de arquivos ou conteúdo privado.
+    validations:
+      required: true
