@@ -129,7 +129,7 @@ fn migrate(conn: &mut Connection, path: &Path) -> Result<(), CoreError> {
     }
     Ok(())
 }
-fn open_db(path: &Path) -> Result<Connection, CoreError> {
+pub(crate) fn open_db(path: &Path) -> Result<Connection, CoreError> {
     let db = path.join("project.sqlite");
     let mut conn = Connection::open_with_flags(db, OpenFlags::SQLITE_OPEN_READ_WRITE)
         .map_err(|e| error("project_open", e))?;

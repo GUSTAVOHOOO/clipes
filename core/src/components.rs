@@ -99,6 +99,9 @@ fn load_settings() -> Result<Settings, CoreError> {
         Err(e) => Err(error("settings", e)),
     }
 }
+pub(crate) fn configured_ffmpeg() -> Option<PathBuf> {
+    load_settings().ok().and_then(|s| s.ffmpeg_path)
+}
 fn save_settings(s: &Settings) -> Result<(), CoreError> {
     let p = settings_path()?;
     fs::create_dir_all(p.parent().unwrap()).map_err(|e| error("settings", e))?;
