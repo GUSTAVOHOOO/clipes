@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissões mínimas do shell do Clipes",
+  "windows": ["main"],
+  "permissions": ["core:default", "updater:allow-check", "updater:allow-download-and-install", "process:allow-restart"]
+}

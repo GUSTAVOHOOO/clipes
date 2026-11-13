@@ -8,7 +8,7 @@ await new Promise(resolve => socket.listen(0, '127.0.0.1', resolve));
 const port = socket.address().port;
 await new Promise(resolve => socket.close(resolve));
 const url = `http://127.0.0.1:${port}`;
-const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { env: { ...process.env, VITE_CORE_MOCK: '1' }, stdio: 'inherit' });
+const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { env: { ...process.env, VITE_CORE_MOCK: '1', VITE_UPDATER_MOCK: 'available' }, stdio: 'inherit' });
 let browser;
 try {
   for (let i = 0; ; i++) {
@@ -20,6 +20,16 @@ try {
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   await page.goto(url);
+  const updateDialog = page.getByRole('dialog', { name: 'Atualização disponível' });
+  await updateDialog.waitFor();
+  assert.match(await updateDialog.innerText(), /0\.1\.0/);
+  assert.match(await updateDialog.innerText(), /Novidades de teste/);
+  await updateDialog.getByRole('button', { name: 'Agora não' }).click();
+  assert.equal(await updateDialog.count(), 0);
+  await page.reload();
+  await page.getByRole('dialog', { name: 'Atualização disponível' }).getByRole('button', { name: 'Atualizar agora' }).click();
+  await page.getByRole('status').getByText('Atualização instalada', { exact: true }).waitFor();
+  await page.getByRole('status').getByRole('button', { name: 'Fechar' }).click();
   await page.getByRole('heading', { name: 'Nenhum Projeto aberto' }).waitFor();
   await mkdir('shots', { recursive: true });
   await page.screenshot({ path: 'shots/home-dark.png' });

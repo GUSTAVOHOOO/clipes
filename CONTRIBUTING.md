@@ -46,7 +46,11 @@ bun run build
 
 ## Contrato do núcleo
 
-O crate `core` não depende do Tauri. A UI chama o único adaptador `core_dispatch`, que repassa nome e argumentos JSON ao mesmo `dispatch` usado pelo harness. Cada módulo de feature registra seus próprios comandos com `inventory::submit!`; incluir o módulo no crate exige no máximo uma linha `mod`, sem alterar uma lista central de comandos. Os eventos `core-progress` usam o mesmo `ProgressEvent` serializável, com job, etapa, porcentagem, mensagem e erro tipado opcional. O callback do despacho entrega os eventos ao adaptador Tauri ou ao harness. Processos externos devem usar `core::process::spawn`, que inicia o executável diretamente, sem shell.
+O crate `core` não depende do Tauri. A UI chama o único adaptador `core_dispatch`, que repassa nome e argumentos JSON ao mesmo `dispatch` usado pelo harness. Cada módulo de feature registra seus próprios comandos com `inventory::submit!`; incluir o módulo no crate exige no máximo uma linha `mod`, sem alterar uma lista central de comandos. Os eventos `core-progress` usam o mesmo `ProgressEvent` serializável, com job, etapa, porcentagem, mensagem e erro tipado opcional. O callback do despacho entrega os eventos ao adaptador Tauri ou ao harness. Processos externos devem usar `core::process::spawn`, que inicia o executável diretamente, sem shell. Como exceção de infraestrutura do shell, plugins oficiais do Tauri como updater e process são usados diretamente pela UI; a lógica de domínio continua exclusivamente no `core_dispatch`.
+
+### Chave do updater
+
+O mantenedor gera o par de assinatura uma única vez com `bun run tauri signer generate -- -w ~/.tauri/clipes.key`. Proteja o arquivo privado e guarde sua senha em um gerenciador de senhas; nunca o commite nem o compartilhe. Configure `TAURI_SIGNING_PRIVATE_KEY` com o conteúdo da chave e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` com sua senha nos secrets do repositório GitHub. A chave pública gerada deve substituir o marcador `CHAVE_PUBLICA_TAURI_PENDENTE_DO_DEV` em `src-tauri/tauri.conf.json` e pode ser compartilhada. Pull requests compilam sem assinatura; builds de tags usam os secrets para assinar os artefatos de atualização.
 
 ## Demonstração do design system
 

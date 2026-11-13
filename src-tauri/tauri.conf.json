@@ -13,10 +13,17 @@
   "bundle": {
     "active": true,
     "targets": ["nsis", "appimage", "deb"],
+    "createUpdaterArtifacts": true,
     "icon": ["icons/icon.png", "icons/icon.ico"],
     "windows": {
       "webviewInstallMode": { "type": "downloadBootstrapper" },
       "nsis": { "installMode": "currentUser" }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "CHAVE_PUBLICA_TAURI_PENDENTE_DO_DEV",
+      "endpoints": ["https://github.com/GUSTAVOHOOO/clipes/releases/latest/download/latest.json"]
     }
   }
 }

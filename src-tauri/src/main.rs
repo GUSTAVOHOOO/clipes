@@ -20,6 +20,8 @@ async fn core_dispatch(
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![core_dispatch])
         .run(tauri::generate_context!())
         .expect("failed to run Clipes");
