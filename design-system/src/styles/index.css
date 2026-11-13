@@ -1,0 +1,210 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/geist-mono';
+@import './tokens.css';
+
+/* O tema vem do atributo data-theme no <html>, não da mídia: o usuário escolhe em Configurações. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+@custom-variant light (&:where([data-theme='light'], [data-theme='light'] *));
+
+/*
+ * Os tokens semânticos viram utilitários: bg-surface, text-fg-2, border-line, ring-focus…
+ * `inline` faz o Tailwind usar var(--x) direto, então a troca de tema não precisa recompilar nada.
+ * Os nomes padrão do Tailwind (cores, sombras, raios) são zerados para que ninguém use slate-800 por engano.
+ */
+@theme inline {
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-black: #000;
+  --color-white: #fff;
+
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-field: var(--field);
+  --color-hover: var(--hover);
+  --color-selected: var(--selected);
+  --color-raised: var(--raised);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-control-border: var(--control-border);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-fg-3: var(--fg-3);
+  --color-fg-disabled: var(--fg-disabled);
+  --color-fg-inverse: var(--fg-inverse);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-fg: var(--primary-fg);
+  --color-accent: var(--accent);
+  --color-accent-text: var(--accent-text);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-accent-line: var(--accent-line);
+  --color-focus: var(--focus-ring);
+  --color-danger: var(--danger);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-warning: var(--warning);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-success: var(--success);
+  --color-success-subtle: var(--success-subtle);
+  --color-info: var(--info);
+  --color-info-subtle: var(--info-subtle);
+  --color-track: var(--track);
+  --color-wave: var(--wave);
+  --color-handle: var(--handle);
+  --color-playhead: var(--playhead);
+  --color-scrim: var(--scrim);
+  --color-letterbox: var(--media-letterbox);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --text-*: initial;
+  --text-2xs: var(--text-2xs);
+  --text-2xs--line-height: 1.35;
+  --text-xs: var(--text-xs);
+  --text-xs--line-height: 1.4;
+  --text-sm: var(--text-sm);
+  --text-sm--line-height: 1.4;
+  --text-md: var(--text-md);
+  --text-md--line-height: 1.5;
+  --text-lg: var(--text-lg);
+  --text-lg--line-height: 1.4;
+  --text-xl: var(--text-xl);
+  --text-xl--line-height: 1.3;
+  --text-2xl: var(--text-2xl);
+  --text-2xl--line-height: 1.25;
+
+  --radius-*: initial;
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-full: var(--radius-full);
+
+  --shadow-*: initial;
+  --shadow-popover: var(--shadow-popover);
+  --shadow-overlay: var(--shadow-overlay);
+  --shadow-dialog: var(--shadow-dialog);
+
+  --ease-out: var(--ease-out);
+  --ease-out-expo: var(--ease-out-expo);
+  --ease-in-out: var(--ease-in-out);
+}
+
+/* ------------------------------------------------------------------ base */
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+  }
+  body {
+    background: var(--canvas);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    line-height: var(--leading-ui);
+    font-feature-settings: 'cv11', 'ss01'; /* Inter: a e l mais legíveis em tamanho pequeno */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: var(--accent-subtle);
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  button {
+    cursor: default; /* app desktop: o cursor de mão fica para links de verdade */
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 1px;
+  }
+  /* rolagem fina na cor da linha: a barra continua padrão, só some no meio do grafite */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+}
+
+/* ------------------------------------------------------------------ utilitários próprios */
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+@utility timecode {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+/* foco visível em anel: para controles com raio, onde o outline padrão fica quadrado no WebKitGTK */
+@utility foco {
+  outline: none;
+  &:focus-visible {
+    box-shadow:
+      0 0 0 1px var(--surface),
+      0 0 0 3px var(--focus-ring);
+  }
+}
+/* hachura de silêncio e de "fora da Fonte" */
+@utility hachura {
+  background-image: repeating-linear-gradient(135deg, transparent 0 4px, var(--hatch) 4px 5px);
+}
+@utility sem-barra {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------ animações de estado */
+@keyframes entra-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes entra-cima {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+}
+@keyframes entra-baixo {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.985);
+  }
+}
+@keyframes pulso-carregando {
+  50% {
+    opacity: 0.55;
+  }
+}
+@keyframes barra-indeterminada {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 80ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
