@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Clipes",
+  "version": "0.1.0",
+  "identifier": "br.com.clipes.app",
+  "build": {
+    "beforeDevCommand": "bun run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "bun run build",
+    "frontendDist": "../dist"
+  },
+  "app": { "windows": [{ "title": "Clipes", "width": 900, "height": 600 }] },
+  "bundle": { "active": false }
+}
