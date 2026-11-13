@@ -3817,310 +3817,652 @@
       ]
     },
     {
-      "start": 3296.272,
-      "end": 3351.568,
+      "start": 3631.216,
+      "end": 3687.904,
       "language": "en",
-      "language_probability": 0.9961,
+      "language_probability": 0.9946,
       "words": [
         {
-          "start": 3302.112,
-          "end": 3303.112,
-          "word": " You",
-          "probability": 0.2206
+          "start": 3631.216,
+          "end": 3631.716,
+          "word": " It's",
+          "probability": 0.5403
         },
         {
-          "start": 3303.112,
-          "end": 3304.112,
-          "word": " can't",
-          "probability": 0.8708
-        },
-        {
-          "start": 3304.112,
-          "end": 3304.652,
-          "word": " hide",
-          "probability": 0.9858
-        },
-        {
-          "start": 3304.652,
-          "end": 3305.492,
-          "word": " forever!",
-          "probability": 0.9346
-        },
-        {
-          "start": 3317.292,
-          "end": 3318.292,
-          "word": " Devon!",
-          "probability": 0.4929
-        },
-        {
-          "start": 3318.932,
-          "end": 3319.932,
-          "word": " Where",
-          "probability": 0.2815
-        },
-        {
-          "start": 3319.932,
-          "end": 3323.932,
-          "word": " you",
-          "probability": 0.9639
-        },
-        {
-          "start": 3323.932,
-          "end": 3323.952,
-          "word": " at",
-          "probability": 0.9966
-        },
-        {
-          "start": 3323.952,
-          "end": 3324.292,
-          "word": " Devon?",
-          "probability": 0.853
-        },
-        {
-          "start": 3324.372,
-          "end": 3325.312,
-          "word": " Where",
-          "probability": 0.8979
-        },
-        {
-          "start": 3325.312,
-          "end": 3325.412,
-          "word": " you",
-          "probability": 0.9893
-        },
-        {
-          "start": 3325.412,
-          "end": 3325.512,
-          "word": " at",
-          "probability": 0.999
-        },
-        {
-          "start": 3325.512,
-          "end": 3325.852,
-          "word": " Devon?",
-          "probability": 0.9775
-        },
-        {
-          "start": 3326.832,
-          "end": 3327.432,
-          "word": " What",
-          "probability": 0.0457
-        },
-        {
-          "start": 3327.432,
-          "end": 3327.612,
-          "word": " do",
+          "start": 3631.716,
+          "end": 3631.776,
+          "word": " my",
           "probability": 0.96
         },
         {
-          "start": 3327.612,
-          "end": 3327.632,
-          "word": " you",
-          "probability": 0.9604
+          "start": 3631.776,
+          "end": 3632.176,
+          "word": " child",
+          "probability": 0.6318
         },
         {
-          "start": 3327.632,
-          "end": 3327.852,
-          "word": " mean",
-          "probability": 0.9917
+          "start": 3632.176,
+          "end": 3632.596,
+          "word": " right",
+          "probability": 0.9473
         },
         {
-          "start": 3327.852,
-          "end": 3328.052,
-          "word": " all",
-          "probability": 0.8618
+          "start": 3632.596,
+          "end": 3632.856,
+          "word": " here,",
+          "probability": 0.9897
         },
         {
-          "start": 3328.052,
-          "end": 3328.232,
-          "word": " our",
-          "probability": 0.7734
+          "start": 3632.896,
+          "end": 3632.996,
+          "word": " dude.",
+          "probability": 0.9834
         },
         {
-          "start": 3328.232,
-          "end": 3328.712,
-          "word": " operatives",
-          "probability": 0.9814
+          "start": 3639.256,
+          "end": 3639.716,
+          "word": " Chat,",
+          "probability": 0.5044
         },
         {
-          "start": 3328.712,
-          "end": 3328.872,
-          "word": " are",
-          "probability": 0.9883
+          "start": 3639.716,
+          "end": 3640.176,
+          "word": " after",
+          "probability": 0.9941
         },
         {
-          "start": 3328.872,
-          "end": 3329.172,
-          "word": " dead?",
-          "probability": 0.9829
+          "start": 3640.176,
+          "end": 3640.556,
+          "word": " playing",
+          "probability": 0.9995
         },
         {
-          "start": 3330.892,
-          "end": 3331.492,
-          "word": " Stupid",
-          "probability": 0.791
+          "start": 3640.556,
+          "end": 3641.276,
+          "word": " a",
+          "probability": 0.998
         },
         {
-          "start": 3331.492,
-          "end": 3331.792,
-          "word": " ass",
-          "probability": 0.7114
+          "start": 3641.276,
+          "end": 3641.496,
+          "word": " lot",
+          "probability": 0.9995
         },
         {
-          "start": 3331.792,
-          "end": 3332.072,
-          "word": " nigger!",
-          "probability": 0.562
+          "start": 3641.496,
+          "end": 3641.596,
+          "word": " of",
+          "probability": 0.9995
         },
         {
-          "start": 3332.092,
-          "end": 3332.132,
-          "word": " Hear",
-          "probability": 0.9463
-        },
-        {
-          "start": 3332.132,
-          "end": 3332.252,
-          "word": " me",
-          "probability": 0.9976
-        },
-        {
-          "start": 3332.252,
-          "end": 3332.472,
-          "word": " out!",
+          "start": 3641.596,
+          "end": 3641.696,
+          "word": " the",
           "probability": 0.9971
         },
         {
-          "start": 3332.732,
-          "end": 3332.832,
-          "word": " Uh",
-          "probability": 0.2124
+          "start": 3641.696,
+          "end": 3641.856,
+          "word": " Grand",
+          "probability": 0.7661
         },
         {
-          "start": 3332.832,
-          "end": 3333.632,
-          "word": " huh.",
-          "probability": 0.5488
+          "start": 3641.856,
+          "end": 3642.076,
+          "word": " Theft",
+          "probability": 0.9961
         },
         {
-          "start": 3333.772,
-          "end": 3334.332,
-          "word": " Uh",
-          "probability": 0.5386
+          "start": 3642.076,
+          "end": 3642.496,
+          "word": " Autos,",
+          "probability": 0.8936
         },
         {
-          "start": 3334.332,
-          "end": 3334.592,
-          "word": " huh.",
-          "probability": 0.9688
+          "start": 3642.596,
+          "end": 3644.096,
+          "word": " this",
+          "probability": 0.9932
         },
         {
-          "start": 3334.892,
-          "end": 3335.472,
-          "word": " Uh",
-          "probability": 0.6333
+          "start": 3644.096,
+          "end": 3645.076,
+          "word": " game,",
+          "probability": 0.9985
         },
         {
-          "start": 3335.472,
-          "end": 3335.792,
-          "word": " huh.",
-          "probability": 0.9731
+          "start": 3645.076,
+          "end": 3645.896,
+          "word": " my",
+          "probability": 0.689
         },
         {
-          "start": 3336.132,
-          "end": 3336.732,
-          "word": " Uh",
-          "probability": 0.9312
+          "start": 3645.896,
+          "end": 3646.296,
+          "word": " rock",
+          "probability": 0.7627
         },
         {
-          "start": 3336.732,
-          "end": 3337.012,
-          "word": " huh.",
-          "probability": 0.9814
+          "start": 3646.296,
+          "end": 3646.556,
+          "word": " star,",
+          "probability": 0.7148
         },
         {
-          "start": 3337.932,
-          "end": 3338.532,
-          "word": " Uh",
-          "probability": 0.9595
+          "start": 3646.816,
+          "end": 3647.316,
+          "word": " from",
+          "probability": 0.9927
         },
         {
-          "start": 3338.532,
-          "end": 3338.832,
-          "word": " huh.",
-          "probability": 0.9834
+          "start": 3647.316,
+          "end": 3647.516,
+          "word": " the",
+          "probability": 1.0
         },
         {
-          "start": 3341.952,
-          "end": 3342.552,
-          "word": " Uh",
-          "probability": 0.9668
+          "start": 3647.516,
+          "end": 3647.896,
+          "word": " motion,",
+          "probability": 0.9536
         },
         {
-          "start": 3342.552,
-          "end": 3343.152,
-          "word": " huh.",
-          "probability": 0.9819
+          "start": 3647.976,
+          "end": 3648.116,
+          "word": " from",
+          "probability": 0.9995
         },
         {
-          "start": 3343.572,
-          "end": 3343.752,
-          "word": " Uh",
-          "probability": 0.9678
+          "start": 3648.116,
+          "end": 3648.276,
+          "word": " what",
+          "probability": 1.0
         },
         {
-          "start": 3343.752,
-          "end": 3344.152,
-          "word": " huh.",
+          "start": 3648.276,
+          "end": 3648.376,
+          "word": " I",
+          "probability": 1.0
+        },
+        {
+          "start": 3648.376,
+          "end": 3648.496,
+          "word": " can",
+          "probability": 1.0
+        },
+        {
+          "start": 3648.496,
+          "end": 3648.816,
+          "word": " feel,",
+          "probability": 1.0
+        },
+        {
+          "start": 3648.936,
+          "end": 3649.136,
+          "word": " bro.",
+          "probability": 0.9971
+        },
+        {
+          "start": 3649.496,
+          "end": 3649.956,
+          "word": " I",
+          "probability": 1.0
+        },
+        {
+          "start": 3649.956,
+          "end": 3650.136,
+          "word": " can",
+          "probability": 1.0
+        },
+        {
+          "start": 3650.136,
+          "end": 3650.476,
+          "word": " feel",
+          "probability": 1.0
+        },
+        {
+          "start": 3650.476,
+          "end": 3650.656,
+          "word": " the",
+          "probability": 1.0
+        },
+        {
+          "start": 3650.656,
+          "end": 3650.916,
+          "word": " difference",
+          "probability": 0.9995
+        },
+        {
+          "start": 3650.916,
+          "end": 3651.136,
+          "word": " in",
+          "probability": 1.0
+        },
+        {
+          "start": 3651.136,
+          "end": 3651.476,
+          "word": " each",
+          "probability": 0.9995
+        },
+        {
+          "start": 3651.476,
+          "end": 3652.016,
+          "word": " game,",
+          "probability": 1.0
+        },
+        {
+          "start": 3652.076,
+          "end": 3652.516,
+          "word": " literally,",
+          "probability": 0.9995
+        },
+        {
+          "start": 3652.756,
+          "end": 3652.976,
+          "word": " bro.",
+          "probability": 0.999
+        },
+        {
+          "start": 3653.076,
+          "end": 3653.236,
+          "word": " I",
+          "probability": 0.9995
+        },
+        {
+          "start": 3653.236,
+          "end": 3653.456,
+          "word": " can",
+          "probability": 1.0
+        },
+        {
+          "start": 3653.456,
+          "end": 3653.736,
+          "word": " feel",
+          "probability": 1.0
+        },
+        {
+          "start": 3653.736,
+          "end": 3653.896,
+          "word": " the",
+          "probability": 1.0
+        },
+        {
+          "start": 3653.896,
+          "end": 3654.196,
+          "word": " game",
+          "probability": 0.9995
+        },
+        {
+          "start": 3654.196,
+          "end": 3654.516,
+          "word": " as",
+          "probability": 0.9995
+        },
+        {
+          "start": 3654.516,
+          "end": 3654.696,
+          "word": " I",
+          "probability": 1.0
+        },
+        {
+          "start": 3654.696,
+          "end": 3654.896,
+          "word": " was",
+          "probability": 1.0
+        },
+        {
+          "start": 3654.896,
+          "end": 3655.376,
+          "word": " increasing",
+          "probability": 0.9995
+        },
+        {
+          "start": 3655.376,
+          "end": 3656.176,
+          "word": " on",
+          "probability": 0.9956
+        },
+        {
+          "start": 3656.176,
+          "end": 3656.536,
+          "word": " each",
+          "probability": 1.0
+        },
+        {
+          "start": 3656.536,
+          "end": 3657.156,
+          "word": " game,",
+          "probability": 1.0
+        },
+        {
+          "start": 3657.276,
+          "end": 3657.496,
+          "word": " bro.",
+          "probability": 0.9976
+        },
+        {
+          "start": 3657.496,
+          "end": 3658.436,
+          "word": " And",
+          "probability": 0.2881
+        },
+        {
+          "start": 3658.436,
+          "end": 3659.416,
+          "word": " the",
+          "probability": 0.6367
+        },
+        {
+          "start": 3659.416,
+          "end": 3660.636,
+          "word": " GTA",
+          "probability": 0.5503
+        },
+        {
+          "start": 3660.636,
+          "end": 3662.676,
+          "word": " 3",
+          "probability": 0.0217
+        },
+        {
+          "start": 3662.676,
+          "end": 3665.656,
+          "word": " to",
+          "probability": 0.6782
+        },
+        {
+          "start": 3665.656,
+          "end": 3666.016,
+          "word": " GTA",
+          "probability": 0.9761
+        },
+        {
+          "start": 3666.016,
+          "end": 3666.476,
+          "word": " Vice",
+          "probability": 0.9053
+        },
+        {
+          "start": 3666.476,
+          "end": 3666.736,
+          "word": " City",
+          "probability": 0.9497
+        },
+        {
+          "start": 3666.736,
+          "end": 3667.056,
+          "word": " Jump",
+          "probability": 0.7471
+        },
+        {
+          "start": 3667.056,
+          "end": 3667.356,
+          "word": " was",
+          "probability": 0.9487
+        },
+        {
+          "start": 3667.356,
+          "end": 3667.676,
+          "word": " incredible.",
+          "probability": 0.9907
+        },
+        {
+          "start": 3668.576,
+          "end": 3669.176,
+          "word": " The",
+          "probability": 0.9937
+        },
+        {
+          "start": 3669.176,
+          "end": 3669.416,
+          "word": " Vice",
+          "probability": 0.9951
+        },
+        {
+          "start": 3669.416,
+          "end": 3669.676,
+          "word": " City",
+          "probability": 0.999
+        },
+        {
+          "start": 3669.676,
+          "end": 3669.976,
+          "word": " Jump",
+          "probability": 0.9863
+        },
+        {
+          "start": 3669.976,
+          "end": 3671.576,
+          "word": " to",
           "probability": 0.9824
         },
         {
-          "start": 3345.372,
-          "end": 3345.972,
-          "word": " Uh",
-          "probability": 0.9653
+          "start": 3671.576,
+          "end": 3671.916,
+          "word": " GTA",
+          "probability": 0.9443
         },
         {
-          "start": 3345.972,
-          "end": 3346.412,
-          "word": " huh.",
-          "probability": 0.9849
+          "start": 3671.916,
+          "end": 3672.436,
+          "word": " 4",
+          "probability": 0.9736
         },
         {
-          "start": 3346.732,
-          "end": 3347.332,
-          "word": " Uh",
-          "probability": 0.9639
+          "start": 3672.436,
+          "end": 3672.816,
+          "word": " Jump,",
+          "probability": 0.9346
         },
         {
-          "start": 3347.332,
-          "end": 3347.332,
-          "word": " huh.",
-          "probability": 0.9868
+          "start": 3673.016,
+          "end": 3674.176,
+          "word": " huge",
+          "probability": 0.9604
         },
         {
-          "start": 3347.352,
-          "end": 3347.952,
-          "word": " Uh",
-          "probability": 0.9307
+          "start": 3674.176,
+          "end": 3674.636,
+          "word": " difference.",
+          "probability": 0.9995
         },
         {
-          "start": 3347.952,
-          "end": 3347.952,
-          "word": " huh.",
-          "probability": 0.9868
+          "start": 3675.056,
+          "end": 3675.456,
+          "word": " The",
+          "probability": 0.9961
         },
         {
-          "start": 3349.952,
-          "end": 3350.552,
-          "word": " Uh",
-          "probability": 0.9297
+          "start": 3675.456,
+          "end": 3675.916,
+          "word": " GTA",
+          "probability": 0.9995
         },
         {
-          "start": 3350.552,
-          "end": 3351.152,
-          "word": " huh.",
-          "probability": 0.9834
+          "start": 3675.916,
+          "end": 3676.536,
+          "word": " 4,",
+          "probability": 0.9961
+        },
+        {
+          "start": 3676.856,
+          "end": 3676.976,
+          "word": " I'm",
+          "probability": 0.8643
+        },
+        {
+          "start": 3676.976,
+          "end": 3677.056,
+          "word": " going",
+          "probability": 0.2375
+        },
+        {
+          "start": 3677.056,
+          "end": 3677.236,
+          "word": " to",
+          "probability": 0.999
+        },
+        {
+          "start": 3677.236,
+          "end": 3677.936,
+          "word": " have",
+          "probability": 0.5371
+        },
+        {
+          "start": 3677.936,
+          "end": 3679.036,
+          "word": " to",
+          "probability": 0.9995
+        },
+        {
+          "start": 3679.036,
+          "end": 3679.096,
+          "word": " break",
+          "probability": 0.9858
+        },
+        {
+          "start": 3679.096,
+          "end": 3679.196,
+          "word": " this",
+          "probability": 0.9995
+        },
+        {
+          "start": 3679.196,
+          "end": 3679.316,
+          "word": " shit",
+          "probability": 0.9575
+        },
+        {
+          "start": 3679.316,
+          "end": 3679.436,
+          "word": " down.",
+          "probability": 0.999
+        },
+        {
+          "start": 3679.716,
+          "end": 3680.256,
+          "word": " I'm",
+          "probability": 0.701
+        },
+        {
+          "start": 3680.256,
+          "end": 3680.316,
+          "word": " going",
+          "probability": 0.9995
+        },
+        {
+          "start": 3680.316,
+          "end": 3680.356,
+          "word": " to",
+          "probability": 1.0
+        },
+        {
+          "start": 3680.356,
+          "end": 3680.436,
+          "word": " have",
+          "probability": 1.0
+        },
+        {
+          "start": 3680.436,
+          "end": 3680.516,
+          "word": " to",
+          "probability": 1.0
+        },
+        {
+          "start": 3680.516,
+          "end": 3680.616,
+          "word": " break",
+          "probability": 1.0
+        },
+        {
+          "start": 3680.616,
+          "end": 3680.736,
+          "word": " this",
+          "probability": 1.0
+        },
+        {
+          "start": 3680.736,
+          "end": 3680.836,
+          "word": " shit",
+          "probability": 1.0
+        },
+        {
+          "start": 3680.836,
+          "end": 3680.976,
+          "word": " down.",
+          "probability": 1.0
+        },
+        {
+          "start": 3683.756,
+          "end": 3684.356,
+          "word": " 3",
+          "probability": 0.8672
+        },
+        {
+          "start": 3684.356,
+          "end": 3684.956,
+          "word": " was",
+          "probability": 0.9902
+        },
+        {
+          "start": 3684.956,
+          "end": 3685.156,
+          "word": " a",
+          "probability": 0.9995
+        },
+        {
+          "start": 3685.156,
+          "end": 3685.316,
+          "word": " real",
+          "probability": 1.0
+        },
+        {
+          "start": 3685.316,
+          "end": 3685.556,
+          "word": " tone",
+          "probability": 0.9951
+        },
+        {
+          "start": 3685.556,
+          "end": 3685.936,
+          "word": " setter.",
+          "probability": 0.988
+        },
+        {
+          "start": 3687.496,
+          "end": 3687.736,
+          "word": " 3",
+          "probability": 0.0006
+        },
+        {
+          "start": 3687.736,
+          "end": 3687.876,
+          "word": " was",
+          "probability": 0.0
+        },
+        {
+          "start": 3687.876,
+          "end": 3687.876,
+          "word": " a",
+          "probability": 0.0555
+        },
+        {
+          "start": 3687.876,
+          "end": 3687.876,
+          "word": " real",
+          "probability": 0.0056
+        },
+        {
+          "start": 3687.876,
+          "end": 3687.876,
+          "word": " tone",
+          "probability": 0.0
+        },
+        {
+          "start": 3687.876,
+          "end": 3687.876,
+          "word": " setter.",
+          "probability": 0.0203
         }
       ]
     },

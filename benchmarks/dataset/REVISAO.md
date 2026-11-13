@@ -6,7 +6,7 @@
 
 - [ ] Conferir características de áudio e cobertura das condições difíceis.
 - [ ] Conferir todos os Cortes localizados por áudio ou Transcrição; não inventar correspondências.
-- Cortes localizados: 0 (nenhum confirmado enquanto a lista estiver vazia).
+- Cortes localizados: 0.
 
 | Início (s) | Fim (s) | Idioma provisório | Revisada |
 | ---: | ---: | --- | --- |
@@ -25,7 +25,7 @@
 
 - [ ] Conferir características de áudio e cobertura das condições difíceis.
 - [ ] Conferir todos os Cortes localizados por áudio ou Transcrição; não inventar correspondências.
-- Cortes localizados: 0 (nenhum confirmado enquanto a lista estiver vazia).
+- Cortes localizados: 0.
 
 | Início (s) | Fim (s) | Idioma provisório | Revisada |
 | ---: | ---: | --- | --- |
@@ -44,7 +44,7 @@
 
 - [ ] Conferir características de áudio e cobertura das condições difíceis.
 - [ ] Conferir todos os Cortes localizados por áudio ou Transcrição; não inventar correspondências.
-- Cortes localizados: 0 (nenhum confirmado enquanto a lista estiver vazia).
+- Cortes localizados: 0.
 
 | Início (s) | Fim (s) | Idioma provisório | Revisada |
 | ---: | ---: | --- | --- |
@@ -63,7 +63,7 @@
 
 - [ ] Conferir características de áudio e cobertura das condições difíceis.
 - [ ] Conferir todos os Cortes localizados por áudio ou Transcrição; não inventar correspondências.
-- Cortes localizados: 0 (nenhum confirmado enquanto a lista estiver vazia).
+- Cortes localizados: 0.
 
 | Início (s) | Fim (s) | Idioma provisório | Revisada |
 | ---: | ---: | --- | --- |
@@ -82,7 +82,7 @@
 
 - [ ] Conferir características de áudio e cobertura das condições difíceis.
 - [ ] Conferir todos os Cortes localizados por áudio ou Transcrição; não inventar correspondências.
-- Cortes localizados: 0 (nenhum confirmado enquanto a lista estiver vazia).
+- Cortes localizados: 0.
 
 | Início (s) | Fim (s) | Idioma provisório | Revisada |
 | ---: | ---: | --- | --- |
@@ -101,7 +101,7 @@
 
 - [ ] Conferir características de áudio e cobertura das condições difíceis.
 - [ ] Conferir todos os Cortes localizados por áudio ou Transcrição; não inventar correspondências.
-- Cortes localizados: 0 (nenhum confirmado enquanto a lista estiver vazia).
+- Cortes localizados: 0.
 
 | Início (s) | Fim (s) | Idioma provisório | Revisada |
 | ---: | ---: | --- | --- |
@@ -109,7 +109,7 @@
 | 1445.632 | 1503.424 | pt | [ ] |
 | 2897.536 | 2958.976 | pt | [ ] |
 | 4351.024 | 4410.496 | pt | [ ] |
-| 5801.392 | 5859.824 | pt | [ ] |
+| 5923.376 | 5989.920 | pt | [ ] |
 | 7249.840 | 7310.896 | pt | [ ] |
 | 8698.704 | 8755.600 | pt | [ ] |
 | 10147.888 | 10212.160 | pt | [ ] |
@@ -120,7 +120,7 @@
 
 - [ ] Conferir características de áudio e cobertura das condições difíceis.
 - [ ] Conferir todos os Cortes localizados por áudio ou Transcrição; não inventar correspondências.
-- Cortes localizados: 0 (nenhum confirmado enquanto a lista estiver vazia).
+- Cortes localizados: 0.
 
 | Início (s) | Fim (s) | Idioma provisório | Revisada |
 | ---: | ---: | --- | --- |
@@ -132,25 +132,25 @@
 | 2062.464 | 2116.304 | en | [ ] |
 | 2477.680 | 2545.696 | en | [ ] |
 | 2885.024 | 2945.728 | en | [ ] |
-| 3296.272 | 3351.568 | en | [ ] |
+| 3631.216 | 3687.904 | en | [ ] |
 | 3710.752 | 3769.808 | en | [ ] |
 
 ## [IRRITEI STREAMERS AO VIVO no GTA RP 😂 (Paulinho o LOKO)](https://www.youtube.com/watch?v=QiwQ62ypdcI)
 
 - [ ] Conferir características de áudio e cobertura das condições difíceis.
 - [ ] Conferir todos os Cortes localizados por áudio ou Transcrição; não inventar correspondências.
-- Cortes localizados: 0 (nenhum confirmado enquanto a lista estiver vazia).
+- Cortes localizados: 0.
 
 | Início (s) | Fim (s) | Idioma provisório | Revisada |
 | ---: | ---: | --- | --- |
 | 16.304 | 76.736 | pt | [ ] |
 | 147.840 | 208.864 | pt | [ ] |
-| 293.728 | 354.496 | pt | [ ] |
+| 224.640 | 284.032 | pt | [ ] |
 | 444.496 | 503.520 | pt | [ ] |
 | 594.992 | 656.608 | pt | [ ] |
 | 743.856 | 808.000 | pt | [ ] |
 | 880.144 | 940.048 | pt | [ ] |
-| 1041.680 | 1101.680 | pt | [ ] |
+| 1089.984 | 1156.048 | pt | [ ] |
 | 1187.088 | 1249.200 | pt | [ ] |
 | 1317.088 | 1371.712 | pt | [ ] |
 
@@ -158,7 +158,7 @@
 
 - [ ] Conferir características de áudio e cobertura das condições difíceis.
 - [ ] Conferir todos os Cortes localizados por áudio ou Transcrição; não inventar correspondências.
-- Cortes localizados: 0 (nenhum confirmado enquanto a lista estiver vazia).
+- Cortes localizados: 0.
 
 | Início (s) | Fim (s) | Idioma provisório | Revisada |
 | ---: | ---: | --- | --- |
@@ -172,3 +172,42 @@
 | 2632.448 | 2693.648 | en | [ ] |
 | 3009.312 | 3067.248 | en | [ ] |
 | 3385.104 | 3441.424 | en | [ ] |
+
+## [🎮PLAYING EVERY GTA UNTIL I BEAT IT: Grand Theft Auto 5🎮](https://www.youtube.com/watch?v=6LB7vibQ5q0)
+
+- [ ] Conferir características de áudio e cobertura das condições difíceis.
+- [ ] Conferir todos os Cortes localizados por áudio ou Transcrição; não inventar correspondências.
+- Cortes localizados: 1.
+- [ ] Conferir [The moment Kai chooses the GTA 5 ending](https://www.youtube.com/watch?v=pI4dIrz3zm4): 36914.266–36974.287 s na Fonte (correlação de áudio em quatro janelas de seis segundos; alinhamento consistente dentro de 2 ms).
+
+| Início (s) | Fim (s) | Idioma provisório | Revisada |
+| ---: | ---: | --- | --- |
+| 1.776 | 63.104 | en | [ ] |
+| 4445.936 | 4513.760 | en | [ ] |
+| 8915.552 | 8983.600 | en | [ ] |
+| 13390.624 | 13434.416 | en | [ ] |
+| 17846.352 | 17903.840 | en | [ ] |
+| 22324.400 | 22393.520 | en | [ ] |
+| 26775.536 | 26835.360 | en | [ ] |
+| 31237.568 | 31299.504 | en | [ ] |
+| 35695.744 | 35756.320 | en | [ ] |
+| 39967.712 | 40009.808 | en | [ ] |
+
+## [🎮PLAYING EVERY GTA UNTIL I BEAT IT: Grand Theft Auto 4🎮](https://www.youtube.com/watch?v=6dhayer-a90)
+
+- [ ] Conferir características de áudio e cobertura das condições difíceis.
+- [ ] Conferir todos os Cortes localizados por áudio ou Transcrição; não inventar correspondências.
+- Cortes localizados: 0.
+
+| Início (s) | Fim (s) | Idioma provisório | Revisada |
+| ---: | ---: | --- | --- |
+| 5.760 | 63.600 | en | [ ] |
+| 4380.480 | 4440.736 | en | [ ] |
+| 8794.080 | 8854.496 | en | [ ] |
+| 13190.720 | 13248.624 | en | [ ] |
+| 17589.760 | 17638.768 | en | [ ] |
+| 21986.576 | 22045.920 | en | [ ] |
+| 26382.768 | 26431.104 | en | [ ] |
+| 30779.072 | 30840.528 | en | [ ] |
+| 37383.504 | 37454.032 | en | [ ] |
+| 39575.744 | 39632.208 | en | [ ] |

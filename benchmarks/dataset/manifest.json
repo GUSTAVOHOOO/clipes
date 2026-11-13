@@ -25,9 +25,42 @@
             "peak_dbfs": -2.0
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 5.392,
+              "end": 20.392,
+              "language": "en",
+              "probability": 0.998
+            },
+            {
+              "start": 20.392,
+              "end": 35.392,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 35.392,
+              "end": 50.392,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 50.392,
+              "end": 60.016,
+              "language": "en",
+              "probability": 0.9966
+            }
+          ],
+          "selecionada_para": [
+            "inglês detectado por segmento"
+          ]
         },
         {
           "start": 136.384,
@@ -40,9 +73,42 @@
             "peak_dbfs": -1.7
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 136.384,
+              "end": 151.384,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 151.384,
+              "end": 166.384,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 166.384,
+              "end": 181.384,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 181.384,
+              "end": 196.304,
+              "language": "en",
+              "probability": 0.9995
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 271.424,
@@ -55,9 +121,42 @@
             "peak_dbfs": -2.3
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 271.424,
+              "end": 286.424,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 286.424,
+              "end": 301.424,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 301.424,
+              "end": 316.424,
+              "language": "en",
+              "probability": 0.9985
+            },
+            {
+              "start": 316.424,
+              "end": 331.424,
+              "language": "en",
+              "probability": 0.9995
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 398.272,
@@ -70,9 +169,48 @@
             "peak_dbfs": -1.9
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 398.272,
+              "end": 413.272,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 413.272,
+              "end": 428.272,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 428.272,
+              "end": 443.272,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 443.272,
+              "end": 458.272,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 458.272,
+              "end": 460.928,
+              "language": "en",
+              "probability": 0.999
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 534.72,
@@ -85,9 +223,42 @@
             "peak_dbfs": -2.1
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 534.72,
+              "end": 549.72,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 549.72,
+              "end": 564.72,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 564.72,
+              "end": 579.72,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 579.72,
+              "end": 593.6,
+              "language": "en",
+              "probability": 0.999
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 673.088,
@@ -100,9 +271,48 @@
             "peak_dbfs": -2.1
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 673.088,
+              "end": 688.088,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 688.088,
+              "end": 703.088,
+              "language": "en",
+              "probability": 1.0
+            },
+            {
+              "start": 703.088,
+              "end": 718.088,
+              "language": "en",
+              "probability": 0.9951
+            },
+            {
+              "start": 718.088,
+              "end": 733.088,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 733.088,
+              "end": 744.688,
+              "language": "en",
+              "probability": 0.999
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 789.216,
@@ -115,9 +325,42 @@
             "peak_dbfs": -2.5
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 789.216,
+              "end": 804.216,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 804.216,
+              "end": 819.216,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 819.216,
+              "end": 834.216,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 834.216,
+              "end": 849.216,
+              "language": "en",
+              "probability": 1.0
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 926.56,
@@ -130,9 +373,42 @@
             "peak_dbfs": -2.7
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 926.56,
+              "end": 941.56,
+              "language": "en",
+              "probability": 1.0
+            },
+            {
+              "start": 941.56,
+              "end": 956.56,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 956.56,
+              "end": 971.56,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 971.56,
+              "end": 985.52,
+              "language": "en",
+              "probability": 0.9995
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1058.0,
@@ -145,9 +421,48 @@
             "peak_dbfs": -2.9
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1058.0,
+              "end": 1073.0,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 1073.0,
+              "end": 1088.0,
+              "language": "en",
+              "probability": 1.0
+            },
+            {
+              "start": 1088.0,
+              "end": 1103.0,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 1103.0,
+              "end": 1118.0,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 1118.0,
+              "end": 1119.216,
+              "language": "en",
+              "probability": 0.9971
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1188.56,
@@ -160,9 +475,42 @@
             "peak_dbfs": -2.6
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1188.56,
+              "end": 1203.56,
+              "language": "en",
+              "probability": 0.9976
+            },
+            {
+              "start": 1203.56,
+              "end": 1218.56,
+              "language": "en",
+              "probability": 0.9956
+            },
+            {
+              "start": 1218.56,
+              "end": 1233.56,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 1233.56,
+              "end": 1241.248,
+              "language": "en",
+              "probability": 0.999
+            }
+          ],
+          "selecionada_para": [
+            "inglês detectado por segmento"
+          ]
         }
       ],
       "idiomas_provisorios": [
@@ -170,13 +518,13 @@
       ],
       "caracteristicas_audio": {
         "medicao": "RMS e pico em dBFS por amostra (mono, 16 kHz)",
-        "musica_alta": "não avaliada",
-        "gritos": "não avaliados",
-        "varias_vozes": "não avaliadas",
-        "trechos_en": "detectados nas amostras",
+        "musica_alta": "não detectada pelo limiar de energia; conferir #29",
+        "gritos": "não detectados pelo limiar de nível; conferir #29",
+        "varias_vozes": "a conferir na #29; método não separa locutores",
+        "trechos_en": "detectados por segmento; conferir #29",
         "status": "provisório: avaliar na revisão"
       },
-      "criterio_amostragem": "Alvos uniformes; bordas candidatas em lacunas do Silero VAD; estratificação por condições difíceis ainda precisa ser conferida.",
+      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
       "transcricao": {
         "file": "transcricoes/-KY4_vLBhMc.json",
         "sha256": "cbb1874a1d740c88c6d4fbb5cc078ed5c31e85bec649295d9ac9ceb65f3d5676",
@@ -219,7 +567,40 @@
             "peak_dbfs": -1.9
           },
           "conditions": [],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 0.416,
+              "end": 15.416,
+              "language": "pt",
+              "probability": 0.999
+            },
+            {
+              "start": 15.416,
+              "end": 30.416,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 30.416,
+              "end": 45.416,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 45.416,
+              "end": 60.416,
+              "language": "pt",
+              "probability": 0.9995
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 207.12,
@@ -232,7 +613,40 @@
             "peak_dbfs": -2.6
           },
           "conditions": [],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 207.12,
+              "end": 222.12,
+              "language": "pt",
+              "probability": 0.998
+            },
+            {
+              "start": 222.12,
+              "end": 237.12,
+              "language": "pt",
+              "probability": 1.0
+            },
+            {
+              "start": 237.12,
+              "end": 252.12,
+              "language": "pt",
+              "probability": 0.999
+            },
+            {
+              "start": 252.12,
+              "end": 265.952,
+              "language": "pt",
+              "probability": 0.999
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 423.504,
@@ -245,7 +659,40 @@
             "peak_dbfs": -2.1
           },
           "conditions": [],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 423.504,
+              "end": 438.504,
+              "language": "pt",
+              "probability": 1.0
+            },
+            {
+              "start": 438.504,
+              "end": 453.504,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 453.504,
+              "end": 468.504,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 468.504,
+              "end": 483.504,
+              "language": "pt",
+              "probability": 0.9985
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 619.904,
@@ -258,7 +705,40 @@
             "peak_dbfs": -3.3
           },
           "conditions": [],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 619.904,
+              "end": 634.904,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 634.904,
+              "end": 649.904,
+              "language": "pt",
+              "probability": 0.9985
+            },
+            {
+              "start": 649.904,
+              "end": 664.904,
+              "language": "pt",
+              "probability": 0.9985
+            },
+            {
+              "start": 664.904,
+              "end": 675.76,
+              "language": "pt",
+              "probability": 0.9995
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 820.08,
@@ -271,7 +751,46 @@
             "peak_dbfs": -2.7
           },
           "conditions": [],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 820.08,
+              "end": 835.08,
+              "language": "pt",
+              "probability": 0.999
+            },
+            {
+              "start": 835.08,
+              "end": 850.08,
+              "language": "pt",
+              "probability": 1.0
+            },
+            {
+              "start": 850.08,
+              "end": 865.08,
+              "language": "pt",
+              "probability": 0.9985
+            },
+            {
+              "start": 865.08,
+              "end": 880.08,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 880.08,
+              "end": 882.368,
+              "language": "pt",
+              "probability": 0.9966
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1031.936,
@@ -284,7 +803,40 @@
             "peak_dbfs": -2.1
           },
           "conditions": [],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1031.936,
+              "end": 1046.936,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 1046.936,
+              "end": 1061.936,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 1061.936,
+              "end": 1076.936,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 1076.936,
+              "end": 1090.24,
+              "language": "pt",
+              "probability": 0.9995
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1242.32,
@@ -297,7 +849,46 @@
             "peak_dbfs": -1.8
           },
           "conditions": [],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1242.32,
+              "end": 1257.32,
+              "language": "pt",
+              "probability": 0.999
+            },
+            {
+              "start": 1257.32,
+              "end": 1272.32,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 1272.32,
+              "end": 1287.32,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 1287.32,
+              "end": 1302.32,
+              "language": "pt",
+              "probability": 0.999
+            },
+            {
+              "start": 1302.32,
+              "end": 1304.72,
+              "language": "pt",
+              "probability": 0.999
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1450.0,
@@ -310,7 +901,46 @@
             "peak_dbfs": -2.1
           },
           "conditions": [],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1450.0,
+              "end": 1465.0,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 1465.0,
+              "end": 1480.0,
+              "language": "pt",
+              "probability": 0.9976
+            },
+            {
+              "start": 1480.0,
+              "end": 1495.0,
+              "language": "pt",
+              "probability": 1.0
+            },
+            {
+              "start": 1495.0,
+              "end": 1510.0,
+              "language": "pt",
+              "probability": 0.999
+            },
+            {
+              "start": 1510.0,
+              "end": 1511.616,
+              "language": "pt",
+              "probability": 0.9985
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1649.392,
@@ -323,7 +953,40 @@
             "peak_dbfs": -1.8
           },
           "conditions": [],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1649.392,
+              "end": 1664.392,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 1664.392,
+              "end": 1679.392,
+              "language": "pt",
+              "probability": 1.0
+            },
+            {
+              "start": 1679.392,
+              "end": 1694.392,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 1694.392,
+              "end": 1706.8,
+              "language": "pt",
+              "probability": 0.9995
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1856.656,
@@ -336,7 +999,40 @@
             "peak_dbfs": -4.0
           },
           "conditions": [],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1856.656,
+              "end": 1871.656,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 1871.656,
+              "end": 1886.656,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 1886.656,
+              "end": 1901.656,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 1901.656,
+              "end": 1913.984,
+              "language": "pt",
+              "probability": 0.999
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         }
       ],
       "idiomas_provisorios": [
@@ -344,13 +1040,13 @@
       ],
       "caracteristicas_audio": {
         "medicao": "RMS e pico em dBFS por amostra (mono, 16 kHz)",
-        "musica_alta": "não avaliada",
-        "gritos": "não avaliados",
-        "varias_vozes": "não avaliadas",
-        "trechos_en": "não detectados nas amostras",
+        "musica_alta": "não detectada pelo limiar de energia; conferir #29",
+        "gritos": "não detectados pelo limiar de nível; conferir #29",
+        "varias_vozes": "a conferir na #29; método não separa locutores",
+        "trechos_en": "não detectados nos segmentos amostrados; conferir #29",
         "status": "provisório: avaliar na revisão"
       },
-      "criterio_amostragem": "Alvos uniformes; bordas candidatas em lacunas do Silero VAD; estratificação por condições difíceis ainda precisa ser conferida.",
+      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
       "transcricao": {
         "file": "transcricoes/0yhO15vKSRs.json",
         "sha256": "d5e327b7ca288e41418133fd36f6a4d81cf08ba517027731309e46e75a0e58e2",
@@ -393,7 +1089,40 @@
             "peak_dbfs": -2.9
           },
           "conditions": [],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1.344,
+              "end": 16.344,
+              "language": "pt",
+              "probability": 1.0
+            },
+            {
+              "start": 16.344,
+              "end": 31.344,
+              "language": "pt",
+              "probability": 0.9951
+            },
+            {
+              "start": 31.344,
+              "end": 46.344,
+              "language": "pt",
+              "probability": 0.9985
+            },
+            {
+              "start": 46.344,
+              "end": 61.344,
+              "language": "pt",
+              "probability": 0.998
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 132.864,
@@ -406,7 +1135,46 @@
             "peak_dbfs": -3.0
           },
           "conditions": [],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 132.864,
+              "end": 147.864,
+              "language": "pt",
+              "probability": 0.9971
+            },
+            {
+              "start": 147.864,
+              "end": 162.864,
+              "language": "pt",
+              "probability": 0.999
+            },
+            {
+              "start": 162.864,
+              "end": 177.864,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 177.864,
+              "end": 192.864,
+              "language": "pt",
+              "probability": 0.9971
+            },
+            {
+              "start": 192.864,
+              "end": 194.016,
+              "language": "pt",
+              "probability": 0.9907
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 255.472,
@@ -419,7 +1187,34 @@
             "peak_dbfs": -2.8
           },
           "conditions": [],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 255.472,
+              "end": 270.472,
+              "language": "pt",
+              "probability": 0.999
+            },
+            {
+              "start": 270.472,
+              "end": 285.472,
+              "language": "pt",
+              "probability": 0.9976
+            },
+            {
+              "start": 285.472,
+              "end": 299.792,
+              "language": "pt",
+              "probability": 0.9946
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 382.352,
@@ -432,7 +1227,40 @@
             "peak_dbfs": -2.9
           },
           "conditions": [],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 2,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 382.352,
+              "end": 397.352,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 397.352,
+              "end": 412.352,
+              "language": "pt",
+              "probability": 0.999
+            },
+            {
+              "start": 412.352,
+              "end": 427.352,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 427.352,
+              "end": 442.352,
+              "language": "pt",
+              "probability": 0.9995
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 510.048,
@@ -445,7 +1273,46 @@
             "peak_dbfs": -2.6
           },
           "conditions": [],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 510.048,
+              "end": 525.048,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 525.048,
+              "end": 540.048,
+              "language": "pt",
+              "probability": 0.999
+            },
+            {
+              "start": 540.048,
+              "end": 555.048,
+              "language": "pt",
+              "probability": 1.0
+            },
+            {
+              "start": 555.048,
+              "end": 570.048,
+              "language": "pt",
+              "probability": 0.9966
+            },
+            {
+              "start": 570.048,
+              "end": 572.496,
+              "language": "pt",
+              "probability": 0.9976
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 641.824,
@@ -458,7 +1325,40 @@
             "peak_dbfs": -2.7
           },
           "conditions": [],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 641.824,
+              "end": 656.824,
+              "language": "pt",
+              "probability": 0.999
+            },
+            {
+              "start": 656.824,
+              "end": 671.824,
+              "language": "pt",
+              "probability": 0.9976
+            },
+            {
+              "start": 671.824,
+              "end": 686.824,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 686.824,
+              "end": 697.312,
+              "language": "pt",
+              "probability": 0.9985
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 767.088,
@@ -471,7 +1371,46 @@
             "peak_dbfs": -2.7
           },
           "conditions": [],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 767.088,
+              "end": 782.088,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 782.088,
+              "end": 797.088,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 797.088,
+              "end": 812.088,
+              "language": "pt",
+              "probability": 0.9961
+            },
+            {
+              "start": 812.088,
+              "end": 827.088,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 827.088,
+              "end": 840.32,
+              "language": "pt",
+              "probability": 0.9985
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 885.152,
@@ -484,7 +1423,46 @@
             "peak_dbfs": -2.8
           },
           "conditions": [],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 1,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 885.152,
+              "end": 900.152,
+              "language": "pt",
+              "probability": 0.9976
+            },
+            {
+              "start": 900.152,
+              "end": 915.152,
+              "language": "pt",
+              "probability": 0.9917
+            },
+            {
+              "start": 915.152,
+              "end": 930.152,
+              "language": "pt",
+              "probability": 0.9976
+            },
+            {
+              "start": 930.152,
+              "end": 945.152,
+              "language": "pt",
+              "probability": 0.9985
+            },
+            {
+              "start": 945.152,
+              "end": 946.848,
+              "language": "pt",
+              "probability": 0.9922
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1022.144,
@@ -497,7 +1475,46 @@
             "peak_dbfs": -2.7
           },
           "conditions": [],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 1,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1022.144,
+              "end": 1037.144,
+              "language": "pt",
+              "probability": 0.999
+            },
+            {
+              "start": 1037.144,
+              "end": 1052.144,
+              "language": "pt",
+              "probability": 0.9976
+            },
+            {
+              "start": 1052.144,
+              "end": 1067.144,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 1067.144,
+              "end": 1082.144,
+              "language": "pt",
+              "probability": 0.999
+            },
+            {
+              "start": 1082.144,
+              "end": 1084.224,
+              "language": "pt",
+              "probability": 0.9907
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1153.328,
@@ -510,7 +1527,34 @@
             "peak_dbfs": -2.3
           },
           "conditions": [],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1153.328,
+              "end": 1168.328,
+              "language": "pt",
+              "probability": 0.9985
+            },
+            {
+              "start": 1168.328,
+              "end": 1183.328,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 1183.328,
+              "end": 1194.08,
+              "language": "pt",
+              "probability": 0.9995
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         }
       ],
       "idiomas_provisorios": [
@@ -518,13 +1562,13 @@
       ],
       "caracteristicas_audio": {
         "medicao": "RMS e pico em dBFS por amostra (mono, 16 kHz)",
-        "musica_alta": "não avaliada",
-        "gritos": "não avaliados",
-        "varias_vozes": "não avaliadas",
-        "trechos_en": "não detectados nas amostras",
+        "musica_alta": "não detectada pelo limiar de energia; conferir #29",
+        "gritos": "não detectados pelo limiar de nível; conferir #29",
+        "varias_vozes": "a conferir na #29; método não separa locutores",
+        "trechos_en": "não detectados nos segmentos amostrados; conferir #29",
         "status": "provisório: avaliar na revisão"
       },
-      "criterio_amostragem": "Alvos uniformes; bordas candidatas em lacunas do Silero VAD; estratificação por condições difíceis ainda precisa ser conferida.",
+      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
       "transcricao": {
         "file": "transcricoes/PY93Az6EJOY.json",
         "sha256": "6c9d48a32403b2e2ff3bc6ac99e4aca97233177fdc18d0f311251adc1860736c",
@@ -567,9 +1611,42 @@
             "peak_dbfs": -3.6
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 2.08,
+              "end": 17.08,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 17.08,
+              "end": 32.08,
+              "language": "en",
+              "probability": 0.9946
+            },
+            {
+              "start": 32.08,
+              "end": 47.08,
+              "language": "en",
+              "probability": 0.9961
+            },
+            {
+              "start": 47.08,
+              "end": 62.08,
+              "language": "en",
+              "probability": 0.9976
+            }
+          ],
+          "selecionada_para": [
+            "inglês detectado por segmento"
+          ]
         },
         {
           "start": 210.192,
@@ -582,9 +1659,42 @@
             "peak_dbfs": -3.7
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 210.192,
+              "end": 225.192,
+              "language": "en",
+              "probability": 0.9966
+            },
+            {
+              "start": 225.192,
+              "end": 240.192,
+              "language": "en",
+              "probability": 0.9985
+            },
+            {
+              "start": 240.192,
+              "end": 255.192,
+              "language": "en",
+              "probability": 0.9985
+            },
+            {
+              "start": 255.192,
+              "end": 270.192,
+              "language": "en",
+              "probability": 0.9985
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 416.768,
@@ -597,9 +1707,42 @@
             "peak_dbfs": -3.6
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 416.768,
+              "end": 431.768,
+              "language": "en",
+              "probability": 0.9976
+            },
+            {
+              "start": 431.768,
+              "end": 446.768,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 446.768,
+              "end": 461.768,
+              "language": "en",
+              "probability": 0.9971
+            },
+            {
+              "start": 461.768,
+              "end": 475.84,
+              "language": "en",
+              "probability": 0.9985
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 626.976,
@@ -612,9 +1755,42 @@
             "peak_dbfs": -3.9
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 626.976,
+              "end": 641.976,
+              "language": "en",
+              "probability": 0.9976
+            },
+            {
+              "start": 641.976,
+              "end": 656.976,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 656.976,
+              "end": 671.976,
+              "language": "en",
+              "probability": 0.9956
+            },
+            {
+              "start": 671.976,
+              "end": 680.768,
+              "language": "en",
+              "probability": 0.999
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 842.016,
@@ -627,9 +1803,42 @@
             "peak_dbfs": -3.2
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 842.016,
+              "end": 857.016,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 857.016,
+              "end": 872.016,
+              "language": "en",
+              "probability": 0.9971
+            },
+            {
+              "start": 872.016,
+              "end": 887.016,
+              "language": "en",
+              "probability": 0.9937
+            },
+            {
+              "start": 887.016,
+              "end": 900.896,
+              "language": "en",
+              "probability": 0.999
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1046.848,
@@ -642,9 +1851,42 @@
             "peak_dbfs": -3.3
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1046.848,
+              "end": 1061.848,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 1061.848,
+              "end": 1076.848,
+              "language": "en",
+              "probability": 0.998
+            },
+            {
+              "start": 1076.848,
+              "end": 1091.848,
+              "language": "en",
+              "probability": 0.9976
+            },
+            {
+              "start": 1091.848,
+              "end": 1106.848,
+              "language": "en",
+              "probability": 0.9976
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1250.624,
@@ -657,9 +1899,48 @@
             "peak_dbfs": -3.3
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1250.624,
+              "end": 1265.624,
+              "language": "en",
+              "probability": 0.998
+            },
+            {
+              "start": 1265.624,
+              "end": 1280.624,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 1280.624,
+              "end": 1295.624,
+              "language": "en",
+              "probability": 0.9946
+            },
+            {
+              "start": 1295.624,
+              "end": 1310.624,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 1310.624,
+              "end": 1314.032,
+              "language": "en",
+              "probability": 0.9961
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1458.608,
@@ -672,9 +1953,48 @@
             "peak_dbfs": -3.7
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1458.608,
+              "end": 1473.608,
+              "language": "en",
+              "probability": 0.998
+            },
+            {
+              "start": 1473.608,
+              "end": 1488.608,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 1488.608,
+              "end": 1503.608,
+              "language": "en",
+              "probability": 0.998
+            },
+            {
+              "start": 1503.608,
+              "end": 1518.608,
+              "language": "en",
+              "probability": 0.9966
+            },
+            {
+              "start": 1518.608,
+              "end": 1520.096,
+              "language": "en",
+              "probability": 0.9951
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1669.056,
@@ -687,9 +2007,48 @@
             "peak_dbfs": -3.4
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1669.056,
+              "end": 1684.056,
+              "language": "en",
+              "probability": 0.998
+            },
+            {
+              "start": 1684.056,
+              "end": 1699.056,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 1699.056,
+              "end": 1714.056,
+              "language": "en",
+              "probability": 0.9976
+            },
+            {
+              "start": 1714.056,
+              "end": 1729.056,
+              "language": "en",
+              "probability": 0.9976
+            },
+            {
+              "start": 1729.056,
+              "end": 1730.096,
+              "language": "en",
+              "probability": 0.9854
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1878.144,
@@ -702,9 +2061,42 @@
             "peak_dbfs": -2.9
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1878.144,
+              "end": 1893.144,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 1893.144,
+              "end": 1908.144,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 1908.144,
+              "end": 1923.144,
+              "language": "en",
+              "probability": 0.9985
+            },
+            {
+              "start": 1923.144,
+              "end": 1924.56,
+              "language": "en",
+              "probability": 0.9961
+            }
+          ],
+          "selecionada_para": [
+            "inglês detectado por segmento"
+          ]
         }
       ],
       "idiomas_provisorios": [
@@ -712,13 +2104,13 @@
       ],
       "caracteristicas_audio": {
         "medicao": "RMS e pico em dBFS por amostra (mono, 16 kHz)",
-        "musica_alta": "não avaliada",
-        "gritos": "não avaliados",
-        "varias_vozes": "não avaliadas",
-        "trechos_en": "detectados nas amostras",
+        "musica_alta": "não detectada pelo limiar de energia; conferir #29",
+        "gritos": "não detectados pelo limiar de nível; conferir #29",
+        "varias_vozes": "a conferir na #29; método não separa locutores",
+        "trechos_en": "detectados por segmento; conferir #29",
         "status": "provisório: avaliar na revisão"
       },
-      "criterio_amostragem": "Alvos uniformes; bordas candidatas em lacunas do Silero VAD; estratificação por condições difíceis ainda precisa ser conferida.",
+      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
       "transcricao": {
         "file": "transcricoes/6quC2VnuHTU.json",
         "sha256": "a1276e6d49882b21b310409c733aabb45b258cfab490a2d4975cf390ae5b76db",
@@ -761,9 +2153,48 @@
             "peak_dbfs": -3.3
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 5.328,
+              "end": 20.328,
+              "language": "en",
+              "probability": 0.9985
+            },
+            {
+              "start": 20.328,
+              "end": 35.328,
+              "language": "en",
+              "probability": 0.9956
+            },
+            {
+              "start": 35.328,
+              "end": 50.328,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 50.328,
+              "end": 65.328,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 65.328,
+              "end": 67.904,
+              "language": "en",
+              "probability": 0.999
+            }
+          ],
+          "selecionada_para": [
+            "inglês detectado por segmento"
+          ]
         },
         {
           "start": 146.736,
@@ -776,9 +2207,48 @@
             "peak_dbfs": -3.3
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 146.736,
+              "end": 161.736,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 161.736,
+              "end": 176.736,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 176.736,
+              "end": 191.736,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 191.736,
+              "end": 206.736,
+              "language": "en",
+              "probability": 0.9966
+            },
+            {
+              "start": 206.736,
+              "end": 209.168,
+              "language": "en",
+              "probability": 0.9922
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 292.976,
@@ -791,9 +2261,48 @@
             "peak_dbfs": -3.3
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 292.976,
+              "end": 307.976,
+              "language": "en",
+              "probability": 0.998
+            },
+            {
+              "start": 307.976,
+              "end": 322.976,
+              "language": "en",
+              "probability": 0.9976
+            },
+            {
+              "start": 322.976,
+              "end": 337.976,
+              "language": "en",
+              "probability": 0.9985
+            },
+            {
+              "start": 337.976,
+              "end": 352.976,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 352.976,
+              "end": 361.728,
+              "language": "en",
+              "probability": 0.998
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 440.0,
@@ -806,9 +2315,48 @@
             "peak_dbfs": -3.5
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 440.0,
+              "end": 455.0,
+              "language": "en",
+              "probability": 0.9976
+            },
+            {
+              "start": 455.0,
+              "end": 470.0,
+              "language": "en",
+              "probability": 0.9985
+            },
+            {
+              "start": 470.0,
+              "end": 485.0,
+              "language": "en",
+              "probability": 0.9985
+            },
+            {
+              "start": 485.0,
+              "end": 500.0,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 500.0,
+              "end": 502.336,
+              "language": "en",
+              "probability": 0.9937
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 577.232,
@@ -821,9 +2369,48 @@
             "peak_dbfs": -3.8
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 577.232,
+              "end": 592.232,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 592.232,
+              "end": 607.232,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 607.232,
+              "end": 622.232,
+              "language": "en",
+              "probability": 0.998
+            },
+            {
+              "start": 622.232,
+              "end": 637.232,
+              "language": "en",
+              "probability": 0.9995
+            },
+            {
+              "start": 637.232,
+              "end": 638.704,
+              "language": "en",
+              "probability": 0.9932
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 728.256,
@@ -836,9 +2423,42 @@
             "peak_dbfs": -3.6
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 728.256,
+              "end": 743.256,
+              "language": "en",
+              "probability": 0.9966
+            },
+            {
+              "start": 743.256,
+              "end": 758.256,
+              "language": "en",
+              "probability": 0.9971
+            },
+            {
+              "start": 758.256,
+              "end": 773.256,
+              "language": "en",
+              "probability": 0.9976
+            },
+            {
+              "start": 773.256,
+              "end": 788.256,
+              "language": "en",
+              "probability": 0.9951
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 874.144,
@@ -851,9 +2471,48 @@
             "peak_dbfs": -3.4
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 874.144,
+              "end": 889.144,
+              "language": "en",
+              "probability": 0.998
+            },
+            {
+              "start": 889.144,
+              "end": 904.144,
+              "language": "en",
+              "probability": 0.9985
+            },
+            {
+              "start": 904.144,
+              "end": 919.144,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 919.144,
+              "end": 934.144,
+              "language": "en",
+              "probability": 0.998
+            },
+            {
+              "start": 934.144,
+              "end": 936.464,
+              "language": "en",
+              "probability": 0.9902
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1018.512,
@@ -866,9 +2525,48 @@
             "peak_dbfs": -3.4
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1018.512,
+              "end": 1033.512,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 1033.512,
+              "end": 1048.512,
+              "language": "en",
+              "probability": 0.9912
+            },
+            {
+              "start": 1048.512,
+              "end": 1063.512,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 1063.512,
+              "end": 1078.512,
+              "language": "en",
+              "probability": 0.9971
+            },
+            {
+              "start": 1078.512,
+              "end": 1081.184,
+              "language": "en",
+              "probability": 0.9966
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1163.84,
@@ -881,9 +2579,42 @@
             "peak_dbfs": -3.5
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1163.84,
+              "end": 1178.84,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 1178.84,
+              "end": 1193.84,
+              "language": "en",
+              "probability": 0.9966
+            },
+            {
+              "start": 1193.84,
+              "end": 1208.84,
+              "language": "en",
+              "probability": 0.9956
+            },
+            {
+              "start": 1208.84,
+              "end": 1223.84,
+              "language": "en",
+              "probability": 0.9951
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1310.864,
@@ -896,9 +2627,42 @@
             "peak_dbfs": -3.3
           },
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
-          "status": "provisória até a revisão"
+          "status": "provisória até a revisão",
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1310.864,
+              "end": 1325.864,
+              "language": "en",
+              "probability": 0.998
+            },
+            {
+              "start": 1325.864,
+              "end": 1340.864,
+              "language": "en",
+              "probability": 0.999
+            },
+            {
+              "start": 1340.864,
+              "end": 1355.864,
+              "language": "en",
+              "probability": 0.9971
+            },
+            {
+              "start": 1355.864,
+              "end": 1367.856,
+              "language": "en",
+              "probability": 0.9961
+            }
+          ],
+          "selecionada_para": [
+            "inglês detectado por segmento"
+          ]
         }
       ],
       "idiomas_provisorios": [
@@ -906,13 +2670,13 @@
       ],
       "caracteristicas_audio": {
         "medicao": "RMS e pico em dBFS por amostra (mono, 16 kHz)",
-        "musica_alta": "não avaliada",
-        "gritos": "não avaliados",
-        "varias_vozes": "não avaliadas",
-        "trechos_en": "detectados nas amostras",
+        "musica_alta": "não detectada pelo limiar de energia; conferir #29",
+        "gritos": "não detectados pelo limiar de nível; conferir #29",
+        "varias_vozes": "a conferir na #29; método não separa locutores",
+        "trechos_en": "detectados por segmento; conferir #29",
         "status": "provisório: avaliar na revisão"
       },
-      "criterio_amostragem": "Alvos uniformes; bordas candidatas em lacunas do Silero VAD; estratificação por condições difíceis ainda precisa ser conferida.",
+      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
       "transcricao": {
         "file": "transcricoes/RUKzeWj1ORY.json",
         "sha256": "30481c7ef4adae5408b3d7b03aac20ddcbd67ab088c5eb595b90ba10c6e68a45",
@@ -951,7 +2715,40 @@
           "status": "provisória até a revisão",
           "conditions": [],
           "language_provisional": "pt",
-          "language_probability": 0.998
+          "language_probability": 0.998,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 4.592,
+              "end": 19.592,
+              "language": "pt",
+              "probability": 0.9961
+            },
+            {
+              "start": 19.592,
+              "end": 34.592,
+              "language": "pt",
+              "probability": 0.9922
+            },
+            {
+              "start": 34.592,
+              "end": 49.592,
+              "language": "pt",
+              "probability": 0.9902
+            },
+            {
+              "start": 49.592,
+              "end": 64.4,
+              "language": "pt",
+              "probability": 0.9839
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1445.632,
@@ -960,34 +2757,186 @@
           "status": "provisória até a revisão",
           "conditions": [],
           "language_provisional": "pt",
-          "language_probability": 0.9697
+          "language_probability": 0.9697,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1445.632,
+              "end": 1460.632,
+              "language": "pt",
+              "probability": 0.9697
+            },
+            {
+              "start": 1460.632,
+              "end": 1475.632,
+              "language": "pt",
+              "probability": 0.9614
+            },
+            {
+              "start": 1475.632,
+              "end": 1490.632,
+              "language": "pt",
+              "probability": 0.9927
+            },
+            {
+              "start": 1490.632,
+              "end": 1503.424,
+              "language": "pt",
+              "probability": 0.9771
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 2897.536,
           "end": 2958.976,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "status": "provisória até a revisão",
-          "conditions": [],
+          "conditions": [
+            "candidata a música alta"
+          ],
           "language_provisional": "pt",
-          "language_probability": 0.978
+          "language_probability": 0.978,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 14,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 2897.536,
+              "end": 2912.536,
+              "language": "pt",
+              "probability": 0.3042
+            },
+            {
+              "start": 2912.536,
+              "end": 2927.536,
+              "language": "pt",
+              "probability": 0.9731
+            },
+            {
+              "start": 2927.536,
+              "end": 2942.536,
+              "language": "pt",
+              "probability": 0.9922
+            },
+            {
+              "start": 2942.536,
+              "end": 2957.536,
+              "language": "pt",
+              "probability": 0.9907
+            },
+            {
+              "start": 2957.536,
+              "end": 2958.976,
+              "language": "pt",
+              "probability": 0.5142
+            }
+          ],
+          "selecionada_para": [
+            "música alta candidata"
+          ]
         },
         {
           "start": 4351.024,
           "end": 4410.496,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "status": "provisória até a revisão",
-          "conditions": [],
+          "conditions": [
+            "candidata a música alta",
+            "candidato a gritos"
+          ],
           "language_provisional": "pt",
-          "language_probability": 0.9814
+          "language_probability": 0.9814,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 13,
+            "segundos_fala_alta": 12
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 4351.024,
+              "end": 4366.024,
+              "language": "pt",
+              "probability": 0.9849
+            },
+            {
+              "start": 4366.024,
+              "end": 4381.024,
+              "language": "pt",
+              "probability": 0.8125
+            },
+            {
+              "start": 4381.024,
+              "end": 4396.024,
+              "language": "pt",
+              "probability": 0.9658
+            },
+            {
+              "start": 4396.024,
+              "end": 4410.496,
+              "language": "pt",
+              "probability": 0.9673
+            }
+          ],
+          "selecionada_para": [
+            "música alta candidata",
+            "gritos candidatos"
+          ]
         },
         {
-          "start": 5801.392,
-          "end": 5859.824,
-          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "start": 5923.376,
+          "end": 5989.92,
+          "criterion": "alvo por gritos candidata; bordas em lacunas VAD",
           "status": "provisória até a revisão",
-          "conditions": [],
+          "conditions": [
+            "candidato a gritos"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 26
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 5923.376,
+              "end": 5938.376,
+              "language": "pt",
+              "probability": 0.9878
+            },
+            {
+              "start": 5938.376,
+              "end": 5953.376,
+              "language": "pt",
+              "probability": 0.876
+            },
+            {
+              "start": 5953.376,
+              "end": 5968.376,
+              "language": "pt",
+              "probability": 0.9453
+            },
+            {
+              "start": 5968.376,
+              "end": 5983.376,
+              "language": "pt",
+              "probability": 0.7314
+            },
+            {
+              "start": 5983.376,
+              "end": 5989.92,
+              "language": "nn",
+              "probability": 0.6904
+            }
+          ],
           "language_provisional": "pt",
-          "language_probability": 0.9961
+          "language_probability": 0.9658,
+          "selecionada_para": [
+            "gritos candidatos"
+          ]
         },
         {
           "start": 7249.84,
@@ -996,7 +2945,46 @@
           "status": "provisória até a revisão",
           "conditions": [],
           "language_provisional": "pt",
-          "language_probability": 0.9805
+          "language_probability": 0.9805,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 7249.84,
+              "end": 7264.84,
+              "language": "pt",
+              "probability": 0.9951
+            },
+            {
+              "start": 7264.84,
+              "end": 7279.84,
+              "language": "pt",
+              "probability": 0.9863
+            },
+            {
+              "start": 7279.84,
+              "end": 7294.84,
+              "language": "pt",
+              "probability": 0.9673
+            },
+            {
+              "start": 7294.84,
+              "end": 7309.84,
+              "language": "pt",
+              "probability": 0.9941
+            },
+            {
+              "start": 7309.84,
+              "end": 7310.896,
+              "language": "pt",
+              "probability": 0.6377
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 8698.704,
@@ -1005,7 +2993,40 @@
           "status": "provisória até a revisão",
           "conditions": [],
           "language_provisional": "pt",
-          "language_probability": 0.9937
+          "language_probability": 0.9937,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 8698.704,
+              "end": 8713.704,
+              "language": "pt",
+              "probability": 0.9893
+            },
+            {
+              "start": 8713.704,
+              "end": 8728.704,
+              "language": "pt",
+              "probability": 0.9854
+            },
+            {
+              "start": 8728.704,
+              "end": 8743.704,
+              "language": "pt",
+              "probability": 0.9546
+            },
+            {
+              "start": 8743.704,
+              "end": 8755.6,
+              "language": "pt",
+              "probability": 0.9932
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 10147.888,
@@ -1014,16 +3035,90 @@
           "status": "provisória até a revisão",
           "conditions": [],
           "language_provisional": "pt",
-          "language_probability": 0.9766
+          "language_probability": 0.9766,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 10147.888,
+              "end": 10162.888,
+              "language": "pt",
+              "probability": 0.9741
+            },
+            {
+              "start": 10162.888,
+              "end": 10177.888,
+              "language": "pt",
+              "probability": 0.9526
+            },
+            {
+              "start": 10177.888,
+              "end": 10192.888,
+              "language": "pt",
+              "probability": 0.8657
+            },
+            {
+              "start": 10192.888,
+              "end": 10207.888,
+              "language": "pt",
+              "probability": 0.9629
+            },
+            {
+              "start": 10207.888,
+              "end": 10212.16,
+              "language": "en",
+              "probability": 0.4285
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 11599.616,
           "end": 11659.888,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "status": "provisória até a revisão",
-          "conditions": [],
+          "conditions": [
+            "candidata a música alta"
+          ],
           "language_provisional": "pt",
-          "language_probability": 0.9917
+          "language_probability": 0.9917,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 8,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 11599.616,
+              "end": 11614.616,
+              "language": "pt",
+              "probability": 0.9912
+            },
+            {
+              "start": 11614.616,
+              "end": 11629.616,
+              "language": "pt",
+              "probability": 0.8882
+            },
+            {
+              "start": 11629.616,
+              "end": 11644.616,
+              "language": "pt",
+              "probability": 0.9365
+            },
+            {
+              "start": 11644.616,
+              "end": 11659.616,
+              "language": "pt",
+              "probability": 0.9907
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 13047.36,
@@ -1032,23 +3127,56 @@
           "status": "provisória até a revisão",
           "conditions": [],
           "language_provisional": "pt",
-          "language_probability": 0.9985
+          "language_probability": 0.9985,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 13047.36,
+              "end": 13062.36,
+              "language": "pt",
+              "probability": 0.9951
+            },
+            {
+              "start": 13062.36,
+              "end": 13077.36,
+              "language": "pt",
+              "probability": 0.9946
+            },
+            {
+              "start": 13077.36,
+              "end": 13092.36,
+              "language": "pt",
+              "probability": 0.9995
+            },
+            {
+              "start": 13092.36,
+              "end": 13107.36,
+              "language": "pt",
+              "probability": 0.9995
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         }
       ],
       "idiomas_provisorios": [
         "pt"
       ],
       "caracteristicas_audio": {
-        "musica_alta": "não avaliada",
-        "gritos": "não avaliados",
-        "varias_vozes": "não avaliadas",
-        "trechos_en": "não detectados nas amostras",
+        "musica_alta": "candidata por energia sem fala; conferir #29",
+        "gritos": "candidatos por nível de fala; conferir #29",
+        "varias_vozes": "a conferir na #29; método não separa locutores",
+        "trechos_en": "não detectados nos segmentos amostrados; conferir #29",
         "status": "provisório: avaliar na revisão"
       },
-      "criterio_amostragem": "Alvos uniformes; bordas candidatas em lacunas do Silero VAD; estratificação por condições difíceis ainda precisa ser conferida.",
+      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
       "transcricao": {
         "file": "transcricoes/rtZyZL3FfH4.json",
-        "sha256": "53739559506e7cb43153f1bb757aa4ce90704035484e077a8e67fb95d36642a2",
+        "sha256": "9190c601e678bbed02217f2dc489c4fed8047d926afb8a3e1c4ba38948ea1117",
         "origin": "Systran/faster-whisper-large-v3",
         "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
         "engine": "faster-whisper 1.2.1",
@@ -1082,127 +3210,468 @@
           "end": 62.176,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
           "status": "provisória até a revisão",
           "language_provisional": "en",
-          "language_probability": 0.9966
+          "language_probability": 0.9966,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 3,
+            "segundos_fala_alta": 2
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 2.032,
+              "end": 17.032,
+              "language": "en",
+              "probability": 0.9858
+            },
+            {
+              "start": 17.032,
+              "end": 32.032,
+              "language": "en",
+              "probability": 0.9839
+            },
+            {
+              "start": 32.032,
+              "end": 47.032,
+              "language": "en",
+              "probability": 0.9946
+            },
+            {
+              "start": 47.032,
+              "end": 62.032,
+              "language": "en",
+              "probability": 0.9766
+            }
+          ],
+          "selecionada_para": [
+            "inglês detectado por segmento"
+          ]
         },
         {
           "start": 414.08,
           "end": 474.208,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
           "status": "provisória até a revisão",
           "language_provisional": "en",
-          "language_probability": 0.9937
+          "language_probability": 0.9937,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 5,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 414.08,
+              "end": 429.08,
+              "language": "en",
+              "probability": 0.9814
+            },
+            {
+              "start": 429.08,
+              "end": 444.08,
+              "language": "en",
+              "probability": 0.9512
+            },
+            {
+              "start": 444.08,
+              "end": 459.08,
+              "language": "en",
+              "probability": 0.9814
+            },
+            {
+              "start": 459.08,
+              "end": 474.08,
+              "language": "en",
+              "probability": 0.9468
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 815.232,
           "end": 855.504,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "conditions": [
-            "fala em inglês"
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
           ],
           "status": "provisória até a revisão",
           "language_provisional": "en",
-          "language_probability": 0.9878
+          "language_probability": 0.9878,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 22,
+            "segundos_fala_alta": 1
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 815.232,
+              "end": 830.232,
+              "language": "en",
+              "probability": 0.9834
+            },
+            {
+              "start": 830.232,
+              "end": 845.232,
+              "language": "en",
+              "probability": 0.9629
+            },
+            {
+              "start": 845.232,
+              "end": 855.504,
+              "language": "en",
+              "probability": 0.9233
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1238.528,
           "end": 1297.888,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "conditions": [
-            "fala em inglês"
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
           ],
           "status": "provisória até a revisão",
           "language_provisional": "en",
-          "language_probability": 0.9946
+          "language_probability": 0.9946,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 32,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1238.528,
+              "end": 1253.528,
+              "language": "en",
+              "probability": 0.6621
+            },
+            {
+              "start": 1253.528,
+              "end": 1268.528,
+              "language": "en",
+              "probability": 0.9907
+            },
+            {
+              "start": 1268.528,
+              "end": 1283.528,
+              "language": "en",
+              "probability": 0.9868
+            },
+            {
+              "start": 1283.528,
+              "end": 1297.888,
+              "language": "en",
+              "probability": 0.9883
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1649.056,
           "end": 1709.344,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "conditions": [
-            "fala em inglês"
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
           ],
           "status": "provisória até a revisão",
           "language_provisional": "en",
-          "language_probability": 0.9854
+          "language_probability": 0.9854,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 50,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1649.056,
+              "end": 1664.056,
+              "language": "en",
+              "probability": 0.9819
+            },
+            {
+              "start": 1664.056,
+              "end": 1679.056,
+              "language": "en",
+              "probability": 0.8892
+            },
+            {
+              "start": 1679.056,
+              "end": 1694.056,
+              "language": "en",
+              "probability": 0.9399
+            },
+            {
+              "start": 1694.056,
+              "end": 1709.056,
+              "language": "en",
+              "probability": 0.9854
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 2062.464,
           "end": 2116.304,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "conditions": [
-            "fala em inglês"
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
           ],
           "status": "provisória até a revisão",
           "language_provisional": "en",
-          "language_probability": 0.8652
+          "language_probability": 0.8652,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 51,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 2062.464,
+              "end": 2077.464,
+              "language": "en",
+              "probability": 0.8882
+            },
+            {
+              "start": 2077.464,
+              "end": 2092.464,
+              "language": "en",
+              "probability": 0.897
+            },
+            {
+              "start": 2092.464,
+              "end": 2107.464,
+              "language": "en",
+              "probability": 0.9351
+            },
+            {
+              "start": 2107.464,
+              "end": 2116.304,
+              "language": "en",
+              "probability": 0.9443
+            }
+          ],
+          "selecionada_para": [
+            "música alta candidata"
+          ]
         },
         {
           "start": 2477.68,
           "end": 2545.696,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "conditions": [
-            "fala em inglês"
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
           ],
           "status": "provisória até a revisão",
           "language_provisional": "en",
-          "language_probability": 0.9956
+          "language_probability": 0.9956,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 30,
+            "segundos_fala_alta": 2
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 2477.68,
+              "end": 2492.68,
+              "language": "en",
+              "probability": 0.9927
+            },
+            {
+              "start": 2492.68,
+              "end": 2507.68,
+              "language": "en",
+              "probability": 0.9888
+            },
+            {
+              "start": 2507.68,
+              "end": 2522.68,
+              "language": "en",
+              "probability": 0.9756
+            },
+            {
+              "start": 2522.68,
+              "end": 2537.68,
+              "language": "en",
+              "probability": 0.8174
+            },
+            {
+              "start": 2537.68,
+              "end": 2545.696,
+              "language": "ja",
+              "probability": 0.3833
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 2885.024,
           "end": 2945.728,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "conditions": [
-            "fala em inglês"
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
           ],
           "status": "provisória até a revisão",
           "language_provisional": "en",
-          "language_probability": 0.7158
+          "language_probability": 0.7158,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 53,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 2885.024,
+              "end": 2900.024,
+              "language": "en",
+              "probability": 0.3682
+            },
+            {
+              "start": 2900.024,
+              "end": 2915.024,
+              "language": "en",
+              "probability": 0.8188
+            },
+            {
+              "start": 2915.024,
+              "end": 2930.024,
+              "language": "en",
+              "probability": 0.873
+            },
+            {
+              "start": 2930.024,
+              "end": 2945.024,
+              "language": "en",
+              "probability": 0.9629
+            }
+          ],
+          "selecionada_para": [
+            "música alta candidata"
+          ]
         },
         {
-          "start": 3296.272,
-          "end": 3351.568,
-          "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "conditions": [
-            "fala em inglês"
-          ],
+          "start": 3631.216,
+          "end": 3687.904,
+          "criterion": "alvo por gritos candidata; bordas em lacunas VAD",
           "status": "provisória até a revisão",
+          "conditions": [
+            "candidata a música alta",
+            "candidato a gritos",
+            "fala em inglês detectada por segmento"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 24,
+            "segundos_fala_alta": 9
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 3631.216,
+              "end": 3646.216,
+              "language": "en",
+              "probability": 0.9868
+            },
+            {
+              "start": 3646.216,
+              "end": 3661.216,
+              "language": "en",
+              "probability": 0.9966
+            },
+            {
+              "start": 3661.216,
+              "end": 3676.216,
+              "language": "en",
+              "probability": 0.9902
+            },
+            {
+              "start": 3676.216,
+              "end": 3687.904,
+              "language": "en",
+              "probability": 0.9917
+            }
+          ],
           "language_provisional": "en",
-          "language_probability": 0.9961
+          "language_probability": 0.9946,
+          "selecionada_para": [
+            "gritos candidatos"
+          ]
         },
         {
           "start": 3710.752,
           "end": 3769.808,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "conditions": [
-            "fala em inglês"
+            "candidata a música alta",
+            "candidato a gritos",
+            "fala em inglês detectada por segmento"
           ],
           "status": "provisória até a revisão",
           "language_provisional": "en",
-          "language_probability": 0.9966
+          "language_probability": 0.9966,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 11,
+            "segundos_fala_alta": 8
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 3710.752,
+              "end": 3725.752,
+              "language": "en",
+              "probability": 0.9922
+            },
+            {
+              "start": 3725.752,
+              "end": 3740.752,
+              "language": "en",
+              "probability": 0.9937
+            },
+            {
+              "start": 3740.752,
+              "end": 3755.752,
+              "language": "en",
+              "probability": 0.9863
+            },
+            {
+              "start": 3755.752,
+              "end": 3769.808,
+              "language": "en",
+              "probability": 0.9932
+            }
+          ],
+          "selecionada_para": [
+            "gritos candidatos",
+            "inglês detectado por segmento"
+          ]
         }
       ],
       "caracteristicas_audio": {
-        "musica_alta": "não avaliada",
-        "gritos": "não avaliados",
-        "varias_vozes": "não avaliadas",
-        "trechos_en": "detectados nas amostras",
+        "musica_alta": "candidata por energia sem fala; conferir #29",
+        "gritos": "candidatos por nível de fala; conferir #29",
+        "varias_vozes": "a conferir na #29; método não separa locutores",
+        "trechos_en": "detectados por segmento; conferir #29",
         "status": "provisório: avaliar na revisão"
       },
-      "criterio_amostragem": "Alvos uniformes; bordas candidatas em lacunas do Silero VAD; estratificação por condições difíceis ainda precisa ser conferida.",
+      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
       "clips_status": {
         "localizados": 0,
         "motivo": "Busca por títulos e canais não identificou Cortes completos com correspondência verificável; legenda automática indisponível ou limitada por HTTP 429 para candidatos recentes."
       },
       "transcricao": {
         "file": "transcricoes/MX8wnu3xXeM.json",
-        "sha256": "f2219712669d0bfc520e3d9385a2e7435d998bf662455eae1a277cbbeace7b89",
+        "sha256": "b6bde052b040c05cbb28447ed97058faf51b11a94f618354c31d45c93ff41316",
         "origin": "Systran/faster-whisper-large-v3",
         "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
         "engine": "faster-whisper 1.2.1",
@@ -1234,28 +3703,140 @@
           "start": 16.304,
           "end": 76.736,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "conditions": [],
+          "conditions": [
+            "candidata a música alta"
+          ],
           "status": "provisória até a revisão",
           "language_provisional": "pt",
-          "language_probability": 0.9907
+          "language_probability": 0.9907,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 15,
+            "segundos_fala_alta": 1
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 16.304,
+              "end": 31.304,
+              "language": "pt",
+              "probability": 0.999
+            },
+            {
+              "start": 31.304,
+              "end": 46.304,
+              "language": "pt",
+              "probability": 0.9814
+            },
+            {
+              "start": 46.304,
+              "end": 61.304,
+              "language": "pt",
+              "probability": 0.9834
+            },
+            {
+              "start": 61.304,
+              "end": 76.304,
+              "language": "pt",
+              "probability": 0.9688
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 147.84,
           "end": 208.864,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "conditions": [],
+          "conditions": [
+            "candidata a música alta"
+          ],
           "status": "provisória até a revisão",
           "language_provisional": "pt",
-          "language_probability": 0.9976
+          "language_probability": 0.9976,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 12,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 147.84,
+              "end": 162.84,
+              "language": "pt",
+              "probability": 0.9688
+            },
+            {
+              "start": 162.84,
+              "end": 177.84,
+              "language": "pt",
+              "probability": 0.999
+            },
+            {
+              "start": 177.84,
+              "end": 192.84,
+              "language": "pt",
+              "probability": 0.9985
+            },
+            {
+              "start": 192.84,
+              "end": 207.84,
+              "language": "pt",
+              "probability": 0.9819
+            },
+            {
+              "start": 207.84,
+              "end": 208.864,
+              "language": "ko",
+              "probability": 0.3909
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
-          "start": 293.728,
-          "end": 354.496,
-          "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "conditions": [],
+          "start": 224.64,
+          "end": 284.032,
+          "criterion": "alvo por gritos candidata; bordas em lacunas VAD",
           "status": "provisória até a revisão",
+          "conditions": [
+            "candidata a música alta",
+            "candidato a gritos"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 10,
+            "segundos_fala_alta": 3
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 224.64,
+              "end": 239.64,
+              "language": "pt",
+              "probability": 0.9878
+            },
+            {
+              "start": 239.64,
+              "end": 254.64,
+              "language": "pt",
+              "probability": 0.9902
+            },
+            {
+              "start": 254.64,
+              "end": 269.64,
+              "language": "pt",
+              "probability": 0.9902
+            },
+            {
+              "start": 269.64,
+              "end": 284.032,
+              "language": "pt",
+              "probability": 0.9629
+            }
+          ],
           "language_provisional": "pt",
-          "language_probability": 0.9834
+          "language_probability": 0.9771,
+          "selecionada_para": [
+            "gritos candidatos"
+          ]
         },
         {
           "start": 444.496,
@@ -1264,43 +3845,235 @@
           "conditions": [],
           "status": "provisória até a revisão",
           "language_provisional": "pt",
-          "language_probability": 0.98
+          "language_probability": 0.98,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 6,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 444.496,
+              "end": 459.496,
+              "language": "pt",
+              "probability": 0.9731
+            },
+            {
+              "start": 459.496,
+              "end": 474.496,
+              "language": "pt",
+              "probability": 0.9897
+            },
+            {
+              "start": 474.496,
+              "end": 489.496,
+              "language": "pt",
+              "probability": 0.9888
+            },
+            {
+              "start": 489.496,
+              "end": 503.52,
+              "language": "pt",
+              "probability": 0.9883
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 594.992,
           "end": 656.608,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "conditions": [],
+          "conditions": [
+            "candidata a música alta"
+          ],
           "status": "provisória até a revisão",
           "language_provisional": "pt",
-          "language_probability": 0.9971
+          "language_probability": 0.9971,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 9,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 594.992,
+              "end": 609.992,
+              "language": "pt",
+              "probability": 0.9824
+            },
+            {
+              "start": 609.992,
+              "end": 624.992,
+              "language": "pt",
+              "probability": 0.9961
+            },
+            {
+              "start": 624.992,
+              "end": 639.992,
+              "language": "jw",
+              "probability": 0.4744
+            },
+            {
+              "start": 639.992,
+              "end": 654.992,
+              "language": "pt",
+              "probability": 0.9873
+            },
+            {
+              "start": 654.992,
+              "end": 656.608,
+              "language": "en",
+              "probability": 0.4539
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 743.856,
           "end": 808.0,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "conditions": [],
+          "conditions": [
+            "candidata a música alta"
+          ],
           "status": "provisória até a revisão",
           "language_provisional": "pt",
-          "language_probability": 0.9888
+          "language_probability": 0.9888,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 34,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 743.856,
+              "end": 758.856,
+              "language": "pt",
+              "probability": 0.9868
+            },
+            {
+              "start": 758.856,
+              "end": 773.856,
+              "language": "pt",
+              "probability": 0.9883
+            },
+            {
+              "start": 773.856,
+              "end": 788.856,
+              "language": "pt",
+              "probability": 0.9697
+            },
+            {
+              "start": 788.856,
+              "end": 803.856,
+              "language": "en",
+              "probability": 0.3906
+            },
+            {
+              "start": 803.856,
+              "end": 808.0,
+              "language": "ru",
+              "probability": 0.3701
+            }
+          ],
+          "selecionada_para": [
+            "música alta candidata"
+          ]
         },
         {
           "start": 880.144,
           "end": 940.048,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "conditions": [],
+          "conditions": [
+            "candidata a música alta"
+          ],
           "status": "provisória até a revisão",
           "language_provisional": "pt",
-          "language_probability": 0.9873
+          "language_probability": 0.9873,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 37,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 880.144,
+              "end": 895.144,
+              "language": "pt",
+              "probability": 0.9917
+            },
+            {
+              "start": 895.144,
+              "end": 910.144,
+              "language": "pt",
+              "probability": 0.6709
+            },
+            {
+              "start": 910.144,
+              "end": 925.144,
+              "language": "pt",
+              "probability": 0.9897
+            },
+            {
+              "start": 925.144,
+              "end": 940.048,
+              "language": "pt",
+              "probability": 0.9893
+            }
+          ],
+          "selecionada_para": [
+            "música alta candidata"
+          ]
         },
         {
-          "start": 1041.68,
-          "end": 1101.68,
-          "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "conditions": [],
+          "start": 1089.984,
+          "end": 1156.048,
+          "criterion": "alvo por gritos candidata; bordas em lacunas VAD",
           "status": "provisória até a revisão",
+          "conditions": [
+            "candidata a música alta",
+            "candidato a gritos"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 10,
+            "segundos_fala_alta": 7
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1089.984,
+              "end": 1104.984,
+              "language": "pt",
+              "probability": 0.9761
+            },
+            {
+              "start": 1104.984,
+              "end": 1119.984,
+              "language": "pt",
+              "probability": 0.9917
+            },
+            {
+              "start": 1119.984,
+              "end": 1134.984,
+              "language": "pt",
+              "probability": 0.9941
+            },
+            {
+              "start": 1134.984,
+              "end": 1149.984,
+              "language": "pt",
+              "probability": 0.9922
+            },
+            {
+              "start": 1149.984,
+              "end": 1156.048,
+              "language": "pt",
+              "probability": 0.9839
+            }
+          ],
           "language_provisional": "pt",
-          "language_probability": 0.9961
+          "language_probability": 0.981,
+          "selecionada_para": [
+            "gritos candidatos"
+          ]
         },
         {
           "start": 1187.088,
@@ -1309,33 +4082,107 @@
           "conditions": [],
           "status": "provisória até a revisão",
           "language_provisional": "pt",
-          "language_probability": 0.9565
+          "language_probability": 0.9565,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 5,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1187.088,
+              "end": 1202.088,
+              "language": "pt",
+              "probability": 0.9692
+            },
+            {
+              "start": 1202.088,
+              "end": 1217.088,
+              "language": "pt",
+              "probability": 0.9209
+            },
+            {
+              "start": 1217.088,
+              "end": 1232.088,
+              "language": "pt",
+              "probability": 0.9805
+            },
+            {
+              "start": 1232.088,
+              "end": 1247.088,
+              "language": "pt",
+              "probability": 0.9961
+            },
+            {
+              "start": 1247.088,
+              "end": 1249.2,
+              "language": "pt",
+              "probability": 0.9922
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1317.088,
           "end": 1371.712,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "conditions": [],
+          "conditions": [
+            "candidata a música alta"
+          ],
           "status": "provisória até a revisão",
           "language_provisional": "pt",
-          "language_probability": 0.9937
+          "language_probability": 0.9937,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 19,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1317.088,
+              "end": 1332.088,
+              "language": "pt",
+              "probability": 0.9937
+            },
+            {
+              "start": 1332.088,
+              "end": 1347.088,
+              "language": "pt",
+              "probability": 0.9863
+            },
+            {
+              "start": 1347.088,
+              "end": 1362.088,
+              "language": "pt",
+              "probability": 0.9941
+            },
+            {
+              "start": 1362.088,
+              "end": 1371.712,
+              "language": "pt",
+              "probability": 0.9897
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         }
       ],
       "caracteristicas_audio": {
-        "musica_alta": "não avaliada",
-        "gritos": "não avaliados",
-        "varias_vozes": "não avaliadas",
-        "trechos_en": "não detectados nas amostras",
+        "musica_alta": "candidata por energia sem fala; conferir #29",
+        "gritos": "candidatos por nível de fala; conferir #29",
+        "varias_vozes": "a conferir na #29; método não separa locutores",
+        "trechos_en": "não detectados nos segmentos amostrados; conferir #29",
         "status": "provisório: avaliar na revisão"
       },
-      "criterio_amostragem": "Alvos uniformes; bordas candidatas em lacunas do Silero VAD; estratificação por condições difíceis ainda precisa ser conferida.",
+      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
       "clips_status": {
         "localizados": 0,
         "motivo": "Busca por títulos e canais não identificou Cortes completos com correspondência verificável; legenda automática indisponível ou limitada por HTTP 429 para candidatos recentes."
       },
       "transcricao": {
         "file": "transcricoes/QiwQ62ypdcI.json",
-        "sha256": "00cc0344539d334e296b3090619c194972f024a139830b0c98a35dd85d9f5400",
+        "sha256": "5c9c9900ad60c46f7f18b883b0c7a8be37ea5d017446ea045429f24e8f86ae93",
         "origin": "Systran/faster-whisper-large-v3",
         "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
         "engine": "faster-whisper 1.2.1",
@@ -1368,120 +4215,477 @@
           "end": 68.672,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "conditions": [
-            "fala em inglês"
+            "candidato a gritos",
+            "fala em inglês detectada por segmento"
           ],
           "status": "provisória até a revisão",
           "language_provisional": "en",
-          "language_probability": 0.9971
+          "language_probability": 0.9971,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 5,
+            "segundos_fala_alta": 6
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 11.712,
+              "end": 26.712,
+              "language": "en",
+              "probability": 0.9941
+            },
+            {
+              "start": 26.712,
+              "end": 41.712,
+              "language": "en",
+              "probability": 0.9946
+            },
+            {
+              "start": 41.712,
+              "end": 56.712,
+              "language": "en",
+              "probability": 0.9922
+            },
+            {
+              "start": 56.712,
+              "end": 68.672,
+              "language": "en",
+              "probability": 0.9888
+            }
+          ],
+          "selecionada_para": [
+            "gritos candidatos",
+            "inglês detectado por segmento"
+          ]
         },
         {
           "start": 376.864,
           "end": 435.76,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "conditions": [
-            "fala em inglês"
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
           ],
           "status": "provisória até a revisão",
           "language_provisional": "en",
-          "language_probability": 0.9946
+          "language_probability": 0.9946,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 26,
+            "segundos_fala_alta": 2
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 376.864,
+              "end": 391.864,
+              "language": "en",
+              "probability": 0.9614
+            },
+            {
+              "start": 391.864,
+              "end": 406.864,
+              "language": "en",
+              "probability": 0.9883
+            },
+            {
+              "start": 406.864,
+              "end": 421.864,
+              "language": "en",
+              "probability": 0.9873
+            },
+            {
+              "start": 421.864,
+              "end": 435.76,
+              "language": "en",
+              "probability": 0.9512
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 754.96,
           "end": 815.968,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "conditions": [
-            "fala em inglês"
+            "candidato a gritos",
+            "fala em inglês detectada por segmento"
           ],
           "status": "provisória até a revisão",
           "language_provisional": "en",
-          "language_probability": 0.998
+          "language_probability": 0.998,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 11
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 754.96,
+              "end": 769.96,
+              "language": "en",
+              "probability": 0.9985
+            },
+            {
+              "start": 769.96,
+              "end": 784.96,
+              "language": "en",
+              "probability": 0.9956
+            },
+            {
+              "start": 784.96,
+              "end": 799.96,
+              "language": "en",
+              "probability": 0.998
+            },
+            {
+              "start": 799.96,
+              "end": 814.96,
+              "language": "en",
+              "probability": 0.894
+            },
+            {
+              "start": 814.96,
+              "end": 815.968,
+              "language": "es",
+              "probability": 0.5415
+            }
+          ],
+          "selecionada_para": [
+            "gritos candidatos"
+          ]
         },
         {
           "start": 1126.688,
           "end": 1186.992,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
           "status": "provisória até a revisão",
           "language_provisional": "en",
-          "language_probability": 0.9946
+          "language_probability": 0.9946,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 2,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1126.688,
+              "end": 1141.688,
+              "language": "en",
+              "probability": 0.9854
+            },
+            {
+              "start": 1141.688,
+              "end": 1156.688,
+              "language": "en",
+              "probability": 0.9775
+            },
+            {
+              "start": 1156.688,
+              "end": 1171.688,
+              "language": "en",
+              "probability": 0.7524
+            },
+            {
+              "start": 1171.688,
+              "end": 1186.688,
+              "language": "en",
+              "probability": 0.405
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1496.288,
           "end": 1552.016,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "conditions": [
-            "fala em inglês"
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
           ],
           "status": "provisória até a revisão",
           "language_provisional": "en",
-          "language_probability": 0.9805
+          "language_probability": 0.9805,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 27,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1496.288,
+              "end": 1511.288,
+              "language": "en",
+              "probability": 0.3018
+            },
+            {
+              "start": 1511.288,
+              "end": 1526.288,
+              "language": "en",
+              "probability": 0.9824
+            },
+            {
+              "start": 1526.288,
+              "end": 1541.288,
+              "language": "en",
+              "probability": 0.9907
+            },
+            {
+              "start": 1541.288,
+              "end": 1552.016,
+              "language": "en",
+              "probability": 0.9629
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 1882.768,
           "end": 1957.28,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "conditions": [
-            "fala em inglês"
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
           ],
           "status": "provisória até a revisão",
           "language_provisional": "en",
-          "language_probability": 0.7227
+          "language_probability": 0.7227,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 28,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1882.768,
+              "end": 1897.768,
+              "language": "en",
+              "probability": 0.8882
+            },
+            {
+              "start": 1897.768,
+              "end": 1912.768,
+              "language": "nn",
+              "probability": 0.52
+            },
+            {
+              "start": 1912.768,
+              "end": 1927.768,
+              "language": "en",
+              "probability": 0.8477
+            },
+            {
+              "start": 1927.768,
+              "end": 1942.768,
+              "language": "nn",
+              "probability": 0.4072
+            },
+            {
+              "start": 1942.768,
+              "end": 1957.28,
+              "language": "en",
+              "probability": 0.4087
+            }
+          ],
+          "selecionada_para": [
+            "música alta candidata"
+          ]
         },
         {
           "start": 2256.976,
           "end": 2316.192,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "conditions": [
-            "fala em inglês"
+            "fala em inglês detectada por segmento"
           ],
           "status": "provisória até a revisão",
           "language_provisional": "en",
-          "language_probability": 0.9434
+          "language_probability": 0.9434,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 3,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 2256.976,
+              "end": 2271.976,
+              "language": "en",
+              "probability": 0.9307
+            },
+            {
+              "start": 2271.976,
+              "end": 2286.976,
+              "language": "en",
+              "probability": 0.939
+            },
+            {
+              "start": 2286.976,
+              "end": 2301.976,
+              "language": "en",
+              "probability": 0.9966
+            },
+            {
+              "start": 2301.976,
+              "end": 2316.192,
+              "language": "en",
+              "probability": 0.9917
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 2632.448,
           "end": 2693.648,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "conditions": [
-            "fala em inglês"
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
           ],
           "status": "provisória até a revisão",
           "language_provisional": "en",
-          "language_probability": 0.9468
+          "language_probability": 0.9468,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 17,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 2632.448,
+              "end": 2647.448,
+              "language": "en",
+              "probability": 0.9521
+            },
+            {
+              "start": 2647.448,
+              "end": 2662.448,
+              "language": "en",
+              "probability": 0.8477
+            },
+            {
+              "start": 2662.448,
+              "end": 2677.448,
+              "language": "en",
+              "probability": 0.8438
+            },
+            {
+              "start": 2677.448,
+              "end": 2692.448,
+              "language": "en",
+              "probability": 0.9697
+            },
+            {
+              "start": 2692.448,
+              "end": 2693.648,
+              "language": "en",
+              "probability": 0.7524
+            }
+          ],
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
         },
         {
           "start": 3009.312,
           "end": 3067.248,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "conditions": [
-            "fala em inglês"
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
           ],
           "status": "provisória até a revisão",
           "language_provisional": "en",
-          "language_probability": 0.9951
+          "language_probability": 0.9951,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 29,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 3009.312,
+              "end": 3024.312,
+              "language": "en",
+              "probability": 0.9624
+            },
+            {
+              "start": 3024.312,
+              "end": 3039.312,
+              "language": "en",
+              "probability": 0.9976
+            },
+            {
+              "start": 3039.312,
+              "end": 3054.312,
+              "language": "en",
+              "probability": 0.981
+            },
+            {
+              "start": 3054.312,
+              "end": 3067.248,
+              "language": "en",
+              "probability": 0.9453
+            }
+          ],
+          "selecionada_para": [
+            "música alta candidata"
+          ]
         },
         {
           "start": 3385.104,
           "end": 3441.424,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "conditions": [
-            "fala em inglês"
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
           ],
           "status": "provisória até a revisão",
           "language_provisional": "en",
-          "language_probability": 0.9951
+          "language_probability": 0.9951,
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 26,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 3385.104,
+              "end": 3400.104,
+              "language": "en",
+              "probability": 0.9912
+            },
+            {
+              "start": 3400.104,
+              "end": 3415.104,
+              "language": "en",
+              "probability": 0.9883
+            },
+            {
+              "start": 3415.104,
+              "end": 3430.104,
+              "language": "en",
+              "probability": 0.9966
+            },
+            {
+              "start": 3430.104,
+              "end": 3441.424,
+              "language": "en",
+              "probability": 0.9966
+            }
+          ],
+          "selecionada_para": [
+            "inglês detectado por segmento"
+          ]
         }
       ],
       "caracteristicas_audio": {
-        "musica_alta": "não avaliada",
-        "gritos": "não avaliados",
-        "varias_vozes": "não avaliadas",
-        "trechos_en": "detectados nas amostras",
+        "musica_alta": "candidata por energia sem fala; conferir #29",
+        "gritos": "candidatos por nível de fala; conferir #29",
+        "varias_vozes": "a conferir na #29; método não separa locutores",
+        "trechos_en": "detectados por segmento; conferir #29",
         "status": "provisório: avaliar na revisão"
       },
-      "criterio_amostragem": "Alvos uniformes; bordas candidatas em lacunas do Silero VAD; estratificação por condições difíceis ainda precisa ser conferida.",
+      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
       "clips_status": {
         "localizados": 0,
         "motivo": "Busca por títulos e canais não identificou Cortes completos com correspondência verificável; legenda automática indisponível ou limitada por HTTP 429 para candidatos recentes."
@@ -1489,6 +4693,1038 @@
       "transcricao": {
         "file": "transcricoes/juFnXA7rhOk.json",
         "sha256": "014a40e5610069db7be68cc3253b52cc1a4b16b74664e40b06a2758623e1c3af",
+        "origin": "Systran/faster-whisper-large-v3",
+        "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+        "engine": "faster-whisper 1.2.1",
+        "task": "transcribe",
+        "beam_size": 5,
+        "word_timestamps": true,
+        "date": "2026-11-13",
+        "status": "provisória até a revisão"
+      },
+      "idiomas_provisorios": [
+        "en"
+      ]
+    },
+    {
+      "id": "6LB7vibQ5q0",
+      "url": "https://www.youtube.com/watch?v=6LB7vibQ5q0",
+      "title": "🎮PLAYING EVERY GTA UNTIL I BEAT IT: Grand Theft Auto 5🎮",
+      "channel": "Kai Cenat Live",
+      "duration_seconds": 40220,
+      "published": "2026-11-11",
+      "retrieved": "2026-11-13",
+      "live": true,
+      "file": "6LB7vibQ5q0.webm",
+      "format": "251",
+      "sha256": "42bccaa8a8038eea475bedffa845088d9fa5153548391678bec601011f721cb1",
+      "clips": [
+        {
+          "url": "https://www.youtube.com/watch?v=pI4dIrz3zm4",
+          "channel": "U BOE CLIPPER",
+          "title": "The moment Kai chooses the GTA 5 ending",
+          "published": "2026-11-11",
+          "retrieved": "2026-11-13",
+          "clip_start": 0.0,
+          "clip_end": 60.021,
+          "start": 36914.266,
+          "end": 36974.287,
+          "method": "correlação de áudio em quatro janelas de seis segundos; alinhamento consistente dentro de 2 ms",
+          "confidence": "provisória; conferir bordas na #29",
+          "sha256": "e5f13be47024ac0ce53225a688c5f91c797582c3f3207c840524838f7f6e48cf",
+          "format": "251-20",
+          "file": "pI4dIrz3zm4.webm"
+        }
+      ],
+      "clips_status": {
+        "localizados": 1,
+        "motivo": "Busca em canais de Cortes; outras correspondências são parciais ou insuficientes para validar limites."
+      },
+      "samples": [
+        {
+          "start": 1.776,
+          "end": 63.104,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [
+            "candidato a gritos",
+            "fala em inglês detectada por segmento"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 5,
+            "segundos_fala_alta": 7
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 1.776,
+              "end": 16.776,
+              "language": "en",
+              "probability": 0.9946
+            },
+            {
+              "start": 16.776,
+              "end": 31.776,
+              "language": "en",
+              "probability": 0.9858
+            },
+            {
+              "start": 31.776,
+              "end": 46.776,
+              "language": "en",
+              "probability": 0.9766
+            },
+            {
+              "start": 46.776,
+              "end": 61.776,
+              "language": "en",
+              "probability": 0.9888
+            },
+            {
+              "start": 61.776,
+              "end": 63.104,
+              "language": "en",
+              "probability": 0.9785
+            }
+          ],
+          "language_provisional": "en",
+          "language_probability": 0.9946,
+          "selecionada_para": [
+            "gritos candidatos",
+            "inglês detectado por segmento"
+          ]
+        },
+        {
+          "start": 4445.936,
+          "end": 4513.76,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 53,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 4445.936,
+              "end": 4460.936,
+              "language": "en",
+              "probability": 0.9443
+            },
+            {
+              "start": 4460.936,
+              "end": 4475.936,
+              "language": "en",
+              "probability": 0.7163
+            },
+            {
+              "start": 4475.936,
+              "end": 4490.936,
+              "language": "en",
+              "probability": 0.7715
+            },
+            {
+              "start": 4490.936,
+              "end": 4505.936,
+              "language": "en",
+              "probability": 0.8364
+            },
+            {
+              "start": 4505.936,
+              "end": 4513.76,
+              "language": "en",
+              "probability": 0.9253
+            }
+          ],
+          "language_provisional": "en",
+          "language_probability": 0.9639,
+          "selecionada_para": [
+            "música alta candidata"
+          ]
+        },
+        {
+          "start": 8915.552,
+          "end": 8983.6,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 62,
+            "segundos_fala_alta": 1
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 8915.552,
+              "end": 8930.552,
+              "language": "en",
+              "probability": 0.3884
+            },
+            {
+              "start": 8930.552,
+              "end": 8945.552,
+              "language": "nn",
+              "probability": 0.5728
+            },
+            {
+              "start": 8945.552,
+              "end": 8960.552,
+              "language": "en",
+              "probability": 0.9766
+            },
+            {
+              "start": 8960.552,
+              "end": 8975.552,
+              "language": "en",
+              "probability": 0.979
+            },
+            {
+              "start": 8975.552,
+              "end": 8983.6,
+              "language": "en",
+              "probability": 0.9497
+            }
+          ],
+          "language_provisional": "en",
+          "language_probability": 0.2313,
+          "selecionada_para": [
+            "música alta candidata"
+          ]
+        },
+        {
+          "start": 13390.624,
+          "end": 13434.416,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 42,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 13390.624,
+              "end": 13405.624,
+              "language": "en",
+              "probability": 0.9609
+            },
+            {
+              "start": 13405.624,
+              "end": 13420.624,
+              "language": "en",
+              "probability": 0.9307
+            },
+            {
+              "start": 13420.624,
+              "end": 13434.416,
+              "language": "en",
+              "probability": 0.8857
+            }
+          ],
+          "language_provisional": "en",
+          "language_probability": 0.9629,
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
+        },
+        {
+          "start": 17846.352,
+          "end": 17903.84,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [
+            "candidata a música alta",
+            "candidato a gritos",
+            "fala em inglês detectada por segmento"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 39,
+            "segundos_fala_alta": 4
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 17846.352,
+              "end": 17861.352,
+              "language": "en",
+              "probability": 0.8853
+            },
+            {
+              "start": 17861.352,
+              "end": 17876.352,
+              "language": "en",
+              "probability": 0.4944
+            },
+            {
+              "start": 17876.352,
+              "end": 17891.352,
+              "language": "en",
+              "probability": 0.9868
+            },
+            {
+              "start": 17891.352,
+              "end": 17903.84,
+              "language": "en",
+              "probability": 0.9507
+            }
+          ],
+          "language_provisional": "en",
+          "language_probability": 0.8511,
+          "selecionada_para": [
+            "gritos candidatos"
+          ]
+        },
+        {
+          "start": 22324.4,
+          "end": 22393.52,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 28,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 22324.4,
+              "end": 22339.4,
+              "language": "en",
+              "probability": 0.7979
+            },
+            {
+              "start": 22339.4,
+              "end": 22354.4,
+              "language": "en",
+              "probability": 0.5723
+            },
+            {
+              "start": 22354.4,
+              "end": 22369.4,
+              "language": "en",
+              "probability": 0.3806
+            },
+            {
+              "start": 22369.4,
+              "end": 22384.4,
+              "language": "en",
+              "probability": 0.7783
+            },
+            {
+              "start": 22384.4,
+              "end": 22393.52,
+              "language": "en",
+              "probability": 0.9839
+            }
+          ],
+          "language_provisional": "en",
+          "language_probability": 0.6738,
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
+        },
+        {
+          "start": 26775.536,
+          "end": 26835.36,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [
+            "fala em inglês detectada por segmento"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 26775.536,
+              "end": 26790.536,
+              "language": "en",
+              "probability": 0.9502
+            },
+            {
+              "start": 26790.536,
+              "end": 26805.536,
+              "language": "en",
+              "probability": 0.8818
+            },
+            {
+              "start": 26805.536,
+              "end": 26820.536,
+              "language": "en",
+              "probability": 0.9692
+            },
+            {
+              "start": 26820.536,
+              "end": 26835.36,
+              "language": "en",
+              "probability": 0.9111
+            }
+          ],
+          "language_provisional": "en",
+          "language_probability": 0.9331,
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
+        },
+        {
+          "start": 31237.568,
+          "end": 31299.504,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 26,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 31237.568,
+              "end": 31252.568,
+              "language": "en",
+              "probability": 0.9858
+            },
+            {
+              "start": 31252.568,
+              "end": 31267.568,
+              "language": "en",
+              "probability": 0.9907
+            },
+            {
+              "start": 31267.568,
+              "end": 31282.568,
+              "language": "en",
+              "probability": 0.9941
+            },
+            {
+              "start": 31282.568,
+              "end": 31297.568,
+              "language": "en",
+              "probability": 0.9917
+            },
+            {
+              "start": 31297.568,
+              "end": 31299.504,
+              "language": "en",
+              "probability": 0.3284
+            }
+          ],
+          "language_provisional": "en",
+          "language_probability": 0.9956,
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
+        },
+        {
+          "start": 35695.744,
+          "end": 35756.32,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 12,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 35695.744,
+              "end": 35710.744,
+              "language": "en",
+              "probability": 0.9019
+            },
+            {
+              "start": 35710.744,
+              "end": 35725.744,
+              "language": "en",
+              "probability": 0.6519
+            },
+            {
+              "start": 35725.744,
+              "end": 35740.744,
+              "language": "en",
+              "probability": 0.8149
+            },
+            {
+              "start": 35740.744,
+              "end": 35755.744,
+              "language": "en",
+              "probability": 0.9419
+            }
+          ],
+          "language_provisional": "en",
+          "language_probability": 0.8804,
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
+        },
+        {
+          "start": 39967.712,
+          "end": 40009.808,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 14,
+            "segundos_fala_alta": 1
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 39967.712,
+              "end": 39982.712,
+              "language": "en",
+              "probability": 0.981
+            },
+            {
+              "start": 39982.712,
+              "end": 39997.712,
+              "language": "en",
+              "probability": 0.9907
+            },
+            {
+              "start": 39997.712,
+              "end": 40009.808,
+              "language": "en",
+              "probability": 0.9922
+            }
+          ],
+          "language_provisional": "en",
+          "language_probability": 0.9966,
+          "selecionada_para": [
+            "inglês detectado por segmento"
+          ]
+        }
+      ],
+      "caracteristicas_audio": {
+        "musica_alta": "candidata por energia sem fala; conferir #29",
+        "gritos": "candidatos por nível de fala; conferir #29",
+        "varias_vozes": "a conferir na #29; método não separa locutores",
+        "trechos_en": "detectados por segmento; conferir #29",
+        "status": "provisório: avaliar na revisão"
+      },
+      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
+      "transcricao": {
+        "file": "transcricoes/6LB7vibQ5q0.json",
+        "sha256": "8adfad1c65ea22ac14150b5091063dc228b5fb0de93ee12641382b64246f7658",
+        "origin": "Systran/faster-whisper-large-v3",
+        "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+        "engine": "faster-whisper 1.2.1",
+        "task": "transcribe",
+        "beam_size": 5,
+        "word_timestamps": true,
+        "date": "2026-11-13",
+        "status": "provisória até a revisão"
+      },
+      "idiomas_provisorios": [
+        "en"
+      ]
+    },
+    {
+      "id": "6dhayer-a90",
+      "url": "https://www.youtube.com/watch?v=6dhayer-a90",
+      "title": "🎮PLAYING EVERY GTA UNTIL I BEAT IT: Grand Theft Auto 4🎮",
+      "channel": "Kai Cenat Live",
+      "duration_seconds": 39635,
+      "published": "2026-11-09",
+      "retrieved": "2026-11-13",
+      "live": true,
+      "file": "6dhayer-a90.webm",
+      "format": "251",
+      "sha256": "e5e1d7eb73c1681ec923e70057facbda80df64fb3d109451a2d1a1597d377e0d",
+      "clips": [],
+      "clips_status": {
+        "localizados": 0,
+        "motivo": "Busca em canais de Cortes; outras correspondências são parciais ou insuficientes para validar limites."
+      },
+      "samples": [
+        {
+          "start": 5.76,
+          "end": 63.6,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [
+            "fala em inglês detectada por segmento"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 5.76,
+              "end": 20.76,
+              "language": "en",
+              "probability": 0.9941
+            },
+            {
+              "start": 20.76,
+              "end": 35.76,
+              "language": "en",
+              "probability": 0.9863
+            },
+            {
+              "start": 35.76,
+              "end": 50.76,
+              "language": "en",
+              "probability": 0.9902
+            },
+            {
+              "start": 50.76,
+              "end": 63.6,
+              "language": "en",
+              "probability": 0.9946
+            }
+          ],
+          "language_provisional": "en",
+          "language_probability": 0.9922,
+          "selecionada_para": [
+            "inglês detectado por segmento"
+          ]
+        },
+        {
+          "start": 4380.48,
+          "end": 4440.736,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 39,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 4380.48,
+              "end": 4395.48,
+              "language": "en",
+              "probability": 0.6094
+            },
+            {
+              "start": 4395.48,
+              "end": 4410.48,
+              "language": "es",
+              "probability": 0.262
+            },
+            {
+              "start": 4410.48,
+              "end": 4425.48,
+              "language": "en",
+              "probability": 0.4363
+            },
+            {
+              "start": 4425.48,
+              "end": 4440.48,
+              "language": "en",
+              "probability": 0.9907
+            }
+          ],
+          "language_provisional": "en",
+          "language_probability": 0.293,
+          "selecionada_para": [
+            "música alta candidata"
+          ]
+        },
+        {
+          "start": 8794.08,
+          "end": 8854.496,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [
+            "fala em inglês detectada por segmento"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 7,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 8794.08,
+              "end": 8809.08,
+              "language": "en",
+              "probability": 0.9858
+            },
+            {
+              "start": 8809.08,
+              "end": 8824.08,
+              "language": "en",
+              "probability": 0.9756
+            },
+            {
+              "start": 8824.08,
+              "end": 8839.08,
+              "language": "en",
+              "probability": 0.9912
+            },
+            {
+              "start": 8839.08,
+              "end": 8854.08,
+              "language": "en",
+              "probability": 0.981
+            }
+          ],
+          "language_provisional": "en",
+          "language_probability": 0.9814,
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
+        },
+        {
+          "start": 13190.72,
+          "end": 13248.624,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [
+            "fala em inglês detectada por segmento"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 0,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 13190.72,
+              "end": 13205.72,
+              "language": "en",
+              "probability": 0.71
+            },
+            {
+              "start": 13205.72,
+              "end": 13220.72,
+              "language": "en",
+              "probability": 0.9292
+            },
+            {
+              "start": 13220.72,
+              "end": 13235.72,
+              "language": "en",
+              "probability": 0.3867
+            },
+            {
+              "start": 13235.72,
+              "end": 13248.624,
+              "language": "en",
+              "probability": 0.4792
+            }
+          ],
+          "language_provisional": "en",
+          "language_probability": 0.9736,
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
+        },
+        {
+          "start": 17589.76,
+          "end": 17638.768,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 10,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 17589.76,
+              "end": 17604.76,
+              "language": "en",
+              "probability": 0.9883
+            },
+            {
+              "start": 17604.76,
+              "end": 17619.76,
+              "language": "en",
+              "probability": 0.9438
+            },
+            {
+              "start": 17619.76,
+              "end": 17634.76,
+              "language": "nn",
+              "probability": 0.323
+            },
+            {
+              "start": 17634.76,
+              "end": 17638.768,
+              "language": "ko",
+              "probability": 0.5952
+            }
+          ],
+          "language_provisional": "en",
+          "language_probability": 0.9844,
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
+        },
+        {
+          "start": 21986.576,
+          "end": 22045.92,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [
+            "fala em inglês detectada por segmento"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 1,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 21986.576,
+              "end": 22001.576,
+              "language": "en",
+              "probability": 0.8887
+            },
+            {
+              "start": 22001.576,
+              "end": 22016.576,
+              "language": "en",
+              "probability": 0.469
+            },
+            {
+              "start": 22016.576,
+              "end": 22031.576,
+              "language": "en",
+              "probability": 0.9199
+            },
+            {
+              "start": 22031.576,
+              "end": 22045.92,
+              "language": "en",
+              "probability": 0.9419
+            }
+          ],
+          "language_provisional": "en",
+          "language_probability": 0.8511,
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
+        },
+        {
+          "start": 26382.768,
+          "end": 26431.104,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [
+            "fala em inglês detectada por segmento"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 7,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 26382.768,
+              "end": 26397.768,
+              "language": "en",
+              "probability": 0.9932
+            },
+            {
+              "start": 26397.768,
+              "end": 26412.768,
+              "language": "en",
+              "probability": 0.8604
+            },
+            {
+              "start": 26412.768,
+              "end": 26427.768,
+              "language": "en",
+              "probability": 0.9404
+            },
+            {
+              "start": 26427.768,
+              "end": 26431.104,
+              "language": "nn",
+              "probability": 0.4636
+            }
+          ],
+          "language_provisional": "en",
+          "language_probability": 0.9907,
+          "selecionada_para": [
+            "distribuição uniforme"
+          ]
+        },
+        {
+          "start": 30779.072,
+          "end": 30840.528,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [
+            "candidata a música alta",
+            "fala em inglês detectada por segmento"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 33,
+            "segundos_fala_alta": 0
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 30779.072,
+              "end": 30794.072,
+              "language": "en",
+              "probability": 0.978
+            },
+            {
+              "start": 30794.072,
+              "end": 30809.072,
+              "language": "haw",
+              "probability": 0.5728
+            },
+            {
+              "start": 30809.072,
+              "end": 30824.072,
+              "language": "en",
+              "probability": 0.895
+            },
+            {
+              "start": 30824.072,
+              "end": 30839.072,
+              "language": "en",
+              "probability": 0.8467
+            },
+            {
+              "start": 30839.072,
+              "end": 30840.528,
+              "language": "en",
+              "probability": 0.4158
+            }
+          ],
+          "language_provisional": "en",
+          "language_probability": 0.9492,
+          "selecionada_para": [
+            "música alta candidata"
+          ]
+        },
+        {
+          "start": 37383.504,
+          "end": 37454.032,
+          "criterion": "alvo por gritos candidata; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [
+            "candidata a música alta",
+            "candidato a gritos",
+            "fala em inglês detectada por segmento"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 8,
+            "segundos_fala_alta": 17
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 37383.504,
+              "end": 37398.504,
+              "language": "en",
+              "probability": 0.9678
+            },
+            {
+              "start": 37398.504,
+              "end": 37413.504,
+              "language": "en",
+              "probability": 0.9907
+            },
+            {
+              "start": 37413.504,
+              "end": 37428.504,
+              "language": "en",
+              "probability": 0.9932
+            },
+            {
+              "start": 37428.504,
+              "end": 37443.504,
+              "language": "en",
+              "probability": 0.9985
+            },
+            {
+              "start": 37443.504,
+              "end": 37454.032,
+              "language": "en",
+              "probability": 0.9932
+            }
+          ],
+          "language_provisional": "en",
+          "language_probability": 0.9854,
+          "selecionada_para": [
+            "gritos candidatos"
+          ]
+        },
+        {
+          "start": 39575.744,
+          "end": 39632.208,
+          "criterion": "alvo uniforme; bordas em lacunas VAD",
+          "status": "provisória até a revisão",
+          "conditions": [
+            "candidata a música alta",
+            "candidato a gritos",
+            "fala em inglês detectada por segmento"
+          ],
+          "metrics_audio": {
+            "segundos_energia_sem_fala": 12,
+            "segundos_fala_alta": 3
+          },
+          "idiomas_segmentos": [
+            {
+              "start": 39575.744,
+              "end": 39590.744,
+              "language": "en",
+              "probability": 0.9658
+            },
+            {
+              "start": 39590.744,
+              "end": 39605.744,
+              "language": "en",
+              "probability": 0.978
+            },
+            {
+              "start": 39605.744,
+              "end": 39620.744,
+              "language": "en",
+              "probability": 0.8218
+            },
+            {
+              "start": 39620.744,
+              "end": 39632.208,
+              "language": "en",
+              "probability": 0.9863
+            }
+          ],
+          "language_provisional": "en",
+          "language_probability": 0.96,
+          "selecionada_para": [
+            "gritos candidatos",
+            "inglês detectado por segmento"
+          ]
+        }
+      ],
+      "caracteristicas_audio": {
+        "musica_alta": "candidata por energia sem fala; conferir #29",
+        "gritos": "candidatos por nível de fala; conferir #29",
+        "varias_vozes": "a conferir na #29; método não separa locutores",
+        "trechos_en": "detectados por segmento; conferir #29",
+        "status": "provisório: avaliar na revisão"
+      },
+      "criterio_amostragem": "Até duas amostras por condição candidata por nível e VAD; demais alvos uniformes; bordas em lacunas VAD.",
+      "transcricao": {
+        "file": "transcricoes/6dhayer-a90.json",
+        "sha256": "8bc3bd8c1eee0f85408e58149970d8390e5b171ccb7ff6a685d145044ddad179",
         "origin": "Systran/faster-whisper-large-v3",
         "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
         "engine": "faster-whisper 1.2.1",
