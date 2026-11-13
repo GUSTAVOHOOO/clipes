@@ -1,0 +1,11 @@
+name: Sugerir ideia
+description: Proponha uma melhoria para o Clipes.
+labels: [needs-triage]
+body:
+  - type: textarea
+    id: body
+    attributes:
+      label: Ideia
+      description: Conte qual necessidade a ideia atende e como ela ajudaria. Revise o texto antes de publicar e não inclua dados privados ou credenciais.
+    validations:
+      required: true

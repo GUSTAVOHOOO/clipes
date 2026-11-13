@@ -1,0 +1,11 @@
+name: Propor Provedor ou modelo
+description: Sugira um Provedor ou modelo para o Clipes.
+labels: [needs-triage]
+body:
+  - type: textarea
+    id: body
+    attributes:
+      label: Proposta
+      description: Informe nome, finalidade, links oficiais, licença do código e dos pesos quando houver, uso comercial e como a proposta ajudaria. Não inclua credenciais.
+    validations:
+      required: true
