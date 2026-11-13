@@ -7,3 +7,7 @@ node_modules/
 
 # Clones de projetos open source usados como referência (ver ADR-0002)
 reference/
+/target/
+/dist/
+core/target/
+src-tauri/gen/

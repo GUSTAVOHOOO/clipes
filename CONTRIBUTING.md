@@ -21,17 +21,36 @@ git commit -s -m "feat: descreve a mudança"
 
 Verifique o rodapé com `git log -1 --format=full`. Se faltou a assinatura no último commit local, `git commit --amend -s` a acrescenta. Não assine em nome de outra pessoa.
 
-## Rodar e verificar o que existe hoje
+## Desenvolvimento
 
-O app desktop, o núcleo e o worker ainda não estão disponíveis neste repositório. O que pode ser executado hoje é a demonstração do design system Foco, com [Bun](https://bun.sh/) e Node.js instalados:
+O Clipes usa Tauri 2, React, TypeScript e Bun. Instale Rust (toolchain estável), Bun e os [pré-requisitos do Tauri para seu sistema](https://v2.tauri.app/start/prerequisites/). No Windows, instale também o WebView2 e as ferramentas de compilação C++ do Visual Studio.
 
 ```sh
-cd design-system
-bun install --frozen-lockfile
-bun run dev --host 127.0.0.1 --port 5180 --strictPort
+bun install
+bun run tauri dev
 ```
 
-Abra http://localhost:5180. Para verificar a compilação, execute `bun run build` em `design-system`. A [documentação da demonstração](design-system/README.md) explica seus limites e outras verificações, incluindo as que exigem Chrome no Windows. Ela não processa vídeo de produção.
+A janela mostra a versão retornada pelo núcleo. Para executar o harness sem abrir uma janela e observar o resultado e os eventos:
+
+```sh
+cargo run -p clipes-core --example headless
+```
+
+Para verificar o projeto:
+
+```sh
+cargo test --workspace
+bun run typecheck
+bun run build
+```
+
+## Contrato do núcleo
+
+O crate `core` não depende do Tauri. A UI chama o único adaptador `core_dispatch`, que repassa nome e argumentos JSON ao mesmo `dispatch` usado pelo harness. Cada módulo de feature registra seus próprios comandos com `inventory::submit!`; incluir o módulo no crate exige no máximo uma linha `mod`, sem alterar uma lista central de comandos. Os eventos `core-progress` usam o mesmo `ProgressEvent` serializável, com job, etapa, porcentagem, mensagem e erro tipado opcional. O callback do despacho entrega os eventos ao adaptador Tauri ou ao harness. Processos externos devem usar `core::process::spawn`, que inicia o executável diretamente, sem shell.
+
+## Demonstração do design system
+
+A demonstração Foco pode ser executada em design-system com bun install --frozen-lockfile e bun run dev --host 127.0.0.1 --port 5180 --strictPort. Abra http://localhost:5180. Execute bun run build em design-system para verificar a compilação. A [documentação](design-system/README.md) explica os limites e outras verificações. Ela não processa vídeo de produção.
 
 ## Configuração do GitHub para mantenedores
 
