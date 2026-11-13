@@ -43,6 +43,10 @@ Registro de que o criador da Fonte autorizou o uso do material, com origem e esc
 
 ## Material e processamento
 
+**Projeto** (Project)
+O conjunto portátil de tudo o que o usuário produz para um canal: Fontes, Transcrições, Cortes, Vídeos transformados e Empacotamento, junto com o Perfil de canal. Por padrão, é um por canal. A Fonte fica referenciada, não copiada: se o arquivo sumir, a Fonte fica offline até ser relocalizada.
+_Evitar_: biblioteca, workspace, pasta
+
 **Fonte** (Source)
 O vídeo original de onde os Cortes são extraídos: um arquivo local ou uma live já gravada (VOD).
 _Evitar_: vídeo original, input
