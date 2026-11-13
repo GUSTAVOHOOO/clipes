@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <link rel="icon" href="data:," />
+    <title>Clipes · design system</title>
+    <script>
+      // Aplica o tema salvo antes do primeiro pinte, para não piscar.
+      try {
+        var t = localStorage.getItem('clipes.tema') || 'escuro'
+        var claro = t === 'claro' || (t === 'sistema' && matchMedia('(prefers-color-scheme: light)').matches)
+        document.documentElement.dataset.theme = claro ? 'light' : 'dark'
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

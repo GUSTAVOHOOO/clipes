@@ -1,0 +1,5 @@
+node_modules
+dist
+shots/
+public/THIRD_PARTY_NOTICES.md
+*.log
