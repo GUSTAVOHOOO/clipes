@@ -15,7 +15,7 @@ Cada **Projeto** do Clipes é uma pasta `.clipes` com um banco **SQLite próprio
   - Corte, estilo, Roteiro e Empacotamento são **documentos JSON** com `schemaVersion` e `revision`, validados pelo núcleo.
   - Os tempos são inteiros em µs.
 - **Mídia referenciada:** a Fonte não é copiada para o Projeto, a menos que o usuário escolha copiar. Se o arquivo sumir, a Fonte fica offline e pode ser relocalizada. A Transcrição e a edição continuam acessíveis, mas o preview e o export ficam bloqueados. O app nunca troca a mídia sozinho.
-- **Migrações:** `PRAGMA user_version` com migrações numeradas, e uma migração própria por tipo de JSON. Antes de migrar, o app faz um backup verificado. Não há downgrade.
+- **Migrações:** migrações com identificadores textuais únicos por ticket, registrados no banco e aplicados em ordem, e uma migração própria por tipo de JSON. Antes de migrar, o app faz um backup verificado. Não há downgrade.
 - **Backup:** automático e rotativo, pela Online Backup API do SQLite. A restauração é testada com `integrity_check`.
 - **Desfazer:** pilha em memória por Corte, com arrastos agrupados, mais autosave e snapshots persistentes limitados. Sem event sourcing.
 - **Fila de jobs:** persistida no Projeto, com tentativas e checkpoints, e reconciliada após crash. Uma chamada paga ao Provedor com resultado incerto nunca é repetida às cegas.
