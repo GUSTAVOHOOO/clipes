@@ -1,0 +1,1 @@
+export const texts = { 'pt-BR': { title: 'Preferências', theme: 'Tema', dark: 'Escuro', light: 'Claro', language: 'Idioma' }, en: { title: 'Preferences', theme: 'Theme', dark: 'Dark', light: 'Light', language: 'Language' } } as const;
