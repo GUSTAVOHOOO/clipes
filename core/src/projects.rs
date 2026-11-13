@@ -28,9 +28,9 @@ struct Recent {
     name: String,
     path: PathBuf,
 }
-fn library(v: &Value) -> Result<PathBuf, CoreError> {
-    if let Some(p) = v.get("library").and_then(Value::as_str) {
-        return Ok(PathBuf::from(p));
+fn library() -> Result<PathBuf, CoreError> {
+    if let Some(dir) = std::env::var_os("CLIPES_DATA_DIR") {
+        return Ok(PathBuf::from(dir).join("projects.json"));
     }
     Ok(dirs::data_local_dir()
         .ok_or_else(|| error("library", "Diretório de dados indisponível"))?
@@ -105,7 +105,16 @@ fn migrate(conn: &mut Connection, path: &Path) -> Result<(), CoreError> {
         .filter(|m| !applied.iter().any(|id| id == m.id))
         .collect();
     if !pending.is_empty() {
-        backup(conn, &path.join("project.pre-migration.sqlite"))?;
+        let has_tables: bool = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table')",
+                [],
+                |r| r.get(0),
+            )
+            .map_err(|e| error("migration", e))?;
+        if has_tables {
+            backup(conn, &path.join("project.pre-migration.sqlite"))?;
+        }
         let tx = conn.transaction().map_err(|e| error("migration", e))?;
         tx.execute_batch(
             "CREATE TABLE IF NOT EXISTS schema_migrations (id TEXT PRIMARY KEY NOT NULL);",
@@ -144,7 +153,7 @@ fn open(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .query_row("SELECT name FROM project LIMIT 1", [], |r| r.get(0))
         .map_err(|e| error("invalid_project", e))?;
     remember(
-        &library(&v)?,
+        &library()?,
         Recent {
             name: name.clone(),
             path: path.clone(),
@@ -171,12 +180,12 @@ fn create(v: Value, events: &mut EventSink<'_>) -> CommandResult {
         conn.execute("INSERT INTO project (name) VALUES (?1)", [name])
             .map_err(|e| error("project_create", e))?;
         drop(conn);
-        open(json!({"path":path,"library":v["library"]}), events)
+        open(json!({"path":path}), events)
     })();
     result
 }
-fn recent(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let items = read_library(&library(&v)?)?;
+fn recent(_: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let items = read_library(&library()?)?;
     Ok(json!(items.into_iter().map(|p| json!({"available":p.path.join("project.sqlite").is_file(),"name":p.name,"path":p.path})).collect::<Vec<_>>()))
 }
 inventory::submit! { CommandRegistration { name:"projects.create", execute:create } }

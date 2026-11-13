@@ -16,15 +16,24 @@ fn project_lifecycle_and_library_rebuild() {
             .as_nanos()
     ));
     fs::create_dir_all(&root).unwrap();
-    let library = root.join("library.json");
+    let data_dir = root.join("data");
+    let library = data_dir.join("projects.json");
+    let victim = root.join("victim.json");
+    fs::write(&victim, "[]").unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", &data_dir);
     let run = |name, args| dispatch(name, args, &mut |_| {});
     let project = run(
         "projects.create",
-        json!({"parent":root,"name":"Canal","library":library}),
+        json!({"parent":root,"name":"Canal","library":victim}),
     )
     .unwrap();
+    assert_eq!(fs::read_to_string(&victim).unwrap(), "[]");
+    assert!(library.exists());
     let path = project["path"].as_str().unwrap();
     assert!(std::path::Path::new(path).join("project.sqlite").exists());
+    assert!(!std::path::Path::new(path)
+        .join("project.pre-migration.sqlite")
+        .exists());
     let conn =
         rusqlite::Connection::open(std::path::Path::new(path).join("project.sqlite")).unwrap();
     assert_eq!(
@@ -37,11 +46,12 @@ fn project_lifecycle_and_library_rebuild() {
     drop(conn);
     fs::remove_file(&library).unwrap();
     assert_eq!(
-        run("projects.open", json!({"path":path,"library":library})).unwrap()["name"],
+        run("projects.open", json!({"path":path,"library":victim})).unwrap()["name"],
         "Canal"
     );
+    assert_eq!(fs::read_to_string(&victim).unwrap(), "[]");
     assert_eq!(
-        run("projects.recent", json!({"library":library}))
+        run("projects.recent", json!({"library":victim}))
             .unwrap()
             .as_array()
             .unwrap()
@@ -50,9 +60,10 @@ fn project_lifecycle_and_library_rebuild() {
     );
     fs::remove_dir_all(std::path::Path::new(path)).unwrap();
     assert_eq!(
-        run("projects.recent", json!({"library":library})).unwrap()[0]["available"],
+        run("projects.recent", json!({"library":victim})).unwrap()[0]["available"],
         false
     );
+    std::env::remove_var("CLIPES_DATA_DIR");
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -107,14 +118,8 @@ fn migration_backup_is_valid_and_unknown_migration_is_rejected() {
     )
     .unwrap();
     drop(conn);
-    let library = root.join("library.json");
     // The initial schema migration runs, although this old database has no project row.
-    assert!(dispatch(
-        "projects.open",
-        json!({"path":path,"library":library}),
-        &mut |_| {}
-    )
-    .is_err());
+    assert!(dispatch("projects.open", json!({"path":path}), &mut |_| {}).is_err());
     let backup = Connection::open(path.join("project.pre-migration.sqlite")).unwrap();
     assert_eq!(
         backup
@@ -134,13 +139,9 @@ fn migration_backup_is_valid_and_unknown_migration_is_rejected() {
         .unwrap();
     drop(conn);
     assert_eq!(
-        dispatch(
-            "projects.open",
-            json!({"path":path,"library":library}),
-            &mut |_| {}
-        )
-        .unwrap_err()
-        .code,
+        dispatch("projects.open", json!({"path":path}), &mut |_| {})
+            .unwrap_err()
+            .code,
         "newer_project"
     );
     fs::remove_dir_all(root).unwrap();
