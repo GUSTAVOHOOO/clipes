@@ -11,6 +11,7 @@ let urlSettingsMock = {terms_accepted:false, download_dir:'/test/downloads'};
 let providerMock = { endpoint: '', model: '', nativeSchema: false, keyLastFour: null as string | null, remote: false, confirmed: false };
 export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   if (import.meta.env.VITE_CORE_MOCK === '1' && !isTauri()) {
+    if (name === 'diagnostic.get') return { text: "Clipes: 0.1.0\nSistema operacional: indisponível" } as T;
     if (name === 'projects.recent') return [] as T;
     if (name === 'projects.current') return (sourceTest ? { name:'Teste', path:'/test/Teste.clipes' } : null) as T;
     if (sourceTest && name === 'backups.list') return [] as T;

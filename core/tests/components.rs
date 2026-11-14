@@ -26,6 +26,7 @@ fn every_component_has_an_allowed_license() {
         let allowed = matches!(
             license,
             "MIT"
+                | "BSL-1.0"
                 | "Apache-2.0"
                 | "BSD-2-Clause"
                 | "BSD-3-Clause"

@@ -44,3 +44,5 @@ pub mod provider;
 mod sources;
 mod url_import;
 mod version;
+
+pub mod diagnostic;

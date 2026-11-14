@@ -4,7 +4,7 @@ import parse from 'spdx-expression-parse'
 const licenses = new Set([
   'MIT', 'Apache-2.0', 'BSD-2-Clause', 'BSD-3-Clause', 'ISC', 'Zlib',
   'Unicode-3.0', 'MPL-2.0', 'MIT-0', 'CDLA-Permissive-2.0', 'bzip2-1.0.6',
-  'OFL-1.1', '0BSD', 'Unlicense', 'Apache-2.0 WITH LLVM-exception',
+  'BSL-1.0', 'OFL-1.1', '0BSD', 'Unlicense', 'Apache-2.0 WITH LLVM-exception',
 ])
 function evaluate(node) {
   if (node.conjunction === 'and') return evaluate(node.left) && evaluate(node.right)

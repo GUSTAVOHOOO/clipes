@@ -3,7 +3,8 @@
 allow = [
   "MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Zlib",
   "Unicode-3.0", "MPL-2.0", "MIT-0", "CDLA-Permissive-2.0", "bzip2-1.0.6",
-  "OFL-1.1", "0BSD", "Unlicense", "Apache-2.0 WITH LLVM-exception",
+  # Boost é permissiva e compatível com Apache-2.0.
+  "BSL-1.0", "OFL-1.1", "0BSD", "Unlicense", "Apache-2.0 WITH LLVM-exception",
 ]
 
 [advisories]
@@ -15,6 +16,11 @@ ignore = [
   "RUSTSEC-2026-0459",
   # Macro de compilação sem código em runtime; depende do upstream gtk-rs/Tauri.
   "RUSTSEC-2024-0370",
+  # Apenas avisos de manutenção; crates absorvidas pelo zbus 6. São trazidas no
+  # Linux por tauri-plugin-opener 2.7.3 -> zbus 5.19; remover quando o upstream usar zbus 6.
+  "RUSTSEC-2026-0370", # zvariant
+  "RUSTSEC-2026-0371", # zbus_names
+  "RUSTSEC-2026-0372", # zvariant_derive
 ]
 
 [bans]
