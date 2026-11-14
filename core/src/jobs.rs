@@ -1,6 +1,6 @@
 use crate::{projects, CommandRegistration, CommandResult, EventSink};
 use serde_json::{json, Value};
-mod preview;
+pub(crate) mod preview;
 
 #[derive(Clone, Copy)]
 pub enum Safety {

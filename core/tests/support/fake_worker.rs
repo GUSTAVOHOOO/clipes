@@ -80,6 +80,109 @@ fn worker(scenario: &str) {
     }
 }
 
+/// Modo `transcribe` (CLIPES_FAKE_WORKER_MODE=transcribe): fala o protocolo de verdade e
+/// deriva as palavras do pedido, uma por segundo coberto (início em k+0,1 s). O áudio falso
+/// do ffmpeg falso guarda só a duração do bloco em segundos. Se CLIPES_FAKE_WORKER_CRASH
+/// apontar para um arquivo existente, o worker o apaga e morre no segundo pedido do processo;
+/// enquanto CLIPES_FAKE_WORKER_HOLD existir, segura o pedido (atendendo `cancel`).
+fn transcribe_worker() {
+    use std::sync::mpsc;
+    let (tx, rx) = mpsc::channel::<Value>();
+    std::thread::spawn(move || {
+        for line in std::io::stdin().lock().lines() {
+            let Ok(line) = line else { break };
+            if let Ok(value) = serde_json::from_str::<Value>(&line) {
+                if tx.send(value).is_err() {
+                    break;
+                }
+            }
+        }
+    });
+    let mut out = std::io::stdout().lock();
+    let mut requests = 0;
+    let send = |out: &mut std::io::StdoutLock<'_>, value: Value| {
+        writeln!(out, "{value}").unwrap();
+        out.flush().unwrap();
+    };
+    while let Ok(message) = rx.recv() {
+        match message["type"].as_str() {
+            Some("hello") => send(
+                &mut out,
+                serde_json::json!({"v":1,"type":"handshake","protocol":1,"worker":"fake","python":"fake","libs":{"faster-whisper":"fake"}}),
+            ),
+            Some("shutdown") => return,
+            Some("request") => {
+                requests += 1;
+                let id = message["id"].clone();
+                if requests == 2 {
+                    if let Some(flag) = std::env::var_os("CLIPES_FAKE_WORKER_CRASH") {
+                        let flag = PathBuf::from(flag);
+                        if flag.exists() {
+                            fs::remove_file(flag).unwrap();
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                let hold = std::env::var_os("CLIPES_FAKE_WORKER_HOLD").map(PathBuf::from);
+                let mut cancelled = false;
+                while hold.as_ref().is_some_and(|h| h.exists()) {
+                    if let Ok(m) = rx.recv_timeout(std::time::Duration::from_millis(20)) {
+                        cancelled |= m["type"] == "cancel";
+                    }
+                    if cancelled {
+                        break;
+                    }
+                }
+                if cancelled {
+                    send(
+                        &mut out,
+                        serde_json::json!({"v":1,"type":"error","id":id,"code":"cancelled","message":"Tarefa cancelada."}),
+                    );
+                    continue;
+                }
+                let params = &message["params"];
+                let seconds: f64 = params["audio"]
+                    .as_str()
+                    .and_then(|p| fs::read_to_string(p).ok())
+                    .and_then(|t| t.trim().parse().ok())
+                    .unwrap_or(-1.0);
+                if seconds < 0.0 || message["task"] != "transcribe" {
+                    send(
+                        &mut out,
+                        serde_json::json!({"v":1,"type":"error","id":id,"code":"internal","message":"Erro interno do worker."}),
+                    );
+                    continue;
+                }
+                let covered = if params["final"] == true {
+                    seconds
+                } else {
+                    (seconds - 2.0).max(1.0)
+                };
+                send(
+                    &mut out,
+                    serde_json::json!({"v":1,"type":"progress","id":id,"stage":"transcribing","percentage":50,"message":"Transcrevendo"}),
+                );
+                let words: Vec<Value> = (0..covered.floor() as i64)
+                    .map(|k| serde_json::json!({"text":"palavra","start_us":k * 1_000_000 + 100_000,"end_us":k * 1_000_000 + 500_000,"language":"pt"}))
+                    .collect();
+                let silences: Vec<Value> = (0..covered.floor() as i64)
+                    .flat_map(|k| {
+                        [
+                            serde_json::json!({"start_us":k * 1_000_000,"end_us":k * 1_000_000 + 100_000}),
+                            serde_json::json!({"start_us":k * 1_000_000 + 500_000,"end_us":(k + 1) * 1_000_000}),
+                        ]
+                    })
+                    .collect();
+                send(
+                    &mut out,
+                    serde_json::json!({"v":1,"type":"result","id":id,"data":{"covered_us":(covered * 1e6) as i64,"words":words,"silences":silences}}),
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
 fn uv(args: &[String]) {
     let exe = std::env::current_exe().unwrap();
     let dir = exe.parent().unwrap();
@@ -124,6 +227,9 @@ fn main() {
     let exe = std::env::current_exe().unwrap();
     if exe.file_stem().is_some_and(|s| s == "uv") {
         return uv(&args);
+    }
+    if std::env::var("CLIPES_FAKE_WORKER_MODE").as_deref() == Ok("transcribe") {
+        return transcribe_worker();
     }
     let scenario = args
         .iter()

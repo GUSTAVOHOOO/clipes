@@ -102,6 +102,20 @@ pub(super) fn uv_version_for(settings: &Settings) -> Option<String> {
     (output.status.success() && Some(version.as_str()) == manifest_uv_version()).then_some(version)
 }
 
+/// O worker está instalado (ambiente criado e estado gravado)?
+pub(super) fn installed(settings: &Settings) -> bool {
+    let worker = worker_dir(settings);
+    state_path(&worker).is_file() && venv_python(&worker).is_file()
+}
+
+/// O worker foi instalado com as bibliotecas CUDA (GPU NVIDIA na instalação)?
+pub(super) fn cuda_installed(settings: &Settings) -> bool {
+    fs::read(state_path(&worker_dir(settings)))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+        .is_some_and(|state| state["cuda"] == true)
+}
+
 /// Há GPU NVIDIA? Sem ela, o worker usa só a variante CPU (sem libs CUDA).
 fn has_nvidia_gpu() -> bool {
     crate::process::spawn("nvidia-smi", ["-L"], None)

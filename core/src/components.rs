@@ -1,3 +1,4 @@
+pub(crate) mod models;
 mod update;
 pub(crate) mod worker;
 use crate::{CommandRegistration, CommandResult, CoreError, EventSink, ProgressEvent};
@@ -72,7 +73,7 @@ fn manifest_command(_: Value, _: &mut EventSink<'_>) -> CommandResult {
 }
 
 #[derive(Serialize, Deserialize)]
-struct Settings {
+pub(crate) struct Settings {
     data_dir: PathBuf,
     cache_dir: PathBuf,
     cache_limit_bytes: u64,
@@ -386,11 +387,22 @@ fn fetch(
     size: u64,
     path: &Path,
     cancelled: &AtomicBool,
-    mut progress: impl FnMut(u8),
+    progress: impl FnMut(u8),
 ) -> Result<(), CoreError> {
     let client = reqwest::blocking::Client::builder()
         .build()
         .map_err(|e| error("download", e))?;
+    fetch_with(&client, url, sha, size, path, cancelled, progress)
+}
+fn fetch_with(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    sha: &str,
+    size: u64,
+    path: &Path,
+    cancelled: &AtomicBool,
+    mut progress: impl FnMut(u8),
+) -> Result<(), CoreError> {
     let mut offset = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
     if offset > size {
         fs::remove_file(path).map_err(|e| error("download", e))?;
