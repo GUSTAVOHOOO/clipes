@@ -27,6 +27,9 @@ pub struct Price {
     pub model: String,
     pub input_per_million: f64,
     pub output_per_million: f64,
+    /// Official pricing page the embedded price was read from; absent in user overrides.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -410,3 +413,27 @@ inventory::submit! { CommandRegistration { name: "provider.cost.list", execute: 
 inventory::submit! { CommandRegistration { name: "provider.prices.get", execute: cmd_prices } }
 inventory::submit! { CommandRegistration { name: "provider.prices.set", execute: cmd_price_set } }
 inventory::submit! { CommandRegistration { name: "provider.prices.clear", execute: cmd_price_clear } }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn embedded_table_is_dated_unique_and_sourced() {
+        let table = embedded();
+        assert_eq!(table.updated_at.len(), 10);
+        let mut seen = std::collections::HashSet::new();
+        for p in &table.prices {
+            assert!(
+                seen.insert((p.provider.clone(), p.model.clone())),
+                "{}",
+                p.model
+            );
+            assert!(valid_price(p));
+            assert!(p
+                .source
+                .as_deref()
+                .is_some_and(|u| u.starts_with("https://")));
+        }
+    }
+}
