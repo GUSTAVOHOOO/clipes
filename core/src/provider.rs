@@ -260,10 +260,13 @@ mod settings {
                 crate::assistant::Route::Unset => cli = crate::provider_cli::selected()?,
             }
         }
+        // Per task (app settings) or by Project (project.sqlite): either vetoes. Same point and
+        // same error, before any network access. "Redo with the strong one" and any future
+        // escalation resolve the route here, so they inherit the veto.
         let local_only = match task {
             Some(task) => crate::assistant::local_only(task)?,
             None => false,
-        };
+        } || crate::projects::project_local_only()?;
         if let Some(kind) = cli {
             // CLIs are never local.
             return if local_only {
