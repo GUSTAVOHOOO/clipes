@@ -88,11 +88,17 @@ fn settings(c: &Connection) -> Result<(u64, u64), CoreError> {
     c.query_row(
         "SELECT interval_seconds,copies FROM backup_settings LIMIT 1",
         [],
-        |r| Ok((r.get(0)?, r.get(1)?)),
+        |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)),
     )
     .optional()
-    .map(|row| row.unwrap_or((INTERVAL, COPIES)))
-    .map_err(|_| failure())
+    .map_err(|_| failure())?
+    .map_or(Ok((INTERVAL, COPIES)), |(interval, copies)| {
+        // rusqlite 0.42 não lê u64; valor negativo continua sendo falha.
+        Ok((
+            u64::try_from(interval).map_err(|_| failure())?,
+            u64::try_from(copies).map_err(|_| failure())?,
+        ))
+    })
 }
 fn is_id(name: &str, prefix: &str) -> bool {
     name.strip_prefix(prefix)
