@@ -10,7 +10,7 @@ let sourceItems = [
 let urlSettingsMock = {terms_accepted:false, download_dir:'/test/downloads'};
 let jobItems = [
   { id: 1, kind: 'preview', state: 'running', progress: 42, project: 'test-project' },
-  { id: 2, kind: 'provider', state: 'uncertain', progress: 0, project: 'test-project' },
+  { id: 2, kind: 'ai:example', safety: 'paid', state: 'uncertain', progress: 0, project: 'test-project' },
 ];
 let providerMock = { kind: 'openai', endpoint: '', model: '', nativeSchema: false, keyLastFour: null as string | null, remote: false, confirmed: false, confirmedEndpoints: [] as string[] };
 type ProfileMock = { id: string; label: string; kind: string; endpoint: string; model: string; nativeSchema: boolean; ownKey: boolean; keyLastFour: string | null };
@@ -53,6 +53,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'projects.recent') return [] as T;
     if (name === 'projects.current') return (sourceTest ? { name:'Teste', path:'/test/Teste.clipes', id:'test-project' } : null) as T;
     if (name === 'jobs.list') return (sourceTest ? jobItems : []) as T;
+    if (sourceTest && name === 'jobs.estimate') return { safety: 'paid', estimate: { kind: 'unknown' } } as T;
     if (sourceTest && (name === 'jobs.retry' || name === 'jobs.discard' || name === 'jobs.cancel')) {
       const {id, confirmed} = args as {id:number; confirmed?:boolean};
       if (name === 'jobs.retry' && !confirmed) throw {code:'confirmation_required', message:'Confirmação obrigatória'};
