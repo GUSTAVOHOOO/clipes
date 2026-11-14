@@ -71,6 +71,22 @@ try {
   await workerDialog.getByRole('button', { name: 'Cancelar' }).click();
   await workerDialog.waitFor({ state: 'hidden' });
 
+  const turboCard = page.getByRole('article', { name: /Whisper large-v3-turbo/ });
+  assert.match(await turboCard.innerText(), /1,62 GB|1\.62 GB/);
+  assert.match(await turboCard.innerText(), /MIT/);
+  assert.match(await turboCard.innerText(), /recomendado para esta máquina/);
+  assert.match(await page.getByRole('article', { name: /Whisper small/ }).innerText(), /Instalado/);
+  await turboCard.getByRole('button', { name: 'Baixar modelo' }).click();
+  const modelDialog = page.getByRole('alertdialog', { name: 'Baixar o modelo?' });
+  await modelDialog.waitFor();
+  const modelDialogText = await modelDialog.innerText();
+  assert.match(modelDialogText, /Licença: MIT/);
+  assert.match(modelDialogText, /Tamanho: 1\.62 GB/);
+  assert.match(modelDialogText, /SHA-256/);
+  assert.equal(await modelDialog.getByRole('link', { name: 'Fonte e licença do modelo' }).getAttribute('href'), 'https://huggingface.co/dropbox-dash/faster-whisper-large-v3-turbo/tree/0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf');
+  await modelDialog.getByRole('button', { name: 'Cancelar' }).click();
+  await modelDialog.waitFor({ state: 'hidden' });
+
   page.once('dialog', dialog => dialog.dismiss());
   await page.getByRole('button', { name: 'Baixar' }).first().click();
   await page.screenshot({ path: 'shots/components.png' });
@@ -198,6 +214,13 @@ try {
   await page.getByRole('button', {name:'Baixar por URL'}).click();
   await page.getByText('/test/downloaded.mp4').first().waitFor();
   assert.equal(await terms.count(), 0);
+  const downloadedRow = page.locator('li').filter({hasText:'/test/downloaded.mp4'}).first();
+  await downloadedRow.getByRole('button', {name:'Transcrever'}).click();
+  await downloadedRow.getByText('Transcrevendo: 40%').waitFor();
+  await downloadedRow.getByRole('button', {name:'Cancelar transcrição'}).click();
+  await downloadedRow.getByText(/Transcrição interrompida · 40%/).waitFor();
+  await downloadedRow.getByRole('button', {name:'Retomar'}).click();
+  await downloadedRow.getByText('Transcrevendo: 40%').waitFor();
   const changedRow = page.locator('li').filter({ hasText:'/test/changed.mp4' });
   const offlineRow = page.locator('li').filter({ hasText:'/test/offline.mp4' });
   await changedRow.getByRole('button', {name:'Verificar identidade'}).click();
