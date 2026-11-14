@@ -44,6 +44,8 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'app.version') return { version } as T;
     if (name === 'components.ytdlp.status') return {installed:true,version:'test'} as T;
     if (name === 'components.ytdlp.update') return {version:'test'} as T;
+    if (name === 'components.worker.status') return { installed: true, outdated: false, cuda: false, uv: '0.13.8', handshake: { protocol: 1, worker: '0.1.0', python: '3.12.16', libs: { 'faster-whisper': '1.2.1', onnxruntime: '1.32.0', numpy: '2.4.6', 'opencv-python-headless': null } } } as T;
+    if (name === 'components.worker.install') return { handshake: null } as T;
     if (name === 'components.ffmpeg.status') return { incomplete: false } as T;
     if (name === 'provider.status') return { ...providerMock } as T;
     if (name === 'provider.cli.status') return { ...providerCliMock } as T;
@@ -63,6 +65,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'components.manifest') return [
       { id: 'ffmpeg', version: 'test', size: 2000000, license: 'GPL-3.0-or-later', source_url: 'https://github.com/FFmpeg/FFmpeg' },
       { id: 'yt-dlp', version: 'test', size: 1000000, license: 'Unlicense', source_url: 'https://github.com/yt-dlp/yt-dlp' },
+      { id: 'uv', version: '0.13.8', size: 15000000, license: 'Apache-2.0', source_url: 'https://github.com/astral-sh/uv' },
     ] as T;
     if (name === 'components.settings.get') return { data_dir: '/test/data', cache_dir: '/test/cache', cache_limit_bytes: 10000000000, ffmpeg_path: null } as T;
     throw new Error(`Unknown core command: ${name}`);
