@@ -47,12 +47,12 @@ try {
   assert.match(await page.locator('main').innerText(), /Unlicense/);
   assert.equal(await page.getByLabel('Limite do cache (GB)').inputValue(), '10');
   await page.getByRole('button', {name:'Atualizar yt-dlp'}).click();
-  const updateDialog = page.getByRole('alertdialog', {name:'Atualizar yt-dlp?'});
-  await updateDialog.waitFor();
-  assert.match(await updateDialog.innerText(), /Versão instalada: test/);
-  await updateDialog.getByRole('button', {name:'Cancelar'}).click();
+  const ytDlpUpdateDialog = page.getByRole('alertdialog', {name:'Atualizar yt-dlp?'});
+  await ytDlpUpdateDialog.waitFor();
+  assert.match(await ytDlpUpdateDialog.innerText(), /Versão instalada: test/);
+  await ytDlpUpdateDialog.getByRole('button', {name:'Cancelar'}).click();
   await page.getByRole('button', {name:'Atualizar yt-dlp'}).click();
-  await updateDialog.getByRole('button', {name:'Atualizar',exact:true}).click();
+  await ytDlpUpdateDialog.getByRole('button', {name:'Atualizar',exact:true}).click();
   await page.getByText('Verificação de atualização concluída.').waitFor();
 
   page.once('dialog', dialog => dialog.dismiss());
