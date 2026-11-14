@@ -24,3 +24,9 @@ fn download_requires_confirmation() {
     .unwrap_err();
     assert_eq!(err.code, "confirmation_required");
 }
+
+#[test]
+fn yt_dlp_update_requires_confirmation() {
+    let err = dispatch("components.ytdlp.update", json!({}), &mut |_| {}).unwrap_err();
+    assert_eq!(err.code, "confirmation_required");
+}

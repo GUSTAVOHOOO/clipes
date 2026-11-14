@@ -36,6 +36,15 @@ try {
   assert.match(await page.locator('main').innerText(), /GPL-3\.0-or-later/);
   assert.match(await page.locator('main').innerText(), /Unlicense/);
   assert.equal(await page.getByLabel('Limite do cache (GB)').inputValue(), '10');
+  await page.getByRole('button', {name:'Atualizar yt-dlp'}).click();
+  const updateDialog = page.getByRole('alertdialog', {name:'Atualizar yt-dlp?'});
+  await updateDialog.waitFor();
+  assert.match(await updateDialog.innerText(), /Versão instalada: test/);
+  await updateDialog.getByRole('button', {name:'Cancelar'}).click();
+  await page.getByRole('button', {name:'Atualizar yt-dlp'}).click();
+  await updateDialog.getByRole('button', {name:'Atualizar',exact:true}).click();
+  await page.getByText('Verificação de atualização concluída.').waitFor();
+
   page.once('dialog', dialog => dialog.dismiss());
   await page.getByRole('button', { name: 'Baixar' }).first().click();
   await page.screenshot({ path: 'shots/components.png' });
@@ -87,6 +96,20 @@ try {
   await page.screenshot({ path: 'shots/app-dark.png' });
   await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
   await page.goto(`${url}?source-test=1`);
+  await page.getByLabel('URL do vídeo').fill('https://example.com/video');
+  await page.getByRole('button', {name:'Baixar por URL'}).click();
+  const terms = page.getByRole('alertdialog', {name:'Aviso sobre os Termos'});
+  await terms.waitFor();
+  assert.match(await terms.innerText(), /Termos do YouTube proíbem baixar conteúdo sem autorização/);
+  await terms.getByRole('button', {name:'Cancelar'}).click();
+  await page.getByRole('button', {name:'Baixar por URL'}).click();
+  await terms.getByRole('button', {name:'Entendi e continuar'}).click();
+  await page.getByText('/test/downloaded.mp4').waitFor();
+  await page.getByLabel('Permissão').selectOption('none');
+  await page.getByRole('button', {name:'Importar Fonte'}).click();
+  await page.getByRole('button', {name:'Baixar por URL'}).click();
+  await page.getByText('/test/downloaded.mp4').first().waitFor();
+  assert.equal(await terms.count(), 0);
   const changedRow = page.locator('li').filter({ hasText:'/test/changed.mp4' });
   const offlineRow = page.locator('li').filter({ hasText:'/test/offline.mp4' });
   await changedRow.getByRole('button', {name:'Verificar identidade'}).click();

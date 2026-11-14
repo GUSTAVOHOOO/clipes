@@ -36,6 +36,7 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Sintoma:** teste de Provedor espera `provider_http`, mas recebe `network` no CI Windows.
 - **Causa:** o servidor falso responde e fecha antes de ler a requisição inteira; o fechamento pode causar reset TCP. Um socket aceito de listener não bloqueante também pode permanecer não bloqueante no Windows.
 - **Ação:** coloque o socket aceito em modo bloqueante com timeout e leia os cabeçalhos até `\r\n\r\n` e o corpo inteiro pelo `Content-Length` antes de responder; teste também a requisição fragmentada.
+- **Cancelamento de download:** não feche uma resposta com `Content-Length` maior que o corpo enviado para simular progresso: no Windows a leitura pode falhar antes do callback. Mantenha a resposta aberta e sincronize a entrega do restante com o callback de progresso.
 
 ### Sem CI
 - Até o PR #86 entrar, o repo não tinha CI (`gh pr checks` responde `no checks reported`). Sem checks, revise pelo diff, pelos critérios de aceite e pela evidência de testes do worker, e diga isso no resumo.
@@ -96,3 +97,7 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Sintoma:** testes de integridade falham no SHA-256 dos JSON revisados, embora o conteúdo textual seja o mesmo.
 - **Causa:** `core.autocrlf` converteu LF para CRLF; o manifesto fixa o hash dos bytes com LF.
 - **Ação:** preserve ou restaure LF nos JSON afetados antes de conferir os hashes; não atualize o manifesto para aceitar uma conversão local.
+
+### Pasta de downloads ausente em CI Linux
+- **Sintoma:** `dirs::download_dir()` retorna `None` no runner sem configuração de diretórios XDG.
+- **Ação:** quando Vídeos e Downloads do sistema não estiverem configurados, use `~/Downloads/Clipes`; isole os dados do teste com `CLIPES_DATA_DIR`.
