@@ -7,6 +7,7 @@ let sourceItems = [
   { id: 2, path: '/test/offline.mp4', status: 'offline', available: false, verified: false, permission: {status:'none'} },
   { id: 3, path: '/test/mismatch.mp4', status: 'changed', available: false, verified: true, permission: {status:'none'} },
 ];
+let urlSettingsMock = {terms_accepted:false, download_dir:'/test/downloads'};
 let providerMock = { endpoint: '', model: '', nativeSchema: false, keyLastFour: null as string | null, remote: false, confirmed: false };
 export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   if (import.meta.env.VITE_CORE_MOCK === '1' && !isTauri()) {
@@ -14,7 +15,13 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'projects.current') return (sourceTest ? { name:'Teste', path:'/test/Teste.clipes' } : null) as T;
     if (sourceTest && name === 'backups.list') return [] as T;
     if (sourceTest && name === 'backups.settings.get') return { interval_seconds: 1800, copies: 10 } as T;
+    if (name === 'sources.url.settings.get') return urlSettingsMock as T;
+    if (name === 'sources.url.settings.set') { urlSettingsMock = {...urlSettingsMock, ...(args as typeof urlSettingsMock)}; return urlSettingsMock as T; }
     if (sourceTest && name === 'sources.list') return sourceItems as T;
+    if (sourceTest && name === 'sources.url.download') return {path:'/test/downloaded.mp4',url:(args as {url:string}).url} as T;
+    if (sourceTest && name === 'sources.inspect') return {format:{duration:'12'},streams:[{index:0,codec_type:'audio',codec_name:'aac'}]} as T;
+    if (sourceTest && name === 'sources.import') { const a=args as {path:string;permission:{status:string};origin_url?:string}; const item={id:4,path:a.path,status:'available',available:true,verified:true,permission:a.permission}; sourceItems.push(item); return {...item,origin_url:a.origin_url} as T; }
+
     if (sourceTest && (name === 'sources.hash' || name === 'sources.relocate')) {
       const { id, confirmed } = args as { id: number; confirmed?: boolean };
       if (!confirmed) throw { code:'confirmation_required', message:'confirmation required' };
