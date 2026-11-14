@@ -83,17 +83,47 @@ fn backup_restore_and_reject_corruption() {
         json!({"interval_seconds":1,"copies":2}),
     )
     .unwrap();
-    let writer = std::thread::spawn(|| {
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let writer = std::thread::spawn(move || {
         projects::with_writer(|conn| {
             conn.execute("UPDATE project SET name='Concorrente'", [])?;
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            entered_tx.send(()).unwrap();
+            release_rx.recv().unwrap();
             Ok(())
         })
         .unwrap()
     });
-    run("backups.create", json!({})).unwrap();
+    entered_rx.recv().unwrap();
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    let backup = std::thread::spawn(move || {
+        done_tx
+            .send(dispatch("backups.create", json!({}), &mut |_| {}))
+            .unwrap();
+    });
+    assert!(done_rx
+        .recv_timeout(std::time::Duration::from_millis(100))
+        .is_err());
+    release_tx.send(()).unwrap();
     writer.join().unwrap();
+    done_rx.recv().unwrap().unwrap();
+    backup.join().unwrap();
     let before_timer = run("backups.list", json!({})).unwrap();
+    let backup_id = before_timer
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|b| b["before_restore"] == false)
+        .unwrap()["id"]
+        .as_str()
+        .unwrap();
+    let copy = rusqlite::Connection::open(path.join("backups").join(backup_id)).unwrap();
+    assert_eq!(
+        copy.query_row("SELECT name FROM project", [], |r| r.get::<_, String>(0))
+            .unwrap(),
+        "Concorrente"
+    );
+    drop(copy);
     projects::with_writer(|conn| {
         conn.execute("UPDATE project SET name='Concorrente'", [])?;
         Ok(())
