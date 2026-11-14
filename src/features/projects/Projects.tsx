@@ -3,6 +3,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { coreDispatch } from '@/lib/core';
 import { Button } from '@/components/ui/Button';
 import { useText } from '@/lib/i18n';
+import { Backups } from './Backups';
 
 type Project = { name: string; path: string; available: boolean };
 const texts = {
@@ -14,7 +15,7 @@ export function Projects() {
   const [items, setItems] = useState<Project[]>([]); const [name, setName] = useState('');
   const [current, setCurrent] = useState<Project | null>(null); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
   async function refresh() { setItems(await coreDispatch<Project[]>('projects.recent', {})); }
-  useEffect(() => { refresh().catch((e) => setError(String(e?.message ?? e))); }, []);
+  useEffect(() => { refresh().catch((e) => setError(String(e?.message ?? e))); coreDispatch<Project | null>('projects.current', {}).then(setCurrent).catch((e) => setError(String(e?.message ?? e))); }, []);
   async function perform(action: () => Promise<Project | null>) {
     setError(''); setBusy(true);
     try { const result = await action(); if (result) { setCurrent(result); await refresh(); } }
@@ -29,6 +30,7 @@ export function Projects() {
       <Button disabled={busy} onClick={() => perform(async () => { const path = await choose(); return path ? coreDispatch<Project>('projects.open', {path}) : null; })}>{t.opening}</Button></div>
     {error && <p role="alert" className="mt-4 text-danger">{t.error} {error}</p>}
     {current && <p className="mt-6 text-sm">{t.current}: <strong>{current.name}</strong></p>}
+    {current && <Backups projectPath={current.path} onRestored={async () => setCurrent(await coreDispatch<Project | null>('projects.current', {}))} />}
     <h2 className="mt-8 text-base font-semibold">{t.recent}</h2>
     {items.length === 0 ? <p className="mt-3 text-fg-2">{t.empty}</p> : <ul className="mt-3 divide-y divide-line border-y border-line">{items.map(item => <li key={item.path} className="flex flex-wrap items-center justify-between gap-3 py-3"><div className="min-w-0"><strong>{item.name}</strong><p className="break-all text-sm text-fg-2">{item.path}</p></div>{item.available ? <Button disabled={busy} onClick={() => perform(() => coreDispatch<Project>('projects.open', {path:item.path}))}>{t.opening}</Button> : <span className="text-sm text-fg-2">{t.unavailable}</span>}</li>)}</ul>}
   </section>;

@@ -4,9 +4,11 @@ use std::{
     fs,
     time::{SystemTime, UNIX_EPOCH},
 };
+static PROJECT_TEST: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[test]
 fn project_lifecycle_and_library_rebuild() {
+    let _guard = PROJECT_TEST.lock().unwrap();
     let root = std::env::temp_dir().join(format!(
         "clipes-project-{}-{}",
         std::process::id(),
@@ -58,6 +60,7 @@ fn project_lifecycle_and_library_rebuild() {
             .len(),
         1
     );
+    run("projects.close", json!({})).unwrap();
     fs::remove_dir_all(std::path::Path::new(path)).unwrap();
     assert_eq!(
         run("projects.recent", json!({"library":victim})).unwrap()[0]["available"],
@@ -100,6 +103,7 @@ fn document_envelopes_are_validated_by_type() {
 
 #[test]
 fn migration_backup_is_valid_and_unknown_migration_is_rejected() {
+    let _guard = PROJECT_TEST.lock().unwrap();
     use rusqlite::Connection;
     let root = std::env::temp_dir().join(format!(
         "clipes-migration-{}-{}",

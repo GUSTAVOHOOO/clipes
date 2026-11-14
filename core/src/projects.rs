@@ -8,6 +8,9 @@ use std::{
     time::Duration,
 };
 
+mod backups;
+pub use backups::{start_job, with_writer, ProjectJob};
+
 fn error(code: &str, e: impl ToString) -> CoreError {
     CoreError {
         code: code.into(),
@@ -148,10 +151,7 @@ fn open(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         return Err(error("invalid_project", "Escolha uma pasta .clipes"));
     }
     let path = path.canonicalize().map_err(|e| error("project_open", e))?;
-    let conn = open_db(&path)?;
-    let name: String = conn
-        .query_row("SELECT name FROM project LIMIT 1", [], |r| r.get(0))
-        .map_err(|e| error("invalid_project", e))?;
+    let name = backups::open_session(path.clone())?;
     remember(
         &library()?,
         Recent {
