@@ -85,6 +85,43 @@ try {
   await page.getByText('Connection tested successfully.').waitFor();
   await page.getByLabel('Theme').selectOption('escuro');
   await page.screenshot({ path: 'shots/app-dark.png' });
+  await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
+  await page.goto(`${url}?source-test=1`);
+  const changedRow = page.locator('li').filter({ hasText:'/test/changed.mp4' });
+  const offlineRow = page.locator('li').filter({ hasText:'/test/offline.mp4' });
+  await changedRow.getByRole('button', {name:'Verificar identidade'}).click();
+  const changedDialog = page.getByRole('alertdialog', {name:'Confirmar Fonte alterada'});
+  await changedDialog.waitFor({timeout:1500});
+  assert.match(await changedDialog.innerText(), /mesmo caminho/i);
+  assert.match(await changedDialog.innerText(), /não foi comparad/i);
+  await changedDialog.getByRole('button', {name:'Cancelar'}).waitFor();
+  assert.equal(await changedDialog.getByRole('button', {name:'Cancelar'}).evaluate(e => e === document.activeElement), true);
+  for (let i=0; i<4; i++) { await page.keyboard.press('Tab'); await page.waitForFunction(() => document.querySelector('[role=alertdialog]')?.contains(document.activeElement), null, {timeout:2000}); }
+  await page.keyboard.press('Escape');
+  await changedDialog.waitFor({state:'hidden'});
+  assert.match(await changedRow.innerText(), /Fonte alterada/);
+  assert.equal(await changedRow.getByRole('button', {name:'Verificar identidade'}).evaluate(e => e === document.activeElement), true);
+  await changedRow.getByRole('button', {name:'Verificar identidade'}).click();
+  await changedDialog.getByRole('button', {name:'Confirmar'}).click();
+  await changedRow.getByText(/Disponível/).waitFor();
+  await offlineRow.getByRole('button', {name:'Relocalizar'}).click();
+  const relocateDialog = page.getByRole('alertdialog', {name:'Confirmar relocalização'});
+  await relocateDialog.waitFor();
+  assert.match(await relocateDialog.innerText(), /Tamanho, duração e amostras conferem/);
+  assert.match(await relocateDialog.innerText(), /hash completo original não está disponível/);
+  for (let i=0; i<4; i++) { await page.keyboard.press('Tab'); await page.waitForFunction(() => document.querySelector('[role=alertdialog]')?.contains(document.activeElement), null, {timeout:2000}); }
+  await page.keyboard.press('Escape');
+  await relocateDialog.waitFor({state:'hidden'});
+  assert.match(await offlineRow.innerText(), /Fonte offline/);
+  await offlineRow.getByRole('button', {name:'Relocalizar'}).click();
+  await relocateDialog.getByRole('button', {name:'Confirmar'}).click();
+  await offlineRow.getByText(/Disponível/).waitFor();
+  const mismatchRow = page.locator('li').filter({ hasText:'/test/mismatch.mp4' });
+  await mismatchRow.getByRole('button', {name:'Verificar identidade'}).click();
+  await changedDialog.waitFor();
+  assert.match(await changedDialog.innerText(), /hash completo não confere com o original/);
+  await changedDialog.getByRole('button', {name:'Cancelar'}).click();
+  assert.match(await mismatchRow.innerText(), /Fonte alterada/);
   assert.deepEqual(errors, []);
   console.log('UI keyboard, preferences, about, drawer and screenshots: OK');
 } finally { await browser?.close(); server.kill(); }

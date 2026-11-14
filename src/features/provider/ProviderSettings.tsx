@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertDialog as AD } from '@base-ui/react/alert-dialog';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { coreDispatch } from '@/lib/core';
 import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
@@ -17,7 +17,6 @@ export function ProviderSettings() {
   const [busy, setBusy] = useState(false);
   const [consentEndpoint, setConsentEndpoint] = useState<string | null>(null);
   const testButton = useRef<HTMLButtonElement>(null);
-  const cancelButton = useRef<HTMLButtonElement>(null);
   const input = 'foco mt-2 block h-9 w-full max-w-lg rounded-md border border-line-strong bg-field px-3 text-fg';
   async function refresh() { const value = await coreDispatch<Status>('provider.status', {}); setSaved(value); setStatus(value); }
   const dirty = status.endpoint !== saved.endpoint || status.model !== saved.model || status.nativeSchema !== saved.nativeSchema;
@@ -49,18 +48,8 @@ export function ProviderSettings() {
     </form>
     <div className="mt-6"><Button ref={testButton} type="button" disabled={busy || dirty || !saved.endpoint || !saved.model} onClick={() => void run(test, t.success)}>{t.test}</Button></div>
     {message && <p className="mt-4 text-sm" role="status">{message}</p>}
-    <AD.Root open={consentEndpoint !== null} onOpenChange={open => { if (!open) setConsentEndpoint(null); }}>
-      <AD.Portal>
-        <AD.Backdrop className="fixed inset-0 bg-scrim" style={{ zIndex: 'var(--z-scrim)' }} />
-        <AD.Popup initialFocus={cancelButton} finalFocus={testButton} className="fixed top-[14vh] left-1/2 flex max-h-[76vh] w-[min(420px,calc(100vw-32px))] -translate-x-1/2 flex-col overflow-hidden rounded-xl border border-line-strong bg-surface text-fg shadow-dialog outline-none" style={{ zIndex: 'var(--z-dialog)' }}>
-          <div className="px-5 pt-4 pb-3"><AD.Title className="text-lg font-semibold">{t.confirmTitle}</AD.Title><AD.Description className="mt-1 text-sm text-fg-2">{t.confirm}</AD.Description></div>
-          <p className="break-all px-5 pb-4">{consentEndpoint}</p>
-          <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">
-            <AD.Close render={<Button ref={cancelButton} />}>{t.cancel}</AD.Close>
-            <Button variante="primario" onClick={() => { const endpoint = consentEndpoint; setConsentEndpoint(null); if (endpoint) void run(async () => { await coreDispatch('provider.confirm', { endpoint }); await coreDispatch('provider.test', {}); }, t.success); }}>{t.send}</Button>
-          </div>
-        </AD.Popup>
-      </AD.Portal>
-    </AD.Root>
+    <ConfirmDialog open={consentEndpoint !== null} onOpenChange={open => { if (!open) setConsentEndpoint(null); }} title={t.confirmTitle} description={t.confirm} cancelLabel={t.cancel} confirmLabel={t.send} finalFocus={testButton} onConfirm={() => { const endpoint = consentEndpoint; setConsentEndpoint(null); if (endpoint) void run(async () => { await coreDispatch('provider.confirm', { endpoint }); await coreDispatch('provider.test', {}); }, t.success); }}>
+      <p className="break-all px-5 pb-4">{consentEndpoint}</p>
+    </ConfirmDialog>
   </section>;
 }
