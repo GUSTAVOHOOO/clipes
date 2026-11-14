@@ -1,6 +1,16 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
+  "description": "Permissões mínimas do shell do Clipes",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:allow-open", "dialog:allow-save", "clipboard-manager:allow-write-text", { "identifier": "opener:allow-open-url", "allow": [{ "url": "https://github.com/GUSTAVOHOOO/clipes/issues/new*" }] }]
+  "permissions": [
+    "core:default",
+    "updater:allow-check",
+    "updater:allow-download-and-install",
+    "process:allow-restart",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "clipboard-manager:allow-write-text",
+    { "identifier": "opener:allow-open-url", "allow": [{ "url": "https://github.com/GUSTAVOHOOO/clipes/issues/new*" }] }
+  ]
 }

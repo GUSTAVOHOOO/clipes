@@ -11,3 +11,5 @@ O beta do Windows ainda não tem assinatura de código. Por isso, o Microsoft De
 ## Publicação de uma release
 
 Após integrar o fluxo e ajustar as versões do aplicativo para a versão desejada, o mantenedor cria e envia uma tag no commit a publicar, por exemplo `git tag v0.1.0` e `git push origin v0.1.0`. A execução de **Instaladores e release** gera os três instaladores, cria `SHA256SUMS.txt` e publica uma release com notas geradas pelo GitHub. Pull requests executam somente os builds e disponibilizam os instaladores como artefatos do Actions, sem criar release.
+
+As atualizações usam pacotes assinados do Tauri. Para gerar e proteger o par de chaves, configurar os secrets `TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` e definir a chave pública, siga [o guia de contribuição](CONTRIBUTING.md#chave-do-updater). O app mostra a versão e as notas e só baixa a atualização depois da confirmação.
