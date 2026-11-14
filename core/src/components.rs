@@ -62,6 +62,7 @@ fn error(code: &str, message: impl ToString) -> CoreError {
     CoreError {
         code: code.into(),
         message: message.to_string(),
+        usage: None,
     }
 }
 fn manifest_command(_: Value, _: &mut EventSink<'_>) -> CommandResult {

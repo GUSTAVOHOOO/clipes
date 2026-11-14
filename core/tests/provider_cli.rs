@@ -53,7 +53,7 @@ fn headless_cli_contract() {
         run("provider.cli.confirm", json!({"kind":kind})).unwrap();
         assert_eq!(
             run("provider.structured", request.clone()).unwrap(),
-            json!({"schemaVersion":1})
+            json!({"data":{"schemaVersion":1},"usage":null,"calls":1})
         );
         let data = fs::read_to_string(&log).unwrap();
         assert!(data.contains("untrustedTranscript"));

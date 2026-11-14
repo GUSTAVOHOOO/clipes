@@ -17,6 +17,7 @@ fn error(code: &str, message: &str) -> CoreError {
     CoreError {
         code: code.into(),
         message: message.into(),
+        usage: None,
     }
 }
 fn path() -> Result<PathBuf, CoreError> {
@@ -239,7 +240,7 @@ impl Provider for CliProvider {
         if value.get("schemaVersion").is_none() || !validator.is_valid(&value) {
             return Err(error("invalid_json", "Provider response failed validation"));
         }
-        Ok(value)
+        Ok(json!({"data":value,"usage":null,"calls":1}))
     }
 }
 inventory::submit! { CommandRegistration { name: "provider.cli.status", execute: status } }

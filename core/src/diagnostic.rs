@@ -121,6 +121,7 @@ fn export(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let path = v["path"].as_str().ok_or_else(|| CoreError {
         code: "invalid_path".into(),
         message: "Caminho inválido".into(),
+        usage: None,
     })?;
     let destination = Path::new(path);
     if !destination.is_absolute()
@@ -130,15 +131,18 @@ fn export(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         return Err(CoreError {
             code: "invalid_path".into(),
             message: "Caminho inválido".into(),
+            usage: None,
         });
     }
     let text = v["text"].as_str().ok_or_else(|| CoreError {
         code: "invalid_text".into(),
         message: "Texto inválido".into(),
+        usage: None,
     })?;
     fs::write(path, text).map_err(|_| CoreError {
         code: "export_failed".into(),
         message: "Não foi possível salvar o diagnóstico".into(),
+        usage: None,
     })?;
     Ok(json!({}))
 }
