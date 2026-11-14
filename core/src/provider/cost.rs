@@ -267,8 +267,8 @@ pub fn record(
     })
 }
 
-/// Runs a provider call and attaches and records its real cost. Truncated output still
-/// costs money, so its `usage` is recorded too; other failures report no usage.
+/// Runs a provider call and attaches and records its real cost. Failures that carry usage
+/// (truncation, invalid JSON, refusal) are recorded too; a timeout is recorded as unknown.
 /// `cost.recorded` is false when no Project is open.
 pub fn run_costed(
     target: &Target,
@@ -293,12 +293,14 @@ pub fn run_costed(
             Ok(value)
         }
         Err(mut e) => {
-            if e.code == "output_truncated" {
-                if let Some(info) = e.usage.clone() {
-                    let calls = info["calls"].as_u64().unwrap_or(1);
-                    let cost = settle(&info["usage"], calls)?;
-                    e.usage = Some(json!({"usage":info["usage"],"calls":calls,"cost":cost}));
-                }
+            // Failures after a response carry `{usage, calls}` and were billed (truncation,
+            // invalid JSON, refusal). A timeout may have been billed: unknown, never zero.
+            if let Some(info) = e.usage.clone().filter(|i| i.get("calls").is_some()) {
+                let calls = info["calls"].as_u64().unwrap_or(1);
+                let cost = settle(&info["usage"], calls)?;
+                e.usage = Some(json!({"usage":info["usage"],"calls":calls,"cost":cost}));
+            } else if e.code == "timeout_uncertain" {
+                settle(&Value::Null, 1)?;
             }
             Err(e)
         }

@@ -205,6 +205,27 @@ fn estimate_actual_and_project_record() {
     .unwrap_err();
     assert_eq!(err.code, "output_truncated");
     assert_eq!(err.usage.unwrap()["cost"]["microUsd"], 13 + 200);
+    // Invalid JSON after repair was billed too; a timeout is recorded as unknown, never zero.
+    let invalid = CoreError {
+        code: "invalid_json".into(),
+        message: "Provider response failed validation after repair".into(),
+        usage: Some(json!({"usage":{"inputTokens":1000,"outputTokens":0},"calls":2})),
+    };
+    let err = cost::run_costed(&paid, "script", None, || {
+        Fake(Err(invalid.clone())).structured(&request("", None))
+    })
+    .unwrap_err();
+    assert_eq!(err.usage.unwrap()["cost"]["microUsd"], 1250);
+    let timeout = CoreError {
+        code: "timeout_uncertain".into(),
+        message: "Provider timed out".into(),
+        usage: None,
+    };
+    assert!(
+        cost::run_costed(&paid, "script", None, || Fake(Err(timeout.clone()))
+            .structured(&request("", None)))
+        .is_err()
+    );
     // Other failures record nothing.
     let down = CoreError {
         code: "network".into(),
@@ -219,7 +240,7 @@ fn estimate_actual_and_project_record() {
 
     let rows = call("provider.cost.list", json!({})).unwrap();
     let rows = rows.as_array().unwrap();
-    assert_eq!(rows.len(), 5);
+    assert_eq!(rows.len(), 7);
     assert_eq!(rows[0]["task"], "score");
     assert!(rows[0]["batch"].is_null());
     assert_eq!(rows[0]["calls"], 2);
@@ -232,6 +253,12 @@ fn estimate_actual_and_project_record() {
     assert_eq!(rows[3]["costKind"], "unknown");
     assert!(rows[3]["microUsd"].is_null());
     assert_eq!(rows[4]["outputTokens"], 20);
+    assert_eq!(
+        (rows[5]["costKind"].as_str(), rows[5]["calls"].as_i64()),
+        (Some("usd"), Some(2))
+    );
+    assert_eq!(rows[6]["costKind"], "unknown");
+    assert!(rows[6]["microUsd"].is_null());
     let batch = call("provider.cost.list", json!({"batch":"lote-1"})).unwrap();
     assert_eq!(batch.as_array().unwrap().len(), 1);
     assert!(!serde_json::to_string(&rows)
