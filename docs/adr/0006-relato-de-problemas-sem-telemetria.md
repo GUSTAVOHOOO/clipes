@@ -9,7 +9,7 @@ O usuário leva um bug ou uma ideia do app para uma issue do GitHub sem que o Cl
 ## As duas regras
 
 1. **O diagnóstico é uma allowlist.** Só sai o que está na lista; o que não está, não sai.
-   - **Entra:** versão do app e dos Componentes, sistema operacional, GPU/VRAM e encoder detectados, nome do Motor de transcrição e do Provedor, etapa do pipeline onde falhou e as últimas ~200 linhas de erro e aviso do log.
+   - **Entra:** versão do app e dos Componentes, sistema operacional, GPU/VRAM e encoder detectados, nome do Motor de transcrição e do Provedor, versão da Tarefa de IA e hash do prompt (ver a emenda ao final), etapa do pipeline onde falhou e as últimas ~200 linhas de erro e aviso do log.
    - **Nunca entra:** chaves, caminhos pessoais (o nome de usuário vira `~`), nomes de Fontes e de arquivos, texto de Transcrição, Roteiro ou prompts, URLs das Fontes e nome do canal.
    - O log local já é gravado limpo, e a limpeza se repete na exportação como segunda barreira.
 2. **Nenhum envio sem revisão.** O usuário vê o texto completo numa tela de pré-visualização, pode editá-lo e remover blocos. Sem essa tela não existe botão de envio. No relato de bug o diagnóstico vem ligado, e na ideia vem desligado.
@@ -26,3 +26,9 @@ O usuário leva um bug ou uma ideia do app para uma issue do GitHub sem que o Cl
 - **Telemetria automática de falhas:** contraria o zero telemetria já decidido.
 - **Denylist de dados sensíveis:** é frágil, porque um campo novo vazaria por padrão. Daí a allowlist.
 - **Dois repositórios, um público e outro de desenvolvimento:** os tickets e o mapa são parte do valor público do projeto, e a numeração e as sub-issues se separariam. O isolamento vem das labels `wayfinder:*` e da triagem, não de outro repo.
+
+## Emenda de 14/11/2026: versão da tarefa e hash do prompt entram na allowlist
+
+Decisão do dev em 14/11/2026, a partir da [pesquisa do harness (#114)](https://github.com/GUSTAVOHOOO/clipes/issues/114) e do [ADR-0009](0009-custo-orcamento-e-auditoria-de-chamadas-de-ia.md). A allowlist do diagnóstico passa a incluir **`task_version`** (a versão da Tarefa de IA) e **`prompt_sha256`** (o hash do texto do prompt versionado). São identificadores, não conteúdo: dizem qual versão de prompt falhou sem revelar texto de Transcrição, Roteiro ou prompt.
+
+Nada mais muda. Os campos de auditoria do Projeto (hash da entrada, hash da resposta, host, tamanho enviado) **continuam fora** do diagnóstico, e o texto de prompts, Transcrições e Roteiros **nunca entra**, nem no log local.
