@@ -21,6 +21,13 @@ async fn core_dispatch(
 
 fn main() {
     tauri::Builder::default()
+        .setup(|app| {
+            let handle = app.handle().clone();
+            let _ = clipes_core::set_event_emitter(std::sync::Arc::new(move |event| {
+                let _ = handle.emit("core-progress", event);
+            }));
+            Ok(())
+        })
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())

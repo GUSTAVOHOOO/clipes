@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/Button';
 import { useText } from '@/lib/i18n';
 import { Sources } from './Sources';
 import { Backups } from './Backups';
+import { Jobs } from './Jobs';
 
-type Project = { name: string; path: string; available: boolean };
+type Project = { name: string; path: string; available: boolean; id: string };
 const texts = {
   'pt-BR': { title:'Projetos', intro:'Crie um Projeto para seu canal ou abra uma pasta existente.', name:'Nome do Projeto', create:'Criar Projeto', opening:'Abrir pasta', recent:'Recentes', empty:'Nenhum Projeto recente.', unavailable:'Indisponível', current:'Projeto aberto', error:'Não foi possível abrir o Projeto.' },
   en: { title:'Projects', intro:'Create a Project for your channel or open an existing folder.', name:'Project name', create:'Create Project', opening:'Open folder', recent:'Recent', empty:'No recent Projects.', unavailable:'Unavailable', current:'Open Project', error:'Could not open the Project.' },
@@ -32,6 +33,7 @@ export function Projects() {
     {error && <p role="alert" className="mt-4 text-danger">{t.error} {error}</p>}
     {current && <p className="mt-6 text-sm">{t.current}: <strong>{current.name}</strong></p>}
     {current && <Sources project={current.path} />}
+    {current && <Jobs key={current.id} projectId={current.id} />}
     {current && <Backups projectPath={current.path} onRestored={async () => setCurrent(await coreDispatch<Project | null>('projects.current', {}))} />}
     <h2 className="mt-8 text-base font-semibold">{t.recent}</h2>
     {items.length === 0 ? <p className="mt-3 text-fg-2">{t.empty}</p> : <ul className="mt-3 divide-y divide-line border-y border-line">{items.map(item => <li key={item.path} className="flex flex-wrap items-center justify-between gap-3 py-3"><div className="min-w-0"><strong>{item.name}</strong><p className="break-all text-sm text-fg-2">{item.path}</p></div>{item.available ? <Button disabled={busy} onClick={() => perform(() => coreDispatch<Project>('projects.open', {path:item.path}))}>{t.opening}</Button> : <span className="text-sm text-fg-2">{t.unavailable}</span>}</li>)}</ul>}

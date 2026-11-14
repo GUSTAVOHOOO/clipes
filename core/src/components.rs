@@ -105,6 +105,15 @@ fn load_settings() -> Result<Settings, CoreError> {
         Err(e) => Err(error("settings", e)),
     }
 }
+pub(crate) fn cache_settings() -> Result<(PathBuf, u64, Option<PathBuf>), CoreError> {
+    let settings =
+        load_settings().map_err(|_| error("settings", "Não foi possível ler as configurações."))?;
+    Ok((
+        settings.cache_dir,
+        settings.cache_limit_bytes,
+        settings.ffmpeg_path,
+    ))
+}
 pub(crate) fn ytdlp_executable() -> Result<PathBuf, CoreError> {
     let settings = load_settings()
         .map_err(|_| error("component_missing", "Componente yt-dlp indisponível"))?;
@@ -325,6 +334,7 @@ fn download(v: Value, events: &mut EventSink<'_>) -> CommandResult {
             &flag,
             |percentage| {
                 events(ProgressEvent {
+                    project: None,
                     job: id.into(),
                     stage: "download".into(),
                     percentage,
@@ -346,6 +356,7 @@ fn download(v: Value, events: &mut EventSink<'_>) -> CommandResult {
         }
         fs::remove_file(part).map_err(|e| error("install", e))?;
         events(ProgressEvent {
+            project: None,
             job: id.into(),
             stage: "complete".into(),
             percentage: 100,

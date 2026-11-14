@@ -52,6 +52,8 @@ O crate `core` não depende do Tauri. A UI chama o único adaptador `core_dispat
 
 O mantenedor gera o par de assinatura uma única vez com `bun run tauri signer generate -- -w "%USERPROFILE%\.tauri\clipes-updater.key"`. Guarde a senha em `%USERPROFILE%\.tauri\clipes-updater.password.txt`, ao lado da chave. Faça backup seguro dos dois arquivos; nunca commite nem compartilhe a chave privada ou a senha. Configure `TAURI_SIGNING_PRIVATE_KEY` com o conteúdo da chave e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` com sua senha nos secrets do repositório GitHub. A chave pública em `src-tauri/tauri.conf.json` pode ser compartilhada. Pull requests compilam sem assinatura; builds de tags usam os secrets para assinar os artefatos de atualização.
 
+Na inicialização, `set_event_emitter` instala uma única vez o receptor compartilhado dos eventos assíncronos da fila; sem receptor, eles são descartados. Eventos da fila identificam o Projeto e o job. O despacho síncrono continua usando seu callback emprestado. Cada Projeto aberto tem um único thread de fila, que executa um job de cada vez; a interface consulta também `jobs.list` para recuperar o estado atual.
+
 ## Demonstração do design system
 
 A demonstração Foco pode ser executada em design-system com bun install --frozen-lockfile e bun run dev --host 127.0.0.1 --port 5180 --strictPort. Abra http://localhost:5180. Execute bun run build em design-system para verificar a compilação. A [documentação](design-system/README.md) explica os limites e outras verificações. Ela não processa vídeo de produção.
@@ -84,6 +86,8 @@ O núcleo cria backups SQLite em `backups/`, sem incluir cache, ao abrir quando 
 Registre cada migração SQL com `inventory` como `projects::Migration`. Use um identificador textual único, ordenável, com o número do ticket e um sufixo próprio, por exemplo `0033_001_project`. Nunca renumere migrações de outros tickets. O núcleo aplica todas as migrações ausentes em ordem, mesmo quando uma migração de outro ticket já foi aplicada, e recusa IDs desconhecidos sem fazer downgrade. Antes de migrar um banco com tabelas, gera `project.pre-migration.sqlite` pela Online Backup API e verifica sua integridade; um banco novo sem tabelas não precisa de backup.
 
 Para testes headless, defina `CLIPES_DATA_DIR` no ambiente do processo para isolar o índice de Projetos em `projects.json` nesse diretório; sem a variável, usa-se o diretório de dados local do app. Os comandos do núcleo não aceitam um caminho de biblioteca da UI.
+
+O cache de onda usa o formato binário `CLPWAVE\0`, versão 1, com inteiros little-endian: quatro `u32` (versão, taxa de picos por segundo, canais e quantidade de níveis), seguidos por uma tabela de níveis com `u64` de offset absoluto em bytes e `u64` de contagem de instantes. Cada instante tem um par `i16` mínimo/máximo por canal, intercalados na ordem dos canais. Há 100 instantes por segundo; cada nível seguinte agrega quatro picos consecutivos por canal até restar aproximadamente um pico por segundo ou menos. A tabela permite ler apenas o nível e intervalo necessários para a timeline.
 
 Documentos `clip`, `style`, `script` e `packaging` são objetos JSON com `schemaVersion` igual a 1 e `revision` inteira não negativa. Cada tipo registra seu validador e suas migrações próprias; campos de domínio serão definidos pelos tickets correspondentes. O comando `documents.validate` migra e valida o documento no núcleo; versões futuras são recusadas.
 

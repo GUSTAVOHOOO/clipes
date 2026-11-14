@@ -152,7 +152,21 @@ fn open(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         return Err(error("invalid_project", "Escolha uma pasta .clipes"));
     }
     let path = path.canonicalize().map_err(|e| error("project_open", e))?;
-    let name = backups::open_session(path.clone())?;
+    let previous = crate::dispatch("projects.current", json!({}), &mut |_| {})
+        .ok()
+        .and_then(|v| v["path"].as_str().map(PathBuf::from));
+    crate::jobs::stop_worker();
+    let name = match backups::open_session(path.clone()) {
+        Ok(name) => name,
+        Err(err) => {
+            if let Some(previous) = previous {
+                crate::jobs::start_worker(previous);
+            }
+            return Err(err);
+        }
+    };
+    crate::jobs::reconcile()?;
+    crate::jobs::start_worker(path.clone());
     remember(
         &library()?,
         Recent {
@@ -160,7 +174,12 @@ fn open(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             path: path.clone(),
         },
     )?;
-    Ok(json!({"name": name, "path":path}))
+    let id = with_reader(|c| {
+        c.query_row("SELECT id FROM queue_project_identity", [], |r| {
+            r.get::<_, String>(0)
+        })
+    })?;
+    Ok(json!({"name": name, "path":path, "id":id}))
 }
 fn create(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     let name = v["name"].as_str().unwrap_or("").trim();
