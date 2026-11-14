@@ -92,18 +92,33 @@ mod settings {
     use std::{fs, path::PathBuf, sync::Mutex};
     static LOCK: Mutex<()> = Mutex::new(());
 
+    /// Id of the profile synthesized from the single-endpoint settings (v1).
+    pub(super) const LEGACY: &str = "legacy";
+    const CLI_IDS: [&str; 2] = ["codex", "claude"];
+
     #[derive(Clone, Default, Serialize, Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct Settings {
+        /// Absent in files written before profiles existed (v1).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        schema_version: Option<u32>,
+        /// v1 fields. In v2 they mirror the `legacy` profile, so older readers keep working.
+        #[serde(default)]
         endpoint: String,
+        #[serde(default)]
         model: String,
         #[serde(default = "default_kind")]
         kind: String,
+        #[serde(default)]
         native_schema: bool,
+        /// Per vault account: the key suffix. Per endpoint: the consent.
         #[serde(default)]
         timeouts: Timeouts,
         #[serde(default)]
         providers: std::collections::HashMap<String, Metadata>,
+        /// Absent until the user edits something; reading synthesizes `legacy` meanwhile.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        profiles: Option<Vec<Profile>>,
     }
     fn default_kind() -> String {
         "openai".into()
@@ -114,12 +129,93 @@ mod settings {
         confirmed: bool,
         key_last_four: Option<String>,
     }
-    #[cfg(test)]
-    fn path() -> Result<PathBuf, CoreError> {
-        Ok(std::env::temp_dir().join(format!("clipes-provider-test-{}.json", std::process::id())))
+    /// A saved Provider. Locality is never stored: it is computed from the endpoint.
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Profile {
+        id: String,
+        label: String,
+        kind: String,
+        endpoint: String,
+        model: String,
+        #[serde(default)]
+        native_schema: bool,
+        /// `None` means the vault account is the endpoint string (shared, and the v1 account).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        vault_account: Option<String>,
     }
-    #[cfg(not(test))]
+    impl Profile {
+        fn account(&self) -> String {
+            self.vault_account
+                .clone()
+                .unwrap_or_else(|| self.endpoint.clone())
+        }
+    }
+    fn profiles(settings: &Settings) -> Vec<Profile> {
+        if let Some(list) = &settings.profiles {
+            return list.clone();
+        }
+        if settings.endpoint.is_empty() {
+            return Vec::new();
+        }
+        vec![Profile {
+            id: LEGACY.into(),
+            label: "Principal".into(),
+            kind: if settings.kind.is_empty() {
+                default_kind()
+            } else {
+                settings.kind.clone()
+            },
+            endpoint: settings.endpoint.clone(),
+            model: settings.model.clone(),
+            native_schema: settings.native_schema,
+            vault_account: None,
+        }]
+    }
+    fn find(settings: &Settings, id: &str) -> Option<Profile> {
+        profiles(settings).into_iter().find(|p| p.id == id)
+    }
+    /// The profile a command acts on: the explicit `profileId`, else `legacy` (if any).
+    fn pick(settings: &Settings, args: &Value) -> Result<Option<Profile>, CoreError> {
+        match args.get("profileId").and_then(Value::as_str) {
+            Some(id) => find(settings, id)
+                .map(Some)
+                .ok_or_else(|| error("invalid_settings", "Profile not found")),
+            None => Ok(find(settings, LEGACY)),
+        }
+    }
+    /// Saves the list as v2 and mirrors `legacy` into the v1 fields.
+    fn store(settings: &mut Settings, list: Vec<Profile>) {
+        let legacy = list.iter().find(|p| p.id == LEGACY).cloned();
+        settings.endpoint = legacy
+            .as_ref()
+            .map(|p| p.endpoint.clone())
+            .unwrap_or_default();
+        settings.model = legacy.as_ref().map(|p| p.model.clone()).unwrap_or_default();
+        settings.kind = legacy
+            .as_ref()
+            .map_or_else(default_kind, |p| p.kind.clone());
+        settings.native_schema = legacy.as_ref().is_some_and(|p| p.native_schema);
+        settings.schema_version = Some(2);
+        settings.profiles = Some(list);
+    }
+    fn valid_id(id: &str) -> bool {
+        !id.is_empty()
+            && id.len() <= 40
+            && !CLI_IDS.contains(&id)
+            && id
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+    }
     fn path() -> Result<PathBuf, CoreError> {
+        if let Some(dir) = std::env::var_os("CLIPES_DATA_DIR") {
+            return Ok(PathBuf::from(dir).join("provider.json"));
+        }
+        #[cfg(test)]
+        return Ok(
+            std::env::temp_dir().join(format!("clipes-provider-test-{}.json", std::process::id()))
+        );
+        #[cfg(not(test))]
         directories::ProjectDirs::from("io", "github.gustavohooo", "clipes")
             .map(|p| p.config_dir().join("provider.json"))
             .ok_or_else(|| error("settings", "Could not locate settings directory"))
@@ -141,20 +237,20 @@ mod settings {
         fs::write(path, bytes).map_err(|_| error("settings", "Could not save provider settings"))
     }
     #[cfg(not(test))]
-    fn vault_set(endpoint: &str, key: &str) -> Result<(), CoreError> {
-        keyring::Entry::new("io.github.gustavohooo.clipes.provider", endpoint)
+    fn vault_set(account: &str, key: &str) -> Result<(), CoreError> {
+        keyring::Entry::new("io.github.gustavohooo.clipes.provider", account)
             .and_then(|e| e.set_password(key))
             .map_err(|_| error("vault", "Could not save key in system vault"))
     }
     #[cfg(not(test))]
-    fn vault_get(endpoint: &str) -> Result<String, CoreError> {
-        keyring::Entry::new("io.github.gustavohooo.clipes.provider", endpoint)
+    fn vault_get(account: &str) -> Result<String, CoreError> {
+        keyring::Entry::new("io.github.gustavohooo.clipes.provider", account)
             .and_then(|e| e.get_password())
             .map_err(|_| error("vault", "Could not read key from system vault"))
     }
     #[cfg(not(test))]
-    fn vault_remove(endpoint: &str) -> Result<(), CoreError> {
-        match keyring::Entry::new("io.github.gustavohooo.clipes.provider", endpoint)
+    fn vault_remove(account: &str) -> Result<(), CoreError> {
+        match keyring::Entry::new("io.github.gustavohooo.clipes.provider", account)
             .and_then(|e| e.delete_credential())
         {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
@@ -165,47 +261,88 @@ mod settings {
     static FAKE_VAULT: std::sync::LazyLock<Mutex<std::collections::HashMap<String, String>>> =
         std::sync::LazyLock::new(|| Mutex::new(std::collections::HashMap::new()));
     #[cfg(test)]
-    fn vault_set(endpoint: &str, key: &str) -> Result<(), CoreError> {
+    fn vault_set(account: &str, key: &str) -> Result<(), CoreError> {
         FAKE_VAULT
             .lock()
             .unwrap()
-            .insert(endpoint.into(), key.into());
+            .insert(account.into(), key.into());
         Ok(())
     }
     #[cfg(test)]
-    fn vault_get(endpoint: &str) -> Result<String, CoreError> {
+    fn vault_get(account: &str) -> Result<String, CoreError> {
         FAKE_VAULT
             .lock()
             .unwrap()
-            .get(endpoint)
+            .get(account)
             .cloned()
             .ok_or_else(|| error("vault", "Could not read key from system vault"))
     }
     #[cfg(test)]
-    fn vault_remove(endpoint: &str) -> Result<(), CoreError> {
-        FAKE_VAULT.lock().unwrap().remove(endpoint);
+    fn vault_remove(account: &str) -> Result<(), CoreError> {
+        FAKE_VAULT.lock().unwrap().remove(account);
         Ok(())
     }
     fn locked() -> Result<std::sync::MutexGuard<'static, ()>, CoreError> {
         LOCK.lock()
             .map_err(|_| error("settings", "Could not access provider settings"))
     }
-    fn status(_: Value, _: &mut EventSink<'_>) -> CommandResult {
+    fn metadata(settings: &Settings, key: &str) -> Metadata {
+        settings.providers.get(key).cloned().unwrap_or_default()
+    }
+    fn status_json(settings: &Settings, profile: Option<&Profile>) -> Value {
+        let Some(p) = profile else {
+            return json!({"endpoint":"", "model":"", "kind":"openai", "nativeSchema":false, "timeouts":settings.timeouts.effective(), "keyLastFour":null, "remote":false, "confirmed":false});
+        };
+        let remote = !is_local_endpoint(&p.endpoint).unwrap_or(false);
+        let key = metadata(settings, &p.account());
+        json!({"profileId":p.id, "endpoint":p.endpoint, "model":p.model, "kind":p.kind, "nativeSchema":p.native_schema, "timeouts":settings.timeouts.effective(), "keyLastFour":key.key_last_four, "remote":remote, "confirmed":metadata(settings, &p.endpoint).confirmed})
+    }
+    fn status(args: Value, _: &mut EventSink<'_>) -> CommandResult {
         let _guard = locked()?;
         let settings = read()?;
-        let remote = if settings.endpoint.is_empty() {
-            false
-        } else {
-            !is_local_endpoint(&settings.endpoint).unwrap_or(false)
+        let profile = pick(&settings, &args)?;
+        Ok(status_json(&settings, profile.as_ref()))
+    }
+    fn profile_view(settings: &Settings, p: &Profile) -> Value {
+        let price = super::cost::price_for(&p.kind, &p.model)
+            .ok()
+            .flatten()
+            .map(|(price, source)| {
+                json!({"inputPerMillion":price.input_per_million, "outputPerMillion":price.output_per_million, "source":source})
+            });
+        json!({
+            "id": p.id, "label": p.label, "kind": p.kind, "endpoint": p.endpoint,
+            "model": p.model, "nativeSchema": p.native_schema,
+            "ownKey": p.vault_account.is_some(),
+            "keyLastFour": metadata(settings, &p.account()).key_last_four,
+            "local": is_local_endpoint(&p.endpoint).unwrap_or(false),
+            "confirmed": metadata(settings, &p.endpoint).confirmed,
+            "price": price, "cli": false,
+        })
+    }
+    fn cli_view(kind: &str, status: &Value) -> Value {
+        json!({
+            "id": kind, "label": if kind == "codex" { "Codex CLI" } else { "Claude Code CLI" },
+            "kind": kind, "endpoint": null, "model": null, "nativeSchema": false,
+            "ownKey": false, "keyLastFour": null, "local": false,
+            "confirmed": status[format!("{kind}Confirmed")].as_bool().unwrap_or(false),
+            "active": status["selected"] == kind, "price": null, "cli": true,
+            "experimental": true,
+        })
+    }
+    /// Every profile: the saved ones, then the Codex and Claude Code CLIs. Reading never writes.
+    fn profiles_list(_: Value, events: &mut EventSink<'_>) -> CommandResult {
+        let settings = {
+            let _guard = locked()?;
+            read()?
         };
-        let metadata = settings
-            .providers
-            .get(&settings.endpoint)
-            .cloned()
-            .unwrap_or_default();
-        Ok(
-            json!({"endpoint":settings.endpoint, "model":settings.model, "kind":if settings.kind.is_empty() { "openai" } else { &settings.kind }, "nativeSchema":settings.native_schema, "timeouts":settings.timeouts.effective(), "keyLastFour":metadata.key_last_four, "remote":remote, "confirmed":metadata.confirmed}),
-        )
+        let mut out: Vec<Value> = profiles(&settings)
+            .iter()
+            .map(|p| profile_view(&settings, p))
+            .collect();
+        let cli = crate::dispatch("provider.cli.status", json!({}), events)?;
+        out.extend(CLI_IDS.iter().map(|kind| cli_view(kind, &cli)));
+        Ok(json!({"profiles": out}))
     }
     fn configure(args: Value, _: &mut EventSink<'_>) -> CommandResult {
         let endpoint = args
@@ -225,30 +362,102 @@ mod settings {
             return Err(error("invalid_settings", "Model is required"));
         }
         resolve(&endpoint)?;
+        let id = match args.get("profileId") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(id)) if id == LEGACY || valid_id(id) => Some(id.as_str()),
+            Some(_) => return Err(error("invalid_settings", "Invalid profile id")),
+        };
+        let target = id.unwrap_or(LEGACY);
+        let own_key = args.get("ownKey").and_then(Value::as_bool);
+        if own_key.is_some() && target == LEGACY {
+            return Err(error(
+                "invalid_settings",
+                "The main profile always uses the endpoint as vault account",
+            ));
+        }
         let _guard = locked()?;
-        let old = read()?;
+        let mut settings = read()?;
         let kind = args.get("kind").and_then(Value::as_str).unwrap_or("openai");
         if !matches!(kind, "openai" | "anthropic" | "gemini") {
             return Err(error("invalid_settings", "Invalid provider type"));
         }
-        // Without `timeouts` the current ones stay; `timeouts: {}` restores the defaults.
-        let timeouts = match args.get("timeouts") {
-            Some(value) => Timeouts::parse(value)?,
-            None => old.timeouts,
-        };
-        let settings = Settings {
+        let mut list = profiles(&settings);
+        let existing = list.iter().position(|p| p.id == target);
+        let label = args
+            .get("label")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .map(|l| l.chars().take(60).collect::<String>())
+            .or_else(|| existing.map(|i| list[i].label.clone()))
+            .unwrap_or_else(|| {
+                if target == LEGACY {
+                    "Principal".into()
+                } else {
+                    target.into()
+                }
+            });
+        let mut vault_account = existing.and_then(|i| list[i].vault_account.clone());
+        let mut stale = None;
+        match own_key {
+            Some(true) => vault_account = Some(format!("profile:{target}")),
+            Some(false) => stale = vault_account.take(),
+            None => {}
+        }
+        let profile = Profile {
+            id: target.into(),
+            label,
+            kind: kind.into(),
             endpoint,
             model,
-            kind: kind.into(),
             native_schema: args
                 .get("nativeSchema")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
-            timeouts,
-            providers: old.providers,
+            vault_account,
         };
+        match existing {
+            Some(i) => list[i] = profile,
+            None => list.push(profile),
+        }
+        if let Some(account) = stale {
+            vault_remove(&account)?;
+            settings.providers.remove(&account);
+        }
+        store(&mut settings, list);
         write(&settings)?;
-        crate::provider_cli::clear()?;
+        // Only the legacy form replaces "the" provider, so only it deactivates the CLI.
+        if id.is_none() {
+            crate::provider_cli::clear()?;
+            return Ok(json!({}));
+        }
+        Ok(json!({"profileId": target}))
+    }
+    fn profile_remove(args: Value, _: &mut EventSink<'_>) -> CommandResult {
+        let id = args
+            .get("profileId")
+            .and_then(Value::as_str)
+            .ok_or_else(|| error("invalid_settings", "Profile not found"))?;
+        if id == LEGACY {
+            return Err(error(
+                "invalid_settings",
+                "The main profile cannot be removed",
+            ));
+        }
+        let _guard = locked()?;
+        let mut settings = read()?;
+        let mut list = profiles(&settings);
+        let index = list
+            .iter()
+            .position(|p| p.id == id)
+            .ok_or_else(|| error("invalid_settings", "Profile not found"))?;
+        let removed = list.remove(index);
+        if let Some(account) = removed.vault_account {
+            vault_remove(&account)?;
+            settings.providers.remove(&account);
+        }
+        store(&mut settings, list);
+        write(&settings)?;
         Ok(json!({}))
     }
     fn key_set(args: Value, _: &mut EventSink<'_>) -> CommandResult {
@@ -259,15 +468,11 @@ mod settings {
             .ok_or_else(|| error("invalid_key", "Enter a key"))?;
         let _guard = locked()?;
         let mut settings = read()?;
-        if settings.endpoint.is_empty() {
-            return Err(error("invalid_settings", "Configure the provider first"));
-        }
-        vault_set(&settings.endpoint, key)?;
-        settings
-            .providers
-            .entry(settings.endpoint.clone())
-            .or_default()
-            .key_last_four = Some(
+        let profile = pick(&settings, &args)?
+            .ok_or_else(|| error("invalid_settings", "Configure the provider first"))?;
+        let account = profile.account();
+        vault_set(&account, key)?;
+        settings.providers.entry(account).or_default().key_last_four = Some(
             key.chars()
                 .rev()
                 .take(4)
@@ -279,44 +484,54 @@ mod settings {
         write(&settings)?;
         Ok(json!({}))
     }
-    fn key_remove(_: Value, _: &mut EventSink<'_>) -> CommandResult {
+    fn key_remove(args: Value, _: &mut EventSink<'_>) -> CommandResult {
         let _guard = locked()?;
         let mut settings = read()?;
-        vault_remove(&settings.endpoint)?;
-        settings
-            .providers
-            .entry(settings.endpoint.clone())
-            .or_default()
-            .key_last_four = None;
+        let Some(profile) = pick(&settings, &args)? else {
+            return Ok(json!({}));
+        };
+        let account = profile.account();
+        vault_remove(&account)?;
+        settings.providers.entry(account).or_default().key_last_four = None;
         write(&settings)?;
         Ok(json!({}))
     }
     fn confirm(args: Value, _: &mut EventSink<'_>) -> CommandResult {
         let _guard = locked()?;
         let mut settings = read()?;
-        if args.get("endpoint").and_then(Value::as_str) != Some(settings.endpoint.as_str())
-            || settings.endpoint.is_empty()
-        {
+        let profile = pick(&settings, &args)?;
+        let endpoint = match &profile {
+            Some(p) if !p.endpoint.is_empty() => p.endpoint.clone(),
+            _ => {
+                return Err(error(
+                    "invalid_settings",
+                    "Provider endpoint changed; review it again",
+                ))
+            }
+        };
+        if args.get("endpoint").and_then(Value::as_str) != Some(endpoint.as_str()) {
             return Err(error(
                 "invalid_settings",
                 "Provider endpoint changed; review it again",
             ));
         }
-        settings
-            .providers
-            .entry(settings.endpoint.clone())
-            .or_default()
-            .confirmed = true;
+        // Consent is per endpoint: every profile on it inherits.
+        settings.providers.entry(endpoint).or_default().confirmed = true;
         write(&settings)?;
         Ok(json!({}))
     }
     /// `provider.structured` with a cancellation token, for the AI job executor (#121).
     pub fn run_structured(args: Value, cancel: &CancelToken) -> CommandResult {
-        let route = crate::assistant::route(args.get("task").and_then(Value::as_str))?;
-        let cli = match route {
-            crate::assistant::Route::Cli(kind) => Some(kind),
-            crate::assistant::Route::Endpoint => None,
-            crate::assistant::Route::Unset => crate::provider_cli::selected()?,
+        let explicit = args.get("profileId").is_some_and(|v| !v.is_null());
+        let cli = if explicit {
+            None
+        } else {
+            match crate::assistant::route(args.get("task").and_then(Value::as_str))? {
+                crate::assistant::Route::Cli(kind) => Some(kind),
+                // "endpoint" resolves to the synthesized `legacy` profile.
+                crate::assistant::Route::Endpoint => None,
+                crate::assistant::Route::Unset => crate::provider_cli::selected()?,
+            }
         };
         if let Some(kind) = cli {
             let request: StructuredRequest = serde_json::from_value(args)
@@ -324,50 +539,45 @@ mod settings {
             return crate::provider_cli::CliProvider(kind, crate::provider_cli::timeout()?)
                 .structured_with(&request, cancel);
         }
-        let settings = {
+        let (settings, profile) = {
             let _guard = locked()?;
-            read()?
+            let settings = read()?;
+            let profile = pick(&settings, &args)?
+                .filter(|p| !p.endpoint.is_empty())
+                .ok_or_else(|| error("invalid_settings", "Configure the provider first"))?;
+            (settings, profile)
         };
-        if settings.endpoint.is_empty() {
-            return Err(error("invalid_settings", "Configure the provider first"));
-        }
-        let metadata = settings
-            .providers
-            .get(&settings.endpoint)
-            .cloned()
-            .unwrap_or_default();
-        if !metadata.confirmed && !is_local_endpoint(&settings.endpoint)? {
+        let consent = metadata(&settings, &profile.endpoint);
+        if !consent.confirmed && !is_local_endpoint(&profile.endpoint)? {
             return Err(error(
                 "confirmation_required",
                 "Confirm sending text to this provider first",
             ));
         }
-        let key = if metadata.key_last_four.is_some() {
-            Some(vault_get(&settings.endpoint)?)
+        let account = profile.account();
+        let key = if metadata(&settings, &account).key_last_four.is_some() {
+            Some(vault_get(&account)?)
         } else {
             None
         };
         let mut request: StructuredRequest = serde_json::from_value(args)
             .map_err(|_| error("invalid_request", "Invalid structured request"))?;
-        request.native_schema = settings.native_schema;
-        match settings.kind.as_str() {
+        request.native_schema = profile.native_schema;
+        match profile.kind.as_str() {
             "" | "openai" => {
-                let mut p = OpenAiProvider::new(settings.endpoint, settings.model, key)?;
-                p.confirm(metadata.confirmed);
-                p.with_timeouts(settings.timeouts)
-                    .structured_with(&request, cancel)
+                let mut p = OpenAiProvider::new(profile.endpoint, profile.model, key)?;
+                p.confirm(consent.confirmed);
+                p.structured(&request)
             }
             "anthropic" => {
-                let mut p = AnthropicProvider::new(settings.endpoint, settings.model, key)?;
-                p.confirm(metadata.confirmed);
-                p.with_timeouts(settings.timeouts)
-                    .structured_with(&request, cancel)
+                let mut p = AnthropicProvider::new(profile.endpoint, profile.model, key)?;
+                p.confirm(consent.confirmed);
+                p.structured(&request)
             }
             "gemini" => {
-                let mut p = GeminiProvider::new(settings.endpoint, settings.model, key)?;
-                p.confirm(metadata.confirmed);
-                p.with_timeouts(settings.timeouts)
-                    .structured_with(&request, cancel)
+                let mut p = GeminiProvider::new(profile.endpoint, profile.model, key)?;
+                p.confirm(consent.confirmed);
+                p.structured(&request)
             }
             _ => Err(error("invalid_settings", "Invalid provider type")),
         }
@@ -397,18 +607,26 @@ mod settings {
         });
         result
     }
-    fn test(_: Value, events: &mut EventSink<'_>) -> CommandResult {
-        let native = {
+    fn test(args: Value, events: &mut EventSink<'_>) -> CommandResult {
+        let (native, profile_id) = {
             let _guard = locked()?;
-            read()?.native_schema
+            let settings = read()?;
+            let profile = pick(&settings, &args)?;
+            (
+                profile.is_some_and(|p| p.native_schema),
+                args.get("profileId").cloned(),
+            )
         };
-        call(
-            json!({"instruction":"Respond with schemaVersion 1.","transcript":"","schema":{"type":"object","properties":{"schemaVersion":{"type":"integer","const":1}},"required":["schemaVersion"],"additionalProperties":false},"nativeSchema":native}),
-            events,
-        )
+        let mut request = json!({"instruction":"Respond with schemaVersion 1.","transcript":"","schema":{"type":"object","properties":{"schemaVersion":{"type":"integer","const":1}},"required":["schemaVersion"],"additionalProperties":false},"nativeSchema":native});
+        if let Some(id) = profile_id {
+            request["profileId"] = id;
+        }
+        call(request, events)
     }
     inventory::submit! { CommandRegistration { name: "provider.status", execute: status } }
     inventory::submit! { CommandRegistration { name: "provider.configure", execute: configure } }
+    inventory::submit! { CommandRegistration { name: "provider.profiles.list", execute: profiles_list } }
+    inventory::submit! { CommandRegistration { name: "provider.profiles.remove", execute: profile_remove } }
     inventory::submit! { CommandRegistration { name: "provider.key.set", execute: key_set } }
     inventory::submit! { CommandRegistration { name: "provider.key.remove", execute: key_remove } }
     inventory::submit! { CommandRegistration { name: "provider.confirm", execute: confirm } }
@@ -422,6 +640,201 @@ mod settings {
             net::TcpListener,
             thread,
         };
+        static GUARD: Mutex<()> = Mutex::new(());
+        /// Serializes the tests that share the settings file and the fake vault, and resets both.
+        fn fresh() -> std::sync::MutexGuard<'static, ()> {
+            let guard = GUARD.lock().unwrap_or_else(|e| e.into_inner());
+            let _ = fs::remove_file(path().unwrap());
+            FAKE_VAULT.lock().unwrap().clear();
+            guard
+        }
+        fn run(name: &str, args: Value) -> CommandResult {
+            crate::dispatch(name, args, &mut |_| {})
+        }
+        fn profile<'a>(list: &'a Value, id: &str) -> &'a Value {
+            list["profiles"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|p| p["id"] == id)
+                .unwrap()
+        }
+        /// Accepts one request, checks the wire and answers a valid structured response.
+        fn serve(check: impl Fn(String) + Send + 'static) -> (String, thread::JoinHandle<()>) {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let endpoint = format!("http://{}/v1", listener.local_addr().unwrap());
+            let handle = thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                let wire =
+                    String::from_utf8(super::super::test_http::read_request(&mut stream)).unwrap();
+                check(wire.to_lowercase());
+                let body = r#"{"choices":[{"message":{"content":"{\"schemaVersion\":1}"}}]}"#;
+                write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                )
+                .unwrap();
+            });
+            (endpoint, handle)
+        }
+        const V1_REMOTE: &str = "https://192.0.2.10/v1";
+        fn write_v1(endpoint: &str) {
+            fs::write(
+                path().unwrap(),
+                json!({"endpoint":endpoint,"model":"old-model","kind":"openai","nativeSchema":true,
+                    "providers":{endpoint:{"confirmed":true,"keyLastFour":"1234"}}})
+                .to_string(),
+            )
+            .unwrap();
+        }
+        #[test]
+        fn v1_file_is_read_as_legacy_profile_without_rewriting_it() {
+            let _g = fresh();
+            write_v1(V1_REMOTE);
+            let before = fs::read(path().unwrap()).unwrap();
+            let list = run("provider.profiles.list", json!({})).unwrap();
+            let legacy = profile(&list, "legacy");
+            assert_eq!(legacy["endpoint"], V1_REMOTE);
+            assert_eq!(legacy["model"], "old-model");
+            assert_eq!(legacy["kind"], "openai");
+            assert_eq!(legacy["nativeSchema"], true);
+            assert_eq!(legacy["keyLastFour"], "1234");
+            assert_eq!(legacy["confirmed"], true);
+            assert_eq!(legacy["local"], false);
+            let status = run("provider.status", json!({})).unwrap();
+            assert_eq!(status["model"], "old-model");
+            assert_eq!(status["keyLastFour"], "1234");
+            assert_eq!(fs::read(path().unwrap()).unwrap(), before);
+        }
+        #[test]
+        fn old_vault_key_stays_readable_under_the_endpoint_account() {
+            let _g = fresh();
+            let (endpoint, server) = serve(|wire| {
+                assert!(wire.contains("authorization: bearer old-key-1234"));
+            });
+            write_v1(&endpoint);
+            // The v1 key was saved under the endpoint string; nothing may move it.
+            vault_set(&endpoint, "old-key-1234").unwrap();
+            let output = run("provider.test", json!({})).unwrap();
+            assert_eq!(output["data"]["schemaVersion"], 1);
+            server.join().unwrap();
+            // Editing the legacy profile migrates the file to v2 but keeps the account.
+            run(
+                "provider.configure",
+                json!({"endpoint":endpoint,"model":"new-model","kind":"openai"}),
+            )
+            .unwrap();
+            let file: Value = serde_json::from_slice(&fs::read(path().unwrap()).unwrap()).unwrap();
+            assert_eq!(file["schemaVersion"], 2);
+            assert_eq!(file["profiles"][0]["id"], "legacy");
+            assert!(file["profiles"][0].get("vaultAccount").is_none());
+            assert_eq!(vault_get(&endpoint).unwrap(), "old-key-1234");
+            assert_eq!(
+                run("provider.status", json!({})).unwrap()["keyLastFour"],
+                "1234"
+            );
+        }
+        #[test]
+        fn profiles_on_one_endpoint_share_key_and_consent_and_an_own_key_does_not() {
+            let _g = fresh();
+            let configure = |extra: Value| {
+                let mut args = json!({"endpoint":V1_REMOTE,"model":"m","kind":"openai"});
+                args.as_object_mut()
+                    .unwrap()
+                    .extend(extra.as_object().unwrap().clone());
+                run("provider.configure", args).unwrap()
+            };
+            configure(json!({}));
+            run("provider.key.set", json!({"key":"shared-key-1111"})).unwrap();
+            run("provider.confirm", json!({"endpoint":V1_REMOTE})).unwrap();
+            configure(json!({"profileId":"fast","model":"cheap","label":"Rápido"}));
+            let list = run("provider.profiles.list", json!({})).unwrap();
+            let fast = profile(&list, "fast");
+            assert_eq!(fast["label"], "Rápido");
+            assert_eq!(fast["keyLastFour"], "1111");
+            assert_eq!(fast["confirmed"], true);
+            assert_eq!(fast["ownKey"], false);
+            assert_eq!(FAKE_VAULT.lock().unwrap().len(), 1);
+            configure(json!({"profileId":"second","model":"other","ownKey":true}));
+            run(
+                "provider.key.set",
+                json!({"profileId":"second","key":"second-key-2222"}),
+            )
+            .unwrap();
+            assert_eq!(vault_get("profile:second").unwrap(), "second-key-2222");
+            assert_eq!(vault_get(V1_REMOTE).unwrap(), "shared-key-1111");
+            let list = run("provider.profiles.list", json!({})).unwrap();
+            assert_eq!(profile(&list, "second")["keyLastFour"], "2222");
+            assert_eq!(profile(&list, "second")["confirmed"], true);
+            assert_eq!(profile(&list, "legacy")["keyLastFour"], "1111");
+            run("provider.key.remove", json!({"profileId":"second"})).unwrap();
+            assert!(vault_get("profile:second").is_err());
+            assert_eq!(vault_get(V1_REMOTE).unwrap(), "shared-key-1111");
+            // Removing a profile with its own key also removes that key; the shared one stays.
+            run(
+                "provider.key.set",
+                json!({"profileId":"second","key":"again-3333"}),
+            )
+            .unwrap();
+            run("provider.profiles.remove", json!({"profileId":"second"})).unwrap();
+            assert!(vault_get("profile:second").is_err());
+            assert_eq!(vault_get(V1_REMOTE).unwrap(), "shared-key-1111");
+            assert_eq!(
+                run("provider.profiles.remove", json!({"profileId":"legacy"}))
+                    .unwrap_err()
+                    .code,
+                "invalid_settings"
+            );
+            let text = fs::read_to_string(path().unwrap()).unwrap();
+            assert!(!text.contains("shared-key") && !text.contains("second-key"));
+            assert!(!text.contains("\"local\":"));
+        }
+        #[test]
+        fn explicit_profile_calls_its_own_model_and_key() {
+            let _g = fresh();
+            let (endpoint, server) = serve(|wire| {
+                assert!(wire.contains("authorization: bearer fast-key-4444"));
+                assert!(wire.contains("\"model\":\"cheap\""));
+            });
+            run(
+                "provider.configure",
+                json!({"endpoint":endpoint,"model":"main","kind":"openai"}),
+            )
+            .unwrap();
+            run(
+                "provider.configure",
+                json!({"profileId":"fast","endpoint":endpoint,"model":"cheap","kind":"openai","ownKey":true}),
+            )
+            .unwrap();
+            run(
+                "provider.key.set",
+                json!({"profileId":"fast","key":"fast-key-4444"}),
+            )
+            .unwrap();
+            run("provider.test", json!({"profileId":"fast"})).unwrap();
+            server.join().unwrap();
+            assert_eq!(
+                run("provider.test", json!({"profileId":"missing"}))
+                    .unwrap_err()
+                    .code,
+                "invalid_settings"
+            );
+        }
+        #[test]
+        fn invalid_profile_ids_and_cli_ids_are_rejected() {
+            let _g = fresh();
+            for id in ["", "Codex", "codex", "claude", "a b", "../x"] {
+                let err = run(
+                    "provider.configure",
+                    json!({"profileId":id,"endpoint":V1_REMOTE,"model":"m"}),
+                )
+                .unwrap_err();
+                assert_eq!(err.code, "invalid_settings", "{id}");
+            }
+            assert!(!path().unwrap().exists());
+        }
         #[test]
         fn legacy_settings_default_to_openai() {
             let settings: Settings = serde_json::from_value(
@@ -439,8 +852,7 @@ mod settings {
         }
         #[test]
         fn headless_dispatch_uses_fake_vault_and_never_returns_key() {
-            let _ = fs::remove_file(path().unwrap());
-            FAKE_VAULT.lock().unwrap().clear();
+            let _g = fresh();
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             let endpoint = format!("http://{}/v1", listener.local_addr().unwrap());
             let server = thread::spawn(move || {
