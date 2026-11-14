@@ -10,3 +10,13 @@ def pair_words(reference, aligned):
         raise ValueError('As palavras alinhadas divergem do texto revisado')
     return [{'word': reference[i]['word'], 'start': aligned[j]['start'],
              'end': aligned[j]['end']} for i, j in pairs]
+
+
+def corpus_segments(sample):
+    from metrics import exclude_uncertain, subtract
+    intervals = subtract(sample['start'], sample['end'],
+                         [(span['start'], span['end']) for span in sample['incertos']])
+    eligible = exclude_uncertain(sample['words'], sample['incertos'])
+    return [(start, end, words) for start, end in intervals
+            if (words := [word for word in eligible
+                          if word['start'] >= start and word['end'] <= end])]

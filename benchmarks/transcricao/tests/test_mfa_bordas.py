@@ -15,3 +15,13 @@ class PairWordsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             pair_words([{'word': 'um'}, {'word': 'dois'}],
                        [{'word': 'um', 'start': 1, 'end': 2}])
+
+class CorpusTests(unittest.TestCase):
+    def test_segments_exclude_uncertainty_and_keep_absolute_offsets(self):
+        from mfa_bordas import corpus_segments
+        sample = {'start': 10, 'end': 14, 'incertos': [{'start': 11, 'end': 12}],
+                  'words': [{'word': 'um', 'start': 10.2, 'end': 10.8},
+                            {'word': 'ruim', 'start': 10.9, 'end': 11.2},
+                            {'word': 'dois', 'start': 12.1, 'end': 12.6}]}
+        self.assertEqual(corpus_segments(sample), [
+            (10, 11, [sample['words'][0]]), (12, 14, [sample['words'][2]])])
