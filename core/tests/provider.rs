@@ -6,6 +6,34 @@ use std::{
     thread,
 };
 
+fn read_request(stream: &mut std::net::TcpStream) -> Vec<u8> {
+    stream.set_nonblocking(false).unwrap();
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_secs(3)))
+        .unwrap();
+    let mut bytes = Vec::new();
+    loop {
+        let mut chunk = [0; 4096];
+        let n = std::io::Read::read(stream, &mut chunk).unwrap();
+        assert!(n > 0, "request ended before its body");
+        bytes.extend_from_slice(&chunk[..n]);
+        if let Some(pos) = bytes.windows(4).position(|x| x == b"\r\n\r\n") {
+            let headers = String::from_utf8_lossy(&bytes[..pos]);
+            let length: usize = headers
+                .lines()
+                .find_map(|line| {
+                    line.split_once(':')
+                        .filter(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+                        .map(|(_, value)| value.trim().parse().unwrap())
+                })
+                .expect("missing Content-Length");
+            if bytes.len() >= pos + 4 + length {
+                return bytes;
+            }
+        }
+    }
+}
+
 fn server(replies: Vec<&'static str>) -> (String, thread::JoinHandle<usize>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
@@ -13,8 +41,7 @@ fn server(replies: Vec<&'static str>) -> (String, thread::JoinHandle<usize>) {
         let mut count = 0;
         for reply in replies {
             let (mut stream, _) = listener.accept().unwrap();
-            let mut request = [0; 16384];
-            let _ = stream.read(&mut request).unwrap();
+            let _ = read_request(&mut stream);
             let response = format!(
                 "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                 reply.len(),
@@ -104,8 +131,7 @@ fn raw_server(responses: Vec<&'static str>) -> (String, thread::JoinHandle<usize
         while count < responses.len() && std::time::Instant::now() < deadline {
             match listener.accept() {
                 Ok((mut stream, _)) => {
-                    let mut buf = [0; 16384];
-                    let _ = stream.read(&mut buf);
+                    let _ = read_request(&mut stream);
                     stream.write_all(responses[count].as_bytes()).unwrap();
                     count += 1;
                 }
@@ -118,6 +144,29 @@ fn raw_server(responses: Vec<&'static str>) -> (String, thread::JoinHandle<usize
         count
     });
     (format!("http://{address}/v1"), handle)
+}
+
+#[test]
+fn fake_server_waits_for_fragmented_request_body() {
+    let (url, server) = raw_server(vec![
+        "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+    ]);
+    let address = url.trim_start_matches("http://").trim_end_matches("/v1");
+    let mut stream = std::net::TcpStream::connect(address).unwrap();
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_millis(150)))
+        .unwrap();
+    stream
+        .write_all(b"POST /v1 HTTP/1.1\r\nHost: localhost\r\nContent-Length: 4\r\n\r\n")
+        .unwrap();
+    let mut response = [0u8; 128];
+    assert!(
+        stream.read(&mut response).is_err(),
+        "server responded before reading the body"
+    );
+    stream.write_all(b"test").unwrap();
+    assert!(stream.read(&mut response).unwrap() > 0);
+    assert_eq!(server.join().unwrap(), 1);
 }
 
 #[test]
