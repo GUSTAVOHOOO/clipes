@@ -9,7 +9,9 @@ use std::{
 };
 
 mod backups;
+mod privacy;
 pub use backups::{start_job, with_reader, with_writer, ProjectJob};
+pub(crate) use privacy::project_local_only;
 
 fn error(code: &str, e: impl ToString) -> CoreError {
     CoreError {

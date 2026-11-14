@@ -22,14 +22,15 @@ export function TaskTable({ status, onChange }: { status: unknown; onChange: () 
   const [rows, setRows] = useState<Row[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [message, setMessage] = useState('');
+  const [projectVeto, setProjectVeto] = useState(false);
   const number = new Intl.NumberFormat(language, { maximumFractionDigits: 6 });
   const select = 'foco block h-9 w-full min-w-44 rounded-md border border-line-strong bg-field px-2 text-fg';
   async function load() {
     const [table, list] = await Promise.all([
-      coreDispatch<{ tasks: Row[] }>('assistant.tasks', {}),
+      coreDispatch<{ tasks: Row[]; projectLocalOnly: boolean }>('assistant.tasks', {}),
       coreDispatch<{ profiles: Profile[] }>('provider.profiles.list', {}),
     ]);
-    setRows(table.tasks); setProfiles(list.profiles);
+    setRows(table.tasks); setProjectVeto(table.projectLocalOnly); setProfiles(list.profiles);
   }
   useEffect(() => { void load().catch(() => setMessage(t.failed)); }, [status]);
   async function act(name: string, args: object) {
@@ -51,6 +52,7 @@ export function TaskTable({ status, onChange }: { status: unknown; onChange: () 
   return <div className="mt-6" role="group" aria-labelledby="task-table-title">
     <h3 id="task-table-title" className="font-semibold">{t.tasksTitle}</h3>
     <p className="mt-1 text-sm text-fg-2">{t.tasksBody}</p>
+    {projectVeto && <p className="mt-3 rounded-md border border-line-strong px-3 py-2 text-sm" role="status">{t.projectVeto}</p>}
     <div className="mt-3 overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead className="text-fg-2"><tr>
