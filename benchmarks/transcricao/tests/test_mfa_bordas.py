@@ -109,3 +109,9 @@ class ReferenceCoverageTests(unittest.TestCase):
         self.assertEqual(missing, 1)
         self.assertLess(spans[0]['start'], 2)
         self.assertGreater(spans[0]['end'], 2)
+
+class PhoneCompatibilityTests(unittest.TestCase):
+    def test_rejects_phones_not_in_acoustic_model(self):
+        from preparar_dicionario_mfa import incompatible_phones
+        self.assertEqual(incompatible_phones(['casa\tk a z a', 'sol\ts o l'], {'k', 'a', 'z', 's', 'o'}), {'l'})
+        self.assertEqual(incompatible_phones(['casa\tk a z a'], {'k', 'a', 'z'}), set())
