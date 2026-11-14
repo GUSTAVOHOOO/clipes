@@ -13,6 +13,9 @@ let jobItems = [
   { id: 2, kind: 'provider', state: 'uncertain', progress: 0, project: 'test-project' },
 ];
 let providerMock = { kind: 'openai', endpoint: '', model: '', nativeSchema: false, keyLastFour: null as string | null, remote: false, confirmed: false };
+const assistantTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('assistant-test');
+let assistantMock = { completed: !assistantTest, skipped: false, needsSetup: assistantTest, default: '', tasks: { selection: '', packaging: '', script: '', translation: '' } as Record<string, string> };
+const assistantView = () => ({ ...assistantMock, needsSetup: !assistantMock.completed && !assistantMock.skipped, tasks: { ...assistantMock.tasks } });
 let providerCliMock = { selected: '', codexConfirmed: false, claudeConfirmed: false };
 export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   if (import.meta.env.VITE_CORE_MOCK === '1' && !isTauri()) {
@@ -47,6 +50,15 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'components.worker.status') return { installed: true, outdated: false, cuda: false, uv: '0.13.8', handshake: { protocol: 1, worker: '0.1.0', python: '3.12.16', libs: { 'faster-whisper': '1.2.1', onnxruntime: '1.32.0', numpy: '2.4.6', 'opencv-python-headless': null } } } as T;
     if (name === 'components.worker.install') return { handshake: null } as T;
     if (name === 'components.ffmpeg.status') return { incomplete: false } as T;
+    if (name === 'assistant.status') return assistantView() as T;
+    if (name === 'assistant.detect') return { ollama: { found: true, endpoint: 'http://127.0.0.1:11434/v1', models: ['llama3:8b', 'qwen3'] }, lmStudio: { found: false, endpoint: null, models: [] }, llamaCpp: { found: false, endpoint: null, models: [] }, codex: { found: true }, claude: { found: false } } as T;
+    if (name === 'assistant.default.set' || name === 'assistant.task.set') {
+      const { choice, task } = args as { choice: string; task?: string };
+      if ((choice === 'codex' && !providerCliMock.codexConfirmed) || (choice === 'claude' && !providerCliMock.claudeConfirmed)) throw { code: 'confirmation_required', message: 'confirmation required' };
+      if (name === 'assistant.task.set') assistantMock.tasks[task!] = choice; else assistantMock.default = choice;
+      return assistantView() as T;
+    }
+    if (name === 'assistant.complete') { const skipped = !!(args as { skipped?: boolean }).skipped; assistantMock = { ...assistantMock, completed: !skipped, skipped }; return assistantView() as T; }
     if (name === 'provider.status') return { ...providerMock } as T;
     if (name === 'provider.cli.status') return { ...providerCliMock } as T;
     if (name === 'provider.cli.configure') { providerCliMock.selected = (args as { kind: string }).kind; return {} as T; }

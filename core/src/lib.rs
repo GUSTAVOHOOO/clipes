@@ -56,6 +56,7 @@ pub fn dispatch(name: &str, arguments: Value, events: &mut EventSink<'_>) -> Com
     }
 }
 
+mod assistant;
 mod components;
 pub mod jobs;
 pub mod process;

@@ -73,6 +73,10 @@ fn configure(args: Value, _: &mut EventSink<'_>) -> CommandResult {
     let mut s = read()?;
     s.selected = kind.into();
     write(&s)?;
+    drop(_lock);
+    if kind.is_empty() {
+        crate::assistant::forget_cli()?;
+    }
     Ok(json!({}))
 }
 fn confirm(args: Value, _: &mut EventSink<'_>) -> CommandResult {
@@ -110,6 +114,18 @@ pub(crate) fn selected() -> Result<Option<String>, CoreError> {
         )),
         _ => Err(error("invalid_settings", "Invalid provider")),
     }
+}
+/// Whether the user already confirmed sending text to this CLI (the #39 warning).
+pub(crate) fn confirmed(kind: &str) -> Result<bool, CoreError> {
+    let _lock = LOCK
+        .lock()
+        .map_err(|_| error("settings", "Could not access provider settings"))?;
+    let s = read()?;
+    Ok(match kind {
+        "codex" => s.codex_confirmed,
+        "claude" => s.claude_confirmed,
+        _ => false,
+    })
 }
 pub(crate) fn clear() -> Result<(), CoreError> {
     let _lock = LOCK
