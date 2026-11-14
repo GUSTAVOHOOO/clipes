@@ -6,7 +6,7 @@ status: accepted
 
 Cada chamada ao Provedor deixa no Projeto uma linha de custo e uma de auditoria, **inclusive as que falham depois de receber resposta**. Decisão do dev em 14/11/2026, a partir da [pesquisa do harness (#114)](https://github.com/GUSTAVOHOOO/clipes/issues/114) e da [pesquisa de roteamento (#113)](https://github.com/GUSTAVOHOOO/clipes/issues/113). Complementa o [#40](https://github.com/GUSTAVOHOOO/clipes/issues/40), o [ADR-0005](0005-projeto-portatil-com-sqlite.md) (custos e jobs são tabelas) e o [ADR-0006](0006-relato-de-problemas-sem-telemetria.md).
 
-Uma resposta inválida já foi cobrada pelo Provedor. Hoje o núcleo só guarda o custo agregado por tarefa e por lote, e perde o `usage` das falhas. Sem o número por chamada, não há como somar, auditar nem aplicar teto com honestidade.
+Uma resposta inválida já foi cobrada pelo Provedor. O núcleo guarda o custo agregado por tarefa e por lote, e as falhas de limite de taxa e HTTP ainda não carregam `usage`. Sem o número por chamada, não há como somar, auditar nem aplicar teto com honestidade.
 
 ## Custo e orçamento
 
