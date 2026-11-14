@@ -248,10 +248,21 @@ impl Adapter {
             } else {
                 json!({"inputTokens":input,"outputTokens":output})
             };
-            if matches!(self.kind, Kind::Anthropic) && response["stop_reason"] == "max_tokens" {
-                let mut e = error("output_truncated", "Provider output was truncated");
+            let truncated = match self.kind {
+                Kind::OpenAi => response.pointer("/choices/0/finish_reason"),
+                Kind::Anthropic => response.get("stop_reason"),
+                Kind::Gemini => response.pointer("/candidates/0/finishReason"),
+            }
+            .and_then(Value::as_str)
+            .is_some_and(|reason| matches!(reason, "length" | "max_tokens" | "MAX_TOKENS"));
+            // Every failure after a response was received was already billed: carry the usage.
+            let billed = |code: &str, message: &str| {
+                let mut e = error(code, message);
                 e.usage = Some(json!({"usage":usage,"calls":calls}));
-                return Err(e);
+                e
+            };
+            if truncated {
+                return Err(billed("output_truncated", "Provider output was truncated"));
             }
             let text = match self.kind {
                 Kind::OpenAi => response
@@ -265,17 +276,20 @@ impl Adapter {
                     .pointer("/candidates/0/content/parts/0/text")
                     .and_then(Value::as_str),
             }
-            .ok_or_else(|| error("invalid_response", "Provider response contains no text"))?;
+            .ok_or_else(|| billed("invalid_response", "Provider response contains no text"))?;
             if let Ok(value) = serde_json::from_str::<Value>(text) {
                 if value.get("schemaVersion").is_some() && validator.is_valid(&value) {
                     return Ok(json!({"data":value,"usage":usage,"calls":calls}));
                 }
             }
             if request.native_schema {
-                return Err(error("invalid_json", "Provider response failed validation"));
+                return Err(billed(
+                    "invalid_json",
+                    "Provider response failed validation",
+                ));
             }
             if repair == 1 {
-                return Err(error(
+                return Err(billed(
                     "invalid_json",
                     "Provider response failed validation after repair",
                 ));

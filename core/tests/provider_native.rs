@@ -1,4 +1,6 @@
-use clipes_core::provider::{AnthropicProvider, GeminiProvider, Provider, StructuredRequest};
+use clipes_core::provider::{
+    AnthropicProvider, GeminiProvider, OpenAiProvider, Provider, StructuredRequest,
+};
 use serde_json::{json, Value};
 use std::{
     io::{Read, Write},
@@ -223,4 +225,165 @@ fn anthropic_repairs_and_sums_usage() {
 #[test]
 fn gemini_repairs_and_sums_usage() {
     repair_with_usage("gemini");
+}
+
+fn truncation(kind: &str, reply: Value) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let endpoint = format!("http://{}/v1", listener.local_addr().unwrap());
+    let server = thread::spawn(move || {
+        // A second connection would mean an automatic repair, which is a paid extra call.
+        listener.set_nonblocking(false).unwrap();
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(3)))
+            .unwrap();
+        let mut bytes = Vec::new();
+        loop {
+            let mut chunk = [0; 4096];
+            let n = stream.read(&mut chunk).unwrap();
+            assert!(n > 0);
+            bytes.extend_from_slice(&chunk[..n]);
+            if let Some(pos) = bytes.windows(4).position(|x| x == b"\r\n\r\n") {
+                let headers = String::from_utf8_lossy(&bytes[..pos]).to_lowercase();
+                let len: usize = headers
+                    .lines()
+                    .find_map(|l| l.strip_prefix("content-length:"))
+                    .unwrap()
+                    .trim()
+                    .parse()
+                    .unwrap();
+                if bytes.len() >= pos + 4 + len {
+                    break;
+                }
+            }
+        }
+        let reply = reply.to_string();
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            reply.len(),
+            reply
+        )
+        .unwrap();
+        drop(stream);
+        listener.set_nonblocking(true).unwrap();
+        thread::sleep(std::time::Duration::from_millis(300));
+        assert!(listener.accept().is_err(), "unexpected repair call");
+    });
+    let request = StructuredRequest {
+        instruction: "Return JSON".into(),
+        transcript: "".into(),
+        schema: json!({"type":"object"}),
+        native_schema: false,
+        max_output_tokens: Some(21),
+    };
+    let error = match kind {
+        "openai" => OpenAiProvider::new(endpoint, "model".into(), None)
+            .unwrap()
+            .structured(&request),
+        _ => GeminiProvider::new(endpoint, "model".into(), None)
+            .unwrap()
+            .structured(&request),
+    }
+    .unwrap_err();
+    assert_eq!(error.code, "output_truncated");
+    server.join().unwrap();
+    assert_eq!(
+        error.usage,
+        Some(json!({"usage":{"inputTokens":9,"outputTokens":21},"calls":1}))
+    );
+}
+
+#[test]
+fn openai_truncation_preserves_usage_without_repair() {
+    truncation(
+        "openai",
+        json!({"choices":[{"finish_reason":"length","message":{"content":"{"}}],"usage":{"prompt_tokens":9,"completion_tokens":21}}),
+    );
+}
+
+#[test]
+fn gemini_truncation_preserves_usage_without_repair() {
+    truncation(
+        "gemini",
+        json!({"candidates":[{"finishReason":"MAX_TOKENS","content":{"parts":[{"text":"{"}]}}],"usageMetadata":{"promptTokenCount":9,"candidatesTokenCount":21}}),
+    );
+}
+
+/// Serves one fake reply per connection and returns the provider error.
+fn failure(replies: Vec<Value>) -> clipes_core::CoreError {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let endpoint = format!("http://{}/v1", listener.local_addr().unwrap());
+    let server = thread::spawn(move || {
+        for reply in replies {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(3)))
+                .unwrap();
+            let mut bytes = Vec::new();
+            loop {
+                let mut chunk = [0; 4096];
+                let n = stream.read(&mut chunk).unwrap();
+                assert!(n > 0);
+                bytes.extend_from_slice(&chunk[..n]);
+                if let Some(pos) = bytes.windows(4).position(|x| x == b"\r\n\r\n") {
+                    let headers = String::from_utf8_lossy(&bytes[..pos]).to_lowercase();
+                    let len: usize = headers
+                        .lines()
+                        .find_map(|l| l.strip_prefix("content-length:"))
+                        .unwrap()
+                        .trim()
+                        .parse()
+                        .unwrap();
+                    if bytes.len() >= pos + 4 + len {
+                        break;
+                    }
+                }
+            }
+            let reply = reply.to_string();
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                reply.len(),
+                reply
+            )
+            .unwrap();
+        }
+    });
+    let request = StructuredRequest {
+        instruction: "Return JSON".into(),
+        transcript: "".into(),
+        schema: json!({"type":"object"}),
+        native_schema: false,
+        max_output_tokens: None,
+    };
+    let error = OpenAiProvider::new(endpoint, "model".into(), None)
+        .unwrap()
+        .structured(&request)
+        .unwrap_err();
+    server.join().unwrap();
+    error
+}
+
+#[test]
+fn invalid_json_after_repair_carries_accumulated_usage() {
+    let bad = |i, o| json!({"choices":[{"finish_reason":"stop","message":{"content":"nope"}}],"usage":{"prompt_tokens":i,"completion_tokens":o}});
+    let error = failure(vec![bad(10, 4), bad(15, 5)]);
+    assert_eq!(error.code, "invalid_json");
+    assert_eq!(
+        error.usage,
+        Some(json!({"usage":{"inputTokens":25,"outputTokens":9},"calls":2}))
+    );
+}
+
+#[test]
+fn refusal_carries_usage() {
+    let error = failure(vec![
+        json!({"choices":[{"finish_reason":"stop","message":{"content":null,"refusal":"no"}}],"usage":{"prompt_tokens":7,"completion_tokens":2}}),
+    ]);
+    assert_eq!(error.code, "invalid_response");
+    assert_eq!(
+        error.usage,
+        Some(json!({"usage":{"inputTokens":7,"outputTokens":2},"calls":1}))
+    );
 }
