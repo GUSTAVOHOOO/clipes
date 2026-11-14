@@ -12,8 +12,6 @@ ignore = [
   # pgp só verifica assinatura com chave pública, sem segredo (core/src/components/update.rs).
   "RUSTSEC-2023-0071", # rsa: tempo de operações com chave privada
   "RUSTSEC-2026-0387", # crypto-bigint: operações sobre inteiros secretos
-  # Correção rastreada no #104; risco real: Projetos portáteis podem vir de terceiros.
-  "RUSTSEC-2026-0459",
   # Macro de compilação sem código em runtime; depende do upstream gtk-rs/Tauri.
   "RUSTSEC-2024-0370",
   # Apenas avisos de manutenção; crates absorvidas pelo zbus 6. São trazidas no
