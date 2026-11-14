@@ -51,16 +51,27 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.path }}
           if-no-files-found: error
-      - name: Guardar artefatos assinados do updater
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+      - name: Guardar assinatura do updater Windows
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
-          name: updater-${{ matrix.artifact }}
-          path: |
-            target/release/bundle/nsis/*.exe.sig
-            target/release/bundle/appimage/*.AppImage.sig
-            target/release/bundle/deb/*.deb.sig
+          name: updater-windows
+          path: target/release/bundle/nsis/*.exe.sig
           if-no-files-found: error
+      - name: Guardar assinaturas do updater Linux
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: updater-linux
+          path: target/release/bundle/appimage/*.AppImage.sig
+          if-no-files-found: error
+      - name: Guardar assinatura opcional do updater DEB
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: updater-deb
+          path: target/release/bundle/deb/*.deb.sig
+          if-no-files-found: ignore
 
   release:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
@@ -89,9 +100,12 @@ jobs:
           deb_signatures=( *.deb.sig )
           debs=( *.deb )
           test "${#windows[@]}" -eq 1 && test "${#appimages[@]}" -eq 1 && test "${#debs[@]}" -eq 1
-          test "${#windows_signatures[@]}" -eq 1 && test "${#deb_signatures[@]}" -eq 1 && test "${#appimage_signatures[@]}" -eq 1
+          test "${#windows_signatures[@]}" -eq 1 && test "${#appimage_signatures[@]}" -eq 1
+          test "${#deb_signatures[@]}" -le 1
           sha256sum "${windows[@]}" "${appimages[@]}" "${debs[@]}" > SHA256SUMS.txt
-          gh release create "$RELEASE_TAG" "${windows[@]}" "${appimages[@]}" "${debs[@]}" "${windows_signatures[@]}" "${deb_signatures[@]}" "${appimage_signatures[@]}" SHA256SUMS.txt --generate-notes
+          release_assets=( "${windows[@]}" "${appimages[@]}" "${debs[@]}" "${windows_signatures[@]}" "${appimage_signatures[@]}" SHA256SUMS.txt )
+          if ((${#deb_signatures[@]})); then release_assets+=( "${deb_signatures[@]}" ); fi
+          gh release create "$RELEASE_TAG" "${release_assets[@]}" --generate-notes
           gh release view "$RELEASE_TAG" --json body --jq .body > release-notes.md
           RELEASE_NOTES="$(cat release-notes.md)" python3 - <<'PY'
           import json
@@ -104,28 +118,33 @@ jobs:
           windows = next(Path(".").glob("*.exe"))
           windows_signature = Path(f"{windows}.sig").read_text().strip()
           deb = next(Path(".").glob("*.deb"))
-          deb_signature = Path(f"{deb}.sig").read_text().strip()
           appimage = next(Path(".").glob("*.AppImage"))
           appimage_signature = Path(f"{appimage}.sig").read_text().strip()
           base = f"https://github.com/{repo}/releases/download/{tag}"
+          windows_platform = {
+              "url": f"{base}/{windows}",
+              "signature": windows_signature,
+          }
+          appimage_platform = {
+              "url": f"{base}/{appimage}",
+              "signature": appimage_signature,
+          }
           payload = {
               "version": version,
               "notes": os.environ["RELEASE_NOTES"].strip() or f"Atualização do Clipes para a versão {version}.",
               "platforms": {
-                  "windows-x86_64-nsis": {
-                      "url": f"{base}/{windows}",
-                      "signature": windows_signature,
-                  },
-                  "linux-x86_64-deb": {
-                      "url": f"{base}/{deb}",
-                      "signature": deb_signature,
-                  },
-                  "linux-x86_64-appimage": {
-                      "url": f"{base}/{appimage}",
-                      "signature": appimage_signature,
-                  },
+                  "windows-x86_64-nsis": windows_platform,
+                  "windows-x86_64": windows_platform,
+                  "linux-x86_64-appimage": appimage_platform,
+                  "linux-x86_64": appimage_platform,
               },
           }
+          deb_signature_path = Path(f"{deb}.sig")
+          if deb_signature_path.is_file():
+              payload["platforms"]["linux-x86_64-deb"] = {
+                  "url": f"{base}/{deb}",
+                  "signature": deb_signature_path.read_text().strip(),
+              }
           Path("latest.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
           PY
           gh release upload "$RELEASE_TAG" latest.json --clobber
