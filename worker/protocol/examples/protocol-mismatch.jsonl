@@ -1,0 +1,2 @@
+{"from":"core","message":{"v":1,"type":"hello","protocol":99}}
+{"from":"worker","message":{"v":1,"type":"error","id":null,"code":"protocol_mismatch","message":"Versão do protocolo incompatível."}}

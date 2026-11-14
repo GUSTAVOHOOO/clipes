@@ -66,5 +66,6 @@ mod provider_cli;
 mod sources;
 mod url_import;
 mod version;
+pub mod worker;
 
 pub mod diagnostic;

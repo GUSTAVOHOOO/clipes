@@ -41,11 +41,26 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
+    spawn_managed_with(program, arguments, |_| {})
+}
+
+/// Like [`spawn_managed`], letting the caller adjust the command (environment,
+/// piped stdin, working directory) before it starts. Still no shell.
+pub fn spawn_managed_with<I, S>(
+    program: impl AsRef<OsStr>,
+    arguments: I,
+    configure: impl FnOnce(&mut Command),
+) -> io::Result<(Child, ProcessGroup)>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
     let mut command = Command::new(program);
     command
         .args(arguments)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
+    configure(&mut command);
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;

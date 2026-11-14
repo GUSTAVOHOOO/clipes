@@ -1,0 +1,8 @@
+{"from":"core","message":{"v":1,"type":"hello","protocol":1}}
+{"from":"worker","message":{"v":1,"type":"handshake","protocol":1,"worker":"*","python":"*","libs":{"faster-whisper":"*","onnxruntime":"*","numpy":"*","opencv-python-headless":"*"}}}
+{"from":"core","message":{"v":1,"type":"request","id":"r1","task":"transcribe","params":{"wait_for_cancel":true}}}
+{"from":"worker","message":{"v":1,"type":"event","event":"model_loaded","model":"fake-whisper"}}
+{"from":"worker","message":{"v":1,"type":"progress","id":"r1","stage":"transcribing","percentage":10,"message":"Transcrevendo"}}
+{"from":"core","message":{"v":1,"type":"cancel","id":"r1"}}
+{"from":"worker","message":{"v":1,"type":"error","id":"r1","code":"cancelled","message":"Tarefa cancelada."}}
+{"from":"core","message":{"v":1,"type":"shutdown"}}

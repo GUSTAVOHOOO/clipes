@@ -55,6 +55,22 @@ try {
   await ytDlpUpdateDialog.getByRole('button', {name:'Atualizar',exact:true}).click();
   await page.getByText('Verificação de atualização concluída.').waitFor();
 
+  const workerCard = page.getByRole('article', { name: /Worker de ML/ });
+  assert.match(await workerCard.innerText(), /Protocolo\s*1/);
+  assert.match(await workerCard.innerText(), /faster-whisper\s*1\.2\.1/);
+  assert.match(await workerCard.innerText(), /opencv-python-headless\s*não instalada/);
+  await workerCard.getByRole('button', { name: 'Reinstalar worker' }).click();
+  const workerDialog = page.getByRole('alertdialog', { name: 'Instalar o worker de ML?' });
+  await workerDialog.waitFor();
+  const workerDialogText = await workerDialog.innerText();
+  assert.match(workerDialogText, /uv: MIT OR Apache-2\.0/);
+  assert.match(workerDialogText, /Python gerenciado: PSF-2\.0/);
+  assert.match(workerDialogText, /Bibliotecas do worker: licenças permissivas/);
+  assert.match(workerDialogText, /nvidia-cublas-cu12 e nvidia-cudnn-cu12\), proprietárias, sob o EULA da NVIDIA/);
+  assert.equal(await workerDialog.getByRole('link', { name: 'Texto oficial do EULA' }).getAttribute('href'), 'https://docs.nvidia.com/cuda/eula/index.html');
+  await workerDialog.getByRole('button', { name: 'Cancelar' }).click();
+  await workerDialog.waitFor({ state: 'hidden' });
+
   page.once('dialog', dialog => dialog.dismiss());
   await page.getByRole('button', { name: 'Baixar' }).first().click();
   await page.screenshot({ path: 'shots/components.png' });

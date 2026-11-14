@@ -1,0 +1,11 @@
+{"from":"core","message":{"v":1,"type":"hello","protocol":1}}
+{"from":"worker","message":{"v":1,"type":"handshake","protocol":1,"worker":"*","python":"*","libs":{"faster-whisper":"*","onnxruntime":"*","numpy":"*","opencv-python-headless":"*"}}}
+{"from":"core","message":{"v":1,"type":"request","id":"r1","task":"transcribe","params":{}}}
+{"from":"worker","message":{"v":1,"type":"event","event":"model_loaded","model":"fake-whisper"}}
+{"from":"worker","message":{"v":1,"type":"progress","id":"r1","stage":"transcribing","percentage":50,"message":"Transcrevendo"}}
+{"from":"worker","message":{"v":1,"type":"result","id":"r1","data":{"text":"olá mundo"}}}
+{"from":"core","message":{"v":1,"type":"request","id":"r2","task":"reframe","params":{}}}
+{"from":"worker","message":{"v":1,"type":"event","event":"model_released","model":"fake-whisper"}}
+{"from":"worker","message":{"v":1,"type":"event","event":"model_loaded","model":"fake-yunet"}}
+{"from":"worker","message":{"v":1,"type":"result","id":"r2","data":{"crop":[0,0,1080,1920]}}}
+{"from":"core","message":{"v":1,"type":"shutdown"}}

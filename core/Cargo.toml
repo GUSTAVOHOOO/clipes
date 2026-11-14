@@ -17,6 +17,7 @@ sha2 = "0.10"
 dirs = "6"
 zip = { version = "9.5.1", default-features = false, features = ["deflate"] }
 tar = "0.4"
+flate2 = "1"
 xz2 = "0.1"
 rusqlite = { version = "0.42", features = ["bundled", "backup"] }
 pgp = "0.20"
@@ -29,3 +30,10 @@ libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
+
+# Worker e uv falsos para os testes de contrato do núcleo (não entram no instalador).
+[[bin]]
+name = "fake-worker"
+path = "tests/support/fake_worker.rs"
+test = false
+doctest = false
