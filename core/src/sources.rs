@@ -1,5 +1,5 @@
 use crate::{projects, CommandRegistration, CommandResult, CoreError, EventSink, ProgressEvent};
-use rusqlite::{params, Connection};
+use rusqlite::params;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
@@ -21,13 +21,18 @@ fn err(code: &str, message: &str) -> CoreError {
         message: message.into(),
     }
 }
-fn writer(v: &Value) -> Result<Connection, CoreError> {
-    let p = v["project"]
+fn project_job(v: &Value) -> Result<projects::ProjectJob, CoreError> {
+    let job = projects::start_job()?;
+    let requested = v["project"]
         .as_str()
         .ok_or_else(|| err("invalid_project", "Projeto obrigatório"))?;
-    projects::open_db(Path::new(p))
-        .map_err(|_| err("project_open", "Não foi possível abrir o Projeto"))
+    let current = crate::dispatch("projects.current", json!({}), &mut |_| {})?;
+    if current["path"].as_str() != Some(requested) {
+        return Err(err("invalid_project", "O Projeto não está aberto"));
+    }
+    Ok(job)
 }
+
 fn resolve_path(v: &Value, stored: &str) -> Result<PathBuf, CoreError> {
     let path = PathBuf::from(stored);
     if path.is_absolute() {
@@ -211,6 +216,7 @@ fn inspect(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     probe(&path)
 }
 fn import(v: Value, events: &mut EventSink<'_>) -> CommandResult {
+    let _job = project_job(&v)?;
     permission(&v["permission"])?;
     let source = PathBuf::from(
         v["path"]
@@ -285,15 +291,14 @@ fn import(v: Value, events: &mut EventSink<'_>) -> CommandResult {
         path = Path::new("media").join(name);
     }
     let modified = modified(&resolve_path(&v, &path.to_string_lossy())?)?;
-    let conn = writer(&v)?;
-    conn.execute("INSERT INTO sources(path,size,duration_us,partial_hash,full_hash,metadata,permission,audio_track,modified) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",params![path.to_string_lossy(),size as i64,dur,part,full_hash,metadata.to_string(),v["permission"].to_string(),audio,modified]).map_err(|_|err("source_save","Não foi possível salvar a Fonte"))?;
-    let id = conn.last_insert_rowid();
-    drop(conn);
+    let id = projects::with_writer(|conn| {
+        conn.execute("INSERT INTO sources(path,size,duration_us,partial_hash,full_hash,metadata,permission,audio_track,modified) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",params![path.to_string_lossy(),size as i64,dur,part,full_hash,metadata.to_string(),v["permission"].to_string(),audio,modified])?;
+        Ok(conn.last_insert_rowid())
+    })?;
     get(&v, id)
 }
 fn get(v: &Value, id: i64) -> CommandResult {
-    let conn = writer(v)?;
-    let (path,metadata,permission,audio,hash,size,partial_hash,mtime):(String,String,String,i64,Option<String>,i64,String,Option<String>)=conn.query_row("SELECT path,metadata,permission,audio_track,full_hash,size,partial_hash,modified FROM sources WHERE id=?1",[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?,r.get(7)?))).map_err(|_|err("source_missing","Fonte não encontrada"))?;
+    let (path,metadata,permission,audio,hash,size,partial_hash,mtime):(String,String,String,i64,Option<String>,i64,String,Option<String>)=projects::with_reader(|conn| conn.query_row("SELECT path,metadata,permission,audio_track,full_hash,size,partial_hash,modified FROM sources WHERE id=?1",[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?,r.get(7)?)))).map_err(|_|err("source_missing","Fonte não encontrada"))?;
     let resolved = resolve_path(v, &path)?;
     let state = if !resolved.is_file() {
         "offline"
@@ -310,41 +315,38 @@ fn get(v: &Value, id: i64) -> CommandResult {
     )
 }
 fn list(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let conn = writer(&v)?;
-    let mut q = conn
-        .prepare("SELECT id FROM sources ORDER BY id")
-        .map_err(|_| err("source_read", "Não foi possível listar Fontes"))?;
-    let ids = q
-        .query_map([], |r| r.get::<_, i64>(0))
-        .map_err(|_| err("source_read", "Não foi possível listar Fontes"))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| err("source_read", "Não foi possível listar Fontes"))?;
-    drop(q);
-    drop(conn);
+    let _job = project_job(&v)?;
+    let ids = projects::with_reader(|conn| {
+        let mut q = conn.prepare("SELECT id FROM sources ORDER BY id")?;
+        let rows = q
+            .query_map([], |r| r.get::<_, i64>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    })?;
     Ok(json!(ids
         .into_iter()
         .map(|id| get(&v, id))
         .collect::<Result<Vec<_>, _>>()?))
 }
 fn hash_source(v: Value, events: &mut EventSink<'_>) -> CommandResult {
+    let _job = project_job(&v)?;
     let id = v["id"]
         .as_i64()
         .ok_or_else(|| err("source_missing", "Fonte não encontrada"))?;
-    let conn = writer(&v)?;
     let (path, size, part, mtime, previous_hash): (
         String,
         i64,
         String,
         Option<String>,
         Option<String>,
-    ) = conn
-        .query_row(
+    ) = projects::with_reader(|conn| {
+        conn.query_row(
             "SELECT path,size,partial_hash,modified,full_hash FROM sources WHERE id=?1",
             [id],
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
         )
-        .map_err(|_| err("source_missing", "Fonte não encontrada"))?;
-    drop(conn);
+    })
+    .map_err(|_| err("source_missing", "Fonte não encontrada"))?;
     let resolved = resolve_path(&v, &path)?;
     let before = partial(&resolved)?;
     let before_mtime = modified(&resolved)?;
@@ -383,8 +385,9 @@ fn hash_source(v: Value, events: &mut EventSink<'_>) -> CommandResult {
             "A Fonte foi alterada durante a verificação",
         ));
     }
-    let conn = writer(&v)?;
-    let updated=conn.execute("UPDATE sources SET full_hash=?1,size=?2,partial_hash=?3,modified=?4,metadata=COALESCE(?5,metadata),duration_us=COALESCE(?6,duration_us) WHERE id=?7 AND path=?8 AND partial_hash=?9",params![hash,before.0 as i64,before.1,before_mtime,metadata.as_ref().map(Value::to_string),metadata.as_ref().and_then(duration),id,path,part]).map_err(|_|err("source_save","Não foi possível salvar a verificação"))?;
+    let updated = projects::with_writer(|conn| {
+        conn.execute("UPDATE sources SET full_hash=?1,size=?2,partial_hash=?3,modified=?4,metadata=COALESCE(?5,metadata),duration_us=COALESCE(?6,duration_us) WHERE id=?7 AND path=?8 AND partial_hash=?9",params![hash,before.0 as i64,before.1,before_mtime,metadata.as_ref().map(Value::to_string),metadata.as_ref().and_then(duration),id,path,part])
+    })?;
     if updated != 1 {
         return Err(err(
             "source_changed",
@@ -394,6 +397,7 @@ fn hash_source(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     Ok(json!({"verified":true}))
 }
 fn relocate(v: Value, events: &mut EventSink<'_>) -> CommandResult {
+    let _job = project_job(&v)?;
     let id = v["id"]
         .as_i64()
         .ok_or_else(|| err("source_missing", "Fonte não encontrada"))?;
@@ -402,15 +406,15 @@ fn relocate(v: Value, events: &mut EventSink<'_>) -> CommandResult {
             .as_str()
             .ok_or_else(|| err("invalid_source", "Selecione a Fonte"))?,
     );
-    let conn = writer(&v)?;
-    let (size, dur, part, hash): (i64, i64, String, Option<String>) = conn
-        .query_row(
-            "SELECT size,duration_us,partial_hash,full_hash FROM sources WHERE id=?1",
-            [id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
-        )
+    let (size, dur, part, hash): (i64, i64, String, Option<String>) =
+        projects::with_reader(|conn| {
+            conn.query_row(
+                "SELECT size,duration_us,partial_hash,full_hash FROM sources WHERE id=?1",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+        })
         .map_err(|_| err("source_missing", "Fonte não encontrada"))?;
-    drop(conn);
     if partial(&candidate)? != (size as u64, part.clone())
         || duration(&probe(&candidate)?) != Some(dur)
     {
@@ -434,13 +438,12 @@ fn relocate(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     let path = candidate
         .canonicalize()
         .map_err(|_| err("source_unavailable", "Fonte indisponível"))?;
-    let conn = writer(&v)?;
-    conn.execute(
-        "UPDATE sources SET path=?1,full_hash=?2,modified=?3 WHERE id=?4",
-        params![path.to_string_lossy(), candidate_hash, candidate_mtime, id],
-    )
-    .map_err(|_| err("source_save", "Não foi possível relocalizar a Fonte"))?;
-    drop(conn);
+    projects::with_writer(|conn| {
+        conn.execute(
+            "UPDATE sources SET path=?1,full_hash=?2,modified=?3 WHERE id=?4",
+            params![path.to_string_lossy(), candidate_hash, candidate_mtime, id],
+        )
+    })?;
     get(&v, id)
 }
 inventory::submit! {CommandRegistration{name:"sources.import",execute:import}}

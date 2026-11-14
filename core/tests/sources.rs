@@ -164,6 +164,24 @@ fn local_source_lifecycle() {
         json!({"project":project,"id":unverified_id,"path":moved,"confirmed":true})
     )
     .is_ok());
+    let mut job_blocks_close = false;
+    run(
+        "sources.hash",
+        json!({"project":project,"id":id,"job":"guard-test"}),
+    )
+    .unwrap();
+    dispatch(
+        "sources.hash",
+        json!({"project":project,"id":id,"job":"guard-observe"}),
+        &mut |_| {
+            job_blocks_close = dispatch("projects.close", json!({}), &mut |_| {})
+                .unwrap_err()
+                .code
+                == "project_busy";
+        },
+    )
+    .unwrap();
+    assert!(job_blocks_close);
     let mut emitted = false;
     let result = dispatch(
         "sources.hash",
@@ -246,8 +264,10 @@ fn local_source_lifecycle() {
         "available"
     );
     let moved_project = root.join("Canal-movido.clipes");
+    run("projects.close", json!({})).unwrap();
     fs::rename(project, &moved_project).unwrap();
-    let items = run("sources.list", json!({"project":moved_project})).unwrap();
+    let reopened = run("projects.open", json!({"path":moved_project})).unwrap();
+    let items = run("sources.list", json!({"project":reopened["path"]})).unwrap();
     let copy = items
         .as_array()
         .unwrap()
@@ -255,5 +275,6 @@ fn local_source_lifecycle() {
         .find(|s| s["id"] == copied["id"])
         .unwrap();
     assert_eq!(copy["available"], true);
+    run("projects.close", json!({})).unwrap();
     fs::remove_dir_all(root).unwrap();
 }
