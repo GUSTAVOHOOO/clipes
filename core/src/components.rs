@@ -1,4 +1,5 @@
 mod update;
+pub(crate) mod worker;
 use crate::{CommandRegistration, CommandResult, CoreError, EventSink, ProgressEvent};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -28,9 +29,9 @@ struct Component {
 
 fn manifest() -> Vec<Component> {
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-    let assets = [("ffmpeg", "N-128889-g88c46fce27", "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-11-13-12-43/ffmpeg-N-128889-g88c46fce27-win64-gpl.zip", "35fa1c17eeead1f572072b134458788caf71c4a7fbce9e0bb2f3c41032959531", 201952396), ("yt-dlp", "2026.11.04.232659", "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/2026.11.04.232659/yt-dlp.exe", "85c8d440422108bee7ecd11e584d56cc04fb3bd1a0b3200bdc8a66d5c5a985fc", 23587638)];
+    let assets = [("ffmpeg", "N-128889-g88c46fce27", "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-11-13-12-43/ffmpeg-N-128889-g88c46fce27-win64-gpl.zip", "35fa1c17eeead1f572072b134458788caf71c4a7fbce9e0bb2f3c41032959531", 201952396), ("yt-dlp", "2026.11.04.232659", "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/2026.11.04.232659/yt-dlp.exe", "85c8d440422108bee7ecd11e584d56cc04fb3bd1a0b3200bdc8a66d5c5a985fc", 23587638), ("uv", "0.13.8", "https://github.com/astral-sh/uv/releases/download/0.13.8/uv-x86_64-pc-windows-msvc.zip", "529e78a9cec6cd7e3e014f7ecd8bda0c113969d4ed0f2efeedb85c30943325b8", 15529884)];
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    let assets = [("ffmpeg", "N-128889-g88c46fce27", "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-11-13-12-43/ffmpeg-N-128889-g88c46fce27-linux64-gpl.tar.xz", "efa8f93583e84d5a1036e7e08e19db9f03ca637d7620ed58b0ecca39e9e34323", 157401784), ("yt-dlp", "2026.11.04.232659", "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/2026.11.04.232659/yt-dlp_linux", "16e96c02ffefd0bd1fe8ae6cc943b16c96e575c29eed7038d15213034437bc34", 41179568)];
+    let assets = [("ffmpeg", "N-128889-g88c46fce27", "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-11-13-12-43/ffmpeg-N-128889-g88c46fce27-linux64-gpl.tar.xz", "efa8f93583e84d5a1036e7e08e19db9f03ca637d7620ed58b0ecca39e9e34323", 157401784), ("yt-dlp", "2026.11.04.232659", "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/2026.11.04.232659/yt-dlp_linux", "16e96c02ffefd0bd1fe8ae6cc943b16c96e575c29eed7038d15213034437bc34", 41179568), ("uv", "0.13.8", "https://github.com/astral-sh/uv/releases/download/0.13.8/uv-x86_64-unknown-linux-gnu.tar.gz", "5acfd9177cfecf0bf87578f059728215ccc884388988f55f7a65041b57387d91", 16855069)];
     #[cfg(not(any(
         all(target_os = "windows", target_arch = "x86_64"),
         all(target_os = "linux", target_arch = "x86_64")
@@ -44,16 +45,17 @@ fn manifest() -> Vec<Component> {
             url,
             sha256,
             size,
-            license: if id == "ffmpeg" {
-                "GPL-3.0-or-later"
-            } else {
-                "Unlicense"
+            license: match id {
+                "ffmpeg" => "GPL-3.0-or-later",
+                // Licença dupla "Apache-2.0 OR MIT"; adotamos a Apache-2.0 do projeto.
+                "uv" => "Apache-2.0",
+                _ => "Unlicense",
             },
             build_source_url: if id == "ffmpeg" { Some("https://github.com/FFmpeg-Builds/FFmpeg-Builds/tree/autobuild-2026-11-13-12-43") } else { None },
-            source_url: if id == "ffmpeg" {
-                "https://github.com/FFmpeg/FFmpeg/tree/88c46fce27"
-            } else {
-                "https://github.com/yt-dlp/yt-dlp-nightly-builds/tree/2026.11.04.232659"
+            source_url: match id {
+                "ffmpeg" => "https://github.com/FFmpeg/FFmpeg/tree/88c46fce27",
+                "uv" => "https://github.com/astral-sh/uv/tree/0.13.8",
+                _ => "https://github.com/yt-dlp/yt-dlp-nightly-builds/tree/2026.11.04.232659",
             },
         })
         .collect()
@@ -168,6 +170,7 @@ fn diagnostic_components_for(settings: &Settings) -> String {
                         update::installed(&exe).unwrap_or_else(|_| "indisponível".into())
                     }
                 }
+                "uv" => worker::uv_version_for(settings).unwrap_or_else(|| "não instalado".into()),
                 _ => "indisponível".into(),
             };
             format!("{}: {}", item.id, value)
@@ -321,55 +324,61 @@ fn download(v: Value, events: &mut EventSink<'_>) -> CommandResult {
         }
         map.insert(id.into(), flag.clone());
     }
-    let result = (|| {
-        let settings = load_settings()?;
-        let dir = settings.data_dir.join("components");
-        fs::create_dir_all(&dir).map_err(|e| error("download", e))?;
-        let part = dir.join(format!("{}-{}.part", item.id, item.version));
-        fetch(
-            &item.url,
-            item.sha256,
-            item.size,
-            &part,
-            &flag,
-            |percentage| {
-                events(ProgressEvent {
-                    project: None,
-                    job: id.into(),
-                    stage: "download".into(),
-                    percentage,
-                    message: "Baixando componente".into(),
-                    error: None,
-                })
-            },
-        )?;
-        let exe = dir.join(if cfg!(windows) {
-            format!("{}.exe", item.id)
-        } else {
-            item.id.to_string()
-        });
-        install(&item, &part, &exe)?;
-        if item.id == "ffmpeg" {
-            let mut settings = load_settings()?;
-            settings.ffmpeg_path = Some(exe.clone());
-            save_settings(&settings)?;
-        }
-        fs::remove_file(part).map_err(|e| error("install", e))?;
-        events(ProgressEvent {
-            project: None,
-            job: id.into(),
-            stage: "complete".into(),
-            percentage: 100,
-            message: "Componente instalado".into(),
-            error: None,
-        });
-        Ok(json!({"path": exe}))
-    })();
+    let result = download_item(&item, &flag, id, events);
     if result.is_err() {
         crate::diagnostic::record(crate::diagnostic::DiagnosticEvent::ComponentFailure);
     }
     jobs().lock().unwrap().remove(id);
     result
+}
+fn download_item(
+    item: &Component,
+    flag: &AtomicBool,
+    id: &str,
+    events: &mut EventSink<'_>,
+) -> CommandResult {
+    let settings = load_settings()?;
+    let dir = settings.data_dir.join("components");
+    fs::create_dir_all(&dir).map_err(|e| error("download", e))?;
+    let part = dir.join(format!("{}-{}.part", item.id, item.version));
+    fetch(
+        item.url,
+        item.sha256,
+        item.size,
+        &part,
+        flag,
+        |percentage| {
+            events(ProgressEvent {
+                project: None,
+                job: id.into(),
+                stage: "download".into(),
+                percentage,
+                message: "Baixando componente".into(),
+                error: None,
+            })
+        },
+    )?;
+    let exe = dir.join(if cfg!(windows) {
+        format!("{}.exe", item.id)
+    } else {
+        item.id.to_string()
+    });
+    install(item, &part, &exe)?;
+    if item.id == "ffmpeg" {
+        let mut settings = load_settings()?;
+        settings.ffmpeg_path = Some(exe.clone());
+        save_settings(&settings)?;
+    }
+    fs::remove_file(part).map_err(|e| error("install", e))?;
+    events(ProgressEvent {
+        project: None,
+        job: id.into(),
+        stage: "complete".into(),
+        percentage: 100,
+        message: "Componente instalado".into(),
+        error: None,
+    });
+    Ok(json!({"path": exe}))
 }
 fn fetch(
     url: &str,
@@ -464,6 +473,9 @@ fn install(item: &Component, part: &Path, exe: &Path) -> Result<(), CoreError> {
         fs::copy(part, &tmp).map_err(|e| error("install", e))?;
         return promote(&tmp, exe);
     }
+    if item.id == "uv" {
+        return install_uv(part, exe);
+    }
     let probe = exe.with_file_name(probe_name());
     let tmp_exe = exe.with_extension("installing");
     let tmp_probe = probe.with_extension("installing");
@@ -539,6 +551,66 @@ fn install(item: &Component, part: &Path, exe: &Path) -> Result<(), CoreError> {
     if result.is_err() {
         let _ = fs::remove_file(&tmp_exe);
         let _ = fs::remove_file(&tmp_probe);
+    }
+    result
+}
+/// Extrai só o executável `uv` do arquivo oficial (zip no Windows, tar.gz no Linux).
+fn install_uv(part: &Path, exe: &Path) -> Result<(), CoreError> {
+    let tmp = exe.with_extension("installing");
+    let name = if cfg!(windows) { "uv.exe" } else { "uv" };
+    let result = (|| {
+        let mut found = false;
+        if cfg!(windows) {
+            let mut zip = zip::ZipArchive::new(File::open(part).map_err(|e| error("install", e))?)
+                .map_err(|e| error("install", e))?;
+            let index = (0..zip.len())
+                .find(|i| {
+                    zip.by_index(*i)
+                        .map(|f| {
+                            f.name()
+                                .is_ok_and(|p| p == name || p.ends_with(&format!("/{name}")))
+                        })
+                        .unwrap_or(false)
+                })
+                .ok_or_else(|| error("install", "Executável uv ausente"))?;
+            let mut src = zip.by_index(index).map_err(|e| error("install", e))?;
+            io::copy(
+                &mut src,
+                &mut File::create(&tmp).map_err(|e| error("install", e))?,
+            )
+            .map_err(|e| error("install", e))?;
+            found = true;
+        } else {
+            let decoder =
+                flate2::read::GzDecoder::new(File::open(part).map_err(|e| error("install", e))?);
+            let mut archive = tar::Archive::new(decoder);
+            for entry in archive.entries().map_err(|e| error("install", e))? {
+                let mut entry = entry.map_err(|e| error("install", e))?;
+                let path = entry
+                    .path()
+                    .map_err(|e| error("install", e))?
+                    .to_string_lossy()
+                    .into_owned();
+                if entry.header().entry_type().is_file()
+                    && (path == name || path.ends_with(&format!("/{name}")))
+                {
+                    io::copy(
+                        &mut entry,
+                        &mut File::create(&tmp).map_err(|e| error("install", e))?,
+                    )
+                    .map_err(|e| error("install", e))?;
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if !found {
+            return Err(error("install", "Executável uv ausente"));
+        }
+        promote(&tmp, exe)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&tmp);
     }
     result
 }
