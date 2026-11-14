@@ -41,6 +41,11 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 ### Sem CI
 - Até o PR #86 entrar, o repo não tinha CI (`gh pr checks` responde `no checks reported`). Sem checks, revise pelo diff, pelos critérios de aceite e pela evidência de testes do worker, e diga isso no resumo.
 
+### Teste de diálogo falha intermitentemente no CI
+- **Sintoma:** Playwright encontra dois botões com o mesmo nome após fechar um diálogo Foco.
+- **Causa:** a animação de saída ainda mantém o botão do diálogo na árvore enquanto o teste tenta abrir o próximo diálogo.
+- **Ação:** aguarde o diálogo anterior ficar oculto e restrinja o seletor de abertura à seção que contém o botão.
+
 ### Tickets da mesma onda mexendo nos mesmos arquivos da raiz
 - **Ação:** faça o merge de um PR e mande o outro worker fazer rebase em `origin/master` antes de abrir (ou atualizar) o PR. Nada de push forçado em branch alheia.
 

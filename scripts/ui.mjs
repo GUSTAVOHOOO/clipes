@@ -97,13 +97,14 @@ try {
   await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
   await page.goto(`${url}?source-test=1`);
   await page.getByText('Resultado incerto').waitFor();
-  await page.getByRole('button', {name:'Repetir'}).click();
+  await page.locator('section[aria-labelledby="jobs-title"]').getByRole('button', {name:'Repetir'}).click();
   const retryDialog = page.getByRole('alertdialog', {name:'Repetir tarefa?'});
   await retryDialog.waitFor();
   assert.match(await retryDialog.innerText(), /cobrança/i);
   await retryDialog.getByRole('button', {name:'Cancelar'}).click();
+  await retryDialog.waitFor({state:'hidden'});
   await page.getByText('Resultado incerto').waitFor();
-  await page.getByRole('button', {name:'Repetir'}).click();
+  await page.locator('section[aria-labelledby="jobs-title"]').getByRole('button', {name:'Repetir'}).click();
   await retryDialog.getByRole('button', {name:'Repetir'}).click();
   await page.getByText('Resultado incerto').waitFor({state:'hidden'});
   await page.getByRole('button', {name:'Cancelar tarefa'}).first().click();
