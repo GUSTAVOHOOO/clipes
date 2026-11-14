@@ -17,7 +17,7 @@ ALLOWED = {
     "BSL-1.0", "OFL-1.1", "0BSD", "Unlicense", "Apache-2.0 WITH LLVM-exception",
 }
 
-# Exceções por pacote, cada uma com a razão. Elas aguardam revisão dos mantenedores
+# Exceções por pacote, cada uma com a razão, aprovadas pelo mantenedor em 2026-11-14 (PR #111)
 # (CONTRIBUTING.md, "Licenças de dependências"): nada entra aqui sem justificativa.
 EXCEPTIONS = {
     # Texto da licença PSF-2.0 (permissiva, a mesma do Python); só a anotação de tipos.
