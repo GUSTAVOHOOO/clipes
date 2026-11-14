@@ -73,3 +73,7 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 ### Cargo fora do PATH no Windows
 - **Sintoma:** `cargo` não é reconhecido, embora o Rust esteja instalado.
 - **Ação:** use `%USERPROFILE%\.cargo\bin\cargo.exe` ou acrescente `%USERPROFILE%\.cargo\bin` ao PATH da sessão.
+
+### faster-whisper não encontra CUDA no Windows
+- **Sintoma:** `Library cublas64_12.dll is not found or cannot be loaded`, mesmo com as bibliotecas NVIDIA instaladas no ambiente virtual.
+- **Ação:** acrescente ao `PATH` da sessão as pastas `Lib\site-packages\nvidia\cublas\bin` e `Lib\site-packages\nvidia\cudnn\bin` desse ambiente antes de iniciar o Python. Mantenha o ambiente e os modelos fora do repo.

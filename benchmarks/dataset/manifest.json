@@ -2721,7 +2721,7 @@
           "published_timestamp": 1763342332,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "ea81ffc2f46ac94208f89648e5e1b547843cdae102c8099a431bf22cd2baeb26",
           "format": "251",
           "file": "a3aI-2mWXus.webm",
@@ -2740,7 +2740,69 @@
               "score": 0.9211630118280174,
               "coarse_score": 0.4766260293823793
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 50.0,
+              "palavras_total": 18,
+              "spans_incertos": 5,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 3819.936,
+                "novo": 3819.936,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  3817.184,
+                  3821.728
+                ],
+                "rms": 0.027351,
+                "boundary_match_score": 0.9833,
+                "match_offset_error": 0.0003
+              },
+              "end": {
+                "original": 3832.436,
+                "novo": 3832.436,
+                "status": "borda não ajustada"
+              }
+            },
+            "incertos": [
+              {
+                "start": 3821.736,
+                "end": 3822.776,
+                "whisper": "",
+                "parakeet": "Hoje eu foto futuro!"
+              },
+              {
+                "start": 3829.736,
+                "end": 3830.396,
+                "whisper": "já botei",
+                "parakeet": "não vou te ir"
+              },
+              {
+                "start": 3830.416,
+                "end": 3831.096,
+                "whisper": "Demidu!",
+                "parakeet": "dedo de tu!"
+              },
+              {
+                "start": 3831.716,
+                "end": 3832.156,
+                "whisper": "botei",
+                "parakeet": "vou te ir"
+              },
+              {
+                "start": 3832.176,
+                "end": 3832.756,
+                "whisper": "Demidu!",
+                "parakeet": "dedo!"
+              }
+            ]
+          }
         },
         {
           "clip_start": 0.0,
@@ -2756,7 +2818,7 @@
           "published_timestamp": 1763384617,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "93e0ace9378cc85b01f8fb4c60bce616b51edda1951f558e6ae4dbc02d414169",
           "format": "251",
           "file": "YXuzpw18sEc.webm",
@@ -2775,13 +2837,69 @@
               "score": 0.9395885250259844,
               "coarse_score": 0.9595867757051884
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 78.95,
+              "palavras_total": 38,
+              "spans_incertos": 4,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 6987.15,
+                "novo": 6987.15,
+                "status": "borda não ajustada"
+              },
+              "end": {
+                "original": 7256.15,
+                "novo": 7256.15,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  7255.872,
+                  7256.992
+                ],
+                "rms": 0.03214,
+                "boundary_match_score": 0.9851,
+                "match_offset_error": 0.0003
+              }
+            },
+            "incertos": [
+              {
+                "start": 6984.15,
+                "end": 6984.71,
+                "whisper": "Pô, jacaré,",
+                "parakeet": "Mas peraí,"
+              },
+              {
+                "start": 6987.01,
+                "end": 6987.45,
+                "whisper": "que...",
+                "parakeet": ""
+              },
+              {
+                "start": 6987.93,
+                "end": 6988.47,
+                "whisper": "correndo com o",
+                "parakeet": "calando pro"
+              },
+              {
+                "start": 7258.55,
+                "end": 7258.91,
+                "whisper": "total.",
+                "parakeet": "totalmente."
+              }
+            ]
+          }
         },
         {
           "clip_start": 8.0,
-          "clip_end": 109.5,
+          "clip_end": 109.08,
           "start": 37.982,
-          "end": 139.482,
+          "end": 139.062,
           "score": 0.683,
           "coarse_score": 0.4521,
           "url": "https://www.youtube.com/watch?v=lxFBw6tpBtU",
@@ -2791,7 +2909,7 @@
           "published_timestamp": 1763419632,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "2179a3e6dd25c873d930e716c8f25934aa777cad50459b353e405f3bdf796866",
           "format": "251",
           "file": "lxFBw6tpBtU.webm",
@@ -2810,12 +2928,68 @@
               "score": 0.9519742289140297,
               "coarse_score": 0.5923605514929546
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 50.0,
+              "palavras_total": 12,
+              "spans_incertos": 4,
+              "bordas_ajustadas": 1
+            },
+            "bordas": {
+              "start": {
+                "original": 37.982,
+                "novo": 37.982,
+                "status": "borda não ajustada"
+              },
+              "end": {
+                "original": 139.482,
+                "novo": 139.062,
+                "delta": -0.42,
+                "vad_intervalo": [
+                  138.24,
+                  139.136
+                ],
+                "rms": 0.019253,
+                "boundary_match_score": 0.9275,
+                "match_offset_error": 0.0
+              }
+            },
+            "incertos": [
+              {
+                "start": 34.982,
+                "end": 39.622,
+                "whisper": "roleplay eu",
+                "parakeet": "Role play. Eu"
+              },
+              {
+                "start": 40.502,
+                "end": 40.742,
+                "whisper": "",
+                "parakeet": "o"
+              },
+              {
+                "start": 137.602,
+                "end": 137.842,
+                "whisper": "",
+                "parakeet": "Uh!"
+              },
+              {
+                "start": 140.322,
+                "end": 141.202,
+                "whisper": "",
+                "parakeet": "Tem aqui, tem aqui,"
+              }
+            ]
+          }
         },
         {
-          "clip_start": 110.0,
+          "clip_start": 109.987,
           "clip_end": 168.5,
-          "start": 142.004,
+          "start": 141.991,
           "end": 200.504,
           "score": 0.7368,
           "coarse_score": 0.7033,
@@ -2826,7 +3000,7 @@
           "published_timestamp": 1763419632,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "2179a3e6dd25c873d930e716c8f25934aa777cad50459b353e405f3bdf796866",
           "format": "251",
           "file": "lxFBw6tpBtU.webm",
@@ -2845,13 +3019,57 @@
               "score": 0.8860193628528736,
               "coarse_score": 0.8405956782842975
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 75.0,
+              "palavras_total": 16,
+              "spans_incertos": 2,
+              "bordas_ajustadas": 1
+            },
+            "bordas": {
+              "start": {
+                "original": 142.004,
+                "novo": 141.991,
+                "delta": -0.013,
+                "vad_intervalo": [
+                  141.696,
+                  142.56
+                ],
+                "rms": 0.015995,
+                "boundary_match_score": 0.9299,
+                "match_offset_error": -0.0002
+              },
+              "end": {
+                "original": 200.504,
+                "novo": 200.504,
+                "status": "borda não ajustada"
+              }
+            },
+            "incertos": [
+              {
+                "start": 140.324,
+                "end": 140.924,
+                "whisper": "Espera",
+                "parakeet": "Tem aqui, tem"
+              },
+              {
+                "start": 140.804,
+                "end": 141.404,
+                "whisper": "espera",
+                "parakeet": "tem"
+              }
+            ]
+          }
         },
         {
-          "clip_start": 168.75,
-          "clip_end": 221.5,
-          "start": 223.841,
-          "end": 276.591,
+          "clip_start": 168.46,
+          "clip_end": 221.632,
+          "start": 223.551,
+          "end": 276.723,
           "score": 0.8876,
           "coarse_score": 0.7727,
           "url": "https://www.youtube.com/watch?v=lxFBw6tpBtU",
@@ -2861,7 +3079,7 @@
           "published_timestamp": 1763419632,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "2179a3e6dd25c873d930e716c8f25934aa777cad50459b353e405f3bdf796866",
           "format": "251",
           "file": "lxFBw6tpBtU.webm",
@@ -2880,7 +3098,64 @@
               "score": 0.9343537827112998,
               "coarse_score": 0.7821359725783779
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 59.26,
+              "palavras_total": 27,
+              "spans_incertos": 3,
+              "bordas_ajustadas": 2
+            },
+            "bordas": {
+              "start": {
+                "original": 223.841,
+                "novo": 223.551,
+                "delta": -0.29,
+                "vad_intervalo": [
+                  222.816,
+                  223.744
+                ],
+                "rms": 0.02404,
+                "boundary_match_score": 0.8279,
+                "match_offset_error": 0.0001
+              },
+              "end": {
+                "original": 276.591,
+                "novo": 276.723,
+                "delta": 0.132,
+                "vad_intervalo": [
+                  276.288,
+                  277.952
+                ],
+                "rms": 0.001311,
+                "boundary_match_score": 0.9732,
+                "match_offset_error": 0.0003
+              }
+            },
+            "incertos": [
+              {
+                "start": 220.841,
+                "end": 222.121,
+                "whisper": "Tu é roda em baixa!",
+                "parakeet": "Embaixo?"
+              },
+              {
+                "start": 223.561,
+                "end": 225.001,
+                "whisper": "Eu sou a",
+                "parakeet": "é assim, só"
+              },
+              {
+                "start": 225.261,
+                "end": 225.961,
+                "whisper": "que força",
+                "parakeet": "de fósforo."
+              }
+            ]
+          }
         },
         {
           "clip_start": 229.25,
@@ -2896,7 +3171,7 @@
           "published_timestamp": 1763419632,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "2179a3e6dd25c873d930e716c8f25934aa777cad50459b353e405f3bdf796866",
           "format": "251",
           "file": "lxFBw6tpBtU.webm",
@@ -2915,7 +3190,81 @@
               "score": 0.9298802994265997,
               "coarse_score": 0.5875803304121275
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 32.14,
+              "palavras_total": 28,
+              "spans_incertos": 7,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 302.934,
+                "novo": 302.934,
+                "status": "borda não ajustada"
+              },
+              "end": {
+                "original": 372.434,
+                "novo": 372.434,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  372.16,
+                  372.992
+                ],
+                "rms": 0.004821,
+                "boundary_match_score": 0.987,
+                "match_offset_error": 0.0002
+              }
+            },
+            "incertos": [
+              {
+                "start": 301.054,
+                "end": 301.854,
+                "whisper": "branco atirou no",
+                "parakeet": "Branca tirou o"
+              },
+              {
+                "start": 305.614,
+                "end": 305.774,
+                "whisper": "",
+                "parakeet": "fila."
+              },
+              {
+                "start": 369.554,
+                "end": 369.754,
+                "whisper": "me",
+                "parakeet": "mim"
+              },
+              {
+                "start": 371.174,
+                "end": 371.674,
+                "whisper": "fez",
+                "parakeet": "viu perder"
+              },
+              {
+                "start": 371.474,
+                "end": 372.394,
+                "whisper": "período, Luiz, não?",
+                "parakeet": "livro mesmo?"
+              },
+              {
+                "start": 373.154,
+                "end": 373.514,
+                "whisper": "Vai",
+                "parakeet": "pra"
+              },
+              {
+                "start": 373.894,
+                "end": 375.274,
+                "whisper": "meu.",
+                "parakeet": "né? Aí, boa. Espera aí, peraí."
+              }
+            ]
+          }
         },
         {
           "clip_start": 311.5,
@@ -2931,7 +3280,7 @@
           "published_timestamp": 1763419632,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "2179a3e6dd25c873d930e716c8f25934aa777cad50459b353e405f3bdf796866",
           "format": "251",
           "file": "lxFBw6tpBtU.webm",
@@ -2950,7 +3299,58 @@
               "score": 0.9726276673421353,
               "coarse_score": 0.5031608941928273
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 76.19,
+              "palavras_total": 21,
+              "spans_incertos": 2,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 426.819,
+                "novo": 426.819,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  426.048,
+                  427.296
+                ],
+                "rms": 0.001382,
+                "boundary_match_score": 0.9607,
+                "match_offset_error": -0.0001
+              },
+              "end": {
+                "original": 464.319,
+                "novo": 464.319,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  463.968,
+                  467.52
+                ],
+                "rms": 0.00761,
+                "boundary_match_score": 0.9813,
+                "match_offset_error": -0.0001
+              }
+            },
+            "incertos": [
+              {
+                "start": 429.599,
+                "end": 429.799,
+                "whisper": "eu e",
+                "parakeet": ""
+              },
+              {
+                "start": 461.319,
+                "end": 466.279,
+                "whisper": "POMA! POMA!",
+                "parakeet": "Toma! Toma! Cadê? O T-Mag."
+              }
+            ]
+          }
         },
         {
           "clip_start": 350.5,
@@ -2966,7 +3366,7 @@
           "published_timestamp": 1763419632,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "2179a3e6dd25c873d930e716c8f25934aa777cad50459b353e405f3bdf796866",
           "format": "251",
           "file": "lxFBw6tpBtU.webm",
@@ -2985,13 +3385,70 @@
               "score": 0.9642742686558504,
               "coarse_score": 0.4064118633299424
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 33.33,
+              "palavras_total": 6,
+              "spans_incertos": 3,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 465.819,
+                "novo": 465.819,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  463.968,
+                  467.52
+                ],
+                "rms": 0.002297,
+                "boundary_match_score": 0.9602,
+                "match_offset_error": 0.0
+              },
+              "end": {
+                "original": 545.319,
+                "novo": 545.319,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  543.968,
+                  551.904
+                ],
+                "rms": 0.036175,
+                "boundary_match_score": 0.975,
+                "match_offset_error": 0.0
+              }
+            },
+            "incertos": [
+              {
+                "start": 463.139,
+                "end": 465.459,
+                "whisper": "",
+                "parakeet": "Toma! Cadê?"
+              },
+              {
+                "start": 466.959,
+                "end": 467.619,
+                "whisper": "se",
+                "parakeet": "cê"
+              },
+              {
+                "start": 467.979,
+                "end": 468.799,
+                "whisper": "palma",
+                "parakeet": "pau!"
+              }
+            ]
+          }
         },
         {
           "clip_start": 430.25,
-          "clip_end": 655.5,
+          "clip_end": 655.636,
           "start": 551.003,
-          "end": 776.253,
+          "end": 776.389,
           "score": 0.6622,
           "coarse_score": 0.5575,
           "url": "https://www.youtube.com/watch?v=lxFBw6tpBtU",
@@ -3001,7 +3458,7 @@
           "published_timestamp": 1763419632,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "2179a3e6dd25c873d930e716c8f25934aa777cad50459b353e405f3bdf796866",
           "format": "251",
           "file": "lxFBw6tpBtU.webm",
@@ -3020,7 +3477,45 @@
               "score": 0.9404028381729552,
               "coarse_score": 0.8671091454613566
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 85.71,
+              "palavras_total": 14,
+              "spans_incertos": 1,
+              "bordas_ajustadas": 1
+            },
+            "bordas": {
+              "start": {
+                "original": 551.003,
+                "novo": 551.003,
+                "status": "borda não ajustada"
+              },
+              "end": {
+                "original": 776.253,
+                "novo": 776.389,
+                "delta": 0.136,
+                "vad_intervalo": [
+                  775.904,
+                  788.032
+                ],
+                "rms": 0.016714,
+                "boundary_match_score": 0.9457,
+                "match_offset_error": -0.0004
+              }
+            },
+            "incertos": [
+              {
+                "start": 551.303,
+                "end": 551.683,
+                "whisper": "está",
+                "parakeet": "tá"
+              }
+            ]
+          }
         },
         {
           "clip_start": 660.5,
@@ -3036,7 +3531,7 @@
           "published_timestamp": 1763419632,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "2179a3e6dd25c873d930e716c8f25934aa777cad50459b353e405f3bdf796866",
           "format": "251",
           "file": "lxFBw6tpBtU.webm",
@@ -3055,7 +3550,51 @@
               "score": 0.9523351947422093,
               "coarse_score": 0.6238789540960367
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 89.47,
+              "palavras_total": 19,
+              "spans_incertos": 2,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 782.634,
+                "novo": 782.634,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  775.904,
+                  788.032
+                ],
+                "rms": 0.006473,
+                "boundary_match_score": 0.8491,
+                "match_offset_error": -0.0005
+              },
+              "end": {
+                "original": 846.884,
+                "novo": 846.884,
+                "status": "borda não ajustada"
+              }
+            },
+            "incertos": [
+              {
+                "start": 779.634,
+                "end": 781.154,
+                "whisper": "Tchau!",
+                "parakeet": ""
+              },
+              {
+                "start": 845.744,
+                "end": 845.864,
+                "whisper": "Ô,",
+                "parakeet": ""
+              }
+            ]
+          }
         },
         {
           "clip_start": 0.25,
@@ -3071,7 +3610,7 @@
           "published_timestamp": 1763337521,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "a5d76108d94199d474fbaf22ee151c84975cc0867246ae1176b325b405487c4e",
           "format": "251",
           "file": "KWgaK8bLKaI.webm",
@@ -3090,7 +3629,44 @@
               "score": 0.9559800645044643,
               "coarse_score": 0.8409753081440035
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 84.62,
+              "palavras_total": 26,
+              "spans_incertos": 2,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 592.69,
+                "novo": 592.69,
+                "status": "borda não ajustada"
+              },
+              "end": {
+                "original": 736.44,
+                "novo": 736.44,
+                "status": "borda não ajustada"
+              }
+            },
+            "incertos": [
+              {
+                "start": 590.33,
+                "end": 590.81,
+                "whisper": "polícia",
+                "parakeet": "Kuleta"
+              },
+              {
+                "start": 592.19,
+                "end": 594.85,
+                "whisper": "Tá atirando,",
+                "parakeet": "Ai, meu Deus Gosta aí, ô Tá tirando,"
+              }
+            ]
+          }
         },
         {
           "clip_start": 144.5,
@@ -3106,7 +3682,7 @@
           "published_timestamp": 1763337521,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "a5d76108d94199d474fbaf22ee151c84975cc0867246ae1176b325b405487c4e",
           "format": "251",
           "file": "KWgaK8bLKaI.webm",
@@ -3125,7 +3701,45 @@
               "score": 0.9494463588250909,
               "coarse_score": 0.6835428973579795
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 85.0,
+              "palavras_total": 20,
+              "spans_incertos": 1,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 736.94,
+                "novo": 736.94,
+                "status": "borda não ajustada"
+              },
+              "end": {
+                "original": 754.94,
+                "novo": 754.94,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  746.112,
+                  758.464
+                ],
+                "rms": 0.008464,
+                "boundary_match_score": 0.9775,
+                "match_offset_error": 0.0229
+              }
+            },
+            "incertos": [
+              {
+                "start": 756.52,
+                "end": 757.92,
+                "whisper": "Obrigado por assistir",
+                "parakeet": ""
+              }
+            ]
+          }
         },
         {
           "clip_start": 162.75,
@@ -3141,7 +3755,7 @@
           "published_timestamp": 1763337521,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "a5d76108d94199d474fbaf22ee151c84975cc0867246ae1176b325b405487c4e",
           "format": "251",
           "file": "KWgaK8bLKaI.webm",
@@ -3160,7 +3774,51 @@
               "score": 0.9952035615258235,
               "coarse_score": 0.8691365237117533
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 33.33,
+              "palavras_total": 12,
+              "spans_incertos": 2,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 755.259,
+                "novo": 755.259,
+                "status": "borda não ajustada"
+              },
+              "end": {
+                "original": 810.259,
+                "novo": 810.259,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  808.992,
+                  817.92
+                ],
+                "rms": 0.023313,
+                "boundary_match_score": 0.995,
+                "match_offset_error": 0.0004
+              }
+            },
+            "incertos": [
+              {
+                "start": 752.259,
+                "end": 758.159,
+                "whisper": "Obrigado por assistir",
+                "parakeet": ""
+              },
+              {
+                "start": 808.139,
+                "end": 808.619,
+                "whisper": "me chicote",
+                "parakeet": "não te encontro"
+              }
+            ]
+          }
         },
         {
           "clip_start": 228.5,
@@ -3176,7 +3834,7 @@
           "published_timestamp": 1763337521,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "a5d76108d94199d474fbaf22ee151c84975cc0867246ae1176b325b405487c4e",
           "format": "251",
           "file": "KWgaK8bLKaI.webm",
@@ -3195,7 +3853,52 @@
               "score": 0.9891723478239528,
               "coarse_score": 0.530606455173121
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 93.94,
+              "palavras_total": 33,
+              "spans_incertos": 1,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 821.079,
+                "novo": 821.079,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  818.944,
+                  833.824
+                ],
+                "rms": 0.010891,
+                "boundary_match_score": 0.9868,
+                "match_offset_error": 0.0
+              },
+              "end": {
+                "original": 883.829,
+                "novo": 883.829,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  883.296,
+                  884.576
+                ],
+                "rms": 0.000526,
+                "boundary_match_score": 0.9911,
+                "match_offset_error": 0.0
+              }
+            },
+            "incertos": [
+              {
+                "start": 818.079,
+                "end": 818.319,
+                "whisper": "",
+                "parakeet": "Tá"
+              }
+            ]
+          }
         }
       ],
       "samples": [
@@ -3203,7 +3906,7 @@
           "start": 4.592,
           "end": 64.4,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [],
           "language_provisional": "pt",
           "language_probability": 0.998,
@@ -3239,13 +3942,23 @@
           ],
           "selecionada_para": [
             "distribuição uniforme"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 90.99,
+              "spans_incertos": 7,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 1445.632,
           "end": 1503.424,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [],
           "language_provisional": "pt",
           "language_probability": 0.9697,
@@ -3281,13 +3994,23 @@
           ],
           "selecionada_para": [
             "distribuição uniforme"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 46.9,
+              "spans_incertos": 22,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 2897.536,
           "end": 2958.976,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [
             "candidata a música alta"
           ],
@@ -3331,13 +4054,23 @@
           ],
           "selecionada_para": [
             "música alta candidata"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 54.55,
+              "spans_incertos": 4,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 4351.024,
           "end": 4410.496,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [
             "candidata a música alta",
             "candidato a gritos"
@@ -3377,13 +4110,23 @@
           "selecionada_para": [
             "música alta candidata",
             "gritos candidatos"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 68.29,
+              "spans_incertos": 9,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 5923.376,
           "end": 5989.92,
           "criterion": "alvo por gritos candidata; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [
             "candidato a gritos"
           ],
@@ -3427,13 +4170,23 @@
           "language_probability": 0.9658,
           "selecionada_para": [
             "gritos candidatos"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 30.77,
+              "spans_incertos": 24,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 7249.84,
           "end": 7310.896,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [],
           "language_provisional": "pt",
           "language_probability": 0.9805,
@@ -3475,13 +4228,23 @@
           ],
           "selecionada_para": [
             "distribuição uniforme"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 79.07,
+              "spans_incertos": 7,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 8698.704,
           "end": 8755.6,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [],
           "language_provisional": "pt",
           "language_probability": 0.9937,
@@ -3517,13 +4280,23 @@
           ],
           "selecionada_para": [
             "distribuição uniforme"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 84.48,
+              "spans_incertos": 13,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 10147.888,
           "end": 10212.16,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [],
           "language_provisional": "pt",
           "language_probability": 0.9766,
@@ -3565,13 +4338,23 @@
           ],
           "selecionada_para": [
             "distribuição uniforme"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 63.04,
+              "spans_incertos": 7,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 11599.616,
           "end": 11659.888,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [
             "candidata a música alta"
           ],
@@ -3609,13 +4392,23 @@
           ],
           "selecionada_para": [
             "distribuição uniforme"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 56.58,
+              "spans_incertos": 17,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 13047.36,
           "end": 13107.744,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [],
           "language_provisional": "pt",
           "language_probability": 0.9985,
@@ -3651,7 +4444,17 @@
           ],
           "selecionada_para": [
             "distribuição uniforme"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 94.82,
+              "spans_incertos": 6,
+              "bordas_ajustadas": 0
+            }
+          }
         }
       ],
       "idiomas_provisorios": [
@@ -3667,7 +4470,7 @@
       "criterio_amostragem": "Até duas amostras por condição candidata: música = >=8 segundos com RMS >= -25 dBFS e VAD <10% de fala; gritos = >=3 segundos com RMS >= -9 dBFS e VAD >60% de fala; inglês = probabilidade >=0,8 por janela de até 15 s; demais alvos uniformes e bordas em lacunas VAD. Sinais provisórios sujeitos à revisão #29.",
       "transcricao": {
         "file": "transcricoes/rtZyZL3FfH4.json",
-        "sha256": "9190c601e678bbed02217f2dc489c4fed8047d926afb8a3e1c4ba38948ea1117",
+        "sha256": "f89dbe0ec0d5b06efcbfda7b9dee8122aadccf781f568f021868c8c3dbda1027",
         "origin": "Systran/faster-whisper-large-v3",
         "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
         "engine": "faster-whisper 1.2.1",
@@ -3675,11 +4478,22 @@
         "beam_size": 5,
         "word_timestamps": true,
         "date": "2026-11-13",
-        "status": "provisória até a revisão"
+        "status": "revisada por agente; spans incertos excluídos",
+        "review": {
+          "by": "agent",
+          "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+          "date": "2026-11-14",
+          "coverage": {
+            "palavras_concordantes_pct": 71.41,
+            "spans_incertos": 116,
+            "bordas_ajustadas": 0
+          }
+        }
       },
       "clips_status": {
         "localizados": 14,
-        "motivo": "Meta >=10 alcançada por segmentos de publicações humanas localizados por áudio; referências provisórias até revisão #29. Segmentos de publicações diferentes podem se sobrepor na Fonte."
+        "motivo": "Meta >=10 alcançada por segmentos de publicações humanas localizados por áudio; referências provisórias até revisão #29. Segmentos de publicações diferentes podem se sobrepor na Fonte.",
+        "status_revisao": "revisados por agente; incertezas registradas por Corte"
       },
       "broadcast_started_utc": "2025-11-16T23:06:02+00:00",
       "uploaded": "2025-11-17",
@@ -3805,6 +4619,23 @@
           }
         ],
         "stop_reason": "meta >=10 alcançada; restante do inventário não necessário; resultados de lotes já concluídos preservados"
+      },
+      "review": {
+        "by": "agent",
+        "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+        "date": "2026-11-14",
+        "scope": "10 amostras de transcrição e Cortes",
+        "coverage": {
+          "palavras_concordantes_pct": 71.41,
+          "spans_incertos": 116,
+          "bordas_ajustadas": 0
+        },
+        "coverage_cortes": {
+          "palavras_concordantes_pct": 70.0,
+          "palavras_total": 290,
+          "spans_incertos": 39,
+          "bordas_ajustadas": 5
+        }
       }
     },
     {
@@ -4322,7 +5153,7 @@
           "conditions": [
             "candidata a música alta"
           ],
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "language_provisional": "pt",
           "language_probability": 0.9907,
           "metrics_audio": {
@@ -4357,7 +5188,17 @@
           ],
           "selecionada_para": [
             "distribuição uniforme"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 66.89,
+              "spans_incertos": 17,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 147.84,
@@ -4366,7 +5207,7 @@
           "conditions": [
             "candidata a música alta"
           ],
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "language_provisional": "pt",
           "language_probability": 0.9976,
           "metrics_audio": {
@@ -4407,13 +5248,23 @@
           ],
           "selecionada_para": [
             "distribuição uniforme"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 84.95,
+              "spans_incertos": 8,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 224.64,
           "end": 284.032,
           "criterion": "alvo por gritos candidata; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [
             "candidata a música alta",
             "candidato a gritos"
@@ -4452,14 +5303,24 @@
           "language_probability": 0.9771,
           "selecionada_para": [
             "gritos candidatos"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 64.37,
+              "spans_incertos": 13,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 444.496,
           "end": 503.52,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "conditions": [],
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "language_provisional": "pt",
           "language_probability": 0.98,
           "metrics_audio": {
@@ -4494,7 +5355,17 @@
           ],
           "selecionada_para": [
             "distribuição uniforme"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 69.23,
+              "spans_incertos": 19,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 594.992,
@@ -4503,7 +5374,7 @@
           "conditions": [
             "candidata a música alta"
           ],
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "language_provisional": "pt",
           "language_probability": 0.9971,
           "metrics_audio": {
@@ -4544,7 +5415,17 @@
           ],
           "selecionada_para": [
             "distribuição uniforme"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 83.61,
+              "spans_incertos": 5,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 743.856,
@@ -4553,7 +5434,7 @@
           "conditions": [
             "candidata a música alta"
           ],
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "language_provisional": "pt",
           "language_probability": 0.9888,
           "metrics_audio": {
@@ -4594,7 +5475,17 @@
           ],
           "selecionada_para": [
             "música alta candidata"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 52.0,
+              "spans_incertos": 6,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 880.144,
@@ -4603,7 +5494,7 @@
           "conditions": [
             "candidata a música alta"
           ],
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "language_provisional": "pt",
           "language_probability": 0.9873,
           "metrics_audio": {
@@ -4638,13 +5529,23 @@
           ],
           "selecionada_para": [
             "música alta candidata"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 54.55,
+              "spans_incertos": 5,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 1089.984,
           "end": 1156.048,
           "criterion": "alvo por gritos candidata; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [
             "candidata a música alta",
             "candidato a gritos"
@@ -4689,14 +5590,24 @@
           "language_probability": 0.981,
           "selecionada_para": [
             "gritos candidatos"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 50.32,
+              "spans_incertos": 26,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 1187.088,
           "end": 1249.2,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
           "conditions": [],
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "language_provisional": "pt",
           "language_probability": 0.9565,
           "metrics_audio": {
@@ -4737,7 +5648,17 @@
           ],
           "selecionada_para": [
             "distribuição uniforme"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 68.57,
+              "spans_incertos": 19,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 1317.088,
@@ -4746,7 +5667,7 @@
           "conditions": [
             "candidata a música alta"
           ],
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "language_provisional": "pt",
           "language_probability": 0.9937,
           "metrics_audio": {
@@ -4781,7 +5702,17 @@
           ],
           "selecionada_para": [
             "distribuição uniforme"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 72.6,
+              "spans_incertos": 21,
+              "bordas_ajustadas": 0
+            }
+          }
         }
       ],
       "caracteristicas_audio": {
@@ -4798,7 +5729,7 @@
       },
       "transcricao": {
         "file": "transcricoes/QiwQ62ypdcI.json",
-        "sha256": "5c9c9900ad60c46f7f18b883b0c7a8be37ea5d017446ea045429f24e8f86ae93",
+        "sha256": "48b8f48048cd09184a2823d4561507714bbe05d981b7124d74c8d491afe82648",
         "origin": "Systran/faster-whisper-large-v3",
         "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
         "engine": "faster-whisper 1.2.1",
@@ -4806,11 +5737,32 @@
         "beam_size": 5,
         "word_timestamps": true,
         "date": "2026-11-13",
-        "status": "provisória até a revisão"
+        "status": "revisada por agente; spans incertos excluídos",
+        "review": {
+          "by": "agent",
+          "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+          "date": "2026-11-14",
+          "coverage": {
+            "palavras_concordantes_pct": 67.04,
+            "spans_incertos": 139,
+            "bordas_ajustadas": 0
+          }
+        }
       },
       "idiomas_provisorios": [
         "pt"
-      ]
+      ],
+      "review": {
+        "by": "agent",
+        "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+        "date": "2026-11-14",
+        "scope": "10 amostras de transcrição",
+        "coverage": {
+          "palavras_concordantes_pct": 67.04,
+          "spans_incertos": 139,
+          "bordas_ajustadas": 0
+        }
+      }
     },
     {
       "id": "juFnXA7rhOk",
@@ -5349,8 +6301,8 @@
           "published_timestamp": 1794377509,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
-          "sha256": "e5f13be47024ac0ce53225a688c5f91c797582c3f3207c840524838f7f6e48cf",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
+          "sha256": "0dd6c0f672e0241a6b6fb45d31eb13dfdffc57b92a9eae7d0ff78a37626485bc",
           "format": "399+251-20",
           "file": "pI4dIrz3zm4.webm",
           "clip_duration_seconds": 60,
@@ -5368,7 +6320,61 @@
               "score": 0.9872620392051512,
               "coarse_score": 0.6513166378106922
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 73.33,
+              "palavras_total": 30,
+              "spans_incertos": 3,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 36914.263,
+                "novo": 36914.263,
+                "status": "borda não ajustada"
+              },
+              "end": {
+                "original": 36974.263,
+                "novo": 36974.263,
+                "status": "borda não ajustada"
+              }
+            },
+            "incertos": [
+              {
+                "start": 36913.323,
+                "end": 36913.763,
+                "whisper": "he's",
+                "parakeet": "he"
+              },
+              {
+                "start": 36914.143,
+                "end": 36914.303,
+                "whisper": "",
+                "parakeet": "people"
+              },
+              {
+                "start": 36974.923,
+                "end": 36976.983,
+                "whisper": "and not only to help",
+                "parakeet": "In honor of GTA Five."
+              }
+            ]
+          },
+          "hash_change": {
+            "previous_sha256": "e5f13be47024ac0ce53225a688c5f91c797582c3f3207c840524838f7f6e48cf",
+            "date": "2026-11-14",
+            "reason": "nova coleta do mesmo formato; bytes divergiram",
+            "duration_seconds": 60.021,
+            "audio_match": {
+              "start": 36914.263,
+              "end": 36974.263,
+              "score": 0.9818
+            }
+          }
         },
         {
           "clip_start": 305.5,
@@ -5384,7 +6390,7 @@
           "published_timestamp": 1794519626,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "f5fa3a09eec081d7e444fe2f82a26f6b83efdc1950e0435a2d83ca40652b68d7",
           "format": "251",
           "file": "7zI91QM038I.webm",
@@ -5403,7 +6409,58 @@
               "score": 0.9497414554193823,
               "coarse_score": 0.5843996322775857
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 0.0,
+              "palavras_total": 5,
+              "spans_incertos": 2,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 38485.235,
+                "novo": 38485.235,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  38430.4,
+                  38489.504
+                ],
+                "rms": 0.039626,
+                "boundary_match_score": 0.997,
+                "match_offset_error": 0.0
+              },
+              "end": {
+                "original": 38501.485,
+                "novo": 38501.485,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  38496.384,
+                  38529.312
+                ],
+                "rms": 0.777675,
+                "boundary_match_score": 0.9441,
+                "match_offset_error": 0.0
+              }
+            },
+            "incertos": [
+              {
+                "start": 38482.235,
+                "end": 38487.995,
+                "whisper": "Come on! Come on!",
+                "parakeet": "Consonant."
+              },
+              {
+                "start": 38498.485,
+                "end": 38500.705,
+                "whisper": "FUCK!",
+                "parakeet": ""
+              }
+            ]
+          }
         },
         {
           "clip_start": 322.25,
@@ -5419,7 +6476,7 @@
           "published_timestamp": 1794519626,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "f5fa3a09eec081d7e444fe2f82a26f6b83efdc1950e0435a2d83ca40652b68d7",
           "format": "251",
           "file": "7zI91QM038I.webm",
@@ -5438,12 +6495,50 @@
               "score": 0.9141703865627584,
               "coarse_score": 0.9346741164993737
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 94.44,
+              "palavras_total": 18,
+              "spans_incertos": 1,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 30811.397,
+                "novo": 30811.397,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  30809.44,
+                  30811.84
+                ],
+                "rms": 0.320231,
+                "boundary_match_score": 0.9728,
+                "match_offset_error": -0.0003
+              },
+              "end": {
+                "original": 30835.897,
+                "novo": 30835.897,
+                "status": "borda não ajustada"
+              }
+            },
+            "incertos": [
+              {
+                "start": 30809.417,
+                "end": 30812.397,
+                "whisper": "help.",
+                "parakeet": "help."
+              }
+            ]
+          }
         },
         {
-          "clip_start": 398.5,
+          "clip_start": 398.21,
           "clip_end": 415.0,
-          "start": 23147.419,
+          "start": 23147.129,
           "end": 23163.919,
           "score": 0.9338,
           "coarse_score": 0.535,
@@ -5454,7 +6549,7 @@
           "published_timestamp": 1794519626,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "f5fa3a09eec081d7e444fe2f82a26f6b83efdc1950e0435a2d83ca40652b68d7",
           "format": "251",
           "file": "7zI91QM038I.webm",
@@ -5473,7 +6568,45 @@
               "score": 0.9668829809945215,
               "coarse_score": 0.6557703656474829
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 100.0,
+              "palavras_total": 13,
+              "spans_incertos": 1,
+              "bordas_ajustadas": 1
+            },
+            "bordas": {
+              "start": {
+                "original": 23147.419,
+                "novo": 23147.129,
+                "delta": -0.29,
+                "vad_intervalo": [
+                  23106.304,
+                  23150.656
+                ],
+                "rms": 0.081233,
+                "boundary_match_score": 0.8727,
+                "match_offset_error": 0.0005
+              },
+              "end": {
+                "original": 23163.919,
+                "novo": 23163.919,
+                "status": "borda não ajustada"
+              }
+            },
+            "incertos": [
+              {
+                "start": 23149.059,
+                "end": 23149.939,
+                "whisper": "",
+                "parakeet": "Throw me in guard!"
+              }
+            ]
+          }
         },
         {
           "clip_start": 432.0,
@@ -5489,7 +6622,7 @@
           "published_timestamp": 1794519626,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "f5fa3a09eec081d7e444fe2f82a26f6b83efdc1950e0435a2d83ca40652b68d7",
           "format": "251",
           "file": "7zI91QM038I.webm",
@@ -5508,7 +6641,38 @@
               "score": 0.9525483845680475,
               "coarse_score": 0.525363152081933
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 96.77,
+              "palavras_total": 31,
+              "spans_incertos": 1,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 39741.522,
+                "novo": 39741.522,
+                "status": "borda não ajustada"
+              },
+              "end": {
+                "original": 39755.772,
+                "novo": 39755.772,
+                "status": "borda não ajustada"
+              }
+            },
+            "incertos": [
+              {
+                "start": 39752.772,
+                "end": 39753.092,
+                "whisper": "",
+                "parakeet": "Oh"
+              }
+            ]
+          }
         },
         {
           "clip_start": 10.5,
@@ -5524,7 +6688,7 @@
           "published_timestamp": 1794429038,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "fa28a63620f3edc2a4e9f5e120324c2c3e579aa621f00306ae5d0ca8e56778ac",
           "format": "251",
           "file": "8rHjZSL44fE.webm",
@@ -5543,13 +6707,50 @@
               "score": 0.9968655702432916,
               "coarse_score": 0.842536933508512
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 9.09,
+              "palavras_total": 11,
+              "spans_incertos": 2,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 40022.541,
+                "novo": 40022.541,
+                "status": "borda não ajustada"
+              },
+              "end": {
+                "original": 40052.041,
+                "novo": 40052.041,
+                "status": "borda não ajustada"
+              }
+            },
+            "incertos": [
+              {
+                "start": 40021.701,
+                "end": 40022.961,
+                "whisper": "gonna go get my ticket, y'all",
+                "parakeet": "a gonket."
+              },
+              {
+                "start": 40049.041,
+                "end": 40054.901,
+                "whisper": "Thanks for watching!",
+                "parakeet": ""
+              }
+            ]
+          }
         },
         {
           "clip_start": 49.5,
-          "clip_end": 61.5,
+          "clip_end": 61.44,
           "start": 9135.512,
-          "end": 9147.512,
+          "end": 9147.452,
           "score": 0.9843,
           "coarse_score": 0.7537,
           "url": "https://www.youtube.com/watch?v=8rHjZSL44fE",
@@ -5559,7 +6760,7 @@
           "published_timestamp": 1794429038,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "fa28a63620f3edc2a4e9f5e120324c2c3e579aa621f00306ae5d0ca8e56778ac",
           "format": "251",
           "file": "8rHjZSL44fE.webm",
@@ -5578,12 +6779,63 @@
               "score": 0.9842510662652585,
               "coarse_score": 0.8186439626606663
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 77.78,
+              "palavras_total": 27,
+              "spans_incertos": 2,
+              "bordas_ajustadas": 1
+            },
+            "bordas": {
+              "start": {
+                "original": 9135.512,
+                "novo": 9135.512,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  9121.216,
+                  9137.056
+                ],
+                "rms": 0.000358,
+                "boundary_match_score": 0.9901,
+                "match_offset_error": -0.0001
+              },
+              "end": {
+                "original": 9147.512,
+                "novo": 9147.452,
+                "delta": -0.06,
+                "vad_intervalo": [
+                  9137.632,
+                  9148.128
+                ],
+                "rms": 0.111327,
+                "boundary_match_score": 0.9836,
+                "match_offset_error": -0.0001
+              }
+            },
+            "incertos": [
+              {
+                "start": 9146.492,
+                "end": 9146.832,
+                "whisper": "hand it to",
+                "parakeet": "handle"
+              },
+              {
+                "start": 9149.852,
+                "end": 9150.372,
+                "whisper": "kind of",
+                "parakeet": "I'm kinda"
+              }
+            ]
+          }
         },
         {
-          "clip_start": 62.25,
+          "clip_start": 62.541,
           "clip_end": 91.5,
-          "start": 9848.634,
+          "start": 9848.925,
           "end": 9877.884,
           "score": 0.9835,
           "coarse_score": 0.6035,
@@ -5594,7 +6846,7 @@
           "published_timestamp": 1794429038,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "fa28a63620f3edc2a4e9f5e120324c2c3e579aa621f00306ae5d0ca8e56778ac",
           "format": "251",
           "file": "8rHjZSL44fE.webm",
@@ -5613,7 +6865,51 @@
               "score": 0.9869725324820591,
               "coarse_score": 0.6967339062525156
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 82.05,
+              "palavras_total": 39,
+              "spans_incertos": 2,
+              "bordas_ajustadas": 1
+            },
+            "bordas": {
+              "start": {
+                "original": 9848.634,
+                "novo": 9848.925,
+                "delta": 0.291,
+                "vad_intervalo": [
+                  9848.8,
+                  9849.344
+                ],
+                "rms": 0.104839,
+                "boundary_match_score": 0.9852,
+                "match_offset_error": -0.0001
+              },
+              "end": {
+                "original": 9877.884,
+                "novo": 9877.884,
+                "status": "borda não ajustada"
+              }
+            },
+            "incertos": [
+              {
+                "start": 9845.634,
+                "end": 9845.874,
+                "whisper": "I'm fast as fuck, boy.",
+                "parakeet": ""
+              },
+              {
+                "start": 9877.504,
+                "end": 9878.084,
+                "whisper": "bro",
+                "parakeet": "bruh."
+              }
+            ]
+          }
         },
         {
           "clip_start": 92.0,
@@ -5629,7 +6925,7 @@
           "published_timestamp": 1794429038,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "fa28a63620f3edc2a4e9f5e120324c2c3e579aa621f00306ae5d0ca8e56778ac",
           "format": "251",
           "file": "8rHjZSL44fE.webm",
@@ -5648,13 +6944,44 @@
               "score": 0.9834033839417831,
               "coarse_score": 0.9799583085814807
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 80.0,
+              "palavras_total": 15,
+              "spans_incertos": 1,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 10153.751,
+                "novo": 10153.751,
+                "status": "borda não ajustada"
+              },
+              "end": {
+                "original": 10178.001,
+                "novo": 10178.001,
+                "status": "borda não ajustada"
+              }
+            },
+            "incertos": [
+              {
+                "start": 10175.001,
+                "end": 10178.921,
+                "whisper": "Thanks for watching!",
+                "parakeet": ""
+              }
+            ]
+          }
         },
         {
-          "clip_start": 124.25,
-          "clip_end": 153.5,
-          "start": 2282.557,
-          "end": 2311.807,
+          "clip_start": 124.64,
+          "clip_end": 154.03,
+          "start": 2282.947,
+          "end": 2312.337,
           "score": 0.8454,
           "coarse_score": 0.8205,
           "url": "https://www.youtube.com/watch?v=8rHjZSL44fE",
@@ -5664,7 +6991,7 @@
           "published_timestamp": 1794429038,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "fa28a63620f3edc2a4e9f5e120324c2c3e579aa621f00306ae5d0ca8e56778ac",
           "format": "251",
           "file": "8rHjZSL44fE.webm",
@@ -5683,7 +7010,58 @@
               "score": 0.9680392747035367,
               "coarse_score": 0.8291383474188736
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 16.67,
+              "palavras_total": 12,
+              "spans_incertos": 2,
+              "bordas_ajustadas": 2
+            },
+            "bordas": {
+              "start": {
+                "original": 2282.557,
+                "novo": 2282.947,
+                "delta": 0.39,
+                "vad_intervalo": [
+                  2271.776,
+                  2361.984
+                ],
+                "rms": 0.080266,
+                "boundary_match_score": 0.9566,
+                "match_offset_error": 0.0004
+              },
+              "end": {
+                "original": 2311.807,
+                "novo": 2312.337,
+                "delta": 0.53,
+                "vad_intervalo": [
+                  2271.776,
+                  2361.984
+                ],
+                "rms": 0.083456,
+                "boundary_match_score": 0.7427,
+                "match_offset_error": 0.0004
+              }
+            },
+            "incertos": [
+              {
+                "start": 2279.557,
+                "end": 2282.937,
+                "whisper": "Let me in! Let me in!",
+                "parakeet": ""
+              },
+              {
+                "start": 2309.707,
+                "end": 2310.967,
+                "whisper": "Come on, bro!",
+                "parakeet": "That's the rope"
+              }
+            ]
+          }
         },
         {
           "clip_start": 418.25,
@@ -5699,7 +7077,7 @@
           "published_timestamp": 1794429038,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "fa28a63620f3edc2a4e9f5e120324c2c3e579aa621f00306ae5d0ca8e56778ac",
           "format": "251",
           "file": "8rHjZSL44fE.webm",
@@ -5718,19 +7096,64 @@
               "score": 0.8965970547838281,
               "coarse_score": 0.5556430620231158
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 78.57,
+              "palavras_total": 14,
+              "spans_incertos": 2,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 18858.932,
+                "novo": 18858.932,
+                "status": "borda não ajustada"
+              },
+              "end": {
+                "original": 18873.682,
+                "novo": 18873.682,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  18870.176,
+                  18874.688
+                ],
+                "rms": 0.054869,
+                "boundary_match_score": 0.9914,
+                "match_offset_error": 0.0
+              }
+            },
+            "incertos": [
+              {
+                "start": 18861.532,
+                "end": 18861.692,
+                "whisper": "",
+                "parakeet": "fiction."
+              },
+              {
+                "start": 18874.362,
+                "end": 18874.522,
+                "whisper": "I'll",
+                "parakeet": "I"
+              }
+            ]
+          }
         }
       ],
       "clips_status": {
         "localizados": 11,
-        "motivo": "Meta >=10 alcançada por segmentos de publicações humanas localizados por áudio; referências provisórias até revisão #29. Segmentos de publicações diferentes podem se sobrepor na Fonte."
+        "motivo": "Meta >=10 alcançada por segmentos de publicações humanas localizados por áudio; referências provisórias até revisão #29. Segmentos de publicações diferentes podem se sobrepor na Fonte.",
+        "status_revisao": "revisados por agente; incertezas registradas por Corte"
       },
       "samples": [
         {
           "start": 1.776,
           "end": 63.104,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [
             "candidato a gritos",
             "fala em inglês detectada por segmento"
@@ -5776,13 +7199,23 @@
           "selecionada_para": [
             "gritos candidatos",
             "inglês detectado por segmento"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 89.55,
+              "spans_incertos": 7,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 4445.936,
           "end": 4513.76,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [
             "candidata a música alta",
             "fala em inglês detectada por segmento"
@@ -5827,13 +7260,23 @@
           "language_probability": 0.9639,
           "selecionada_para": [
             "música alta candidata"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 39.29,
+              "spans_incertos": 3,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 8915.552,
           "end": 8983.6,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [
             "candidata a música alta",
             "fala em inglês detectada por segmento"
@@ -5878,13 +7321,23 @@
           "language_probability": 0.2313,
           "selecionada_para": [
             "música alta candidata"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 73.85,
+              "spans_incertos": 4,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 13390.624,
           "end": 13434.416,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [
             "candidata a música alta",
             "fala em inglês detectada por segmento"
@@ -5917,13 +7370,23 @@
           "language_probability": 0.9629,
           "selecionada_para": [
             "distribuição uniforme"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 94.12,
+              "spans_incertos": 2,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 17846.352,
           "end": 17903.84,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [
             "candidata a música alta",
             "candidato a gritos",
@@ -5963,13 +7426,23 @@
           "language_probability": 0.8511,
           "selecionada_para": [
             "gritos candidatos"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 78.26,
+              "spans_incertos": 5,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 22324.4,
           "end": 22393.52,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [
             "candidata a música alta",
             "fala em inglês detectada por segmento"
@@ -6014,13 +7487,23 @@
           "language_probability": 0.6738,
           "selecionada_para": [
             "distribuição uniforme"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 77.94,
+              "spans_incertos": 9,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 26775.536,
           "end": 26835.36,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [
             "fala em inglês detectada por segmento"
           ],
@@ -6058,13 +7541,23 @@
           "language_probability": 0.9331,
           "selecionada_para": [
             "distribuição uniforme"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 93.69,
+              "spans_incertos": 5,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 31237.568,
           "end": 31299.504,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [
             "candidata a música alta",
             "fala em inglês detectada por segmento"
@@ -6109,13 +7602,23 @@
           "language_probability": 0.9956,
           "selecionada_para": [
             "distribuição uniforme"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 79.87,
+              "spans_incertos": 11,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 35695.744,
           "end": 35756.32,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [
             "candidata a música alta",
             "fala em inglês detectada por segmento"
@@ -6154,13 +7657,23 @@
           "language_probability": 0.8804,
           "selecionada_para": [
             "distribuição uniforme"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 78.38,
+              "spans_incertos": 8,
+              "bordas_ajustadas": 0
+            }
+          }
         },
         {
           "start": 39967.712,
           "end": 40009.808,
           "criterion": "alvo uniforme; bordas em lacunas VAD",
-          "status": "provisória até a revisão",
+          "status": "revisada por agente; spans incertos excluídos",
           "conditions": [
             "candidata a música alta",
             "fala em inglês detectada por segmento"
@@ -6193,7 +7706,17 @@
           "language_probability": 0.9966,
           "selecionada_para": [
             "inglês detectado por segmento"
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 96.72,
+              "spans_incertos": 2,
+              "bordas_ajustadas": 0
+            }
+          }
         }
       ],
       "caracteristicas_audio": {
@@ -6206,7 +7729,7 @@
       "criterio_amostragem": "Até duas amostras por condição candidata: música = >=8 segundos com RMS >= -25 dBFS e VAD <10% de fala; gritos = >=3 segundos com RMS >= -9 dBFS e VAD >60% de fala; inglês = probabilidade >=0,8 por janela de até 15 s; demais alvos uniformes e bordas em lacunas VAD. Sinais provisórios sujeitos à revisão #29.",
       "transcricao": {
         "file": "transcricoes/6LB7vibQ5q0.json",
-        "sha256": "8adfad1c65ea22ac14150b5091063dc228b5fb0de93ee12641382b64246f7658",
+        "sha256": "8b43473fdb934ad82fb20fddb1a851ae34583f0f84da7c85d536cdd18faabbe8",
         "origin": "Systran/faster-whisper-large-v3",
         "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
         "engine": "faster-whisper 1.2.1",
@@ -6214,7 +7737,17 @@
         "beam_size": 5,
         "word_timestamps": true,
         "date": "2026-11-13",
-        "status": "provisória até a revisão"
+        "status": "revisada por agente; spans incertos excluídos",
+        "review": {
+          "by": "agent",
+          "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+          "date": "2026-11-14",
+          "coverage": {
+            "palavras_concordantes_pct": 84.01,
+            "spans_incertos": 56,
+            "bordas_ajustadas": 0
+          }
+        }
       },
       "idiomas_provisorios": [
         "en"
@@ -6261,6 +7794,23 @@
           }
         ],
         "stop_reason": "meta >=10 alcançada; restante do inventário não necessário; resultados de lotes já concluídos preservados"
+      },
+      "review": {
+        "by": "agent",
+        "method": "Comparação com NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3 e análise temporal com VAD; discordâncias incertas.",
+        "date": "2026-11-14",
+        "scope": "10 amostras de transcrição e Cortes",
+        "coverage": {
+          "palavras_concordantes_pct": 84.01,
+          "spans_incertos": 56,
+          "bordas_ajustadas": 0
+        },
+        "coverage_cortes": {
+          "palavras_concordantes_pct": 74.88,
+          "palavras_total": 215,
+          "spans_incertos": 19,
+          "bordas_ajustadas": 5
+        }
       }
     },
     {
@@ -6278,9 +7828,9 @@
       "clips": [
         {
           "clip_start": 4.5,
-          "clip_end": 15.5,
+          "clip_end": 15.554,
           "start": 9429.747,
-          "end": 9440.747,
+          "end": 9440.801,
           "score": 0.9214,
           "coarse_score": 0.9644,
           "url": "https://www.youtube.com/watch?v=U1MB0sWV8fw",
@@ -6290,7 +7840,7 @@
           "published_timestamp": 1794345333,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "9a94768b4856c862c46df90aba9189be6a7bb2d27c9e6989c6b4e45c115967fd",
           "format": "251",
           "file": "U1MB0sWV8fw.webm",
@@ -6309,7 +7859,57 @@
               "score": 0.9421785182047828,
               "coarse_score": 0.964372356169107
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 75.0,
+              "palavras_total": 24,
+              "spans_incertos": 3,
+              "bordas_ajustadas": 1
+            },
+            "bordas": {
+              "start": {
+                "original": 9429.747,
+                "novo": 9429.747,
+                "status": "borda não ajustada"
+              },
+              "end": {
+                "original": 9440.747,
+                "novo": 9440.801,
+                "delta": 0.054,
+                "vad_intervalo": [
+                  9440.416,
+                  9441.632
+                ],
+                "rms": 0.023681,
+                "boundary_match_score": 0.9231,
+                "match_offset_error": -0.0
+              }
+            },
+            "incertos": [
+              {
+                "start": 9426.867,
+                "end": 9427.387,
+                "whisper": "butlers",
+                "parakeet": "bottles."
+              },
+              {
+                "start": 9428.347,
+                "end": 9428.987,
+                "whisper": "butlers",
+                "parakeet": "ballers."
+              },
+              {
+                "start": 9443.327,
+                "end": 9443.507,
+                "whisper": "the",
+                "parakeet": "you."
+              }
+            ]
+          }
         },
         {
           "clip_start": 48.0,
@@ -6325,7 +7925,7 @@
           "published_timestamp": 1794345333,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "9a94768b4856c862c46df90aba9189be6a7bb2d27c9e6989c6b4e45c115967fd",
           "format": "251",
           "file": "U1MB0sWV8fw.webm",
@@ -6344,13 +7944,69 @@
               "score": 0.9528662317398626,
               "coarse_score": 0.42035245650322334
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 20.0,
+              "palavras_total": 10,
+              "spans_incertos": 4,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 10598.468,
+                "novo": 10598.468,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  10595.264,
+                  10614.272
+                ],
+                "rms": 0.056418,
+                "boundary_match_score": 0.9724,
+                "match_offset_error": -0.0001
+              },
+              "end": {
+                "original": 10614.968,
+                "novo": 10614.968,
+                "status": "borda não ajustada"
+              }
+            },
+            "incertos": [
+              {
+                "start": 10596.548,
+                "end": 10599.068,
+                "whisper": "Thank you.",
+                "parakeet": "I'm gonna find that."
+              },
+              {
+                "start": 10611.968,
+                "end": 10614.368,
+                "whisper": "bye bye",
+                "parakeet": "My bad"
+              },
+              {
+                "start": 10615.888,
+                "end": 10616.608,
+                "whisper": "",
+                "parakeet": "I can reach you first."
+              },
+              {
+                "start": 10617.728,
+                "end": 10617.808,
+                "whisper": "",
+                "parakeet": "yeah."
+              }
+            ]
+          }
         },
         {
           "clip_start": 77.0,
-          "clip_end": 87.75,
+          "clip_end": 87.887,
           "start": 11446.294,
-          "end": 11457.044,
+          "end": 11457.181,
           "score": 0.9718,
           "coarse_score": 0.8983,
           "url": "https://www.youtube.com/watch?v=U1MB0sWV8fw",
@@ -6360,7 +8016,7 @@
           "published_timestamp": 1794345333,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "9a94768b4856c862c46df90aba9189be6a7bb2d27c9e6989c6b4e45c115967fd",
           "format": "251",
           "file": "U1MB0sWV8fw.webm",
@@ -6379,13 +8035,70 @@
               "score": 0.9718386046612844,
               "coarse_score": 0.8982831446319516
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 77.27,
+              "palavras_total": 22,
+              "spans_incertos": 3,
+              "bordas_ajustadas": 1
+            },
+            "bordas": {
+              "start": {
+                "original": 11446.294,
+                "novo": 11446.294,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  11437.184,
+                  11447.424
+                ],
+                "rms": 0.061267,
+                "boundary_match_score": 0.9857,
+                "match_offset_error": 0.0005
+              },
+              "end": {
+                "original": 11457.044,
+                "novo": 11457.181,
+                "delta": 0.137,
+                "vad_intervalo": [
+                  11456.896,
+                  11457.504
+                ],
+                "rms": 0.032626,
+                "boundary_match_score": 0.9728,
+                "match_offset_error": 0.0005
+              }
+            },
+            "incertos": [
+              {
+                "start": 11454.044,
+                "end": 11454.604,
+                "whisper": "",
+                "parakeet": "On my on my"
+              },
+              {
+                "start": 11455.924,
+                "end": 11456.164,
+                "whisper": "am I",
+                "parakeet": ""
+              },
+              {
+                "start": 11457.324,
+                "end": 11457.644,
+                "whisper": "",
+                "parakeet": "Mm-mm."
+              }
+            ]
+          }
         },
         {
-          "clip_start": 88.5,
-          "clip_end": 102.25,
-          "start": 11458.928,
-          "end": 11472.678,
+          "clip_start": 88.36,
+          "clip_end": 102.785,
+          "start": 11458.788,
+          "end": 11473.213,
           "score": 0.9907,
           "coarse_score": 0.5149,
           "url": "https://www.youtube.com/watch?v=U1MB0sWV8fw",
@@ -6395,7 +8108,7 @@
           "published_timestamp": 1794345333,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "9a94768b4856c862c46df90aba9189be6a7bb2d27c9e6989c6b4e45c115967fd",
           "format": "251",
           "file": "U1MB0sWV8fw.webm",
@@ -6414,13 +8127,88 @@
               "score": 0.9971663372217022,
               "coarse_score": 0.5149091730896102
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 50.0,
+              "palavras_total": 30,
+              "spans_incertos": 6,
+              "bordas_ajustadas": 2
+            },
+            "bordas": {
+              "start": {
+                "original": 11458.928,
+                "novo": 11458.788,
+                "delta": -0.14,
+                "vad_intervalo": [
+                  11457.696,
+                  11459.488
+                ],
+                "rms": 0.057739,
+                "boundary_match_score": 0.926,
+                "match_offset_error": -0.0001
+              },
+              "end": {
+                "original": 11472.678,
+                "novo": 11473.213,
+                "delta": 0.535,
+                "vad_intervalo": [
+                  11473.088,
+                  11474.592
+                ],
+                "rms": 0.067901,
+                "boundary_match_score": 0.6568,
+                "match_offset_error": -0.0001
+              }
+            },
+            "incertos": [
+              {
+                "start": 11455.928,
+                "end": 11456.048,
+                "whisper": "Fuckin'",
+                "parakeet": ""
+              },
+              {
+                "start": 11457.288,
+                "end": 11457.688,
+                "whisper": "",
+                "parakeet": "Mm-hmm."
+              },
+              {
+                "start": 11459.928,
+                "end": 11460.408,
+                "whisper": "Oh,",
+                "parakeet": "Holy"
+              },
+              {
+                "start": 11469.678,
+                "end": 11470.238,
+                "whisper": "You want to go to no gym?",
+                "parakeet": ""
+              },
+              {
+                "start": 11472.158,
+                "end": 11474.538,
+                "whisper": "experiences, Jim. Bro,",
+                "parakeet": "experience there. Bo,"
+              },
+              {
+                "start": 11475.358,
+                "end": 11475.518,
+                "whisper": "bro.",
+                "parakeet": "bo."
+              }
+            ]
+          }
         },
         {
           "clip_start": 104.25,
-          "clip_end": 133.5,
+          "clip_end": 133.636,
           "start": 11022.985,
-          "end": 11052.235,
+          "end": 11052.371,
           "score": 0.9722,
           "coarse_score": 0.6218,
           "url": "https://www.youtube.com/watch?v=U1MB0sWV8fw",
@@ -6430,7 +8218,7 @@
           "published_timestamp": 1794345333,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "9a94768b4856c862c46df90aba9189be6a7bb2d27c9e6989c6b4e45c115967fd",
           "format": "251",
           "file": "U1MB0sWV8fw.webm",
@@ -6449,7 +8237,63 @@
               "score": 0.985288221464886,
               "coarse_score": 0.69935948646631
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 63.89,
+              "palavras_total": 36,
+              "spans_incertos": 4,
+              "bordas_ajustadas": 1
+            },
+            "bordas": {
+              "start": {
+                "original": 11022.985,
+                "novo": 11022.985,
+                "status": "borda não ajustada"
+              },
+              "end": {
+                "original": 11052.235,
+                "novo": 11052.371,
+                "delta": 0.136,
+                "vad_intervalo": [
+                  11051.936,
+                  11053.664
+                ],
+                "rms": 0.063545,
+                "boundary_match_score": 0.7893,
+                "match_offset_error": -0.0004
+              }
+            },
+            "incertos": [
+              {
+                "start": 11024.745,
+                "end": 11025.265,
+                "whisper": "I've got to",
+                "parakeet": "I just gotta"
+              },
+              {
+                "start": 11025.505,
+                "end": 11025.825,
+                "whisper": "case",
+                "parakeet": "gangster."
+              },
+              {
+                "start": 11049.235,
+                "end": 11050.595,
+                "whisper": "around the way, and",
+                "parakeet": "Run away. Ain't"
+              },
+              {
+                "start": 11050.695,
+                "end": 11050.915,
+                "whisper": "gon'",
+                "parakeet": "gonna"
+              }
+            ]
+          }
         },
         {
           "clip_start": 171.25,
@@ -6465,7 +8309,7 @@
           "published_timestamp": 1794345333,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "9a94768b4856c862c46df90aba9189be6a7bb2d27c9e6989c6b4e45c115967fd",
           "format": "251",
           "file": "U1MB0sWV8fw.webm",
@@ -6484,13 +8328,57 @@
               "score": 0.9809704451225835,
               "coarse_score": 0.939844327433895
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 78.95,
+              "palavras_total": 19,
+              "spans_incertos": 2,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 8506.245,
+                "novo": 8506.245,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  8504.224,
+                  8511.584
+                ],
+                "rms": 0.017122,
+                "boundary_match_score": 0.9691,
+                "match_offset_error": -0.0003
+              },
+              "end": {
+                "original": 8524.995,
+                "novo": 8524.995,
+                "status": "borda não ajustada"
+              }
+            },
+            "incertos": [
+              {
+                "start": 8503.245,
+                "end": 8503.385,
+                "whisper": "Look,",
+                "parakeet": ""
+              },
+              {
+                "start": 8523.995,
+                "end": 8524.475,
+                "whisper": "",
+                "parakeet": "sit lean"
+              }
+            ]
+          }
         },
         {
           "clip_start": 190.5,
-          "clip_end": 213.0,
+          "clip_end": 213.45,
           "start": 8681.235,
-          "end": 8703.735,
+          "end": 8704.185,
           "score": 0.9152,
           "coarse_score": 0.6681,
           "url": "https://www.youtube.com/watch?v=U1MB0sWV8fw",
@@ -6500,7 +8388,7 @@
           "published_timestamp": 1794345333,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "9a94768b4856c862c46df90aba9189be6a7bb2d27c9e6989c6b4e45c115967fd",
           "format": "251",
           "file": "U1MB0sWV8fw.webm",
@@ -6519,13 +8407,69 @@
               "score": 0.9151904286086113,
               "coarse_score": 0.6681007649329422
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 73.08,
+              "palavras_total": 26,
+              "spans_incertos": 4,
+              "bordas_ajustadas": 1
+            },
+            "bordas": {
+              "start": {
+                "original": 8681.235,
+                "novo": 8681.235,
+                "status": "borda não ajustada"
+              },
+              "end": {
+                "original": 8703.735,
+                "novo": 8704.185,
+                "delta": 0.45,
+                "vad_intervalo": [
+                  8703.68,
+                  8706.688
+                ],
+                "rms": 0.062529,
+                "boundary_match_score": 0.7342,
+                "match_offset_error": -0.0001
+              }
+            },
+            "incertos": [
+              {
+                "start": 8683.915,
+                "end": 8683.995,
+                "whisper": "",
+                "parakeet": "put"
+              },
+              {
+                "start": 8702.215,
+                "end": 8702.615,
+                "whisper": "What",
+                "parakeet": ""
+              },
+              {
+                "start": 8706.195,
+                "end": 8706.355,
+                "whisper": "are",
+                "parakeet": ""
+              },
+              {
+                "start": 8706.335,
+                "end": 8706.715,
+                "whisper": "talking to?",
+                "parakeet": "talk?"
+              }
+            ]
+          }
         },
         {
           "clip_start": 346.25,
-          "clip_end": 362.0,
+          "clip_end": 362.31,
           "start": 29513.551,
-          "end": 29529.301,
+          "end": 29529.611,
           "score": 0.9574,
           "coarse_score": 0.9349,
           "url": "https://www.youtube.com/watch?v=U1MB0sWV8fw",
@@ -6535,7 +8479,7 @@
           "published_timestamp": 1794345333,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "9a94768b4856c862c46df90aba9189be6a7bb2d27c9e6989c6b4e45c115967fd",
           "format": "251",
           "file": "U1MB0sWV8fw.webm",
@@ -6554,7 +8498,63 @@
               "score": 0.9797750892520422,
               "coarse_score": 0.9707959078947742
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 67.86,
+              "palavras_total": 28,
+              "spans_incertos": 4,
+              "bordas_ajustadas": 1
+            },
+            "bordas": {
+              "start": {
+                "original": 29513.551,
+                "novo": 29513.551,
+                "status": "borda não ajustada"
+              },
+              "end": {
+                "original": 29529.301,
+                "novo": 29529.611,
+                "delta": 0.31,
+                "vad_intervalo": [
+                  29529.536,
+                  29532.416
+                ],
+                "rms": 0.075365,
+                "boundary_match_score": 0.8617,
+                "match_offset_error": 0.0001
+              }
+            },
+            "incertos": [
+              {
+                "start": 29510.631,
+                "end": 29510.951,
+                "whisper": "",
+                "parakeet": "Damn,"
+              },
+              {
+                "start": 29527.421,
+                "end": 29527.741,
+                "whisper": "about",
+                "parakeet": "the docks"
+              },
+              {
+                "start": 29527.801,
+                "end": 29528.721,
+                "whisper": "turn for the wash",
+                "parakeet": "be turned"
+              },
+              {
+                "start": 29531.181,
+                "end": 29531.621,
+                "whisper": "No!",
+                "parakeet": ""
+              }
+            ]
+          }
         },
         {
           "clip_start": 366.75,
@@ -6570,7 +8570,7 @@
           "published_timestamp": 1794345333,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "9a94768b4856c862c46df90aba9189be6a7bb2d27c9e6989c6b4e45c115967fd",
           "format": "251",
           "file": "U1MB0sWV8fw.webm",
@@ -6589,7 +8589,44 @@
               "score": 0.9936512250706871,
               "coarse_score": 0.9670829982358403
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 83.33,
+              "palavras_total": 30,
+              "spans_incertos": 2,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 30574.798,
+                "novo": 30574.798,
+                "status": "borda não ajustada"
+              },
+              "end": {
+                "original": 30590.548,
+                "novo": 30590.548,
+                "status": "borda não ajustada"
+              }
+            },
+            "incertos": [
+              {
+                "start": 30588.208,
+                "end": 30588.908,
+                "whisper": "cock into",
+                "parakeet": "cockin' in"
+              },
+              {
+                "start": 30591.148,
+                "end": 30591.388,
+                "whisper": "",
+                "parakeet": "if I"
+              }
+            ]
+          }
         },
         {
           "clip_start": 36.5,
@@ -6605,7 +8642,7 @@
           "published_timestamp": 1794219327,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "46dbb660ec456159b8524ad73aad865595b8181513d087d541a9afa44e2040a1",
           "format": "251",
           "file": "oUNkbBKbv2c.webm",
@@ -6624,13 +8661,58 @@
               "score": 0.9856483557078964,
               "coarse_score": 0.44850200434689874
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 0.0,
+              "palavras_total": 3,
+              "spans_incertos": 1,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 11150.922,
+                "novo": 11150.922,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  11148.256,
+                  11159.616
+                ],
+                "rms": 0.010969,
+                "boundary_match_score": 0.9937,
+                "match_offset_error": -0.0005
+              },
+              "end": {
+                "original": 11171.922,
+                "novo": 11171.922,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  11165.856,
+                  11184.864
+                ],
+                "rms": 0.031605,
+                "boundary_match_score": 0.995,
+                "match_offset_error": -0.0005
+              }
+            },
+            "incertos": [
+              {
+                "start": 11172.382,
+                "end": 11174.742,
+                "whisper": "no fuck you",
+                "parakeet": ""
+              }
+            ]
+          }
         },
         {
           "clip_start": 57.75,
-          "clip_end": 117.5,
+          "clip_end": 117.63,
           "start": 11532.183,
-          "end": 11591.933,
+          "end": 11592.063,
           "score": 0.9405,
           "coarse_score": 0.451,
           "url": "https://www.youtube.com/watch?v=oUNkbBKbv2c",
@@ -6640,7 +8722,7 @@
           "published_timestamp": 1794219327,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "46dbb660ec456159b8524ad73aad865595b8181513d087d541a9afa44e2040a1",
           "format": "251",
           "file": "oUNkbBKbv2c.webm",
@@ -6659,7 +8741,52 @@
               "score": 0.9910287993030398,
               "coarse_score": 0.5354104517720096
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 53.33,
+              "palavras_total": 15,
+              "spans_incertos": 1,
+              "bordas_ajustadas": 1
+            },
+            "bordas": {
+              "start": {
+                "original": 11532.183,
+                "novo": 11532.183,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  11531.776,
+                  11533.152
+                ],
+                "rms": 0.048014,
+                "boundary_match_score": 0.9452,
+                "match_offset_error": -0.0004
+              },
+              "end": {
+                "original": 11591.933,
+                "novo": 11592.063,
+                "delta": 0.13,
+                "vad_intervalo": [
+                  11548.352,
+                  11595.264
+                ],
+                "rms": 0.01847,
+                "boundary_match_score": 0.9874,
+                "match_offset_error": -0.0004
+              }
+            },
+            "incertos": [
+              {
+                "start": 11529.183,
+                "end": 11530.223,
+                "whisper": "Did you just click the button?",
+                "parakeet": "Yeah,"
+              }
+            ]
+          }
         },
         {
           "clip_start": 200.5,
@@ -6675,7 +8802,7 @@
           "published_timestamp": 1794219327,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "46dbb660ec456159b8524ad73aad865595b8181513d087d541a9afa44e2040a1",
           "format": "251",
           "file": "oUNkbBKbv2c.webm",
@@ -6694,7 +8821,57 @@
               "score": 0.9676692079991219,
               "coarse_score": 0.48669167682915165
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 25.0,
+              "palavras_total": 16,
+              "spans_incertos": 3,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 9704.419,
+                "novo": 9704.419,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  9703.264,
+                  9706.88
+                ],
+                "rms": 0.034956,
+                "boundary_match_score": 0.949,
+                "match_offset_error": 0.0005
+              },
+              "end": {
+                "original": 9731.919,
+                "novo": 9731.919,
+                "status": "borda não ajustada"
+              }
+            },
+            "incertos": [
+              {
+                "start": 9701.419,
+                "end": 9705.419,
+                "whisper": "",
+                "parakeet": "Hey, you might bang him with the girl, but you can't."
+              },
+              {
+                "start": 9729.239,
+                "end": 9733.639,
+                "whisper": "there's a shoe with a I should",
+                "parakeet": "was that it's true. Is it AI? Sure. I should've let you should've"
+              },
+              {
+                "start": 9733.119,
+                "end": 9734.679,
+                "whisper": "pop a soup",
+                "parakeet": "cop"
+              }
+            ]
+          }
         },
         {
           "clip_start": 228.5,
@@ -6710,7 +8887,7 @@
           "published_timestamp": 1794219327,
           "retrieved": "2026-11-13",
           "method": "audio_matching v1: correlação espectral + forma de onda; segmento de publicação humana",
-          "confidence": "localizado por áudio; conferir bordas na #29",
+          "confidence": "revisado por agente; ver review para bordas e spans incertos",
           "sha256": "46dbb660ec456159b8524ad73aad865595b8181513d087d541a9afa44e2040a1",
           "format": "251",
           "file": "oUNkbBKbv2c.webm",
@@ -6729,12 +8906,58 @@
               "score": 0.9907865957397316,
               "coarse_score": 0.9276973060776863
             }
-          ]
+          ],
+          "review": {
+            "by": "agent",
+            "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+            "date": "2026-11-14",
+            "coverage": {
+              "palavras_concordantes_pct": 50.0,
+              "palavras_total": 2,
+              "spans_incertos": 1,
+              "bordas_ajustadas": 0
+            },
+            "bordas": {
+              "start": {
+                "original": 16827.004,
+                "novo": 16827.004,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  16724.8,
+                  16889.376
+                ],
+                "rms": 0.028027,
+                "boundary_match_score": 0.9936,
+                "match_offset_error": -0.0001
+              },
+              "end": {
+                "original": 16839.504,
+                "novo": 16839.504,
+                "delta": 0.0,
+                "vad_intervalo": [
+                  16724.8,
+                  16889.376
+                ],
+                "rms": 0.003815,
+                "boundary_match_score": 0.912,
+                "match_offset_error": -0.0001
+              }
+            },
+            "incertos": [
+              {
+                "start": 16824.004,
+                "end": 16825.044,
+                "whisper": "Help!",
+                "parakeet": ""
+              }
+            ]
+          }
         }
       ],
       "clips_status": {
         "localizados": 13,
-        "motivo": "Meta >=10 alcançada por segmentos de publicações humanas localizados por áudio; referências provisórias até revisão #29. Segmentos de publicações diferentes podem se sobrepor na Fonte."
+        "motivo": "Meta >=10 alcançada por segmentos de publicações humanas localizados por áudio; referências provisórias até revisão #29. Segmentos de publicações diferentes podem se sobrepor na Fonte.",
+        "status_revisao": "revisados por agente; incertezas registradas por Corte"
       },
       "samples": [
         {
@@ -7253,6 +9476,18 @@
           }
         ],
         "stop_reason": "meta >=10 alcançada; restante do inventário não necessário; resultados de lotes já concluídos preservados"
+      },
+      "review": {
+        "by": "agent",
+        "method": "NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0; https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), Whisper large-v3, pausas VAD e audio_match.py.",
+        "date": "2026-11-14",
+        "scope": "Cortes",
+        "coverage": {
+          "palavras_concordantes_pct": 63.6,
+          "palavras_total": 261,
+          "spans_incertos": 38,
+          "bordas_ajustadas": 8
+        }
       }
     }
   ],
