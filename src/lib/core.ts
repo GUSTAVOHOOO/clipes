@@ -29,6 +29,8 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       return {} as T;
     }
     if (name === 'app.version') return { version } as T;
+    if (name === 'components.ytdlp.status') return {installed:true,version:'test'} as T;
+    if (name === 'components.ytdlp.update') return {version:'test'} as T;
     if (name === 'components.ffmpeg.status') return { incomplete: false } as T;
     if (name === 'provider.status') return { ...providerMock } as T;
     if (name === 'provider.configure') {

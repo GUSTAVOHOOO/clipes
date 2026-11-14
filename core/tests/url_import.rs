@@ -56,6 +56,9 @@ fn url_settings_persist_terms_and_download_directory_per_installation() {
         .status()
         .unwrap()
         .success());
+    use sha2::{Digest, Sha256};
+    let fake_hash = format!("{:x}", Sha256::digest(fs::read(&fake).unwrap()));
+    fs::write(component_dir.join("yt-dlp.state.json"), json!({"version":"2027.01.01.000000","sha256":fake_hash,"origin":"SHA2-256SUMS assinado por yt-dlp"}).to_string()).unwrap();
     let project = run("projects.create", json!({"parent":root,"name":"Teste"})).unwrap();
     let project = project["path"].as_str().unwrap();
     let mut progress = Vec::new();

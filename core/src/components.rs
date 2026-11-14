@@ -1,3 +1,4 @@
+mod update;
 use crate::{CommandRegistration, CommandResult, CoreError, EventSink, ProgressEvent};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -114,6 +115,7 @@ pub(crate) fn ytdlp_executable() -> Result<PathBuf, CoreError> {
     if !executable.is_file() {
         return Err(error("component_missing", "Instale o Componente yt-dlp"));
     }
+    update::installed(&executable)?;
     Ok(executable)
 }
 pub(crate) fn configured_ffmpeg() -> Option<PathBuf> {
@@ -659,5 +661,80 @@ mod tests {
         fs::write(ffmpeg.with_file_name(probe_name()), b"ffprobe").unwrap();
         assert!(!managed_incomplete(&settings));
         fs::remove_dir_all(root).unwrap();
+    }
+}
+
+fn verified_checksum(
+    key: &impl pgp::types::VerifyingKey,
+    sums: &[u8],
+    signature: &[u8],
+    asset: &str,
+) -> Result<String, CoreError> {
+    use pgp::composed::{Deserializable, DetachedSignature};
+    let invalid = || error("update_signature", "Assinatura da atualização inválida");
+    let sig = DetachedSignature::from_bytes(signature).map_err(|_| invalid())?;
+    sig.verify(key, sums).map_err(|_| invalid())?;
+    let text = std::str::from_utf8(sums)
+        .map_err(|_| error("update_checksum", "Lista de hashes inválida"))?;
+    let mut matches = text.lines().filter_map(|line| {
+        let (hash, filename) = line.split_once(' ')?;
+        let filename = filename
+            .strip_prefix(' ')
+            .or_else(|| filename.strip_prefix('*'))?;
+        (filename == asset && hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()))
+            .then(|| hash.to_ascii_lowercase())
+    });
+    let hash = matches
+        .next()
+        .ok_or_else(|| error("update_checksum", "Hash da atualização ausente"))?;
+    if matches.next().is_some() {
+        return Err(error("update_checksum", "Lista de hashes inválida"));
+    }
+    Ok(hash)
+}
+
+#[cfg(test)]
+mod signature_tests {
+    use pgp::{
+        composed::{DetachedSignature, KeyType, SecretKeyParamsBuilder},
+        crypto::hash::HashAlgorithm,
+        ser::Serialize,
+        types::Password,
+    };
+    #[test]
+    fn verifies_signed_sums_and_rejects_tampering_or_missing_asset() {
+        let key = SecretKeyParamsBuilder::default()
+            .key_type(KeyType::Ed25519)
+            .can_sign(true)
+            .primary_user_id("test".into())
+            .build()
+            .unwrap()
+            .generate(rand::thread_rng())
+            .unwrap();
+        let sums = format!("{}  yt-dlp.exe\n", "a".repeat(64));
+        let sig = DetachedSignature::sign_binary_data(
+            rand::thread_rng(),
+            &key.primary_key,
+            &Password::empty(),
+            HashAlgorithm::Sha256,
+            sums.as_bytes(),
+        )
+        .unwrap();
+        let bytes = sig.to_bytes().unwrap();
+        assert_eq!(
+            super::verified_checksum(key.public_key(), sums.as_bytes(), &bytes, "yt-dlp.exe")
+                .unwrap(),
+            "a".repeat(64)
+        );
+        assert!(
+            super::verified_checksum(key.public_key(), b"tampered", &bytes, "yt-dlp.exe").is_err()
+        );
+        assert!(super::verified_checksum(
+            key.public_key(),
+            sums.as_bytes(),
+            &bytes,
+            "yt-dlp_linux"
+        )
+        .is_err());
     }
 }

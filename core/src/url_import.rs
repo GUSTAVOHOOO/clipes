@@ -30,6 +30,7 @@ fn load() -> Result<Settings, CoreError> {
             let base = dirs::video_dir()
                 .filter(|p| p.is_dir())
                 .or_else(dirs::download_dir)
+                .or_else(|| dirs::home_dir().map(|p| p.join("Downloads")))
                 .ok_or_else(|| error("settings", "Pasta de downloads indisponível"))?;
             Ok(Settings {
                 terms_accepted: false,
@@ -63,7 +64,7 @@ use crate::{projects, ProgressEvent};
 use std::{
     collections::HashMap,
     ffi::OsString,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Read, Write},
     path::Path,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -173,12 +174,14 @@ fn run_download(
         })
         .ok_or_else(|| error("download_directory", "Pasta de downloads indisponível"))?;
     let template = temp.0.join("%(id)s.%(ext)s");
-    let args: Vec<OsString> = [
+    let mut args: Vec<OsString> = [
         "--ignore-config",
         "--no-playlist",
         "--newline",
         "--progress",
-        "--no-color",
+        "--color",
+        "never",
+        "--no-simulate",
         "--restrict-filenames",
         "--progress-template",
         "download:clipes-progress:%(progress._percent_str)s",
@@ -188,8 +191,14 @@ fn run_download(
     ]
     .iter()
     .map(OsString::from)
-    .chain([template.into_os_string(), "--".into(), url.into()])
+    .chain([template.into_os_string()])
     .collect();
+    if let Some(ffmpeg) = crate::components::configured_ffmpeg() {
+        args.push("--ffmpeg-location".into());
+        args.push(ffmpeg.into_os_string());
+    }
+    args.push("--".into());
+    args.push(url.into());
     let mut child = crate::process::spawn(exe, args).map_err(|_| failure())?;
     let stdout = child.stdout.take().ok_or_else(failure)?;
     let stderr = child.stderr.take().ok_or_else(failure)?;
@@ -270,10 +279,42 @@ fn run_download(
             Ok(()) => return Ok(target),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(_) => {
-                return Err(error(
-                    "download_directory",
-                    "Pasta de downloads indisponível",
-                ))
+                let mut target_file = match fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&target)
+                {
+                    Ok(file) => file,
+                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                    Err(_) => {
+                        return Err(error(
+                            "download_directory",
+                            "Pasta de downloads indisponível",
+                        ))
+                    }
+                };
+                let copied = (|| {
+                    let mut source = fs::File::open(&canonical).map_err(|_| failure())?;
+                    let mut block = [0; 65536];
+                    loop {
+                        if flag.load(Ordering::Relaxed) {
+                            return Err(error("cancelled", "Download cancelado"));
+                        }
+                        let n = source.read(&mut block).map_err(|_| failure())?;
+                        if n == 0 {
+                            break;
+                        }
+                        target_file.write_all(&block[..n]).map_err(|_| failure())?;
+                    }
+                    target_file.flush().map_err(|_| failure())?;
+                    Ok(())
+                })();
+                drop(target_file);
+                if let Err(e) = copied {
+                    let _ = fs::remove_file(&target);
+                    return Err(e);
+                }
+                return Ok(target);
             }
         }
     }

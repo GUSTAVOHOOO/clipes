@@ -96,3 +96,7 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Sintoma:** testes de integridade falham no SHA-256 dos JSON revisados, embora o conteúdo textual seja o mesmo.
 - **Causa:** `core.autocrlf` converteu LF para CRLF; o manifesto fixa o hash dos bytes com LF.
 - **Ação:** preserve ou restaure LF nos JSON afetados antes de conferir os hashes; não atualize o manifesto para aceitar uma conversão local.
+
+### Pasta de downloads ausente em CI Linux
+- **Sintoma:** `dirs::download_dir()` retorna `None` no runner sem configuração de diretórios XDG.
+- **Ação:** quando Vídeos e Downloads do sistema não estiverem configurados, use `~/Downloads/Clipes`; isole os dados do teste com `CLIPES_DATA_DIR`.

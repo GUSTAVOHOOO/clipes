@@ -36,6 +36,15 @@ try {
   assert.match(await page.locator('main').innerText(), /GPL-3\.0-or-later/);
   assert.match(await page.locator('main').innerText(), /Unlicense/);
   assert.equal(await page.getByLabel('Limite do cache (GB)').inputValue(), '10');
+  await page.getByRole('button', {name:'Atualizar yt-dlp'}).click();
+  const updateDialog = page.getByRole('alertdialog', {name:'Atualizar yt-dlp?'});
+  await updateDialog.waitFor();
+  assert.match(await updateDialog.innerText(), /Versão instalada: test/);
+  await updateDialog.getByRole('button', {name:'Cancelar'}).click();
+  await page.getByRole('button', {name:'Atualizar yt-dlp'}).click();
+  await updateDialog.getByRole('button', {name:'Atualizar',exact:true}).click();
+  await page.getByText('Verificação de atualização concluída.').waitFor();
+
   page.once('dialog', dialog => dialog.dismiss());
   await page.getByRole('button', { name: 'Baixar' }).first().click();
   await page.screenshot({ path: 'shots/components.png' });
