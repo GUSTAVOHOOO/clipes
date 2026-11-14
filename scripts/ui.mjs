@@ -218,6 +218,7 @@ try {
   const retryDialog = page.getByRole('alertdialog', {name:'Repetir tarefa?'});
   await retryDialog.waitFor();
   assert.match(await retryDialog.innerText(), /cobrança/i);
+  assert.match(await retryDialog.innerText(), /Custo estimado da repetição: desconhecido/);
   await retryDialog.getByRole('button', {name:'Cancelar'}).click();
   await retryDialog.waitFor({state:'hidden'});
   await page.getByText('Resultado incerto').waitFor();
