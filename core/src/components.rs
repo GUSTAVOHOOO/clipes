@@ -223,7 +223,7 @@ pub(crate) fn ffprobe_executable(ffmpeg: Option<&Path>) -> Result<PathBuf, CoreE
         candidates.push(PathBuf::from(probe_name()));
     }
     for executable in candidates {
-        let valid = crate::process::spawn(&executable, ["-version"])
+        let valid = crate::process::spawn(&executable, ["-version"], None)
             .and_then(|child| child.wait_with_output())
             .is_ok_and(|o| {
                 o.status.success()
@@ -262,7 +262,7 @@ fn settings_set(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 }
 fn ffmpeg_system(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let path = v.get("path").and_then(Value::as_str).unwrap_or("ffmpeg");
-    let output = crate::process::spawn(path, ["-version"])
+    let output = crate::process::spawn(path, ["-version"], None)
         .and_then(|child| child.wait_with_output())
         .map_err(|e| error("invalid_ffmpeg", e))?;
     let version = String::from_utf8_lossy(&output.stdout)

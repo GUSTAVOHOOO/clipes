@@ -41,6 +41,7 @@ mod components;
 pub mod process;
 pub mod projects;
 pub mod provider;
+mod provider_cli;
 mod sources;
 mod url_import;
 mod version;

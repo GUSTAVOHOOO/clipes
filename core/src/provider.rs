@@ -361,6 +361,7 @@ mod settings {
             providers: old.providers,
         };
         write(&settings)?;
+        crate::provider_cli::clear()?;
         Ok(json!({}))
     }
     fn key_set(args: Value, _: &mut EventSink<'_>) -> CommandResult {
@@ -423,6 +424,11 @@ mod settings {
         Ok(json!({}))
     }
     fn call_inner(args: Value) -> CommandResult {
+        if let Some(kind) = crate::provider_cli::selected()? {
+            let request: StructuredRequest = serde_json::from_value(args)
+                .map_err(|_| error("invalid_request", "Invalid structured request"))?;
+            return crate::provider_cli::CliProvider(kind).structured(&request);
+        }
         let settings = {
             let _guard = locked()?;
             read()?
