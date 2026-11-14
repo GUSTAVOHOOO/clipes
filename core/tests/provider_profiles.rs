@@ -27,7 +27,7 @@ fn files_in_the_old_format_keep_working_and_are_not_rewritten() {
     let files = [
         (
             "provider.json",
-            json!({"endpoint":endpoint,"model":"m","kind":"openai","nativeSchema":false,
+            json!({"endpoint":endpoint,"model":"m","kind":"openai","nativeSchema":false,"timeouts":{"local":900},
                 "providers":{endpoint:{"confirmed":true,"keyLastFour":"abcd"}}}),
         ),
         (
@@ -94,7 +94,7 @@ fn files_in_the_old_format_keep_working_and_are_not_rewritten() {
     assert_eq!(profile(&list, "local-qwen")["label"], "Local");
     assert_eq!(profile(&list, "legacy")["endpoint"], endpoint);
     let saved = fs::read_to_string(root.join("provider.json")).unwrap();
-    assert!(!saved.contains("\"local\""));
+    assert!(!saved.contains("\"local\":true") && !saved.contains("\"local\":false"));
     let saved: Value = serde_json::from_str(&saved).unwrap();
     assert_eq!(saved["schemaVersion"], 2);
     // The v1 fields keep mirroring the legacy profile for older readers.
@@ -128,6 +128,20 @@ fn files_in_the_old_format_keep_working_and_are_not_rewritten() {
     let list = run("provider.profiles.list", json!({})).unwrap();
     assert_eq!(profile(&list, "legacy")["model"], "m2");
     assert_eq!(profile(&list, "local-qwen")["model"], "qwen3");
+
+    // The timeouts of #117 are global and survive the move to profiles.
+    let timeouts = run("provider.status", json!({})).unwrap()["timeouts"].clone();
+    assert_eq!(timeouts["local"], 900);
+    run(
+        "provider.configure",
+        json!({"profileId":"extra","kind":"openai","endpoint":"http://127.0.0.1:11434/v1","model":"x"}),
+    )
+    .unwrap();
+    assert_eq!(
+        run("provider.status", json!({})).unwrap()["timeouts"],
+        timeouts
+    );
+    run("provider.profiles.remove", json!({"profileId":"extra"})).unwrap();
 
     // Removing a profile leaves the legacy one and its consent alone.
     run(

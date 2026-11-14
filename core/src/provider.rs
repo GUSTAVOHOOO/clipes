@@ -64,11 +64,27 @@ pub struct StructuredRequest {
 
 pub trait Provider {
     fn structured(&self, request: &StructuredRequest) -> Result<Value, CoreError>;
+    /// Like `structured`, but stops with a `cancelled` error once `cancel` is set: during the
+    /// 429 wait, an HTTP request in flight, or a CLI run (which kills the process tree).
+    /// The default only looks at the token before starting.
+    fn structured_with(
+        &self,
+        request: &StructuredRequest,
+        cancel: &CancelToken,
+    ) -> Result<Value, CoreError> {
+        if cancel.is_cancelled() {
+            return Err(control::cancelled());
+        }
+        self.structured(request)
+    }
 }
 
 mod adapters;
+pub(crate) mod control;
 pub use adapters::{AnthropicProvider, GeminiProvider, OpenAiProvider};
+pub use control::{CancelToken, Timeouts};
 pub mod cost;
+pub use settings::run_structured;
 
 mod settings {
     use super::*;
@@ -96,6 +112,8 @@ mod settings {
         #[serde(default)]
         native_schema: bool,
         /// Per vault account: the key suffix. Per endpoint: the consent.
+        #[serde(default)]
+        timeouts: Timeouts,
         #[serde(default)]
         providers: std::collections::HashMap<String, Metadata>,
         /// Absent until the user edits something; reading synthesizes `legacy` meanwhile.
@@ -273,11 +291,11 @@ mod settings {
     }
     fn status_json(settings: &Settings, profile: Option<&Profile>) -> Value {
         let Some(p) = profile else {
-            return json!({"endpoint":"", "model":"", "kind":"openai", "nativeSchema":false, "keyLastFour":null, "remote":false, "confirmed":false});
+            return json!({"endpoint":"", "model":"", "kind":"openai", "nativeSchema":false, "timeouts":settings.timeouts.effective(), "keyLastFour":null, "remote":false, "confirmed":false});
         };
         let remote = !is_local_endpoint(&p.endpoint).unwrap_or(false);
         let key = metadata(settings, &p.account());
-        json!({"profileId":p.id, "endpoint":p.endpoint, "model":p.model, "kind":p.kind, "nativeSchema":p.native_schema, "keyLastFour":key.key_last_four, "remote":remote, "confirmed":metadata(settings, &p.endpoint).confirmed})
+        json!({"profileId":p.id, "endpoint":p.endpoint, "model":p.model, "kind":p.kind, "nativeSchema":p.native_schema, "timeouts":settings.timeouts.effective(), "keyLastFour":key.key_last_four, "remote":remote, "confirmed":metadata(settings, &p.endpoint).confirmed})
     }
     fn status(args: Value, _: &mut EventSink<'_>) -> CommandResult {
         let _guard = locked()?;
@@ -502,7 +520,8 @@ mod settings {
         write(&settings)?;
         Ok(json!({}))
     }
-    fn call_inner(args: Value) -> CommandResult {
+    /// `provider.structured` with a cancellation token, for the AI job executor (#121).
+    pub fn run_structured(args: Value, cancel: &CancelToken) -> CommandResult {
         let explicit = args.get("profileId").is_some_and(|v| !v.is_null());
         let cli = if explicit {
             None
@@ -517,7 +536,8 @@ mod settings {
         if let Some(kind) = cli {
             let request: StructuredRequest = serde_json::from_value(args)
                 .map_err(|_| error("invalid_request", "Invalid structured request"))?;
-            return crate::provider_cli::CliProvider(kind).structured(&request);
+            return crate::provider_cli::CliProvider(kind, crate::provider_cli::timeout()?)
+                .structured_with(&request, cancel);
         }
         let (settings, profile) = {
             let _guard = locked()?;
@@ -571,7 +591,7 @@ mod settings {
             message: "Preparing provider request".into(),
             error: None,
         });
-        let result = call_inner(args);
+        let result = run_structured(args, &CancelToken::default());
         events(crate::ProgressEvent {
             project: None,
             job: "provider.structured".into(),
@@ -769,7 +789,7 @@ mod settings {
             );
             let text = fs::read_to_string(path().unwrap()).unwrap();
             assert!(!text.contains("shared-key") && !text.contains("second-key"));
-            assert!(!text.contains("\"local\""));
+            assert!(!text.contains("\"local\":"));
         }
         #[test]
         fn explicit_profile_calls_its_own_model_and_key() {
@@ -822,6 +842,13 @@ mod settings {
             )
             .unwrap();
             assert_eq!(settings.kind, "openai");
+            assert_eq!(settings.timeouts, Timeouts::default());
+            let configured: Settings = serde_json::from_value(
+                json!({"endpoint":"http://localhost:1/v1", "model":"m", "nativeSchema":false, "timeouts":{"local":900}}),
+            )
+            .unwrap();
+            assert_eq!(configured.timeouts.endpoint(true), Duration::from_secs(900));
+            assert_eq!(configured.timeouts.endpoint(false), Duration::from_secs(60));
         }
         #[test]
         fn headless_dispatch_uses_fake_vault_and_never_returns_key() {
@@ -993,7 +1020,7 @@ mod security_tests {
             connections.len()
         });
         let mut provider = OpenAiProvider::new(endpoint, "model".into(), None).unwrap();
-        provider.0.timeout = Duration::from_millis(100);
+        provider.0.timeout = Some(Duration::from_millis(100));
         assert_eq!(
             provider.structured(&input()).unwrap_err().code,
             "timeout_uncertain"
