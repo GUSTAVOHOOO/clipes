@@ -305,15 +305,17 @@ pub fn run_costed(
     }
 }
 
-// The active provider is read through the public status commands, so per-task provider
-// selection (#43) only has to change this one function.
-fn target_now() -> Result<Target, CoreError> {
-    let noop = &mut |_| {};
-    let cli = crate::dispatch("provider.cli.status", json!({}), noop)?;
-    if let Some(name) = cli["selected"].as_str().filter(|s| !s.is_empty()) {
-        return Ok(Target::Cli { name: name.into() });
+// Same route as `provider.structured` (per-task choice, then default, then the CLI selection).
+fn target_now(task: Option<&str>) -> Result<Target, CoreError> {
+    let cli = match crate::assistant::route(task)? {
+        crate::assistant::Route::Cli(kind) => Some(kind),
+        crate::assistant::Route::Endpoint => None,
+        crate::assistant::Route::Unset => crate::provider_cli::selected()?,
+    };
+    if let Some(name) = cli {
+        return Ok(Target::Cli { name });
     }
-    let s = crate::dispatch("provider.status", json!({}), noop)?;
+    let s = crate::dispatch("provider.status", json!({}), &mut |_| {})?;
     if s["endpoint"].as_str().unwrap_or("").is_empty() {
         return Err(error("invalid_settings", "Configure the provider first"));
     }
@@ -328,13 +330,13 @@ fn request(args: &Value) -> Result<StructuredRequest, CoreError> {
         .map_err(|_| error("invalid_request", "Invalid structured request"))
 }
 fn cmd_estimate(args: Value, _: &mut EventSink<'_>) -> CommandResult {
-    estimate(&target_now()?, &request(&args)?)
+    estimate(&target_now(args["task"].as_str())?, &request(&args)?)
 }
 fn cmd_run(args: Value, events: &mut EventSink<'_>) -> CommandResult {
     let task = args["task"].as_str().unwrap_or("").to_owned();
     let batch = args["batch"].as_str().map(str::to_owned);
     request(&args)?;
-    let target = target_now()?;
+    let target = target_now(args["task"].as_str())?;
     run_costed(&target, &task, batch.as_deref(), || {
         crate::dispatch("provider.structured", args, events)
     })

@@ -287,7 +287,13 @@ mod settings {
         Ok(json!({}))
     }
     fn call_inner(args: Value) -> CommandResult {
-        if let Some(kind) = crate::provider_cli::selected()? {
+        let route = crate::assistant::route(args.get("task").and_then(Value::as_str))?;
+        let cli = match route {
+            crate::assistant::Route::Cli(kind) => Some(kind),
+            crate::assistant::Route::Endpoint => None,
+            crate::assistant::Route::Unset => crate::provider_cli::selected()?,
+        };
+        if let Some(kind) = cli {
             let request: StructuredRequest = serde_json::from_value(args)
                 .map_err(|_| error("invalid_request", "Invalid structured request"))?;
             return crate::provider_cli::CliProvider(kind).structured(&request);

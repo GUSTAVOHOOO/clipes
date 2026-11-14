@@ -24,12 +24,20 @@ Codex CLI e Claude Code CLI são experimentais e só são selecionados por escol
 
 Os adaptadores CLI retornam `usage: null` e `calls: 1`, pois nao informam tokens.
 
+## Assistente de primeira execução e Provedor por tarefa
+
+Na primeira execução, a UI abre um assistente que chama `assistant.detect` para listar o que já existe na máquina: Ollama (`GET /api/tags` em `127.0.0.1:11434`), LM Studio (`GET /v1/models` em `127.0.0.1:1234`), servidor do llama.cpp (`GET /v1/models` ou `/health` em `127.0.0.1:8080`) e os executáveis `codex` e `claude` no `PATH`. "Local" significa só loopback: a detecção recusa qualquer outro endereço, usa timeout curto (800 ms), não segue redirecionamentos nem proxy e não executa os CLIs, só procura o arquivo no `PATH`. Os testes injetam as URLs (`ollama`, `lmStudio`, `llamaCpp`) e o `path` como argumentos de `assistant.detect`, com servidores HTTP falsos em portas efêmeras; a UI não envia esses argumentos.
+
+O assistente recomenda sem escolher: explica qualidade e custo de cada tipo de Provedor (API, assinatura via CLI e modelo local), e não existe Provedor padrão de fábrica. Os CLIs são experimentais e só ficam disponíveis depois do mesmo aviso e da confirmação do `provider.cli.confirm`; `assistant.default.set` e `assistant.task.set` recusam `codex` ou `claude` com `confirmation_required` antes disso.
+
+As escolhas ficam em `assistant.json` nas configurações do app (`CLIPES_DATA_DIR`), nunca no Projeto nem no Perfil de canal: `assistant.status`, `assistant.default.set`, `assistant.task.set` e `assistant.complete` (com `skipped` para registrar o "pular"). Cada escolha é `endpoint` (a API ou o modelo local configurado em `provider.configure`), `codex`, `claude` ou vazio. As tarefas são `selection` (seleção de Cortes), `packaging` (Empacotamento), `script` (Roteiro) e `translation` (tradução); uma tarefa sem troca usa o padrão. `provider.structured` aceita o campo opcional `task`: com ele usa a troca da tarefa ou o padrão; sem ele, usa o padrão. Se nada foi escolhido pelo assistente, vale o comportamento anterior. Desativar o CLI esquece as escolhas que apontavam para ele.
+
 ## Custo do Provedor
 
 `core/src/provider/cost.rs` calcula o custo sem alterar os adaptadores. A tabela de preços é o JSON versionado `core/src/provider/prices.json` (`updatedAt` e preço em US$ por milhão de tokens de entrada e de saída, por provedor e modelo, com correspondência exata); a UI mostra a data. O usuário pode sobrescrever o preço de um modelo (`provider.prices.set`, guardado em `provider-prices.json` no diretório de configuração ou em `CLIPES_DATA_DIR`) e a sobrescrita vence a tabela. Não há busca na rede; confira os valores embutidos ao atualizar a tabela.
 
 - `provider.cost.estimate`: tokens de entrada = caracteres da instrução, do schema e da Transcrição ÷ 4 (arredondado para cima); o teto de saída é `maxOutputTokens` (Anthropic assume 8192). O resultado traz mínimo (só entrada) e máximo (com o teto de saída); sem teto, o máximo é nulo.
-- `provider.cost.run`: roda `provider.structured`, devolve `cost` calculado pelo `usage` e o registra na tabela `provider_costs` do Projeto aberto (`task` obrigatório, `batch` opcional; o lote real chega no #56). Saída truncada (`output_truncated`) também é registrada, pois foi cobrada.
+- `provider.cost.run`: roda `provider.structured`, devolve `cost` calculado pelo `usage` e o registra na tabela `provider_costs` do Projeto aberto (`task` obrigatório, o mesmo da rota por tarefa do assistente: `selection`, `packaging`, `script` ou `translation`; `batch` opcional; o lote real chega no #56). Saída truncada (`output_truncated`) também é registrada, pois foi cobrada.
 - `provider.cost.list`: lê os registros, opcionalmente por `batch`.
 - Tipos de custo: `usd`; `zero` (endpoint loopback); `plan_quota` (CLI, sem valor em dinheiro); `unknown` (modelo sem preço ou `usage` incompleto), nunca zero.
 
