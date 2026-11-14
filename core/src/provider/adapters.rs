@@ -225,16 +225,24 @@ impl Adapter {
                     response.pointer("/usageMetadata/candidatesTokenCount"),
                 ),
             };
-            fn add(total: &mut Option<u64>, value: Option<&Value>, first: bool) {
-                let n = value.and_then(Value::as_u64);
+            let mut output_count = o.and_then(Value::as_u64);
+            if matches!(self.kind, Kind::Gemini) {
+                if let Some(thoughts) = response
+                    .pointer("/usageMetadata/thoughtsTokenCount")
+                    .and_then(Value::as_u64)
+                {
+                    output_count = output_count.and_then(|n| n.checked_add(thoughts));
+                }
+            }
+            fn add(total: &mut Option<u64>, n: Option<u64>, first: bool) {
                 *total = if first {
                     n
                 } else {
                     total.and_then(|t| n.and_then(|v| t.checked_add(v)))
                 };
             }
-            add(&mut input, i, repair == 0);
-            add(&mut output, o, repair == 0);
+            add(&mut input, i.and_then(Value::as_u64), repair == 0);
+            add(&mut output, output_count, repair == 0);
             let usage = if input.is_none() && output.is_none() {
                 Value::Null
             } else {

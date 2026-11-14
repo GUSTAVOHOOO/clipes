@@ -52,7 +52,7 @@ fn run(kind: &str) {
                 }
             }
         }
-        let reply = if kind == "anthropic" { json!({"content":[{"type":"text","text":"{\"schemaVersion\":1}"}],"usage":{"input_tokens":11,"output_tokens":7}}) } else { json!({"candidates":[{"content":{"parts":[{"text":"{\"schemaVersion\":1}"}]}}],"usageMetadata":{"promptTokenCount":11,"candidatesTokenCount":7}}) }.to_string();
+        let reply = if kind == "anthropic" { json!({"content":[{"type":"text","text":"{\"schemaVersion\":1}"}],"usage":{"input_tokens":11,"output_tokens":7}}) } else { json!({"candidates":[{"content":{"parts":[{"text":"{\"schemaVersion\":1}"}]}}],"usageMetadata":{"promptTokenCount":11,"candidatesTokenCount":7,"thoughtsTokenCount":3}}) }.to_string();
         write!(
             stream,
             "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -80,7 +80,7 @@ fn run(kind: &str) {
     .unwrap();
     assert_eq!(
         result,
-        json!({"data":{"schemaVersion":1},"usage":{"inputTokens":11,"outputTokens":7},"calls":1})
+        json!({"data":{"schemaVersion":1},"usage":{"inputTokens":11,"outputTokens":if provider_kind == "gemini" {10} else {7}},"calls":1})
     );
     server.join().unwrap();
 }
