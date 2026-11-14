@@ -40,6 +40,23 @@ pub fn checkpoint(id: i64, checkpoint: &str) -> Result<(), crate::CoreError> {
     })
 }
 
+/// Records an execution result; a provider timeout may have incurred a charge.
+pub fn finish(id: i64, result: Result<(), crate::CoreError>) -> Result<(), crate::CoreError> {
+    let state = match result {
+        Ok(()) => "completed",
+        Err(ref e) if e.code == "timeout_uncertain" => "uncertain",
+        Err(ref e) if e.code == "cancelled" => "cancelled",
+        Err(_) => "failed",
+    };
+    projects::with_writer(|c| {
+        c.execute(
+            "UPDATE jobs SET state=?2 WHERE id=?1 AND state='running'",
+            (id, state),
+        )?;
+        Ok(())
+    })
+}
+
 inventory::submit! { projects::Migration { id: "0044_001_jobs", sql: "CREATE TABLE jobs (id INTEGER PRIMARY KEY, kind TEXT NOT NULL, safety TEXT NOT NULL CHECK(safety IN ('local','paid')), state TEXT NOT NULL CHECK(state IN ('queued','running','uncertain','completed','cancelled','failed')), attempts INTEGER NOT NULL DEFAULT 0, checkpoint TEXT, progress INTEGER NOT NULL DEFAULT 0, cancel_requested INTEGER NOT NULL DEFAULT 0); CREATE TABLE queue_project_identity (id TEXT NOT NULL); INSERT INTO queue_project_identity VALUES (lower(hex(randomblob(16))));" } }
 
 pub fn progress(
@@ -80,6 +97,40 @@ fn cancel(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     Ok(Value::Null)
 }
 inventory::submit! { CommandRegistration { name: "jobs.cancel", execute: cancel } }
+
+fn uncertain_action(v: Value, repeat: bool) -> CommandResult {
+    if repeat && v["confirmed"] != true {
+        return Err(crate::CoreError {
+            code: "confirmation_required".into(),
+            message: "Confirme que repetir pode gerar nova cobrança.".into(),
+        });
+    }
+    let id = v["id"].as_i64().ok_or_else(|| crate::CoreError {
+        code: "invalid_job".into(),
+        message: "Tarefa inválida.".into(),
+    })?;
+    let changed = projects::with_writer(|c| {
+        c.execute(
+            "UPDATE jobs SET state=?2, cancel_requested=0 WHERE id=?1 AND state='uncertain'",
+            (id, if repeat { "queued" } else { "cancelled" }),
+        )
+    })?;
+    if changed != 1 {
+        return Err(crate::CoreError {
+            code: "invalid_job_state".into(),
+            message: "A tarefa não está em estado incerto.".into(),
+        });
+    }
+    Ok(Value::Null)
+}
+fn retry(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    uncertain_action(v, true)
+}
+fn discard(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    uncertain_action(v, false)
+}
+inventory::submit! { CommandRegistration { name: "jobs.retry", execute: retry } }
+inventory::submit! { CommandRegistration { name: "jobs.discard", execute: discard } }
 
 pub(crate) fn reconcile() -> Result<(), crate::CoreError> {
     projects::with_writer(|c| {

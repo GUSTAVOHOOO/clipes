@@ -73,6 +73,27 @@ fn crash_reconciles_running_jobs_and_retains_checkpoint() {
     assert_eq!(jobs[0]["checkpoint"], "checkpoint");
     assert_eq!(jobs[1]["state"], "uncertain");
     assert_eq!(jobs[1]["checkpoint"], "sent");
+    let paid_id = jobs[1]["id"].as_i64().unwrap();
+    assert_eq!(
+        dispatch("jobs.retry", json!({"id":paid_id}), &mut |_| {})
+            .unwrap_err()
+            .code,
+        "confirmation_required"
+    );
+    assert_eq!(
+        dispatch("jobs.list", json!({}), &mut |_| {}).unwrap()[1]["state"],
+        "uncertain"
+    );
+    dispatch(
+        "jobs.retry",
+        json!({"id":paid_id,"confirmed":true}),
+        &mut |_| {},
+    )
+    .unwrap();
+    assert_eq!(
+        dispatch("jobs.list", json!({}), &mut |_| {}).unwrap()[1]["state"],
+        "queued"
+    );
     dispatch("jobs.cancel", json!({"id":jobs[0]["id"]}), &mut |_| {}).unwrap();
     let updated = dispatch("jobs.list", json!({}), &mut |_| {}).unwrap();
     assert_eq!(updated[0]["state"], "cancelled");
@@ -93,6 +114,26 @@ fn crash_reconciles_running_jobs_and_retains_checkpoint() {
     assert!(events[0].project.as_ref().is_some_and(|id| !id.is_empty()));
     assert_eq!(events[0].percentage, 42);
     drop(events);
+    let paid = jobs::enqueue("provider", Safety::Paid).unwrap();
+    assert!(jobs::begin(paid).unwrap());
+    jobs::finish(
+        paid,
+        Err(clipes_core::CoreError {
+            code: "timeout_uncertain".into(),
+            message: "incerto".into(),
+        }),
+    )
+    .unwrap();
+    dispatch("jobs.discard", json!({"id":paid}), &mut |_| {}).unwrap();
+    assert_eq!(
+        dispatch("jobs.list", json!({}), &mut |_| {})
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .last()
+            .unwrap()["state"],
+        "cancelled"
+    );
     dispatch("projects.close", json!({}), &mut |_| {}).unwrap();
     fs::remove_dir_all(root).unwrap();
 }
