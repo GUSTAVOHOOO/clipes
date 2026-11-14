@@ -1,5 +1,6 @@
 use crate::{projects, CommandRegistration, CommandResult, EventSink};
 use serde_json::{json, Value};
+mod preview;
 
 #[derive(Clone, Copy)]
 pub enum Safety {
@@ -50,14 +51,42 @@ pub fn finish(id: i64, result: Result<(), crate::CoreError>) -> Result<(), crate
     };
     projects::with_writer(|c| {
         c.execute(
-            "UPDATE jobs SET state=?2 WHERE id=?1 AND state='running'",
+            "UPDATE jobs SET state=?2, progress=CASE WHEN ?2='completed' THEN 100 ELSE progress END WHERE id=?1 AND state='running'",
             (id, state),
         )?;
         Ok(())
     })
 }
 
-inventory::submit! { projects::Migration { id: "0044_001_jobs", sql: "CREATE TABLE jobs (id INTEGER PRIMARY KEY, kind TEXT NOT NULL, safety TEXT NOT NULL CHECK(safety IN ('local','paid')), state TEXT NOT NULL CHECK(state IN ('queued','running','uncertain','completed','cancelled','failed')), attempts INTEGER NOT NULL DEFAULT 0, checkpoint TEXT, progress INTEGER NOT NULL DEFAULT 0, cancel_requested INTEGER NOT NULL DEFAULT 0); CREATE TABLE queue_project_identity (id TEXT NOT NULL); INSERT INTO queue_project_identity VALUES (lower(hex(randomblob(16))));" } }
+inventory::submit! { projects::Migration { id: "0044_001_jobs", sql: "CREATE TABLE jobs (id INTEGER PRIMARY KEY, kind TEXT NOT NULL, safety TEXT NOT NULL CHECK(safety IN ('local','paid')), state TEXT NOT NULL CHECK(state IN ('queued','running','uncertain','completed','cancelled','failed')), attempts INTEGER NOT NULL DEFAULT 0, checkpoint TEXT, progress INTEGER NOT NULL DEFAULT 0, cancel_requested INTEGER NOT NULL DEFAULT 0, source_id INTEGER); CREATE TABLE queue_project_identity (id TEXT NOT NULL); INSERT INTO queue_project_identity VALUES (lower(hex(randomblob(16))));" } }
+
+struct Worker {
+    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    thread: std::thread::JoinHandle<()>,
+}
+fn worker() -> &'static std::sync::Mutex<Option<Worker>> {
+    static WORKER: std::sync::OnceLock<std::sync::Mutex<Option<Worker>>> =
+        std::sync::OnceLock::new();
+    WORKER.get_or_init(|| std::sync::Mutex::new(None))
+}
+pub(crate) fn stop_worker() {
+    if let Ok(mut guard) = worker().lock() {
+        if let Some(worker) = guard.take() {
+            worker.stop.store(true, std::sync::atomic::Ordering::SeqCst);
+            let _ = worker.thread.join();
+        }
+    }
+}
+pub(crate) fn start_worker(project: std::path::PathBuf) {
+    let mut guard = worker().lock().unwrap();
+    if guard.is_some() {
+        return;
+    }
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let thread_stop = stop.clone();
+    let thread = std::thread::spawn(move || preview::run_queue(project, thread_stop));
+    *guard = Some(Worker { stop, thread });
+}
 
 pub fn progress(
     id: i64,
@@ -141,8 +170,8 @@ pub(crate) fn reconcile() -> Result<(), crate::CoreError> {
 
 fn list(_: Value, _: &mut EventSink<'_>) -> CommandResult {
     projects::with_reader(|c| {
-        let mut s = c.prepare("SELECT id,kind,safety,state,attempts,checkpoint,progress FROM jobs ORDER BY id")?;
-        let rows = s.query_map([], |r| Ok(json!({"id":r.get::<_,i64>(0)?,"kind":r.get::<_,String>(1)?,"safety":r.get::<_,String>(2)?,"state":r.get::<_,String>(3)?,"attempts":r.get::<_,i64>(4)?,"checkpoint":r.get::<_,Option<String>>(5)?,"progress":r.get::<_,i64>(6)?})))?;
+        let mut s = c.prepare("SELECT id,kind,safety,state,attempts,checkpoint,progress,(SELECT id FROM queue_project_identity) FROM jobs ORDER BY id")?;
+        let rows = s.query_map([], |r| Ok(json!({"id":r.get::<_,i64>(0)?,"kind":r.get::<_,String>(1)?,"safety":r.get::<_,String>(2)?,"state":r.get::<_,String>(3)?,"attempts":r.get::<_,i64>(4)?,"checkpoint":r.get::<_,Option<String>>(5)?,"progress":r.get::<_,i64>(6)?,"project":r.get::<_,String>(7)?})))?;
         rows.collect::<rusqlite::Result<Vec<_>>>()
     }).map(|v| json!(v))
 }

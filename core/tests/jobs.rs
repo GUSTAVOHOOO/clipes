@@ -20,7 +20,7 @@ fn child_worker() {
         &mut |_| {},
     )
     .unwrap();
-    let local = jobs::enqueue("preview", Safety::Local).unwrap();
+    let local = jobs::enqueue("test", Safety::Local).unwrap();
     let paid = jobs::enqueue("provider", Safety::Paid).unwrap();
     assert!(jobs::begin(local).unwrap());
     assert!(jobs::begin(paid).unwrap());

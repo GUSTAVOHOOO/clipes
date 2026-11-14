@@ -83,6 +83,8 @@ Registre cada migração SQL com `inventory` como `projects::Migration`. Use um 
 
 Para testes headless, defina `CLIPES_DATA_DIR` no ambiente do processo para isolar o índice de Projetos em `projects.json` nesse diretório; sem a variável, usa-se o diretório de dados local do app. Os comandos do núcleo não aceitam um caminho de biblioteca da UI.
 
+O cache de onda usa o formato binário `CLPWAVE\0`, versão 1, com inteiros little-endian: quatro `u32` (versão, taxa de picos por segundo, canais e quantidade de níveis), seguidos por uma tabela de níveis com `u64` de offset absoluto em bytes e `u64` de contagem de picos. Cada pico é um par `i16` mínimo/máximo. A onda é mixada em mono, com 100 picos por segundo; cada nível seguinte agrega quatro picos consecutivos até restar aproximadamente um pico por segundo ou menos. A tabela permite ler apenas o nível e intervalo necessários para a timeline.
+
 Documentos `clip`, `style`, `script` e `packaging` são objetos JSON com `schemaVersion` igual a 1 e `revision` inteira não negativa. Cada tipo registra seu validador e suas migrações próprias; campos de domínio serão definidos pelos tickets correspondentes. O comando `documents.validate` migra e valida o documento no núcleo; versões futuras são recusadas.
 
 ## Atualização do yt-dlp

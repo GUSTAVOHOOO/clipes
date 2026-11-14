@@ -97,7 +97,7 @@ fn duration(v: &Value) -> Option<i64> {
         None
     }
 }
-fn partial(path: &Path) -> Result<(u64, String), CoreError> {
+pub(crate) fn partial(path: &Path) -> Result<(u64, String), CoreError> {
     let mut f = File::open(path).map_err(|_| err("source_unavailable", "Fonte indisponível"))?;
     let size = f
         .metadata()
@@ -302,8 +302,15 @@ fn import(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     }
     let modified = modified(&resolve_path(&v, &path.to_string_lossy())?)?;
     let id = projects::with_writer(|conn| {
-        conn.execute("INSERT INTO sources(path,size,duration_us,partial_hash,full_hash,metadata,permission,audio_track,modified,origin_url) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",params![path.to_string_lossy(),size as i64,dur,part,full_hash,metadata.to_string(),v["permission"].to_string(),audio,modified,origin_url])?;
-        Ok(conn.last_insert_rowid())
+        let tx = conn.transaction()?;
+        tx.execute("INSERT INTO sources(path,size,duration_us,partial_hash,full_hash,metadata,permission,audio_track,modified,origin_url) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",params![path.to_string_lossy(),size as i64,dur,part,full_hash,metadata.to_string(),v["permission"].to_string(),audio,modified,origin_url])?;
+        let id = tx.last_insert_rowid();
+        tx.execute(
+            "INSERT INTO jobs(kind,safety,state,source_id) VALUES ('preview','local','queued',?1)",
+            [id],
+        )?;
+        tx.commit()?;
+        Ok(id)
     })?;
     get(&v, id)
 }

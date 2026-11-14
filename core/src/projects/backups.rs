@@ -246,13 +246,19 @@ pub(super) fn open_session(path: PathBuf) -> Result<String, CoreError> {
 fn current(_: Value, _: &mut EventSink<'_>) -> CommandResult {
     let g = state().lock().map_err(|_| busy())?;
     Ok(match g.as_ref() {
-        Some(s) => json!({"name":s.name,"path":s.path,"warning":s.warning}),
+        Some(s) => {
+            json!({"name":s.name,"path":s.path,"warning":s.warning,"id":s.conn.as_ref().and_then(|c| c.query_row("SELECT id FROM queue_project_identity", [], |r| r.get::<_, String>(0)).ok())})
+        }
         None => Value::Null,
     })
 }
 fn close(_: Value, _: &mut EventSink<'_>) -> CommandResult {
+    crate::jobs::stop_worker();
     let mut g = state().lock().map_err(|_| busy())?;
     if g.as_ref().is_some_and(|s| s.jobs > 0) {
+        if let Some(s) = g.as_ref() {
+            crate::jobs::start_worker(s.path.clone());
+        }
         return Err(busy());
     }
     if let Some(s) = g.take() {
@@ -311,7 +317,22 @@ fn list(_: Value, _: &mut EventSink<'_>) -> CommandResult {
     all.sort_by_key(|p| std::cmp::Reverse(p.metadata().and_then(|m| m.modified()).ok()));
     Ok(json!(all.iter().filter_map(|p| { let id = p.file_name()?.to_str()?; let time = p.metadata().ok()?.modified().ok()?.duration_since(UNIX_EPOCH).ok()?.as_secs(); Some(json!({"id":id,"created_at":time,"before_restore":id.starts_with("before-restore-")})) }).collect::<Vec<_>>()))
 }
-fn restore(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+fn restore(v: Value, events: &mut EventSink<'_>) -> CommandResult {
+    crate::jobs::stop_worker();
+    let result = restore_inner(v, events);
+    let path = state()
+        .lock()
+        .ok()
+        .and_then(|g| g.as_ref().map(|s| s.path.clone()));
+    if let Some(path) = path {
+        if result.is_ok() {
+            let _ = crate::jobs::reconcile();
+        }
+        crate::jobs::start_worker(path);
+    }
+    result
+}
+fn restore_inner(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let id = v["id"]
         .as_str()
         .filter(|id| is_id(id, "backup-") || is_id(id, "before-restore-"))

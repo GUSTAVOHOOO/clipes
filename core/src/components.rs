@@ -104,6 +104,15 @@ fn load_settings() -> Result<Settings, CoreError> {
         Err(e) => Err(error("settings", e)),
     }
 }
+pub(crate) fn cache_settings() -> Result<(PathBuf, u64, Option<PathBuf>), CoreError> {
+    let settings =
+        load_settings().map_err(|_| error("settings", "Não foi possível ler as configurações."))?;
+    Ok((
+        settings.cache_dir,
+        settings.cache_limit_bytes,
+        settings.ffmpeg_path,
+    ))
+}
 pub(crate) fn ytdlp_executable() -> Result<PathBuf, CoreError> {
     let settings = load_settings()
         .map_err(|_| error("component_missing", "Componente yt-dlp indisponível"))?;
