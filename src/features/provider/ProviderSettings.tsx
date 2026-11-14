@@ -9,7 +9,7 @@ import { CliSettings } from './CliSettings';
 type Status = { kind: 'openai' | 'anthropic' | 'gemini'; endpoint: string; model: string; nativeSchema: boolean; keyLastFour: string | null; remote: boolean; confirmed: boolean };
 const empty: Status = { kind: 'openai', endpoint: '', model: '', nativeSchema: false, keyLastFour: null, remote: false, confirmed: false };
 
-export function ProviderSettings() {
+export function ProviderSettings({ onChange }: { onChange?: () => void } = {}) {
   const t = useText(texts);
   const [status, setStatus] = useState<Status>(empty);
   const [saved, setSaved] = useState<Status>(empty);
@@ -26,7 +26,7 @@ export function ProviderSettings() {
   useEffect(() => { void refresh().catch(() => setMessage(t.failed)); }, []);
   async function run(action: () => Promise<void | boolean>, result: string) {
     setBusy(true); setMessage('');
-    try { const completed = await action(); await refresh(); if (completed !== false) setMessage(result); } catch (error) { const code = (error as { code?: string })?.code; setMessage(code === 'timeout_uncertain' ? t.timeoutUncertain : code === 'insecure_endpoint' ? t.insecureEndpoint : t.failed); } finally { setBusy(false); }
+    try { const completed = await action(); await refresh(); onChange?.(); if (completed !== false) setMessage(result); } catch (error) { const code = (error as { code?: string })?.code; setMessage(code === 'timeout_uncertain' ? t.timeoutUncertain : code === 'insecure_endpoint' ? t.insecureEndpoint : t.failed); } finally { setBusy(false); }
   }
   async function test() {
     const current = await coreDispatch<Status>('provider.status', {});
@@ -55,6 +55,6 @@ export function ProviderSettings() {
     <ConfirmDialog open={consentEndpoint !== null} onOpenChange={open => { if (!open) setConsentEndpoint(null); }} title={t.confirmTitle} description={t.confirm} cancelLabel={t.cancel} confirmLabel={t.send} finalFocus={testButton} onConfirm={() => { const endpoint = consentEndpoint; setConsentEndpoint(null); if (endpoint) void run(async () => { await coreDispatch('provider.confirm', { endpoint }); await coreDispatch('provider.test', {}); }, t.success); }}>
       <p className="break-all px-5 pb-4">{consentEndpoint}</p>
     </ConfirmDialog>
-    <CliSettings refreshKey={cliRefresh} onSelected={setCliSelected} />
+    <CliSettings refreshKey={cliRefresh} onSelected={value => { setCliSelected(value); onChange?.(); }} />
   </section>;
 }
