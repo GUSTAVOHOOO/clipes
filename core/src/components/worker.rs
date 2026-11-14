@@ -402,17 +402,17 @@ fn status(_: Value, _: &mut EventSink<'_>) -> CommandResult {
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok());
     let Some(state) = state.filter(|_| venv_python(&worker).is_file()) else {
-        return Ok(json!({"installed": false}));
+        return Ok(json!({"installed": false, "gpu": has_nvidia_gpu()}));
     };
     let outdated = state["lock_sha256"] != json!(lock_sha256());
     Ok(match start_worker() {
         Ok(client) => {
             let handshake = client.handshake().clone();
             client.shutdown();
-            json!({"installed": true, "outdated": outdated, "cuda": state["cuda"], "uv": state["uv"], "handshake": handshake})
+            json!({"installed": true, "outdated": outdated, "cuda": state["cuda"], "gpu": has_nvidia_gpu(), "uv": state["uv"], "handshake": handshake})
         }
         Err(e) => {
-            json!({"installed": true, "outdated": outdated, "cuda": state["cuda"], "uv": state["uv"], "error": {"code": e.code, "message": e.message}})
+            json!({"installed": true, "outdated": outdated, "cuda": state["cuda"], "gpu": has_nvidia_gpu(), "uv": state["uv"], "error": {"code": e.code, "message": e.message}})
         }
     })
 }

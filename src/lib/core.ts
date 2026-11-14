@@ -47,7 +47,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'app.version') return { version } as T;
     if (name === 'components.ytdlp.status') return {installed:true,version:'test'} as T;
     if (name === 'components.ytdlp.update') return {version:'test'} as T;
-    if (name === 'components.worker.status') return { installed: true, outdated: false, cuda: false, uv: '0.13.8', handshake: { protocol: 1, worker: '0.1.0', python: '3.12.16', libs: { 'faster-whisper': '1.2.1', onnxruntime: '1.32.0', numpy: '2.4.6', 'opencv-python-headless': null } } } as T;
+    if (name === 'components.worker.status') return { installed: true, outdated: false, cuda: false, gpu: true, uv: '0.13.8', handshake: { protocol: 1, worker: '0.1.0', python: '3.12.16', libs: { 'faster-whisper': '1.2.1', onnxruntime: '1.32.0', numpy: '2.4.6', 'opencv-python-headless': null } } } as T;
     if (name === 'components.worker.install') return { handshake: null } as T;
     if (name === 'components.ffmpeg.status') return { incomplete: false } as T;
     if (name === 'assistant.status') return assistantView() as T;

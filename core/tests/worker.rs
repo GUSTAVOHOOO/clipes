@@ -254,7 +254,9 @@ fn install_requires_confirmation() {
 fn status_without_install_says_not_installed() {
     let _data = Data::new();
     let status = dispatch("components.worker.status", json!({}), &mut |_| {}).unwrap();
-    assert_eq!(status, json!({"installed": false}));
+    assert_eq!(status["installed"], false);
+    // A GPU é detectada antes da instalação, para a confirmação avisar sobre as libs CUDA.
+    assert!(status["gpu"].is_boolean());
 }
 
 #[test]

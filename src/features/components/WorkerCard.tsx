@@ -8,7 +8,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { workerTexts } from './workerTexts';
 
 type Handshake = { protocol: number; worker: string; python: string; libs: Record<string, string | null> };
-type Status = { installed: boolean; outdated?: boolean; cuda?: boolean; handshake?: Handshake; error?: { code: string } };
+type Status = { installed: boolean; outdated?: boolean; cuda?: boolean; gpu?: boolean; handshake?: Handshake; error?: { code: string } };
 type Progress = { job: string; stage: string; percentage: number };
 function message(error: unknown) { return typeof error === 'object' && error !== null && 'message' in error ? String(error.message) : String(error); }
 
@@ -52,6 +52,16 @@ export function WorkerCard() {
       <Button ref={installFocus} disabled={busy} onClick={() => setConfirming(true)}>{status?.installed ? t.reinstall : t.install}</Button>
       {busy && <><progress max={100} value={progress} aria-label={t.progress} /><Button onClick={() => { void coreDispatch('components.cancel', { id: 'worker' }); }}>{t.cancel}</Button></>}
     </div>
-    <ConfirmDialog open={confirming} onOpenChange={setConfirming} title={t.confirmTitle} description={t.confirmDescription} cancelLabel={t.cancelDialog} confirmLabel={t.confirm} finalFocus={installFocus} onConfirm={() => void install()} />
+    <ConfirmDialog open={confirming} onOpenChange={setConfirming} title={t.confirmTitle} description={t.confirmDescription} cancelLabel={t.cancelDialog} confirmLabel={t.confirm} finalFocus={installFocus} onConfirm={() => void install()}>
+      <div className="overflow-y-auto px-5 pb-3 text-sm">
+        <p className="font-semibold">{t.licenses}</p>
+        <ul className="mt-1 list-disc space-y-1 pl-5 text-fg-2">
+          <li>{t.licenseUv}</li>
+          <li>{t.licensePython}</li>
+          <li>{t.licenseLibs}</li>
+        </ul>
+        {status?.gpu && <p className="mt-3" role="note">{t.cudaNotice} <a className="underline" href="https://docs.nvidia.com/cuda/eula/index.html" target="_blank" rel="noreferrer">{t.cudaEula}</a></p>}
+      </div>
+    </ConfirmDialog>
   </article>;
 }

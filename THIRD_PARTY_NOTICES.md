@@ -10,6 +10,12 @@ Tears of Steel, © Blender Foundation, 2012. Filme original: [mango.blender.org]
 
 O catálogo apresenta FFmpeg, Whisper e Kokoro como exemplos de interface. Nenhum executável ou peso desses projetos é distribuído neste repositório. As licenças e fontes de cada build/modelo devem acompanhar o download real no app desktop, conforme ADR-0003.
 
+O app desktop também baixa, ao instalar o worker de ML:
+
+- **Python standalone gerenciado** (instalado pelo uv no ambiente do worker): licença PSF-2.0, texto em [python.org/psf/license](https://docs.python.org/3/license.html).
+- **Bibliotecas do worker de ML** (faster-whisper, onnxruntime, numpy, opencv-python-headless e dependências, fixadas em `worker/uv.lock`): licenças permissivas, conferidas no CI por `worker/check_licenses.py`.
+- **Bibliotecas CUDA da NVIDIA** (`nvidia-cublas-cu12`, `nvidia-cudnn-cu12`), baixadas só quando há GPU NVIDIA: proprietárias, sob o [EULA da NVIDIA](https://docs.nvidia.com/cuda/eula/index.html).
+
 ## @base-ui/react@1.9.0
 
 Licença declarada: MIT.
