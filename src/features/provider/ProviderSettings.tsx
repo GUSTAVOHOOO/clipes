@@ -1,0 +1,66 @@
+import { useEffect, useRef, useState } from 'react';
+import { AlertDialog as AD } from '@base-ui/react/alert-dialog';
+import { coreDispatch } from '@/lib/core';
+import { useText } from '@/lib/i18n';
+import { Button } from '@/components/ui/Button';
+import { texts } from './texts';
+
+type Status = { endpoint: string; model: string; nativeSchema: boolean; keyLastFour: string | null; remote: boolean; confirmed: boolean };
+const empty: Status = { endpoint: '', model: '', nativeSchema: false, keyLastFour: null, remote: false, confirmed: false };
+
+export function ProviderSettings() {
+  const t = useText(texts);
+  const [status, setStatus] = useState<Status>(empty);
+  const [saved, setSaved] = useState<Status>(empty);
+  const [key, setKey] = useState('');
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [consentEndpoint, setConsentEndpoint] = useState<string | null>(null);
+  const testButton = useRef<HTMLButtonElement>(null);
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  const input = 'foco mt-2 block h-9 w-full max-w-lg rounded-md border border-line-strong bg-field px-3 text-fg';
+  async function refresh() { const value = await coreDispatch<Status>('provider.status', {}); setSaved(value); setStatus(value); }
+  const dirty = status.endpoint !== saved.endpoint || status.model !== saved.model || status.nativeSchema !== saved.nativeSchema;
+  useEffect(() => { void refresh().catch(() => setMessage(t.failed)); }, []);
+  async function run(action: () => Promise<void | boolean>, result: string) {
+    setBusy(true); setMessage('');
+    try { const completed = await action(); await refresh(); if (completed !== false) setMessage(result); } catch (error) { const code = (error as { code?: string })?.code; setMessage(code === 'timeout_uncertain' ? t.timeoutUncertain : code === 'insecure_endpoint' ? t.insecureEndpoint : t.failed); } finally { setBusy(false); }
+  }
+  async function test() {
+    const current = await coreDispatch<Status>('provider.status', {});
+    if (current.remote && !current.confirmed) {
+      setConsentEndpoint(current.endpoint);
+      return false;
+    }
+    await coreDispatch('provider.test', {});
+  }
+  return <section className="mt-10 max-w-xl border-t border-line pt-8" aria-labelledby="provider-title">
+    <h2 id="provider-title" className="text-lg font-semibold">{t.title}</h2>
+    <form className="mt-5 flex flex-col gap-4" onSubmit={e => { e.preventDefault(); void run(async () => { await coreDispatch('provider.configure', { endpoint: status.endpoint, model: status.model, nativeSchema: status.nativeSchema }); }, t.saved); }}>
+      <label>{t.endpoint}<input className={input} type="url" required value={status.endpoint} onChange={e => setStatus({ ...status, endpoint: e.target.value })} /></label>
+      <label>{t.model}<input className={input} required value={status.model} onChange={e => setStatus({ ...status, model: e.target.value })} /></label>
+      <label className="flex items-center gap-2"><input type="checkbox" checked={status.nativeSchema} onChange={e => setStatus({ ...status, nativeSchema: e.target.checked })} />{t.schema}</label>
+      <div><Button type="submit" disabled={busy}>{t.save}</Button></div>
+    </form>
+    <form className="mt-6 flex flex-col gap-3" onSubmit={e => { e.preventDefault(); const submitted = key; setKey(''); void run(async () => { await coreDispatch('provider.key.set', { key: submitted }); }, t.saved); }}>
+      <label>{t.key}<input className={input} type="password" autoComplete="off" value={key} onChange={e => setKey(e.target.value)} /></label>
+      <p className="text-sm text-fg-2">{t.keyHelp}</p><p className="text-sm">{status.keyLastFour ? `${t.keySaved} ${status.keyLastFour}` : t.noKey}</p>
+      <div className="flex flex-wrap gap-2"><Button type="submit" disabled={busy || dirty || !saved.endpoint || !key}>{t.setKey}</Button><Button type="button" disabled={busy || dirty || !status.keyLastFour} onClick={() => void run(async () => { await coreDispatch('provider.key.remove', {}); }, t.saved)}>{t.removeKey}</Button></div>
+    </form>
+    <div className="mt-6"><Button ref={testButton} type="button" disabled={busy || dirty || !saved.endpoint || !saved.model} onClick={() => void run(test, t.success)}>{t.test}</Button></div>
+    {message && <p className="mt-4 text-sm" role="status">{message}</p>}
+    <AD.Root open={consentEndpoint !== null} onOpenChange={open => { if (!open) setConsentEndpoint(null); }}>
+      <AD.Portal>
+        <AD.Backdrop className="fixed inset-0 bg-scrim" style={{ zIndex: 'var(--z-scrim)' }} />
+        <AD.Popup initialFocus={cancelButton} finalFocus={testButton} className="fixed top-[14vh] left-1/2 flex max-h-[76vh] w-[min(420px,calc(100vw-32px))] -translate-x-1/2 flex-col overflow-hidden rounded-xl border border-line-strong bg-surface text-fg shadow-dialog outline-none" style={{ zIndex: 'var(--z-dialog)' }}>
+          <div className="px-5 pt-4 pb-3"><AD.Title className="text-lg font-semibold">{t.confirmTitle}</AD.Title><AD.Description className="mt-1 text-sm text-fg-2">{t.confirm}</AD.Description></div>
+          <p className="break-all px-5 pb-4">{consentEndpoint}</p>
+          <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">
+            <AD.Close render={<Button ref={cancelButton} />}>{t.cancel}</AD.Close>
+            <Button variante="primario" onClick={() => { const endpoint = consentEndpoint; setConsentEndpoint(null); if (endpoint) void run(async () => { await coreDispatch('provider.confirm', { endpoint }); await coreDispatch('provider.test', {}); }, t.success); }}>{t.send}</Button>
+          </div>
+        </AD.Popup>
+      </AD.Portal>
+    </AD.Root>
+  </section>;
+}
