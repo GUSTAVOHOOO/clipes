@@ -25,3 +25,29 @@ class CorpusTests(unittest.TestCase):
                             {'word': 'dois', 'start': 12.1, 'end': 12.6}]}
         self.assertEqual(corpus_segments(sample), [
             (10, 11, [sample['words'][0]]), (12, 14, [sample['words'][2]])])
+
+class NormalizeTests(unittest.TestCase):
+    def test_expansions_and_hyphens_are_explicit_and_reversible(self):
+        from mfa_bordas import normalize_word
+        for language, original, expected in [
+            ('pt', ' 4,', ['quatro']), ('pt', '100', ['cem']),
+            ('en', '24', ['twenty', 'four']), ('en', '48', ['forty', 'eight']),
+            ('en', '200', ['two', 'hundred']), ('en', '90s.', ['nineties']),
+            ('pt', '-RP,', ['erre', 'pe']), ('pt', 'F8', ['efe', 'oito']),
+            ('en', '-acting.', ['acting']), ('pt', '-se', ['se'])]:
+            result = normalize_word(original, language)
+            self.assertEqual(result['original'], original)
+            self.assertEqual(result['words'], expected)
+            self.assertTrue(result['normalized'])
+        self.assertEqual(normalize_word(' 2x1', 'pt')['words'], [])
+
+    def test_mapping_collapses_expansion_into_original_token(self):
+        from mfa_bordas import collapse_words
+        mapping = [{'original': ' 24', 'words': ['twenty', 'four'], 'normalized': True},
+                   {'original': ' cats', 'words': ['cats'], 'normalized': False}]
+        aligned = [{'word': 'twenty', 'start': .1, 'end': .2},
+                   {'word': 'four', 'start': .2, 'end': .4},
+                   {'word': 'cats', 'start': .5, 'end': .8}]
+        self.assertEqual(collapse_words(mapping, aligned), [
+            {'word': ' 24', 'start': .1, 'end': .4, 'normalized': True},
+            {'word': ' cats', 'start': .5, 'end': .8, 'normalized': False}])

@@ -5,7 +5,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from mfa_bordas import corpus_segments
+from mfa_bordas import corpus_segments, normalize_word
 
 DATA = Path(__file__).resolve().parents[1] / 'dataset'
 
@@ -39,15 +39,18 @@ def main():
         for sample in reviewed:
             ref = next(x for x in transcript['samples'] if x['start'] == sample['start'] and x['end'] == sample['end'])
             language = ref['language']
+            ambiguous = [w for w in ref['words'] if not normalize_word(w['word'], language)['words']]
+            ref = dict(ref, incertos=ref['incertos'] + [{'start': w['start'], 'end': w['end']} for w in ambiguous])
             for begin, end, words in corpus_segments(ref):
+                mapping = [normalize_word(w['word'], language) for w in words]
                 name = f"{item['id']}_{len(chunks):05d}"
                 directory = a.output / language
                 directory.mkdir(parents=True, exist_ok=True)
                 subprocess.run(['ffmpeg', '-v', 'error', '-ss', str(begin), '-i', str(media), '-t', str(end-begin),
                                 '-ac', '1', '-ar', '16000', '-y', str(directory / (name + '.wav'))], check=True)
-                (directory / (name + '.lab')).write_text(' '.join(w['word'].strip() for w in words) + '\n', encoding='utf8')
+                (directory / (name + '.lab')).write_text(' '.join(word for item in mapping for word in item['words']) + '\n', encoding='utf8')
                 chunks.append({'name': name, 'source': item['id'], 'language': language,
-                               'sample_start': sample['start'], 'start': begin, 'end': end, 'words': words})
+                               'sample_start': sample['start'], 'start': begin, 'end': end, 'words': words, 'mapping': mapping})
     (a.output / 'manifest.json').write_text(json.dumps({'chunks': chunks}, ensure_ascii=False, indent=2), encoding='utf8')
     print(f'{len(chunks)} trechos preparados')
 
