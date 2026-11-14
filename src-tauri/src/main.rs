@@ -12,9 +12,9 @@ async fn core_dispatch(
         })
     })
     .await
-    .map_err(|error| clipes_core::CoreError {
+    .map_err(|_| clipes_core::CoreError {
         code: "dispatch_failed".into(),
-        message: error.to_string(),
+        message: "Core command failed".into(),
     })?
 }
 

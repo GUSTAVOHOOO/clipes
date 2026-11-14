@@ -58,6 +58,31 @@ try {
   await page.locator('aside[aria-label="Left drawer"][data-aberta="true"]').waitFor();
   await page.mouse.move(600, 500);
   await page.screenshot({ path: 'shots/app-light.png' });
+  await page.getByLabel('API endpoint').fill('https://example.com/v1');
+  await page.getByLabel('Model', { exact: true }).fill('mock-model');
+  await page.getByRole('button', { name: 'Save provider' }).click();
+  await page.getByText('Settings saved.').waitFor();
+  await page.getByLabel('API key', { exact: true }).fill('fixture-value-1234');
+  await page.getByRole('button', { name: 'Save key' }).click();
+  await page.getByText('Key saved, ending in 1234').waitFor();
+  assert.equal(await page.getByLabel('API key', { exact: true }).inputValue(), '');
+  await page.getByRole('button', { name: 'Test connection' }).click();
+  const consent = page.getByRole('alertdialog', { name: 'Send text to provider?' });
+  await consent.waitFor({ timeout: 1500 });
+  await page.screenshot({ path: 'shots/provider-consent.png' });
+  assert.match(await consent.innerText(), /https:\/\/example\.com\/v1/);
+  assert.match(await consent.innerText(), /Only text is sent; video and audio are not sent/);
+  for (let i = 0; i < 4; i++) {
+    await page.keyboard.press('Tab');
+    await page.waitForFunction(() => document.querySelector('[role=alertdialog]')?.contains(document.activeElement), null, { timeout: 2000 });
+  }
+  await page.keyboard.press('Escape');
+  await consent.waitFor({ state: 'hidden' });
+  assert.equal(await page.getByText('Connection tested successfully.').count(), 0);
+  await page.getByRole('button', { name: 'Test connection' }).click();
+  await consent.waitFor();
+  await consent.getByRole('button', { name: 'Send text' }).click();
+  await page.getByText('Connection tested successfully.').waitFor();
   await page.getByLabel('Theme').selectOption('escuro');
   await page.screenshot({ path: 'shots/app-dark.png' });
   assert.deepEqual(errors, []);
