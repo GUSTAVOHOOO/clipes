@@ -22,7 +22,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "CHAVE_PUBLICA_TAURI_PENDENTE_DO_DEV",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI4MjQ2MTY1QzM4RUIxNTEKUldSUnNZN0RaV0VrdUExWkRydkZVRWorM29YZno3STBoVDN1LzJBK2M5M1JHOWVCWE5tM1J1M0EK",
       "endpoints": ["https://github.com/GUSTAVOHOOO/clipes/releases/latest/download/latest.json"]
     }
   }

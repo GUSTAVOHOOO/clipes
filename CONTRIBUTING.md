@@ -50,7 +50,7 @@ O crate `core` não depende do Tauri. A UI chama o único adaptador `core_dispat
 
 ### Chave do updater
 
-O mantenedor gera o par de assinatura uma única vez com `bun run tauri signer generate -- -w ~/.tauri/clipes.key`. Proteja o arquivo privado e guarde sua senha em um gerenciador de senhas; nunca o commite nem o compartilhe. Configure `TAURI_SIGNING_PRIVATE_KEY` com o conteúdo da chave e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` com sua senha nos secrets do repositório GitHub. A chave pública gerada deve substituir o marcador `CHAVE_PUBLICA_TAURI_PENDENTE_DO_DEV` em `src-tauri/tauri.conf.json` e pode ser compartilhada. Pull requests compilam sem assinatura; builds de tags usam os secrets para assinar os artefatos de atualização.
+O mantenedor gera o par de assinatura uma única vez com `bun run tauri signer generate -- -w "%USERPROFILE%\.tauri\clipes-updater.key"`. Guarde a senha em `%USERPROFILE%\.tauri\clipes-updater.password.txt`, ao lado da chave. Faça backup seguro dos dois arquivos; nunca commite nem compartilhe a chave privada ou a senha. Configure `TAURI_SIGNING_PRIVATE_KEY` com o conteúdo da chave e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` com sua senha nos secrets do repositório GitHub. A chave pública em `src-tauri/tauri.conf.json` pode ser compartilhada. Pull requests compilam sem assinatura; builds de tags usam os secrets para assinar os artefatos de atualização.
 
 ## Demonstração do design system
 
@@ -72,3 +72,17 @@ Os formulários recebem `template`, `title` e o texto no parâmetro `body` da UR
 A casca usa os tokens e componentes Foco, sem dados demonstrativos. Os textos ficam nas pastas das respectivas features. Uma feature pode contribuir para uma gaveta exportando `drawer` de `src/features/<feature>/drawer.tsx`, conforme o tipo `DrawerContribution` em `src/lib/drawers.ts`; o registro descobre o módulo automaticamente. Comandos da tela são registrados com `useComandos`.
 
 Para executar a interface no navegador com o núcleo simulado, use `VITE_CORE_MOCK=1 bun run dev` (no PowerShell, `$env:VITE_CORE_MOCK='1'; bun run dev`). O núcleo real continua sendo usado pelo Tauri. Para verificar teclado, telas, console e capturas, instale o Chromium com `bunx playwright install chromium` e execute `bun run test:ui`; as capturas ficam em `shots/`. Os tokens da interface são verificados por `bun run test:contrast`.
+
+## Projetos e migrações
+
+Cada Projeto é uma pasta `.clipes` com `project.sqlite`; a biblioteca local é apenas um índice recuperado ao abrir a pasta. Recentes ausentes permanecem listados como indisponíveis. O núcleo é o único escritor; SQLite usa WAL e FTS5. Tempos usam `projects::Microseconds` em µs inteiros.
+
+O núcleo mantém uma sessão de Projeto por vez. `projects.open` e `projects.create` abrem a sessão, `projects.current` a consulta e `projects.close` a encerra; abrir outro Projeto encerra o anterior. Toda escrita de módulos de domínio deve usar `projects::with_writer`, que serializa o acesso e marca o Projeto como alterado; não abra `project.sqlite` para escrita diretamente. Jobs que dependem do Projeto mantêm um `projects::start_job` durante sua execução, impedindo troca ou restauração até terminarem.
+
+O núcleo cria backups SQLite em `backups/`, sem incluir cache, ao abrir quando o último backup já passou do intervalo e periodicamente enquanto aberto, apenas após escrita. O padrão é 30 minutos e 10 cópias por Projeto, configuráveis. Antes de restaurar, verifica uma cópia com `integrity_check` e `foreign_key_check` e preserva o estado atual; cópias pré-restauração e pré-migração não são removidas pela rotação. Falhas de backup produzem aviso tipado e não impedem o uso do Projeto.
+
+Registre cada migração SQL com `inventory` como `projects::Migration`. Use um identificador textual único, ordenável, com o número do ticket e um sufixo próprio, por exemplo `0033_001_project`. Nunca renumere migrações de outros tickets. O núcleo aplica todas as migrações ausentes em ordem, mesmo quando uma migração de outro ticket já foi aplicada, e recusa IDs desconhecidos sem fazer downgrade. Antes de migrar um banco com tabelas, gera `project.pre-migration.sqlite` pela Online Backup API e verifica sua integridade; um banco novo sem tabelas não precisa de backup.
+
+Para testes headless, defina `CLIPES_DATA_DIR` no ambiente do processo para isolar o índice de Projetos em `projects.json` nesse diretório; sem a variável, usa-se o diretório de dados local do app. Os comandos do núcleo não aceitam um caminho de biblioteca da UI.
+
+Documentos `clip`, `style`, `script` e `packaging` são objetos JSON com `schemaVersion` igual a 1 e `revision` inteira não negativa. Cada tipo registra seu validador e suas migrações próprias; campos de domínio serão definidos pelos tickets correspondentes. O comando `documents.validate` migra e valida o documento no núcleo; versões futuras são recusadas.

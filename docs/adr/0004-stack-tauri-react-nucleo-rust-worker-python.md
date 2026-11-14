@@ -16,7 +16,7 @@ O protótipo provou que o Tauri 2 com WebView2 dá conta do editor. A condição
    - as chamadas a FFmpeg e yt-dlp como executáveis separados, via `std::process::Command` e sem shell;
    - o cofre de chaves do sistema;
    - a **camada de Provedor**.
-2. **UI React**, que só exibe e edita. Ela nunca vê chaves e nunca abre processos. Fala com o núcleo por comandos do Tauri, e a mídia chega por um protocolo próprio com suporte a Range.
+2. **UI React**, que só exibe e edita. Ela pode enviar a chave ao núcleo na entrada, mas nunca lê chaves e nunca abre processos. Fala com o núcleo por comandos do Tauri, e a mídia chega por um protocolo próprio com suporte a Range.
 3. **Um único worker Python ("worker de ML")**, que roda:
    - o faster-whisper (transcrição);
    - o Kokoro (TTS), de preferência via ONNX Runtime e sem PyTorch, se o benchmark confirmar;
@@ -36,7 +36,7 @@ Os adaptadores HTTP são nossos e ficam no Rust. Bastam três formatos:
 - compatível com OpenAI, que cobre OpenAI, OpenRouter, Ollama e qualquer endpoint compatível;
 - Gemini.
 
-O Codex entra como subprocesso. As chaves ficam no cofre e nunca chegam à UI. A validação do JSON e o teto de custo por lote ficam num lugar só, e as chamadas estruturadas e simples do [#13](https://github.com/GUSTAVOHOOO/clipes/issues/13) não precisam de uma biblioteca grande.
+O Codex entra como subprocesso. As chaves ficam no cofre e a UI nunca as lê. A validação do JSON e o teto de custo por lote ficam num lugar só, e as chamadas estruturadas e simples do [#13](https://github.com/GUSTAVOHOOO/clipes/issues/13) não precisam de uma biblioteca grande.
 
 ## Opções consideradas
 
