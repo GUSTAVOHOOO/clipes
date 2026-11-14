@@ -23,3 +23,14 @@ No Gemini, `outputTokens` inclui `candidatesTokenCount` e `thoughtsTokenCount` q
 Codex CLI e Claude Code CLI são experimentais e só são selecionados por escolha explícita; o usuário instala o CLI e faz login, e o Clipes não lê nem guarda seus tokens. Cada chamada exige confirmação prévia do envio de texto e consome a cota do plano. O Codex 0.169 não oferece opção comprovada para desligar todas as ferramentas: usa execução efêmera, sem configuração ou regras do usuário, sandbox somente leitura, diretório temporário e schema de saída, com ferramentas opcionais desligadas. Ainda pode executar comandos de leitura; uma Transcrição maliciosa pode causar leitura e envio de arquivos à OpenAI, portanto use Fontes confiáveis. O Claude Code usa modo de impressão, schema JSON, ferramentas embutidas e MCP desligados, sem comandos, persistência de sessão ou configurações de usuário/projeto/local. A Anthropic ainda não confirmou por escrito o uso por apps de terceiros. Se o Claude instalado não oferecer `--tools`, o núcleo recusa a execução. Ambos recebem o prompt pelo stdin e rodam sem shell, e a resposta é validada localmente. Os testes usam CLIs falsos, sem chamadas pagas.
 
 Os adaptadores CLI retornam `usage: null` e `calls: 1`, pois nao informam tokens.
+
+## Custo do Provedor
+
+`core/src/provider/cost.rs` calcula o custo sem alterar os adaptadores. A tabela de preços é o JSON versionado `core/src/provider/prices.json` (`updatedAt` e preço em US$ por milhão de tokens de entrada e de saída, por provedor e modelo, com correspondência exata); a UI mostra a data. O usuário pode sobrescrever o preço de um modelo (`provider.prices.set`, guardado em `provider-prices.json` no diretório de configuração ou em `CLIPES_DATA_DIR`) e a sobrescrita vence a tabela. Não há busca na rede; confira os valores embutidos ao atualizar a tabela.
+
+- `provider.cost.estimate`: tokens de entrada = caracteres da instrução, do schema e da Transcrição ÷ 4 (arredondado para cima); o teto de saída é `maxOutputTokens` (Anthropic assume 8192). O resultado traz mínimo (só entrada) e máximo (com o teto de saída); sem teto, o máximo é nulo.
+- `provider.cost.run`: roda `provider.structured`, devolve `cost` calculado pelo `usage` e o registra na tabela `provider_costs` do Projeto aberto (`task` obrigatório, `batch` opcional; o lote real chega no #56). Saída truncada (`output_truncated`) também é registrada, pois foi cobrada.
+- `provider.cost.list`: lê os registros, opcionalmente por `batch`.
+- Tipos de custo: `usd`; `zero` (endpoint loopback); `plan_quota` (CLI, sem valor em dinheiro); `unknown` (modelo sem preço ou `usage` incompleto), nunca zero.
+
+OpenAI (`finish_reason: length`) e Gemini (`finishReason: MAX_TOKENS`) também devolvem `output_truncated` com `usage`, sem reparo automático.

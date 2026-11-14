@@ -13,6 +13,7 @@ let jobItems = [
   { id: 2, kind: 'provider', state: 'uncertain', progress: 0, project: 'test-project' },
 ];
 let providerMock = { kind: 'openai', endpoint: '', model: '', nativeSchema: false, keyLastFour: null as string | null, remote: false, confirmed: false };
+let priceOverrides: { provider: string; model: string; inputPerMillion: number; outputPerMillion: number }[] = [];
 let providerCliMock = { selected: '', codexConfirmed: false, claudeConfirmed: false };
 export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   if (import.meta.env.VITE_CORE_MOCK === '1' && !isTauri()) {
@@ -59,6 +60,18 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'provider.key.set') { providerMock.keyLastFour = (args as { key: string }).key.slice(-4); return {} as T; }
     if (name === 'provider.key.remove') { providerMock.keyLastFour = null; return {} as T; }
     if (name === 'provider.confirm') { providerMock.confirmed = true; return {} as T; }
+    if (name === 'provider.prices.get' || name === 'provider.prices.set' || name === 'provider.prices.clear') {
+      const a = args as { provider: string; model: string; inputPerMillion?: number; outputPerMillion?: number };
+      if (name === 'provider.prices.set') priceOverrides = [...priceOverrides.filter(p => !(p.provider === a.provider && p.model === a.model)), { provider: a.provider, model: a.model, inputPerMillion: a.inputPerMillion!, outputPerMillion: a.outputPerMillion! }];
+      if (name === 'provider.prices.clear') priceOverrides = priceOverrides.filter(p => !(p.provider === a.provider && p.model === a.model));
+      return { updatedAt: '2026-11-14', prices: [{ provider: 'openai', model: 'gpt-5', inputPerMillion: 1.25, outputPerMillion: 10 }], overrides: priceOverrides } as T;
+    }
+    if (name === 'provider.cost.estimate') {
+      const { transcript, maxOutputTokens } = args as { transcript: string; maxOutputTokens?: number };
+      const inputTokens = Math.ceil((transcript.length + 2) / 4);
+      return { kind: 'usd', inputTokens, maxOutputTokens: maxOutputTokens ?? null, minMicroUsd: Math.round(inputTokens * 1.25), maxMicroUsd: maxOutputTokens ? Math.round(inputTokens * 1.25 + maxOutputTokens * 10) : null } as T;
+    }
+    if (name === 'provider.cost.list') return (sourceTest ? [{ id: 1, task: 'score', batch: null, provider: 'openai', model: 'gpt-5', costKind: 'usd', microUsd: 2500 }, { id: 2, task: 'script', batch: null, provider: 'cli:codex', model: '', costKind: 'plan_quota', microUsd: null }] : []) as T;
     if (name === 'provider.test') return { schemaVersion: 1 } as T;
     if (name === 'components.manifest') return [
       { id: 'ffmpeg', version: 'test', size: 2000000, license: 'GPL-3.0-or-later', source_url: 'https://github.com/FFmpeg/FFmpeg' },
