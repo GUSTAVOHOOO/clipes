@@ -5,8 +5,8 @@ import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { texts } from './texts';
 
-type Status = { endpoint: string; model: string; nativeSchema: boolean; keyLastFour: string | null; remote: boolean; confirmed: boolean };
-const empty: Status = { endpoint: '', model: '', nativeSchema: false, keyLastFour: null, remote: false, confirmed: false };
+type Status = { kind: 'openai' | 'anthropic' | 'gemini'; endpoint: string; model: string; nativeSchema: boolean; keyLastFour: string | null; remote: boolean; confirmed: boolean };
+const empty: Status = { kind: 'openai', endpoint: '', model: '', nativeSchema: false, keyLastFour: null, remote: false, confirmed: false };
 
 export function ProviderSettings() {
   const t = useText(texts);
@@ -19,7 +19,7 @@ export function ProviderSettings() {
   const testButton = useRef<HTMLButtonElement>(null);
   const input = 'foco mt-2 block h-9 w-full max-w-lg rounded-md border border-line-strong bg-field px-3 text-fg';
   async function refresh() { const value = await coreDispatch<Status>('provider.status', {}); setSaved(value); setStatus(value); }
-  const dirty = status.endpoint !== saved.endpoint || status.model !== saved.model || status.nativeSchema !== saved.nativeSchema;
+  const dirty = status.kind !== saved.kind || status.endpoint !== saved.endpoint || status.model !== saved.model || status.nativeSchema !== saved.nativeSchema;
   useEffect(() => { void refresh().catch(() => setMessage(t.failed)); }, []);
   async function run(action: () => Promise<void | boolean>, result: string) {
     setBusy(true); setMessage('');
@@ -35,7 +35,8 @@ export function ProviderSettings() {
   }
   return <section className="mt-10 max-w-xl border-t border-line pt-8" aria-labelledby="provider-title">
     <h2 id="provider-title" className="text-lg font-semibold">{t.title}</h2>
-    <form className="mt-5 flex flex-col gap-4" onSubmit={e => { e.preventDefault(); void run(async () => { await coreDispatch('provider.configure', { endpoint: status.endpoint, model: status.model, nativeSchema: status.nativeSchema }); }, t.saved); }}>
+    <form className="mt-5 flex flex-col gap-4" onSubmit={e => { e.preventDefault(); void run(async () => { await coreDispatch('provider.configure', { kind: status.kind, endpoint: status.endpoint, model: status.model, nativeSchema: status.nativeSchema }); }, t.saved); }}>
+      <label>{t.kind}<select className={input} value={status.kind} onChange={e => setStatus({ ...status, kind: e.target.value as Status['kind'] })}><option value="openai">OpenAI-compatible</option><option value="anthropic">Anthropic</option><option value="gemini">Gemini</option></select></label>
       <label>{t.endpoint}<input className={input} type="url" required value={status.endpoint} onChange={e => setStatus({ ...status, endpoint: e.target.value })} /></label>
       <label>{t.model}<input className={input} required value={status.model} onChange={e => setStatus({ ...status, model: e.target.value })} /></label>
       <label className="flex items-center gap-2"><input type="checkbox" checked={status.nativeSchema} onChange={e => setStatus({ ...status, nativeSchema: e.target.checked })} />{t.schema}</label>

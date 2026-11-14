@@ -15,6 +15,7 @@ async fn core_dispatch(
     .map_err(|_| clipes_core::CoreError {
         code: "dispatch_failed".into(),
         message: "Core command failed".into(),
+        usage: None,
     })?
 }
 
