@@ -12,7 +12,10 @@ let jobItems = [
   { id: 1, kind: 'preview', state: 'running', progress: 42, project: 'test-project' },
   { id: 2, kind: 'provider', state: 'uncertain', progress: 0, project: 'test-project' },
 ];
-let providerMock = { kind: 'openai', endpoint: '', model: '', nativeSchema: false, keyLastFour: null as string | null, remote: false, confirmed: false };
+let providerMock = { kind: 'openai', endpoint: '', model: '', nativeSchema: false, keyLastFour: null as string | null, remote: false, confirmed: false, confirmedEndpoints: [] as string[] };
+type ProfileMock = { id: string; label: string; kind: string; endpoint: string; model: string; nativeSchema: boolean; ownKey: boolean; keyLastFour: string | null };
+let profileMocks: ProfileMock[] = [];
+const isLocalHost = (endpoint: string) => ['localhost', '127.0.0.1', '[::1]'].includes(new URL(endpoint).hostname);
 let priceOverrides: { provider: string; model: string; inputPerMillion: number; outputPerMillion: number }[] = [];
 const assistantTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('assistant-test');
 let assistantMock = { completed: !assistantTest, skipped: false, needsSetup: assistantTest, default: '', tasks: { selection: '', packaging: '', script: '', translation: '' } as Record<string, string> };
@@ -60,20 +63,39 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       return assistantView() as T;
     }
     if (name === 'assistant.complete') { const skipped = !!(args as { skipped?: boolean }).skipped; assistantMock = { ...assistantMock, completed: !skipped, skipped }; return assistantView() as T; }
+    if (name === 'provider.profiles.list') {
+      const view = (p: ProfileMock) => ({ ...p, keyLastFour: p.ownKey || p.endpoint !== providerMock.endpoint ? p.keyLastFour : providerMock.keyLastFour, local: isLocalHost(p.endpoint), confirmed: providerMock.confirmedEndpoints.includes(p.endpoint), price: null, cli: false });
+      const main = providerMock.endpoint ? [view({ id: 'legacy', label: 'Principal', kind: providerMock.kind, endpoint: providerMock.endpoint, model: providerMock.model, nativeSchema: providerMock.nativeSchema, ownKey: false, keyLastFour: providerMock.keyLastFour })] : [];
+      const cli = (kind: string, label: string, confirmed: boolean) => ({ id: kind, label, kind, endpoint: null, model: null, nativeSchema: false, ownKey: false, keyLastFour: null, local: false, confirmed, active: providerCliMock.selected === kind, price: null, cli: true, experimental: true });
+      return { profiles: [...main, ...profileMocks.map(view), cli('codex', 'Codex CLI', providerCliMock.codexConfirmed), cli('claude', 'Claude Code CLI', providerCliMock.claudeConfirmed)] } as T;
+    }
+    if (name === 'provider.profiles.remove') { profileMocks = profileMocks.filter(p => p.id !== (args as { profileId: string }).profileId); return {} as T; }
     if (name === 'provider.status') return { ...providerMock } as T;
     if (name === 'provider.cli.status') return { ...providerCliMock } as T;
     if (name === 'provider.cli.configure') { providerCliMock.selected = (args as { kind: string }).kind; return {} as T; }
     if (name === 'provider.cli.confirm') { if (providerCliMock.selected === 'codex') providerCliMock.codexConfirmed = true; else providerCliMock.claudeConfirmed = true; return {} as T; }
+    if (name === 'provider.configure' && (args as { profileId?: string }).profileId) {
+      const a = args as { profileId: string; label: string; kind: string; endpoint: string; model: string; nativeSchema: boolean; ownKey?: boolean };
+      const old = profileMocks.find(p => p.id === a.profileId);
+      const next = { id: a.profileId, label: a.label, kind: a.kind, endpoint: a.endpoint, model: a.model, nativeSchema: a.nativeSchema, ownKey: a.ownKey ?? old?.ownKey ?? false, keyLastFour: old?.keyLastFour ?? null };
+      profileMocks = old ? profileMocks.map(p => p.id === a.profileId ? next : p) : [...profileMocks, next];
+      return { profileId: a.profileId } as T;
+    }
     if (name === 'provider.configure') {
       providerCliMock.selected = '';
       const { kind, endpoint, model, nativeSchema } = args as { kind: string; endpoint: string; model: string; nativeSchema: boolean };
       const same = endpoint === providerMock.endpoint;
-      providerMock = { kind, endpoint, model, nativeSchema, keyLastFour: same ? providerMock.keyLastFour : null, confirmed: same && providerMock.confirmed, remote: !['localhost', '127.0.0.1', '[::1]'].includes(new URL(endpoint).hostname) };
+      providerMock = { kind, endpoint, model, nativeSchema, keyLastFour: same ? providerMock.keyLastFour : null, confirmed: same && providerMock.confirmed, confirmedEndpoints: providerMock.confirmedEndpoints, remote: !['localhost', '127.0.0.1', '[::1]'].includes(new URL(endpoint).hostname) };
+      return {} as T;
+    }
+    if ((name === 'provider.key.set' || name === 'provider.key.remove') && (args as { profileId?: string }).profileId && (args as { profileId?: string }).profileId !== 'legacy') {
+      const { profileId, key } = args as { profileId: string; key?: string };
+      profileMocks = profileMocks.map(p => p.id === profileId ? { ...p, keyLastFour: name === 'provider.key.set' ? key!.slice(-4) : null } : p);
       return {} as T;
     }
     if (name === 'provider.key.set') { providerMock.keyLastFour = (args as { key: string }).key.slice(-4); return {} as T; }
     if (name === 'provider.key.remove') { providerMock.keyLastFour = null; return {} as T; }
-    if (name === 'provider.confirm') { providerMock.confirmed = true; return {} as T; }
+    if (name === 'provider.confirm') { const endpoint = (args as { endpoint: string }).endpoint; if (endpoint === providerMock.endpoint) providerMock.confirmed = true; providerMock.confirmedEndpoints.push(endpoint); return {} as T; }
     if (name === 'provider.prices.get' || name === 'provider.prices.set' || name === 'provider.prices.clear') {
       const a = args as { provider: string; model: string; inputPerMillion?: number; outputPerMillion?: number };
       if (name === 'provider.prices.set') priceOverrides = [...priceOverrides.filter(p => !(p.provider === a.provider && p.model === a.model)), { provider: a.provider, model: a.model, inputPerMillion: a.inputPerMillion!, outputPerMillion: a.outputPerMillion! }];
