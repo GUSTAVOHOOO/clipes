@@ -152,6 +152,7 @@ fn open(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     }
     let path = path.canonicalize().map_err(|e| error("project_open", e))?;
     let name = backups::open_session(path.clone())?;
+    crate::jobs::reconcile()?;
     remember(
         &library()?,
         Recent {
