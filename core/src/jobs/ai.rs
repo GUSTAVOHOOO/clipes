@@ -124,6 +124,8 @@ struct Probe<'a> {
     sent: &'a AtomicBool,
     /// Teto de chamadas HTTP deste job (a chamada e o reparo), já descontado o orçamento do escopo.
     max_calls: u64,
+    /// Uma entrada por chamada HTTP que o Provedor fez (a chamada e o reparo).
+    log: &'a Mutex<Vec<Value>>,
     job: i64,
 }
 
@@ -140,9 +142,13 @@ impl Provider for Probe<'_> {
             self.sent.store(true, Ordering::SeqCst);
             let _ = checkpoint(self.job, "sent");
         }
-        crate::provider::control::with_call_limit(Some(self.max_calls), || {
+        let (reply, log) = crate::provider::control::with_call_scope(Some(self.max_calls), || {
             self.inner.structured_with(request, cancel)
-        })
+        });
+        if let Ok(mut all) = self.log.lock() {
+            all.extend(log);
+        }
+        reply
     }
 }
 
@@ -498,10 +504,12 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
             })
         });
     let sent = AtomicBool::new(false);
+    let call_log: Mutex<Vec<Value>> = Mutex::new(Vec::new());
     let probe = Probe {
         inner: provider.as_ref(),
         sent: &sent,
         max_calls,
+        log: &call_log,
         job: id,
     };
     let token = CancelToken::new();
@@ -540,7 +548,8 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
     stage(id, task, "verify", 80, "Conferindo a resposta");
     match run {
         Ok(out) => {
-            let entries = entries_of(&out.log, &out.usage, out.calls, "ok");
+            let log = call_log.lock().map(|l| l.clone()).unwrap_or_default();
+            let entries = entries_of(&log, &out.usage, out.calls, "ok");
             record_calls(id, &unit, &route, &estimate, &entries, elapsed_ms);
             settle(
                 id,
@@ -573,7 +582,7 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
                 let info = e.usage.clone().unwrap_or(Value::Null);
                 let usage = info.get("usage").filter(|u| !u.is_null()).cloned();
                 let calls = info["calls"].as_u64().unwrap_or(1);
-                let log = info["log"].as_array().cloned().unwrap_or_default();
+                let log = call_log.lock().map(|l| l.clone()).unwrap_or_default();
                 let mut entries = entries_of(&log, &usage, calls, &e.code);
                 // A última chamada chegou, mas não passou no schema nem nos verificadores; ou
                 // foi cortada pelo limite de tempo do job.
@@ -590,11 +599,7 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
                 "outcome": match how { Settle::Uncertain => "uncertain", Settle::Cancelled => "cancelled", _ => "failed" },
                 "code": e.code,
                 "violations": e.violations,
-                "usage": e.usage.as_ref().map(|u| {
-                    let mut u = u.clone();
-                    if let Some(map) = u.as_object_mut() { map.remove("log"); }
-                    u
-                }),
+                "usage": e.usage,
                 "cost": cost_of(unit.paid, e.usage.is_some(), unknown),
             });
             let (state, message) = match how {

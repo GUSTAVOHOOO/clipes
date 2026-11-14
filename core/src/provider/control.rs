@@ -23,22 +23,46 @@ impl CancelToken {
     }
 }
 
+#[derive(Default)]
+struct CallScope {
+    limit: Option<u64>,
+    log: Vec<Value>,
+}
 thread_local! {
-    static CALL_LIMIT: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
+    static SCOPE: std::cell::RefCell<Option<CallScope>> = const { std::cell::RefCell::new(None) };
 }
 
-/// Runs `f` with a ceiling of HTTP calls for the structured request it makes on this thread
-/// (the AI job executor sets it, #124). The adapter skips the paid repair call once the
-/// calls made reach it. There is no limit outside this scope.
-pub(crate) fn with_call_limit<T>(limit: Option<u64>, f: impl FnOnce() -> T) -> T {
-    let previous = CALL_LIMIT.replace(limit);
+/// Runs `f` (a structured request on this thread) with a ceiling of HTTP calls and collects
+/// one entry per call it makes: `{attempt, calls, usage, code, durationMs}` (the AI job
+/// executor writes a cost row per entry, #124). The adapter skips the paid repair call once the
+/// calls made reach the ceiling. Outside a scope there is no ceiling and nothing is collected,
+/// so the public reply of a Provider does not change.
+pub(crate) fn with_call_scope<T>(limit: Option<u64>, f: impl FnOnce() -> T) -> (T, Vec<Value>) {
+    let previous = SCOPE.replace(Some(CallScope {
+        limit,
+        log: Vec::new(),
+    }));
     let result = f();
-    CALL_LIMIT.set(previous);
-    result
+    let scope = SCOPE.replace(previous).unwrap_or_default();
+    (result, scope.log)
 }
 
 pub(crate) fn call_limit() -> Option<u64> {
-    CALL_LIMIT.get()
+    SCOPE.with_borrow(|s| s.as_ref().and_then(|s| s.limit))
+}
+
+/// Calls of one request, handed to the open scope when dropped (also on an early return).
+#[derive(Default)]
+pub(crate) struct CallLog(pub(crate) Vec<Value>);
+impl Drop for CallLog {
+    fn drop(&mut self) {
+        let entries = std::mem::take(&mut self.0);
+        SCOPE.with_borrow_mut(|s| {
+            if let Some(s) = s {
+                s.log.extend(entries);
+            }
+        });
+    }
 }
 
 pub(crate) const CANCEL_POLL: Duration = Duration::from_millis(25);

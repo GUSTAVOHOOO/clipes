@@ -144,9 +144,6 @@ pub struct TaskOutput {
     pub data: Value,
     pub usage: Option<Value>,
     pub calls: u64,
-    /// One entry per Provider call (`attempt`, `calls`, `usage`, `code`, `durationMs`); empty when
-    /// the Provider does not report it.
-    pub log: Vec<Value>,
 }
 
 const WIRE_KEYWORDS: &[&str] = &[
@@ -279,11 +276,6 @@ pub fn run(
     let reply = provider.structured_with(&request, cancel)?;
     let usage = reply.get("usage").filter(|u| !u.is_null()).cloned();
     let calls = reply.get("calls").and_then(Value::as_u64).unwrap_or(1);
-    let log = reply
-        .get("log")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
     let data = reply.get("data").cloned().ok_or_else(|| {
         TaskError::new("invalid_response", "Provider returned an invalid response")
     })?;
@@ -291,11 +283,7 @@ pub fn run(
         code: code.into(),
         message: message.into(),
         violations,
-        usage: Some(if log.is_empty() {
-            serde_json::json!({"usage": usage, "calls": calls})
-        } else {
-            serde_json::json!({"usage": usage, "calls": calls, "log": log})
-        }),
+        usage: Some(serde_json::json!({"usage": usage, "calls": calls})),
     };
     let validator = jsonschema::validator_for(&full)
         .map_err(|_| TaskError::new("invalid_task", "Task full schema is invalid"))?;
@@ -328,12 +316,7 @@ pub fn run(
             violations,
         ));
     }
-    Ok(TaskOutput {
-        data,
-        usage,
-        calls,
-        log,
-    })
+    Ok(TaskOutput { data, usage, calls })
 }
 
 #[cfg(test)]

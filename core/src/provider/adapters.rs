@@ -322,7 +322,8 @@ impl Adapter {
         let mut calls = 0;
         // One entry per call of this request (attempt 0, then the repair): `{attempt, calls,
         // usage, code, durationMs}`. The AI job executor writes one cost row per entry (#124).
-        let mut log: Vec<Value> = Vec::new();
+        let mut flush = control::CallLog::default();
+        let log = &mut flush.0;
         for repair in 0..2 {
             let started = std::time::Instant::now();
             let mut body = match self.kind {
@@ -384,11 +385,8 @@ impl Adapter {
                         );
                     }
                     log.push(json!({"attempt":repair,"calls":entry_calls,"usage":entry_usage,"code":e.code,"durationMs":started.elapsed().as_millis() as u64}));
-                    // An earlier call of this request was billed even if this one was not.
-                    if info.is_some() || log.len() > 1 {
-                        e.usage = Some(
-                            json!({"usage":usage_value(input, output),"calls":calls,"log":log}),
-                        );
+                    if info.is_some() {
+                        e.usage = Some(json!({"usage":usage_value(input, output),"calls":calls}));
                     }
                     return Err(e);
                 }
@@ -412,14 +410,14 @@ impl Adapter {
                     last["code"] = json!(code);
                 }
                 let mut e = error(code, message);
-                e.usage = Some(json!({"usage":usage,"calls":calls,"log":log}));
+                e.usage = Some(json!({"usage":usage,"calls":calls}));
                 e
             };
             if truncated {
                 return Err(billed(
                     "output_truncated",
                     "Provider output was truncated",
-                    &mut log,
+                    &mut *log,
                 ));
             }
             // A refusal is the model's answer, not a malformed one: no repair. The refusal
@@ -430,7 +428,7 @@ impl Adapter {
                     .and_then(Value::as_str)
                     .is_some_and(|refusal| !refusal.is_empty())
             {
-                return Err(billed("refusal", "Provider refused the request", &mut log));
+                return Err(billed("refusal", "Provider refused the request", &mut *log));
             }
             let text = match self.kind {
                 Kind::OpenAi => response
@@ -448,26 +446,26 @@ impl Adapter {
                 billed(
                     "invalid_response",
                     "Provider response contains no text",
-                    &mut log,
+                    &mut *log,
                 )
             })?;
             if let Ok(value) = serde_json::from_str::<Value>(text) {
                 if value.get("schemaVersion").is_some() && validator.is_valid(&value) {
-                    return Ok(json!({"data":value,"usage":usage,"calls":calls,"log":log}));
+                    return Ok(json!({"data":value,"usage":usage,"calls":calls}));
                 }
             }
             if request.native_schema {
                 return Err(billed(
                     "invalid_json",
                     "Provider response failed validation",
-                    &mut log,
+                    &mut *log,
                 ));
             }
             if repair == 1 {
                 return Err(billed(
                     "invalid_json",
                     "Provider response failed validation after repair",
-                    &mut log,
+                    &mut *log,
                 ));
             }
             if let Some(last) = log.last_mut() {
@@ -478,7 +476,7 @@ impl Adapter {
                 return Err(billed(
                     "budget_calls",
                     "Call budget reached before the repair",
-                    &mut log,
+                    &mut *log,
                 ));
             }
             messages.push(json!({"role":"assistant","content":text}));
