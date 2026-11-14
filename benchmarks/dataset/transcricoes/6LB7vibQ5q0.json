@@ -1,5 +1,5 @@
 {
-  "status": "provisória até a revisão",
+  "status": "revisada por agente; spans incertos excluídos",
   "source": "6LB7vibQ5q0",
   "samples": [
     {
@@ -812,6 +812,1145 @@
           "word": " bro",
           "probability": 0.7896
         }
+      ],
+      "incertos": [
+        {
+          "start": 11.536,
+          "end": 11.696,
+          "whisper": "",
+          "parakeet": "the",
+          "vad_fala_pct": 100
+        },
+        {
+          "start": 11.516,
+          "end": 12.416,
+          "whisper": "lives",
+          "parakeet": "drive",
+          "vad_fala_pct": 85.8
+        },
+        {
+          "start": 25.596,
+          "end": 26.696,
+          "whisper": "But I'm",
+          "parakeet": "hold on we're",
+          "vad_fala_pct": 44.4
+        },
+        {
+          "start": 46.096,
+          "end": 47.336,
+          "whisper": "All right",
+          "parakeet": "Alright,",
+          "vad_fala_pct": 38.1
+        },
+        {
+          "start": 48.676,
+          "end": 48.856,
+          "whisper": "and",
+          "parakeet": "here,",
+          "vad_fala_pct": 100
+        },
+        {
+          "start": 51.236,
+          "end": 51.436,
+          "whisper": "and",
+          "parakeet": "here,",
+          "vad_fala_pct": 100
+        },
+        {
+          "start": 61.756,
+          "end": 62.696,
+          "whisper": "stream feature, bro",
+          "parakeet": "",
+          "vad_fala_pct": 100
+        }
+      ],
+      "bordas_incertas": [
+        {
+          "word_index": 0,
+          "edge": "start",
+          "whisper": 1.776,
+          "parakeet": 2.016
+        },
+        {
+          "word_index": 0,
+          "edge": "end",
+          "whisper": 2.256,
+          "parakeet": 2.576
+        },
+        {
+          "word_index": 1,
+          "edge": "start",
+          "whisper": 5.516,
+          "parakeet": 5.696
+        },
+        {
+          "word_index": 2,
+          "edge": "start",
+          "whisper": 6.036,
+          "parakeet": 6.336
+        },
+        {
+          "word_index": 2,
+          "edge": "end",
+          "whisper": 6.356,
+          "parakeet": 6.576
+        },
+        {
+          "word_index": 3,
+          "edge": "start",
+          "whisper": 6.356,
+          "parakeet": 6.576
+        },
+        {
+          "word_index": 3,
+          "edge": "end",
+          "whisper": 6.616,
+          "parakeet": 7.136
+        },
+        {
+          "word_index": 4,
+          "edge": "start",
+          "whisper": 6.896,
+          "parakeet": 7.376
+        },
+        {
+          "word_index": 4,
+          "edge": "end",
+          "whisper": 7.416,
+          "parakeet": 7.776
+        },
+        {
+          "word_index": 5,
+          "edge": "start",
+          "whisper": 7.416,
+          "parakeet": 7.776
+        },
+        {
+          "word_index": 5,
+          "edge": "end",
+          "whisper": 7.656,
+          "parakeet": 8.096
+        },
+        {
+          "word_index": 6,
+          "edge": "start",
+          "whisper": 7.656,
+          "parakeet": 8.096
+        },
+        {
+          "word_index": 6,
+          "edge": "end",
+          "whisper": 7.856,
+          "parakeet": 8.416
+        },
+        {
+          "word_index": 7,
+          "edge": "start",
+          "whisper": 8.776,
+          "parakeet": 9.056
+        },
+        {
+          "word_index": 8,
+          "edge": "end",
+          "whisper": 9.476,
+          "parakeet": 9.696
+        },
+        {
+          "word_index": 9,
+          "edge": "start",
+          "whisper": 9.476,
+          "parakeet": 9.696
+        },
+        {
+          "word_index": 9,
+          "edge": "end",
+          "whisper": 9.616,
+          "parakeet": 10.016
+        },
+        {
+          "word_index": 10,
+          "edge": "start",
+          "whisper": 9.616,
+          "parakeet": 10.016
+        },
+        {
+          "word_index": 10,
+          "edge": "end",
+          "whisper": 9.876,
+          "parakeet": 10.256
+        },
+        {
+          "word_index": 11,
+          "edge": "start",
+          "whisper": 10.296,
+          "parakeet": 10.496
+        },
+        {
+          "word_index": 14,
+          "edge": "end",
+          "whisper": 11.336,
+          "parakeet": 11.536
+        },
+        {
+          "word_index": 15,
+          "edge": "start",
+          "whisper": 11.336,
+          "parakeet": 11.696
+        },
+        {
+          "word_index": 15,
+          "edge": "end",
+          "whisper": 11.516,
+          "parakeet": 11.856
+        },
+        {
+          "word_index": 17,
+          "edge": "start",
+          "whisper": 14.456,
+          "parakeet": 14.656
+        },
+        {
+          "word_index": 18,
+          "edge": "start",
+          "whisper": 14.976,
+          "parakeet": 15.296
+        },
+        {
+          "word_index": 19,
+          "edge": "end",
+          "whisper": 15.496,
+          "parakeet": 15.696
+        },
+        {
+          "word_index": 20,
+          "edge": "start",
+          "whisper": 15.496,
+          "parakeet": 15.696
+        },
+        {
+          "word_index": 21,
+          "edge": "start",
+          "whisper": 15.796,
+          "parakeet": 15.936
+        },
+        {
+          "word_index": 22,
+          "edge": "start",
+          "whisper": 16.036,
+          "parakeet": 16.256
+        },
+        {
+          "word_index": 22,
+          "edge": "end",
+          "whisper": 16.276,
+          "parakeet": 16.416
+        },
+        {
+          "word_index": 23,
+          "edge": "start",
+          "whisper": 16.276,
+          "parakeet": 17.256
+        },
+        {
+          "word_index": 24,
+          "edge": "start",
+          "whisper": 17.576,
+          "parakeet": 17.896
+        },
+        {
+          "word_index": 25,
+          "edge": "end",
+          "whisper": 18.156,
+          "parakeet": 18.376
+        },
+        {
+          "word_index": 26,
+          "edge": "start",
+          "whisper": 18.156,
+          "parakeet": 18.376
+        },
+        {
+          "word_index": 26,
+          "edge": "end",
+          "whisper": 18.436,
+          "parakeet": 18.536
+        },
+        {
+          "word_index": 27,
+          "edge": "start",
+          "whisper": 18.436,
+          "parakeet": 18.696
+        },
+        {
+          "word_index": 27,
+          "edge": "end",
+          "whisper": 18.696,
+          "parakeet": 19.016
+        },
+        {
+          "word_index": 28,
+          "edge": "start",
+          "whisper": 18.696,
+          "parakeet": 19.016
+        },
+        {
+          "word_index": 28,
+          "edge": "end",
+          "whisper": 18.956,
+          "parakeet": 19.256
+        },
+        {
+          "word_index": 29,
+          "edge": "start",
+          "whisper": 21.196,
+          "parakeet": 21.336
+        },
+        {
+          "word_index": 30,
+          "edge": "start",
+          "whisper": 21.716,
+          "parakeet": 22.056
+        },
+        {
+          "word_index": 30,
+          "edge": "end",
+          "whisper": 22.096,
+          "parakeet": 22.216
+        },
+        {
+          "word_index": 31,
+          "edge": "start",
+          "whisper": 22.096,
+          "parakeet": 22.216
+        },
+        {
+          "word_index": 31,
+          "edge": "end",
+          "whisper": 22.216,
+          "parakeet": 22.376
+        },
+        {
+          "word_index": 32,
+          "edge": "start",
+          "whisper": 22.216,
+          "parakeet": 22.376
+        },
+        {
+          "word_index": 32,
+          "edge": "end",
+          "whisper": 22.396,
+          "parakeet": 22.616
+        },
+        {
+          "word_index": 33,
+          "edge": "start",
+          "whisper": 22.396,
+          "parakeet": 22.616
+        },
+        {
+          "word_index": 33,
+          "edge": "end",
+          "whisper": 22.676,
+          "parakeet": 22.776
+        },
+        {
+          "word_index": 34,
+          "edge": "start",
+          "whisper": 22.676,
+          "parakeet": 22.936
+        },
+        {
+          "word_index": 34,
+          "edge": "end",
+          "whisper": 22.976,
+          "parakeet": 23.096
+        },
+        {
+          "word_index": 35,
+          "edge": "start",
+          "whisper": 22.976,
+          "parakeet": 23.336
+        },
+        {
+          "word_index": 35,
+          "edge": "end",
+          "whisper": 23.256,
+          "parakeet": 23.576
+        },
+        {
+          "word_index": 40,
+          "edge": "start",
+          "whisper": 26.756,
+          "parakeet": 27.176
+        },
+        {
+          "word_index": 40,
+          "edge": "end",
+          "whisper": 26.996,
+          "parakeet": 27.496
+        },
+        {
+          "word_index": 41,
+          "edge": "start",
+          "whisper": 28.456,
+          "parakeet": 28.936
+        },
+        {
+          "word_index": 42,
+          "edge": "start",
+          "whisper": 28.976,
+          "parakeet": 29.176
+        },
+        {
+          "word_index": 42,
+          "edge": "end",
+          "whisper": 29.216,
+          "parakeet": 29.336
+        },
+        {
+          "word_index": 43,
+          "edge": "start",
+          "whisper": 29.216,
+          "parakeet": 29.496
+        },
+        {
+          "word_index": 43,
+          "edge": "end",
+          "whisper": 29.476,
+          "parakeet": 29.656
+        },
+        {
+          "word_index": 44,
+          "edge": "start",
+          "whisper": 29.476,
+          "parakeet": 29.736
+        },
+        {
+          "word_index": 44,
+          "edge": "end",
+          "whisper": 29.616,
+          "parakeet": 30.056
+        },
+        {
+          "word_index": 45,
+          "edge": "start",
+          "whisper": 29.616,
+          "parakeet": 30.056
+        },
+        {
+          "word_index": 45,
+          "edge": "end",
+          "whisper": 29.916,
+          "parakeet": 30.216
+        },
+        {
+          "word_index": 46,
+          "edge": "start",
+          "whisper": 29.916,
+          "parakeet": 30.456
+        },
+        {
+          "word_index": 47,
+          "edge": "start",
+          "whisper": 30.616,
+          "parakeet": 30.936
+        },
+        {
+          "word_index": 47,
+          "edge": "end",
+          "whisper": 30.936,
+          "parakeet": 31.176
+        },
+        {
+          "word_index": 48,
+          "edge": "start",
+          "whisper": 31.836,
+          "parakeet": 32.016
+        },
+        {
+          "word_index": 48,
+          "edge": "end",
+          "whisper": 32.316,
+          "parakeet": 32.496
+        },
+        {
+          "word_index": 49,
+          "edge": "start",
+          "whisper": 32.316,
+          "parakeet": 32.576
+        },
+        {
+          "word_index": 49,
+          "edge": "end",
+          "whisper": 32.796,
+          "parakeet": 33.056
+        },
+        {
+          "word_index": 50,
+          "edge": "start",
+          "whisper": 32.796,
+          "parakeet": 33.216
+        },
+        {
+          "word_index": 50,
+          "edge": "end",
+          "whisper": 33.276,
+          "parakeet": 33.856
+        },
+        {
+          "word_index": 51,
+          "edge": "start",
+          "whisper": 33.976,
+          "parakeet": 34.256
+        },
+        {
+          "word_index": 52,
+          "edge": "start",
+          "whisper": 34.456,
+          "parakeet": 34.656
+        },
+        {
+          "word_index": 52,
+          "edge": "end",
+          "whisper": 34.736,
+          "parakeet": 34.896
+        },
+        {
+          "word_index": 53,
+          "edge": "start",
+          "whisper": 34.736,
+          "parakeet": 34.896
+        },
+        {
+          "word_index": 54,
+          "edge": "start",
+          "whisper": 34.956,
+          "parakeet": 35.296
+        },
+        {
+          "word_index": 55,
+          "edge": "start",
+          "whisper": 35.636,
+          "parakeet": 35.936
+        },
+        {
+          "word_index": 55,
+          "edge": "end",
+          "whisper": 36.116,
+          "parakeet": 36.256
+        },
+        {
+          "word_index": 56,
+          "edge": "start",
+          "whisper": 36.116,
+          "parakeet": 36.256
+        },
+        {
+          "word_index": 56,
+          "edge": "end",
+          "whisper": 36.276,
+          "parakeet": 36.416
+        },
+        {
+          "word_index": 57,
+          "edge": "start",
+          "whisper": 36.276,
+          "parakeet": 36.416
+        },
+        {
+          "word_index": 57,
+          "edge": "end",
+          "whisper": 36.416,
+          "parakeet": 36.576
+        },
+        {
+          "word_index": 58,
+          "edge": "start",
+          "whisper": 36.416,
+          "parakeet": 36.576
+        },
+        {
+          "word_index": 58,
+          "edge": "end",
+          "whisper": 36.536,
+          "parakeet": 36.816
+        },
+        {
+          "word_index": 59,
+          "edge": "start",
+          "whisper": 36.536,
+          "parakeet": 36.816
+        },
+        {
+          "word_index": 59,
+          "edge": "end",
+          "whisper": 36.776,
+          "parakeet": 37.136
+        },
+        {
+          "word_index": 60,
+          "edge": "start",
+          "whisper": 36.776,
+          "parakeet": 37.136
+        },
+        {
+          "word_index": 60,
+          "edge": "end",
+          "whisper": 36.956,
+          "parakeet": 37.456
+        },
+        {
+          "word_index": 61,
+          "edge": "start",
+          "whisper": 36.956,
+          "parakeet": 37.456
+        },
+        {
+          "word_index": 61,
+          "edge": "end",
+          "whisper": 37.256,
+          "parakeet": 37.776
+        },
+        {
+          "word_index": 62,
+          "edge": "start",
+          "whisper": 39.816,
+          "parakeet": 39.936
+        },
+        {
+          "word_index": 62,
+          "edge": "end",
+          "whisper": 40.296,
+          "parakeet": 40.176
+        },
+        {
+          "word_index": 64,
+          "edge": "start",
+          "whisper": 40.536,
+          "parakeet": 40.736
+        },
+        {
+          "word_index": 65,
+          "edge": "start",
+          "whisper": 40.736,
+          "parakeet": 40.976
+        },
+        {
+          "word_index": 65,
+          "edge": "end",
+          "whisper": 40.936,
+          "parakeet": 41.136
+        },
+        {
+          "word_index": 66,
+          "edge": "start",
+          "whisper": 40.936,
+          "parakeet": 41.296
+        },
+        {
+          "word_index": 66,
+          "edge": "end",
+          "whisper": 41.276,
+          "parakeet": 41.456
+        },
+        {
+          "word_index": 67,
+          "edge": "start",
+          "whisper": 41.276,
+          "parakeet": 41.456
+        },
+        {
+          "word_index": 67,
+          "edge": "end",
+          "whisper": 41.576,
+          "parakeet": 41.776
+        },
+        {
+          "word_index": 68,
+          "edge": "start",
+          "whisper": 41.576,
+          "parakeet": 41.776
+        },
+        {
+          "word_index": 68,
+          "edge": "end",
+          "whisper": 41.776,
+          "parakeet": 41.936
+        },
+        {
+          "word_index": 69,
+          "edge": "start",
+          "whisper": 41.776,
+          "parakeet": 41.936
+        },
+        {
+          "word_index": 69,
+          "edge": "end",
+          "whisper": 41.976,
+          "parakeet": 42.176
+        },
+        {
+          "word_index": 70,
+          "edge": "start",
+          "whisper": 41.976,
+          "parakeet": 42.176
+        },
+        {
+          "word_index": 70,
+          "edge": "end",
+          "whisper": 42.276,
+          "parakeet": 42.416
+        },
+        {
+          "word_index": 71,
+          "edge": "start",
+          "whisper": 42.276,
+          "parakeet": 42.496
+        },
+        {
+          "word_index": 71,
+          "edge": "end",
+          "whisper": 42.636,
+          "parakeet": 42.896
+        },
+        {
+          "word_index": 72,
+          "edge": "start",
+          "whisper": 42.636,
+          "parakeet": 42.896
+        },
+        {
+          "word_index": 72,
+          "edge": "end",
+          "whisper": 42.916,
+          "parakeet": 43.056
+        },
+        {
+          "word_index": 73,
+          "edge": "start",
+          "whisper": 42.916,
+          "parakeet": 43.056
+        },
+        {
+          "word_index": 73,
+          "edge": "end",
+          "whisper": 43.276,
+          "parakeet": 43.536
+        },
+        {
+          "word_index": 74,
+          "edge": "start",
+          "whisper": 43.376,
+          "parakeet": 43.696
+        },
+        {
+          "word_index": 74,
+          "edge": "end",
+          "whisper": 43.576,
+          "parakeet": 44.016
+        },
+        {
+          "word_index": 75,
+          "edge": "start",
+          "whisper": 43.576,
+          "parakeet": 44.016
+        },
+        {
+          "word_index": 75,
+          "edge": "end",
+          "whisper": 43.836,
+          "parakeet": 44.336
+        },
+        {
+          "word_index": 76,
+          "edge": "start",
+          "whisper": 43.836,
+          "parakeet": 44.336
+        },
+        {
+          "word_index": 76,
+          "edge": "end",
+          "whisper": 44.196,
+          "parakeet": 44.656
+        },
+        {
+          "word_index": 77,
+          "edge": "start",
+          "whisper": 44.796,
+          "parakeet": 45.216
+        },
+        {
+          "word_index": 77,
+          "edge": "end",
+          "whisper": 45.276,
+          "parakeet": 45.536
+        },
+        {
+          "word_index": 78,
+          "edge": "start",
+          "whisper": 45.276,
+          "parakeet": 45.536
+        },
+        {
+          "word_index": 78,
+          "edge": "end",
+          "whisper": 45.656,
+          "parakeet": 45.856
+        },
+        {
+          "word_index": 79,
+          "edge": "start",
+          "whisper": 45.656,
+          "parakeet": 45.856
+        },
+        {
+          "word_index": 83,
+          "edge": "start",
+          "whisper": 47.856,
+          "parakeet": 47.976
+        },
+        {
+          "word_index": 90,
+          "edge": "start",
+          "whisper": 48.936,
+          "parakeet": 49.256
+        },
+        {
+          "word_index": 90,
+          "edge": "end",
+          "whisper": 49.116,
+          "parakeet": 49.416
+        },
+        {
+          "word_index": 91,
+          "edge": "start",
+          "whisper": 49.116,
+          "parakeet": 49.416
+        },
+        {
+          "word_index": 91,
+          "edge": "end",
+          "whisper": 49.576,
+          "parakeet": 50.056
+        },
+        {
+          "word_index": 92,
+          "edge": "start",
+          "whisper": 49.576,
+          "parakeet": 50.056
+        },
+        {
+          "word_index": 92,
+          "edge": "end",
+          "whisper": 50.156,
+          "parakeet": 50.376
+        },
+        {
+          "word_index": 93,
+          "edge": "start",
+          "whisper": 50.156,
+          "parakeet": 50.536
+        },
+        {
+          "word_index": 97,
+          "edge": "end",
+          "whisper": 51.236,
+          "parakeet": 51.336
+        },
+        {
+          "word_index": 99,
+          "edge": "start",
+          "whisper": 51.436,
+          "parakeet": 51.576
+        },
+        {
+          "word_index": 99,
+          "edge": "end",
+          "whisper": 51.576,
+          "parakeet": 51.736
+        },
+        {
+          "word_index": 100,
+          "edge": "start",
+          "whisper": 51.576,
+          "parakeet": 51.736
+        },
+        {
+          "word_index": 100,
+          "edge": "end",
+          "whisper": 51.776,
+          "parakeet": 51.896
+        },
+        {
+          "word_index": 101,
+          "edge": "start",
+          "whisper": 51.776,
+          "parakeet": 51.896
+        },
+        {
+          "word_index": 101,
+          "edge": "end",
+          "whisper": 51.996,
+          "parakeet": 52.136
+        },
+        {
+          "word_index": 102,
+          "edge": "start",
+          "whisper": 51.996,
+          "parakeet": 52.136
+        },
+        {
+          "word_index": 102,
+          "edge": "end",
+          "whisper": 52.196,
+          "parakeet": 52.376
+        },
+        {
+          "word_index": 103,
+          "edge": "start",
+          "whisper": 52.196,
+          "parakeet": 52.376
+        },
+        {
+          "word_index": 103,
+          "edge": "end",
+          "whisper": 52.396,
+          "parakeet": 52.536
+        },
+        {
+          "word_index": 104,
+          "edge": "start",
+          "whisper": 52.396,
+          "parakeet": 52.536
+        },
+        {
+          "word_index": 104,
+          "edge": "end",
+          "whisper": 52.596,
+          "parakeet": 52.696
+        },
+        {
+          "word_index": 105,
+          "edge": "start",
+          "whisper": 52.596,
+          "parakeet": 52.936
+        },
+        {
+          "word_index": 105,
+          "edge": "end",
+          "whisper": 53.336,
+          "parakeet": 53.496
+        },
+        {
+          "word_index": 106,
+          "edge": "start",
+          "whisper": 53.336,
+          "parakeet": 53.496
+        },
+        {
+          "word_index": 108,
+          "edge": "end",
+          "whisper": 54.236,
+          "parakeet": 54.136
+        },
+        {
+          "word_index": 110,
+          "edge": "start",
+          "whisper": 54.476,
+          "parakeet": 54.616
+        },
+        {
+          "word_index": 110,
+          "edge": "end",
+          "whisper": 54.636,
+          "parakeet": 54.856
+        },
+        {
+          "word_index": 111,
+          "edge": "start",
+          "whisper": 54.636,
+          "parakeet": 54.856
+        },
+        {
+          "word_index": 111,
+          "edge": "end",
+          "whisper": 54.736,
+          "parakeet": 54.936
+        },
+        {
+          "word_index": 112,
+          "edge": "start",
+          "whisper": 54.736,
+          "parakeet": 55.016
+        },
+        {
+          "word_index": 112,
+          "edge": "end",
+          "whisper": 55.036,
+          "parakeet": 55.176
+        },
+        {
+          "word_index": 113,
+          "edge": "start",
+          "whisper": 55.436,
+          "parakeet": 55.656
+        },
+        {
+          "word_index": 113,
+          "edge": "end",
+          "whisper": 55.916,
+          "parakeet": 56.056
+        },
+        {
+          "word_index": 114,
+          "edge": "start",
+          "whisper": 55.916,
+          "parakeet": 56.136
+        },
+        {
+          "word_index": 114,
+          "edge": "end",
+          "whisper": 56.136,
+          "parakeet": 56.296
+        },
+        {
+          "word_index": 115,
+          "edge": "start",
+          "whisper": 56.136,
+          "parakeet": 56.296
+        },
+        {
+          "word_index": 115,
+          "edge": "end",
+          "whisper": 56.296,
+          "parakeet": 56.456
+        },
+        {
+          "word_index": 116,
+          "edge": "start",
+          "whisper": 56.296,
+          "parakeet": 56.456
+        },
+        {
+          "word_index": 118,
+          "edge": "end",
+          "whisper": 56.856,
+          "parakeet": 57.016
+        },
+        {
+          "word_index": 119,
+          "edge": "start",
+          "whisper": 56.856,
+          "parakeet": 57.016
+        },
+        {
+          "word_index": 119,
+          "edge": "end",
+          "whisper": 57.136,
+          "parakeet": 57.256
+        },
+        {
+          "word_index": 120,
+          "edge": "start",
+          "whisper": 57.136,
+          "parakeet": 57.256
+        },
+        {
+          "word_index": 120,
+          "edge": "end",
+          "whisper": 57.336,
+          "parakeet": 57.656
+        },
+        {
+          "word_index": 121,
+          "edge": "start",
+          "whisper": 57.336,
+          "parakeet": 57.656
+        },
+        {
+          "word_index": 121,
+          "edge": "end",
+          "whisper": 57.616,
+          "parakeet": 57.816
+        },
+        {
+          "word_index": 122,
+          "edge": "start",
+          "whisper": 57.616,
+          "parakeet": 57.816
+        },
+        {
+          "word_index": 122,
+          "edge": "end",
+          "whisper": 57.856,
+          "parakeet": 58.136
+        },
+        {
+          "word_index": 123,
+          "edge": "start",
+          "whisper": 57.856,
+          "parakeet": 58.136
+        },
+        {
+          "word_index": 123,
+          "edge": "end",
+          "whisper": 58.276,
+          "parakeet": 58.696
+        },
+        {
+          "word_index": 124,
+          "edge": "start",
+          "whisper": 58.276,
+          "parakeet": 58.696
+        },
+        {
+          "word_index": 124,
+          "edge": "end",
+          "whisper": 58.796,
+          "parakeet": 59.016
+        },
+        {
+          "word_index": 125,
+          "edge": "start",
+          "whisper": 58.856,
+          "parakeet": 59.176
+        },
+        {
+          "word_index": 125,
+          "edge": "end",
+          "whisper": 59.056,
+          "parakeet": 59.496
+        },
+        {
+          "word_index": 126,
+          "edge": "end",
+          "whisper": 60.516,
+          "parakeet": 60.616
+        },
+        {
+          "word_index": 127,
+          "edge": "start",
+          "whisper": 60.516,
+          "parakeet": 60.616
+        },
+        {
+          "word_index": 129,
+          "edge": "end",
+          "whisper": 61.296,
+          "parakeet": 61.416
+        },
+        {
+          "word_index": 130,
+          "edge": "start",
+          "whisper": 61.296,
+          "parakeet": 61.416
+        },
+        {
+          "word_index": 130,
+          "edge": "end",
+          "whisper": 61.756,
+          "parakeet": 61.576
+        }
       ]
     },
     {
@@ -987,6 +2126,145 @@
           "end": 4513.036,
           "word": " girl.",
           "probability": 0.9189
+        }
+      ],
+      "incertos": [
+        {
+          "start": 4450.736,
+          "end": 4450.896,
+          "whisper": "Chad.",
+          "parakeet": "chat,",
+          "vad_fala_pct": 10.0
+        },
+        {
+          "start": 4469.096,
+          "end": 4470.616,
+          "whisper": "Chad, do you think I need you to go score",
+          "parakeet": "Tan they are even for the ghost tour",
+          "vad_fala_pct": 0.0
+        },
+        {
+          "start": 4472.136,
+          "end": 4504.296,
+          "whisper": "Oh, my gosh.",
+          "parakeet": "We find high right now, deep in space, becauseVinewood has finally imploded into Wonder of Limits. There's lots of toys and ice cream. All the rides are 50 cents, so take those.Ladies on your chest I've had this much money anywhere. So back home, I just don't care. He leaves this place, no, I don't care. Baba Baba, no fucking sins.",
+          "vad_fala_pct": 0.0
+        }
+      ],
+      "bordas_incertas": [
+        {
+          "word_index": 0,
+          "edge": "start",
+          "whisper": 4450.436,
+          "parakeet": 4450.176
+        },
+        {
+          "word_index": 0,
+          "edge": "end",
+          "whisper": 4450.636,
+          "parakeet": 4450.416
+        },
+        {
+          "word_index": 4,
+          "edge": "start",
+          "whisper": 4451.016,
+          "parakeet": 4451.136
+        },
+        {
+          "word_index": 4,
+          "edge": "end",
+          "whisper": 4451.176,
+          "parakeet": 4451.296
+        },
+        {
+          "word_index": 5,
+          "edge": "start",
+          "whisper": 4451.256,
+          "parakeet": 4451.376
+        },
+        {
+          "word_index": 5,
+          "edge": "end",
+          "whisper": 4451.296,
+          "parakeet": 4451.456
+        },
+        {
+          "word_index": 6,
+          "edge": "start",
+          "whisper": 4451.296,
+          "parakeet": 4451.616
+        },
+        {
+          "word_index": 6,
+          "edge": "end",
+          "whisper": 4451.436,
+          "parakeet": 4451.856
+        },
+        {
+          "word_index": 22,
+          "edge": "start",
+          "whisper": 4511.556,
+          "parakeet": 4511.696
+        },
+        {
+          "word_index": 22,
+          "edge": "end",
+          "whisper": 4511.896,
+          "parakeet": 4512.016
+        },
+        {
+          "word_index": 23,
+          "edge": "start",
+          "whisper": 4511.976,
+          "parakeet": 4512.096
+        },
+        {
+          "word_index": 23,
+          "edge": "end",
+          "whisper": 4512.136,
+          "parakeet": 4512.256
+        },
+        {
+          "word_index": 24,
+          "edge": "start",
+          "whisper": 4512.136,
+          "parakeet": 4512.256
+        },
+        {
+          "word_index": 24,
+          "edge": "end",
+          "whisper": 4512.316,
+          "parakeet": 4512.496
+        },
+        {
+          "word_index": 25,
+          "edge": "start",
+          "whisper": 4512.316,
+          "parakeet": 4512.496
+        },
+        {
+          "word_index": 25,
+          "edge": "end",
+          "whisper": 4512.536,
+          "parakeet": 4512.656
+        },
+        {
+          "word_index": 26,
+          "edge": "start",
+          "whisper": 4512.536,
+          "parakeet": 4512.656
+        },
+        {
+          "word_index": 26,
+          "edge": "end",
+          "whisper": 4512.696,
+          "parakeet": 4512.816
+        },
+        {
+          "word_index": 27,
+          "edge": "start",
+          "whisper": 4512.696,
+          "parakeet": 4512.816
         }
       ]
     },
@@ -1386,6 +2664,458 @@
           "word": " dick?",
           "probability": 0.7739
         }
+      ],
+      "incertos": [
+        {
+          "start": 8959.892,
+          "end": 8960.792,
+          "whisper": "Can I fly out with a",
+          "parakeet": "the",
+          "vad_fala_pct": 45.3
+        },
+        {
+          "start": 8966.212,
+          "end": 8966.552,
+          "whisper": "going to",
+          "parakeet": "gonna",
+          "vad_fala_pct": 0.0
+        },
+        {
+          "start": 8970.672,
+          "end": 8971.852,
+          "whisper": "You got to drop,",
+          "parakeet": "",
+          "vad_fala_pct": 0.0
+        },
+        {
+          "start": 8975.032,
+          "end": 8975.392,
+          "whisper": "want",
+          "parakeet": "won't",
+          "vad_fala_pct": 0.0
+        }
+      ],
+      "bordas_incertas": [
+        {
+          "word_index": 0,
+          "edge": "start",
+          "whisper": 8949.472,
+          "parakeet": 8949.712
+        },
+        {
+          "word_index": 2,
+          "edge": "end",
+          "whisper": 8950.392,
+          "parakeet": 8950.512
+        },
+        {
+          "word_index": 3,
+          "edge": "start",
+          "whisper": 8950.392,
+          "parakeet": 8950.512
+        },
+        {
+          "word_index": 3,
+          "edge": "end",
+          "whisper": 8950.712,
+          "parakeet": 8951.072
+        },
+        {
+          "word_index": 4,
+          "edge": "start",
+          "whisper": 8950.712,
+          "parakeet": 8951.072
+        },
+        {
+          "word_index": 4,
+          "edge": "end",
+          "whisper": 8951.312,
+          "parakeet": 8951.552
+        },
+        {
+          "word_index": 5,
+          "edge": "start",
+          "whisper": 8951.312,
+          "parakeet": 8951.552
+        },
+        {
+          "word_index": 5,
+          "edge": "end",
+          "whisper": 8951.452,
+          "parakeet": 8951.792
+        },
+        {
+          "word_index": 6,
+          "edge": "start",
+          "whisper": 8951.452,
+          "parakeet": 8951.792
+        },
+        {
+          "word_index": 6,
+          "edge": "end",
+          "whisper": 8951.772,
+          "parakeet": 8952.032
+        },
+        {
+          "word_index": 7,
+          "edge": "start",
+          "whisper": 8951.772,
+          "parakeet": 8952.032
+        },
+        {
+          "word_index": 7,
+          "edge": "end",
+          "whisper": 8952.252,
+          "parakeet": 8952.432
+        },
+        {
+          "word_index": 8,
+          "edge": "start",
+          "whisper": 8952.472,
+          "parakeet": 8952.752
+        },
+        {
+          "word_index": 8,
+          "edge": "end",
+          "whisper": 8952.712,
+          "parakeet": 8952.912
+        },
+        {
+          "word_index": 9,
+          "edge": "start",
+          "whisper": 8952.712,
+          "parakeet": 8952.912
+        },
+        {
+          "word_index": 9,
+          "edge": "end",
+          "whisper": 8953.212,
+          "parakeet": 8953.792
+        },
+        {
+          "word_index": 10,
+          "edge": "start",
+          "whisper": 8953.212,
+          "parakeet": 8952.912
+        },
+        {
+          "word_index": 10,
+          "edge": "end",
+          "whisper": 8953.592,
+          "parakeet": 8953.792
+        },
+        {
+          "word_index": 11,
+          "edge": "start",
+          "whisper": 8953.592,
+          "parakeet": 8953.792
+        },
+        {
+          "word_index": 11,
+          "edge": "end",
+          "whisper": 8954.272,
+          "parakeet": 8954.512
+        },
+        {
+          "word_index": 12,
+          "edge": "start",
+          "whisper": 8954.552,
+          "parakeet": 8954.672
+        },
+        {
+          "word_index": 14,
+          "edge": "start",
+          "whisper": 8955.092,
+          "parakeet": 8955.232
+        },
+        {
+          "word_index": 14,
+          "edge": "end",
+          "whisper": 8955.212,
+          "parakeet": 8955.472
+        },
+        {
+          "word_index": 15,
+          "edge": "start",
+          "whisper": 8955.352,
+          "parakeet": 8955.552
+        },
+        {
+          "word_index": 15,
+          "edge": "end",
+          "whisper": 8955.492,
+          "parakeet": 8955.792
+        },
+        {
+          "word_index": 16,
+          "edge": "start",
+          "whisper": 8955.492,
+          "parakeet": 8955.792
+        },
+        {
+          "word_index": 20,
+          "edge": "start",
+          "whisper": 8956.632,
+          "parakeet": 8956.832
+        },
+        {
+          "word_index": 20,
+          "edge": "end",
+          "whisper": 8957.012,
+          "parakeet": 8957.312
+        },
+        {
+          "word_index": 21,
+          "edge": "start",
+          "whisper": 8957.172,
+          "parakeet": 8957.632
+        },
+        {
+          "word_index": 21,
+          "edge": "end",
+          "whisper": 8957.652,
+          "parakeet": 8957.792
+        },
+        {
+          "word_index": 22,
+          "edge": "start",
+          "whisper": 8957.652,
+          "parakeet": 8957.792
+        },
+        {
+          "word_index": 25,
+          "edge": "end",
+          "whisper": 8958.992,
+          "parakeet": 8959.152
+        },
+        {
+          "word_index": 26,
+          "edge": "start",
+          "whisper": 8958.992,
+          "parakeet": 8959.152
+        },
+        {
+          "word_index": 26,
+          "edge": "end",
+          "whisper": 8959.252,
+          "parakeet": 8959.472
+        },
+        {
+          "word_index": 27,
+          "edge": "start",
+          "whisper": 8959.252,
+          "parakeet": 8959.472
+        },
+        {
+          "word_index": 35,
+          "edge": "start",
+          "whisper": 8960.892,
+          "parakeet": 8961.112
+        },
+        {
+          "word_index": 36,
+          "edge": "start",
+          "whisper": 8961.092,
+          "parakeet": 8961.352
+        },
+        {
+          "word_index": 36,
+          "edge": "end",
+          "whisper": 8961.172,
+          "parakeet": 8961.592
+        },
+        {
+          "word_index": 37,
+          "edge": "start",
+          "whisper": 8961.172,
+          "parakeet": 8961.592
+        },
+        {
+          "word_index": 37,
+          "edge": "end",
+          "whisper": 8961.252,
+          "parakeet": 8961.912
+        },
+        {
+          "word_index": 38,
+          "edge": "end",
+          "whisper": 8966.052,
+          "parakeet": 8965.912
+        },
+        {
+          "word_index": 39,
+          "edge": "start",
+          "whisper": 8966.052,
+          "parakeet": 8965.912
+        },
+        {
+          "word_index": 49,
+          "edge": "start",
+          "whisper": 8971.992,
+          "parakeet": 8972.312
+        },
+        {
+          "word_index": 49,
+          "edge": "end",
+          "whisper": 8972.192,
+          "parakeet": 8972.632
+        },
+        {
+          "word_index": 50,
+          "edge": "start",
+          "whisper": 8972.692,
+          "parakeet": 8972.872
+        },
+        {
+          "word_index": 50,
+          "edge": "end",
+          "whisper": 8973.172,
+          "parakeet": 8973.352
+        },
+        {
+          "word_index": 51,
+          "edge": "start",
+          "whisper": 8973.172,
+          "parakeet": 8973.352
+        },
+        {
+          "word_index": 51,
+          "edge": "end",
+          "whisper": 8973.332,
+          "parakeet": 8973.512
+        },
+        {
+          "word_index": 52,
+          "edge": "start",
+          "whisper": 8973.332,
+          "parakeet": 8973.512
+        },
+        {
+          "word_index": 52,
+          "edge": "end",
+          "whisper": 8973.552,
+          "parakeet": 8973.672
+        },
+        {
+          "word_index": 53,
+          "edge": "start",
+          "whisper": 8973.552,
+          "parakeet": 8973.832
+        },
+        {
+          "word_index": 53,
+          "edge": "end",
+          "whisper": 8973.912,
+          "parakeet": 8974.392
+        },
+        {
+          "word_index": 56,
+          "edge": "start",
+          "whisper": 8975.392,
+          "parakeet": 8975.712
+        },
+        {
+          "word_index": 56,
+          "edge": "end",
+          "whisper": 8975.552,
+          "parakeet": 8975.872
+        },
+        {
+          "word_index": 57,
+          "edge": "start",
+          "whisper": 8975.552,
+          "parakeet": 8975.872
+        },
+        {
+          "word_index": 57,
+          "edge": "end",
+          "whisper": 8975.672,
+          "parakeet": 8975.952
+        },
+        {
+          "word_index": 58,
+          "edge": "start",
+          "whisper": 8975.672,
+          "parakeet": 8975.952
+        },
+        {
+          "word_index": 58,
+          "edge": "end",
+          "whisper": 8975.792,
+          "parakeet": 8976.112
+        },
+        {
+          "word_index": 59,
+          "edge": "start",
+          "whisper": 8975.792,
+          "parakeet": 8976.112
+        },
+        {
+          "word_index": 59,
+          "edge": "end",
+          "whisper": 8975.992,
+          "parakeet": 8976.192
+        },
+        {
+          "word_index": 60,
+          "edge": "start",
+          "whisper": 8975.992,
+          "parakeet": 8976.192
+        },
+        {
+          "word_index": 60,
+          "edge": "end",
+          "whisper": 8976.252,
+          "parakeet": 8976.512
+        },
+        {
+          "word_index": 61,
+          "edge": "start",
+          "whisper": 8976.252,
+          "parakeet": 8976.512
+        },
+        {
+          "word_index": 61,
+          "edge": "end",
+          "whisper": 8976.552,
+          "parakeet": 8976.672
+        },
+        {
+          "word_index": 62,
+          "edge": "start",
+          "whisper": 8976.552,
+          "parakeet": 8976.672
+        },
+        {
+          "word_index": 62,
+          "edge": "end",
+          "whisper": 8976.712,
+          "parakeet": 8976.992
+        },
+        {
+          "word_index": 63,
+          "edge": "start",
+          "whisper": 8976.712,
+          "parakeet": 8976.992
+        },
+        {
+          "word_index": 63,
+          "edge": "end",
+          "whisper": 8977.032,
+          "parakeet": 8977.632
+        },
+        {
+          "word_index": 64,
+          "edge": "start",
+          "whisper": 8977.172,
+          "parakeet": 8977.952
+        },
+        {
+          "word_index": 64,
+          "edge": "end",
+          "whisper": 8978.112,
+          "parakeet": 8978.432
+        }
       ]
     },
     {
@@ -1597,6 +3327,378 @@
           "end": 13433.804,
           "word": " didn't.",
           "probability": 0.9998
+        }
+      ],
+      "incertos": [
+        {
+          "start": 13396.704,
+          "end": 13422.064,
+          "whisper": "",
+          "parakeet": "you know the airfield's mine, don't you? Oh yeah, you can afford a runway, but you can't afford to move out of that corrugated metal desk shack. So how you got-Well, we're alive. Hey, good work down there. I'm the one who says thank you. He was helping me. Thank you, Franklin. Yes, cool, homes. And thank you, Chop. Hey, are you gonna tell us exactly?What we were helping with?",
+          "vad_fala_pct": 0.0
+        },
+        {
+          "start": 13428.304,
+          "end": 13428.544,
+          "whisper": "",
+          "parakeet": "Oh.",
+          "vad_fala_pct": 0.0
+        }
+      ],
+      "bordas_incertas": [
+        {
+          "word_index": 1,
+          "edge": "start",
+          "whisper": 13390.804,
+          "parakeet": 13391.184
+        },
+        {
+          "word_index": 1,
+          "edge": "end",
+          "whisper": 13391.244,
+          "parakeet": 13391.584
+        },
+        {
+          "word_index": 4,
+          "edge": "start",
+          "whisper": 13422.364,
+          "parakeet": 13422.544
+        },
+        {
+          "word_index": 4,
+          "edge": "end",
+          "whisper": 13422.504,
+          "parakeet": 13422.704
+        },
+        {
+          "word_index": 5,
+          "edge": "start",
+          "whisper": 13422.504,
+          "parakeet": 13422.704
+        },
+        {
+          "word_index": 5,
+          "edge": "end",
+          "whisper": 13422.764,
+          "parakeet": 13422.944
+        },
+        {
+          "word_index": 6,
+          "edge": "start",
+          "whisper": 13422.764,
+          "parakeet": 13422.944
+        },
+        {
+          "word_index": 6,
+          "edge": "end",
+          "whisper": 13422.944,
+          "parakeet": 13423.104
+        },
+        {
+          "word_index": 7,
+          "edge": "start",
+          "whisper": 13422.944,
+          "parakeet": 13423.104
+        },
+        {
+          "word_index": 7,
+          "edge": "end",
+          "whisper": 13423.204,
+          "parakeet": 13423.424
+        },
+        {
+          "word_index": 8,
+          "edge": "start",
+          "whisper": 13423.204,
+          "parakeet": 13423.424
+        },
+        {
+          "word_index": 8,
+          "edge": "end",
+          "whisper": 13423.504,
+          "parakeet": 13423.824
+        },
+        {
+          "word_index": 9,
+          "edge": "start",
+          "whisper": 13423.504,
+          "parakeet": 13423.824
+        },
+        {
+          "word_index": 9,
+          "edge": "end",
+          "whisper": 13423.744,
+          "parakeet": 13424.064
+        },
+        {
+          "word_index": 10,
+          "edge": "start",
+          "whisper": 13423.744,
+          "parakeet": 13424.064
+        },
+        {
+          "word_index": 10,
+          "edge": "end",
+          "whisper": 13424.204,
+          "parakeet": 13424.544
+        },
+        {
+          "word_index": 11,
+          "edge": "start",
+          "whisper": 13424.424,
+          "parakeet": 13424.704
+        },
+        {
+          "word_index": 11,
+          "edge": "end",
+          "whisper": 13424.844,
+          "parakeet": 13425.024
+        },
+        {
+          "word_index": 12,
+          "edge": "start",
+          "whisper": 13424.844,
+          "parakeet": 13425.024
+        },
+        {
+          "word_index": 12,
+          "edge": "end",
+          "whisper": 13425.024,
+          "parakeet": 13425.184
+        },
+        {
+          "word_index": 13,
+          "edge": "start",
+          "whisper": 13425.024,
+          "parakeet": 13425.184
+        },
+        {
+          "word_index": 13,
+          "edge": "end",
+          "whisper": 13425.484,
+          "parakeet": 13425.664
+        },
+        {
+          "word_index": 14,
+          "edge": "start",
+          "whisper": 13425.484,
+          "parakeet": 13425.664
+        },
+        {
+          "word_index": 14,
+          "edge": "end",
+          "whisper": 13425.624,
+          "parakeet": 13425.984
+        },
+        {
+          "word_index": 15,
+          "edge": "start",
+          "whisper": 13425.624,
+          "parakeet": 13425.984
+        },
+        {
+          "word_index": 15,
+          "edge": "end",
+          "whisper": 13426.224,
+          "parakeet": 13426.544
+        },
+        {
+          "word_index": 16,
+          "edge": "start",
+          "whisper": 13426.224,
+          "parakeet": 13426.544
+        },
+        {
+          "word_index": 16,
+          "edge": "end",
+          "whisper": 13426.704,
+          "parakeet": 13426.864
+        },
+        {
+          "word_index": 17,
+          "edge": "start",
+          "whisper": 13426.704,
+          "parakeet": 13426.864
+        },
+        {
+          "word_index": 17,
+          "edge": "end",
+          "whisper": 13426.984,
+          "parakeet": 13427.104
+        },
+        {
+          "word_index": 18,
+          "edge": "start",
+          "whisper": 13426.984,
+          "parakeet": 13427.104
+        },
+        {
+          "word_index": 18,
+          "edge": "end",
+          "whisper": 13427.364,
+          "parakeet": 13427.504
+        },
+        {
+          "word_index": 19,
+          "edge": "start",
+          "whisper": 13427.364,
+          "parakeet": 13427.504
+        },
+        {
+          "word_index": 19,
+          "edge": "end",
+          "whisper": 13427.584,
+          "parakeet": 13427.744
+        },
+        {
+          "word_index": 20,
+          "edge": "start",
+          "whisper": 13427.584,
+          "parakeet": 13427.744
+        },
+        {
+          "word_index": 20,
+          "edge": "end",
+          "whisper": 13427.844,
+          "parakeet": 13428.144
+        },
+        {
+          "word_index": 21,
+          "edge": "start",
+          "whisper": 13429.004,
+          "parakeet": 13429.184
+        },
+        {
+          "word_index": 22,
+          "edge": "end",
+          "whisper": 13429.624,
+          "parakeet": 13429.824
+        },
+        {
+          "word_index": 23,
+          "edge": "start",
+          "whisper": 13429.624,
+          "parakeet": 13429.824
+        },
+        {
+          "word_index": 23,
+          "edge": "end",
+          "whisper": 13429.924,
+          "parakeet": 13430.064
+        },
+        {
+          "word_index": 24,
+          "edge": "start",
+          "whisper": 13429.924,
+          "parakeet": 13430.064
+        },
+        {
+          "word_index": 24,
+          "edge": "end",
+          "whisper": 13430.104,
+          "parakeet": 13430.224
+        },
+        {
+          "word_index": 25,
+          "edge": "start",
+          "whisper": 13430.104,
+          "parakeet": 13430.224
+        },
+        {
+          "word_index": 25,
+          "edge": "end",
+          "whisper": 13430.444,
+          "parakeet": 13430.624
+        },
+        {
+          "word_index": 26,
+          "edge": "start",
+          "whisper": 13430.444,
+          "parakeet": 13430.624
+        },
+        {
+          "word_index": 26,
+          "edge": "end",
+          "whisper": 13430.684,
+          "parakeet": 13430.864
+        },
+        {
+          "word_index": 27,
+          "edge": "start",
+          "whisper": 13430.684,
+          "parakeet": 13430.864
+        },
+        {
+          "word_index": 27,
+          "edge": "end",
+          "whisper": 13430.884,
+          "parakeet": 13431.024
+        },
+        {
+          "word_index": 28,
+          "edge": "start",
+          "whisper": 13430.884,
+          "parakeet": 13431.024
+        },
+        {
+          "word_index": 28,
+          "edge": "end",
+          "whisper": 13431.204,
+          "parakeet": 13431.424
+        },
+        {
+          "word_index": 29,
+          "edge": "start",
+          "whisper": 13431.204,
+          "parakeet": 13431.424
+        },
+        {
+          "word_index": 29,
+          "edge": "end",
+          "whisper": 13431.404,
+          "parakeet": 13431.584
+        },
+        {
+          "word_index": 30,
+          "edge": "start",
+          "whisper": 13431.404,
+          "parakeet": 13431.584
+        },
+        {
+          "word_index": 30,
+          "edge": "end",
+          "whisper": 13431.824,
+          "parakeet": 13432.144
+        },
+        {
+          "word_index": 31,
+          "edge": "start",
+          "whisper": 13432.184,
+          "parakeet": 13432.384
+        },
+        {
+          "word_index": 31,
+          "edge": "end",
+          "whisper": 13432.544,
+          "parakeet": 13432.864
+        },
+        {
+          "word_index": 32,
+          "edge": "start",
+          "whisper": 13432.664,
+          "parakeet": 13433.104
+        },
+        {
+          "word_index": 32,
+          "edge": "end",
+          "whisper": 13433.224,
+          "parakeet": 13433.344
+        },
+        {
+          "word_index": 33,
+          "edge": "start",
+          "whisper": 13433.224,
+          "parakeet": 13433.344
         }
       ]
     },
@@ -1881,6 +3983,279 @@
           "end": 17902.152,
           "word": " shit!",
           "probability": 0.8364
+        }
+      ],
+      "incertos": [
+        {
+          "start": 17882.612,
+          "end": 17882.892,
+          "whisper": "the same",
+          "parakeet": "",
+          "vad_fala_pct": 100
+        },
+        {
+          "start": 17883.212,
+          "end": 17884.312,
+          "whisper": "as her. It's",
+          "parakeet": "time. You",
+          "vad_fala_pct": 36.7
+        },
+        {
+          "start": 17886.752,
+          "end": 17886.832,
+          "whisper": "",
+          "parakeet": "the",
+          "vad_fala_pct": 100
+        },
+        {
+          "start": 17887.472,
+          "end": 17887.952,
+          "whisper": "the youth.",
+          "parakeet": "see you.",
+          "vad_fala_pct": 76.7
+        },
+        {
+          "start": 17893.032,
+          "end": 17893.352,
+          "whisper": "",
+          "parakeet": "eat him",
+          "vad_fala_pct": 100
+        }
+      ],
+      "bordas_incertas": [
+        {
+          "word_index": 0,
+          "edge": "start",
+          "whisper": 17849.932,
+          "parakeet": 17850.192
+        },
+        {
+          "word_index": 2,
+          "edge": "start",
+          "whisper": 17850.732,
+          "parakeet": 17850.912
+        },
+        {
+          "word_index": 2,
+          "edge": "end",
+          "whisper": 17851.092,
+          "parakeet": 17851.472
+        },
+        {
+          "word_index": 3,
+          "edge": "start",
+          "whisper": 17880.632,
+          "parakeet": 17880.512
+        },
+        {
+          "word_index": 3,
+          "edge": "end",
+          "whisper": 17881.052,
+          "parakeet": 17880.912
+        },
+        {
+          "word_index": 5,
+          "edge": "end",
+          "whisper": 17881.432,
+          "parakeet": 17881.552
+        },
+        {
+          "word_index": 6,
+          "edge": "start",
+          "whisper": 17881.432,
+          "parakeet": 17881.552
+        },
+        {
+          "word_index": 6,
+          "edge": "end",
+          "whisper": 17881.512,
+          "parakeet": 17881.632
+        },
+        {
+          "word_index": 7,
+          "edge": "start",
+          "whisper": 17881.512,
+          "parakeet": 17881.632
+        },
+        {
+          "word_index": 7,
+          "edge": "end",
+          "whisper": 17881.652,
+          "parakeet": 17881.792
+        },
+        {
+          "word_index": 8,
+          "edge": "start",
+          "whisper": 17882.132,
+          "parakeet": 17882.272
+        },
+        {
+          "word_index": 8,
+          "edge": "end",
+          "whisper": 17882.552,
+          "parakeet": 17882.432
+        },
+        {
+          "word_index": 9,
+          "edge": "start",
+          "whisper": 17882.552,
+          "parakeet": 17882.432
+        },
+        {
+          "word_index": 17,
+          "edge": "start",
+          "whisper": 17884.392,
+          "parakeet": 17884.592
+        },
+        {
+          "word_index": 17,
+          "edge": "end",
+          "whisper": 17884.632,
+          "parakeet": 17884.992
+        },
+        {
+          "word_index": 18,
+          "edge": "start",
+          "whisper": 17885.732,
+          "parakeet": 17885.952
+        },
+        {
+          "word_index": 23,
+          "edge": "start",
+          "whisper": 17886.852,
+          "parakeet": 17887.232
+        },
+        {
+          "word_index": 23,
+          "edge": "end",
+          "whisper": 17887.312,
+          "parakeet": 17887.472
+        },
+        {
+          "word_index": 24,
+          "edge": "start",
+          "whisper": 17887.312,
+          "parakeet": 17887.472
+        },
+        {
+          "word_index": 24,
+          "edge": "end",
+          "whisper": 17887.472,
+          "parakeet": 17887.632
+        },
+        {
+          "word_index": 27,
+          "edge": "start",
+          "whisper": 17888.152,
+          "parakeet": 17888.352
+        },
+        {
+          "word_index": 30,
+          "edge": "end",
+          "whisper": 17889.192,
+          "parakeet": 17889.312
+        },
+        {
+          "word_index": 31,
+          "edge": "start",
+          "whisper": 17889.192,
+          "parakeet": 17889.392
+        },
+        {
+          "word_index": 31,
+          "edge": "end",
+          "whisper": 17889.612,
+          "parakeet": 17889.792
+        },
+        {
+          "word_index": 32,
+          "edge": "start",
+          "whisper": 17889.872,
+          "parakeet": 17890.192
+        },
+        {
+          "word_index": 32,
+          "edge": "end",
+          "whisper": 17890.292,
+          "parakeet": 17890.432
+        },
+        {
+          "word_index": 33,
+          "edge": "start",
+          "whisper": 17890.292,
+          "parakeet": 17890.432
+        },
+        {
+          "word_index": 33,
+          "edge": "end",
+          "whisper": 17890.772,
+          "parakeet": 17890.992
+        },
+        {
+          "word_index": 34,
+          "edge": "start",
+          "whisper": 17890.772,
+          "parakeet": 17890.992
+        },
+        {
+          "word_index": 34,
+          "edge": "end",
+          "whisper": 17890.992,
+          "parakeet": 17891.232
+        },
+        {
+          "word_index": 35,
+          "edge": "start",
+          "whisper": 17892.472,
+          "parakeet": 17892.632
+        },
+        {
+          "word_index": 38,
+          "edge": "start",
+          "whisper": 17899.952,
+          "parakeet": 17900.072
+        },
+        {
+          "word_index": 42,
+          "edge": "end",
+          "whisper": 17901.392,
+          "parakeet": 17901.512
+        },
+        {
+          "word_index": 43,
+          "edge": "start",
+          "whisper": 17901.392,
+          "parakeet": 17901.672
+        },
+        {
+          "word_index": 43,
+          "edge": "end",
+          "whisper": 17901.712,
+          "parakeet": 17901.992
+        },
+        {
+          "word_index": 44,
+          "edge": "start",
+          "whisper": 17901.712,
+          "parakeet": 17901.992
+        },
+        {
+          "word_index": 44,
+          "edge": "end",
+          "whisper": 17901.932,
+          "parakeet": 17902.152
+        },
+        {
+          "word_index": 45,
+          "edge": "start",
+          "whisper": 17901.932,
+          "parakeet": 17902.152
+        },
+        {
+          "word_index": 45,
+          "edge": "end",
+          "whisper": 17902.152,
+          "parakeet": 17902.712
         }
       ]
     },
@@ -2297,6 +4672,511 @@
           "end": 22392.44,
           "word": " up!",
           "probability": 0.9678
+        }
+      ],
+      "incertos": [
+        {
+          "start": 22349.24,
+          "end": 22349.56,
+          "whisper": "You",
+          "parakeet": "",
+          "vad_fala_pct": 0.0
+        },
+        {
+          "start": 22349.72,
+          "end": 22349.96,
+          "whisper": "want to",
+          "parakeet": "wanna",
+          "vad_fala_pct": 0.0
+        },
+        {
+          "start": 22351.12,
+          "end": 22351.44,
+          "whisper": "Yeah.",
+          "parakeet": "",
+          "vad_fala_pct": 0.0
+        },
+        {
+          "start": 22353.88,
+          "end": 22354.44,
+          "whisper": "blaze all",
+          "parakeet": "play Zoe.",
+          "vad_fala_pct": 100
+        },
+        {
+          "start": 22381.94,
+          "end": 22382.74,
+          "whisper": "Oh, yeah.",
+          "parakeet": "",
+          "vad_fala_pct": 0.0
+        },
+        {
+          "start": 22383.56,
+          "end": 22384.28,
+          "whisper": "",
+          "parakeet": "through you hear.",
+          "vad_fala_pct": 0.0
+        },
+        {
+          "start": 22388.32,
+          "end": 22388.48,
+          "whisper": "",
+          "parakeet": "s",
+          "vad_fala_pct": 0.0
+        },
+        {
+          "start": 22389.54,
+          "end": 22391.94,
+          "whisper": "backup! Back",
+          "parakeet": "back",
+          "vad_fala_pct": 0.0
+        },
+        {
+          "start": 22391.94,
+          "end": 22392.44,
+          "whisper": "Back up!",
+          "parakeet": "",
+          "vad_fala_pct": 0.0
+        }
+      ],
+      "bordas_incertas": [
+        {
+          "word_index": 0,
+          "edge": "end",
+          "whisper": 22344.9,
+          "parakeet": 22345.08
+        },
+        {
+          "word_index": 1,
+          "edge": "start",
+          "whisper": 22344.9,
+          "parakeet": 22345.08
+        },
+        {
+          "word_index": 2,
+          "edge": "end",
+          "whisper": 22345.38,
+          "parakeet": 22345.48
+        },
+        {
+          "word_index": 3,
+          "edge": "end",
+          "whisper": 22345.7,
+          "parakeet": 22345.88
+        },
+        {
+          "word_index": 4,
+          "edge": "start",
+          "whisper": 22345.7,
+          "parakeet": 22345.88
+        },
+        {
+          "word_index": 4,
+          "edge": "end",
+          "whisper": 22345.84,
+          "parakeet": 22346.04
+        },
+        {
+          "word_index": 5,
+          "edge": "start",
+          "whisper": 22345.84,
+          "parakeet": 22346.04
+        },
+        {
+          "word_index": 5,
+          "edge": "end",
+          "whisper": 22346.0,
+          "parakeet": 22346.2
+        },
+        {
+          "word_index": 6,
+          "edge": "start",
+          "whisper": 22346.0,
+          "parakeet": 22346.2
+        },
+        {
+          "word_index": 6,
+          "edge": "end",
+          "whisper": 22346.22,
+          "parakeet": 22346.6
+        },
+        {
+          "word_index": 8,
+          "edge": "start",
+          "whisper": 22347.78,
+          "parakeet": 22347.96
+        },
+        {
+          "word_index": 9,
+          "edge": "end",
+          "whisper": 22348.26,
+          "parakeet": 22348.44
+        },
+        {
+          "word_index": 10,
+          "edge": "start",
+          "whisper": 22348.26,
+          "parakeet": 22348.44
+        },
+        {
+          "word_index": 10,
+          "edge": "end",
+          "whisper": 22348.52,
+          "parakeet": 22348.84
+        },
+        {
+          "word_index": 12,
+          "edge": "start",
+          "whisper": 22349.56,
+          "parakeet": 22349.4
+        },
+        {
+          "word_index": 12,
+          "edge": "end",
+          "whisper": 22349.72,
+          "parakeet": 22349.56
+        },
+        {
+          "word_index": 16,
+          "edge": "end",
+          "whisper": 22350.14,
+          "parakeet": 22350.28
+        },
+        {
+          "word_index": 17,
+          "edge": "start",
+          "whisper": 22350.14,
+          "parakeet": 22350.28
+        },
+        {
+          "word_index": 17,
+          "edge": "end",
+          "whisper": 22350.24,
+          "parakeet": 22350.6
+        },
+        {
+          "word_index": 18,
+          "edge": "start",
+          "whisper": 22350.24,
+          "parakeet": 22350.6
+        },
+        {
+          "word_index": 18,
+          "edge": "end",
+          "whisper": 22350.54,
+          "parakeet": 22350.92
+        },
+        {
+          "word_index": 20,
+          "edge": "start",
+          "whisper": 22351.54,
+          "parakeet": 22351.16
+        },
+        {
+          "word_index": 20,
+          "edge": "end",
+          "whisper": 22351.62,
+          "parakeet": 22351.72
+        },
+        {
+          "word_index": 21,
+          "edge": "start",
+          "whisper": 22351.62,
+          "parakeet": 22351.72
+        },
+        {
+          "word_index": 25,
+          "edge": "end",
+          "whisper": 22353.6,
+          "parakeet": 22353.48
+        },
+        {
+          "word_index": 26,
+          "edge": "start",
+          "whisper": 22353.6,
+          "parakeet": 22353.48
+        },
+        {
+          "word_index": 26,
+          "edge": "end",
+          "whisper": 22353.76,
+          "parakeet": 22353.56
+        },
+        {
+          "word_index": 30,
+          "edge": "start",
+          "whisper": 22354.44,
+          "parakeet": 22354.72
+        },
+        {
+          "word_index": 30,
+          "edge": "end",
+          "whisper": 22354.62,
+          "parakeet": 22354.8
+        },
+        {
+          "word_index": 31,
+          "edge": "start",
+          "whisper": 22354.62,
+          "parakeet": 22354.88
+        },
+        {
+          "word_index": 31,
+          "edge": "end",
+          "whisper": 22354.9,
+          "parakeet": 22355.12
+        },
+        {
+          "word_index": 32,
+          "edge": "start",
+          "whisper": 22354.9,
+          "parakeet": 22355.2
+        },
+        {
+          "word_index": 32,
+          "edge": "end",
+          "whisper": 22355.1,
+          "parakeet": 22355.36
+        },
+        {
+          "word_index": 33,
+          "edge": "start",
+          "whisper": 22355.1,
+          "parakeet": 22355.36
+        },
+        {
+          "word_index": 33,
+          "edge": "end",
+          "whisper": 22355.22,
+          "parakeet": 22355.6
+        },
+        {
+          "word_index": 34,
+          "edge": "start",
+          "whisper": 22355.22,
+          "parakeet": 22355.6
+        },
+        {
+          "word_index": 34,
+          "edge": "end",
+          "whisper": 22355.44,
+          "parakeet": 22355.92
+        },
+        {
+          "word_index": 35,
+          "edge": "start",
+          "whisper": 22355.44,
+          "parakeet": 22355.92
+        },
+        {
+          "word_index": 35,
+          "edge": "end",
+          "whisper": 22355.64,
+          "parakeet": 22356.24
+        },
+        {
+          "word_index": 36,
+          "edge": "start",
+          "whisper": 22356.46,
+          "parakeet": 22356.64
+        },
+        {
+          "word_index": 37,
+          "edge": "end",
+          "whisper": 22357.1,
+          "parakeet": 22357.6
+        },
+        {
+          "word_index": 38,
+          "edge": "start",
+          "whisper": 22359.5,
+          "parakeet": 22359.6
+        },
+        {
+          "word_index": 39,
+          "edge": "end",
+          "whisper": 22360.0,
+          "parakeet": 22360.48
+        },
+        {
+          "word_index": 42,
+          "edge": "start",
+          "whisper": 22362.28,
+          "parakeet": 22362.4
+        },
+        {
+          "word_index": 42,
+          "edge": "end",
+          "whisper": 22362.44,
+          "parakeet": 22362.56
+        },
+        {
+          "word_index": 43,
+          "edge": "start",
+          "whisper": 22362.44,
+          "parakeet": 22362.56
+        },
+        {
+          "word_index": 43,
+          "edge": "end",
+          "whisper": 22362.6,
+          "parakeet": 22362.72
+        },
+        {
+          "word_index": 44,
+          "edge": "start",
+          "whisper": 22362.6,
+          "parakeet": 22362.72
+        },
+        {
+          "word_index": 44,
+          "edge": "end",
+          "whisper": 22362.7,
+          "parakeet": 22362.8
+        },
+        {
+          "word_index": 45,
+          "edge": "start",
+          "whisper": 22362.7,
+          "parakeet": 22362.8
+        },
+        {
+          "word_index": 45,
+          "edge": "end",
+          "whisper": 22363.04,
+          "parakeet": 22363.2
+        },
+        {
+          "word_index": 46,
+          "edge": "start",
+          "whisper": 22363.16,
+          "parakeet": 22363.28
+        },
+        {
+          "word_index": 46,
+          "edge": "end",
+          "whisper": 22363.92,
+          "parakeet": 22364.48
+        },
+        {
+          "word_index": 49,
+          "edge": "start",
+          "whisper": 22382.74,
+          "parakeet": 22382.52
+        },
+        {
+          "word_index": 50,
+          "edge": "start",
+          "whisper": 22382.82,
+          "parakeet": 22383.0
+        },
+        {
+          "word_index": 53,
+          "edge": "start",
+          "whisper": 22385.26,
+          "parakeet": 22385.68
+        },
+        {
+          "word_index": 53,
+          "edge": "end",
+          "whisper": 22385.98,
+          "parakeet": 22386.08
+        },
+        {
+          "word_index": 54,
+          "edge": "start",
+          "whisper": 22385.98,
+          "parakeet": 22386.08
+        },
+        {
+          "word_index": 56,
+          "edge": "end",
+          "whisper": 22386.72,
+          "parakeet": 22386.88
+        },
+        {
+          "word_index": 57,
+          "edge": "start",
+          "whisper": 22386.72,
+          "parakeet": 22386.88
+        },
+        {
+          "word_index": 57,
+          "edge": "end",
+          "whisper": 22386.9,
+          "parakeet": 22387.04
+        },
+        {
+          "word_index": 58,
+          "edge": "start",
+          "whisper": 22386.9,
+          "parakeet": 22387.04
+        },
+        {
+          "word_index": 58,
+          "edge": "end",
+          "whisper": 22387.04,
+          "parakeet": 22387.2
+        },
+        {
+          "word_index": 59,
+          "edge": "start",
+          "whisper": 22387.04,
+          "parakeet": 22387.2
+        },
+        {
+          "word_index": 59,
+          "edge": "end",
+          "whisper": 22387.16,
+          "parakeet": 22387.36
+        },
+        {
+          "word_index": 60,
+          "edge": "start",
+          "whisper": 22387.16,
+          "parakeet": 22387.36
+        },
+        {
+          "word_index": 60,
+          "edge": "end",
+          "whisper": 22387.66,
+          "parakeet": 22388.08
+        },
+        {
+          "word_index": 61,
+          "edge": "start",
+          "whisper": 22388.54,
+          "parakeet": 22389.2
+        },
+        {
+          "word_index": 61,
+          "edge": "end",
+          "whisper": 22389.26,
+          "parakeet": 22389.52
+        },
+        {
+          "word_index": 62,
+          "edge": "start",
+          "whisper": 22389.26,
+          "parakeet": 22389.52
+        },
+        {
+          "word_index": 62,
+          "edge": "end",
+          "whisper": 22389.54,
+          "parakeet": 22389.68
+        },
+        {
+          "word_index": 65,
+          "edge": "start",
+          "whisper": 22391.94,
+          "parakeet": 22390.48
+        },
+        {
+          "word_index": 65,
+          "edge": "end",
+          "whisper": 22391.94,
+          "parakeet": 22390.8
         }
       ]
     },
@@ -3542,6 +6422,1701 @@
           "word": " like...",
           "probability": 0.0161
         }
+      ],
+      "incertos": [
+        {
+          "start": 26795.176,
+          "end": 26795.336,
+          "whisper": "",
+          "parakeet": "uh",
+          "vad_fala_pct": 100
+        },
+        {
+          "start": 26796.856,
+          "end": 26797.096,
+          "whisper": "",
+          "parakeet": "Now",
+          "vad_fala_pct": 30.0
+        },
+        {
+          "start": 26818.556,
+          "end": 26818.576,
+          "whisper": "Wow,",
+          "parakeet": "",
+          "vad_fala_pct": 100
+        },
+        {
+          "start": 26821.196,
+          "end": 26822.056,
+          "whisper": "The Hanes",
+          "parakeet": "Now Haynes",
+          "vad_fala_pct": 45.6
+        },
+        {
+          "start": 26832.936,
+          "end": 26834.596,
+          "whisper": "Ooh... Now, I like... I like...",
+          "parakeet": "",
+          "vad_fala_pct": 61.4
+        }
+      ],
+      "bordas_incertas": [
+        {
+          "word_index": 0,
+          "edge": "start",
+          "whisper": 26775.536,
+          "parakeet": 26775.776
+        },
+        {
+          "word_index": 2,
+          "edge": "end",
+          "whisper": 26776.316,
+          "parakeet": 26776.496
+        },
+        {
+          "word_index": 3,
+          "edge": "start",
+          "whisper": 26776.316,
+          "parakeet": 26776.496
+        },
+        {
+          "word_index": 3,
+          "edge": "end",
+          "whisper": 26776.536,
+          "parakeet": 26777.056
+        },
+        {
+          "word_index": 4,
+          "edge": "start",
+          "whisper": 26777.036,
+          "parakeet": 26777.296
+        },
+        {
+          "word_index": 4,
+          "edge": "end",
+          "whisper": 26777.476,
+          "parakeet": 26777.616
+        },
+        {
+          "word_index": 5,
+          "edge": "end",
+          "whisper": 26777.856,
+          "parakeet": 26778.016
+        },
+        {
+          "word_index": 6,
+          "edge": "start",
+          "whisper": 26777.896,
+          "parakeet": 26778.096
+        },
+        {
+          "word_index": 6,
+          "edge": "end",
+          "whisper": 26778.096,
+          "parakeet": 26778.336
+        },
+        {
+          "word_index": 7,
+          "edge": "start",
+          "whisper": 26778.096,
+          "parakeet": 26778.336
+        },
+        {
+          "word_index": 7,
+          "edge": "end",
+          "whisper": 26778.436,
+          "parakeet": 26778.576
+        },
+        {
+          "word_index": 8,
+          "edge": "start",
+          "whisper": 26778.436,
+          "parakeet": 26778.576
+        },
+        {
+          "word_index": 8,
+          "edge": "end",
+          "whisper": 26778.696,
+          "parakeet": 26778.816
+        },
+        {
+          "word_index": 10,
+          "edge": "end",
+          "whisper": 26779.456,
+          "parakeet": 26779.616
+        },
+        {
+          "word_index": 11,
+          "edge": "start",
+          "whisper": 26779.456,
+          "parakeet": 26779.616
+        },
+        {
+          "word_index": 11,
+          "edge": "end",
+          "whisper": 26779.616,
+          "parakeet": 26779.776
+        },
+        {
+          "word_index": 12,
+          "edge": "start",
+          "whisper": 26779.616,
+          "parakeet": 26779.776
+        },
+        {
+          "word_index": 12,
+          "edge": "end",
+          "whisper": 26779.756,
+          "parakeet": 26779.936
+        },
+        {
+          "word_index": 13,
+          "edge": "start",
+          "whisper": 26779.756,
+          "parakeet": 26779.936
+        },
+        {
+          "word_index": 13,
+          "edge": "end",
+          "whisper": 26779.836,
+          "parakeet": 26780.016
+        },
+        {
+          "word_index": 14,
+          "edge": "start",
+          "whisper": 26779.836,
+          "parakeet": 26780.016
+        },
+        {
+          "word_index": 14,
+          "edge": "end",
+          "whisper": 26780.276,
+          "parakeet": 26780.416
+        },
+        {
+          "word_index": 15,
+          "edge": "start",
+          "whisper": 26780.276,
+          "parakeet": 26780.416
+        },
+        {
+          "word_index": 16,
+          "edge": "end",
+          "whisper": 26780.556,
+          "parakeet": 26780.816
+        },
+        {
+          "word_index": 17,
+          "edge": "start",
+          "whisper": 26780.556,
+          "parakeet": 26780.816
+        },
+        {
+          "word_index": 17,
+          "edge": "end",
+          "whisper": 26780.956,
+          "parakeet": 26781.136
+        },
+        {
+          "word_index": 18,
+          "edge": "start",
+          "whisper": 26780.956,
+          "parakeet": 26781.296
+        },
+        {
+          "word_index": 18,
+          "edge": "end",
+          "whisper": 26781.396,
+          "parakeet": 26781.696
+        },
+        {
+          "word_index": 19,
+          "edge": "start",
+          "whisper": 26781.636,
+          "parakeet": 26782.016
+        },
+        {
+          "word_index": 19,
+          "edge": "end",
+          "whisper": 26781.956,
+          "parakeet": 26782.176
+        },
+        {
+          "word_index": 20,
+          "edge": "start",
+          "whisper": 26781.956,
+          "parakeet": 26782.176
+        },
+        {
+          "word_index": 20,
+          "edge": "end",
+          "whisper": 26782.196,
+          "parakeet": 26782.336
+        },
+        {
+          "word_index": 21,
+          "edge": "start",
+          "whisper": 26782.196,
+          "parakeet": 26782.336
+        },
+        {
+          "word_index": 23,
+          "edge": "end",
+          "whisper": 26782.816,
+          "parakeet": 26782.976
+        },
+        {
+          "word_index": 24,
+          "edge": "start",
+          "whisper": 26782.816,
+          "parakeet": 26782.976
+        },
+        {
+          "word_index": 24,
+          "edge": "end",
+          "whisper": 26783.076,
+          "parakeet": 26783.296
+        },
+        {
+          "word_index": 25,
+          "edge": "start",
+          "whisper": 26783.076,
+          "parakeet": 26783.296
+        },
+        {
+          "word_index": 25,
+          "edge": "end",
+          "whisper": 26783.256,
+          "parakeet": 26783.376
+        },
+        {
+          "word_index": 26,
+          "edge": "start",
+          "whisper": 26783.256,
+          "parakeet": 26783.376
+        },
+        {
+          "word_index": 27,
+          "edge": "end",
+          "whisper": 26783.576,
+          "parakeet": 26783.696
+        },
+        {
+          "word_index": 28,
+          "edge": "start",
+          "whisper": 26783.576,
+          "parakeet": 26783.696
+        },
+        {
+          "word_index": 29,
+          "edge": "end",
+          "whisper": 26783.896,
+          "parakeet": 26784.016
+        },
+        {
+          "word_index": 30,
+          "edge": "start",
+          "whisper": 26783.896,
+          "parakeet": 26784.016
+        },
+        {
+          "word_index": 30,
+          "edge": "end",
+          "whisper": 26783.976,
+          "parakeet": 26784.096
+        },
+        {
+          "word_index": 31,
+          "edge": "start",
+          "whisper": 26783.976,
+          "parakeet": 26784.096
+        },
+        {
+          "word_index": 31,
+          "edge": "end",
+          "whisper": 26784.276,
+          "parakeet": 26784.416
+        },
+        {
+          "word_index": 32,
+          "edge": "start",
+          "whisper": 26784.276,
+          "parakeet": 26784.416
+        },
+        {
+          "word_index": 32,
+          "edge": "end",
+          "whisper": 26784.436,
+          "parakeet": 26784.576
+        },
+        {
+          "word_index": 33,
+          "edge": "start",
+          "whisper": 26784.436,
+          "parakeet": 26784.576
+        },
+        {
+          "word_index": 36,
+          "edge": "end",
+          "whisper": 26785.396,
+          "parakeet": 26785.616
+        },
+        {
+          "word_index": 37,
+          "edge": "start",
+          "whisper": 26785.396,
+          "parakeet": 26785.616
+        },
+        {
+          "word_index": 37,
+          "edge": "end",
+          "whisper": 26785.636,
+          "parakeet": 26785.856
+        },
+        {
+          "word_index": 38,
+          "edge": "start",
+          "whisper": 26785.636,
+          "parakeet": 26785.856
+        },
+        {
+          "word_index": 38,
+          "edge": "end",
+          "whisper": 26786.116,
+          "parakeet": 26786.256
+        },
+        {
+          "word_index": 39,
+          "edge": "start",
+          "whisper": 26786.116,
+          "parakeet": 26786.256
+        },
+        {
+          "word_index": 39,
+          "edge": "end",
+          "whisper": 26786.236,
+          "parakeet": 26786.416
+        },
+        {
+          "word_index": 40,
+          "edge": "start",
+          "whisper": 26786.236,
+          "parakeet": 26786.416
+        },
+        {
+          "word_index": 40,
+          "edge": "end",
+          "whisper": 26786.276,
+          "parakeet": 26786.496
+        },
+        {
+          "word_index": 41,
+          "edge": "start",
+          "whisper": 26786.276,
+          "parakeet": 26786.496
+        },
+        {
+          "word_index": 41,
+          "edge": "end",
+          "whisper": 26786.556,
+          "parakeet": 26786.736
+        },
+        {
+          "word_index": 42,
+          "edge": "start",
+          "whisper": 26786.556,
+          "parakeet": 26786.736
+        },
+        {
+          "word_index": 45,
+          "edge": "end",
+          "whisper": 26787.516,
+          "parakeet": 26787.696
+        },
+        {
+          "word_index": 46,
+          "edge": "start",
+          "whisper": 26787.516,
+          "parakeet": 26787.776
+        },
+        {
+          "word_index": 46,
+          "edge": "end",
+          "whisper": 26787.796,
+          "parakeet": 26787.936
+        },
+        {
+          "word_index": 47,
+          "edge": "start",
+          "whisper": 26787.796,
+          "parakeet": 26787.936
+        },
+        {
+          "word_index": 48,
+          "edge": "end",
+          "whisper": 26788.036,
+          "parakeet": 26788.176
+        },
+        {
+          "word_index": 49,
+          "edge": "start",
+          "whisper": 26788.036,
+          "parakeet": 26788.176
+        },
+        {
+          "word_index": 49,
+          "edge": "end",
+          "whisper": 26788.316,
+          "parakeet": 26788.576
+        },
+        {
+          "word_index": 50,
+          "edge": "start",
+          "whisper": 26788.316,
+          "parakeet": 26788.576
+        },
+        {
+          "word_index": 50,
+          "edge": "end",
+          "whisper": 26788.496,
+          "parakeet": 26788.656
+        },
+        {
+          "word_index": 51,
+          "edge": "start",
+          "whisper": 26788.496,
+          "parakeet": 26788.656
+        },
+        {
+          "word_index": 51,
+          "edge": "end",
+          "whisper": 26788.756,
+          "parakeet": 26788.896
+        },
+        {
+          "word_index": 52,
+          "edge": "start",
+          "whisper": 26788.756,
+          "parakeet": 26788.896
+        },
+        {
+          "word_index": 53,
+          "edge": "start",
+          "whisper": 26788.936,
+          "parakeet": 26789.136
+        },
+        {
+          "word_index": 53,
+          "edge": "end",
+          "whisper": 26789.096,
+          "parakeet": 26789.296
+        },
+        {
+          "word_index": 54,
+          "edge": "start",
+          "whisper": 26789.096,
+          "parakeet": 26789.296
+        },
+        {
+          "word_index": 57,
+          "edge": "end",
+          "whisper": 26790.236,
+          "parakeet": 26790.096
+        },
+        {
+          "word_index": 58,
+          "edge": "start",
+          "whisper": 26790.236,
+          "parakeet": 26790.096
+        },
+        {
+          "word_index": 58,
+          "edge": "end",
+          "whisper": 26790.336,
+          "parakeet": 26790.176
+        },
+        {
+          "word_index": 59,
+          "edge": "start",
+          "whisper": 26790.336,
+          "parakeet": 26790.176
+        },
+        {
+          "word_index": 59,
+          "edge": "end",
+          "whisper": 26790.416,
+          "parakeet": 26790.256
+        },
+        {
+          "word_index": 60,
+          "edge": "start",
+          "whisper": 26790.416,
+          "parakeet": 26790.256
+        },
+        {
+          "word_index": 60,
+          "edge": "end",
+          "whisper": 26790.516,
+          "parakeet": 26790.336
+        },
+        {
+          "word_index": 61,
+          "edge": "start",
+          "whisper": 26790.516,
+          "parakeet": 26790.776
+        },
+        {
+          "word_index": 61,
+          "edge": "end",
+          "whisper": 26790.716,
+          "parakeet": 26791.016
+        },
+        {
+          "word_index": 62,
+          "edge": "start",
+          "whisper": 26790.716,
+          "parakeet": 26791.096
+        },
+        {
+          "word_index": 62,
+          "edge": "end",
+          "whisper": 26791.116,
+          "parakeet": 26791.336
+        },
+        {
+          "word_index": 63,
+          "edge": "start",
+          "whisper": 26791.276,
+          "parakeet": 26791.416
+        },
+        {
+          "word_index": 63,
+          "edge": "end",
+          "whisper": 26791.436,
+          "parakeet": 26791.656
+        },
+        {
+          "word_index": 64,
+          "edge": "start",
+          "whisper": 26791.436,
+          "parakeet": 26791.656
+        },
+        {
+          "word_index": 64,
+          "edge": "end",
+          "whisper": 26791.716,
+          "parakeet": 26791.896
+        },
+        {
+          "word_index": 65,
+          "edge": "start",
+          "whisper": 26791.716,
+          "parakeet": 26791.896
+        },
+        {
+          "word_index": 65,
+          "edge": "end",
+          "whisper": 26791.796,
+          "parakeet": 26791.976
+        },
+        {
+          "word_index": 66,
+          "edge": "start",
+          "whisper": 26791.796,
+          "parakeet": 26791.976
+        },
+        {
+          "word_index": 66,
+          "edge": "end",
+          "whisper": 26791.976,
+          "parakeet": 26792.296
+        },
+        {
+          "word_index": 67,
+          "edge": "start",
+          "whisper": 26791.976,
+          "parakeet": 26792.296
+        },
+        {
+          "word_index": 67,
+          "edge": "end",
+          "whisper": 26792.236,
+          "parakeet": 26792.856
+        },
+        {
+          "word_index": 68,
+          "edge": "start",
+          "whisper": 26792.996,
+          "parakeet": 26793.336
+        },
+        {
+          "word_index": 68,
+          "edge": "end",
+          "whisper": 26793.436,
+          "parakeet": 26793.656
+        },
+        {
+          "word_index": 69,
+          "edge": "start",
+          "whisper": 26793.436,
+          "parakeet": 26793.656
+        },
+        {
+          "word_index": 69,
+          "edge": "end",
+          "whisper": 26793.656,
+          "parakeet": 26793.816
+        },
+        {
+          "word_index": 70,
+          "edge": "start",
+          "whisper": 26793.656,
+          "parakeet": 26793.816
+        },
+        {
+          "word_index": 70,
+          "edge": "end",
+          "whisper": 26793.876,
+          "parakeet": 26794.056
+        },
+        {
+          "word_index": 71,
+          "edge": "start",
+          "whisper": 26793.876,
+          "parakeet": 26794.056
+        },
+        {
+          "word_index": 71,
+          "edge": "end",
+          "whisper": 26794.076,
+          "parakeet": 26794.296
+        },
+        {
+          "word_index": 72,
+          "edge": "start",
+          "whisper": 26794.076,
+          "parakeet": 26794.296
+        },
+        {
+          "word_index": 72,
+          "edge": "end",
+          "whisper": 26794.336,
+          "parakeet": 26794.536
+        },
+        {
+          "word_index": 73,
+          "edge": "start",
+          "whisper": 26794.436,
+          "parakeet": 26794.696
+        },
+        {
+          "word_index": 73,
+          "edge": "end",
+          "whisper": 26794.736,
+          "parakeet": 26794.936
+        },
+        {
+          "word_index": 74,
+          "edge": "start",
+          "whisper": 26794.736,
+          "parakeet": 26794.936
+        },
+        {
+          "word_index": 74,
+          "edge": "end",
+          "whisper": 26794.936,
+          "parakeet": 26795.176
+        },
+        {
+          "word_index": 76,
+          "edge": "start",
+          "whisper": 26795.716,
+          "parakeet": 26796.056
+        },
+        {
+          "word_index": 76,
+          "edge": "end",
+          "whisper": 26796.176,
+          "parakeet": 26796.696
+        },
+        {
+          "word_index": 79,
+          "edge": "start",
+          "whisper": 26797.376,
+          "parakeet": 26797.576
+        },
+        {
+          "word_index": 79,
+          "edge": "end",
+          "whisper": 26797.616,
+          "parakeet": 26797.736
+        },
+        {
+          "word_index": 80,
+          "edge": "start",
+          "whisper": 26797.616,
+          "parakeet": 26797.736
+        },
+        {
+          "word_index": 81,
+          "edge": "end",
+          "whisper": 26798.076,
+          "parakeet": 26798.216
+        },
+        {
+          "word_index": 82,
+          "edge": "start",
+          "whisper": 26798.076,
+          "parakeet": 26798.216
+        },
+        {
+          "word_index": 86,
+          "edge": "end",
+          "whisper": 26799.296,
+          "parakeet": 26799.416
+        },
+        {
+          "word_index": 87,
+          "edge": "start",
+          "whisper": 26799.296,
+          "parakeet": 26799.416
+        },
+        {
+          "word_index": 87,
+          "edge": "end",
+          "whisper": 26799.476,
+          "parakeet": 26799.656
+        },
+        {
+          "word_index": 88,
+          "edge": "start",
+          "whisper": 26799.576,
+          "parakeet": 26799.736
+        },
+        {
+          "word_index": 88,
+          "edge": "end",
+          "whisper": 26799.716,
+          "parakeet": 26800.056
+        },
+        {
+          "word_index": 89,
+          "edge": "start",
+          "whisper": 26799.716,
+          "parakeet": 26800.056
+        },
+        {
+          "word_index": 89,
+          "edge": "end",
+          "whisper": 26800.056,
+          "parakeet": 26800.216
+        },
+        {
+          "word_index": 90,
+          "edge": "start",
+          "whisper": 26800.056,
+          "parakeet": 26800.216
+        },
+        {
+          "word_index": 90,
+          "edge": "end",
+          "whisper": 26800.236,
+          "parakeet": 26800.376
+        },
+        {
+          "word_index": 91,
+          "edge": "start",
+          "whisper": 26800.236,
+          "parakeet": 26800.376
+        },
+        {
+          "word_index": 91,
+          "edge": "end",
+          "whisper": 26800.336,
+          "parakeet": 26800.456
+        },
+        {
+          "word_index": 92,
+          "edge": "start",
+          "whisper": 26800.336,
+          "parakeet": 26800.456
+        },
+        {
+          "word_index": 96,
+          "edge": "start",
+          "whisper": 26801.436,
+          "parakeet": 26801.656
+        },
+        {
+          "word_index": 97,
+          "edge": "start",
+          "whisper": 26801.656,
+          "parakeet": 26801.816
+        },
+        {
+          "word_index": 97,
+          "edge": "end",
+          "whisper": 26802.016,
+          "parakeet": 26802.296
+        },
+        {
+          "word_index": 98,
+          "edge": "start",
+          "whisper": 26802.016,
+          "parakeet": 26802.296
+        },
+        {
+          "word_index": 98,
+          "edge": "end",
+          "whisper": 26802.876,
+          "parakeet": 26803.016
+        },
+        {
+          "word_index": 99,
+          "edge": "start",
+          "whisper": 26802.876,
+          "parakeet": 26803.016
+        },
+        {
+          "word_index": 99,
+          "edge": "end",
+          "whisper": 26803.016,
+          "parakeet": 26803.176
+        },
+        {
+          "word_index": 100,
+          "edge": "start",
+          "whisper": 26803.016,
+          "parakeet": 26803.176
+        },
+        {
+          "word_index": 100,
+          "edge": "end",
+          "whisper": 26803.116,
+          "parakeet": 26803.336
+        },
+        {
+          "word_index": 101,
+          "edge": "start",
+          "whisper": 26803.116,
+          "parakeet": 26803.336
+        },
+        {
+          "word_index": 101,
+          "edge": "end",
+          "whisper": 26803.236,
+          "parakeet": 26803.416
+        },
+        {
+          "word_index": 102,
+          "edge": "start",
+          "whisper": 26803.236,
+          "parakeet": 26803.416
+        },
+        {
+          "word_index": 102,
+          "edge": "end",
+          "whisper": 26803.496,
+          "parakeet": 26803.656
+        },
+        {
+          "word_index": 103,
+          "edge": "start",
+          "whisper": 26803.496,
+          "parakeet": 26803.656
+        },
+        {
+          "word_index": 110,
+          "edge": "start",
+          "whisper": 26804.896,
+          "parakeet": 26805.016
+        },
+        {
+          "word_index": 110,
+          "edge": "end",
+          "whisper": 26805.316,
+          "parakeet": 26805.096
+        },
+        {
+          "word_index": 111,
+          "edge": "start",
+          "whisper": 26805.316,
+          "parakeet": 26805.176
+        },
+        {
+          "word_index": 111,
+          "edge": "end",
+          "whisper": 26805.436,
+          "parakeet": 26805.336
+        },
+        {
+          "word_index": 112,
+          "edge": "start",
+          "whisper": 26805.436,
+          "parakeet": 26805.776
+        },
+        {
+          "word_index": 112,
+          "edge": "end",
+          "whisper": 26805.616,
+          "parakeet": 26806.176
+        },
+        {
+          "word_index": 113,
+          "edge": "start",
+          "whisper": 26805.616,
+          "parakeet": 26806.176
+        },
+        {
+          "word_index": 113,
+          "edge": "end",
+          "whisper": 26806.156,
+          "parakeet": 26806.336
+        },
+        {
+          "word_index": 114,
+          "edge": "start",
+          "whisper": 26806.156,
+          "parakeet": 26806.336
+        },
+        {
+          "word_index": 115,
+          "edge": "end",
+          "whisper": 26806.656,
+          "parakeet": 26806.816
+        },
+        {
+          "word_index": 116,
+          "edge": "start",
+          "whisper": 26806.656,
+          "parakeet": 26806.816
+        },
+        {
+          "word_index": 117,
+          "edge": "end",
+          "whisper": 26807.136,
+          "parakeet": 26807.296
+        },
+        {
+          "word_index": 118,
+          "edge": "start",
+          "whisper": 26807.256,
+          "parakeet": 26807.456
+        },
+        {
+          "word_index": 118,
+          "edge": "end",
+          "whisper": 26807.696,
+          "parakeet": 26808.096
+        },
+        {
+          "word_index": 119,
+          "edge": "start",
+          "whisper": 26807.696,
+          "parakeet": 26808.096
+        },
+        {
+          "word_index": 119,
+          "edge": "end",
+          "whisper": 26808.136,
+          "parakeet": 26808.256
+        },
+        {
+          "word_index": 120,
+          "edge": "start",
+          "whisper": 26808.216,
+          "parakeet": 26808.336
+        },
+        {
+          "word_index": 121,
+          "edge": "end",
+          "whisper": 26808.636,
+          "parakeet": 26808.816
+        },
+        {
+          "word_index": 122,
+          "edge": "start",
+          "whisper": 26808.636,
+          "parakeet": 26808.816
+        },
+        {
+          "word_index": 122,
+          "edge": "end",
+          "whisper": 26808.956,
+          "parakeet": 26809.216
+        },
+        {
+          "word_index": 123,
+          "edge": "start",
+          "whisper": 26808.956,
+          "parakeet": 26809.216
+        },
+        {
+          "word_index": 124,
+          "edge": "start",
+          "whisper": 26809.256,
+          "parakeet": 26809.376
+        },
+        {
+          "word_index": 125,
+          "edge": "end",
+          "whisper": 26809.616,
+          "parakeet": 26809.776
+        },
+        {
+          "word_index": 126,
+          "edge": "start",
+          "whisper": 26809.616,
+          "parakeet": 26809.776
+        },
+        {
+          "word_index": 126,
+          "edge": "end",
+          "whisper": 26809.856,
+          "parakeet": 26810.016
+        },
+        {
+          "word_index": 127,
+          "edge": "start",
+          "whisper": 26809.976,
+          "parakeet": 26810.176
+        },
+        {
+          "word_index": 128,
+          "edge": "start",
+          "whisper": 26810.316,
+          "parakeet": 26810.416
+        },
+        {
+          "word_index": 128,
+          "edge": "end",
+          "whisper": 26810.536,
+          "parakeet": 26810.656
+        },
+        {
+          "word_index": 129,
+          "edge": "start",
+          "whisper": 26810.536,
+          "parakeet": 26810.656
+        },
+        {
+          "word_index": 129,
+          "edge": "end",
+          "whisper": 26810.656,
+          "parakeet": 26810.816
+        },
+        {
+          "word_index": 130,
+          "edge": "start",
+          "whisper": 26810.656,
+          "parakeet": 26810.816
+        },
+        {
+          "word_index": 130,
+          "edge": "end",
+          "whisper": 26810.776,
+          "parakeet": 26810.896
+        },
+        {
+          "word_index": 131,
+          "edge": "start",
+          "whisper": 26810.776,
+          "parakeet": 26810.896
+        },
+        {
+          "word_index": 131,
+          "edge": "end",
+          "whisper": 26810.876,
+          "parakeet": 26811.056
+        },
+        {
+          "word_index": 132,
+          "edge": "start",
+          "whisper": 26810.876,
+          "parakeet": 26811.056
+        },
+        {
+          "word_index": 132,
+          "edge": "end",
+          "whisper": 26811.196,
+          "parakeet": 26811.376
+        },
+        {
+          "word_index": 133,
+          "edge": "start",
+          "whisper": 26811.196,
+          "parakeet": 26811.376
+        },
+        {
+          "word_index": 133,
+          "edge": "end",
+          "whisper": 26811.416,
+          "parakeet": 26811.536
+        },
+        {
+          "word_index": 134,
+          "edge": "start",
+          "whisper": 26811.416,
+          "parakeet": 26811.536
+        },
+        {
+          "word_index": 134,
+          "edge": "end",
+          "whisper": 26811.496,
+          "parakeet": 26811.616
+        },
+        {
+          "word_index": 135,
+          "edge": "start",
+          "whisper": 26811.496,
+          "parakeet": 26811.616
+        },
+        {
+          "word_index": 135,
+          "edge": "end",
+          "whisper": 26811.836,
+          "parakeet": 26811.936
+        },
+        {
+          "word_index": 137,
+          "edge": "start",
+          "whisper": 26812.116,
+          "parakeet": 26812.256
+        },
+        {
+          "word_index": 137,
+          "edge": "end",
+          "whisper": 26812.296,
+          "parakeet": 26812.416
+        },
+        {
+          "word_index": 138,
+          "edge": "start",
+          "whisper": 26812.356,
+          "parakeet": 26812.496
+        },
+        {
+          "word_index": 138,
+          "edge": "end",
+          "whisper": 26812.476,
+          "parakeet": 26812.656
+        },
+        {
+          "word_index": 139,
+          "edge": "start",
+          "whisper": 26812.476,
+          "parakeet": 26812.656
+        },
+        {
+          "word_index": 139,
+          "edge": "end",
+          "whisper": 26812.616,
+          "parakeet": 26812.816
+        },
+        {
+          "word_index": 140,
+          "edge": "start",
+          "whisper": 26812.616,
+          "parakeet": 26812.816
+        },
+        {
+          "word_index": 140,
+          "edge": "end",
+          "whisper": 26812.876,
+          "parakeet": 26813.056
+        },
+        {
+          "word_index": 141,
+          "edge": "start",
+          "whisper": 26812.876,
+          "parakeet": 26813.056
+        },
+        {
+          "word_index": 141,
+          "edge": "end",
+          "whisper": 26813.096,
+          "parakeet": 26813.216
+        },
+        {
+          "word_index": 142,
+          "edge": "end",
+          "whisper": 26813.276,
+          "parakeet": 26813.456
+        },
+        {
+          "word_index": 143,
+          "edge": "start",
+          "whisper": 26813.316,
+          "parakeet": 26813.536
+        },
+        {
+          "word_index": 143,
+          "edge": "end",
+          "whisper": 26813.736,
+          "parakeet": 26814.016
+        },
+        {
+          "word_index": 144,
+          "edge": "start",
+          "whisper": 26813.736,
+          "parakeet": 26814.016
+        },
+        {
+          "word_index": 144,
+          "edge": "end",
+          "whisper": 26813.996,
+          "parakeet": 26814.416
+        },
+        {
+          "word_index": 145,
+          "edge": "start",
+          "whisper": 26813.996,
+          "parakeet": 26814.416
+        },
+        {
+          "word_index": 145,
+          "edge": "end",
+          "whisper": 26814.436,
+          "parakeet": 26814.736
+        },
+        {
+          "word_index": 146,
+          "edge": "start",
+          "whisper": 26814.856,
+          "parakeet": 26815.056
+        },
+        {
+          "word_index": 146,
+          "edge": "end",
+          "whisper": 26815.296,
+          "parakeet": 26815.696
+        },
+        {
+          "word_index": 147,
+          "edge": "start",
+          "whisper": 26815.296,
+          "parakeet": 26815.696
+        },
+        {
+          "word_index": 147,
+          "edge": "end",
+          "whisper": 26815.676,
+          "parakeet": 26815.936
+        },
+        {
+          "word_index": 148,
+          "edge": "start",
+          "whisper": 26815.676,
+          "parakeet": 26815.936
+        },
+        {
+          "word_index": 148,
+          "edge": "end",
+          "whisper": 26816.616,
+          "parakeet": 26816.736
+        },
+        {
+          "word_index": 149,
+          "edge": "end",
+          "whisper": 26817.136,
+          "parakeet": 26816.976
+        },
+        {
+          "word_index": 150,
+          "edge": "start",
+          "whisper": 26817.136,
+          "parakeet": 26816.976
+        },
+        {
+          "word_index": 150,
+          "edge": "end",
+          "whisper": 26817.296,
+          "parakeet": 26817.136
+        },
+        {
+          "word_index": 151,
+          "edge": "start",
+          "whisper": 26817.296,
+          "parakeet": 26817.136
+        },
+        {
+          "word_index": 152,
+          "edge": "end",
+          "whisper": 26817.676,
+          "parakeet": 26817.456
+        },
+        {
+          "word_index": 154,
+          "edge": "end",
+          "whisper": 26818.556,
+          "parakeet": 26818.096
+        },
+        {
+          "word_index": 157,
+          "edge": "end",
+          "whisper": 26818.576,
+          "parakeet": 26818.896
+        },
+        {
+          "word_index": 158,
+          "edge": "start",
+          "whisper": 26818.576,
+          "parakeet": 26818.896
+        },
+        {
+          "word_index": 158,
+          "edge": "end",
+          "whisper": 26818.776,
+          "parakeet": 26819.056
+        },
+        {
+          "word_index": 159,
+          "edge": "start",
+          "whisper": 26818.776,
+          "parakeet": 26819.056
+        },
+        {
+          "word_index": 159,
+          "edge": "end",
+          "whisper": 26819.116,
+          "parakeet": 26819.456
+        },
+        {
+          "word_index": 160,
+          "edge": "start",
+          "whisper": 26819.116,
+          "parakeet": 26819.456
+        },
+        {
+          "word_index": 160,
+          "edge": "end",
+          "whisper": 26819.436,
+          "parakeet": 26819.696
+        },
+        {
+          "word_index": 161,
+          "edge": "start",
+          "whisper": 26819.436,
+          "parakeet": 26819.696
+        },
+        {
+          "word_index": 161,
+          "edge": "end",
+          "whisper": 26819.916,
+          "parakeet": 26820.256
+        },
+        {
+          "word_index": 165,
+          "edge": "start",
+          "whisper": 26822.076,
+          "parakeet": 26822.216
+        },
+        {
+          "word_index": 165,
+          "edge": "end",
+          "whisper": 26822.276,
+          "parakeet": 26822.456
+        },
+        {
+          "word_index": 166,
+          "edge": "start",
+          "whisper": 26822.276,
+          "parakeet": 26822.456
+        },
+        {
+          "word_index": 168,
+          "edge": "end",
+          "whisper": 26822.856,
+          "parakeet": 26823.016
+        },
+        {
+          "word_index": 169,
+          "edge": "start",
+          "whisper": 26822.856,
+          "parakeet": 26823.096
+        },
+        {
+          "word_index": 169,
+          "edge": "end",
+          "whisper": 26823.196,
+          "parakeet": 26823.336
+        },
+        {
+          "word_index": 170,
+          "edge": "start",
+          "whisper": 26823.196,
+          "parakeet": 26823.336
+        },
+        {
+          "word_index": 172,
+          "edge": "end",
+          "whisper": 26823.896,
+          "parakeet": 26824.056
+        },
+        {
+          "word_index": 173,
+          "edge": "start",
+          "whisper": 26823.896,
+          "parakeet": 26824.216
+        },
+        {
+          "word_index": 173,
+          "edge": "end",
+          "whisper": 26824.196,
+          "parakeet": 26824.456
+        },
+        {
+          "word_index": 174,
+          "edge": "start",
+          "whisper": 26824.196,
+          "parakeet": 26824.456
+        },
+        {
+          "word_index": 174,
+          "edge": "end",
+          "whisper": 26824.436,
+          "parakeet": 26824.616
+        },
+        {
+          "word_index": 175,
+          "edge": "start",
+          "whisper": 26824.436,
+          "parakeet": 26824.616
+        },
+        {
+          "word_index": 175,
+          "edge": "end",
+          "whisper": 26824.616,
+          "parakeet": 26824.856
+        },
+        {
+          "word_index": 176,
+          "edge": "start",
+          "whisper": 26824.616,
+          "parakeet": 26824.856
+        },
+        {
+          "word_index": 176,
+          "edge": "end",
+          "whisper": 26824.796,
+          "parakeet": 26825.016
+        },
+        {
+          "word_index": 177,
+          "edge": "start",
+          "whisper": 26824.796,
+          "parakeet": 26825.016
+        },
+        {
+          "word_index": 177,
+          "edge": "end",
+          "whisper": 26825.156,
+          "parakeet": 26825.256
+        },
+        {
+          "word_index": 178,
+          "edge": "end",
+          "whisper": 26825.456,
+          "parakeet": 26825.576
+        },
+        {
+          "word_index": 179,
+          "edge": "start",
+          "whisper": 26825.456,
+          "parakeet": 26825.576
+        },
+        {
+          "word_index": 180,
+          "edge": "end",
+          "whisper": 26825.796,
+          "parakeet": 26825.896
+        },
+        {
+          "word_index": 181,
+          "edge": "start",
+          "whisper": 26825.796,
+          "parakeet": 26825.896
+        },
+        {
+          "word_index": 181,
+          "edge": "end",
+          "whisper": 26825.896,
+          "parakeet": 26826.056
+        },
+        {
+          "word_index": 182,
+          "edge": "start",
+          "whisper": 26825.896,
+          "parakeet": 26826.056
+        },
+        {
+          "word_index": 183,
+          "edge": "end",
+          "whisper": 26826.216,
+          "parakeet": 26826.376
+        },
+        {
+          "word_index": 184,
+          "edge": "start",
+          "whisper": 26826.216,
+          "parakeet": 26826.376
+        },
+        {
+          "word_index": 184,
+          "edge": "end",
+          "whisper": 26826.396,
+          "parakeet": 26826.536
+        },
+        {
+          "word_index": 185,
+          "edge": "start",
+          "whisper": 26826.396,
+          "parakeet": 26826.536
+        },
+        {
+          "word_index": 185,
+          "edge": "end",
+          "whisper": 26826.476,
+          "parakeet": 26826.696
+        },
+        {
+          "word_index": 186,
+          "edge": "start",
+          "whisper": 26826.476,
+          "parakeet": 26826.696
+        },
+        {
+          "word_index": 186,
+          "edge": "end",
+          "whisper": 26826.656,
+          "parakeet": 26826.856
+        },
+        {
+          "word_index": 187,
+          "edge": "start",
+          "whisper": 26826.996,
+          "parakeet": 26827.256
+        },
+        {
+          "word_index": 187,
+          "edge": "end",
+          "whisper": 26827.436,
+          "parakeet": 26827.576
+        },
+        {
+          "word_index": 188,
+          "edge": "start",
+          "whisper": 26827.436,
+          "parakeet": 26827.576
+        },
+        {
+          "word_index": 188,
+          "edge": "end",
+          "whisper": 26827.656,
+          "parakeet": 26827.896
+        },
+        {
+          "word_index": 189,
+          "edge": "start",
+          "whisper": 26827.656,
+          "parakeet": 26827.896
+        },
+        {
+          "word_index": 189,
+          "edge": "end",
+          "whisper": 26827.896,
+          "parakeet": 26828.136
+        },
+        {
+          "word_index": 190,
+          "edge": "start",
+          "whisper": 26827.896,
+          "parakeet": 26828.136
+        },
+        {
+          "word_index": 190,
+          "edge": "end",
+          "whisper": 26828.176,
+          "parakeet": 26828.696
+        },
+        {
+          "word_index": 191,
+          "edge": "start",
+          "whisper": 26828.596,
+          "parakeet": 26828.936
+        },
+        {
+          "word_index": 191,
+          "edge": "end",
+          "whisper": 26828.936,
+          "parakeet": 26829.256
+        },
+        {
+          "word_index": 192,
+          "edge": "start",
+          "whisper": 26829.116,
+          "parakeet": 26829.496
+        },
+        {
+          "word_index": 193,
+          "edge": "end",
+          "whisper": 26829.996,
+          "parakeet": 26830.136
+        },
+        {
+          "word_index": 194,
+          "edge": "start",
+          "whisper": 26829.996,
+          "parakeet": 26830.136
+        },
+        {
+          "word_index": 194,
+          "edge": "end",
+          "whisper": 26830.156,
+          "parakeet": 26830.696
+        },
+        {
+          "word_index": 195,
+          "edge": "start",
+          "whisper": 26830.156,
+          "parakeet": 26830.696
+        },
+        {
+          "word_index": 195,
+          "edge": "end",
+          "whisper": 26830.356,
+          "parakeet": 26831.016
+        },
+        {
+          "word_index": 202,
+          "edge": "start",
+          "whisper": 26834.596,
+          "parakeet": 26834.376
+        },
+        {
+          "word_index": 202,
+          "edge": "end",
+          "whisper": 26834.676,
+          "parakeet": 26834.456
+        },
+        {
+          "word_index": 203,
+          "edge": "start",
+          "whisper": 26834.676,
+          "parakeet": 26834.456
+        },
+        {
+          "word_index": 203,
+          "edge": "end",
+          "whisper": 26834.876,
+          "parakeet": 26834.536
+        },
+        {
+          "word_index": 204,
+          "edge": "start",
+          "whisper": 26834.896,
+          "parakeet": 26834.696
+        }
       ]
     },
     {
@@ -4474,6 +9049,1077 @@
           "word": " bro.",
           "probability": 0.0102
         }
+      ],
+      "incertos": [
+        {
+          "start": 31237.568,
+          "end": 31237.588,
+          "whisper": "It's the",
+          "parakeet": "",
+          "vad_fala_pct": 0.0
+        },
+        {
+          "start": 31248.928,
+          "end": 31249.728,
+          "whisper": "Let me",
+          "parakeet": "Sure. Then we",
+          "vad_fala_pct": 28.0
+        },
+        {
+          "start": 31250.288,
+          "end": 31252.808,
+          "whisper": "Let's have a",
+          "parakeet": "to avoid the bigger.I'm gonna",
+          "vad_fala_pct": 82.2
+        },
+        {
+          "start": 31253.128,
+          "end": 31253.208,
+          "whisper": "",
+          "parakeet": "uh",
+          "vad_fala_pct": 100
+        },
+        {
+          "start": 31264.788,
+          "end": 31265.208,
+          "whisper": "them.",
+          "parakeet": "'em.",
+          "vad_fala_pct": 0.0
+        },
+        {
+          "start": 31274.308,
+          "end": 31274.608,
+          "whisper": "them",
+          "parakeet": "him",
+          "vad_fala_pct": 0.0
+        },
+        {
+          "start": 31278.368,
+          "end": 31279.328,
+          "whisper": "I'm",
+          "parakeet": "We have Fregan",
+          "vad_fala_pct": 50.0
+        },
+        {
+          "start": 31278.928,
+          "end": 31279.488,
+          "whisper": "to freaking go",
+          "parakeet": "",
+          "vad_fala_pct": 100
+        },
+        {
+          "start": 31279.568,
+          "end": 31279.648,
+          "whisper": "the",
+          "parakeet": "",
+          "vad_fala_pct": 100
+        },
+        {
+          "start": 31293.968,
+          "end": 31294.408,
+          "whisper": "close",
+          "parakeet": "caught",
+          "vad_fala_pct": 100
+        },
+        {
+          "start": 31297.568,
+          "end": 31299.408,
+          "whisper": "You got your dumb ass, bro.",
+          "parakeet": "Yeah, yeah.",
+          "vad_fala_pct": 0.0
+        }
+      ],
+      "bordas_incertas": [
+        {
+          "word_index": 2,
+          "edge": "start",
+          "whisper": 31237.588,
+          "parakeet": 31237.808
+        },
+        {
+          "word_index": 2,
+          "edge": "end",
+          "whisper": 31237.748,
+          "parakeet": 31237.888
+        },
+        {
+          "word_index": 3,
+          "edge": "start",
+          "whisper": 31237.748,
+          "parakeet": 31237.968
+        },
+        {
+          "word_index": 3,
+          "edge": "end",
+          "whisper": 31238.008,
+          "parakeet": 31238.368
+        },
+        {
+          "word_index": 4,
+          "edge": "start",
+          "whisper": 31238.008,
+          "parakeet": 31238.368
+        },
+        {
+          "word_index": 4,
+          "edge": "end",
+          "whisper": 31238.268,
+          "parakeet": 31238.528
+        },
+        {
+          "word_index": 5,
+          "edge": "start",
+          "whisper": 31238.268,
+          "parakeet": 31238.528
+        },
+        {
+          "word_index": 5,
+          "edge": "end",
+          "whisper": 31238.508,
+          "parakeet": 31238.688
+        },
+        {
+          "word_index": 6,
+          "edge": "start",
+          "whisper": 31238.508,
+          "parakeet": 31238.768
+        },
+        {
+          "word_index": 6,
+          "edge": "end",
+          "whisper": 31238.728,
+          "parakeet": 31239.008
+        },
+        {
+          "word_index": 7,
+          "edge": "start",
+          "whisper": 31238.728,
+          "parakeet": 31239.008
+        },
+        {
+          "word_index": 7,
+          "edge": "end",
+          "whisper": 31239.028,
+          "parakeet": 31239.248
+        },
+        {
+          "word_index": 8,
+          "edge": "start",
+          "whisper": 31239.028,
+          "parakeet": 31239.248
+        },
+        {
+          "word_index": 8,
+          "edge": "end",
+          "whisper": 31239.468,
+          "parakeet": 31239.648
+        },
+        {
+          "word_index": 9,
+          "edge": "start",
+          "whisper": 31239.468,
+          "parakeet": 31239.648
+        },
+        {
+          "word_index": 10,
+          "edge": "end",
+          "whisper": 31240.168,
+          "parakeet": 31240.288
+        },
+        {
+          "word_index": 11,
+          "edge": "start",
+          "whisper": 31240.348,
+          "parakeet": 31240.528
+        },
+        {
+          "word_index": 11,
+          "edge": "end",
+          "whisper": 31240.588,
+          "parakeet": 31240.848
+        },
+        {
+          "word_index": 12,
+          "edge": "start",
+          "whisper": 31240.768,
+          "parakeet": 31241.008
+        },
+        {
+          "word_index": 12,
+          "edge": "end",
+          "whisper": 31241.088,
+          "parakeet": 31241.248
+        },
+        {
+          "word_index": 13,
+          "edge": "start",
+          "whisper": 31241.088,
+          "parakeet": 31241.248
+        },
+        {
+          "word_index": 14,
+          "edge": "end",
+          "whisper": 31241.548,
+          "parakeet": 31241.648
+        },
+        {
+          "word_index": 15,
+          "edge": "start",
+          "whisper": 31241.548,
+          "parakeet": 31241.728
+        },
+        {
+          "word_index": 15,
+          "edge": "end",
+          "whisper": 31241.608,
+          "parakeet": 31241.808
+        },
+        {
+          "word_index": 16,
+          "edge": "start",
+          "whisper": 31241.608,
+          "parakeet": 31241.968
+        },
+        {
+          "word_index": 16,
+          "edge": "end",
+          "whisper": 31241.608,
+          "parakeet": 31242.048
+        },
+        {
+          "word_index": 17,
+          "edge": "start",
+          "whisper": 31241.608,
+          "parakeet": 31242.128
+        },
+        {
+          "word_index": 17,
+          "edge": "end",
+          "whisper": 31242.188,
+          "parakeet": 31242.448
+        },
+        {
+          "word_index": 18,
+          "edge": "start",
+          "whisper": 31242.428,
+          "parakeet": 31242.608
+        },
+        {
+          "word_index": 21,
+          "edge": "start",
+          "whisper": 31243.468,
+          "parakeet": 31243.728
+        },
+        {
+          "word_index": 21,
+          "edge": "end",
+          "whisper": 31243.708,
+          "parakeet": 31243.968
+        },
+        {
+          "word_index": 22,
+          "edge": "start",
+          "whisper": 31243.828,
+          "parakeet": 31244.128
+        },
+        {
+          "word_index": 22,
+          "edge": "end",
+          "whisper": 31244.208,
+          "parakeet": 31244.368
+        },
+        {
+          "word_index": 23,
+          "edge": "start",
+          "whisper": 31244.208,
+          "parakeet": 31244.368
+        },
+        {
+          "word_index": 23,
+          "edge": "end",
+          "whisper": 31244.368,
+          "parakeet": 31244.528
+        },
+        {
+          "word_index": 24,
+          "edge": "start",
+          "whisper": 31244.368,
+          "parakeet": 31244.528
+        },
+        {
+          "word_index": 24,
+          "edge": "end",
+          "whisper": 31244.508,
+          "parakeet": 31244.688
+        },
+        {
+          "word_index": 25,
+          "edge": "start",
+          "whisper": 31244.508,
+          "parakeet": 31244.688
+        },
+        {
+          "word_index": 25,
+          "edge": "end",
+          "whisper": 31244.648,
+          "parakeet": 31244.768
+        },
+        {
+          "word_index": 26,
+          "edge": "start",
+          "whisper": 31244.648,
+          "parakeet": 31244.768
+        },
+        {
+          "word_index": 30,
+          "edge": "end",
+          "whisper": 31245.568,
+          "parakeet": 31245.728
+        },
+        {
+          "word_index": 31,
+          "edge": "start",
+          "whisper": 31245.768,
+          "parakeet": 31245.968
+        },
+        {
+          "word_index": 31,
+          "edge": "end",
+          "whisper": 31246.028,
+          "parakeet": 31246.288
+        },
+        {
+          "word_index": 32,
+          "edge": "start",
+          "whisper": 31246.208,
+          "parakeet": 31246.448
+        },
+        {
+          "word_index": 32,
+          "edge": "end",
+          "whisper": 31246.468,
+          "parakeet": 31246.688
+        },
+        {
+          "word_index": 33,
+          "edge": "start",
+          "whisper": 31246.468,
+          "parakeet": 31246.688
+        },
+        {
+          "word_index": 33,
+          "edge": "end",
+          "whisper": 31246.728,
+          "parakeet": 31246.928
+        },
+        {
+          "word_index": 34,
+          "edge": "start",
+          "whisper": 31246.728,
+          "parakeet": 31246.928
+        },
+        {
+          "word_index": 34,
+          "edge": "end",
+          "whisper": 31247.048,
+          "parakeet": 31247.328
+        },
+        {
+          "word_index": 35,
+          "edge": "start",
+          "whisper": 31247.048,
+          "parakeet": 31247.328
+        },
+        {
+          "word_index": 35,
+          "edge": "end",
+          "whisper": 31247.348,
+          "parakeet": 31247.568
+        },
+        {
+          "word_index": 36,
+          "edge": "start",
+          "whisper": 31247.348,
+          "parakeet": 31247.568
+        },
+        {
+          "word_index": 36,
+          "edge": "end",
+          "whisper": 31247.588,
+          "parakeet": 31247.808
+        },
+        {
+          "word_index": 37,
+          "edge": "start",
+          "whisper": 31247.708,
+          "parakeet": 31247.968
+        },
+        {
+          "word_index": 39,
+          "edge": "end",
+          "whisper": 31248.648,
+          "parakeet": 31248.768
+        },
+        {
+          "word_index": 50,
+          "edge": "start",
+          "whisper": 31253.228,
+          "parakeet": 31254.408
+        },
+        {
+          "word_index": 51,
+          "edge": "start",
+          "whisper": 31255.288,
+          "parakeet": 31255.528
+        },
+        {
+          "word_index": 51,
+          "edge": "end",
+          "whisper": 31255.768,
+          "parakeet": 31255.928
+        },
+        {
+          "word_index": 52,
+          "edge": "start",
+          "whisper": 31255.768,
+          "parakeet": 31255.928
+        },
+        {
+          "word_index": 52,
+          "edge": "end",
+          "whisper": 31256.008,
+          "parakeet": 31256.248
+        },
+        {
+          "word_index": 53,
+          "edge": "start",
+          "whisper": 31256.008,
+          "parakeet": 31256.328
+        },
+        {
+          "word_index": 54,
+          "edge": "end",
+          "whisper": 31256.708,
+          "parakeet": 31256.888
+        },
+        {
+          "word_index": 55,
+          "edge": "start",
+          "whisper": 31256.708,
+          "parakeet": 31256.888
+        },
+        {
+          "word_index": 55,
+          "edge": "end",
+          "whisper": 31256.828,
+          "parakeet": 31257.048
+        },
+        {
+          "word_index": 56,
+          "edge": "start",
+          "whisper": 31256.828,
+          "parakeet": 31257.048
+        },
+        {
+          "word_index": 56,
+          "edge": "end",
+          "whisper": 31257.068,
+          "parakeet": 31257.288
+        },
+        {
+          "word_index": 57,
+          "edge": "start",
+          "whisper": 31257.068,
+          "parakeet": 31257.288
+        },
+        {
+          "word_index": 57,
+          "edge": "end",
+          "whisper": 31257.488,
+          "parakeet": 31257.768
+        },
+        {
+          "word_index": 58,
+          "edge": "start",
+          "whisper": 31257.688,
+          "parakeet": 31257.928
+        },
+        {
+          "word_index": 62,
+          "edge": "start",
+          "whisper": 31258.548,
+          "parakeet": 31258.648
+        },
+        {
+          "word_index": 62,
+          "edge": "end",
+          "whisper": 31258.668,
+          "parakeet": 31258.808
+        },
+        {
+          "word_index": 63,
+          "edge": "start",
+          "whisper": 31258.668,
+          "parakeet": 31258.808
+        },
+        {
+          "word_index": 63,
+          "edge": "end",
+          "whisper": 31258.828,
+          "parakeet": 31258.968
+        },
+        {
+          "word_index": 64,
+          "edge": "start",
+          "whisper": 31258.828,
+          "parakeet": 31258.968
+        },
+        {
+          "word_index": 64,
+          "edge": "end",
+          "whisper": 31259.048,
+          "parakeet": 31259.208
+        },
+        {
+          "word_index": 65,
+          "edge": "start",
+          "whisper": 31259.048,
+          "parakeet": 31259.208
+        },
+        {
+          "word_index": 65,
+          "edge": "end",
+          "whisper": 31259.288,
+          "parakeet": 31259.448
+        },
+        {
+          "word_index": 66,
+          "edge": "start",
+          "whisper": 31259.288,
+          "parakeet": 31259.448
+        },
+        {
+          "word_index": 66,
+          "edge": "end",
+          "whisper": 31259.628,
+          "parakeet": 31259.928
+        },
+        {
+          "word_index": 67,
+          "edge": "start",
+          "whisper": 31259.628,
+          "parakeet": 31259.928
+        },
+        {
+          "word_index": 67,
+          "edge": "end",
+          "whisper": 31259.908,
+          "parakeet": 31260.088
+        },
+        {
+          "word_index": 68,
+          "edge": "start",
+          "whisper": 31259.908,
+          "parakeet": 31260.088
+        },
+        {
+          "word_index": 70,
+          "edge": "end",
+          "whisper": 31260.528,
+          "parakeet": 31260.648
+        },
+        {
+          "word_index": 71,
+          "edge": "start",
+          "whisper": 31260.528,
+          "parakeet": 31260.648
+        },
+        {
+          "word_index": 71,
+          "edge": "end",
+          "whisper": 31260.648,
+          "parakeet": 31260.808
+        },
+        {
+          "word_index": 72,
+          "edge": "start",
+          "whisper": 31260.648,
+          "parakeet": 31260.808
+        },
+        {
+          "word_index": 72,
+          "edge": "end",
+          "whisper": 31260.888,
+          "parakeet": 31261.128
+        },
+        {
+          "word_index": 73,
+          "edge": "start",
+          "whisper": 31260.888,
+          "parakeet": 31261.128
+        },
+        {
+          "word_index": 73,
+          "edge": "end",
+          "whisper": 31261.128,
+          "parakeet": 31261.448
+        },
+        {
+          "word_index": 74,
+          "edge": "start",
+          "whisper": 31261.628,
+          "parakeet": 31261.768
+        },
+        {
+          "word_index": 76,
+          "edge": "end",
+          "whisper": 31262.448,
+          "parakeet": 31262.648
+        },
+        {
+          "word_index": 77,
+          "edge": "start",
+          "whisper": 31262.448,
+          "parakeet": 31262.648
+        },
+        {
+          "word_index": 77,
+          "edge": "end",
+          "whisper": 31262.708,
+          "parakeet": 31262.968
+        },
+        {
+          "word_index": 78,
+          "edge": "start",
+          "whisper": 31262.708,
+          "parakeet": 31262.968
+        },
+        {
+          "word_index": 78,
+          "edge": "end",
+          "whisper": 31262.988,
+          "parakeet": 31263.208
+        },
+        {
+          "word_index": 79,
+          "edge": "start",
+          "whisper": 31262.988,
+          "parakeet": 31263.208
+        },
+        {
+          "word_index": 79,
+          "edge": "end",
+          "whisper": 31263.328,
+          "parakeet": 31263.608
+        },
+        {
+          "word_index": 80,
+          "edge": "start",
+          "whisper": 31263.488,
+          "parakeet": 31263.768
+        },
+        {
+          "word_index": 80,
+          "edge": "end",
+          "whisper": 31263.888,
+          "parakeet": 31264.168
+        },
+        {
+          "word_index": 81,
+          "edge": "start",
+          "whisper": 31263.888,
+          "parakeet": 31264.168
+        },
+        {
+          "word_index": 81,
+          "edge": "end",
+          "whisper": 31264.148,
+          "parakeet": 31264.488
+        },
+        {
+          "word_index": 82,
+          "edge": "start",
+          "whisper": 31264.148,
+          "parakeet": 31264.488
+        },
+        {
+          "word_index": 82,
+          "edge": "end",
+          "whisper": 31264.508,
+          "parakeet": 31264.808
+        },
+        {
+          "word_index": 83,
+          "edge": "start",
+          "whisper": 31264.508,
+          "parakeet": 31264.808
+        },
+        {
+          "word_index": 83,
+          "edge": "end",
+          "whisper": 31264.788,
+          "parakeet": 31264.968
+        },
+        {
+          "word_index": 86,
+          "edge": "end",
+          "whisper": 31266.228,
+          "parakeet": 31266.408
+        },
+        {
+          "word_index": 87,
+          "edge": "start",
+          "whisper": 31266.228,
+          "parakeet": 31266.408
+        },
+        {
+          "word_index": 87,
+          "edge": "end",
+          "whisper": 31266.488,
+          "parakeet": 31266.648
+        },
+        {
+          "word_index": 88,
+          "edge": "start",
+          "whisper": 31266.488,
+          "parakeet": 31266.648
+        },
+        {
+          "word_index": 88,
+          "edge": "end",
+          "whisper": 31266.668,
+          "parakeet": 31266.888
+        },
+        {
+          "word_index": 89,
+          "edge": "start",
+          "whisper": 31266.668,
+          "parakeet": 31266.888
+        },
+        {
+          "word_index": 89,
+          "edge": "end",
+          "whisper": 31266.808,
+          "parakeet": 31267.208
+        },
+        {
+          "word_index": 92,
+          "edge": "end",
+          "whisper": 31268.208,
+          "parakeet": 31268.368
+        },
+        {
+          "word_index": 93,
+          "edge": "start",
+          "whisper": 31268.208,
+          "parakeet": 31268.368
+        },
+        {
+          "word_index": 93,
+          "edge": "end",
+          "whisper": 31268.348,
+          "parakeet": 31268.608
+        },
+        {
+          "word_index": 94,
+          "edge": "start",
+          "whisper": 31268.348,
+          "parakeet": 31268.608
+        },
+        {
+          "word_index": 94,
+          "edge": "end",
+          "whisper": 31268.568,
+          "parakeet": 31268.928
+        },
+        {
+          "word_index": 95,
+          "edge": "start",
+          "whisper": 31268.868,
+          "parakeet": 31269.088
+        },
+        {
+          "word_index": 95,
+          "edge": "end",
+          "whisper": 31269.228,
+          "parakeet": 31269.408
+        },
+        {
+          "word_index": 96,
+          "edge": "start",
+          "whisper": 31269.228,
+          "parakeet": 31269.408
+        },
+        {
+          "word_index": 96,
+          "edge": "end",
+          "whisper": 31269.388,
+          "parakeet": 31269.568
+        },
+        {
+          "word_index": 97,
+          "edge": "start",
+          "whisper": 31269.388,
+          "parakeet": 31269.568
+        },
+        {
+          "word_index": 102,
+          "edge": "end",
+          "whisper": 31270.728,
+          "parakeet": 31270.848
+        },
+        {
+          "word_index": 103,
+          "edge": "start",
+          "whisper": 31270.728,
+          "parakeet": 31270.848
+        },
+        {
+          "word_index": 103,
+          "edge": "end",
+          "whisper": 31270.888,
+          "parakeet": 31271.088
+        },
+        {
+          "word_index": 104,
+          "edge": "start",
+          "whisper": 31270.888,
+          "parakeet": 31271.088
+        },
+        {
+          "word_index": 104,
+          "edge": "end",
+          "whisper": 31271.088,
+          "parakeet": 31271.328
+        },
+        {
+          "word_index": 105,
+          "edge": "start",
+          "whisper": 31271.088,
+          "parakeet": 31271.328
+        },
+        {
+          "word_index": 105,
+          "edge": "end",
+          "whisper": 31271.248,
+          "parakeet": 31271.648
+        },
+        {
+          "word_index": 106,
+          "edge": "start",
+          "whisper": 31271.248,
+          "parakeet": 31271.648
+        },
+        {
+          "word_index": 106,
+          "edge": "end",
+          "whisper": 31271.488,
+          "parakeet": 31271.888
+        },
+        {
+          "word_index": 107,
+          "edge": "start",
+          "whisper": 31271.968,
+          "parakeet": 31272.128
+        },
+        {
+          "word_index": 108,
+          "edge": "end",
+          "whisper": 31272.528,
+          "parakeet": 31272.688
+        },
+        {
+          "word_index": 109,
+          "edge": "start",
+          "whisper": 31272.528,
+          "parakeet": 31272.688
+        },
+        {
+          "word_index": 111,
+          "edge": "end",
+          "whisper": 31273.208,
+          "parakeet": 31273.408
+        },
+        {
+          "word_index": 112,
+          "edge": "start",
+          "whisper": 31273.208,
+          "parakeet": 31273.408
+        },
+        {
+          "word_index": 112,
+          "edge": "end",
+          "whisper": 31273.508,
+          "parakeet": 31273.728
+        },
+        {
+          "word_index": 113,
+          "edge": "start",
+          "whisper": 31273.508,
+          "parakeet": 31273.728
+        },
+        {
+          "word_index": 113,
+          "edge": "end",
+          "whisper": 31273.768,
+          "parakeet": 31273.888
+        },
+        {
+          "word_index": 114,
+          "edge": "start",
+          "whisper": 31273.768,
+          "parakeet": 31273.888
+        },
+        {
+          "word_index": 114,
+          "edge": "end",
+          "whisper": 31273.888,
+          "parakeet": 31274.048
+        },
+        {
+          "word_index": 115,
+          "edge": "start",
+          "whisper": 31273.888,
+          "parakeet": 31274.048
+        },
+        {
+          "word_index": 115,
+          "edge": "end",
+          "whisper": 31274.148,
+          "parakeet": 31274.288
+        },
+        {
+          "word_index": 116,
+          "edge": "start",
+          "whisper": 31274.148,
+          "parakeet": 31274.288
+        },
+        {
+          "word_index": 116,
+          "edge": "end",
+          "whisper": 31274.308,
+          "parakeet": 31274.448
+        },
+        {
+          "word_index": 119,
+          "edge": "start",
+          "whisper": 31274.608,
+          "parakeet": 31274.848
+        },
+        {
+          "word_index": 119,
+          "edge": "end",
+          "whisper": 31274.828,
+          "parakeet": 31275.168
+        },
+        {
+          "word_index": 120,
+          "edge": "start",
+          "whisper": 31274.828,
+          "parakeet": 31275.168
+        },
+        {
+          "word_index": 120,
+          "edge": "end",
+          "whisper": 31275.288,
+          "parakeet": 31275.808
+        },
+        {
+          "word_index": 121,
+          "edge": "end",
+          "whisper": 31276.508,
+          "parakeet": 31277.088
+        },
+        {
+          "word_index": 130,
+          "edge": "start",
+          "whisper": 31279.808,
+          "parakeet": 31280.048
+        },
+        {
+          "word_index": 130,
+          "edge": "end",
+          "whisper": 31280.008,
+          "parakeet": 31280.768
+        },
+        {
+          "word_index": 131,
+          "edge": "start",
+          "whisper": 31289.548,
+          "parakeet": 31289.288
+        },
+        {
+          "word_index": 135,
+          "edge": "end",
+          "whisper": 31290.488,
+          "parakeet": 31290.648
+        },
+        {
+          "word_index": 136,
+          "edge": "start",
+          "whisper": 31290.488,
+          "parakeet": 31290.648
+        },
+        {
+          "word_index": 136,
+          "edge": "end",
+          "whisper": 31290.608,
+          "parakeet": 31290.808
+        },
+        {
+          "word_index": 137,
+          "edge": "start",
+          "whisper": 31290.608,
+          "parakeet": 31290.808
+        },
+        {
+          "word_index": 137,
+          "edge": "end",
+          "whisper": 31290.808,
+          "parakeet": 31291.048
+        },
+        {
+          "word_index": 138,
+          "edge": "start",
+          "whisper": 31290.808,
+          "parakeet": 31291.048
+        },
+        {
+          "word_index": 138,
+          "edge": "end",
+          "whisper": 31291.008,
+          "parakeet": 31291.288
+        },
+        {
+          "word_index": 139,
+          "edge": "start",
+          "whisper": 31291.128,
+          "parakeet": 31291.448
+        },
+        {
+          "word_index": 139,
+          "edge": "end",
+          "whisper": 31291.248,
+          "parakeet": 31291.768
+        },
+        {
+          "word_index": 143,
+          "edge": "end",
+          "whisper": 31293.968,
+          "parakeet": 31294.088
+        },
+        {
+          "word_index": 147,
+          "edge": "start",
+          "whisper": 31294.708,
+          "parakeet": 31295.128
+        },
+        {
+          "word_index": 147,
+          "edge": "end",
+          "whisper": 31294.888,
+          "parakeet": 31295.448
+        }
       ]
     },
     {
@@ -5148,6 +10794,726 @@
           "word": " them.",
           "probability": 0.0357
         }
+      ],
+      "incertos": [
+        {
+          "start": 35697.984,
+          "end": 35698.584,
+          "whisper": "I could just, you know... Hey, come on,",
+          "parakeet": "I'll be back.",
+          "vad_fala_pct": 100
+        },
+        {
+          "start": 35703.444,
+          "end": 35704.704,
+          "whisper": "overindulge.",
+          "parakeet": "over-indulge.",
+          "vad_fala_pct": 89.8
+        },
+        {
+          "start": 35727.324,
+          "end": 35727.824,
+          "whisper": "Cargo",
+          "parakeet": "Carro",
+          "vad_fala_pct": 0.0
+        },
+        {
+          "start": 35733.724,
+          "end": 35734.304,
+          "whisper": "unloaded",
+          "parakeet": "unload a",
+          "vad_fala_pct": 93.8
+        },
+        {
+          "start": 35743.684,
+          "end": 35744.344,
+          "whisper": "Meriwether",
+          "parakeet": "Merryweather",
+          "vad_fala_pct": 0.0
+        },
+        {
+          "start": 35745.524,
+          "end": 35747.384,
+          "whisper": "Oh, shit.",
+          "parakeet": "They out there looking for you.",
+          "vad_fala_pct": 20.6
+        },
+        {
+          "start": 35752.864,
+          "end": 35753.224,
+          "whisper": "I'll",
+          "parakeet": "I",
+          "vad_fala_pct": 0.0
+        },
+        {
+          "start": 35755.744,
+          "end": 35756.284,
+          "whisper": "I'll try to keep them.",
+          "parakeet": "Yeah.",
+          "vad_fala_pct": 0.0
+        }
+      ],
+      "bordas_incertas": [
+        {
+          "word_index": 0,
+          "edge": "start",
+          "whisper": 35695.744,
+          "parakeet": 35696.064
+        },
+        {
+          "word_index": 3,
+          "edge": "end",
+          "whisper": 35696.904,
+          "parakeet": 35697.024
+        },
+        {
+          "word_index": 4,
+          "edge": "start",
+          "whisper": 35696.904,
+          "parakeet": 35697.024
+        },
+        {
+          "word_index": 5,
+          "edge": "end",
+          "whisper": 35697.424,
+          "parakeet": 35697.264
+        },
+        {
+          "word_index": 6,
+          "edge": "start",
+          "whisper": 35697.464,
+          "parakeet": 35697.344
+        },
+        {
+          "word_index": 18,
+          "edge": "end",
+          "whisper": 35698.704,
+          "parakeet": 35699.024
+        },
+        {
+          "word_index": 19,
+          "edge": "start",
+          "whisper": 35698.984,
+          "parakeet": 35699.264
+        },
+        {
+          "word_index": 19,
+          "edge": "end",
+          "whisper": 35699.424,
+          "parakeet": 35699.744
+        },
+        {
+          "word_index": 20,
+          "edge": "start",
+          "whisper": 35699.424,
+          "parakeet": 35699.744
+        },
+        {
+          "word_index": 20,
+          "edge": "end",
+          "whisper": 35699.524,
+          "parakeet": 35699.984
+        },
+        {
+          "word_index": 21,
+          "edge": "start",
+          "whisper": 35699.524,
+          "parakeet": 35699.984
+        },
+        {
+          "word_index": 21,
+          "edge": "end",
+          "whisper": 35699.904,
+          "parakeet": 35700.304
+        },
+        {
+          "word_index": 22,
+          "edge": "start",
+          "whisper": 35700.564,
+          "parakeet": 35700.864
+        },
+        {
+          "word_index": 26,
+          "edge": "end",
+          "whisper": 35702.384,
+          "parakeet": 35702.544
+        },
+        {
+          "word_index": 27,
+          "edge": "start",
+          "whisper": 35702.484,
+          "parakeet": 35702.704
+        },
+        {
+          "word_index": 27,
+          "edge": "end",
+          "whisper": 35702.744,
+          "parakeet": 35703.024
+        },
+        {
+          "word_index": 28,
+          "edge": "start",
+          "whisper": 35702.844,
+          "parakeet": 35703.184
+        },
+        {
+          "word_index": 28,
+          "edge": "end",
+          "whisper": 35703.204,
+          "parakeet": 35703.424
+        },
+        {
+          "word_index": 29,
+          "edge": "start",
+          "whisper": 35703.204,
+          "parakeet": 35703.424
+        },
+        {
+          "word_index": 29,
+          "edge": "end",
+          "whisper": 35703.444,
+          "parakeet": 35703.664
+        },
+        {
+          "word_index": 31,
+          "edge": "end",
+          "whisper": 35706.164,
+          "parakeet": 35706.304
+        },
+        {
+          "word_index": 32,
+          "edge": "start",
+          "whisper": 35706.164,
+          "parakeet": 35706.304
+        },
+        {
+          "word_index": 39,
+          "edge": "end",
+          "whisper": 35707.764,
+          "parakeet": 35707.904
+        },
+        {
+          "word_index": 40,
+          "edge": "start",
+          "whisper": 35707.764,
+          "parakeet": 35707.904
+        },
+        {
+          "word_index": 40,
+          "edge": "end",
+          "whisper": 35707.844,
+          "parakeet": 35707.984
+        },
+        {
+          "word_index": 41,
+          "edge": "start",
+          "whisper": 35707.844,
+          "parakeet": 35707.984
+        },
+        {
+          "word_index": 41,
+          "edge": "end",
+          "whisper": 35707.944,
+          "parakeet": 35708.144
+        },
+        {
+          "word_index": 42,
+          "edge": "start",
+          "whisper": 35707.944,
+          "parakeet": 35708.144
+        },
+        {
+          "word_index": 42,
+          "edge": "end",
+          "whisper": 35708.184,
+          "parakeet": 35708.624
+        },
+        {
+          "word_index": 43,
+          "edge": "start",
+          "whisper": 35708.184,
+          "parakeet": 35708.624
+        },
+        {
+          "word_index": 43,
+          "edge": "end",
+          "whisper": 35708.524,
+          "parakeet": 35708.944
+        },
+        {
+          "word_index": 44,
+          "edge": "start",
+          "whisper": 35708.524,
+          "parakeet": 35709.264
+        },
+        {
+          "word_index": 44,
+          "edge": "end",
+          "whisper": 35709.484,
+          "parakeet": 35710.144
+        },
+        {
+          "word_index": 45,
+          "edge": "end",
+          "whisper": 35721.044,
+          "parakeet": 35721.624
+        },
+        {
+          "word_index": 46,
+          "edge": "start",
+          "whisper": 35721.624,
+          "parakeet": 35721.944
+        },
+        {
+          "word_index": 46,
+          "edge": "end",
+          "whisper": 35722.064,
+          "parakeet": 35722.264
+        },
+        {
+          "word_index": 47,
+          "edge": "start",
+          "whisper": 35722.784,
+          "parakeet": 35723.064
+        },
+        {
+          "word_index": 47,
+          "edge": "end",
+          "whisper": 35723.224,
+          "parakeet": 35723.544
+        },
+        {
+          "word_index": 48,
+          "edge": "start",
+          "whisper": 35723.224,
+          "parakeet": 35723.544
+        },
+        {
+          "word_index": 48,
+          "edge": "end",
+          "whisper": 35723.504,
+          "parakeet": 35723.784
+        },
+        {
+          "word_index": 49,
+          "edge": "start",
+          "whisper": 35723.664,
+          "parakeet": 35724.104
+        },
+        {
+          "word_index": 49,
+          "edge": "end",
+          "whisper": 35724.104,
+          "parakeet": 35724.424
+        },
+        {
+          "word_index": 52,
+          "edge": "start",
+          "whisper": 35727.904,
+          "parakeet": 35728.224
+        },
+        {
+          "word_index": 52,
+          "edge": "end",
+          "whisper": 35728.184,
+          "parakeet": 35728.784
+        },
+        {
+          "word_index": 53,
+          "edge": "start",
+          "whisper": 35731.824,
+          "parakeet": 35731.984
+        },
+        {
+          "word_index": 53,
+          "edge": "end",
+          "whisper": 35732.304,
+          "parakeet": 35732.144
+        },
+        {
+          "word_index": 54,
+          "edge": "start",
+          "whisper": 35732.304,
+          "parakeet": 35732.464
+        },
+        {
+          "word_index": 55,
+          "edge": "start",
+          "whisper": 35732.744,
+          "parakeet": 35732.864
+        },
+        {
+          "word_index": 55,
+          "edge": "end",
+          "whisper": 35733.044,
+          "parakeet": 35733.424
+        },
+        {
+          "word_index": 56,
+          "edge": "start",
+          "whisper": 35733.264,
+          "parakeet": 35733.504
+        },
+        {
+          "word_index": 59,
+          "edge": "start",
+          "whisper": 35734.364,
+          "parakeet": 35734.704
+        },
+        {
+          "word_index": 59,
+          "edge": "end",
+          "whisper": 35734.784,
+          "parakeet": 35735.024
+        },
+        {
+          "word_index": 60,
+          "edge": "start",
+          "whisper": 35734.924,
+          "parakeet": 35735.104
+        },
+        {
+          "word_index": 60,
+          "edge": "end",
+          "whisper": 35735.064,
+          "parakeet": 35735.264
+        },
+        {
+          "word_index": 61,
+          "edge": "start",
+          "whisper": 35735.064,
+          "parakeet": 35735.264
+        },
+        {
+          "word_index": 61,
+          "edge": "end",
+          "whisper": 35735.204,
+          "parakeet": 35735.424
+        },
+        {
+          "word_index": 62,
+          "edge": "start",
+          "whisper": 35735.204,
+          "parakeet": 35735.424
+        },
+        {
+          "word_index": 62,
+          "edge": "end",
+          "whisper": 35735.384,
+          "parakeet": 35735.664
+        },
+        {
+          "word_index": 63,
+          "edge": "start",
+          "whisper": 35735.384,
+          "parakeet": 35735.664
+        },
+        {
+          "word_index": 63,
+          "edge": "end",
+          "whisper": 35735.604,
+          "parakeet": 35735.904
+        },
+        {
+          "word_index": 64,
+          "edge": "start",
+          "whisper": 35735.604,
+          "parakeet": 35735.904
+        },
+        {
+          "word_index": 64,
+          "edge": "end",
+          "whisper": 35735.724,
+          "parakeet": 35736.224
+        },
+        {
+          "word_index": 65,
+          "edge": "start",
+          "whisper": 35735.724,
+          "parakeet": 35736.224
+        },
+        {
+          "word_index": 65,
+          "edge": "end",
+          "whisper": 35736.004,
+          "parakeet": 35736.544
+        },
+        {
+          "word_index": 66,
+          "edge": "start",
+          "whisper": 35739.044,
+          "parakeet": 35738.704
+        },
+        {
+          "word_index": 67,
+          "edge": "start",
+          "whisper": 35739.524,
+          "parakeet": 35739.744
+        },
+        {
+          "word_index": 71,
+          "edge": "end",
+          "whisper": 35741.424,
+          "parakeet": 35741.544
+        },
+        {
+          "word_index": 72,
+          "edge": "start",
+          "whisper": 35741.424,
+          "parakeet": 35741.544
+        },
+        {
+          "word_index": 72,
+          "edge": "end",
+          "whisper": 35741.484,
+          "parakeet": 35741.864
+        },
+        {
+          "word_index": 73,
+          "edge": "start",
+          "whisper": 35741.484,
+          "parakeet": 35741.864
+        },
+        {
+          "word_index": 73,
+          "edge": "end",
+          "whisper": 35742.084,
+          "parakeet": 35742.504
+        },
+        {
+          "word_index": 74,
+          "edge": "start",
+          "whisper": 35742.464,
+          "parakeet": 35742.744
+        },
+        {
+          "word_index": 74,
+          "edge": "end",
+          "whisper": 35742.944,
+          "parakeet": 35743.064
+        },
+        {
+          "word_index": 75,
+          "edge": "start",
+          "whisper": 35742.944,
+          "parakeet": 35743.064
+        },
+        {
+          "word_index": 79,
+          "edge": "start",
+          "whisper": 35744.384,
+          "parakeet": 35744.584
+        },
+        {
+          "word_index": 80,
+          "edge": "start",
+          "whisper": 35744.544,
+          "parakeet": 35744.664
+        },
+        {
+          "word_index": 81,
+          "edge": "end",
+          "whisper": 35744.864,
+          "parakeet": 35744.984
+        },
+        {
+          "word_index": 82,
+          "edge": "start",
+          "whisper": 35744.864,
+          "parakeet": 35744.984
+        },
+        {
+          "word_index": 82,
+          "edge": "end",
+          "whisper": 35745.284,
+          "parakeet": 35745.464
+        },
+        {
+          "word_index": 85,
+          "edge": "start",
+          "whisper": 35748.024,
+          "parakeet": 35747.784
+        },
+        {
+          "word_index": 85,
+          "edge": "end",
+          "whisper": 35748.504,
+          "parakeet": 35748.264
+        },
+        {
+          "word_index": 86,
+          "edge": "start",
+          "whisper": 35748.504,
+          "parakeet": 35748.824
+        },
+        {
+          "word_index": 86,
+          "edge": "end",
+          "whisper": 35748.984,
+          "parakeet": 35749.144
+        },
+        {
+          "word_index": 87,
+          "edge": "start",
+          "whisper": 35749.484,
+          "parakeet": 35749.704
+        },
+        {
+          "word_index": 88,
+          "edge": "end",
+          "whisper": 35750.124,
+          "parakeet": 35750.264
+        },
+        {
+          "word_index": 89,
+          "edge": "start",
+          "whisper": 35750.124,
+          "parakeet": 35750.264
+        },
+        {
+          "word_index": 89,
+          "edge": "end",
+          "whisper": 35750.244,
+          "parakeet": 35750.424
+        },
+        {
+          "word_index": 90,
+          "edge": "start",
+          "whisper": 35750.244,
+          "parakeet": 35750.424
+        },
+        {
+          "word_index": 90,
+          "edge": "end",
+          "whisper": 35750.424,
+          "parakeet": 35750.664
+        },
+        {
+          "word_index": 91,
+          "edge": "start",
+          "whisper": 35750.684,
+          "parakeet": 35750.824
+        },
+        {
+          "word_index": 92,
+          "edge": "end",
+          "whisper": 35751.344,
+          "parakeet": 35751.464
+        },
+        {
+          "word_index": 93,
+          "edge": "start",
+          "whisper": 35751.344,
+          "parakeet": 35751.464
+        },
+        {
+          "word_index": 93,
+          "edge": "end",
+          "whisper": 35751.504,
+          "parakeet": 35751.624
+        },
+        {
+          "word_index": 94,
+          "edge": "start",
+          "whisper": 35751.504,
+          "parakeet": 35751.704
+        },
+        {
+          "word_index": 95,
+          "edge": "end",
+          "whisper": 35752.024,
+          "parakeet": 35752.344
+        },
+        {
+          "word_index": 96,
+          "edge": "start",
+          "whisper": 35752.024,
+          "parakeet": 35752.344
+        },
+        {
+          "word_index": 96,
+          "edge": "end",
+          "whisper": 35752.244,
+          "parakeet": 35752.664
+        },
+        {
+          "word_index": 97,
+          "edge": "start",
+          "whisper": 35752.244,
+          "parakeet": 35752.664
+        },
+        {
+          "word_index": 97,
+          "edge": "end",
+          "whisper": 35752.624,
+          "parakeet": 35752.904
+        },
+        {
+          "word_index": 99,
+          "edge": "end",
+          "whisper": 35753.384,
+          "parakeet": 35753.544
+        },
+        {
+          "word_index": 100,
+          "edge": "start",
+          "whisper": 35753.384,
+          "parakeet": 35753.544
+        },
+        {
+          "word_index": 101,
+          "edge": "end",
+          "whisper": 35753.724,
+          "parakeet": 35753.864
+        },
+        {
+          "word_index": 102,
+          "edge": "start",
+          "whisper": 35753.724,
+          "parakeet": 35753.864
+        },
+        {
+          "word_index": 102,
+          "edge": "end",
+          "whisper": 35753.844,
+          "parakeet": 35754.024
+        },
+        {
+          "word_index": 103,
+          "edge": "start",
+          "whisper": 35753.844,
+          "parakeet": 35754.024
+        },
+        {
+          "word_index": 103,
+          "edge": "end",
+          "whisper": 35754.024,
+          "parakeet": 35754.424
+        },
+        {
+          "word_index": 104,
+          "edge": "start",
+          "whisper": 35754.024,
+          "parakeet": 35754.424
+        },
+        {
+          "word_index": 104,
+          "edge": "end",
+          "whisper": 35754.344,
+          "parakeet": 35754.744
+        },
+        {
+          "word_index": 105,
+          "edge": "start",
+          "whisper": 35754.344,
+          "parakeet": 35754.744
+        },
+        {
+          "word_index": 105,
+          "edge": "end",
+          "whisper": 35754.584,
+          "parakeet": 35755.064
+        }
       ]
     },
     {
@@ -5521,6 +11887,462 @@
           "end": 40008.072,
           "word": "'all.",
           "probability": 1.0
+        }
+      ],
+      "incertos": [
+        {
+          "start": 39990.472,
+          "end": 39990.792,
+          "whisper": "",
+          "parakeet": "um",
+          "vad_fala_pct": 47.5
+        },
+        {
+          "start": 39999.032,
+          "end": 40002.512,
+          "whisper": "when",
+          "parakeet": "when",
+          "vad_fala_pct": 11.3
+        }
+      ],
+      "bordas_incertas": [
+        {
+          "word_index": 0,
+          "edge": "start",
+          "whisper": 39967.712,
+          "parakeet": 39967.872
+        },
+        {
+          "word_index": 1,
+          "edge": "end",
+          "whisper": 39968.352,
+          "parakeet": 39968.592
+        },
+        {
+          "word_index": 2,
+          "edge": "start",
+          "whisper": 39968.352,
+          "parakeet": 39968.752
+        },
+        {
+          "word_index": 2,
+          "edge": "end",
+          "whisper": 39968.692,
+          "parakeet": 39969.312
+        },
+        {
+          "word_index": 8,
+          "edge": "start",
+          "whisper": 39971.792,
+          "parakeet": 39971.952
+        },
+        {
+          "word_index": 9,
+          "edge": "start",
+          "whisper": 39972.132,
+          "parakeet": 39972.272
+        },
+        {
+          "word_index": 9,
+          "edge": "end",
+          "whisper": 39972.412,
+          "parakeet": 39972.752
+        },
+        {
+          "word_index": 10,
+          "edge": "start",
+          "whisper": 39972.412,
+          "parakeet": 39972.752
+        },
+        {
+          "word_index": 10,
+          "edge": "end",
+          "whisper": 39972.732,
+          "parakeet": 39973.312
+        },
+        {
+          "word_index": 11,
+          "edge": "start",
+          "whisper": 39973.612,
+          "parakeet": 39973.792
+        },
+        {
+          "word_index": 11,
+          "edge": "end",
+          "whisper": 39974.012,
+          "parakeet": 39974.352
+        },
+        {
+          "word_index": 12,
+          "edge": "start",
+          "whisper": 39975.352,
+          "parakeet": 39975.632
+        },
+        {
+          "word_index": 12,
+          "edge": "end",
+          "whisper": 39975.752,
+          "parakeet": 39975.952
+        },
+        {
+          "word_index": 13,
+          "edge": "start",
+          "whisper": 39982.732,
+          "parakeet": 39983.032
+        },
+        {
+          "word_index": 13,
+          "edge": "end",
+          "whisper": 39983.132,
+          "parakeet": 39983.352
+        },
+        {
+          "word_index": 14,
+          "edge": "start",
+          "whisper": 39983.132,
+          "parakeet": 39983.352
+        },
+        {
+          "word_index": 16,
+          "edge": "end",
+          "whisper": 39983.952,
+          "parakeet": 39984.072
+        },
+        {
+          "word_index": 17,
+          "edge": "start",
+          "whisper": 39983.952,
+          "parakeet": 39983.832
+        },
+        {
+          "word_index": 18,
+          "edge": "end",
+          "whisper": 39984.112,
+          "parakeet": 39984.232
+        },
+        {
+          "word_index": 19,
+          "edge": "start",
+          "whisper": 39984.112,
+          "parakeet": 39984.392
+        },
+        {
+          "word_index": 19,
+          "edge": "end",
+          "whisper": 39984.272,
+          "parakeet": 39984.712
+        },
+        {
+          "word_index": 20,
+          "edge": "start",
+          "whisper": 39984.272,
+          "parakeet": 39984.712
+        },
+        {
+          "word_index": 20,
+          "edge": "end",
+          "whisper": 39984.392,
+          "parakeet": 39984.952
+        },
+        {
+          "word_index": 21,
+          "edge": "start",
+          "whisper": 39984.392,
+          "parakeet": 39985.192
+        },
+        {
+          "word_index": 25,
+          "edge": "start",
+          "whisper": 39986.192,
+          "parakeet": 39986.392
+        },
+        {
+          "word_index": 25,
+          "edge": "end",
+          "whisper": 39986.392,
+          "parakeet": 39986.632
+        },
+        {
+          "word_index": 26,
+          "edge": "start",
+          "whisper": 39986.452,
+          "parakeet": 39986.792
+        },
+        {
+          "word_index": 26,
+          "edge": "end",
+          "whisper": 39986.592,
+          "parakeet": 39987.112
+        },
+        {
+          "word_index": 27,
+          "edge": "start",
+          "whisper": 39987.412,
+          "parakeet": 39987.592
+        },
+        {
+          "word_index": 31,
+          "edge": "end",
+          "whisper": 39989.852,
+          "parakeet": 39990.232
+        },
+        {
+          "word_index": 32,
+          "edge": "start",
+          "whisper": 39989.852,
+          "parakeet": 39990.232
+        },
+        {
+          "word_index": 32,
+          "edge": "end",
+          "whisper": 39990.132,
+          "parakeet": 39990.472
+        },
+        {
+          "word_index": 33,
+          "edge": "start",
+          "whisper": 39991.452,
+          "parakeet": 39991.592
+        },
+        {
+          "word_index": 34,
+          "edge": "start",
+          "whisper": 39991.932,
+          "parakeet": 39992.072
+        },
+        {
+          "word_index": 35,
+          "edge": "end",
+          "whisper": 39992.272,
+          "parakeet": 39992.392
+        },
+        {
+          "word_index": 36,
+          "edge": "start",
+          "whisper": 39992.272,
+          "parakeet": 39992.392
+        },
+        {
+          "word_index": 36,
+          "edge": "end",
+          "whisper": 39992.412,
+          "parakeet": 39992.712
+        },
+        {
+          "word_index": 37,
+          "edge": "end",
+          "whisper": 39992.432,
+          "parakeet": 39992.712
+        },
+        {
+          "word_index": 38,
+          "edge": "start",
+          "whisper": 39992.432,
+          "parakeet": 39992.712
+        },
+        {
+          "word_index": 38,
+          "edge": "end",
+          "whisper": 39992.712,
+          "parakeet": 39993.352
+        },
+        {
+          "word_index": 39,
+          "edge": "start",
+          "whisper": 39994.492,
+          "parakeet": 39994.712
+        },
+        {
+          "word_index": 40,
+          "edge": "end",
+          "whisper": 39995.232,
+          "parakeet": 39995.352
+        },
+        {
+          "word_index": 41,
+          "edge": "start",
+          "whisper": 39995.232,
+          "parakeet": 39995.352
+        },
+        {
+          "word_index": 41,
+          "edge": "end",
+          "whisper": 39995.432,
+          "parakeet": 39995.592
+        },
+        {
+          "word_index": 42,
+          "edge": "start",
+          "whisper": 39995.432,
+          "parakeet": 39995.592
+        },
+        {
+          "word_index": 42,
+          "edge": "end",
+          "whisper": 39995.792,
+          "parakeet": 39995.992
+        },
+        {
+          "word_index": 43,
+          "edge": "end",
+          "whisper": 39996.232,
+          "parakeet": 39996.392
+        },
+        {
+          "word_index": 45,
+          "edge": "start",
+          "whisper": 39996.312,
+          "parakeet": 39996.552
+        },
+        {
+          "word_index": 45,
+          "edge": "end",
+          "whisper": 39996.492,
+          "parakeet": 39996.952
+        },
+        {
+          "word_index": 46,
+          "edge": "start",
+          "whisper": 39996.492,
+          "parakeet": 39996.952
+        },
+        {
+          "word_index": 46,
+          "edge": "end",
+          "whisper": 39996.952,
+          "parakeet": 39997.512
+        },
+        {
+          "word_index": 47,
+          "edge": "start",
+          "whisper": 39996.952,
+          "parakeet": 39998.032
+        },
+        {
+          "word_index": 47,
+          "edge": "end",
+          "whisper": 39998.072,
+          "parakeet": 39998.272
+        },
+        {
+          "word_index": 48,
+          "edge": "start",
+          "whisper": 39998.072,
+          "parakeet": 39998.272
+        },
+        {
+          "word_index": 48,
+          "edge": "end",
+          "whisper": 39998.512,
+          "parakeet": 39998.672
+        },
+        {
+          "word_index": 49,
+          "edge": "start",
+          "whisper": 39998.512,
+          "parakeet": 39998.672
+        },
+        {
+          "word_index": 49,
+          "edge": "end",
+          "whisper": 39998.672,
+          "parakeet": 39998.912
+        },
+        {
+          "word_index": 50,
+          "edge": "start",
+          "whisper": 39998.672,
+          "parakeet": 39998.912
+        },
+        {
+          "word_index": 50,
+          "edge": "end",
+          "whisper": 39998.772,
+          "parakeet": 39999.232
+        },
+        {
+          "word_index": 51,
+          "edge": "start",
+          "whisper": 39998.772,
+          "parakeet": 39999.232
+        },
+        {
+          "word_index": 51,
+          "edge": "end",
+          "whisper": 39999.032,
+          "parakeet": 39999.872
+        },
+        {
+          "word_index": 54,
+          "edge": "start",
+          "whisper": 40002.852,
+          "parakeet": 40002.992
+        },
+        {
+          "word_index": 55,
+          "edge": "start",
+          "whisper": 40003.052,
+          "parakeet": 40003.232
+        },
+        {
+          "word_index": 55,
+          "edge": "end",
+          "whisper": 40003.372,
+          "parakeet": 40003.552
+        },
+        {
+          "word_index": 56,
+          "edge": "start",
+          "whisper": 40003.372,
+          "parakeet": 40003.632
+        },
+        {
+          "word_index": 56,
+          "edge": "end",
+          "whisper": 40003.532,
+          "parakeet": 40003.792
+        },
+        {
+          "word_index": 57,
+          "edge": "start",
+          "whisper": 40003.532,
+          "parakeet": 40003.792
+        },
+        {
+          "word_index": 57,
+          "edge": "end",
+          "whisper": 40003.792,
+          "parakeet": 40004.352
+        },
+        {
+          "word_index": 58,
+          "edge": "start",
+          "whisper": 40007.232,
+          "parakeet": 40007.392
+        },
+        {
+          "word_index": 58,
+          "edge": "end",
+          "whisper": 40007.712,
+          "parakeet": 40007.872
+        },
+        {
+          "word_index": 59,
+          "edge": "start",
+          "whisper": 40007.712,
+          "parakeet": 40007.872
+        },
+        {
+          "word_index": 59,
+          "edge": "end",
+          "whisper": 40007.912,
+          "parakeet": 40008.352
+        },
+        {
+          "word_index": 60,
+          "edge": "end",
+          "whisper": 40008.072,
+          "parakeet": 40008.352
         }
       ]
     }
