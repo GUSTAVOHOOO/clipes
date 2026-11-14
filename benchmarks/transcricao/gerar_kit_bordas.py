@@ -16,6 +16,7 @@ DATA = Path(__file__).resolve().parents[1] / 'dataset'
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--corpus', type=Path, required=True)
+    p.add_argument('--reference', type=Path, required=True)
     p.add_argument('--aligned-pt', type=Path, required=True)
     p.add_argument('--aligned-en', type=Path, required=True)
     p.add_argument('--g2p-pt', type=Path, required=True)
@@ -26,6 +27,9 @@ def main():
     chunks = json.loads((a.corpus / 'manifest.json').read_text(encoding='utf8'))['chunks']
     generated = {lang: {line.split()[0] for line in path.read_text(encoding='utf8').splitlines() if line.strip()}
                  for lang, path in [('pt', a.g2p_pt), ('en', a.g2p_en)]}
+    reference = json.loads(a.reference.read_text(encoding='utf8'))['references']
+    valid = {(r['source'], r['start'], w['word'], w['start'], w['end'])
+             for r in reference for w in r['words']}
     pools = defaultdict(list)
     for chunk in chunks:
         path = getattr(a, 'aligned_' + chunk['language']) / (chunk['name'] + '.json')
@@ -36,7 +40,8 @@ def main():
         except ValueError:
             continue
         for word in candidates(words, chunk['start'], chunk['end'], generated[chunk['language']]):
-            pools[chunk['source']].append((chunk, word))
+            if (chunk['source'], chunk['sample_start'], word['word'], word['start'], word['end']) in valid:
+                pools[chunk['source']].append((chunk, word))
     rng = random.Random(102)
     selected = []
     for source, n in [('rtZyZL3FfH4', 25), ('QiwQ62ypdcI', 25), ('6LB7vibQ5q0', 50)]:
