@@ -51,6 +51,29 @@ pub fn is_local_endpoint(endpoint: &str) -> Result<bool, CoreError> {
     Ok(addresses.iter().all(|address| address.ip().is_loopback()))
 }
 
+/// Loopback by the literal host (`localhost` or a loopback IP), with no DNS lookup, so the
+/// "local only" veto never touches the network. Anything it cannot read counts as not local.
+pub(crate) fn is_loopback_endpoint(endpoint: &str) -> bool {
+    let Ok(url) = Url::parse(endpoint) else {
+        return false;
+    };
+    url.host_str().is_some_and(|host| {
+        host.eq_ignore_ascii_case("localhost")
+            || host
+                .trim_matches(['[', ']'])
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|ip| ip.is_loopback())
+    })
+}
+
+/// Fixed message: it never carries text, endpoints, profile names or the Project name (ADR-0006).
+pub(crate) fn local_only_violation() -> CoreError {
+    error(
+        "local_only_violation",
+        "This task only accepts a local provider",
+    )
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StructuredRequest {
@@ -85,6 +108,7 @@ pub use adapters::{AnthropicProvider, GeminiProvider, OpenAiProvider};
 pub use control::{CancelToken, Timeouts};
 pub mod cost;
 pub use settings::run_structured;
+pub(crate) use settings::{profile_infos, routed, Routed};
 
 mod settings {
     use super::*;
@@ -177,12 +201,97 @@ mod settings {
     }
     /// The profile a command acts on: the explicit `profileId`, else `legacy` (if any).
     fn pick(settings: &Settings, args: &Value) -> Result<Option<Profile>, CoreError> {
-        match args.get("profileId").and_then(Value::as_str) {
+        pick_by(settings, args.get("profileId").and_then(Value::as_str))
+    }
+    fn pick_by(settings: &Settings, id: Option<&str>) -> Result<Option<Profile>, CoreError> {
+        match id {
             Some(id) => find(settings, id)
                 .map(Some)
                 .ok_or_else(|| error("invalid_settings", "Profile not found")),
             None => Ok(find(settings, LEGACY)),
         }
+    }
+    /// What the assistant needs to know about a saved profile (no key, no consent).
+    pub(crate) struct ProfileInfo {
+        pub id: String,
+        pub label: String,
+        pub kind: String,
+        pub endpoint: String,
+        pub model: String,
+    }
+    impl From<&Profile> for ProfileInfo {
+        fn from(p: &Profile) -> Self {
+            Self {
+                id: p.id.clone(),
+                label: p.label.clone(),
+                kind: p.kind.clone(),
+                endpoint: p.endpoint.clone(),
+                model: p.model.clone(),
+            }
+        }
+    }
+    /// The saved profiles (the synthesized `legacy` included), not the CLIs.
+    pub(crate) fn profile_infos() -> Result<Vec<ProfileInfo>, CoreError> {
+        let _guard = locked()?;
+        let settings = read()?;
+        Ok(profiles(&settings).iter().map(ProfileInfo::from).collect())
+    }
+    /// Where a call goes, already past the "local only" veto. Used by the cost estimate.
+    pub(crate) enum Routed {
+        Cli(String),
+        Api { profile: ProfileInfo, local: bool },
+    }
+    enum Picked {
+        Cli(String),
+        Profile(Profile),
+    }
+    /// Resolves the destination of one call and applies the per-task "local only" veto before
+    /// the consent check, the vault and any network access. Locality is computed here, at
+    /// call time, never stored. Only the app settings choose; the Project never does.
+    fn pick_target(task: Option<&str>, explicit: Option<&str>) -> Result<Picked, CoreError> {
+        let mut profile_id = explicit.map(str::to_owned);
+        let mut cli = None;
+        if explicit.is_none() {
+            match crate::assistant::route(task)? {
+                crate::assistant::Route::Cli(kind) => cli = Some(kind),
+                crate::assistant::Route::Profile(id) => profile_id = Some(id),
+                // "endpoint" resolves to the synthesized `legacy` profile.
+                crate::assistant::Route::Endpoint => {}
+                crate::assistant::Route::Unset => cli = crate::provider_cli::selected()?,
+            }
+        }
+        let local_only = match task {
+            Some(task) => crate::assistant::local_only(task)?,
+            None => false,
+        };
+        if let Some(kind) = cli {
+            // CLIs are never local.
+            return if local_only {
+                Err(local_only_violation())
+            } else {
+                Ok(Picked::Cli(kind))
+            };
+        }
+        let settings = {
+            let _guard = locked()?;
+            read()?
+        };
+        let profile = pick_by(&settings, profile_id.as_deref())?
+            .filter(|p| !p.endpoint.is_empty())
+            .ok_or_else(|| error("invalid_settings", "Configure the provider first"))?;
+        if local_only && !is_loopback_endpoint(&profile.endpoint) {
+            return Err(local_only_violation());
+        }
+        Ok(Picked::Profile(profile))
+    }
+    pub(crate) fn routed(task: Option<&str>, explicit: Option<&str>) -> Result<Routed, CoreError> {
+        Ok(match pick_target(task, explicit)? {
+            Picked::Cli(kind) => Routed::Cli(kind),
+            Picked::Profile(p) => Routed::Api {
+                local: is_loopback_endpoint(&p.endpoint),
+                profile: ProfileInfo::from(&p),
+            },
+        })
     }
     /// Saves the list as v2 and mirrors `legacy` into the v1 fields.
     fn store(settings: &mut Settings, list: Vec<Profile>) {
@@ -522,30 +631,24 @@ mod settings {
     }
     /// `provider.structured` with a cancellation token, for the AI job executor (#121).
     pub fn run_structured(args: Value, cancel: &CancelToken) -> CommandResult {
-        let explicit = args.get("profileId").is_some_and(|v| !v.is_null());
-        let cli = if explicit {
-            None
-        } else {
-            match crate::assistant::route(args.get("task").and_then(Value::as_str))? {
-                crate::assistant::Route::Cli(kind) => Some(kind),
-                // "endpoint" resolves to the synthesized `legacy` profile.
-                crate::assistant::Route::Endpoint => None,
-                crate::assistant::Route::Unset => crate::provider_cli::selected()?,
-            }
+        let explicit = match args.get("profileId") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(id)) => Some(id.as_str()),
+            Some(_) => return Err(error("invalid_settings", "Profile not found")),
         };
-        if let Some(kind) = cli {
-            let request: StructuredRequest = serde_json::from_value(args)
-                .map_err(|_| error("invalid_request", "Invalid structured request"))?;
-            return crate::provider_cli::CliProvider(kind, crate::provider_cli::timeout()?)
-                .structured_with(&request, cancel);
-        }
-        let (settings, profile) = {
+        let profile = match pick_target(args.get("task").and_then(Value::as_str), explicit)? {
+            Picked::Cli(kind) => {
+                let request: StructuredRequest = serde_json::from_value(args)
+                    .map_err(|_| error("invalid_request", "Invalid structured request"))?;
+                let timeout = crate::provider_cli::timeout()?;
+                return crate::provider_cli::CliProvider(kind, timeout)
+                    .structured_with(&request, cancel);
+            }
+            Picked::Profile(profile) => profile,
+        };
+        let settings = {
             let _guard = locked()?;
-            let settings = read()?;
-            let profile = pick(&settings, &args)?
-                .filter(|p| !p.endpoint.is_empty())
-                .ok_or_else(|| error("invalid_settings", "Configure the provider first"))?;
-            (settings, profile)
+            read()?
         };
         let consent = metadata(&settings, &profile.endpoint);
         if !consent.confirmed && !is_local_endpoint(&profile.endpoint)? {
