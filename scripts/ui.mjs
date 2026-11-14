@@ -226,6 +226,20 @@ try {
   await page.getByText('Resultado incerto').waitFor({state:'hidden'});
   await page.getByRole('button', {name:'Cancelar tarefa'}).first().click();
   await page.getByText('Cancelada').waitFor();
+  // Veto "somente local" do Projeto: interruptor nas configurações do Projeto e aviso na tabela Tarefas.
+  const veto = page.getByRole('switch', { name: /Somente local/ });
+  await page.getByText('Nada deste Projeto sai da máquina: só modelos locais.').waitFor();
+  assert.equal(await veto.isChecked(), false, 'o veto começa desligado');
+  await veto.check();
+  assert.equal(await veto.isChecked(), true);
+  await page.getByRole('button', { name: 'Preferências' }).click();
+  await page.getByText(/O Projeto aberto está em “somente local”/).waitFor();
+  await page.screenshot({ path: 'shots/project-veto.png', fullPage: true });
+  await page.getByRole('button', { name: 'Início' }).click();
+  await veto.uncheck();
+  await page.getByRole('button', { name: 'Preferências' }).click();
+  await page.getByText(/O Projeto aberto está em “somente local”/).waitFor({ state: 'detached' });
+  await page.getByRole('button', { name: 'Início' }).click();
   await page.getByLabel('URL do vídeo').fill('https://example.com/video');
   await page.getByRole('button', {name:'Baixar por URL'}).click();
   const terms = page.getByRole('alertdialog', {name:'Aviso sobre os Termos'});
