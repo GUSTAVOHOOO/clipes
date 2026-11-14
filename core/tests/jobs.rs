@@ -121,6 +121,7 @@ fn crash_reconciles_running_jobs_and_retains_checkpoint() {
         Err(clipes_core::CoreError {
             code: "timeout_uncertain".into(),
             message: "incerto".into(),
+            usage: None,
         }),
     )
     .unwrap();

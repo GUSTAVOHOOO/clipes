@@ -118,6 +118,7 @@ fn cancel(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let id = v["id"].as_i64().ok_or_else(|| crate::CoreError {
         code: "invalid_job".into(),
         message: "Tarefa inválida.".into(),
+        usage: None,
     })?;
     projects::with_writer(|c| {
         c.execute("UPDATE jobs SET state=CASE WHEN state='queued' THEN 'cancelled' ELSE state END, cancel_requested=1 WHERE id=?1 AND state IN ('queued','running')", [id])?;
@@ -132,11 +133,13 @@ fn uncertain_action(v: Value, repeat: bool) -> CommandResult {
         return Err(crate::CoreError {
             code: "confirmation_required".into(),
             message: "Confirme que repetir pode gerar nova cobrança.".into(),
+            usage: None,
         });
     }
     let id = v["id"].as_i64().ok_or_else(|| crate::CoreError {
         code: "invalid_job".into(),
         message: "Tarefa inválida.".into(),
+        usage: None,
     })?;
     let changed = projects::with_writer(|c| {
         c.execute(
@@ -148,6 +151,7 @@ fn uncertain_action(v: Value, repeat: bool) -> CommandResult {
         return Err(crate::CoreError {
             code: "invalid_job_state".into(),
             message: "A tarefa não está em estado incerto.".into(),
+            usage: None,
         });
     }
     Ok(Value::Null)

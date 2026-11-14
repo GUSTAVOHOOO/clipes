@@ -15,6 +15,7 @@ fn error(code: &str, e: impl ToString) -> CoreError {
     CoreError {
         code: code.into(),
         message: e.to_string(),
+        usage: None,
     }
 }
 

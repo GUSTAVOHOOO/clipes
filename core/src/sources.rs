@@ -20,6 +20,7 @@ fn err(code: &str, message: &str) -> CoreError {
     CoreError {
         code: code.into(),
         message: message.into(),
+        usage: None,
     }
 }
 fn project_job(v: &Value) -> Result<projects::ProjectJob, CoreError> {
@@ -69,6 +70,7 @@ fn probe(path: &Path) -> Result<Value, CoreError> {
             std::ffi::OsStr::new("json"),
             path.as_os_str(),
         ],
+        None,
     )
     .map_err(|_| {
         err(

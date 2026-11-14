@@ -15,6 +15,7 @@ fn error(code: &str, message: &str) -> crate::CoreError {
     crate::CoreError {
         code: code.into(),
         message: message.into(),
+        usage: None,
     }
 }
 fn failed() -> crate::CoreError {

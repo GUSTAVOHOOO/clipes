@@ -3,16 +3,26 @@ use std::io;
 use std::process::{Child, Command};
 
 /// Starts an executable directly, without passing arguments through a shell.
-pub fn spawn<I, S>(program: impl AsRef<OsStr>, arguments: I) -> io::Result<Child>
+pub fn spawn<I, S>(
+    program: impl AsRef<OsStr>,
+    arguments: I,
+    directory: Option<&std::path::Path>,
+) -> io::Result<Child>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    Command::new(program)
+    let mut command = Command::new(program);
+    command
         .args(arguments)
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
+        .stderr(std::process::Stdio::piped());
+    if let Some(directory) = directory {
+        command
+            .current_dir(directory)
+            .stdin(std::process::Stdio::piped());
+    }
+    command.spawn()
 }
 
 /// A subprocess group that can be terminated together with its descendants.

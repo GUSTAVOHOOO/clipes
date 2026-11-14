@@ -7,6 +7,7 @@ fn error(code: &str, message: &str) -> CoreError {
     CoreError {
         code: code.into(),
         message: message.into(),
+        usage: None,
     }
 }
 #[derive(Serialize, Deserialize)]

@@ -275,7 +275,7 @@ fn install_update(
         fs::remove_file(exe).map_err(|_| fail())?;
         removed = true;
         fs::rename(temp, exe).map_err(|_| fail())?;
-        let mut child = crate::process::spawn(exe, ["--version"]).map_err(|_| fail())?;
+        let mut child = crate::process::spawn(exe, ["--version"], None).map_err(|_| fail())?;
         let stdout = child.stdout.take().ok_or_else(fail)?;
         let stderr = child.stderr.take().ok_or_else(fail)?;
         let reader = thread::spawn(move || {

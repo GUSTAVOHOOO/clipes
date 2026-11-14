@@ -33,3 +33,24 @@ jobs:
         run: bunx playwright install chromium
       - run: bun run test:contrast
       - run: bun run test:ui
+  licenses:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.20.2
+      - run: cargo deny --locked check licenses bans advisories sources
+      - run: bun install --frozen-lockfile
+      - run: bun install --frozen-lockfile
+        working-directory: design-system
+      - name: Check JS production licenses
+        shell: bash
+        run: |
+          node --test scripts/license-policy.test.mjs
+          bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start . --excludePackages 'clipes@0.1.0' --json | node scripts/check-licenses.mjs
+          bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start design-system --excludePackages '@clipes/design-system@0.1.0' --json | node scripts/check-licenses.mjs
