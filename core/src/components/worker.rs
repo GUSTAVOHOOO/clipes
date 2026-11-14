@@ -109,7 +109,6 @@ fn has_nvidia_gpu() -> bool {
 fn uv_environment(worker: &Path) -> Vec<(&'static str, OsString)> {
     vec![
         ("UV_PYTHON_PREFERENCE", "only-managed".into()),
-        ("UV_MANAGED_PYTHON", "1".into()),
         ("UV_PYTHON_DOWNLOADS", "automatic".into()),
         ("UV_PYTHON_INSTALL_DIR", worker.join("python").into()),
         ("UV_PROJECT_ENVIRONMENT", worker.join("venv").into()),
@@ -136,7 +135,8 @@ fn python_install_args() -> Vec<OsString> {
         "python",
         "install",
         PYTHON,
-        "--managed-python",
+        "--python-preference",
+        "only-managed",
         "--no-bin",
         "--no-registry",
         "--no-progress",
@@ -153,7 +153,8 @@ fn sync_args(project: &Path, cuda: bool) -> Vec<OsString> {
         "--no-dev",
         "--python",
         PYTHON,
-        "--managed-python",
+        "--python-preference",
+        "only-managed",
         "--no-progress",
         "--color",
         "never",
@@ -434,7 +435,6 @@ mod tests {
         let env = uv_environment(Path::new("/dados/worker"));
         let get = |key: &str| env.iter().find(|(k, _)| *k == key).map(|(_, v)| v.clone());
         assert_eq!(get("UV_PYTHON_PREFERENCE"), Some("only-managed".into()));
-        assert_eq!(get("UV_MANAGED_PYTHON"), Some("1".into()));
         assert_eq!(get("UV_NO_CONFIG"), Some("1".into()));
         assert_eq!(get("UV_PYTHON_INSTALL_BIN"), Some("0".into()));
         assert_eq!(get("UV_PYTHON_INSTALL_REGISTRY"), Some("0".into()));
@@ -461,7 +461,9 @@ mod tests {
         }
         for args in [python_install_args(), sync_args(Path::new("/p"), false)] {
             let args = lossy(args);
-            assert!(args.contains(&"--managed-python".to_string()));
+            assert!(args
+                .windows(2)
+                .any(|w| w == ["--python-preference", "only-managed"]));
             assert!(!args.contains(&"--system".to_string()));
         }
     }

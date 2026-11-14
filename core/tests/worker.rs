@@ -271,9 +271,8 @@ fn install_uses_only_managed_python_and_status_reports_handshake_versions() {
         log.contains("ENV UV_PYTHON_PREFERENCE=only-managed"),
         "{log}"
     );
-    assert!(log.contains("ENV UV_MANAGED_PYTHON=1"));
     for call in log.lines().filter(|l| l.starts_with("ARGS")) {
-        assert!(call.contains("--managed-python"), "{call}");
+        assert!(call.contains("--python-preference only-managed"), "{call}");
     }
     assert!(log.contains("ARGS python install 3.12"));
     assert!(
@@ -358,4 +357,36 @@ fn a_second_install_while_one_runs_is_refused() {
     assert_eq!(error.code, "already_downloading");
     dispatch("components.cancel", json!({"id":"worker"}), &mut |_| {}).unwrap();
     assert_eq!(background.join().unwrap().unwrap_err().code, "cancelled");
+}
+
+/// Instalação real (rede e centenas de MB): `CLIPES_REAL_UV=<caminho do uv fixado>
+/// cargo test -p clipes-core --test worker -- --ignored real_install`.
+#[test]
+#[ignore]
+fn real_install_with_the_pinned_uv_reaches_the_python_worker() {
+    let uv = std::env::var_os("CLIPES_REAL_UV").expect("CLIPES_REAL_UV");
+    let data = Data::new();
+    let dir = data.root.path().join("components");
+    fs::create_dir_all(&dir).unwrap();
+    fs::copy(uv, dir.join(Data::exe("uv"))).unwrap();
+    let result = install(&mut Vec::new()).unwrap();
+    assert_eq!(result["handshake"]["protocol"], 1);
+    let status = dispatch("components.worker.status", json!({}), &mut |_| {}).unwrap();
+    assert!(status["handshake"]["python"]
+        .as_str()
+        .unwrap()
+        .starts_with("3.12."));
+    assert!(status["handshake"]["libs"]["faster-whisper"].is_string());
+    let mut client = clipes_core::worker::WorkerClient::start(
+        data.worker().join("venv/Scripts/python.exe"),
+        ["-m", "clipes_worker"],
+        |c| {
+            c.env("PYTHONPATH", data.worker().join("project/src"));
+        },
+    )
+    .unwrap();
+    let error = client
+        .run("tts", json!({}), &idle(), &mut |_| {})
+        .unwrap_err();
+    assert_eq!(error.code, "model_missing");
 }
