@@ -70,3 +70,16 @@ def read_mfa_words(data, offset):
         words.append({'word': text, 'start': round(offset + start, 6),
                       'end': round(offset + end, 6)})
     return words
+
+
+def assess_chunk(chunk, data):
+    if data is None:
+        return [], [(chunk['start'], chunk['end'])], 'sem_saida'
+    try:
+        words = collapse_words(chunk['mapping'], read_mfa_words(data, chunk['start']))
+    except (ValueError, KeyError):
+        return [], [(chunk['start'], chunk['end'])], 'divergencia'
+    long_words = [w for w in words if w['end'] - w['start'] > 2]
+    return ([w for w in words if w not in long_words],
+            [(w['start'], w['end']) for w in long_words],
+            'duracao' if long_words else None)

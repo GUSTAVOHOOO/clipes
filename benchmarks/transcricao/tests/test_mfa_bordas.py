@@ -77,3 +77,23 @@ class DiagnoseMfaTests(unittest.TestCase):
         self.assertAlmostEqual(result['mediana_inicio_ms'], 40)
         self.assertAlmostEqual(result['mediana_fim_ms'], 40)
         self.assertEqual(result['f1']['50'], 1)
+
+class PlausibilityTests(unittest.TestCase):
+    def test_excludes_whole_chunk_if_output_missing_or_word_count_differs(self):
+        from mfa_bordas import assess_chunk
+        chunk = {'start': 10, 'end': 12, 'mapping': [
+            {'original': 'oi', 'words': ['oi'], 'normalized': False}]}
+        self.assertEqual(assess_chunk(chunk, None), ([], [(10, 12)], 'sem_saida'))
+        data = {'tiers': {'words': {'entries': [[0, .2, 'oi'], [.2, .3, 'extra']]}}}
+        self.assertEqual(assess_chunk(chunk, data), ([], [(10, 12)], 'divergencia'))
+
+    def test_excludes_interval_of_word_over_two_seconds(self):
+        from mfa_bordas import assess_chunk
+        chunk = {'start': 10, 'end': 15, 'mapping': [
+            {'original': 'lenta', 'words': ['lenta'], 'normalized': False},
+            {'original': 'fim', 'words': ['fim'], 'normalized': False}]}
+        data = {'tiers': {'words': {'entries': [[0, 2.1, 'lenta'], [3, 3.5, 'fim']]}}}
+        words, exclusions, reason = assess_chunk(chunk, data)
+        self.assertEqual(words, [{'word': 'fim', 'start': 13, 'end': 13.5, 'normalized': False}])
+        self.assertEqual(exclusions, [(10, 12.1)])
+        self.assertEqual(reason, 'duracao')
