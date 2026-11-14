@@ -15,6 +15,8 @@ fn main() {
     }
 
     assert!(!args.iter().any(|a| a == "--no-color"));
+    assert!(args.windows(2).any(|w| w == ["--match-filters", "live_status !=? is_live & live_status !=? is_upcoming & live_status !=? post_live"]));
+
     assert!(args.windows(2).any(|w| w == ["--color", "never"]));
     assert!(args.iter().any(|a| a == "--no-simulate"));
     let i = args.iter().position(|a| a == "-o").unwrap();

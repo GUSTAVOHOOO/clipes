@@ -177,6 +177,8 @@ fn run_download(
     let mut args: Vec<OsString> = [
         "--ignore-config",
         "--no-playlist",
+        "--match-filters",
+        "live_status !=? is_live & live_status !=? is_upcoming & live_status !=? post_live",
         "--newline",
         "--progress",
         "--color",
