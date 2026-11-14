@@ -82,3 +82,17 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 ### faster-whisper não encontra CUDA no Windows
 - **Sintoma:** `Library cublas64_12.dll is not found or cannot be loaded`, mesmo com as bibliotecas NVIDIA instaladas no ambiente virtual.
 - **Ação:** acrescente ao `PATH` da sessão as pastas `Lib\site-packages\nvidia\cublas\bin` e `Lib\site-packages\nvidia\cudnn\bin` desse ambiente antes de iniciar o Python. Mantenha o ambiente e os modelos fora do repo.
+
+### Download de modelo preso após interromper `py` no Windows
+- **Sintoma:** outro processo de download fica esperando um lock do cache Hugging Face; o arquivo `.incomplete` continua com zero bytes.
+- **Causa:** interromper o processo que chamou `py` pode deixar o interpretador filho ainda ativo segurando o lock.
+- **Ação:** confira o comando e o PID do filho pertencente à execução interrompida antes de encerrá-lo; então retome o download. Não apague modelos ou caches de outros processos.
+
+### Download de modelo Hugging Face parado com fallback HTTP
+- **Sintoma:** o download de `Systran/faster-whisper-small` pelo fallback HTTP não progride após a conexão.
+- **Ação:** instale `hf_xet` no ambiente isolado e repita o download; para interromper a tentativa anterior, confira o PID do interpretador filho conforme a entrada anterior.
+
+### Hash de transcrição diverge após checkout Windows
+- **Sintoma:** testes de integridade falham no SHA-256 dos JSON revisados, embora o conteúdo textual seja o mesmo.
+- **Causa:** `core.autocrlf` converteu LF para CRLF; o manifesto fixa o hash dos bytes com LF.
+- **Ação:** preserve ou restaure LF nos JSON afetados antes de conferir os hashes; não atualize o manifesto para aceitar uma conversão local.
