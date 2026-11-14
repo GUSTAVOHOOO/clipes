@@ -238,8 +238,23 @@ fn cost_json(c: &Cost) -> Value {
 
 inventory::submit! { projects::Migration { id: "0040_001_provider_costs", sql: "CREATE TABLE provider_costs (id INTEGER PRIMARY KEY, task TEXT NOT NULL, batch TEXT, provider TEXT NOT NULL, model TEXT NOT NULL, input_tokens INTEGER, output_tokens INTEGER, calls INTEGER NOT NULL, cost_kind TEXT NOT NULL CHECK(cost_kind IN ('usd','zero','plan_quota','unknown')), cost_micro_usd INTEGER, price_source TEXT, table_updated_at TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000000)); CREATE INDEX provider_costs_batch ON provider_costs(batch);" } }
 
+inventory::submit! { projects::Migration { id: "0120_001_provider_costs_profile", sql: "ALTER TABLE provider_costs ADD COLUMN profile TEXT;" } }
+
 /// Records one finished call in the open Project; `batch` stays null until batches exist (#56).
 pub fn record(
+    target: &Target,
+    task: &str,
+    batch: Option<&str>,
+    usage: &Value,
+    calls: u64,
+    cost: &Cost,
+) -> Result<(), CoreError> {
+    record_for(None, target, task, batch, usage, calls, cost)
+}
+
+/// Like `record`, also saving the id of the Provider Profile that served the call (#120).
+pub fn record_for(
+    profile: Option<&str>,
     target: &Target,
     task: &str,
     batch: Option<&str>,
@@ -251,7 +266,7 @@ pub fn record(
     let table = embedded().updated_at;
     projects::with_writer(|c| {
         c.execute(
-            "INSERT INTO provider_costs(task,batch,provider,model,input_tokens,output_tokens,calls,cost_kind,cost_micro_usd,price_source,table_updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            "INSERT INTO provider_costs(task,batch,provider,model,input_tokens,output_tokens,calls,cost_kind,cost_micro_usd,price_source,table_updated_at,profile) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
             rusqlite::params![
                 task,
                 batch,
@@ -263,7 +278,8 @@ pub fn record(
                 cost.kind(),
                 cost.micro().map(|v| v as i64),
                 cost.source(),
-                table
+                table,
+                profile
             ],
         )?;
         Ok(())
@@ -279,12 +295,23 @@ pub fn run_costed(
     batch: Option<&str>,
     call: impl FnOnce() -> CommandResult,
 ) -> CommandResult {
+    run_costed_for(None, target, task, batch, call)
+}
+
+/// Like `run_costed`, also saving the id of the Provider Profile that serves the call.
+pub fn run_costed_for(
+    profile: Option<&str>,
+    target: &Target,
+    task: &str,
+    batch: Option<&str>,
+    call: impl FnOnce() -> CommandResult,
+) -> CommandResult {
     if task.trim().is_empty() {
         return Err(error("invalid_request", "Task is required"));
     }
     let settle = |usage: &Value, calls: u64| -> Result<Value, CoreError> {
         let cost = actual(target, usage)?;
-        let recorded = record(target, task, batch, usage, calls, &cost).is_ok();
+        let recorded = record_for(profile, target, task, batch, usage, calls, &cost).is_ok();
         let mut v = cost_json(&cost);
         v["recorded"] = json!(recorded);
         Ok(v)
@@ -310,24 +337,21 @@ pub fn run_costed(
     }
 }
 
-// Same route as `provider.structured` (per-task choice, then default, then the CLI selection).
-fn target_now(task: Option<&str>) -> Result<Target, CoreError> {
-    let cli = match crate::assistant::route(task)? {
-        crate::assistant::Route::Cli(kind) => Some(kind),
-        crate::assistant::Route::Endpoint => None,
-        crate::assistant::Route::Unset => crate::provider_cli::selected()?,
-    };
-    if let Some(name) = cli {
-        return Ok(Target::Cli { name });
-    }
-    let s = crate::dispatch("provider.status", json!({}), &mut |_| {})?;
-    if s["endpoint"].as_str().unwrap_or("").is_empty() {
-        return Err(error("invalid_settings", "Configure the provider first"));
-    }
-    Ok(Target::Api {
-        provider: s["kind"].as_str().unwrap_or("openai").into(),
-        model: s["model"].as_str().unwrap_or("").into(),
-        local: s["remote"] == json!(false),
+// Same route as `provider.structured`: the explicit profile, else the task choice, then the
+// default, then the CLI selection. The price is the one of (kind, model) in `provider.prices`.
+// Returns the profile id too, for the Project record. A "local only" task fails here, before
+// any call.
+fn target_now(task: Option<&str>, explicit: Option<&str>) -> Result<(Target, String), CoreError> {
+    Ok(match super::routed(task, explicit)? {
+        super::Routed::Cli(name) => (Target::Cli { name: name.clone() }, name),
+        super::Routed::Api { profile, local } => (
+            Target::Api {
+                provider: profile.kind,
+                model: profile.model,
+                local,
+            },
+            profile.id,
+        ),
     })
 }
 fn request(args: &Value) -> Result<StructuredRequest, CoreError> {
@@ -335,16 +359,28 @@ fn request(args: &Value) -> Result<StructuredRequest, CoreError> {
         .map_err(|_| error("invalid_request", "Invalid structured request"))
 }
 fn cmd_estimate(args: Value, _: &mut EventSink<'_>) -> CommandResult {
-    estimate(&target_now(args["task"].as_str())?, &request(&args)?)
+    let (target, profile) = target_now(args["task"].as_str(), args["profileId"].as_str())?;
+    let mut estimate = estimate(&target, &request(&args)?)?;
+    estimate["profileId"] = json!(profile);
+    Ok(estimate)
 }
 fn cmd_run(args: Value, events: &mut EventSink<'_>) -> CommandResult {
     let task = args["task"].as_str().unwrap_or("").to_owned();
     let batch = args["batch"].as_str().map(str::to_owned);
     request(&args)?;
-    let target = target_now(args["task"].as_str())?;
-    run_costed(&target, &task, batch.as_deref(), || {
+    let (target, profile) = target_now(args["task"].as_str(), args["profileId"].as_str())?;
+    // The profile and model that serve the call are recorded in the Project and returned.
+    let route = match &target {
+        Target::Cli { name } => json!({"profileId": profile, "kind": name, "model": null}),
+        Target::Api {
+            provider, model, ..
+        } => json!({"profileId": profile, "kind": provider, "model": model}),
+    };
+    let mut done = run_costed_for(Some(&profile), &target, &task, batch.as_deref(), || {
         crate::dispatch("provider.structured", args, events)
-    })
+    })?;
+    done["route"] = route;
+    Ok(done)
 }
 fn price_view() -> Result<Value, CoreError> {
     let _g = LOCK
@@ -401,8 +437,8 @@ fn cmd_price_clear(args: Value, _: &mut EventSink<'_>) -> CommandResult {
 fn cmd_list(args: Value, _: &mut EventSink<'_>) -> CommandResult {
     let batch = args["batch"].as_str().map(str::to_owned);
     projects::with_reader(|c| {
-        let mut s = c.prepare("SELECT id,task,batch,provider,model,input_tokens,output_tokens,calls,cost_kind,cost_micro_usd,price_source,table_updated_at,created_at FROM provider_costs WHERE (?1 IS NULL OR batch=?1) ORDER BY id")?;
-        let rows = s.query_map([batch], |r| Ok(json!({"id":r.get::<_,i64>(0)?,"task":r.get::<_,String>(1)?,"batch":r.get::<_,Option<String>>(2)?,"provider":r.get::<_,String>(3)?,"model":r.get::<_,String>(4)?,"inputTokens":r.get::<_,Option<i64>>(5)?,"outputTokens":r.get::<_,Option<i64>>(6)?,"calls":r.get::<_,i64>(7)?,"costKind":r.get::<_,String>(8)?,"microUsd":r.get::<_,Option<i64>>(9)?,"priceSource":r.get::<_,Option<String>>(10)?,"tableUpdatedAt":r.get::<_,String>(11)?,"createdAt":r.get::<_,i64>(12)?})))?;
+        let mut s = c.prepare("SELECT id,task,batch,provider,model,input_tokens,output_tokens,calls,cost_kind,cost_micro_usd,price_source,table_updated_at,created_at,profile FROM provider_costs WHERE (?1 IS NULL OR batch=?1) ORDER BY id")?;
+        let rows = s.query_map([batch], |r| Ok(json!({"id":r.get::<_,i64>(0)?,"task":r.get::<_,String>(1)?,"batch":r.get::<_,Option<String>>(2)?,"provider":r.get::<_,String>(3)?,"model":r.get::<_,String>(4)?,"inputTokens":r.get::<_,Option<i64>>(5)?,"outputTokens":r.get::<_,Option<i64>>(6)?,"calls":r.get::<_,i64>(7)?,"costKind":r.get::<_,String>(8)?,"microUsd":r.get::<_,Option<i64>>(9)?,"priceSource":r.get::<_,Option<String>>(10)?,"tableUpdatedAt":r.get::<_,String>(11)?,"createdAt":r.get::<_,i64>(12)?,"profile":r.get::<_,Option<String>>(13)?})))?;
         rows.collect::<rusqlite::Result<Vec<_>>>()
     })
     .map(|v| json!(v))

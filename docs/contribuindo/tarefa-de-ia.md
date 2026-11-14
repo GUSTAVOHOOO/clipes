@@ -2,7 +2,7 @@
 
 Uma **Tarefa de IA** é um workflow fixo no núcleo Rust, sem agente e sem tool calling ([ADR-0007](../adr/0007-tarefas-de-ia-como-workflows-fixos-no-nucleo.md)). O contrato de saída é o do [ADR-0008](../adr/0008-contrato-de-saida-estruturada-agnostico-de-provedor.md). O código está em `core/src/ai_task.rs`. Consulte o [glossário](../../GLOSSARY.md) e o guia de [Provedor](provedor.md).
 
-Este módulo só define a tarefa e a executa (`run`). A fila de jobs (#121), o custo por chamada e a aplicação do orçamento (#124) e a auditoria (#125) vêm em outros tickets.
+Este módulo só define a tarefa e a executa (`run`). A fila de jobs está em `core/src/jobs/ai.rs` (veja "Jobs de IA na fila" abaixo); o custo por chamada e a aplicação do orçamento (#124) e a auditoria (#125) vêm em outros tickets.
 
 ## Tarefa nova, passo a passo
 
@@ -67,8 +67,31 @@ fn ids_exist_in_window(input: &TaskInput, output: &Value) -> Vec<Violation> {
 
 ## Cancelamento
 
-`run` recebe um `CancelToken` e o repassa ao Provedor. O executor da fila (#121) guarda um clone e o levanta quando o job é cancelado.
+`run` recebe um `CancelToken` e o repassa ao Provedor. O executor da fila guarda um clone e o levanta quando o job é cancelado (veja abaixo).
 
 ## Orçamento
 
 `Budget` só declara os limites. Hoje `run` usa apenas `max_output_tokens` como teto de saída da requisição; quem aplica chamadas, tokens de entrada, tempo e custo é o #124.
+
+## Jobs de IA na fila
+
+`jobs::enqueue_ai(tarefa, &TaskInput, Safety)` cria um job `ai:<tarefa>`: uma unidade idempotente (uma janela, um Corte), sem Tarefa composta num job só. `Safety::Local` é para modelo de loopback; qualquer outro Provedor (API remota ou CLI) é `Paid`. O payload (`payload`) e o resultado (`result`) ficam na linha do job (migração `0121_001_ai_jobs`); `jobs.list` não os devolve, só `outcome` e `cost`. `jobs.result {id}` devolve o resultado e `jobs.estimate {id}` o custo estimado de repetir.
+
+Estado final de um job de IA:
+
+| Situação | Estado | `cost` em `result` |
+|---|---|---|
+| resposta validada (schema completo e verificadores) | `completed` | `usage` (pago) ou `zero` (local) |
+| `timeout_uncertain` | `uncertain` | `unknown` (pago) ou `zero` (local) |
+| cancelado depois de enviar uma chamada paga | `uncertain` | `unknown`, nunca `cancelled` com custo zero |
+| cancelado antes de enviar, ou modelo local | `cancelled` | `zero` |
+| qualquer outro erro, inclusive `invalid_json` com resposta | `failed` | `usage` (o `usage` do erro fica em `result.usage`) |
+| processo morto no meio da chamada paga | `uncertain` | `unknown` |
+
+- O resultado validado e o estado `completed` são gravados na mesma instrução; um job `completed` nunca se repete.
+- `jobs.retry` de um job `uncertain` **pago** exige `confirmed: true`; sem ele devolve `confirmation_required` com `usage.estimate` (o mesmo de `jobs.estimate`). Job `local` repete sem confirmação (custo zero, ADR-0009 regra 5).
+- Um job `local` só envia a endpoint de loopback; se a configuração mudou, falha com `not_local` antes de enviar.
+- `jobs.cancel` levanta o `CancelToken` da chamada em voo (a fila consulta `cancel_requested` a cada 25 ms).
+- Eventos: `ProgressEvent` com `stage` `ai:<tarefa>:prepare`, `call`, `verify` e `done`, mensagens fixas, sem Transcrição nem resposta do modelo.
+- O #124 lê `result.usage` e `result.cost` para registrar o custo por chamada; este executor não cria tabela de custo.
+- Testes: `jobs::set_ai_provider(Some(fake))` injeta um Provedor falso no worker da fila (veja `core/tests/ai_jobs.rs` e `core/tests/ai_jobs_crash.rs`).

@@ -46,6 +46,9 @@ struct Settings {
     default: String,
     #[serde(default)]
     tasks: BTreeMap<String, String>,
+    /// Tarefas que só aceitam Provedor local (só as ligadas; ausente = desligado).
+    #[serde(default)]
+    local_only: BTreeMap<String, bool>,
 }
 
 fn path() -> Result<PathBuf, CoreError> {
@@ -94,21 +97,38 @@ fn locked() -> Result<std::sync::MutexGuard<'static, ()>, CoreError> {
 pub(crate) enum Route {
     /// O usuário ainda não escolheu pelo assistente: vale o comportamento anterior.
     Unset,
-    /// O Provedor de API ou modelo local configurado em `provider.configure`.
+    /// O Provedor de API ou modelo local configurado em `provider.configure`
+    /// (o perfil `legacy`).
     Endpoint,
+    /// Um perfil salvo, escolhido como `profile:<id>`.
+    Profile(String),
     /// Um CLI (`codex` ou `claude`) já confirmado pelo usuário.
     Cli(String),
 }
 
+const PROFILE_PREFIX: &str = "profile:";
+
+/// `profile:<id>` com o id de um perfil salvo. Os CLIs seguem como `codex` e `claude`.
+fn profile_id(choice: &str) -> Option<&str> {
+    choice
+        .strip_prefix(PROFILE_PREFIX)
+        .filter(|id| !id.is_empty() && !matches!(*id, "codex" | "claude"))
+}
+
 fn valid_choice(choice: &str) -> bool {
-    matches!(choice, "" | "endpoint" | "codex" | "claude")
+    matches!(choice, "" | "endpoint" | "codex" | "claude") || profile_id(choice).is_some()
 }
 
 fn valid_task(task: &str) -> bool {
     TASKS.contains(&task)
 }
 
-/// Resolve o Provedor de uma tarefa: troca da tarefa, senão o padrão, senão nada.
+fn profile_exists(id: &str) -> Result<bool, CoreError> {
+    Ok(crate::provider::profile_infos()?.iter().any(|p| p.id == id))
+}
+
+/// Resolve o Provedor de uma tarefa: troca da tarefa, senão o padrão, senão nada. Um perfil
+/// removido que a escolha ainda aponta recusa a chamada: nunca cai em outro perfil sozinho.
 pub(crate) fn route(task: Option<&str>) -> Result<Route, CoreError> {
     if let Some(task) = task {
         if !valid_task(task) {
@@ -136,8 +156,21 @@ pub(crate) fn route(task: Option<&str>) -> Result<Route, CoreError> {
                 ))
             }
         }
-        _ => Err(error("invalid_settings", "Invalid provider")),
+        other => match profile_id(other) {
+            Some(id) if profile_exists(id)? => Ok(Route::Profile(id.into())),
+            Some(_) => Err(error(
+                "profile_unavailable",
+                "The chosen profile no longer exists",
+            )),
+            None => Err(error("invalid_settings", "Invalid provider")),
+        },
     }
+}
+
+/// Se a tarefa só aceita Provedor local. Vale só para a tarefa; o veto por Projeto é outro.
+pub(crate) fn local_only(task: &str) -> Result<bool, CoreError> {
+    let _lock = locked()?;
+    Ok(read()?.local_only.get(task).copied().unwrap_or(false))
 }
 
 /// Esquece as escolhas que apontam para um CLI desativado.
@@ -156,28 +189,55 @@ pub(crate) fn forget_cli() -> Result<(), CoreError> {
     Ok(())
 }
 
-fn view(settings: &Settings) -> Value {
-    let tasks: BTreeMap<&str, &str> = TASKS
-        .iter()
-        .map(|task| {
-            (
-                *task,
-                settings.tasks.get(*task).map(String::as_str).unwrap_or(""),
-            )
-        })
+/// A escolha como a UI a vê: um `profile:<id>` removido aparece como "sem escolha" e o id
+/// vai em `missing`, para a UI avisar. Os valores antigos passam como estão.
+fn shown(choice: &str, known: &[String]) -> (String, Option<String>) {
+    match profile_id(choice) {
+        Some(id) if !known.iter().any(|k| k == id) => (String::new(), Some(id.to_owned())),
+        _ => (choice.to_owned(), None),
+    }
+}
+
+fn view(settings: &Settings) -> Result<Value, CoreError> {
+    let known: Vec<String> = crate::provider::profile_infos()?
+        .into_iter()
+        .map(|p| p.id)
         .collect();
-    json!({
+    let mut missing = BTreeMap::new();
+    let (default, gone) = shown(&settings.default, &known);
+    if let Some(id) = gone {
+        missing.insert("default".to_owned(), id);
+    }
+    let mut tasks = BTreeMap::new();
+    let mut local_only = BTreeMap::new();
+    for task in TASKS {
+        let (choice, gone) = shown(settings.tasks.get(task).map_or("", String::as_str), &known);
+        if let Some(id) = gone {
+            missing.insert(task.to_owned(), id);
+        }
+        tasks.insert(task, choice);
+        local_only.insert(
+            task,
+            settings.local_only.get(task).copied().unwrap_or(false),
+        );
+    }
+    Ok(json!({
         "completed": settings.completed,
         "skipped": settings.skipped,
         "needsSetup": !settings.completed && !settings.skipped,
-        "default": settings.default,
+        "default": default,
         "tasks": tasks,
-    })
+        "localOnly": local_only,
+        "missing": missing,
+    }))
 }
 
 fn status(_: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let _lock = locked()?;
-    Ok(view(&read()?))
+    let settings = {
+        let _lock = locked()?;
+        read()?
+    };
+    view(&settings)
 }
 
 fn check_choice(choice: &str) -> Result<(), CoreError> {
@@ -190,19 +250,28 @@ fn check_choice(choice: &str) -> Result<(), CoreError> {
             "Confirm sending text to this provider first",
         ));
     }
+    if let Some(id) = profile_id(choice) {
+        if !profile_exists(id)? {
+            return Err(error("invalid_settings", "Profile not found"));
+        }
+    }
     Ok(())
 }
 
 fn set_default(args: Value, _: &mut EventSink<'_>) -> CommandResult {
     let choice = args.get("choice").and_then(Value::as_str).unwrap_or("");
     check_choice(choice)?;
-    let _lock = locked()?;
-    let mut settings = read()?;
-    settings.default = choice.into();
-    write(&settings)?;
-    Ok(view(&settings))
+    let settings = {
+        let _lock = locked()?;
+        let mut settings = read()?;
+        settings.default = choice.into();
+        write(&settings)?;
+        settings
+    };
+    view(&settings)
 }
 
+/// Trocar a escolha de uma tarefa não mexe nas outras, nem no padrão.
 fn set_task(args: Value, _: &mut EventSink<'_>) -> CommandResult {
     let task = args.get("task").and_then(Value::as_str).unwrap_or("");
     if !valid_task(task) {
@@ -210,15 +279,129 @@ fn set_task(args: Value, _: &mut EventSink<'_>) -> CommandResult {
     }
     let choice = args.get("choice").and_then(Value::as_str).unwrap_or("");
     check_choice(choice)?;
-    let _lock = locked()?;
-    let mut settings = read()?;
-    if choice.is_empty() {
-        settings.tasks.remove(task);
-    } else {
-        settings.tasks.insert(task.into(), choice.into());
+    let settings = {
+        let _lock = locked()?;
+        let mut settings = read()?;
+        if choice.is_empty() {
+            settings.tasks.remove(task);
+        } else {
+            settings.tasks.insert(task.into(), choice.into());
+        }
+        write(&settings)?;
+        settings
+    };
+    view(&settings)
+}
+
+/// Liga ou desliga o "somente local" de uma tarefa.
+fn set_local_only(args: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let task = args.get("task").and_then(Value::as_str).unwrap_or("");
+    let Some(enabled) = args.get("enabled").and_then(Value::as_bool) else {
+        return Err(error("invalid_settings", "Invalid setting"));
+    };
+    if !valid_task(task) {
+        return Err(error("invalid_settings", "Invalid task"));
     }
-    write(&settings)?;
-    Ok(view(&settings))
+    let settings = {
+        let _lock = locked()?;
+        let mut settings = read()?;
+        if enabled {
+            settings.local_only.insert(task.into(), true);
+        } else {
+            settings.local_only.remove(task);
+        }
+        write(&settings)?;
+        settings
+    };
+    view(&settings)
+}
+
+/// Para a tabela "Tarefas": perfil, selo de localidade, preço e a sugestão (nunca aplicada).
+fn tasks(_: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let settings = {
+        let _lock = locked()?;
+        read()?
+    };
+    let infos = crate::provider::profile_infos()?;
+    let cost_of = |kind: &str, model: &str, local: bool| -> Result<Value, CoreError> {
+        if local {
+            return Ok(json!({"kind": "zero"}));
+        }
+        Ok(match crate::provider::cost::price_for(kind, model)? {
+            None => json!({"kind": "unknown"}),
+            Some((price, source)) => json!({
+                "kind": "usd",
+                "inputPerMillion": price.input_per_million,
+                "outputPerMillion": price.output_per_million,
+                "priceSource": source,
+            }),
+        })
+    };
+    let from_profile = |id: &str| -> Result<Option<Value>, CoreError> {
+        let Some(p) = infos.iter().find(|p| p.id == id) else {
+            return Ok(None);
+        };
+        let local = crate::provider::is_loopback_endpoint(&p.endpoint);
+        Ok(Some(json!({
+            "id": p.id, "label": p.label, "kind": p.kind, "model": p.model,
+            "local": local, "cli": false, "cost": cost_of(&p.kind, &p.model, local)?,
+        })))
+    };
+    let target = |choice: &str| -> Result<Option<Value>, CoreError> {
+        match choice {
+            "endpoint" => from_profile("legacy"),
+            "codex" | "claude" => Ok(Some(json!({
+                "id": choice, "kind": choice, "model": null, "local": false, "cli": true,
+                "label": if choice == "codex" { "Codex CLI" } else { "Claude Code CLI" },
+                "cost": {"kind": "plan_quota"},
+            }))),
+            other => match profile_id(other) {
+                Some(id) => from_profile(id),
+                None => Ok(None),
+            },
+        }
+    };
+    // Só sugere o que já existe nesta máquina e é local; ainda não foi medido (ADR-0010, regra 2).
+    let suggestion = infos
+        .iter()
+        .find(|p| crate::provider::is_loopback_endpoint(&p.endpoint))
+        .map(|p| {
+            json!({
+                "choice": format!("{PROFILE_PREFIX}{}", p.id),
+                "label": p.label,
+                "measured": false,
+            })
+        });
+    let mut rows = Vec::new();
+    for task in TASKS {
+        let own = settings.tasks.get(task).filter(|c| !c.is_empty());
+        let (source, choice) = match own {
+            Some(choice) => ("task", choice.as_str()),
+            None if !settings.default.is_empty() => ("default", settings.default.as_str()),
+            None => ("none", ""),
+        };
+        let target = target(choice)?;
+        // Escolha que aponta para um perfil que não existe mais: volta a "sem escolha".
+        let missing = if target.is_none() {
+            profile_id(choice).map(str::to_owned)
+        } else {
+            None
+        };
+        let local_only = settings.local_only.get(task).copied().unwrap_or(false);
+        let blocked = local_only && target.as_ref().is_some_and(|t| t["local"] == json!(false));
+        let unchosen = target.is_none();
+        rows.push(json!({
+            "task": task,
+            "choice": if missing.is_some() { "" } else { own.map_or("", String::as_str) },
+            "source": if missing.is_some() { "none" } else { source },
+            "profile": target,
+            "localOnly": local_only,
+            "blocked": blocked,
+            "missing": missing,
+            "suggestion": if unchosen { suggestion.clone().unwrap_or(Value::Null) } else { Value::Null },
+        }));
+    }
+    Ok(json!({"tasks": rows}))
 }
 
 fn complete(args: Value, _: &mut EventSink<'_>) -> CommandResult {
@@ -226,12 +409,15 @@ fn complete(args: Value, _: &mut EventSink<'_>) -> CommandResult {
         .get("skipped")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    let _lock = locked()?;
-    let mut settings = read()?;
-    settings.completed = !skipped;
-    settings.skipped = skipped;
-    write(&settings)?;
-    Ok(view(&settings))
+    let settings = {
+        let _lock = locked()?;
+        let mut settings = read()?;
+        settings.completed = !skipped;
+        settings.skipped = skipped;
+        write(&settings)?;
+        settings
+    };
+    view(&settings)
 }
 
 // ---- Detecção ----
@@ -393,6 +579,8 @@ inventory::submit! { CommandRegistration { name: "assistant.detect", execute: de
 inventory::submit! { CommandRegistration { name: "assistant.default.set", execute: set_default } }
 inventory::submit! { CommandRegistration { name: "assistant.task.set", execute: set_task } }
 inventory::submit! { CommandRegistration { name: "assistant.complete", execute: complete } }
+inventory::submit! { CommandRegistration { name: "assistant.local_only.set", execute: set_local_only } }
+inventory::submit! { CommandRegistration { name: "assistant.tasks", execute: tasks } }
 
 #[cfg(test)]
 mod tests {

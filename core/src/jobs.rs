@@ -1,6 +1,8 @@
 use crate::{projects, CommandRegistration, CommandResult, EventSink};
 use serde_json::{json, Value};
+mod ai;
 pub(crate) mod preview;
+pub use ai::{enqueue_ai, set_ai_provider};
 
 #[derive(Clone, Copy)]
 pub enum Safety {
@@ -129,18 +131,25 @@ fn cancel(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 inventory::submit! { CommandRegistration { name: "jobs.cancel", execute: cancel } }
 
 fn uncertain_action(v: Value, repeat: bool) -> CommandResult {
-    if repeat && v["confirmed"] != true {
-        return Err(crate::CoreError {
-            code: "confirmation_required".into(),
-            message: "Confirme que repetir pode gerar nova cobrança.".into(),
-            usage: None,
-        });
-    }
     let id = v["id"].as_i64().ok_or_else(|| crate::CoreError {
         code: "invalid_job".into(),
         message: "Tarefa inválida.".into(),
         usage: None,
     })?;
+    // Repetir um modelo local (custo zero) não pede confirmação; o resto, sim (ADR-0005).
+    let local = projects::with_reader(|c| {
+        c.query_row("SELECT safety FROM jobs WHERE id=?1", [id], |r| {
+            r.get::<_, String>(0)
+        })
+    })
+    .is_ok_and(|safety| safety == "local");
+    if repeat && !local && v["confirmed"] != true {
+        return Err(crate::CoreError {
+            code: "confirmation_required".into(),
+            message: "Confirme que repetir pode gerar nova cobrança.".into(),
+            usage: Some(json!({"estimate": ai::estimate(id)})),
+        });
+    }
     let changed = projects::with_writer(|c| {
         c.execute(
             "UPDATE jobs SET state=?2, cancel_requested=0 WHERE id=?1 AND state='uncertain'",
@@ -167,6 +176,7 @@ inventory::submit! { CommandRegistration { name: "jobs.discard", execute: discar
 
 pub(crate) fn reconcile() -> Result<(), crate::CoreError> {
     projects::with_writer(|c| {
+        c.execute("UPDATE jobs SET result='{\"outcome\":\"uncertain\",\"code\":\"interrupted\",\"cost\":\"unknown\"}' WHERE state='running' AND safety='paid' AND kind LIKE 'ai:%'", [])?;
         c.execute("UPDATE jobs SET state=CASE safety WHEN 'local' THEN 'queued' ELSE 'uncertain' END WHERE state='running'", [])?;
         Ok(())
     })
@@ -174,8 +184,8 @@ pub(crate) fn reconcile() -> Result<(), crate::CoreError> {
 
 fn list(_: Value, _: &mut EventSink<'_>) -> CommandResult {
     projects::with_reader(|c| {
-        let mut s = c.prepare("SELECT id,kind,safety,state,attempts,checkpoint,progress,(SELECT id FROM queue_project_identity) FROM jobs ORDER BY id")?;
-        let rows = s.query_map([], |r| Ok(json!({"id":r.get::<_,i64>(0)?,"kind":r.get::<_,String>(1)?,"safety":r.get::<_,String>(2)?,"state":r.get::<_,String>(3)?,"attempts":r.get::<_,i64>(4)?,"checkpoint":r.get::<_,Option<String>>(5)?,"progress":r.get::<_,i64>(6)?,"project":r.get::<_,String>(7)?})))?;
+        let mut s = c.prepare("SELECT id,kind,safety,state,attempts,checkpoint,progress,(SELECT id FROM queue_project_identity),json_extract(result,'$.outcome'),json_extract(result,'$.cost') FROM jobs ORDER BY id")?;
+        let rows = s.query_map([], |r| Ok(json!({"id":r.get::<_,i64>(0)?,"kind":r.get::<_,String>(1)?,"safety":r.get::<_,String>(2)?,"state":r.get::<_,String>(3)?,"attempts":r.get::<_,i64>(4)?,"checkpoint":r.get::<_,Option<String>>(5)?,"progress":r.get::<_,i64>(6)?,"project":r.get::<_,String>(7)?,"outcome":r.get::<_,Option<String>>(8)?,"cost":r.get::<_,Option<String>>(9)?})))?;
         rows.collect::<rusqlite::Result<Vec<_>>>()
     }).map(|v| json!(v))
 }

@@ -52,7 +52,7 @@ O crate `core` não depende do Tauri. A UI chama o único adaptador `core_dispat
 
 O mantenedor gera o par de assinatura uma única vez com `bun run tauri signer generate -- -w "%USERPROFILE%\.tauri\clipes-updater.key"`. Guarde a senha em `%USERPROFILE%\.tauri\clipes-updater.password.txt`, ao lado da chave. Faça backup seguro dos dois arquivos; nunca commite nem compartilhe a chave privada ou a senha. Configure `TAURI_SIGNING_PRIVATE_KEY` com o conteúdo da chave e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` com sua senha nos secrets do repositório GitHub. A chave pública em `src-tauri/tauri.conf.json` pode ser compartilhada. Pull requests compilam sem assinatura; builds de tags usam os secrets para assinar os artefatos de atualização.
 
-Na inicialização, `set_event_emitter` instala uma única vez o receptor compartilhado dos eventos assíncronos da fila; sem receptor, eles são descartados. Eventos da fila identificam o Projeto e o job. O despacho síncrono continua usando seu callback emprestado. Cada Projeto aberto tem um único thread de fila, que executa um job de cada vez; a interface consulta também `jobs.list` para recuperar o estado atual.
+Na inicialização, `set_event_emitter` instala uma única vez o receptor compartilhado dos eventos assíncronos da fila; sem receptor, eles são descartados. Eventos da fila identificam o Projeto e o job. O despacho síncrono continua usando seu callback emprestado. Cada Projeto aberto tem um único thread de fila, que executa um job de cada vez; a interface consulta também `jobs.list` para recuperar o estado atual. Jobs `ai:<tarefa>` executam Tarefas de IA (`core/src/jobs/ai.rs`); veja [Tarefa de IA](docs/contribuindo/tarefa-de-ia.md).
 
 ## Demonstração do design system
 
@@ -96,6 +96,16 @@ Documentos `clip`, `style`, `script` e `packaging` são objetos JSON com `schema
 `provider.json` tem a versão 2 com `profiles[]` ([ADR-0010](docs/adr/0010-perfis-multiplos-de-provedor-tarefa-para-perfil-e-somente-local.md)). Um arquivo antigo (só `endpoint`, `model`, `kind`, `nativeSchema`) é lido como o perfil `legacy` e **não é reescrito** até o usuário editar. A conta do cofre é o endpoint (o perfil `legacy` e os perfis sem `ownKey` a compartilham, junto do consentimento, que também é por endpoint); só `ownKey: true` usa a conta `profile:<id>`. A localidade é calculada por `is_local_endpoint`, nunca guardada; os CLIs `codex` e `claude` aparecem em `provider.profiles.list` como perfis não locais, mas continuam ativados por `provider.cli.*` com o aviso do #39.
 
 `provider.configure` sem `profileId` age como antes (substitui o `legacy` e desativa o CLI); com `profileId` faz *upsert* sem tocar no CLI. `provider.status`, `provider.key.*`, `provider.confirm`, `provider.test` e `provider.structured` aceitam `profileId` opcional (sem ele, valem para o `legacy`). Os `timeouts` do #117 continuam globais em `provider.json` (valem para todos os perfis). O preço de um perfil é o de `provider.prices.*` para o par tipo e modelo (sobrescrita do usuário ou tabela embutida). Os testes headless estão em `core/tests/provider_profiles.rs` (arquivos no formato antigo, com `CLIPES_DATA_DIR`) e nos testes de `core/src/provider.rs` (cofre falso).
+
+### Tarefa para perfil e "somente local" (#120)
+
+`assistant.task.set` e `assistant.default.set` aceitam `profile:<id>` (o perfil precisa existir; `profile:codex` e `profile:claude` são recusados, os CLIs continuam sendo `codex` e `claude`). Os valores antigos (`""`, `endpoint`, `codex`, `claude`) são guardados e devolvidos como estão, e `endpoint` resolve para o perfil `legacy`. Trocar a escolha de uma tarefa não mexe nas outras. Sem escolha, `Route::Unset` mantém o comportamento anterior e a sugestão de `assistant.tasks` (o primeiro perfil em loopback, marcado `measured: false`) nunca é aplicada sozinha.
+
+Um `profile:<id>` cujo perfil foi removido aparece em `assistant.status` como `""` com o id em `missing`, e a chamada é **recusada** com `profile_unavailable`: não cai no padrão nem em outro perfil (ADR-0010, regra 4). Escolher de novo ou limpar a escolha resolve. Nada escreve no `assistant.json` ao remover um perfil.
+
+`assistant.local_only.set {task, enabled}` liga o veto por tarefa. `provider.structured`, `provider.cost.estimate` e `provider.cost.run` resolvem a rota por `provider::routed` e, antes do consentimento, do cofre e de qualquer rede, devolvem `local_only_violation` (mensagem fixa, sem `usage`, sem texto, endpoint ou nome de Projeto) se a rota é um CLI ou um endpoint que não é loopback. A checagem usa o host literal (`localhost` ou IP de loopback), sem DNS, na hora da chamada; um `profileId` explícito não a contorna. O veto por Projeto é o #123.
+
+O custo estimado de uma tarefa usa o perfil escolhido: `provider.prices.*` por (tipo, modelo) do perfil, sem campo de preço no perfil. `provider.cost.run` devolve `route` (`profileId`, `kind`, `model`) e grava o id do perfil em `provider_costs.profile` (migração `0120_001_provider_costs_profile`). `assistant.tasks` alimenta a tabela "Tarefas" das Preferências. Testes: `core/tests/task_profiles.rs`.
 
 ## Worker de ML
 

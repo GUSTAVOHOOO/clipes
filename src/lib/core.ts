@@ -10,7 +10,7 @@ let sourceItems = [
 let urlSettingsMock = {terms_accepted:false, download_dir:'/test/downloads'};
 let jobItems = [
   { id: 1, kind: 'preview', state: 'running', progress: 42, project: 'test-project' },
-  { id: 2, kind: 'provider', state: 'uncertain', progress: 0, project: 'test-project' },
+  { id: 2, kind: 'ai:example', safety: 'paid', state: 'uncertain', progress: 0, project: 'test-project' },
 ];
 let transcribeMock: { transcript: object | null; job: object | null } = { transcript: null, job: null };
 let providerMock = { kind: 'openai', endpoint: '', model: '', nativeSchema: false, keyLastFour: null as string | null, remote: false, confirmed: false, confirmedEndpoints: [] as string[] };
@@ -19,8 +19,34 @@ let profileMocks: ProfileMock[] = [];
 const isLocalHost = (endpoint: string) => ['localhost', '127.0.0.1', '[::1]'].includes(new URL(endpoint).hostname);
 let priceOverrides: { provider: string; model: string; inputPerMillion: number; outputPerMillion: number }[] = [];
 const assistantTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('assistant-test');
-let assistantMock = { completed: !assistantTest, skipped: false, needsSetup: assistantTest, default: '', tasks: { selection: '', packaging: '', script: '', translation: '' } as Record<string, string> };
-const assistantView = () => ({ ...assistantMock, needsSetup: !assistantMock.completed && !assistantMock.skipped, tasks: { ...assistantMock.tasks } });
+let assistantMock = { completed: !assistantTest, skipped: false, needsSetup: assistantTest, default: '', tasks: { selection: '', packaging: '', script: '', translation: '' } as Record<string, string>, localOnly: { selection: false, packaging: false, script: false, translation: false } as Record<string, boolean> };
+const knownProfile = (id: string) => (id === 'legacy' ? !!providerMock.endpoint : profileMocks.some(p => p.id === id));
+const staleProfile = (choice: string) => choice.startsWith('profile:') && !knownProfile(choice.slice(8));
+const assistantView = () => {
+  const missing: Record<string, string> = {};
+  const shown = (key: string, choice: string) => { if (staleProfile(choice)) { missing[key] = choice.slice(8); return ''; } return choice; };
+  const tasks = Object.fromEntries(Object.entries(assistantMock.tasks).map(([task, choice]) => [task, shown(task, choice)]));
+  const def = shown('default', assistantMock.default);
+  return { ...assistantMock, default: def, needsSetup: !assistantMock.completed && !assistantMock.skipped, tasks, localOnly: { ...assistantMock.localOnly }, missing };
+};
+const taskTarget = (choice: string) => {
+  const profileRow = (id: string, label: string, kind: string, model: string, endpoint: string) => { const local = isLocalHost(endpoint); return { id, label, kind, model, local, cli: false, cost: local ? { kind: 'zero' } : { kind: 'unknown' } }; };
+  if (choice === 'codex' || choice === 'claude') return { id: choice, label: choice === 'codex' ? 'Codex CLI' : 'Claude Code CLI', kind: choice, model: null, local: false, cli: true, cost: { kind: 'plan_quota' } };
+  const id = choice === 'endpoint' ? 'legacy' : choice.startsWith('profile:') ? choice.slice(8) : '';
+  if (id === 'legacy' && providerMock.endpoint) return profileRow('legacy', 'Principal', providerMock.kind, providerMock.model, providerMock.endpoint);
+  const found = profileMocks.find(p => p.id === id);
+  return found ? profileRow(found.id, found.label, found.kind, found.model, found.endpoint) : null;
+};
+const assistantTasks = () => ({ tasks: Object.keys(assistantMock.tasks).map(task => {
+  const own = assistantMock.tasks[task];
+  const choice = own || assistantMock.default;
+  const profile = taskTarget(choice);
+  const missing = !profile && staleProfile(choice) ? choice.slice(8) : null;
+  const localOnly = assistantMock.localOnly[task] ?? false;
+  const firstLocal = profileMocks.find(p => isLocalHost(p.endpoint));
+  return { task, choice: missing ? '' : own, source: missing ? 'none' : own ? 'task' : assistantMock.default ? 'default' : 'none', profile, localOnly, blocked: localOnly && !!profile && !profile.local, missing,
+    suggestion: !profile && firstLocal ? { choice: `profile:${firstLocal.id}`, label: firstLocal.label, measured: false } : null };
+}) });
 let providerCliMock = { selected: '', codexConfirmed: false, claudeConfirmed: false };
 export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   if (import.meta.env.VITE_CORE_MOCK === '1' && !isTauri()) {
@@ -29,6 +55,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'projects.current') return (sourceTest ? { name:'Teste', path:'/test/Teste.clipes', id:'test-project' } : null) as T;
     if (name === 'jobs.list') return (sourceTest ? jobItems : []) as T;
     if (name === 'jobs.cancel' && (args as { id: number }).id === 99) { transcribeMock = { ...transcribeMock, job: { id: 99, state: 'cancelled', progress: 40 } }; return null as T; }
+    if (sourceTest && name === 'jobs.estimate') return { safety: 'paid', estimate: { kind: 'unknown' } } as T;
     if (sourceTest && (name === 'jobs.retry' || name === 'jobs.discard' || name === 'jobs.cancel')) {
       const {id, confirmed} = args as {id:number; confirmed?:boolean};
       if (name === 'jobs.retry' && !confirmed) throw {code:'confirmation_required', message:'Confirmação obrigatória'};
@@ -57,10 +84,13 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'components.worker.install') return { handshake: null } as T;
     if (name === 'components.ffmpeg.status') return { incomplete: false } as T;
     if (name === 'assistant.status') return assistantView() as T;
+    if (name === 'assistant.tasks') return assistantTasks() as T;
+    if (name === 'assistant.local_only.set') { const { task, enabled } = args as { task: string; enabled: boolean }; assistantMock.localOnly[task] = enabled; return assistantView() as T; }
     if (name === 'assistant.detect') return { ollama: { found: true, endpoint: 'http://127.0.0.1:11434/v1', models: ['llama3:8b', 'qwen3'] }, lmStudio: { found: false, endpoint: null, models: [] }, llamaCpp: { found: false, endpoint: null, models: [] }, codex: { found: true }, claude: { found: false } } as T;
     if (name === 'assistant.default.set' || name === 'assistant.task.set') {
       const { choice, task } = args as { choice: string; task?: string };
       if ((choice === 'codex' && !providerCliMock.codexConfirmed) || (choice === 'claude' && !providerCliMock.claudeConfirmed)) throw { code: 'confirmation_required', message: 'confirmation required' };
+      if (choice.startsWith('profile:') && (!knownProfile(choice.slice(8)) || ['codex', 'claude'].includes(choice.slice(8)))) throw { code: 'invalid_settings', message: 'Profile not found' };
       if (name === 'assistant.task.set') assistantMock.tasks[task!] = choice; else assistantMock.default = choice;
       return assistantView() as T;
     }

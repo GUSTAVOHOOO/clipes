@@ -8,8 +8,8 @@ import { texts as cliTexts } from '@/features/provider/CliSettings';
 import { texts } from './texts';
 
 export const REOPEN_EVENT = 'clipes:assistant-open';
-export type Choice = '' | 'endpoint' | 'codex' | 'claude';
-export type AssistantStatus = { completed: boolean; skipped: boolean; needsSetup: boolean; default: Choice; tasks: Record<string, Choice> };
+export type Choice = '' | 'endpoint' | 'codex' | 'claude' | `profile:${string}`;
+export type AssistantStatus = { completed: boolean; skipped: boolean; needsSetup: boolean; default: Choice; tasks: Record<string, Choice>; localOnly?: Record<string, boolean>; missing?: Record<string, string> };
 type Server = { found: boolean; endpoint: string | null; models: string[] };
 type Detection = { ollama: Server; lmStudio: Server; llamaCpp: Server; codex: { found: boolean }; claude: { found: boolean } };
 
@@ -58,7 +58,7 @@ export function Assistant() {
     await coreDispatch('provider.cli.confirm', { kind });
     await coreDispatch('assistant.default.set', { choice: kind });
   });
-  const name = (choice: Choice) => choice === 'codex' ? t.codex : choice === 'claude' ? t.claude : choice === 'endpoint' ? t.endpointName : '';
+  const name = (choice: Choice) => choice === 'codex' ? t.codex : choice === 'claude' ? t.claude : choice === 'endpoint' ? t.endpointName : choice.startsWith('profile:') ? choice.slice(8) : '';
   const card = 'rounded-lg border border-line bg-field p-4';
   const anyCli = detection && (detection.codex.found || detection.claude.found);
   const anyServer = detection && SERVERS.some(([key]) => detection[key].found);
