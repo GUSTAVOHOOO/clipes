@@ -10,15 +10,15 @@ Relacionadas: [#113](2026-11-14-roteamento-multi-provedor.md) (vários perfis de
 
 ## 1. Resumo (10 linhas)
 
-1. **Tamanho real.** Num formato plausível de Frases com ID e tempo (formato B, seção 3.2), uma hora de live PT ou EN dá **11 mil a 19 mil tokens** (o200k_base); 4 h dão 44–74 mil e 8 h dão 88–149 mil. As três lives do dataset (3,6 h, 11,0 h e 11,2 h) dão ≈68 mil, ≈122 mil e ≈206 mil. **Nenhuma passa de 272 mil.** Duas passam de 100 mil (limiar do Claude Haiku 5.5) e a maior fica rente a 200 mil (Gemini 3.1 Pro).
+1. **Tamanho real.** Num formato plausível de Frases com ID e tempo (formato B, seção 3.2), uma hora de live PT ou EN dá **11 mil a 19 mil tokens** (o200k_base); 4 h dão 44–74 mil e 8 h dão 88–149 mil. As três lives do dataset (3,6 h, 11,0 h e 11,2 h) dão ≈68 mil, ≈122 mil e ≈206 mil. **Nenhuma passa de 272 mil.** Duas passam de 100 mil (limiar do Claude Haiku 5.5) e a maior fica rente a 200 mil (Gemini 3.1 Pro). **Ressalva de regime:** as três lives são *gameplay* (27–52 % de fala). Uma live de conversa (podcast, bate-papo) fica perto da fala densa dos vídeos editados do dataset: até ≈ 23 mil tokens/h no formato H e ≈ 51 mil/h no B, onde 8 h somam ≈ 185 mil (H) ou ≈ 410 mil (B) e **o B cruza 272 mil**.
 2. **O overhead de ID e tempo é o maior desperdício.** No formato B, ID + `hh:mm:ss.d` custa ≈ **11 tokens por Frase** e vale **40–64 % dos tokens** (52–59 % nas lives). ID numérico + marcador de minuto (formato H) fica **+13–20 % sobre o texto puro**, **≈ 45 % menos** que o B.
 3. **Contexto não é o gargalo na nuvem.** Claude 5.x, GPT-6.x e Gemini 4 anunciam ~1 M de contexto e uma live de 8 h cabe numa chamada. O gargalo está nos **modelos locais** (padrão do Ollama: 4 mil tokens abaixo de 24 GiB de VRAM, e o app não sabe disso hoje) e nos limites do código (saída padrão de 8192 tokens na Anthropic, timeout de 60 s).
 4. **As janelas de 10–15 min do #19/#114 se sustentam, mas por outros motivos.** 15 min são só 1,4–4,7 mil tokens. O que justifica janela é modelo local pequeno, retomada por job, limites de saída/timeout e isolamento de injeção. **Não existe fonte** de que live inteira piore a seleção de Cortes: toda a literatura que achei mede recuperação e perguntas e respostas. Quem decide é o #57.
 5. **O que a janela perde é pequeno e mensurável.** Dos 38 Cortes humanos do #28, janelas de 10 min **sem sobreposição** deixam 3 (8 %) cruzando a borda; com 1 min, 1; com 3 min, 0. *Callbacks* e calibragem da Nota entre janelas pedem uma segunda passada barata (~15 mil tokens para 8 h).
 6. **Preço por faixa:** Anthropic (só Haiku 5.5, >100 mil) e OpenAI (>272 mil) cobram a **requisição inteira** na faixa alta. 8 h numa chamada no Haiku 5.5 saem **3,5× mais caras** que em janelas. Em dólares tudo fica entre centavos e ~US$ 1,6 por live: a faixa é questão de **erro de estimativa**, não de fatura.
 7. **O estimador do #40 erra por baixo.** `chars / 4` dá 11,2 mil tokens/h onde o tokenizer real dá 18,6 mil (formato B): **subestima ≈ 40 %**; em texto puro PT, 17–28 %.
-8. **Descobrir o limite do perfil é viável, mas "máximo treinado" não é "contexto carregado".** Ollama, LM Studio e llama.cpp expõem as duas coisas em lugares diferentes (6.1); o `/v1/models` da OpenAI não expõe contexto. Proposta: tabela embutida + sondagem + campo editável + **checagem de truncamento pelo `usage` em toda chamada**.
-9. **Recomendação v1:** planejador de janelas **por orçamento de tokens** (teto de 15 min do #19, encolhe com o contexto efetivo do perfil), formato H, descoberta de contexto, avisos em três níveis (≥ 8 mil seleção liberada; 8–16 mil aviso; < 8 mil bloqueia) e custo por faixa no #40. Live inteira e segunda passada ficam depois, sob benchmark.
+8. **Descobrir o limite do perfil é viável, mas "máximo treinado" não é "contexto carregado".** Ollama, LM Studio e llama.cpp expõem as duas coisas em lugares diferentes (6.1); o `/v1/models` da OpenAI não expõe contexto, e o Ollama só informa o contexto carregado em `/api/ps`, com o modelo na memória. Proposta: tabela embutida + sondagem + campo editável + **checagem de truncamento pelo `usage` em toda chamada**.
+9. **Recomendação v1:** planejador de janelas **por orçamento de tokens** (teto de 15 min do #19, encolhe com o contexto efetivo do perfil), formato H, descoberta de contexto, avisos em três níveis que seguem o resultado do planejador (cheia / reduzida / bloqueada; em formato H e fala densa, ≈ 7 mil bloqueia e ≈ 10 mil libera janela cheia) e custo por faixa no #40. Live inteira e segunda passada ficam depois, sob benchmark.
 10. **Conflitos para o grilling:** janela adaptativa (#19), `num_ctx` do Ollama só pelo `/api/chat` nativo (quarto formato de API, contra o ADR-0004) e glossário ("janela de contexto" x "janela de seleção"). Dez tickets propostos (seção 12), nenhum criado.
 
 ---
@@ -56,7 +56,7 @@ Relacionadas: [#113](2026-11-14-roteamento-multi-provedor.md) (vários perfis de
 ### 3.1 Método e limites (leia antes dos números)
 
 - **Dados.** `benchmarks/dataset/transcricoes/*.json` (faster-whisper large-v3, palavras com tempo, **provisórias**) do #28: 11 itens, 17 mil palavras, 4 em PT e 7 em EN. São **amostras de ~10 min por item**, escolhidas por critério (música, gritos, inglês, uniforme), **não** transcrições inteiras. Só **3 itens são lives** (PT: 3,6 h; EN: 11,0 h e 11,2 h); os outros 8 são vídeos editados (20–63 min), de fala muito mais densa.
-- **Correção de densidade.** Como as amostras são enviesadas, calculei a fração de fala **da live inteira** com o VAD Silero (o mesmo do app, via `faster-whisper`, limiar 0,5, silêncio mínimo 300 ms) sobre o PCM em `%TEMP%\clipes-dataset`, e a comparei com a fração dentro das amostras. Fração de fala na live inteira: PT 52 %, EN 30 % e 27 %; nas amostras: 54 %, 29 % e 40 %. Os tokens/hora usam `tokens da amostra ÷ tempo da amostra × (fala da live ÷ fala da amostra)`. **n = 3 lives, uma em PT: leia como faixa, não como média.**
+- **Correção de densidade.** Como as amostras são enviesadas, calculei a fração de fala **da live inteira** com o VAD Silero (o mesmo do app, via `faster-whisper`, limiar 0,5, silêncio mínimo 300 ms) sobre o PCM em `%TEMP%\clipes-dataset` (8 kHz, reamostrado para 16 kHz por interpolação linear antes do VAD), e a comparei com a fração dentro das amostras. Fração de fala na live inteira: PT 52 %, EN 30 % e 27 %; nas amostras: 54 %, 29 % e 40 %. Os tokens/hora usam `tokens da amostra ÷ tempo da amostra × (fala da live ÷ fala da amostra)`. **n = 3 lives, uma em PT: leia como faixa, não como média.** As três são *gameplay*, com muita pausa de fala; **lives de conversa não foram medidas** e devem ficar perto do "regime denso" abaixo (vídeos editados: 8 itens, 20–63 min, amostras sem correção de fala).
 - **Frases.** Reproduzi a regra do #26 (pontuação do Whisper ou pausa ≥ 0,7 s; quebra na maior pausa se > 25 s). **Os formatos de linha abaixo são minha leitura da spec**, não o que o núcleo envia hoje (seção 2.2). O envelope `{"untrustedTranscript": "..."}` do adaptador foi incluído em todas as contagens.
 - **Tokenizers reais:** tiktoken `o200k_base` (OpenAI) e `cl100k_base`, e `tokenizer.json` públicos de Llama 3 (espelho `unsloth/Llama-3.2-1B-Instruct`), Qwen 2.5 (`Qwen/Qwen2.5-7B-Instruct`), Mistral Nemo e Gemma 2 (espelho `unsloth/gemma-2-2b-it`, proxy do Gemini, **não** o tokenizer do Gemini). **Claude e Gemini não têm tokenizer público**: para eles uso as razões publicadas, que são imprecisas (seção 3.5).
 - **Privacidade da medição.** Os scripts baixaram só tokenizers e `config.json` públicos do Hugging Face e pacotes via `uv`, num diretório temporário fora do repo. Nenhum texto do dataset saiu da máquina. Scripts não commitados (a tarefa pede só o documento).
@@ -85,7 +85,7 @@ Relacionadas: [#113](2026-11-14-roteamento-multi-provedor.md) (vários perfis de
 | Mistral Nemo | 1,61 | 1,47 |
 | Gemma 2 (proxy Gemini) | 1,48 | 1,52 |
 
-*Leitura:* em PT, tokenizers de vocabulário menor (cl100k, Llama 3, Qwen) gastam ~16–22 % mais tokens que o o200k. Em EN a diferença é de 2–10 %.
+*Leitura:* em PT, cl100k, Llama 3 e Qwen gastam ≈ 16 % mais tokens que o o200k, e o Mistral Nemo ≈ 9 %. Em EN a diferença é de 2–10 %.
 
 **Tokens por hora de live, o200k_base, após correção de fala** (as três lives do dataset):
 
@@ -108,7 +108,9 @@ Com Qwen 2.5 o formato B vai a 13,8–23,8 mil/h: os **dígitos viram um token c
 
 Com Qwen 2.5 o B das mesmas lives vai a ≈87 mil, ≈152 mil e ≈252 mil.
 
-**Limiares de preço (seção 5.1):** em B/o200k, **122 mil e 206 mil passam de 100 mil** (Haiku 5.5). **206 mil encosta nos 200 mil** do Gemini 3.1 Pro (a incerteza do tokenizer cobre os dois lados). **Nenhuma live medida passa de 272 mil** (a maior fica em ≈252 mil no Qwen). Para passar, seriam necessárias ~14 h no B de maior densidade, ou **fala densa** como a dos vídeos editados do dataset (até ~51 mil/h no B, **limite superior**: aqui 8 h dariam ≈410 mil e cruzariam 272 mil).
+**Regime denso (fala quase contínua; 8 vídeos editados do dataset, sem correção; limite superior para uma live de conversa):** formato H 8,7–23,1 mil tokens/h; formato B 16–51 mil/h. Em 1 h / 4 h / 8 h: **H 9–23 mil / 35–92 mil / 69–185 mil**; **B 16–51 mil / 65–206 mil / 129–412 mil**. A Frase tem 4–12 palavras e a pontuação do Whisper varia muito nesses vídeos, então o teto é incerto.
+
+**Limiares de preço (seção 5.1):** em B/o200k, **122 mil e 206 mil passam de 100 mil** (Haiku 5.5). **206 mil encosta nos 200 mil** do Gemini 3.1 Pro (a incerteza do tokenizer cobre os dois lados). **Nenhuma live medida passa de 272 mil** (a maior fica em ≈252 mil no Qwen). Nas lives *gameplay* passar de 272 mil exigiria ~14 h no B; no **regime denso** (live de conversa), 8 h no B (≈ 129–412 mil) **já cruzam 272 mil**, e no H (≈ 69–185 mil) não.
 
 **Quanto é overhead.** Overhead de B sobre A = **10,7–11,0 tokens por Frase**, praticamente constante. Participação nos tokens: 40–64 % nos 11 itens (52 %, 54 % e 59 % nas lives); varia com o tamanho da Frase (≈6 palavras nas lives, até ≈12 em PT editado). Ressalva: a granularidade das Frases depende da pontuação do Whisper, que varia muito (uma das amostras EN editadas veio quase sem pontuação), então o limite superior de 51 mil/h é incerto.
 
@@ -116,12 +118,12 @@ Com Qwen 2.5 o B das mesmas lives vai a ≈87 mil, ≈152 mil e ≈252 mil.
 
 ### 3.4 Estimador `chars / 4` do #40
 
-Caracteres por token medidos: texto puro PT 3,3 (3,6–4,0 em EN); formato B 2,4–2,6; formato H ≈ 3,0 (derivado). O `cost.rs` usa **4**. Efeito: no B a estimativa de entrada fica **≈ 40 % abaixo** do tokenizer real; em texto puro PT, 17–28 % abaixo. O que o documento do Gemini diz ("um token equivale a cerca de 4 caracteres", [tokens](https://ai.google.dev/gemini-api/docs/tokens)) vale para texto corrido em inglês; **não vale para linhas cheias de dígitos**.
+Caracteres por token medidos (o200k, com envelope): texto puro PT 3,3 (3,6–4,0 em EN); formato B 2,4–2,6; **formato H 3,3–3,8** (lives; 3,3–4,0 nos vídeos editados). O `cost.rs` usa **4**. Efeito: no B a estimativa de entrada fica **≈ 40 % abaixo** do tokenizer real; no H, **0–20 % abaixo**; em texto puro PT, 17–28 % abaixo. O que o documento do Gemini diz ("um token equivale a cerca de 4 caracteres", [tokens](https://ai.google.dev/gemini-api/docs/tokens)) vale para texto corrido em inglês; **não vale para linhas cheias de dígitos**.
 
 ### 3.5 Claude e Gemini (inferência, com faixa)
 
 - **Claude:** a Anthropic informa que os modelos 4.7 em diante usam um tokenizer novo que "produz aproximadamente 30 % mais tokens para o mesmo texto" **em relação ao anterior** ([pricing, lido em 2026-11-14](https://platform.claude.com/docs/en/about-claude/pricing)). Não há razão publicada contra o o200k. *Inferência:* planejar Claude como **1,0–1,5× o o200k** e usar o `usage.inputTokens` real; a sondagem `count_tokens` da Anthropic não foi testada aqui (exige chave).
-- **Gemini:** ~4 caracteres por token (fato, link acima), que **subestima** o nosso formato B em ≈ 40 % (seção 3.4). Usar o `usageMetadata` real e a contagem de `countTokens` quando houver chave.
+- **Gemini:** ~4 caracteres por token (fato, link acima), que **subestima** o nosso formato B em ≈ 40 % e o H em até ~20 % (seção 3.4). Usar o `usageMetadata` real e a contagem de `countTokens` quando houver chave.
 
 ---
 
@@ -187,7 +189,7 @@ A proposta vem do #19/#26 e foi mantida no #114 (tarefa T6). Com os dados da se�
 | **Segunda passada** (janelas acham candidatos; um modelo forte **reordena e recalibra** com os resumos): entrada ≈ 80 candidatos × ~120 tokens + 32 resumos ≈ **~15 mil tokens para 8 h** | 3 e parte de 2 | 1 chamada barata | cabe até em contexto de 32 mil; é **workflow fixo**, não agente |
 | **Resumo corrente** (cada janela recebe um resumo curto das anteriores; ideia do [Chain of Agents](https://arxiv.org/abs/2406.02818), 2024-06-04) | 2 e 4 | + ~300 tokens por janela | torna janelas **sequenciais** (já são na v1, #114 §5.2) e passa saída do modelo como contexto: risco de injeção (#114 §8.2) |
 
-O Chain of Agents (Google) usa agentes trabalhadores com contexto curto e um gerente; reporta ganho sobre RAG e contexto cheio em tarefas de perguntas e respostas, resumo e código (resumo do paper). Não testa seleção de trechos.
+O Chain of Agents (Google) usa agentes trabalhadores com contexto curto e um gerente; reporta melhorias de **até 10 %** sobre RAG, contexto cheio e outros sistemas multiagente em tarefas de perguntas e respostas, resumo e código (abstract do paper). Não testa seleção de trechos.
 
 ---
 
@@ -228,13 +230,13 @@ Os preços e limites acima batem com o `prices.json` do repo para os modelos que
 
 **Padrão do Ollama (a armadilha).** A página de contexto diz: "Ollama usa por padrão: < 24 GiB de VRAM: **4 mil**; 24–48 GiB: 32 mil; ≥ 48 GiB: 256 mil" ([context-length](https://docs.ollama.com/context-length)). **A documentação se contradiz:** a página do Modelfile ainda diz `num_ctx` padrão **2048** ([modelfile](https://docs.ollama.com/modelfile)). **A máquina-alvo do projeto (RTX 3050, 4 GiB) cai no padrão de 4 mil.**
 
-**Truncamento silencioso.** *Fato (relato, não doc):* a [issue #10368](https://github.com/ollama/ollama/issues/10368) (2025-04-22) mostra o log do servidor `WARN msg="truncating input prompt" limit=2048 prompt=5065 keep=5 new=2048` numa chamada a `/api/embeddings`. **Não está documentado para `/v1/chat/completions`, e não pude testar aqui (Ollama não está instalado)**: tratar como **risco a validar**, com a defesa da seção 6.3 (checar o `usage`). Mais um fato: a [API compatível com OpenAI do Ollama não tem como definir o tamanho do contexto](https://docs.ollama.com/api/openai-compatibility): é preciso um Modelfile com `PARAMETER num_ctx`, ou `OLLAMA_CONTEXT_LENGTH` / controle no app ([context-length](https://docs.ollama.com/context-length)). O `ollama ps` mostra a coluna `CONTEXT` real.
+**Truncamento silencioso.** *Fato (relato, não doc):* a [issue #10368](https://github.com/ollama/ollama/issues/10368) (2025-04-22) mostra o log do servidor `WARN msg="truncating input prompt" limit=2048 prompt=5065 keep=5 new=2048` numa chamada a `/api/embeddings`. **Não está documentado para `/v1/chat/completions`, e não pude testar aqui (Ollama não está instalado)**: tratar como **risco a validar**, com a defesa da seção 6.3 (checar o `usage`). Mais um fato: a [API compatível com OpenAI do Ollama não tem como definir o tamanho do contexto](https://docs.ollama.com/api/openai-compatibility): é preciso um Modelfile com `PARAMETER num_ctx`, ou `OLLAMA_CONTEXT_LENGTH` / controle no app ([context-length](https://docs.ollama.com/context-length)). O `ollama ps` e o `GET /api/ps` mostram o contexto real do modelo carregado ([api/ps](https://docs.ollama.com/api/ps.md)). O parâmetro `truncate` documentado em docs.ollama.com é só do endpoint de embeddings; **para chat não achei na doc nenhum aviso de truncamento**.
 
 **LM Studio.** `GET /api/v1/models` devolve `max_context_length` (máximo do modelo) e, em `loaded_instances[].config.context_length`, o contexto **da instância carregada** (exemplo da doc: 4096 carregado e 262144 máximo); `/api/v1/chat` permite escolher o contexto na requisição, e `/v1/chat/completions` **não** ([lista](https://lmstudio.ai/docs/developer/rest/list), [visão geral](https://lmstudio.ai/docs/developer/rest)).
 
 **llama.cpp (`llama-server`).** `-c/--ctx-size` (padrão 0 = lido do modelo); `-np` slots (padrão automático); `--fit` ajusta ao que cabe na memória (padrão ligado, contexto mínimo 4096); `GET /props` traz `default_generation_settings.n_ctx` (contexto em execução); `GET /v1/models` traz `meta.n_ctx_train` (treinado); `-ctk` (e o par para V) quantizam o KV; a resposta de `/completion` traz `truncated` e `tokens_evaluated` ([README](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md), lido em 2026-11-14).
 
-**Modelos locais com contexto "de verdade".** A [biblioteca do Ollama](https://ollama.com/library) (lida em 2026-11-14) anuncia: Gemma 4 128 mil (tamanhos pequenos) e 256 mil (maiores), Qwen 3.5 256 mil (de 0,8 B a 122 B), Ministral 3 256 mil, gpt-oss 128 mil (20 B: 14 GB), Llama 3.1 e Phi-4-mini 128 mil. **Atenção:** a página do Mistral Nemo mostra "1000K context window" enquanto o texto da mesma página diz "até 128k" e o `config.json` tem `max_position_embeddings` 131072: os metadados da biblioteca **não são confiáveis**. **Sem fonte** de qualidade a esses comprimentos para seleção de Cortes; "máximo treinado" não é "efetivo".
+**Modelos locais com contexto "de verdade".** A [biblioteca do Ollama](https://ollama.com/library) (lida em 2026-11-14) anuncia: Gemma 4 128 mil (tamanhos pequenos) e 256 mil (maiores), Qwen 3.5 256 mil (vários tamanhos, de 1,2 GB a 81 GB nos arquivos listados), Ministral 3 256 mil, gpt-oss 128 mil (20 B: 14 GB), Llama 3.1 e Phi-4-mini 128 mil. **Atenção:** a página do Mistral Nemo mostra "1000K context window" enquanto o texto da mesma página diz "até 128k" e o `config.json` tem `max_position_embeddings` 131072: os metadados da biblioteca **não são confiáveis**. **Sem fonte** de qualidade a esses comprimentos para seleção de Cortes; "máximo treinado" não é "efetivo".
 
 **KV cache (VRAM), cálculo meu.** Fórmula: `KV = 2 (K e V) × camadas com atenção completa × cabeças KV × dim. da cabeça × bytes × tokens`, com `config.json` oficial de cada modelo (Hugging Face, lido em 2026-11-14). fp16 = 2 B; q8_0 ≈ 1,06 B/elemento. **Só o KV; pesos e buffers de cálculo ficam de fora.**
 
@@ -264,12 +266,14 @@ Dois números diferentes, que **não podem ser confundidos**: **máximo suportad
 | Gemini | `inputTokenLimit` | = máximo | `models.get` |
 | OpenAI | **tabela embutida** | = máximo | `/v1/models` não informa |
 | OpenRouter e similares | `context_length` em `/models`, se existir | idem | doc do OpenRouter; **inferência**: oportunista nos demais |
-| Ollama | `POST /api/show` → `model_info["<arq>.context_length"]` ([api.md](https://github.com/ollama/ollama/blob/main/docs/api.md)) | **não está na REST documentada**: `/api/ps` documenta só `size` e `size_vram`; só o CLI `ollama ps` mostra `CONTEXT`. Assumir **4096** salvo declaração do usuário, e **sondar** (6.3) | docs.ollama.com |
+| Ollama | `POST /api/show` → `model_info["<arq>.context_length"]` (exemplo da doc: `gemma4.context_length: 131072`) | `GET /api/ps` → `context_length` "do modelo em execução" (exemplo da doc: 4096). **Só existe com o modelo carregado**: o app precisa carregá-lo antes (chamada mínima ou pré-carga) e ler `/api/ps` depois. `/api/show` também lista em `parameters` o `num_ctx` quando um Modelfile o define (exemplo: `num_ctx 2048`) | [api/ps](https://docs.ollama.com/api/ps.md), [show](https://docs.ollama.com/api-reference/show-model-details.md), [openapi.yaml](https://docs.ollama.com/openapi.yaml) (índice em [llms.txt](https://docs.ollama.com/llms.txt)) |
 | LM Studio | `max_context_length` | `loaded_instances[].config.context_length` | `/api/v1/models` |
 | llama.cpp | `meta.n_ctx_train` em `/v1/models` | `default_generation_settings.n_ctx` em `/props` | README |
 | CLIs (Codex, Claude Code) | tabela embutida (Codex/GPT-6.1 Sol: 500 mil) | desconhecido; sem `usage` | #39 |
 
-**Ordem de decisão proposta:** (1) valor **editado pelo usuário**; (2) valor carregado vindo do servidor; (3) máximo do servidor; (4) tabela embutida (formato `prices.json`, com `source` e `updatedAt`); (5) **padrão conservador de 4096** para Ollama e **8192** para o resto **com aviso** "não consegui descobrir". Cada valor guarda a **origem** para a UI mostrar ("informado pelo LM Studio", "tabela de 2026-11-14", "editado por você").
+**Ordem de decisão proposta:** (1) valor **editado pelo usuário**; (2) valor carregado vindo do servidor; (3) máximo do servidor; (4) tabela embutida (formato `prices.json`, com `source` e `updatedAt`); (5) **padrão conservador de 4096** para Ollama (o padrão documentado abaixo de 24 GiB) e **8192** para o resto, **com aviso** "não consegui descobrir". Cada valor guarda a **origem** para a UI mostrar ("informado pelo LM Studio", "tabela de 2026-11-14", "editado por você").
+
+*Nota de fonte:* o `api.md` do GitHub (`main`) está **defasado** em relação a docs.ollama.com (lá o `/api/ps` não traz `context_length`); vale a doc do site. A conferência feita aqui é só de documentação: **não testei contra um Ollama real** (não instalado).
 
 **Conflito com o ADR-0004:** *metadados* (`/api/show`, `/api/v1/models`, `/props`) **não** são um quarto formato de *completion* e seguem o precedente de `/api/tags`, que já é lido pelo assistente. Mas **definir `num_ctx` por requisição só é possível pelo `/api/chat` nativo do Ollama**, o que seria um **quarto formato** de API: exige grilling e ADR (ver 9).
 
@@ -290,43 +294,54 @@ W             = clamp(entrada_max / tok_min, W_min, 15 min)    # 15 min = teto d
 se entrada_max / tok_min < W_min → bloqueia a seleção neste perfil (erro tipado)
 ```
 
-`tok_min` inicial: usar o **limite superior medido** do formato escolhido (H: ≈ 0,17 mil tokens/min para a live mais densa = 10,2 mil/h; B: ≈ 0,31 mil/min) e **recalibrar com o `usage` real** a cada chamada. Teto adicional: **a janela nunca passa de 85 % do menor limiar de preço do perfil** (100 mil no Haiku 5.5; 200 mil no Gemini 3.1 Pro; 272 mil na OpenAI), o que é automático nas janelas de 15 min.
+`tok_min` inicial: o valor **conservador do regime denso** do formato escolhido (H: ≈ 0,385 mil tokens/min = 23,1 mil/h; B: ≈ 0,86 mil/min = 51 mil/h), **recalibrado com o `usage` real** a cada chamada (uma live *gameplay* cai para ≈ 0,17 mil/min no H e ≈ 0,31 mil/min no B). Teto adicional: **a janela nunca passa de 85 % do menor limiar de preço do perfil** (100 mil no Haiku 5.5; 200 mil no Gemini 3.1 Pro; 272 mil na OpenAI), o que é automático nas janelas de 15 min.
 
-**Exemplo (live densa, formato H, 0,17 mil tokens/min):**
+**Contexto efetivo necessário** `= (P + O + W × tok_min) ÷ 0,85`, com P = 1,5 mil, O = 1 mil e R = 0 (premissas), para janela cheia (15 min) e mínima (9 min):
 
-| Contexto efetivo | `entrada_max` (P 1,5 mil, O 1 mil, R 0) | Janela resultante |
-|---|---|---|
-| 4 096 (Ollama padrão) | 3 482 − 2 500 = **≈ 1,0 mil** | ≈ 6 min < W_min = 9 min → **bloqueia** |
-| 8 192 | 6 963 − 2 500 = ≈ 4,5 mil | ≈ 26 min → **15 min** |
-| 16 384 | ≈ 11,4 mil | 15 min |
-| 32 768 | ≈ 25 mil | 15 min |
+| Regime e formato | tok/min | Janela cheia (15 min) | Janela mínima (9 min) |
+|---|---|---|---|
+| H, fala esparsa (*gameplay*) | 170 | 5,9 mil | 4,7 mil |
+| **H, fala densa** (inicial, conservador) | 385 | **9,7 mil** | **7,0 mil** |
+| B, fala esparsa | 310 | 8,4 mil | 6,2 mil |
+| B, fala densa | 858 | 18,1 mil | 12,0 mil |
 
-No formato B (0,31 mil tokens/min) a janela de 8 mil cai para ≈ 14 min e a de 4 mil bloqueia do mesmo jeito. **O formato H é o que deixa 8 mil utilizável.** Com sobreposição de 3 min, 8 mil gera ≈ 15 chamadas por 3 h. *Inferência:* abaixo de ~8 mil o ganho de tentar não paga: as janelas ficam muito curtas e o modelo local pequeno ainda falharia no JSON (#114 §6).
+**Janela resultante por contexto** (planejador com o `tok_min` conservador do H denso; entre parênteses, após calibrar numa live esparsa):
+
+| Contexto efetivo | `entrada_max` (0,85·ctx − 2,5 mil) | Janela (H denso) | Resultado |
+|---|---|---|---|
+| 4 096 (Ollama padrão) | ≈ 1,0 mil | ≈ 2,5 min (≈ 5,8 min esparso) | **bloqueada** (< 9 min) |
+| 8 192 | ≈ 4,5 mil | ≈ 11,6 min (esparso: 15 min) | **reduzida** |
+| 16 384 | ≈ 11,4 mil | 15 min | **cheia** |
+| 32 768 | ≈ 25 mil | 15 min | **cheia** |
+
+No formato B denso, 8 mil dá só ≈ 5,2 min e **bloqueia**: **o formato H é o que deixa 8 mil utilizável em fala densa**. Com sobreposição de 3 min e janela de 15 min, 3 h ficam em 15 chamadas. *Inferência:* abaixo desse mínimo as janelas ficam curtas demais e o modelo local pequeno ainda tende a falhar no JSON (#114 §6).
 
 ### 6.3 Sondagem e checagem de truncamento (inferência de desenho; **não testada**: sem Ollama aqui)
 
-1. **Toda chamada compara `usage.inputTokens` com a estimativa.** Se `usage` < ~85 % da estimativa (depois de aplicar a faixa de erro do tokenizer), a chamada vira erro tipado **`context_truncated`**, em vez de aceitar uma resposta feita sobre texto cortado. É grátis e vale para qualquer backend que devolva `usage` (OpenAI-compat, Ollama `prompt_eval_count` documentado em [api.md](https://github.com/ollama/ollama/blob/main/docs/api.md), Anthropic, Gemini). Não existe para CLI.
-2. **Sonda no "Testar Provedor" (só local, custo zero):** enviar um texto de tamanho conhecido (~6 mil tokens, `max_tokens = 1`) e ler `usage`. Se vier ≈ 4096, o contexto real é 4096. Em remoto não é necessária (a API informa o limite) e não se gasta dinheiro nela.
+1. **Ollama: ler `GET /api/ps` → `context_length`** com o modelo carregado (documentado) e usar esse valor como contexto efetivo, com origem "informado pelo servidor".
+2. **Comparação de `usage`, só em perfil local (custo zero).** Quando `usage.inputTokens` (no Ollama, `prompt_eval_count`, [documentado](https://docs.ollama.com/api/chat.md)) vier **colado no limite carregado** (≈ `num_ctx`) **e** abaixo do estimado, a chamada vira `context_truncated`. A comparação com a estimativa só vale **depois de calibrada** (a faixa de erro do tokenizer é ×0,8–1,5, seção 7); antes disso, usar só o critério "colado no limite". **Em perfil remoto pago nunca descartar uma resposta cobrada por esse critério**: as APIs remotas devolvem erro de contexto, não cortam em silêncio (*inferência*).
+2b. **Sonda no "Testar Provedor" (só local, custo zero):** texto de tamanho conhecido (~6 mil tokens, `max_tokens = 1`) para confirmar o contexto em servidores que não o informam (OpenAI-compat genérico).
 3. **llama-server:** ler `truncated` e `tokens_evaluated` na resposta (documentado).
 4. O resultado atualiza o contexto efetivo do perfil com origem "medido".
 
 ### 6.4 Avisos e contexto mínimo para seleção de Cortes
 
-| Contexto efetivo | Nível | Mensagem (exemplo) | Efeito |
-|---|---|---|---|
-| ≥ 32 mil | ok | — | janelas de 15 min |
-| 16–32 mil | informativo | "janelas de 15 min, funciona bem" | idem |
-| 8–16 mil | **aviso** | "Este modelo tem contexto de 8 192 tokens. A seleção vai usar janelas menores, mais chamadas e pode perder Cortes. Aumente `num_ctx` ou escolha outro perfil." | permite continuar |
-| < 8 mil | **bloqueio** da seleção neste perfil | "Contexto de 4 096 tokens: o padrão do Ollama. A seleção não cabe. Veja como aumentar." | uso permitido em outras tarefas (tradução, Empacotamento de Cortes curtos) |
+Os níveis **seguem o resultado do planejador** (6.2), não números fixos:
 
-**Contexto mínimo recomendado para seleção: 8 mil (mínimo), 16 mil (recomendado), 32 mil (confortável).** Derivação: contexto necessário = (P + O + W_min × tok_min) ÷ 0,85 = (1,5 + 1 + 1,5) ÷ 0,85 ≈ **4,7 mil** no formato H (W_min de 9 min ≈ 1,5 mil tokens) e (1,5 + 1 + 2,8) ÷ 0,85 ≈ **6,2 mil** no B; com reserva de raciocínio de 2–4 mil, 8–11 mil. Isso reprova os 4 096 do Ollama e fixa **8 mil** como mínimo redondo. Os limiares são **hipóteses**, a calibrar com o #57. A mesma lógica vale para as demais tarefas: Empacotamento, Roteiro e tradução trabalham com um Corte (≤ 3 min ≈ ≤ 1 mil tokens): **4 mil já bastam para Empacotamento de Corte curto**, mas a tradução da legenda de um VOD inteiro precisa de lotes (#75) e entra no mesmo planejador.
+| Resultado do planejador | Nível | Mensagem (exemplo) | Efeito |
+|---|---|---|---|
+| **Cheia** (W = 15 min) | ok | — | janelas de 15 min |
+| **Reduzida** (9 min ≤ W < 15 min) | **aviso** | "Este modelo tem contexto de 8 192 tokens. A seleção vai usar janelas de ~12 min, mais chamadas, e pode perder Cortes. Aumente `num_ctx` ou escolha outro perfil." | permite continuar |
+| **Bloqueada** (W < 9 min) | **bloqueio** da seleção neste perfil | "Contexto de 4 096 tokens: o padrão do Ollama. A seleção não cabe. Veja como aumentar." | uso permitido em outras tarefas (tradução, Empacotamento de Cortes curtos) |
+
+**Rótulos de referência** (formato H, fala densa, de 6.2): **bloqueada abaixo de ≈ 7 mil**, **reduzida de ≈ 7 a ≈ 10 mil**, **cheia a partir de ≈ 10 mil**. Em linguagem de produto: **mínimo 8 mil, recomendado 16 mil, confortável 32 mil** (os dois últimos dão folga para raciocínio e para a calibragem do `tok_min`). Os valores dependem do formato e do regime (tabela de 6.2) e são **hipóteses**, a calibrar com o #57. A mesma lógica vale para as demais tarefas: Empacotamento, Roteiro e tradução trabalham com um Corte (≤ 3 min ≈ ≤ 1 mil tokens): **4 mil já bastam para Empacotamento de Corte curto**, mas a tradução da legenda de um VOD inteiro precisa de lotes (#75) e entra no mesmo planejador.
 
 ### 6.5 O que o assistente do #43 recomenda
 
 O assistente já detecta Ollama, LM Studio, llama.cpp e Codex. Proposta de acréscimo, sem Provedor padrão de fábrica: ao detectar um servidor local, mostrar o **modelo carregado, o contexto efetivo e a origem do valor**, e recomendar assim:
 - API barata com contexto grande (Haiku 5.5, Gemini 4 Hydrogen, GPT-6 Luna): qualidade e custo; sem limitação de contexto.
 - CLI via assinatura: sem `usage`, contexto 500 mil no Codex (GPT-6.1 Sol); sem aviso de truncamento possível.
-- Modelo local: se contexto efetivo < 8 mil, **não recomenda para seleção** e explica como mudar (app do Ollama, `OLLAMA_CONTEXT_LENGTH`); se 8–16 mil, recomenda "para Cortes curtos e Empacotamento; seleção com limitações".
+- Modelo local: se o planejador der janela **bloqueada**, **não recomenda para seleção** e explica como mudar (app do Ollama, `OLLAMA_CONTEXT_LENGTH`); se **reduzida**, recomenda "para Cortes curtos e Empacotamento; seleção com limitações".
 
 ---
 
@@ -337,12 +352,12 @@ Hoje: preço base apenas, `CHARS_PER_TOKEN = 4` e limitação declarada em `docs
 1. **Esquema.** `Price` ganha `tiers: [{ aboveInputTokens, inputPerMillion, outputPerMillion }]`, opcional, e a tabela ganha `contextWindow` e `maxOutput` por modelo. Valores com `source` oficial. Entradas hoje: Haiku 5.5 (>100 mil: 0,50 / 2,50), OpenAI (>272 mil: 2× / 1,5× do base) e Gemini 3.1 Pro (>200 mil: 4 / 18).
 2. **Regra.** A faixa se aplica à **requisição inteira**, escolhida pelo total de tokens de entrada da requisição (Anthropic e OpenAI explícitos; Gemini assumido, *inferência*).
 3. **Custo real.** A faixa vem de `usage.inputTokens` da própria resposta. Se o `usage` vier incompleto, o custo continua `unknown`, nunca zero (regra atual do #40).
-4. **Estimativa.** Com intervalo de tokens `[est × 0,8; est × 1,5]` (faixa de erro de tokenizer, seção 3.5): `mínimo` usa o limite inferior na faixa correspondente; `máximo` usa o limite superior e, se o intervalo **cruzar** o limiar, **cobra a faixa alta** e a UI diz: "esta chamada pode passar de 100 mil tokens: o preço sobe 5×". O estimador deixa de usar `/ 4` fixo: usa **razão por formato** (≈ 3,0 chars/token no H, 2,5 no B, 3,3–3,6 em texto) e **recalibra** com a razão `usage.inputTokens / caracteres` das chamadas anteriores do mesmo perfil.
+4. **Estimativa.** Com intervalo de tokens `[est × 0,8; est × 1,5]` (faixa de erro de tokenizer, seção 3.5): `mínimo` usa o limite inferior na faixa correspondente; `máximo` usa o limite superior e, se o intervalo **cruzar** o limiar, **cobra a faixa alta** e a UI diz: "esta chamada pode passar de 100 mil tokens: o preço sobe 5×". O estimador deixa de usar `/ 4` fixo: usa **razão por formato** (medido no o200k: 3,3–3,8 chars/token no H, 2,4–2,6 no B, 3,3–4,0 em texto) e **recalibra** com a razão `usage.inputTokens / caracteres` das chamadas anteriores do mesmo perfil.
 5. **Planejador.** O limite de entrada por chamada nunca passa de 85 % do **menor** limiar do perfil, então o modo padrão (janelas) nunca cruza faixa; só o modo experimental "live inteira" pode, e nesse caso a estimativa mostra **os dois custos** (inteira e em janelas) antes de rodar.
 6. **Teto de custo do lote (#56).** O teto usa o `máximo` com faixa alta; "perfil sem preço" continua sem teto automático (#113 §7.1).
 7. **Cache.** A Anthropic conta leituras e escritas de cache no limiar; como os adaptadores atuais não usam cache, a regra fica anotada para quando usarem.
 
-**Números (premissas na tabela):** instrução + schema 1,5 mil por chamada; saída ≈ 1,5 mil tokens por hora de live; janelas de 15 min com 2 min de sobreposição; o200k como proxy (Claude pode ser até ×1,5). Custo em US$ por **live**:
+**Números (premissas na tabela):** instrução + schema 1,5 mil por chamada; saída ≈ 1,5 mil tokens por hora de live; janelas de 15 min com **2 min** de sobreposição (a recomendação é 3 min, que acrescenta ≈ 8 % de tokens em janelas); o200k como proxy (Claude pode ser até ×1,5). Custo em US$ por **live**:
 
 | Live | Formato | Modelo | Numa chamada | Em janelas |
 |---|---|---|---|---|
@@ -353,6 +368,8 @@ Hoje: preço base apenas, `CHARS_PER_TOKEN = 4` e limitação declarada em `docs
 | 8 h | H (83 mil) | Haiku 5.5 | 0,014 | 0,022 |
 | 11 h | B (206 mil) | Opus 5.5 | 1,15 | 1,63 |
 | 11 h | B | GPT-6.1 Terra | 0,29 | 0,41 |
+
+*Regime *gameplay* (≈ 18,6 mil/h no B). No regime denso (≈ 51 mil/h no B) uma live de 8 h tem ≈ 410 mil tokens: numa chamada, o GPT-6.1 Terra cruza 272 mil e custa ≈ US$ 1,6 (contra ≈ US$ 0,8 sem faixa); em janelas, ≈ US$ 1,3.*
 
 *Leitura:* o custo é de **centavos a ~US$ 1,6** por live em qualquer combinação. A faixa só **vira o jogo** no Haiku 5.5: 8 h numa chamada em B custa 3,5× mais que em janelas, e o formato H (menos tokens) evita a faixa. A conta que importa para o #40 não é o total, é **a estimativa não estar errada por 40 % nem do lado errado do limiar**.
 
@@ -404,9 +421,9 @@ Hoje: preço base apenas, `CHARS_PER_TOKEN = 4` e limitação declarada em `docs
 
 ### Riscos
 
-1. **Amostra pequena:** 3 lives (1 PT), ~10 min cada, transcrição provisória. A faixa 11–19 mil tokens/h é indicativa. A fala densa (51 mil/h) vem de vídeos editados e é limite superior incerto.
+1. **Amostra pequena e de um só gênero:** 3 lives de *gameplay* (1 PT), ~10 min cada, transcrição provisória; **lives de conversa não medidas**. A faixa 11–19 mil tokens/h é indicativa. A fala densa (51 mil/h) vem de vídeos editados e é limite superior incerto.
 2. **Tokenizers proxy:** Claude e Gemini sem tokenizer público (seção 3.5): a faixa 1,0–1,5× é inferência.
-3. **Ollama não testado aqui:** o comportamento de truncamento atual e o `usage` são **a validar** (T4 tem esse como critério).
+3. **Ollama não testado aqui:** conferi só a doc de docs.ollama.com. O comportamento de truncamento atual em chat e o `usage` são **a validar** (T4 tem isso como critério).
 4. **Qualidade a janelas e contextos longos: sem fonte** para seleção de Cortes; os limiares de 8/16/32 mil são hipóteses.
 5. **KV cache:** cálculo meu; Gemma 3 e Qwen 3.5 dependem do runtime aproveitar janela deslizante e atenção linear.
 6. **Páginas oficiais mudam:** o Gemini 4 Carbon/Argon sobe de preço em 2026-12-01 e a tabela embutida precisa de data e `source` (já tem).
@@ -436,24 +453,24 @@ Hoje: preço base apenas, `CHARS_PER_TOKEN = 4` e limitação declarada em `docs
 
 **T2. Formato de Frases compacto e estimador de tokens**
 - [ ] Núcleo gera `123 texto` com `## hh:mm` por minuto; mapeia ID → tempo localmente.
-- [ ] Estimador por formato, no lugar de `chars/4`, recalibrado com `usage.inputTokens / caracteres` por perfil.
+- [ ] Estimador por formato (medido: H 3,3–3,8 chars/token, B 2,4–2,6), no lugar de `chars/4`, recalibrado com `usage.inputTokens / caracteres` por perfil.
 - [ ] Testes com a regra de Frases do #26 sobre as transcrições do `benchmarks/`; relatório de tokens por hora (PT e EN).
 
 **T3. Descoberta de contexto por perfil**
-- [ ] Ollama `/api/show`, LM Studio `/api/v1/models`, llama.cpp `/props` e `/v1/models`, Anthropic `/v1/models`, Gemini `models.get`, OpenRouter `/models`.
+- [ ] Ollama `/api/show` e `/api/ps` (contexto carregado, com pré-carga do modelo), LM Studio `/api/v1/models`, llama.cpp `/props` e `/v1/models`, Anthropic `/v1/models`, Gemini `models.get`, OpenRouter `/models`.
 - [ ] Tabela embutida `contextWindow`/`maxOutput` no formato do `prices.json`, com `source` e `updatedAt`.
 - [ ] Campo editável pelo usuário; guarda **origem** de cada valor; ordem de decisão da seção 6.1.
 - [ ] Só fala com loopback quando o perfil é local; nada de rede fora do endpoint do perfil.
 - [ ] Testes com servidores falsos.
 
 **T4. Detecção de truncamento e sondagem**
-- [ ] `usage` < 85 % da estimativa (com erro de tokenizer) → erro `context_truncated`, sem aceitar a resposta.
+- [ ] Perfil **local**: `usage` colado no limite carregado e abaixo do estimado (após calibragem) → erro `context_truncated`, sem aceitar a resposta; perfil remoto nunca descarta resposta cobrada por esse critério.
 - [ ] Sonda opcional no "Testar Provedor" local (texto de tamanho conhecido, `max_tokens = 1`).
 - [ ] Leitura de `truncated`/`tokens_evaluated` no llama-server.
 - [ ] Teste headless com servidor que corta o prompt em silêncio; nenhuma repetição às cegas de chamada paga (ADR-0005).
 
 **T5. Avisos de contexto e assistente (#43)**
-- [ ] Três níveis (≥ 8 mil permitido; 8–16 mil aviso; < 8 mil bloqueia a seleção) com mensagens da seção 6.4.
+- [ ] Três níveis **derivados do resultado do planejador** (cheia / reduzida / bloqueada) com as mensagens da seção 6.4; rótulos 8/16/32 mil só como referência.
 - [ ] O assistente mostra modelo, contexto efetivo e origem do valor, e instruções para aumentar o contexto no Ollama/LM Studio/llama.cpp.
 - [ ] Nenhum Provedor padrão de fábrica; a recomendação só sugere.
 
@@ -505,7 +522,7 @@ Hoje: preço base apenas, `CHARS_PER_TOKEN = 4` e limitação declarada em `docs
 - OpenRouter: https://openrouter.ai/docs/api-reference/list-available-models
 
 **Runtimes locais (lidos em 2026-11-14)**
-- Ollama: https://docs.ollama.com/context-length, https://docs.ollama.com/modelfile, https://docs.ollama.com/api/openai-compatibility, https://github.com/ollama/ollama/blob/main/docs/api.md, issue https://github.com/ollama/ollama/issues/10368 (2025-04-22), https://ollama.com/library
+- Ollama: https://docs.ollama.com/context-length, https://docs.ollama.com/modelfile, https://docs.ollama.com/api/openai-compatibility, https://docs.ollama.com/api/ps.md, https://docs.ollama.com/api-reference/show-model-details.md, https://docs.ollama.com/api/chat.md, https://docs.ollama.com/openapi.yaml, https://docs.ollama.com/llms.txt (índice), `docs/api.md` do GitHub `main` (defasado em relação ao site), issue https://github.com/ollama/ollama/issues/10368 (2025-04-22), https://ollama.com/library
 - LM Studio: https://lmstudio.ai/docs/developer/rest/list, https://lmstudio.ai/docs/developer/rest
 - llama.cpp: https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md
 
