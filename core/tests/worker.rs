@@ -392,3 +392,60 @@ fn real_install_with_the_pinned_uv_reaches_the_python_worker() {
         .unwrap_err();
     assert_eq!(error.code, "model_missing");
 }
+
+#[test]
+fn local_engine_follows_the_shared_transcribe_block_example() {
+    use clipes_core::transcription::{BlockRequest, LocalEngine, TranscriptionEngine, Word};
+    // O worker falso exige exatamente as mensagens do exemplo: isso fixa os parâmetros que o
+    // núcleo envia e a leitura do resultado.
+    let mut engine = LocalEngine::with_worker(
+        client("transcribe-block"),
+        json!({"id":"fake","dir":"modelo","device":"cpu","compute_type":"int8"}),
+        1,
+    );
+    let mut percentages = Vec::new();
+    let audio = Path::new("bloco.wav");
+    let first = engine
+        .transcribe_block(
+            &BlockRequest {
+                audio,
+                final_block: false,
+            },
+            &idle(),
+            &mut |p| percentages.push(p),
+        )
+        .unwrap();
+    assert_eq!(first.covered_us, 5_000_000);
+    assert_eq!(
+        first.words,
+        vec![
+            Word {
+                text: "olá".into(),
+                start_us: 1_100_000,
+                end_us: 1_400_000,
+                language: Some("pt".into())
+            },
+            Word {
+                text: "mundo".into(),
+                start_us: 1_500_000,
+                end_us: 1_900_000,
+                language: Some("pt".into())
+            }
+        ]
+    );
+    assert_eq!(first.silences, vec![(0, 1_000_000), (3_000_000, 5_000_000)]);
+    let second = engine
+        .transcribe_block(
+            &BlockRequest {
+                audio,
+                final_block: true,
+            },
+            &idle(),
+            &mut |p| percentages.push(p),
+        )
+        .unwrap();
+    assert_eq!(second.covered_us, 10_000_000);
+    assert_eq!(second.words.len(), 4);
+    assert_eq!(second.words[2].language.as_deref(), Some("en"));
+    assert_eq!(percentages, [0, 100, 0, 50, 100]);
+}

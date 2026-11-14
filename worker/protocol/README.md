@@ -31,6 +31,16 @@ Os pedidos rodam um de cada vez, na ordem de chegada. O `cancel` é lido enquant
 
 `code` é um de: `invalid_message`, `protocol_mismatch`, `unknown_task`, `model_missing`, `out_of_memory`, `cancelled`, `internal`. O `message` do worker é um texto fixo por código e nunca inclui caminhos nem texto de exceção; o núcleo o troca por sua própria mensagem fixa (ADR-0006). Do lado do núcleo existem também `worker_start`, `worker_crashed`, `worker_timeout` e `worker_protocol`.
 
+### Tarefa `transcribe`
+
+Um pedido transcreve **um bloco** de áudio; o núcleo corta o áudio da faixa de microfone escolhida na Fonte (WAV PCM 16 bits, 16 kHz, mono) e mantém o worker vivo entre os blocos.
+
+`params`: `audio` (caminho do WAV do bloco), `final` (`true` no último bloco da Fonte), `batch_size` (1 a 32) e `model` (`id`, `dir` com o diretório local do modelo, `device` `cuda` ou `cpu`, `compute_type` `int8_float16` ou `int8`). Os parâmetros são validados antes de carregar o modelo; o modelo vem sempre de `dir`, nunca do Hub.
+
+`result.data`: `covered_us` (até onde o bloco foi coberto, em µs desde o início do bloco), `words` (`text`, `start_us`, `end_us`, `language`, tempos relativos ao início do bloco) e `silences` (`start_us`, `end_us`). Se a última fala encosta no fim de um bloco que não é o `final`, ela fica de fora e `covered_us` termina onde ela começa: o núcleo começa o bloco seguinte ali, sem cortar palavra. O núcleo grava tudo; o worker só entrega.
+
+Parâmetros do Motor, do benchmark #32: VAD Silero com limiar 0,75 e silêncio mínimo de 200 ms, idioma detectado em cada trecho de VAD, `BatchedInferencePipeline`, beam 5, `word_timestamps=True`, tarefa `transcribe` (nunca traduz) e timestamps de palavra nativos, sem alinhamento (#102). Desvio do benchmark: `max_speech_duration_s=30`, porque o pipeline com `vad_filter=False` levanta `RuntimeError` num trecho de 30 s ou mais.
+
 ### Um modelo por vez
 
 O worker mantém no máximo um modelo carregado. Ao trocar de modelo, libera o anterior (`model_released`) antes de carregar o próximo (`model_loaded`). Ao encerrar, libera sem anunciar. Os modelos de ML são baixados por outro fluxo; sem o arquivo, a tarefa responde `model_missing`.
@@ -50,6 +60,7 @@ O worker mantém no máximo um modelo carregado. Ao trocar de modelo, libera o a
 | `cancel.jsonl` | Cancelamento no meio do pedido. |
 | `error.jsonl` | `model_missing` e `unknown_task`. |
 | `protocol-mismatch.jsonl` | `hello` com protocolo desconhecido (lado do worker). |
+| `transcribe-block.jsonl` | Dois blocos de `transcribe`: o primeiro deixa a fala final para o segundo (`covered_us` menor que o bloco). |
 
 Para mudar o protocolo, aumente `PROTOCOL_VERSION` nos dois lados, atualize os exemplos e esta página.
 

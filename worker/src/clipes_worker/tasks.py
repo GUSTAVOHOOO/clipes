@@ -15,6 +15,8 @@ class Task:
     model: str
     load: Callable[[], object]
     run: Callable  # run(model, params, ctx) -> dict
+    # Opcional: resolve(params) -> (nome do modelo, carregador), quando o modelo depende do pedido.
+    resolve: Callable | None = None
 
 
 def _model_missing():
@@ -22,11 +24,11 @@ def _model_missing():
 
 
 def default_tasks():
-    return {
+    from .transcribe import transcribe_task
+
+    tasks = {
         name: Task(model=model, load=_model_missing, run=lambda *_: {})
-        for name, model in (
-            ("transcribe", "faster-whisper"),
-            ("reframe", "yunet"),
-            ("tts", "kokoro"),
-        )
+        for name, model in (("reframe", "yunet"), ("tts", "kokoro"))
     }
+    tasks["transcribe"] = transcribe_task()
+    return tasks

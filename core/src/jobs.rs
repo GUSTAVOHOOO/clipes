@@ -1,7 +1,7 @@
 use crate::{projects, CommandRegistration, CommandResult, EventSink};
 use serde_json::{json, Value};
 mod ai;
-mod preview;
+pub(crate) mod preview;
 pub use ai::{enqueue_ai, set_ai_provider};
 
 #[derive(Clone, Copy)]

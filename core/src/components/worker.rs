@@ -46,6 +46,10 @@ const FILES: &[(&str, &[u8])] = &[
         "src/clipes_worker/tasks.py",
         include_bytes!("../../../worker/src/clipes_worker/tasks.py"),
     ),
+    (
+        "src/clipes_worker/transcribe.py",
+        include_bytes!("../../../worker/src/clipes_worker/transcribe.py"),
+    ),
 ];
 
 fn worker_dir(settings: &Settings) -> PathBuf {
@@ -73,6 +77,17 @@ fn lock_sha256() -> String {
     let normalized: Vec<u8> = lock.iter().copied().filter(|b| *b != b'\r').collect();
     format!("{:x}", Sha256::digest(normalized))
 }
+/// Hash de todos os arquivos embutidos (código do worker incluso): um worker instalado por uma
+/// versão anterior do app, com outro `tasks.py`, aparece como desatualizado mesmo com o mesmo lock.
+fn files_sha256() -> String {
+    let mut hash = Sha256::new();
+    for (name, bytes) in FILES {
+        hash.update(name.as_bytes());
+        let normalized: Vec<u8> = bytes.iter().copied().filter(|b| *b != b'\r').collect();
+        hash.update(Sha256::digest(normalized));
+    }
+    format!("{:x}", hash.finalize())
+}
 fn manifest_uv_version() -> Option<&'static str> {
     manifest()
         .into_iter()
@@ -96,6 +111,20 @@ pub(super) fn uv_version_for(settings: &Settings) -> Option<String> {
         .next()?
         .to_owned();
     (output.status.success() && Some(version.as_str()) == manifest_uv_version()).then_some(version)
+}
+
+/// O worker está instalado (ambiente criado e estado gravado)?
+pub(super) fn installed(settings: &Settings) -> bool {
+    let worker = worker_dir(settings);
+    state_path(&worker).is_file() && venv_python(&worker).is_file()
+}
+
+/// O worker foi instalado com as bibliotecas CUDA (GPU NVIDIA na instalação)?
+pub(super) fn cuda_installed(settings: &Settings) -> bool {
+    fs::read(state_path(&worker_dir(settings)))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+        .is_some_and(|state| state["cuda"] == true)
 }
 
 /// Há GPU NVIDIA? Sem ela, o worker usa só a variante CPU (sem libs CUDA).
@@ -372,6 +401,7 @@ fn install_inner(cancel: &AtomicBool, events: &mut EventSink<'_>) -> CommandResu
             "uv": manifest_uv_version(),
             "cuda": cuda,
             "lock_sha256": lock_sha256(),
+            "files_sha256": files_sha256(),
         }))
         .unwrap(),
     )
@@ -404,7 +434,8 @@ fn status(_: Value, _: &mut EventSink<'_>) -> CommandResult {
     let Some(state) = state.filter(|_| venv_python(&worker).is_file()) else {
         return Ok(json!({"installed": false, "gpu": has_nvidia_gpu()}));
     };
-    let outdated = state["lock_sha256"] != json!(lock_sha256());
+    let outdated = state["lock_sha256"] != json!(lock_sha256())
+        || state["files_sha256"] != json!(files_sha256());
     Ok(match start_worker() {
         Ok(client) => {
             let handshake = client.handshake().clone();
