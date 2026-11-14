@@ -77,3 +77,15 @@ _Evitar_: modelo de transcrição (o modelo é uma escolha dentro de um Motor)
 **Provedor** (Provider)
 O backend de LLM que escolhe e pontua Cortes, sugere o Empacotamento e os Roteiros e traduz legendas. Ele recebe só texto e aponta trechos da Transcrição: nunca define tempos por conta própria. Existe em três tipos: **assinatura via CLI** (um agente como Claude Code ou Codex usando a assinatura do usuário), **chave de API** e **modelo local**.
 _Evitar_: IA, modelo, conta
+
+**Perfil de Provedor** (Provider Profile)
+Conjunto salvo de um Provedor já configurado: nome livre, tipo, endpoint, modelo, preço e chave no cofre. Pode haver vários ao mesmo tempo, e cada Tarefa de IA aponta para um por regra fixa que o usuário escolhe. Não existe perfil padrão de fábrica, e nem o Projeto nem o Perfil de canal escolhem um.
+_Evitar_: perfil sozinho (confunde com Perfil de canal), conta, preset
+
+**Tarefa de IA** (AI Task)
+Cada trabalho que o Provedor faz no app: seleção de Cortes, Empacotamento, Roteiro e tradução. É um workflow fixo no núcleo, com prompt versionado, schema de saída, verificadores e orçamento, e nunca um agente com ferramentas.
+_Evitar_: agente, prompt, chamada (a chamada é só um passo da tarefa)
+
+**Somente local** (Local Only)
+Restrição que proíbe enviar texto para fora da máquina. Vale por tarefa e como veto por Projeto: só proíbe, nunca escolhe Provedor. Local quer dizer só loopback; servidor na rede local e CLIs não contam.
+_Evitar_: modo offline, modo privado
