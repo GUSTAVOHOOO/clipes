@@ -101,3 +101,8 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 ### Pasta de downloads ausente em CI Linux
 - **Sintoma:** `dirs::download_dir()` retorna `None` no runner sem configuração de diretórios XDG.
 - **Ação:** quando Vídeos e Downloads do sistema não estiverem configurados, use `~/Downloads/Clipes`; isole os dados do teste com `CLIPES_DATA_DIR`.
+
+### MFA no Windows falha com WinError 5 em `compute-mfcc-feats`
+- **Sintoma:** MFA 3.4.3 instalado em um caminho com espaços falha na checagem do Kaldi, mesmo com o executável presente.
+- **Causa:** `thirdparty_binary` acrescenta aspas ao caminho e as passa como parte do nome para `subprocess` no Windows.
+- **Ação:** antes de executar o MFA, anteponha ao `PATH` o caminho curto 8.3 da pasta `Library\bin` do ambiente conda. Exemplo: `$short = cmd /c 'for %I in ("%TEMP%\clipes-mfa-env") do @echo %~sI'; $env:PATH="$short\Library\bin;$short\Scripts;$short;$env:PATH"`; execute `& "$short\python.exe" -m montreal_forced_aligner ...`. Mantenha o ambiente e `MFA_ROOT_DIR` no TEMP.

@@ -62,6 +62,7 @@ fn error(code: &str, message: impl ToString) -> CoreError {
     CoreError {
         code: code.into(),
         message: message.to_string(),
+        usage: None,
     }
 }
 fn manifest_command(_: Value, _: &mut EventSink<'_>) -> CommandResult {
@@ -121,6 +122,57 @@ pub(crate) fn ytdlp_executable() -> Result<PathBuf, CoreError> {
 pub(crate) fn configured_ffmpeg() -> Option<PathBuf> {
     load_settings().ok().and_then(|s| s.ffmpeg_path)
 }
+
+fn diagnostic_components_for(settings: &Settings) -> String {
+    manifest()
+        .into_iter()
+        .map(|item| {
+            let value = match item.id {
+                "ffmpeg" => match &settings.ffmpeg_path {
+                    None => "não instalado".to_string(),
+                    Some(path) => {
+                        let managed = settings.data_dir.join("components").join(if cfg!(windows) {
+                            "ffmpeg.exe"
+                        } else {
+                            "ffmpeg"
+                        });
+                        if path == &managed {
+                            if managed_incomplete(settings) {
+                                "não instalado".into()
+                            } else {
+                                item.version.into()
+                            }
+                        } else {
+                            "FFmpeg do sistema".into()
+                        }
+                    }
+                },
+                "yt-dlp" => {
+                    let exe = settings.data_dir.join("components").join(if cfg!(windows) {
+                        "yt-dlp.exe"
+                    } else {
+                        "yt-dlp"
+                    });
+                    if !exe.is_file() {
+                        "não instalado".into()
+                    } else {
+                        update::installed(&exe).unwrap_or_else(|_| "indisponível".into())
+                    }
+                }
+                _ => "indisponível".into(),
+            };
+            format!("{}: {}", item.id, value)
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+fn diagnostic_components() -> String {
+    load_settings()
+        .map(|s| diagnostic_components_for(&s))
+        .unwrap_or_else(|_| "indisponível".into())
+}
+inventory::submit! { crate::diagnostic::DiagnosticField { kind: crate::diagnostic::DiagnosticKind::Components, value: diagnostic_components } }
+
 fn probe_name() -> &'static str {
     if cfg!(windows) {
         "ffprobe.exe"
@@ -172,7 +224,7 @@ pub(crate) fn ffprobe_executable(ffmpeg: Option<&Path>) -> Result<PathBuf, CoreE
         candidates.push(PathBuf::from(probe_name()));
     }
     for executable in candidates {
-        let valid = crate::process::spawn(&executable, ["-version"])
+        let valid = crate::process::spawn(&executable, ["-version"], None)
             .and_then(|child| child.wait_with_output())
             .is_ok_and(|o| {
                 o.status.success()
@@ -211,7 +263,7 @@ fn settings_set(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 }
 fn ffmpeg_system(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let path = v.get("path").and_then(Value::as_str).unwrap_or("ffmpeg");
-    let output = crate::process::spawn(path, ["-version"])
+    let output = crate::process::spawn(path, ["-version"], None)
         .and_then(|child| child.wait_with_output())
         .map_err(|e| error("invalid_ffmpeg", e))?;
     let version = String::from_utf8_lossy(&output.stdout)
@@ -302,6 +354,9 @@ fn download(v: Value, events: &mut EventSink<'_>) -> CommandResult {
         });
         Ok(json!({"path": exe}))
     })();
+    if result.is_err() {
+        crate::diagnostic::record(crate::diagnostic::DiagnosticEvent::ComponentFailure);
+    }
     jobs().lock().unwrap().remove(id);
     result
 }
@@ -410,7 +465,7 @@ fn install(item: &Component, part: &Path, exe: &Path) -> Result<(), CoreError> {
                 let idx = (0..zip.len())
                     .find(|i| {
                         zip.by_index(*i)
-                            .map(|f| f.name().ends_with(name))
+                            .map(|f| f.name().is_ok_and(|path| path.ends_with(name)))
                             .unwrap_or(false)
                     })
                     .ok_or_else(|| error("install", "Executável FFmpeg ou ffprobe ausente"))?;
@@ -762,5 +817,55 @@ mod signature_tests {
             "yt-dlp_linux"
         )
         .is_err());
+    }
+}
+
+#[cfg(test)]
+mod diagnostic_tests {
+    use super::*;
+    #[test]
+    fn reports_component_versions_without_paths() {
+        let root =
+            std::env::temp_dir().join(format!("clipes-private-diagnostic-{}", std::process::id()));
+        let dir = root.join("components");
+        fs::create_dir_all(&dir).unwrap();
+        let mut settings = Settings {
+            data_dir: root.clone(),
+            cache_dir: root.join("cache"),
+            cache_limit_bytes: 1,
+            ffmpeg_path: None,
+        };
+        let initial = diagnostic_components_for(&settings);
+        assert!(initial.contains("ffmpeg: não instalado"));
+        assert!(initial.contains("yt-dlp: não instalado"));
+        settings.ffmpeg_path = Some(root.join("secret-system-ffmpeg"));
+        let system = diagnostic_components_for(&settings);
+        assert!(system.contains("FFmpeg do sistema"));
+        assert!(!system.contains("secret"));
+        let ffmpeg = dir.join(if cfg!(windows) {
+            "ffmpeg.exe"
+        } else {
+            "ffmpeg"
+        });
+        fs::write(&ffmpeg, b"ffmpeg").unwrap();
+        fs::write(ffmpeg.with_file_name(probe_name()), b"ffprobe").unwrap();
+        settings.ffmpeg_path = Some(ffmpeg);
+        let exe = dir.join(if cfg!(windows) {
+            "yt-dlp.exe"
+        } else {
+            "yt-dlp"
+        });
+        fs::write(&exe, b"updated").unwrap();
+        fs::write(dir.join("yt-dlp.state.json"), serde_json::to_vec(&json!({"version":"2027.01.01.000000", "sha256":format!("{:x}", Sha256::digest(b"updated")), "origin":"SHA2-256SUMS assinado por yt-dlp"})).unwrap()).unwrap();
+        let result = diagnostic_components_for(&settings);
+        let version = manifest()
+            .into_iter()
+            .find(|c| c.id == "ffmpeg")
+            .unwrap()
+            .version;
+        assert!(result.contains(&format!("ffmpeg: {version}")));
+        assert!(result.contains("yt-dlp: 2027.01.01.000000"));
+        assert!(!result.contains(root.to_str().unwrap()));
+        fs::remove_dir_all(root).unwrap();
     }
 }

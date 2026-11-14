@@ -8,9 +8,11 @@ let sourceItems = [
   { id: 3, path: '/test/mismatch.mp4', status: 'changed', available: false, verified: true, permission: {status:'none'} },
 ];
 let urlSettingsMock = {terms_accepted:false, download_dir:'/test/downloads'};
-let providerMock = { endpoint: '', model: '', nativeSchema: false, keyLastFour: null as string | null, remote: false, confirmed: false };
+let providerMock = { kind: 'openai', endpoint: '', model: '', nativeSchema: false, keyLastFour: null as string | null, remote: false, confirmed: false };
+let providerCliMock = { selected: '', codexConfirmed: false, claudeConfirmed: false };
 export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   if (import.meta.env.VITE_CORE_MOCK === '1' && !isTauri()) {
+    if (name === 'diagnostic.get') return { text: "Clipes: 0.1.0\nSistema operacional: indisponível" } as T;
     if (name === 'projects.recent') return [] as T;
     if (name === 'projects.current') return (sourceTest ? { name:'Teste', path:'/test/Teste.clipes' } : null) as T;
     if (sourceTest && name === 'backups.list') return [] as T;
@@ -33,10 +35,14 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'components.ytdlp.update') return {version:'test'} as T;
     if (name === 'components.ffmpeg.status') return { incomplete: false } as T;
     if (name === 'provider.status') return { ...providerMock } as T;
+    if (name === 'provider.cli.status') return { ...providerCliMock } as T;
+    if (name === 'provider.cli.configure') { providerCliMock.selected = (args as { kind: string }).kind; return {} as T; }
+    if (name === 'provider.cli.confirm') { if (providerCliMock.selected === 'codex') providerCliMock.codexConfirmed = true; else providerCliMock.claudeConfirmed = true; return {} as T; }
     if (name === 'provider.configure') {
-      const { endpoint, model, nativeSchema } = args as { endpoint: string; model: string; nativeSchema: boolean };
+      providerCliMock.selected = '';
+      const { kind, endpoint, model, nativeSchema } = args as { kind: string; endpoint: string; model: string; nativeSchema: boolean };
       const same = endpoint === providerMock.endpoint;
-      providerMock = { endpoint, model, nativeSchema, keyLastFour: same ? providerMock.keyLastFour : null, confirmed: same && providerMock.confirmed, remote: !['localhost', '127.0.0.1', '[::1]'].includes(new URL(endpoint).hostname) };
+      providerMock = { kind, endpoint, model, nativeSchema, keyLastFour: same ? providerMock.keyLastFour : null, confirmed: same && providerMock.confirmed, remote: !['localhost', '127.0.0.1', '[::1]'].includes(new URL(endpoint).hostname) };
       return {} as T;
     }
     if (name === 'provider.key.set') { providerMock.keyLastFour = (args as { key: string }).key.slice(-4); return {} as T; }

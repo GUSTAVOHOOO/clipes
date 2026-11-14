@@ -15,6 +15,7 @@ async fn core_dispatch(
     .map_err(|_| clipes_core::CoreError {
         code: "dispatch_failed".into(),
         message: "Core command failed".into(),
+        usage: None,
     })?
 }
 
@@ -23,6 +24,8 @@ fn main() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .invoke_handler(tauri::generate_handler![core_dispatch])
         .run(tauri::generate_context!())
         .expect("failed to run Clipes");

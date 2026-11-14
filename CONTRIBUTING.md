@@ -90,3 +90,21 @@ Documentos `clip`, `style`, `script` e `packaging` são objetos JSON com `schema
 ## Atualização do yt-dlp
 
 A atualização é iniciada somente após confirmação, sem consulta automática. O núcleo consulta a release nightly oficial e verifica localmente a assinatura OpenPGP destacada de `SHA2-256SUMS` antes de aceitar o SHA-256 exato do executável. A chave incorporada vem de [public.key do yt-dlp](https://github.com/yt-dlp/yt-dlp/blob/master/public.key), com fingerprint `AC0CBBE6848D6A873464AF4E57CF65933B5A7581`; se a chave oficial mudar, é necessário atualizar o app com a nova chave e fingerprint verificados. A versão anterior é preservada até o novo executável passar em `--version`.
+
+## Licenças de dependências
+
+A política do [ADR-0003](docs/adr/0003-licenca-apache-ffmpeg-sob-demanda-e-politica-de-modelos.md) é verificada no CI. Para reproduzir, instale `cargo-deny` 0.20.2 e Bun 1.3.12 e execute na raiz:
+
+```sh
+cargo deny --locked check licenses bans advisories sources
+bun install --frozen-lockfile
+(cd design-system && bun install --frozen-lockfile)
+node --test scripts/license-policy.test.mjs
+bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start . --excludePackages 'clipes@0.1.0' --json | node scripts/check-licenses.mjs
+bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start design-system --excludePackages '@clipes/design-system@0.1.0' --json | node scripts/check-licenses.mjs
+cargo test -p clipes-core --test components every_component_has_an_allowed_license
+```
+
+As exclusões dos pacotes raiz `clipes` e `@clipes/design-system` cobrem apenas os projetos Apache-2.0, não suas dependências. Dependências transitivas de produção também são verificadas; o CI Rust inclui desenvolvimento e todos os alvos. FFmpeg GPL é a única exceção para Componentes, como executável separado. Atribuições continuam em [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md); a checagem não as substitui.
+
+Para pedir uma exceção, abra uma issue descrevendo pacote, versão, licença, uso, obrigações e justificativa; aguarde revisão dos mantenedores e documente qualquer exceção junto à política. Nunca adicione licença incompatível silenciosamente. Ainda não existe `pyproject` do worker: o ticket que o criar deve acrescentar ao CI uma checagem transitiva do ambiente Python fixado, com a mesma allowlist e falha para licenças ausentes ou incompatíveis.

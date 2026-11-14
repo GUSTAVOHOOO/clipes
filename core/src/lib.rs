@@ -5,6 +5,8 @@ use serde_json::Value;
 pub struct CoreError {
     pub code: String,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub usage: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -33,6 +35,7 @@ pub fn dispatch(name: &str, arguments: Value, events: &mut EventSink<'_>) -> Com
         None => Err(CoreError {
             code: "unknown_command".into(),
             message: format!("Unknown command: {name}"),
+            usage: None,
         }),
     }
 }
@@ -41,6 +44,9 @@ mod components;
 pub mod process;
 pub mod projects;
 pub mod provider;
+mod provider_cli;
 mod sources;
 mod url_import;
 mod version;
+
+pub mod diagnostic;
