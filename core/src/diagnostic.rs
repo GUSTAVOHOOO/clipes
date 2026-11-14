@@ -29,7 +29,7 @@ impl DiagnosticKind {
 /// Values must be fixed, reviewed strings, never user-provided text.
 pub struct DiagnosticField {
     pub kind: DiagnosticKind,
-    pub value: fn() -> &'static str,
+    pub value: fn() -> String,
 }
 inventory::collect!(DiagnosticField);
 
@@ -112,7 +112,7 @@ fn get(_: Value, _: &mut EventSink<'_>) -> CommandResult {
             .into_iter()
             .find(|field| field.kind == kind)
             .map(|field| (field.value)())
-            .unwrap_or("indisponível");
+            .unwrap_or_else(|| "indisponível".into());
         lines.push(format!("{}: {}", kind.label(), value));
     }
     Ok(json!({"text": lines.join("\n")}))
@@ -122,6 +122,16 @@ fn export(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         code: "invalid_path".into(),
         message: "Caminho inválido".into(),
     })?;
+    let destination = Path::new(path);
+    if !destination.is_absolute()
+        || destination.extension().and_then(|s| s.to_str()) != Some("txt")
+        || destination.is_dir()
+    {
+        return Err(CoreError {
+            code: "invalid_path".into(),
+            message: "Caminho inválido".into(),
+        });
+    }
     let text = v["text"].as_str().ok_or_else(|| CoreError {
         code: "invalid_text".into(),
         message: "Texto inválido".into(),
