@@ -41,6 +41,8 @@ fn source_import_generates_cached_previews() {
             "mpeg4",
             "-c:a",
             "pcm_s16le",
+            "-ac",
+            "2",
             "-y"
         ])
         .arg(&media)
@@ -88,7 +90,7 @@ fn source_import_generates_cached_previews() {
         u32::from_le_bytes(waveform[12..16].try_into().unwrap()),
         100
     );
-    assert_eq!(u32::from_le_bytes(waveform[16..20].try_into().unwrap()), 1);
+    assert_eq!(u32::from_le_bytes(waveform[16..20].try_into().unwrap()), 2);
     assert!(u32::from_le_bytes(waveform[20..24].try_into().unwrap()) > 1);
     let old = root.join("cache/previews/old");
     let newer = root.join("cache/previews/newer");

@@ -8,11 +8,22 @@ let sourceItems = [
   { id: 3, path: '/test/mismatch.mp4', status: 'changed', available: false, verified: true, permission: {status:'none'} },
 ];
 let urlSettingsMock = {terms_accepted:false, download_dir:'/test/downloads'};
+let jobItems = [
+  { id: 1, kind: 'preview', state: 'running', progress: 42, project: 'test-project' },
+  { id: 2, kind: 'provider', state: 'uncertain', progress: 0, project: 'test-project' },
+];
 let providerMock = { endpoint: '', model: '', nativeSchema: false, keyLastFour: null as string | null, remote: false, confirmed: false };
 export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   if (import.meta.env.VITE_CORE_MOCK === '1' && !isTauri()) {
     if (name === 'projects.recent') return [] as T;
-    if (name === 'projects.current') return (sourceTest ? { name:'Teste', path:'/test/Teste.clipes' } : null) as T;
+    if (name === 'projects.current') return (sourceTest ? { name:'Teste', path:'/test/Teste.clipes', id:'test-project' } : null) as T;
+    if (name === 'jobs.list') return (sourceTest ? jobItems : []) as T;
+    if (sourceTest && (name === 'jobs.retry' || name === 'jobs.discard' || name === 'jobs.cancel')) {
+      const {id, confirmed} = args as {id:number; confirmed?:boolean};
+      if (name === 'jobs.retry' && !confirmed) throw {code:'confirmation_required', message:'Confirmação obrigatória'};
+      jobItems = jobItems.map(item => item.id === id ? {...item, state: name === 'jobs.retry' ? 'queued' : 'cancelled'} : item);
+      return null as T;
+    }
     if (sourceTest && name === 'backups.list') return [] as T;
     if (sourceTest && name === 'backups.settings.get') return { interval_seconds: 1800, copies: 10 } as T;
     if (name === 'sources.url.settings.get') return urlSettingsMock as T;

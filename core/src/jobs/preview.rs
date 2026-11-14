@@ -99,13 +99,13 @@ fn progress_event(id: i64, err: Option<crate::CoreError>) -> Result<(), crate::C
     });
     Ok(())
 }
-fn source(id: i64, project: &Path) -> Result<(PathBuf, String, i64, i64), crate::CoreError> {
-    let (stored, hash, audio, size, duration): (String, String, i64, i64, i64) =
+fn source(id: i64, project: &Path) -> Result<(PathBuf, String, i64, i64, usize), crate::CoreError> {
+    let (stored, hash, audio, size, duration, metadata): (String, String, i64, i64, i64, String) =
         projects::with_reader(|c| {
             c.query_row(
-                "SELECT path,partial_hash,audio_track,size,duration_us FROM sources WHERE id=?1",
+                "SELECT path,partial_hash,audio_track,size,duration_us,metadata FROM sources WHERE id=?1",
                 [id],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
             )
         })?;
     let stored = PathBuf::from(stored);
@@ -120,7 +120,16 @@ fn source(id: i64, project: &Path) -> Result<(PathBuf, String, i64, i64), crate:
             "A Fonte está indisponível ou foi alterada.",
         ));
     }
-    Ok((path, hash, audio, duration))
+    let metadata: Value = serde_json::from_str(&metadata).map_err(|_| failed())?;
+    let channels = metadata["streams"]
+        .as_array()
+        .and_then(|streams| streams.iter().find(|s| s["index"].as_i64() == Some(audio)))
+        .and_then(|s| s["channels"].as_u64())
+        .unwrap_or(1);
+    if !(1..=32).contains(&channels) {
+        return Err(failed());
+    }
+    Ok((path, hash, audio, duration, channels as usize))
 }
 fn key(hash: &str, audio: i64) -> String {
     format!("{hash}-{audio}")
@@ -133,7 +142,7 @@ fn generate(
     stop: &AtomicBool,
 ) -> Result<(), crate::CoreError> {
     check(id, stop)?;
-    let (source, hash, audio, duration) = source(source_id, project)?;
+    let (source_path, hash, audio, duration, channels) = source(source_id, project)?;
     let (cache, limit, ffmpeg) = crate::components::cache_settings()?;
     let ffmpeg =
         ffmpeg.ok_or_else(|| error("component_missing", "Instale o Componente FFmpeg."))?;
@@ -162,11 +171,11 @@ fn generate(
             "-v".into(),
             "error".into(),
             "-i".into(),
-            source.as_os_str().to_owned(),
+            source_path.as_os_str().to_owned(),
             "-map".into(),
             format!("0:{audio}").into(),
             "-ac".into(),
-            "1".into(),
+            channels.to_string().into(),
             "-ar".into(),
             "8000".into(),
             "-f".into(),
@@ -174,16 +183,17 @@ fn generate(
             "pipe:1".into(),
         ];
         let mut peaks = Vec::new();
-        let mut lo = i16::MAX;
-        let mut hi = i16::MIN;
+        let mut lo = vec![i16::MAX; channels];
+        let mut hi = vec![i16::MIN; channels];
         let mut count = 0usize;
+        let mut channel = 0usize;
         let mut pending = None;
         let mut processed = 0u64;
         let mut last = 1u8;
         run_process(&ffmpeg, args, id, stop, |bytes| {
             processed += bytes.len() as u64;
             let percentage = ((processed.saturating_mul(1_000_000).saturating_mul(49)
-                / 16_000
+                / (16_000 * channels as u64)
                 / (duration.max(1) as u64))
                 .min(49)) as u8;
             if percentage > last {
@@ -193,14 +203,18 @@ fn generate(
             for &b in bytes {
                 if let Some(first) = pending.take() {
                     let sample = i16::from_le_bytes([first, b]);
-                    lo = lo.min(sample);
-                    hi = hi.max(sample);
-                    count += 1;
-                    if count == 80 {
-                        peaks.push((lo, hi));
-                        lo = i16::MAX;
-                        hi = i16::MIN;
-                        count = 0;
+                    lo[channel] = lo[channel].min(sample);
+                    hi[channel] = hi[channel].max(sample);
+                    channel += 1;
+                    if channel == channels {
+                        channel = 0;
+                        count += 1;
+                        if count == 80 {
+                            peaks.extend((0..channels).map(|i| (lo[i], hi[i])));
+                            lo.fill(i16::MAX);
+                            hi.fill(i16::MIN);
+                            count = 0;
+                        }
                     }
                 } else {
                     pending = Some(b);
@@ -208,10 +222,10 @@ fn generate(
             }
         })?;
         if count > 0 {
-            peaks.push((lo, hi));
+            peaks.extend((0..channels).map(|i| (lo[i], hi[i])));
         }
         let temp = stage.join("waveform.tmp");
-        write_waveform(&temp, peaks)?;
+        write_waveform(&temp, peaks, channels)?;
         fs::rename(temp, &waveform).map_err(|_| failed())?;
     }
     checkpoint(id, "waveform")?;
@@ -222,7 +236,7 @@ fn generate(
         "-v".into(),
         "error".into(),
         "-i".into(),
-        source.as_os_str().to_owned(),
+        source_path.as_os_str().to_owned(),
         "-vf".into(),
         "fps=1/10:round=up,scale=-2:90".into(),
         "-pix_fmt".into(),
@@ -234,6 +248,13 @@ fn generate(
     ];
     run_process(&ffmpeg, args, id, stop, |_| {})?;
     check(id, stop)?;
+    let (_, current_hash, current_audio, _, _) = source(source_id, project)?;
+    if current_hash != hash || current_audio != audio {
+        return Err(error(
+            "source_changed",
+            "A Fonte está indisponível ou foi alterada.",
+        ));
+    }
     if output.exists() {
         fs::remove_dir_all(&output).map_err(|_| failed())?;
     }
@@ -294,31 +315,35 @@ fn run_process(
     result
 }
 
-fn write_waveform(path: &Path, first: Vec<(i16, i16)>) -> Result<(), crate::CoreError> {
-    let target = first.len().div_ceil(100).max(1);
+fn write_waveform(
+    path: &Path,
+    first: Vec<(i16, i16)>,
+    channels: usize,
+) -> Result<(), crate::CoreError> {
+    let target = (first.len() / channels).div_ceil(100).max(1);
     let mut levels = vec![first];
-    while levels.last().unwrap().len() > target {
+    while levels.last().unwrap().len() / channels > target {
         let prev = levels.last().unwrap();
-        let next = prev
-            .chunks(4)
-            .map(|chunk| {
-                (
-                    chunk.iter().map(|x| x.0).min().unwrap(),
-                    chunk.iter().map(|x| x.1).max().unwrap(),
-                )
-            })
-            .collect();
+        let mut next = Vec::new();
+        for chunk in prev.chunks(4 * channels) {
+            for channel in 0..channels {
+                let mut samples = chunk.iter().skip(channel).step_by(channels);
+                if let Some(&first) = samples.next() {
+                    next.push(samples.fold(first, |acc, &v| (acc.0.min(v.0), acc.1.max(v.1))));
+                }
+            }
+        }
         levels.push(next);
     }
     let mut out = fs::File::create(path).map_err(|_| failed())?;
     out.write_all(b"CLPWAVE\0").map_err(|_| failed())?;
-    for value in [1u32, 100, 1, levels.len() as u32] {
+    for value in [1u32, 100, channels as u32, levels.len() as u32] {
         out.write_all(&value.to_le_bytes()).map_err(|_| failed())?;
     }
     let mut offset = 24u64 + levels.len() as u64 * 16;
     for level in &levels {
         out.write_all(&offset.to_le_bytes()).map_err(|_| failed())?;
-        out.write_all(&(level.len() as u64).to_le_bytes())
+        out.write_all(&((level.len() / channels) as u64).to_le_bytes())
             .map_err(|_| failed())?;
         offset += level.len() as u64 * 4;
     }
@@ -378,7 +403,7 @@ fn preview(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let id = v["source_id"].as_i64().ok_or_else(failed)?;
     let current = crate::dispatch("projects.current", json!({}), &mut |_| {})?;
     let project = current["path"].as_str().ok_or_else(failed)?;
-    let (_, hash, audio, _) = source(id, Path::new(project))?;
+    let (_, hash, audio, _, _) = source(id, Path::new(project))?;
     let (cache, _, _) = crate::components::cache_settings()?;
     let dir = cache.join("previews").join(key(&hash, audio));
     let waveform = dir.join("waveform.bin");
