@@ -9,6 +9,7 @@ let sourceItems = [
 ];
 let urlSettingsMock = {terms_accepted:false, download_dir:'/test/downloads'};
 let providerMock = { endpoint: '', model: '', nativeSchema: false, keyLastFour: null as string | null, remote: false, confirmed: false };
+let providerCliMock = { selected: '', codexConfirmed: false, claudeConfirmed: false };
 export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   if (import.meta.env.VITE_CORE_MOCK === '1' && !isTauri()) {
     if (name === 'projects.recent') return [] as T;
@@ -33,7 +34,11 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'components.ytdlp.update') return {version:'test'} as T;
     if (name === 'components.ffmpeg.status') return { incomplete: false } as T;
     if (name === 'provider.status') return { ...providerMock } as T;
+    if (name === 'provider.cli.status') return { ...providerCliMock } as T;
+    if (name === 'provider.cli.configure') { providerCliMock.selected = (args as { kind: string }).kind; return {} as T; }
+    if (name === 'provider.cli.confirm') { if (providerCliMock.selected === 'codex') providerCliMock.codexConfirmed = true; else providerCliMock.claudeConfirmed = true; return {} as T; }
     if (name === 'provider.configure') {
+      providerCliMock.selected = '';
       const { endpoint, model, nativeSchema } = args as { endpoint: string; model: string; nativeSchema: boolean };
       const same = endpoint === providerMock.endpoint;
       providerMock = { endpoint, model, nativeSchema, keyLastFour: same ? providerMock.keyLastFour : null, confirmed: same && providerMock.confirmed, remote: !['localhost', '127.0.0.1', '[::1]'].includes(new URL(endpoint).hostname) };

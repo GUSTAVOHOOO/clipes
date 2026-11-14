@@ -19,6 +19,7 @@ tar = "0.4"
 xz2 = "0.1"
 rusqlite = { version = "0.32", features = ["bundled", "backup"] }
 pgp = "0.20"
+tempfile = "3"
 
 [dev-dependencies]
 rand = "0.8"
