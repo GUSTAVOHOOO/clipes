@@ -16,6 +16,7 @@ import pytest
 from clipes_worker.protocol import WorkerError
 from clipes_worker.server import Server
 from clipes_worker.tasks import Task
+from clipes_worker.transcribe import Transcriber, transcribe_task
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "protocol" / "examples"
 TIMEOUT = 10
@@ -51,6 +52,24 @@ def fake_tasks():
         ),
         "tts": Task("fake-kokoro", missing, lambda *_: {}),
     }
+
+
+def block_tasks():
+    """A tarefa `transcribe` real, com VAD, idioma e modelo falsos (10 s de áudio)."""
+
+    def spans(audio):
+        return [{"start": 16000, "end": 48000}, {"start": 80000, "end": 160000}]
+
+    def transcribe(chunk, language, batch_size):
+        return [(" olá", 0.1, 0.4), ("mundo", 0.5, 0.9)]
+
+    task = transcribe_task(
+        loader=lambda directory, device, compute_type: Transcriber(
+            spans, lambda chunk: "pt" if len(chunk) == 32000 else "en", transcribe
+        ),
+        reader=lambda path: [0.0] * 160000,
+    )
+    return {"transcribe": task}
 
 
 class Pipe:
@@ -100,7 +119,7 @@ def test_worker_follows_example_conversation(path):
     pipe = Pipe()
     result = {}
     thread = threading.Thread(
-        target=lambda: result.update(code=Server(pipe, pipe, fake_tasks()).serve()), daemon=True
+        target=lambda: result.update(code=Server(pipe, pipe, block_tasks() if path.stem == "transcribe-block" else fake_tasks()).serve()), daemon=True
     )
     thread.start()
     for entry in load(path):
@@ -123,6 +142,7 @@ def test_every_example_is_a_valid_alternating_conversation():
         "error",
         "model-swap",
         "protocol-mismatch",
+        "transcribe-block",
     }
     for path in scenarios():
         for entry in load(path):

@@ -46,6 +46,10 @@ const FILES: &[(&str, &[u8])] = &[
         "src/clipes_worker/tasks.py",
         include_bytes!("../../../worker/src/clipes_worker/tasks.py"),
     ),
+    (
+        "src/clipes_worker/transcribe.py",
+        include_bytes!("../../../worker/src/clipes_worker/transcribe.py"),
+    ),
 ];
 
 fn worker_dir(settings: &Settings) -> PathBuf {

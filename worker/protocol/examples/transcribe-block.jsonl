@@ -1,0 +1,13 @@
+{"from":"core","message":{"v":1,"type":"hello","protocol":1}}
+{"from":"worker","message":{"v":1,"type":"handshake","protocol":1,"worker":"*","python":"*","libs":{"faster-whisper":"*","onnxruntime":"*","numpy":"*","opencv-python-headless":"*"}}}
+{"from":"core","message":{"v":1,"type":"request","id":"r1","task":"transcribe","params":{"audio":"bloco.wav","final":false,"batch_size":1,"model":{"id":"fake","dir":"modelo","device":"cpu","compute_type":"int8"}}}}
+{"from":"worker","message":{"v":1,"type":"event","event":"model_loaded","model":"faster-whisper:fake"}}
+{"from":"worker","message":{"v":1,"type":"progress","id":"r1","stage":"transcribing","percentage":0,"message":"Transcrevendo"}}
+{"from":"worker","message":{"v":1,"type":"progress","id":"r1","stage":"transcribing","percentage":100,"message":"Transcrevendo"}}
+{"from":"worker","message":{"v":1,"type":"result","id":"r1","data":{"covered_us":5000000,"words":[{"text":"olá","start_us":1100000,"end_us":1400000,"language":"pt"},{"text":"mundo","start_us":1500000,"end_us":1900000,"language":"pt"}],"silences":[{"start_us":0,"end_us":1000000},{"start_us":3000000,"end_us":5000000}]}}}
+{"from":"core","message":{"v":1,"type":"request","id":"r2","task":"transcribe","params":{"audio":"bloco.wav","final":true,"batch_size":1,"model":{"id":"fake","dir":"modelo","device":"cpu","compute_type":"int8"}}}}
+{"from":"worker","message":{"v":1,"type":"progress","id":"r2","stage":"transcribing","percentage":0,"message":"Transcrevendo"}}
+{"from":"worker","message":{"v":1,"type":"progress","id":"r2","stage":"transcribing","percentage":50,"message":"Transcrevendo"}}
+{"from":"worker","message":{"v":1,"type":"progress","id":"r2","stage":"transcribing","percentage":100,"message":"Transcrevendo"}}
+{"from":"worker","message":{"v":1,"type":"result","id":"r2","data":{"covered_us":10000000,"words":[{"text":"olá","start_us":1100000,"end_us":1400000,"language":"pt"},{"text":"mundo","start_us":1500000,"end_us":1900000,"language":"pt"},{"text":"olá","start_us":5100000,"end_us":5400000,"language":"en"},{"text":"mundo","start_us":5500000,"end_us":5900000,"language":"en"}],"silences":[{"start_us":0,"end_us":1000000},{"start_us":3000000,"end_us":5000000}]}}}
+{"from":"core","message":{"v":1,"type":"shutdown"}}
