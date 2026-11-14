@@ -21,7 +21,7 @@ function slug(label: string, taken: string[]) {
   return id;
 }
 
-export function ProviderProfiles({ refreshKey = 0 }: { refreshKey?: number } = {}) {
+export function ProviderProfiles({ refreshKey = 0, onChange }: { refreshKey?: number; onChange?: () => void } = {}) {
   const t = useText(profileTexts);
   const language = useContext(LanguageContext);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -38,7 +38,7 @@ export function ProviderProfiles({ refreshKey = 0 }: { refreshKey?: number } = {
   useEffect(() => { void refresh().catch(() => setMessage(t.failed)); }, [refreshKey]);
   async function run(action: () => Promise<void | boolean>, result: string) {
     setBusy(true); setMessage('');
-    try { const completed = await action(); await refresh(); if (completed !== false) setMessage(result); } catch (error) { const code = (error as { code?: string })?.code; setMessage(code === 'timeout_uncertain' ? t.timeoutUncertain : code === 'insecure_endpoint' ? t.insecureEndpoint : t.failed); } finally { setBusy(false); }
+    try { const completed = await action(); await refresh(); onChange?.(); if (completed !== false) setMessage(result); } catch (error) { const code = (error as { code?: string })?.code; setMessage(code === 'timeout_uncertain' ? t.timeoutUncertain : code === 'insecure_endpoint' ? t.insecureEndpoint : t.failed); } finally { setBusy(false); }
   }
   async function test(profile: Profile) {
     if (!profile.local && !profile.confirmed) { setConsent(profile); return false; }
