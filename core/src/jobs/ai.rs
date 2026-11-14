@@ -14,7 +14,10 @@
 use super::*;
 use crate::{
     ai_task::{self, AiTask, TaskInput},
-    provider::{CancelToken, Provider, StructuredRequest},
+    provider::{
+        cost::{self, Target},
+        CancelToken, Provider, StructuredRequest,
+    },
     CoreError,
 };
 use std::{
@@ -43,6 +46,43 @@ static PROVIDER: Mutex<Option<SharedProvider>> = Mutex::new(None);
 pub fn set_ai_provider(provider: Option<SharedProvider>) {
     if let Ok(mut slot) = PROVIDER.lock() {
         *slot = provider;
+    }
+}
+
+static ROUTE: Mutex<Option<(Target, String)>> = Mutex::new(None);
+
+/// Fixa o alvo (Provedor e id do perfil) que preço e estimativa usam, para o harness e os
+/// testes headless que injetam um Provedor falso. Sem ele, vale a rota da Tarefa em `provider.json`.
+pub fn set_ai_route(route: Option<(Target, String)>) {
+    if let Ok(mut slot) = ROUTE.lock() {
+        *slot = route;
+    }
+}
+
+/// O alvo do job: o fixado, ou a rota configurada da Tarefa. Sem configuração, um Provedor pago
+/// fica sem preço (custo desconhecido, nunca zero) e um local custa zero.
+fn route_of(task: &str, paid: bool) -> (Target, String) {
+    if let Some(route) = ROUTE.lock().ok().and_then(|slot| slot.clone()) {
+        return route;
+    }
+    match cost::route_for(task) {
+        Ok(route) => route,
+        Err(_) if paid => (
+            Target::Api {
+                provider: "unknown".into(),
+                model: String::new(),
+                local: false,
+            },
+            String::new(),
+        ),
+        Err(_) => (
+            Target::Api {
+                provider: "local".into(),
+                model: String::new(),
+                local: true,
+            },
+            String::new(),
+        ),
     }
 }
 
@@ -82,6 +122,8 @@ impl Provider for Configured {
 struct Probe<'a> {
     inner: &'a dyn Provider,
     sent: &'a AtomicBool,
+    /// Teto de chamadas HTTP deste job (a chamada e o reparo), já descontado o orçamento do escopo.
+    max_calls: u64,
     job: i64,
 }
 
@@ -98,7 +140,9 @@ impl Provider for Probe<'_> {
             self.sent.store(true, Ordering::SeqCst);
             let _ = checkpoint(self.job, "sent");
         }
-        self.inner.structured_with(request, cancel)
+        crate::provider::control::with_call_limit(Some(self.max_calls), || {
+            self.inner.structured_with(request, cancel)
+        })
     }
 }
 
@@ -107,6 +151,16 @@ inventory::submit! { projects::Migration { id: "0121_001_ai_jobs", sql: "ALTER T
 /// Enfileira uma unidade de trabalho da Tarefa de IA `task`. `safety` é `Paid` para qualquer
 /// Provedor que não seja um modelo local (API remota ou CLI de assinatura).
 pub fn enqueue_ai(task: &str, input: &TaskInput, safety: Safety) -> Result<i64, CoreError> {
+    enqueue_ai_in_batch(task, input, safety, None)
+}
+
+/// Como `enqueue_ai`, com o rótulo do lote (#56) que o orçamento por lote soma.
+pub fn enqueue_ai_in_batch(
+    task: &str,
+    input: &TaskInput,
+    safety: Safety,
+    batch: Option<&str>,
+) -> Result<i64, CoreError> {
     let definition =
         ai_task::find(task).ok_or_else(|| error("unknown_task", "Tarefa de IA desconhecida."))?;
     ai_task::check_definition(definition).map_err(CoreError::from)?;
@@ -126,8 +180,8 @@ pub fn enqueue_ai(task: &str, input: &TaskInput, safety: Safety) -> Result<i64, 
     };
     projects::with_writer(|c| {
         c.execute(
-            "INSERT INTO jobs(kind,safety,state,payload) VALUES (?1,?2,'queued',?3)",
-            (format!("{KIND_PREFIX}{task}"), safety, payload),
+            "INSERT INTO jobs(kind,safety,state,payload,batch) VALUES (?1,?2,'queued',?3,?4)",
+            (format!("{KIND_PREFIX}{task}"), safety, payload, batch),
         )?;
         Ok(c.last_insert_rowid())
     })
@@ -137,14 +191,18 @@ struct Unit {
     task: &'static AiTask,
     input: TaskInput,
     paid: bool,
+    batch: Option<String>,
 }
 
 fn load(id: i64) -> Result<Unit, CoreError> {
-    let (safety, payload): (String, Option<String>) = projects::with_reader(|c| {
-        c.query_row("SELECT safety,payload FROM jobs WHERE id=?1", [id], |r| {
-            Ok((r.get(0)?, r.get(1)?))
-        })
-    })?;
+    let (safety, payload, batch): (String, Option<String>, Option<String>) =
+        projects::with_reader(|c| {
+            c.query_row(
+                "SELECT safety,payload,batch FROM jobs WHERE id=?1",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+        })?;
     let invalid = || error("invalid_job_payload", "Dados da tarefa de IA inválidos.");
     let payload: Value =
         serde_json::from_str(&payload.ok_or_else(invalid)?).map_err(|_| invalid())?;
@@ -165,6 +223,7 @@ fn load(id: i64) -> Result<Unit, CoreError> {
             native_schema: input["nativeSchema"].as_bool().unwrap_or(false),
         },
         paid: safety != "local",
+        batch,
     })
 }
 
@@ -265,8 +324,115 @@ fn fail_fixed(id: i64, task: &str, e: CoreError) {
     emit(id, task, "done", 0, "Tarefa de IA falhou", Some(e));
 }
 
+/// O pedido que o executor envia (o mesmo de `ai_task::run`), para estimar antes de enviar.
+fn request_of(unit: &Unit) -> Option<StructuredRequest> {
+    let (wire, _) = ai_task::check_definition(unit.task).ok()?;
+    Some(StructuredRequest {
+        instruction: ai_task::normalized_prompt(unit.task.prompt),
+        transcript: unit.input.transcript.clone(),
+        schema: wire,
+        native_schema: unit.input.native_schema,
+        max_output_tokens: Some(unit.task.budget.max_output_tokens),
+    })
+}
+
+/// Limites do `AiTask.budget` que valem por job e que a estimativa já decide antes de enviar
+/// (ADR-0009, regra 3). Estourar falha o job com `budget_*`; não pausa a fila.
+fn job_limit(unit: &Unit, estimate: &Value) -> Option<(&'static str, &'static str)> {
+    let b = unit.task.budget;
+    if b.max_calls == 0 {
+        return Some(("budget_calls", "A Tarefa não permite nenhuma chamada."));
+    }
+    if estimate["inputTokens"].as_u64().unwrap_or(0) > b.max_input_tokens {
+        return Some((
+            "budget_input_tokens",
+            "A entrada passa do limite de tokens da Tarefa; nada foi enviado.",
+        ));
+    }
+    // `max_cost_micro_cents` está em 1e-5 US$; o custo do núcleo, em 1e-6 US$.
+    let cap = b.max_cost_micro_cents.map(|c| c.saturating_mul(10));
+    let next = estimate["maxMicroUsd"]
+        .as_u64()
+        .or_else(|| estimate["minMicroUsd"].as_u64());
+    if cap.zip(next).is_some_and(|(cap, next)| next > cap) {
+        return Some((
+            "budget_cost",
+            "A estimativa passa do teto de custo da Tarefa; nada foi enviado.",
+        ));
+    }
+    None
+}
+
+/// O log de chamadas do Provedor (`{attempt, calls, usage, code, durationMs}`); sem log, uma
+/// entrada só com o total.
+fn entries_of(log: &[Value], usage: &Option<Value>, calls: u64, code: &str) -> Vec<Value> {
+    if log.is_empty() {
+        vec![json!({"attempt":0,"calls":calls,"usage":usage,"code":code})]
+    } else {
+        log.to_vec()
+    }
+}
+
+/// Erros que acontecem depois de uma chamada chegar ao Provedor: só esses geram linha de custo.
+fn reached_provider(code: &str) -> bool {
+    matches!(
+        code,
+        "timeout_uncertain"
+            | "cancelled"
+            | "budget_time"
+            | "budget_calls"
+            | "rate_limit"
+            | "provider_http"
+            | "network"
+            | "output_truncated"
+            | "refusal"
+            | "invalid_json"
+            | "invalid_response"
+            | "output_invalid"
+            | "verification_failed"
+    )
+}
+
+/// Grava uma linha de custo por chamada (e por reparo) do job (#124). Chamada paga sem `usage`
+/// (timeout, cancelamento em voo) fica com custo desconhecido, nunca zero.
+fn record_calls(
+    id: i64,
+    unit: &Unit,
+    route: &(Target, String),
+    estimate: &Value,
+    entries: &[Value],
+    elapsed_ms: u64,
+) {
+    let each = estimate["maxMicroUsd"]
+        .as_u64()
+        .or_else(|| estimate["minMicroUsd"].as_u64());
+    for entry in entries {
+        let usage = entry["usage"].clone();
+        let Ok(cost) = cost::actual(&route.0, &usage) else {
+            continue;
+        };
+        let profile = (!route.1.is_empty()).then_some(route.1.as_str());
+        let _ = cost::record_call(&cost::CallRow {
+            profile,
+            target: &route.0,
+            task: unit.task.id,
+            task_version: Some(unit.task.version),
+            batch: unit.batch.as_deref(),
+            job: Some(id),
+            attempt: Some(u8::from(entry["attempt"].as_u64() == Some(1))),
+            usage: &usage,
+            calls: entry["calls"].as_u64().unwrap_or(1),
+            cost: &cost,
+            code: entry["code"].as_str().unwrap_or("ok"),
+            estimate_micro_usd: each,
+            duration_ms: Some(entry["durationMs"].as_u64().unwrap_or(elapsed_ms)),
+        });
+    }
+}
+
 /// Executa o job `id`, já `running`. Resolve o estado final sozinho; só devolve o job à fila
-/// quando o app fecha antes de qualquer envio (ou com um modelo local).
+/// quando o app fecha antes de qualquer envio (ou com um modelo local), ou quando o orçamento
+/// acumulado pausa a fila antes de enviar.
 pub(super) fn execute(id: i64, stop: &AtomicBool) {
     let unit = match load(id) {
         Ok(unit) => unit,
@@ -289,6 +455,38 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
         );
         return emit(id, task, "done", 0, "Tarefa de IA cancelada", None);
     }
+    // Orçamento: a estimativa de antes de enviar é a do #40 (`cost::estimate`).
+    let route = route_of(task, unit.paid);
+    let estimate = request_of(&unit)
+        .and_then(|request| cost::estimate(&route.0, &request).ok())
+        .unwrap_or_else(|| json!({"kind":"unknown"}));
+    if let Some((code, message)) = job_limit(&unit, &estimate) {
+        return fail_fixed(id, task, error(code, message));
+    }
+    let job_calls = unit.task.budget.max_calls as u64;
+    let max_calls = match budget::gate(task, unit.batch.as_deref(), &estimate, job_calls) {
+        Ok(budget::Gate::Go { max_calls }) => max_calls,
+        Ok(budget::Gate::Pause { scope, key, code }) => {
+            budget::pause(scope, &key, code);
+            let _ = projects::with_writer(|c| {
+                c.execute(
+                    "UPDATE jobs SET state='queued',attempts=attempts-1,result=NULL WHERE id=?1 AND state='running'",
+                    [id],
+                )?;
+                Ok(())
+            });
+            let e = error(code, budget::pause_message(code));
+            return emit(
+                id,
+                task,
+                "paused",
+                0,
+                "Fila pausada pelo orçamento",
+                Some(e),
+            );
+        }
+        Err(e) => return fail_fixed(id, task, e),
+    };
     let provider: SharedProvider = PROVIDER
         .lock()
         .ok()
@@ -303,11 +501,15 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
     let probe = Probe {
         inner: provider.as_ref(),
         sent: &sent,
+        max_calls,
         job: id,
     };
     let token = CancelToken::new();
     let finished = AtomicBool::new(false);
     let shutdown = AtomicBool::new(false);
+    let timed_out = AtomicBool::new(false);
+    let started = std::time::Instant::now();
+    let wall = Duration::from_secs(unit.task.budget.max_wall_clock_secs);
     stage(id, task, "call", 10, "Chamando o Provedor");
     let run = std::thread::scope(|scope| {
         scope.spawn(|| {
@@ -321,6 +523,12 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
                     token.cancel();
                     break;
                 }
+                // Tempo máximo do job: cancela a chamada em voo (paga, vira incerto).
+                if started.elapsed() >= wall {
+                    timed_out.store(true, Ordering::SeqCst);
+                    token.cancel();
+                    break;
+                }
                 std::thread::sleep(Duration::from_millis(25));
             }
         });
@@ -328,9 +536,12 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
         finished.store(true, Ordering::SeqCst);
         run
     });
+    let elapsed_ms = started.elapsed().as_millis() as u64;
     stage(id, task, "verify", 80, "Conferindo a resposta");
     match run {
         Ok(out) => {
+            let entries = entries_of(&out.log, &out.usage, out.calls, "ok");
+            record_calls(id, &unit, &route, &estimate, &entries, elapsed_ms);
             settle(
                 id,
                 "completed",
@@ -344,20 +555,50 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
             );
             emit(id, task, "done", 100, "Tarefa de IA concluída", None);
         }
-        Err(e) => {
+        Err(mut e) => {
             let sent = sent.load(Ordering::SeqCst);
+            // O limite de tempo do job cancelou a chamada: é um timeout, não um cancelamento.
+            if e.code == "cancelled" && timed_out.load(Ordering::SeqCst) {
+                e.code = if sent && unit.paid {
+                    "timeout_uncertain".into()
+                } else {
+                    "budget_time".into()
+                };
+            }
             let how = classify(&e.code, sent, unit.paid, shutdown.load(Ordering::SeqCst));
+            if how == Settle::Requeue {
+                return requeue(id);
+            }
+            if sent && reached_provider(&e.code) {
+                let info = e.usage.clone().unwrap_or(Value::Null);
+                let usage = info.get("usage").filter(|u| !u.is_null()).cloned();
+                let calls = info["calls"].as_u64().unwrap_or(1);
+                let log = info["log"].as_array().cloned().unwrap_or_default();
+                let mut entries = entries_of(&log, &usage, calls, &e.code);
+                // A última chamada chegou, mas não passou no schema nem nos verificadores; ou
+                // foi cortada pelo limite de tempo do job.
+                if let Some(last) = entries.last_mut() {
+                    if last["code"] == "ok" || last["code"] == "cancelled" {
+                        last["code"] = json!(e.code);
+                    }
+                }
+                record_calls(id, &unit, &route, &estimate, &entries, elapsed_ms);
+            }
             let unknown = how == Settle::Uncertain && unit.paid;
             let core: CoreError = e.clone().into();
             let result = json!({
                 "outcome": match how { Settle::Uncertain => "uncertain", Settle::Cancelled => "cancelled", _ => "failed" },
                 "code": e.code,
                 "violations": e.violations,
-                "usage": e.usage,
+                "usage": e.usage.as_ref().map(|u| {
+                    let mut u = u.clone();
+                    if let Some(map) = u.as_object_mut() { map.remove("log"); }
+                    u
+                }),
                 "cost": cost_of(unit.paid, e.usage.is_some(), unknown),
             });
             let (state, message) = match how {
-                Settle::Requeue => return requeue(id),
+                Settle::Requeue => unreachable!("handled above"),
                 Settle::Uncertain => ("uncertain", "Resultado da chamada incerto"),
                 Settle::Cancelled => ("cancelled", "Tarefa de IA cancelada"),
                 Settle::Failed => ("failed", "Tarefa de IA falhou"),
@@ -368,8 +609,8 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
     }
 }
 
-/// Custo estimado de repetir o job (ADR-0009, regra 5): modelo local é zero; para o resto,
-/// `provider.cost.estimate` da rota da tarefa, ou `unknown` se não houver estimativa.
+/// Custo estimado de repetir o job (ADR-0009, regra 5): modelo local é zero; para o resto, a
+/// estimativa do #40 para a rota da Tarefa, ou `unknown` se não houver.
 pub(super) fn estimate(id: i64) -> Value {
     let Ok(unit) = load(id) else {
         return json!({"kind":"unknown"});
@@ -377,22 +618,11 @@ pub(super) fn estimate(id: i64) -> Value {
     if !unit.paid {
         return json!({"kind":"zero"});
     }
-    let Ok((wire, _)) = ai_task::check_definition(unit.task) else {
+    let route = route_of(unit.task.id, true);
+    let Some(request) = request_of(&unit) else {
         return json!({"kind":"unknown"});
     };
-    let request = StructuredRequest {
-        instruction: ai_task::normalized_prompt(unit.task.prompt),
-        transcript: unit.input.transcript,
-        schema: wire,
-        native_schema: unit.input.native_schema,
-        max_output_tokens: Some(unit.task.budget.max_output_tokens),
-    };
-    let Ok(mut args) = serde_json::to_value(&request) else {
-        return json!({"kind":"unknown"});
-    };
-    args["task"] = json!(unit.task.id);
-    crate::dispatch("provider.cost.estimate", args, &mut |_| {})
-        .unwrap_or_else(|_| json!({"kind":"unknown"}))
+    cost::estimate(&route.0, &request).unwrap_or_else(|_| json!({"kind":"unknown"}))
 }
 
 fn job_id(v: &Value) -> Result<i64, CoreError> {

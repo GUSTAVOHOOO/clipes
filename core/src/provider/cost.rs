@@ -256,6 +256,14 @@ inventory::submit! { projects::Migration { id: "0120_001_provider_costs_profile"
 // that stopped on one.
 inventory::submit! { projects::Migration { id: "0124_001_ai_call_costs_and_budgets", sql: "ALTER TABLE provider_costs ADD COLUMN job_id INTEGER; ALTER TABLE provider_costs ADD COLUMN task_version INTEGER; ALTER TABLE provider_costs ADD COLUMN attempt INTEGER CHECK(attempt IS NULL OR attempt IN (0,1)); ALTER TABLE provider_costs ADD COLUMN outcome TEXT CHECK(outcome IS NULL OR outcome IN ('ok','invalid_json','truncated','refused','timeout_uncertain','rate_limit','provider_http','cancelled')); ALTER TABLE provider_costs ADD COLUMN code TEXT; ALTER TABLE provider_costs ADD COLUMN estimate_micro_usd INTEGER; ALTER TABLE provider_costs ADD COLUMN duration_ms INTEGER; CREATE INDEX provider_costs_job ON provider_costs(job_id); ALTER TABLE jobs ADD COLUMN batch TEXT; CREATE TABLE ai_budgets (scope TEXT NOT NULL CHECK(scope IN ('task','batch')), key TEXT NOT NULL, max_calls INTEGER, max_tokens INTEGER, max_wall_ms INTEGER, max_cost_micro_usd INTEGER, unknown_confirmed INTEGER NOT NULL DEFAULT 0, since INTEGER NOT NULL, PRIMARY KEY(scope,key)); CREATE TABLE ai_pauses (scope TEXT NOT NULL CHECK(scope IN ('task','batch')), key TEXT NOT NULL, reason TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000000), PRIMARY KEY(scope,key));" } }
 
+/// Microseconds since the Unix epoch: the clock of `provider_costs.created_at` and of the
+/// `since` of a budget, so a budget reset never counts rows written before it.
+pub fn now_micros() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_micros() as i64)
+}
+
 /// Normalizes a typed error code to one of the eight outcomes stored in `provider_costs.outcome`.
 /// The raw code is kept in its own column. Codes with no better match (`network`) map to
 /// `provider_http`; a response that failed schema or verification maps to `invalid_json`.
@@ -267,7 +275,10 @@ pub fn outcome_of(code: &str) -> &'static str {
         "timeout_uncertain" | "budget_time" => "timeout_uncertain",
         "rate_limit" => "rate_limit",
         "cancelled" => "cancelled",
-        "invalid_json" | "invalid_response" | "output_invalid" | "verification_failed"
+        "invalid_json"
+        | "invalid_response"
+        | "output_invalid"
+        | "verification_failed"
         | "budget_calls" => "invalid_json",
         _ => "provider_http",
     }
@@ -297,7 +308,7 @@ pub fn record_call(row: &CallRow<'_>) -> Result<(), CoreError> {
     let table = embedded().updated_at;
     projects::with_writer(|c| {
         c.execute(
-            "INSERT INTO provider_costs(task,batch,provider,model,input_tokens,output_tokens,calls,cost_kind,cost_micro_usd,price_source,table_updated_at,profile,job_id,task_version,attempt,outcome,code,estimate_micro_usd,duration_ms) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)",
+            "INSERT INTO provider_costs(task,batch,provider,model,input_tokens,output_tokens,calls,cost_kind,cost_micro_usd,price_source,table_updated_at,profile,job_id,task_version,attempt,outcome,code,estimate_micro_usd,duration_ms,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20)",
             rusqlite::params![
                 row.task,
                 row.batch,
@@ -317,7 +328,8 @@ pub fn record_call(row: &CallRow<'_>) -> Result<(), CoreError> {
                 outcome_of(row.code),
                 row.code,
                 row.estimate_micro_usd.map(|v| v as i64),
-                row.duration_ms.map(|v| v as i64)
+                row.duration_ms.map(|v| v as i64),
+                now_micros()
             ],
         )?;
         Ok(())
@@ -590,9 +602,10 @@ fn cmd_price_clear(args: Value, _: &mut EventSink<'_>) -> CommandResult {
 }
 fn cmd_list(args: Value, _: &mut EventSink<'_>) -> CommandResult {
     let batch = args["batch"].as_str().map(str::to_owned);
+    let job = args["job"].as_i64();
     projects::with_reader(|c| {
-        let mut s = c.prepare("SELECT id,task,batch,provider,model,input_tokens,output_tokens,calls,cost_kind,cost_micro_usd,price_source,table_updated_at,created_at,profile FROM provider_costs WHERE (?1 IS NULL OR batch=?1) ORDER BY id")?;
-        let rows = s.query_map([batch], |r| Ok(json!({"id":r.get::<_,i64>(0)?,"task":r.get::<_,String>(1)?,"batch":r.get::<_,Option<String>>(2)?,"provider":r.get::<_,String>(3)?,"model":r.get::<_,String>(4)?,"inputTokens":r.get::<_,Option<i64>>(5)?,"outputTokens":r.get::<_,Option<i64>>(6)?,"calls":r.get::<_,i64>(7)?,"costKind":r.get::<_,String>(8)?,"microUsd":r.get::<_,Option<i64>>(9)?,"priceSource":r.get::<_,Option<String>>(10)?,"tableUpdatedAt":r.get::<_,String>(11)?,"createdAt":r.get::<_,i64>(12)?,"profile":r.get::<_,Option<String>>(13)?})))?;
+        let mut s = c.prepare("SELECT id,task,batch,provider,model,input_tokens,output_tokens,calls,cost_kind,cost_micro_usd,price_source,table_updated_at,created_at,profile,job_id,task_version,attempt,outcome,code,estimate_micro_usd,duration_ms FROM provider_costs WHERE (?1 IS NULL OR batch=?1) AND (?2 IS NULL OR job_id=?2) ORDER BY id")?;
+        let rows = s.query_map(rusqlite::params![batch, job], |r| Ok(json!({"jobId":r.get::<_,Option<i64>>(14)?,"taskVersion":r.get::<_,Option<i64>>(15)?,"attempt":r.get::<_,Option<i64>>(16)?,"outcome":r.get::<_,Option<String>>(17)?,"code":r.get::<_,Option<String>>(18)?,"estimateMicroUsd":r.get::<_,Option<i64>>(19)?,"durationMs":r.get::<_,Option<i64>>(20)?,"id":r.get::<_,i64>(0)?,"task":r.get::<_,String>(1)?,"batch":r.get::<_,Option<String>>(2)?,"provider":r.get::<_,String>(3)?,"model":r.get::<_,String>(4)?,"inputTokens":r.get::<_,Option<i64>>(5)?,"outputTokens":r.get::<_,Option<i64>>(6)?,"calls":r.get::<_,i64>(7)?,"costKind":r.get::<_,String>(8)?,"microUsd":r.get::<_,Option<i64>>(9)?,"priceSource":r.get::<_,Option<String>>(10)?,"tableUpdatedAt":r.get::<_,String>(11)?,"createdAt":r.get::<_,i64>(12)?,"profile":r.get::<_,Option<String>>(13)?})))?;
         rows.collect::<rusqlite::Result<Vec<_>>>()
     })
     .map(|v| json!(v))

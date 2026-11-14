@@ -1,8 +1,9 @@
 use crate::{projects, CommandRegistration, CommandResult, EventSink};
 use serde_json::{json, Value};
 mod ai;
+mod budget;
 mod preview;
-pub use ai::{enqueue_ai, set_ai_provider};
+pub use ai::{enqueue_ai, enqueue_ai_in_batch, set_ai_provider, set_ai_route};
 
 #[derive(Clone, Copy)]
 pub enum Safety {
@@ -182,10 +183,32 @@ pub(crate) fn reconcile() -> Result<(), crate::CoreError> {
     })
 }
 
+/// Cada job traz o lote, o perfil que o serviu e o custo acumulado da sua Tarefa (`taskCost`),
+/// do perfil (`profileCost`) e do lote (`batchCost`): `{calls, inputTokens, outputTokens,
+/// microUsd, unknownCostCalls, planQuotaCalls, durationMs, costLabel}`. `microUsd` soma só o
+/// que tem preço; `costLabel` diz "custo desconhecido" ou "consome a cota do plano" (CLI).
 fn list(_: Value, _: &mut EventSink<'_>) -> CommandResult {
+    use crate::provider::cost::totals_by;
+    let (by_task, by_profile, by_batch) = (
+        totals_by("task")?,
+        totals_by("profile")?,
+        totals_by("batch")?,
+    );
     projects::with_reader(|c| {
-        let mut s = c.prepare("SELECT id,kind,safety,state,attempts,checkpoint,progress,(SELECT id FROM queue_project_identity),json_extract(result,'$.outcome'),json_extract(result,'$.cost') FROM jobs ORDER BY id")?;
-        let rows = s.query_map([], |r| Ok(json!({"id":r.get::<_,i64>(0)?,"kind":r.get::<_,String>(1)?,"safety":r.get::<_,String>(2)?,"state":r.get::<_,String>(3)?,"attempts":r.get::<_,i64>(4)?,"checkpoint":r.get::<_,Option<String>>(5)?,"progress":r.get::<_,i64>(6)?,"project":r.get::<_,String>(7)?,"outcome":r.get::<_,Option<String>>(8)?,"cost":r.get::<_,Option<String>>(9)?})))?;
+        let mut s = c.prepare("SELECT id,kind,safety,state,attempts,checkpoint,progress,(SELECT id FROM queue_project_identity),json_extract(result,'$.outcome'),json_extract(result,'$.cost'),batch,(SELECT profile FROM provider_costs WHERE job_id=jobs.id ORDER BY id DESC LIMIT 1) FROM jobs ORDER BY id")?;
+        let rows = s.query_map([], |r| {
+            let kind = r.get::<_, String>(1)?;
+            let batch = r.get::<_, Option<String>>(10)?;
+            let profile = r.get::<_, Option<String>>(11)?;
+            let pick = |map: &std::collections::HashMap<String, Value>, key: Option<&str>| {
+                key.and_then(|k| map.get(k)).cloned().unwrap_or(Value::Null)
+            };
+            Ok(json!({"id":r.get::<_,i64>(0)?,"kind":kind,"safety":r.get::<_,String>(2)?,"state":r.get::<_,String>(3)?,"attempts":r.get::<_,i64>(4)?,"checkpoint":r.get::<_,Option<String>>(5)?,"progress":r.get::<_,i64>(6)?,"project":r.get::<_,String>(7)?,"outcome":r.get::<_,Option<String>>(8)?,"cost":r.get::<_,Option<String>>(9)?,
+                "batch":batch,"profile":profile,
+                "taskCost":pick(&by_task, kind.strip_prefix("ai:")),
+                "profileCost":pick(&by_profile, profile.as_deref()),
+                "batchCost":pick(&by_batch, batch.as_deref())}))
+        })?;
         rows.collect::<rusqlite::Result<Vec<_>>>()
     }).map(|v| json!(v))
 }

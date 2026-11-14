@@ -430,11 +430,7 @@ impl Adapter {
                     .and_then(Value::as_str)
                     .is_some_and(|refusal| !refusal.is_empty())
             {
-                return Err(billed(
-                    "refusal",
-                    "Provider refused the request",
-                    &mut log,
-                ));
+                return Err(billed("refusal", "Provider refused the request", &mut log));
             }
             let text = match self.kind {
                 Kind::OpenAi => response
