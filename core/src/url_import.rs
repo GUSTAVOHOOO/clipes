@@ -199,7 +199,7 @@ fn run_download(
     }
     args.push("--".into());
     args.push(url.into());
-    let mut child = crate::process::spawn(exe, args).map_err(|_| failure())?;
+    let (mut child, group) = crate::process::spawn_managed(exe, args).map_err(|_| failure())?;
     let stdout = child.stdout.take().ok_or_else(failure)?;
     let stderr = child.stderr.take().ok_or_else(failure)?;
     let (tx, rx) = mpsc::channel();
@@ -219,6 +219,7 @@ fn run_download(
             handle_line(&line, job, events, &mut filename);
         }
         if flag.load(Ordering::Relaxed) {
+            group.terminate();
             let _ = child.kill();
             let _ = child.wait();
             break Err(error("cancelled", "Download cancelado"));
@@ -227,12 +228,14 @@ fn run_download(
             Ok(Some(status)) => break Ok(status),
             Ok(None) => thread::sleep(Duration::from_millis(50)),
             Err(_) => {
+                group.terminate();
                 let _ = child.kill();
                 let _ = child.wait();
                 break Err(failure());
             }
         }
     };
+    drop(group);
     let _ = output_reader.join();
     let _ = error_reader.join();
     for line in rx.try_iter() {
@@ -276,7 +279,13 @@ fn run_download(
             format!("{stem}-{suffix}.{ext}")
         });
         match fs::hard_link(&canonical, &target) {
-            Ok(()) => return Ok(target),
+            Ok(()) => {
+                if flag.load(Ordering::Relaxed) {
+                    let _ = fs::remove_file(&target);
+                    return Err(error("cancelled", "Download cancelado"));
+                }
+                return Ok(target);
+            }
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(_) => {
                 let mut target_file = match fs::OpenOptions::new()
@@ -313,6 +322,10 @@ fn run_download(
                 if let Err(e) = copied {
                     let _ = fs::remove_file(&target);
                     return Err(e);
+                }
+                if flag.load(Ordering::Relaxed) {
+                    let _ = fs::remove_file(&target);
+                    return Err(error("cancelled", "Download cancelado"));
                 }
                 return Ok(target);
             }
@@ -397,6 +410,18 @@ mod download_tests {
         )
         .unwrap_err();
         assert_eq!(err.code, "cancelled");
+        flag.store(false, Ordering::Relaxed);
+        let err = run_download(
+            &fake,
+            &output,
+            "https://example.com/hang-child",
+            "job",
+            &flag,
+            &mut |_| flag.store(true, Ordering::Relaxed),
+        )
+        .unwrap_err();
+        assert_eq!(err.code, "cancelled");
+        assert!(!output.join("child-survived").exists());
         assert_eq!(fs::read_dir(&output).unwrap().count(), 2);
         fs::remove_dir_all(root).unwrap();
     }
