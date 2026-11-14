@@ -50,6 +50,14 @@ fn session(s: &mut Option<Session>) -> Result<&mut Session, CoreError> {
     s.as_mut().ok_or_else(closed)
 }
 
+/// Read from the current Project without marking it as changed.
+pub fn with_reader<T>(f: impl FnOnce(&Connection) -> rusqlite::Result<T>) -> Result<T, CoreError> {
+    let mut guard = state().lock().map_err(|_| busy())?;
+    let s = session(&mut guard)?;
+    f(s.conn.as_ref().ok_or_else(closed)?)
+        .map_err(|_| fixed("project_read", "Não foi possível ler o Projeto."))
+}
+
 /// All Project writes must use this function, including writes made by jobs.
 pub fn with_writer<T>(
     f: impl FnOnce(&mut Connection) -> rusqlite::Result<T>,

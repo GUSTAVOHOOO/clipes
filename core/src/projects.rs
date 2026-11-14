@@ -9,7 +9,7 @@ use std::{
 };
 
 mod backups;
-pub use backups::{start_job, with_writer, ProjectJob};
+pub use backups::{start_job, with_reader, with_writer, ProjectJob};
 
 fn error(code: &str, e: impl ToString) -> CoreError {
     CoreError {

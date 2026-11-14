@@ -41,4 +41,5 @@ mod components;
 pub mod process;
 pub mod provider;
 pub mod projects;
+mod sources;
 mod version;

@@ -32,6 +32,11 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 ### DCO obrigatório
 - O app DCO está instalado: todo commit precisa de `Signed-off-by`. Use `git commit -s`; para corrigir o último commit ainda não publicado, `git commit --amend -s`.
 
+### Servidor HTTP falso falha no Windows
+- **Sintoma:** teste de Provedor espera `provider_http`, mas recebe `network` no CI Windows.
+- **Causa:** o servidor falso responde e fecha antes de ler a requisição inteira; o fechamento pode causar reset TCP. Um socket aceito de listener não bloqueante também pode permanecer não bloqueante no Windows.
+- **Ação:** coloque o socket aceito em modo bloqueante com timeout e leia os cabeçalhos até `\r\n\r\n` e o corpo inteiro pelo `Content-Length` antes de responder; teste também a requisição fragmentada.
+
 ### Sem CI
 - Até o PR #86 entrar, o repo não tinha CI (`gh pr checks` responde `no checks reported`). Sem checks, revise pelo diff, pelos critérios de aceite e pela evidência de testes do worker, e diga isso no resumo.
 

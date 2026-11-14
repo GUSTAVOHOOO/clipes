@@ -576,9 +576,40 @@ mod settings {
 }
 
 #[cfg(test)]
+mod test_http {
+    pub(super) fn read_request(stream: &mut std::net::TcpStream) -> Vec<u8> {
+        stream.set_nonblocking(false).unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(3)))
+            .unwrap();
+        let mut bytes = Vec::new();
+        loop {
+            let mut chunk = [0; 4096];
+            let n = std::io::Read::read(stream, &mut chunk).unwrap();
+            assert!(n > 0, "request ended before its body");
+            bytes.extend_from_slice(&chunk[..n]);
+            if let Some(pos) = bytes.windows(4).position(|x| x == b"\r\n\r\n") {
+                let headers = String::from_utf8_lossy(&bytes[..pos]);
+                let length: usize = headers
+                    .lines()
+                    .find_map(|line| {
+                        line.split_once(':')
+                            .filter(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+                            .map(|(_, value)| value.trim().parse().unwrap())
+                    })
+                    .expect("missing Content-Length");
+                if bytes.len() >= pos + 4 + length {
+                    return bytes;
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
 mod security_tests {
     use super::*;
-    use std::{io::Read, net::TcpListener, thread, time::Instant};
+    use std::{net::TcpListener, thread, time::Instant};
 
     fn input() -> StructuredRequest {
         StructuredRequest {
@@ -602,8 +633,7 @@ mod security_tests {
                     stream
                         .set_read_timeout(Some(Duration::from_secs(1)))
                         .unwrap();
-                    let mut buf = [0; 4096];
-                    let _ = stream.read(&mut buf);
+                    let _ = super::test_http::read_request(&mut stream);
                     connections.push(stream);
                 }
                 thread::sleep(Duration::from_millis(5));
