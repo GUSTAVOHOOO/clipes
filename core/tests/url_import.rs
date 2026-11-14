@@ -67,6 +67,20 @@ fn url_settings_persist_terms_and_download_directory_per_installation() {
     .unwrap();
     assert!(std::path::Path::new(downloaded["path"].as_str().unwrap()).exists());
     assert!(progress.contains(&42));
+    std::env::set_var("CLIPES_FFPROBE", &fake);
+    let imported = run("sources.import", json!({"project":project,"path":downloaded["path"],"audio_track":0,"permission":{"status":"none"},"origin_url":downloaded["url"]})).unwrap();
+    assert_eq!(imported["origin_url"], "https://example.com/success");
+    assert_eq!(imported["status"], "available");
+    assert_eq!(
+        run("sources.list", json!({"project":project})).unwrap()[0]["origin_url"],
+        "https://example.com/success"
+    );
+    fs::write(downloaded["path"].as_str().unwrap(), b"modified media").unwrap();
+    assert_eq!(
+        run("sources.list", json!({"project":project})).unwrap()[0]["status"],
+        "changed"
+    );
+
     let err = dispatch(
         "sources.url.download",
         json!({"project":project,"url":"https://example.com/hang","job":"cancel-me"}),

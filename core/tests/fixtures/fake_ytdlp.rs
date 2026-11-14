@@ -1,6 +1,11 @@
 use std::{env, fs, io::{self, Write}, thread, time::Duration};
 fn main() {
     let args: Vec<String> = env::args().collect();
+    if args.get(1).map(String::as_str) == Some("-v") {
+        println!(r#"{{"format":{{"duration":"1.0"}},"streams":[{{"index":0,"codec_type":"audio"}}]}}"#);
+        return;
+    }
+
     let i = args.iter().position(|a| a == "-o").unwrap();
     let end = args.iter().position(|a| a == "--").unwrap();
     let url = &args[end + 1];

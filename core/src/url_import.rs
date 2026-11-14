@@ -89,7 +89,7 @@ impl Drop for TempDir {
         let _ = fs::remove_dir_all(&self.0);
     }
 }
-fn validate_url(v: &str) -> Result<(), CoreError> {
+pub(crate) fn validate_url(v: &str) -> Result<(), CoreError> {
     match reqwest::Url::parse(v) {
         Ok(u) if matches!(u.scheme(), "http" | "https") && u.host_str().is_some() => Ok(()),
         _ => Err(error("invalid_url", "Informe uma URL HTTP ou HTTPS válida")),

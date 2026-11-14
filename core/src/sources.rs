@@ -15,6 +15,7 @@ use std::{
 
 inventory::submit! { projects::Migration { id:"0041_001_sources", sql:"CREATE TABLE sources (id INTEGER PRIMARY KEY, path TEXT NOT NULL, size INTEGER NOT NULL, duration_us INTEGER NOT NULL, partial_hash TEXT NOT NULL, full_hash TEXT, metadata TEXT NOT NULL, permission TEXT NOT NULL, audio_track INTEGER NOT NULL);" } }
 inventory::submit! { projects::Migration { id:"0041_002_source_mtime", sql:"ALTER TABLE sources ADD COLUMN modified TEXT;" } }
+inventory::submit! { projects::Migration { id:"0045_001_source_origin_url", sql:"ALTER TABLE sources ADD COLUMN origin_url TEXT;" } }
 fn err(code: &str, message: &str) -> CoreError {
     CoreError {
         code: code.into(),
@@ -218,6 +219,14 @@ fn inspect(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 fn import(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     let _job = project_job(&v)?;
     permission(&v["permission"])?;
+    let origin_url = match v.get("origin_url") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(url)) => {
+            crate::url_import::validate_url(url)?;
+            Some(url.as_str())
+        }
+        _ => return Err(err("invalid_url", "Informe uma URL HTTP ou HTTPS válida")),
+    };
     let source = PathBuf::from(
         v["path"]
             .as_str()
@@ -292,13 +301,13 @@ fn import(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     }
     let modified = modified(&resolve_path(&v, &path.to_string_lossy())?)?;
     let id = projects::with_writer(|conn| {
-        conn.execute("INSERT INTO sources(path,size,duration_us,partial_hash,full_hash,metadata,permission,audio_track,modified) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",params![path.to_string_lossy(),size as i64,dur,part,full_hash,metadata.to_string(),v["permission"].to_string(),audio,modified])?;
+        conn.execute("INSERT INTO sources(path,size,duration_us,partial_hash,full_hash,metadata,permission,audio_track,modified,origin_url) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",params![path.to_string_lossy(),size as i64,dur,part,full_hash,metadata.to_string(),v["permission"].to_string(),audio,modified,origin_url])?;
         Ok(conn.last_insert_rowid())
     })?;
     get(&v, id)
 }
 fn get(v: &Value, id: i64) -> CommandResult {
-    let (path,metadata,permission,audio,hash,size,partial_hash,mtime):(String,String,String,i64,Option<String>,i64,String,Option<String>)=projects::with_reader(|conn| conn.query_row("SELECT path,metadata,permission,audio_track,full_hash,size,partial_hash,modified FROM sources WHERE id=?1",[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?,r.get(7)?)))).map_err(|_|err("source_missing","Fonte não encontrada"))?;
+    let (path,metadata,permission,audio,hash,size,partial_hash,mtime,origin_url):(String,String,String,i64,Option<String>,i64,String,Option<String>,Option<String>)=projects::with_reader(|conn| conn.query_row("SELECT path,metadata,permission,audio_track,full_hash,size,partial_hash,modified,origin_url FROM sources WHERE id=?1",[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?,r.get(7)?,r.get(8)?)))).map_err(|_|err("source_missing","Fonte não encontrada"))?;
     let resolved = resolve_path(v, &path)?;
     let state = if !resolved.is_file() {
         "offline"
@@ -311,7 +320,7 @@ fn get(v: &Value, id: i64) -> CommandResult {
         "changed"
     };
     Ok(
-        json!({"id":id,"status":state,"available":state=="available","path":resolved,"metadata":serde_json::from_str::<Value>(&metadata).unwrap_or(Value::Null),"permission":serde_json::from_str::<Value>(&permission).unwrap_or(Value::Null),"audio_track":audio,"verified":hash.is_some()}),
+        json!({"id":id,"status":state,"available":state=="available","path":resolved,"metadata":serde_json::from_str::<Value>(&metadata).unwrap_or(Value::Null),"permission":serde_json::from_str::<Value>(&permission).unwrap_or(Value::Null),"audio_track":audio,"verified":hash.is_some(),"origin_url":origin_url}),
     )
 }
 fn list(v: Value, _: &mut EventSink<'_>) -> CommandResult {
