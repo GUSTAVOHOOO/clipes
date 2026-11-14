@@ -16,14 +16,14 @@ Nada aqui mexe em código. Nenhuma chave, segredo ou dado pessoal foi usado.
 
 1. Hoje o Clipes tem **um** endpoint (`provider.json`) mais dois CLIs; o #43 deixa cada uma de 4 tarefas escolher entre `endpoint`, `codex` ou `claude`. O #113 pede N Provedores ao mesmo tempo.
 2. A literatura de roteamento (RouteLLM, FrugalGPT, AutoMix, Hybrid LLM) mostra economia real, mas **todas exigem dados rotulados ou um sinal de confiança confiável**. Reavaliações de 2026 mostram que roteadores comerciais e vários aprendidos **não superam baselines simples** (com ressalvas de escopo, seção 3).
-3. O Clipes tem ~50 Cortes rotulados (#28) e proíbe telemetria (ADR-0006): não dá para treinar roteador. **Regra fixa por tarefa, escolhida pelo usuário** é o caminho com melhor relação evidência/esforço.
+3. O dataset do #28 tem só **38 segmentos de Cortes humanos em 3 lives** (manifesto de `benchmarks/dataset`, provisórios) e proíbe telemetria (ADR-0006): não dá para treinar roteador. **Regra fixa por tarefa, escolhida pelo usuário** é o caminho com melhor relação evidência/esforço.
 4. Em dólares, o ganho de rotear é pequeno por Fonte (inferência na seção 4: uma live de 4 h custa centavos a poucos dólares mesmo num modelo forte). O valor real do roteamento aqui é **privacidade (local), cota de assinatura e disponibilidade**, não a fatura.
 5. Recomendação v1: **vários perfis de Provedor** + **tarefa → perfil** (generaliza o #43) + restrição **"somente local"** + custo por perfil (#40) + botão **"refazer com o forte"** manual.
 6. **Conflitos com decisões já tomadas** (seção 9): o #13 diz "sem fallback automático"; "somente local por Projeto" encosta no #43 ("o Perfil de canal não escolhe Provedor"). Nenhum dos dois é tratado como decidido: cada um pede grilling e, se aprovado, um ADR novo.
 7. Cascata automática (barato primeiro, forte só se a validação falhar) é tecnicamente viável com os seams atuais (laço de reparo, `usage`, `uncertain`), mas **fica depois da v1** e só depois do experimento.
 8. Só **seleção de Cortes** tem verdade de campo (#28/#57, provisória). Empacotamento, Roteiro e tradução de legenda **não têm nenhum gabarito** hoje; a tabela de níveis é, em maior parte, hipótese.
 9. Experimento barato: rodar cada modelo candidato **uma vez** sobre todas as janelas do harness do #57, gravar por janela, e **reproduzir offline** qualquer política (sempre-barato, sempre-forte, oráculo, cascata) sem gastar de novo.
-10. Seis tickets propostos (seção 10), nenhum criado no GitHub.
+10. Seis tickets propostos (seção 12), nenhum criado no GitHub.
 
 ---
 
@@ -98,7 +98,7 @@ Nada aqui mexe em código. Nenhuma chave, segredo ou dado pessoal foi usado.
 
 ### 3.2 O que cada uma exigiria do Clipes
 
-- **Roteador aprendido**: dados de qualidade por (tarefa, modelo) que não temos. O #28 dá ~50 Cortes humanos, provisórios, só de seleção. O ADR-0006 e as aprovações "só locais" (#19) impedem coletar dados de uso. Treinar um roteador proprietário é **inviável hoje**; usar um pré-treinado (RouteLLM `mf`) traz dependência de embeddings da OpenAI, o que **quebra "local-first"** para quem quiser rotear localmente.
+- **Roteador aprendido**: dados de qualidade por (tarefa, modelo) que não temos. O #28 (manifesto) dá **38 segmentos de Cortes humanos em 3 lives** (14 em PT-BR, 24 em EN), provisórios, só de seleção; as 5 Fontes originais do #28 são vídeos editados sem Corte localizado. O ADR-0006 e as aprovações "só locais" (#19) impedem coletar dados de uso. Treinar um roteador proprietário é **inviável hoje**; usar um pré-treinado (RouteLLM `mf`) traz dependência de embeddings da OpenAI, o que **quebra "local-first"** para quem quiser rotear localmente.
 - **Cascata com juiz/avaliador**: precisa de um sinal confiável. Para JSON, o sinal existe e é barato: o validador de schema que já existe no adaptador. Para qualidade de conteúdo, não.
 - **Regra fixa**: zero dados, auditável, o usuário entende. É a base recomendada.
 
@@ -161,18 +161,18 @@ Escalar é **uma nova chamada paga**: o teto do #56 precisa ser checado antes de
 
 ## 5. Tarefas do Clipes em níveis
 
-Níveis usados: **local pequeno** (modelo em loopback, ~1–8B, cabe numa RTX 3050 de 4 GB quantizado; a Transcrição já roda sequencialmente na GPU, ADR-0004), **barato** (API de modelo pequeno), **forte**.
+Níveis usados: **local pequeno** (modelo em loopback; **hipótese não medida**: modelos de poucos bilhões de parâmetros quantizados podem caber numa RTX 3050 de 4 GB, mas a VRAM é compartilhada com o worker de ML, ver risco 8), **barato** (API de modelo pequeno), **forte**.
 
 | Tarefa | Entrada / saída | Nível provável | Evidência | Status |
 |---|---|---|---|---|
-| **Seleção de Cortes** (#19) | Janelas de Frases com ID → IDs + Nota de 5 eixos com justificativa | **Forte** para a ordenação final; barato/local talvez sirva como **1º filtro** de janelas | Nenhum benchmark publicado de "apontar momentos em transcrição de live". Estudos de destaque em vídeo usam LLM sobre legendas, mas em outros domínios ([HIVE, 2025-07-03](https://arxiv.org/abs/2507.02790); [Minimal Clips, 2025-12-12](https://arxiv.org/abs/2512.11399)). Contexto longo degrada quando a informação está no meio ([Lost in the Middle, 2023-07-06](https://arxiv.org/abs/2307.03172)); as janelas curtas do #19 mitigam | **Hipótese a medir** no #57 (único com gabarito) |
+| **Seleção de Cortes** (#19) | Janelas de Frases com ID → IDs + Nota de 5 eixos com justificativa | **Forte** para a ordenação final; barato/local talvez sirva como **1º filtro** de janelas | Nenhum benchmark publicado de "apontar momentos em transcrição de live". O HIVE (drama curto e anúncios, [2025-07-03](https://arxiv.org/abs/2507.02790)) afirma que métodos baseados só em texto de ASR e seleção ponta a ponta "negligenciam o contexto visual" e geram saídas incoerentes: **ressalva para seleção só por texto**, que é o que o Clipes faz na v1 (multimodal fica fora, #2). O Minimal Clips ([2025-12-12](https://arxiv.org/abs/2512.11399)) alimenta o LLM com descrições visuais, não com transcrição, então **não é evidência para o nosso caso**. Contexto longo degrada quando a informação está no meio ([Lost in the Middle, 2023-07-06](https://arxiv.org/abs/2307.03172)); as janelas curtas do #19 mitigam | **Hipótese a medir** no #57 (único com gabarito) |
 | **Empacotamento** (#68) | Transcrição de um Corte (20–60 s) → título, descrição, tags, hashtags, ideia de thumbnail, PT-BR/EN | **Barato** ou até local médio; forte opcional | Sem evidência publicada para PT-BR. Entrada pequena, saída curta, o usuário edita tudo | **Hipótese a medir**; sem gabarito (subjetivo) |
 | **Roteiro** (#73) | Transcrição do Corte + blocos vizinhos → blocos de Narração | **Forte** | Nenhuma. É a Transformação (ADR-0001), qualidade criativa; o texto vai para TTS, e o ADR-0001 (regra 7) pune roteiro genérico | **Hipótese**; custo absoluto é baixo (um Corte por vez), então errar para cima é barato |
 | **Tradução de legenda** (#75) | Frases PT-BR ↔ EN → mesmas Frases traduzidas | **Local especializado é plausível** | Modelos pequenos de tradução reportam bons resultados no WMT25: [HY-MT1.5-1.8B/7B](https://arxiv.org/abs/2512.24092) (2025-12-30) e [TranslateGemma](https://arxiv.org/abs/2601.09012) (2026-01-13). **São números dos próprios autores, não medem legenda PT-BR↔EN, e não verifiquei a licença de pesos** (exigência do ADR-0003) | **Hipótese**; checar licença antes de qualquer menção em UI |
 | **Guarda-corpos** (#76) | Avisos e checklist | **Nenhum LLM** | Os critérios de aceite do #76 não chamam Provedor | Não é tarefa de Provedor hoje; um "checador de originalidade por LLM" seria escopo novo e não recomendado |
 | **Reparo de JSON** | Resposta inválida → JSON válido | **Não é tarefa à parte**: vive dentro de cada chamada | Já existe (2 tentativas, mesmo modelo, sem `nativeSchema`). Gramática/`nativeSchema` elimina falha estrutural; semântica não ([2026-09-20](https://arxiv.org/abs/2609.23742)) | Manter; escalar para o forte só se o reparo falhar (seção 4.3) |
 
-**Inferência importante:** como o custo em dólares de Empacotamento, Roteiro e tradução por Corte é desprezível mesmo no modelo forte (entradas de ~100–300 tokens por Frase), **a decisão de nível dessas tarefas é de qualidade e privacidade, não de custo**. O único lugar onde o custo pesa é a **seleção sobre a Fonte inteira** (centenas de milhares de tokens por live).
+**Inferência importante:** como o custo em dólares de Empacotamento, Roteiro e tradução por Corte é desprezível mesmo no modelo forte (entradas de ~100–300 tokens por Corte), **a decisão de nível dessas tarefas é de qualidade e privacidade, não de custo**. O único lugar onde o custo pesa é a **seleção sobre a Fonte inteira** (centenas de milhares de tokens por live).
 
 **Ideia de custo para a seleção (hipótese a medir):** em duas passadas, o modelo barato/local filtra janelas e o forte reordena só os candidatos (~10 por hora, #19), com poucos tokens de entrada. Isso corta tokens do forte sem roteador aprendido. Só vale se o recall do #57 não cair.
 
@@ -257,7 +257,7 @@ Esforço em unidades relativas (P/M/G) sobre o código atual.
     { "id": "legacy",              // perfil sintetizado a partir do endpoint único
       "label": "Principal", "kind": "openai",
       "endpoint": "https://api.example.com/v1", "model": "m", "nativeSchema": false,
-      "vaultAccount": "https://api.example.com/v1",   // PRESERVA a conta atual do cofre
+      "vaultAccount": "https://api.example.com/v1",   // = endpoint: PRESERVA a conta atual e é compartilhada por perfis do mesmo endpoint
       "price": { "inputPerMTok": 2.0, "outputPerMTok": 10.0, "currency": "USD", "source": "user" } },
     { "id": "ollama-qwen", "label": "Local rápido", "kind": "openai",
       "endpoint": "http://127.0.0.1:11434/v1", "model": "qwen-4b", "nativeSchema": true,
@@ -268,13 +268,13 @@ Esforço em unidades relativas (P/M/G) sobre o código atual.
 }
 // assistant.json (mesmos campos + valores novos aceitos)
 { "default": "endpoint",                  // "endpoint" == perfil "legacy"
-  "tasks": { "selection": "profile:legacy", "translation": "profile:ollama-qwen", "packaging": "role:fast" } }
+  "tasks": { "selection": "profile:legacy", "translation": "profile:ollama-qwen", "packaging": "profile:ollama-qwen" } }
 ```
 
 Regras de compatibilidade (todas verificáveis em teste headless):
 - **Leitura preguiçosa**: se não há `profiles`, sintetizar o perfil `legacy` a partir de `endpoint/model/kind/nativeSchema`; **não reescrever** o arquivo até o usuário editar.
 - **Valores antigos de `assistant.json`** (`""`, `endpoint`, `codex`, `claude`) continuam válidos; `endpoint` = `legacy`. `Route::Unset` continua dando o comportamento anterior.
-- **Cofre**: a conta continua sendo a string do endpoint (`vaultAccount`); **migrar a chave seria perigoso** (perder a chave do usuário). Perfis novos usam uma conta própria (`profile:<id>`).
+- **Cofre por endpoint**: a conta continua sendo a string do endpoint. **Vários perfis no mesmo endpoint compartilham a mesma chave e o mesmo consentimento**, que é o caso principal do dev (dois modelos, por exemplo Haiku e Sonnet, na mesma conta de API): o usuário digita a chave uma vez. `vaultAccount` vale por padrão o próprio endpoint e só difere se o usuário pedir explicitamente uma segunda chave para o mesmo endpoint (ex.: duas contas de API diferentes). Trade-off: com chave por endpoint, não dá para ter duas chaves no mesmo endpoint sem esse campo; com chave por perfil, o usuário redigita a mesma chave. Migrar a chave para outra conta seria perigoso (perder a chave do usuário), então não se migra.
 - **Consentimento por endpoint** continua; um perfil novo para um endpoint já confirmado herda; endpoint loopback dispensa (como hoje).
 - **`provider.configure`** sem `profileId` mantém exatamente o comportamento atual (sobrescreve `legacy`, chama `provider_cli::clear()`); com `profileId` faz *upsert* de um perfil e **não** limpa o CLI.
 - **CLIs viram perfis `kind: codex|claude`**, mantendo `provider-cli.json` (confirmações, "experimental, desligado por padrão"); `price: null` e a UI mostra "consome a cota do plano" (#40, #39).
@@ -308,6 +308,8 @@ Regras de compatibilidade (todas verificáveis em teste headless):
 
 **Pré-requisito:** o #57 existir (hoje aberto) e o #28 revisado pelo dev (a referência é "provisória até a revisão"; a revisão de transcrição de amostras por agente já foi sinalizada como otimista no [benchmark de transcrição](2026-11-14-benchmark-transcricao.md)).
 
+**O que o dataset realmente tem** (`benchmarks/dataset/manifest.json`, lido em 2026-11-14): 11 Fontes. Os 5 links originais do #28 são vídeos editados (guias de GTA 6), **sem nenhum Corte humano localizado**; o recall só pode ser medido nas **3 lives** adicionais: `rtZyZL3FfH4` (PT-BR, ~3,6 h, 14 segmentos), `6LB7vibQ5q0` (EN, ~11 h, 11 segmentos) e `6dhayer-a90` (EN, ~11 h, 13 segmentos), **38 segmentos no total**, localizados por áudio e provisórios (conferência humana no #29). O manifesto traz idioma por segmento e métricas de áudio, então dá para **estratificar por idioma** (PT-BR × EN) e por condição de áudio. Os vídeos editados servem para validade de schema, custo e latência, não para recall.
+
 **Desenho (custo ≈ uma rodada por modelo):**
 1. Escolher 3–4 candidatos: um local pequeno (loopback), um barato de API, um forte de API, e opcionalmente o Codex.
 2. Para **cada janela** de **cada VOD** do #28, rodar **uma vez** por modelo, **gravando por janela**: saída bruta, validade de schema, regras do item 4.2, `usage` e latência. Sem reexecutar depois.
@@ -315,7 +317,7 @@ Regras de compatibilidade (todas verificáveis em teste headless):
 4. Métricas (as do #57): recall dos Cortes humanos, % de bordas no meio de Frase (meta 0%), tempo e custo por hora de Fonte, **mais**: taxa de escalada e custo médio com a cascata.
 5. Decisão: se a cascata chega perto do forte com bem menos tokens do forte, e **o oráculo está muito acima de sempre-forte** (há o que ganhar), seguir para o ADR da escalada. Se sempre-forte ≈ oráculo, não rotear.
 
-**Limites a declarar no relatório:** (a) só a **seleção** tem verdade de campo e ela é **provisória** (~50 Cortes, 5 Fontes); (b) Empacotamento, Roteiro e tradução **não** têm gabarito, então o relatório só pode registrar validade, custo e latência, e comparação cega **opcional** feita pelo próprio dev; (c) o conjunto é pequeno demais para estimativas com intervalo estreito: reportar como observação, como o #28 já faz; (d) o oráculo é otimista por construção.
+**Limites a declarar no relatório:** (a) só a **seleção** tem verdade de campo e ela é **provisória** (38 segmentos humanos em 3 lives; as 5 Fontes originais do #28 são vídeos editados sem Corte localizado e só servem para validade, custo e latência); (b) Empacotamento, Roteiro e tradução **não** têm gabarito, então o relatório só pode registrar validade, custo e latência, e comparação cega **opcional** feita pelo próprio dev; (c) o conjunto é pequeno demais para estimativas com intervalo estreito: reportar como observação, como o #28 já faz; (d) o oráculo é otimista por construção.
 
 **Dados que ficam locais:** as saídas por janela não vão para o repositório (as Fontes não são redistribuídas, #28); o repositório só recebe as métricas agregadas.
 
@@ -360,13 +362,14 @@ Regras de compatibilidade (todas verificáveis em teste headless):
 ## 11. Riscos e perguntas abertas para o dev
 
 ### Riscos
-1. **Chave órfã na migração**: mudar a conta do cofre faria o usuário perder a chave. Mitigação: `vaultAccount` preserva a conta atual.
+1. **Chave órfã na migração**: trocar a conta do cofre faria o usuário perder a chave. Mitigação: a conta continua sendo o endpoint.
 2. **Falsa segurança de teto**: perfis sem preço (CLI, modelos custom) ficam fora de tetos por custo.
 3. **Vazamento por escalada**: um perfil local que escala para remoto envia texto que o usuário achava local. Mitigação: consentimento e `localOnly`.
 4. **Qualidade local em PT-BR é desconhecida**: sem benchmark nosso, a tabela de níveis é hipótese.
 5. **Medir com gabarito provisório**: revisão por agente tende ao otimismo (já visto no benchmark de transcrição).
 6. **Preços e modelos mudam rápido**: tabela local atualizável (#40) é obrigatória; não gravar preços no código.
 7. **Licença dos modelos de tradução locais**: ADR-0003 exige conferir antes de listar (não verifiquei).
+8. **VRAM compartilhada**: um servidor em loopback (por exemplo Ollama) roda fora da fila de "um modelo por vez" do worker de ML ([ADR-0004](../adr/0004-stack-tauri-react-nucleo-rust-worker-python.md)) e pode disputar os 4 GB com o faster-whisper e o TTS. Inferência: o app deve avisar, ou serializar, antes de usar um perfil local com GPU durante a Transcrição.
 
 ### Perguntas para o dev
 1. Você aceita **fallback automático** em algum caso (queda do Provedor, falha validada), ou a linha do #13 ("sem fallback automático") continua valendo na v1 e depois dela?
@@ -384,7 +387,7 @@ Regras de compatibilidade (todas verificáveis em teste headless):
 
 **T1. Perfis de Provedor múltiplos com migração sem quebra**
 - [ ] `provider.json` v2 com `profiles[]`; leitura preguiçosa sintetiza o perfil `legacy` do endpoint único.
-- [ ] A conta do cofre do perfil `legacy` continua sendo a string do endpoint; perfis novos usam conta própria; teste prova que a chave antiga continua legível.
+- [ ] A conta do cofre do perfil `legacy` continua sendo a string do endpoint; perfis no mesmo endpoint compartilham a chave (conta = endpoint); só uma segunda chave explícita no mesmo endpoint usa outra conta; teste prova que a chave antiga continua legível.
 - [ ] `provider.configure` sem `profileId` se comporta como hoje (inclusive `provider_cli::clear()`); com `profileId` faz *upsert*.
 - [ ] Consentimento continua por endpoint; endpoint loopback dispensa.
 - [ ] Os valores `""`, `endpoint`, `codex`, `claude` de `assistant.json` seguem resolvendo; `Route::Unset` preservado.
@@ -444,8 +447,8 @@ Todas acessadas em 2026-11-14. Datas: publicação da v1 (arXiv) ou `updatedAt`/
 - Lost in the Middle. 2023-07-06. https://arxiv.org/abs/2307.03172
 - HY-MT1.5 Technical Report. 2025-12-30. https://arxiv.org/abs/2512.24092
 - TranslateGemma Technical Report. 2026-01-13. https://arxiv.org/abs/2601.09012
-- HIVE (edição de vídeo com narrativa multimodal). 2025-07-03. https://arxiv.org/abs/2507.02790
-- Minimal Clips, Maximum Salience. 2025-12-12. https://arxiv.org/abs/2512.11399
+- HIVE (edição automática de vídeo; citado como ressalva à seleção só por texto). 2025-07-03. https://arxiv.org/abs/2507.02790
+- Minimal Clips, Maximum Salience (usa descrições visuais; citado só para contraste). 2025-12-12. https://arxiv.org/abs/2512.11399
 
 **Documentação e repositórios oficiais**
 - RouteLLM (README e API do GitHub: licença Apache-2.0, último push 2024-08-10). https://github.com/lm-sys/RouteLLM
@@ -462,5 +465,6 @@ Todas acessadas em 2026-11-14. Datas: publicação da v1 (arXiv) ou `updatedAt`/
 
 **Repositório do Clipes (lidos em 2026-11-14)**
 - `AGENTS.md`, `GLOSSARY.md`, `CONTRIBUTING.md`, ADRs [0001](../adr/0001-dois-tipos-de-video-e-regras-de-transformacao.md), [0003](../adr/0003-licenca-apache-ffmpeg-sob-demanda-e-politica-de-modelos.md), [0004](../adr/0004-stack-tauri-react-nucleo-rust-worker-python.md), [0005](../adr/0005-projeto-portatil-com-sqlite.md), [0006](../adr/0006-relato-de-problemas-sem-telemetria.md).
+- ADR-0002 (render FFmpeg + libass; sem impacto nesta pesquisa), `benchmarks/dataset/manifest.json` e `README.md` (11 Fontes; 3 lives com 38 segmentos humanos localizados).
 - Issues #1 (mapa), #13, #19, #26 (spec), #28, #39, #40, #43, #56, #57, #68, #72, #73, #75, #76, #113, #114.
 - Código: `core/src/provider.rs`, `core/src/provider/adapters.rs`, `core/src/provider_cli.rs`, `core/src/assistant.rs`, `core/src/jobs.rs`; `docs/contribuindo/provedor.md`; [benchmark de transcrição](2026-11-14-benchmark-transcricao.md).
