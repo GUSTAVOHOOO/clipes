@@ -1,0 +1,7 @@
+{"from":"core","message":{"v":1,"type":"hello","protocol":1}}
+{"from":"worker","message":{"v":1,"type":"handshake","protocol":1,"worker":"*","python":"*","libs":{"faster-whisper":"*","onnxruntime":"*","numpy":"*","opencv-python-headless":"*"}}}
+{"from":"core","message":{"v":1,"type":"request","id":"r1","task":"tts","params":{}}}
+{"from":"worker","message":{"v":1,"type":"error","id":"r1","code":"model_missing","message":"O modelo necessário não está instalado."}}
+{"from":"core","message":{"v":1,"type":"request","id":"r2","task":"inexistente","params":{}}}
+{"from":"worker","message":{"v":1,"type":"error","id":"r2","code":"unknown_task","message":"Tarefa desconhecida."}}
+{"from":"core","message":{"v":1,"type":"shutdown"}}

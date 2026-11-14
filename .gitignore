@@ -17,3 +17,8 @@ src-tauri/gen/
 benchmarks/dataset/local/
 benchmarks/dataset/tests/__pycache__/
 benchmarks/dataset/__pycache__/
+
+# Worker de ML: ambiente e caches Python locais
+worker/.venv/
+__pycache__/
+.pytest_cache/
