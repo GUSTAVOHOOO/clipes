@@ -14,7 +14,7 @@ Cinco labels padrão: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-fo
 
 ### Domain docs
 
-Single-context: um `GLOSSARY.md` e `docs/adr/` na raiz, criados sob demanda. See `docs/agents/domain.md`.
+Single-context: um `GLOSSARY.md` e `docs/adr/` na raiz, criados sob demanda. ADRs são seguidos e podem ser questionados: quando um fato novo os contradiz, levante a questão com a evidência. See `docs/agents/domain.md`.
 
 ### Impedimentos conhecidos
 
