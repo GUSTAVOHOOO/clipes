@@ -64,11 +64,27 @@ pub struct StructuredRequest {
 
 pub trait Provider {
     fn structured(&self, request: &StructuredRequest) -> Result<Value, CoreError>;
+    /// Like `structured`, but stops with a `cancelled` error once `cancel` is set: during the
+    /// 429 wait, an HTTP request in flight, or a CLI run (which kills the process tree).
+    /// The default only looks at the token before starting.
+    fn structured_with(
+        &self,
+        request: &StructuredRequest,
+        cancel: &CancelToken,
+    ) -> Result<Value, CoreError> {
+        if cancel.is_cancelled() {
+            return Err(control::cancelled());
+        }
+        self.structured(request)
+    }
 }
 
 mod adapters;
+pub(crate) mod control;
 pub use adapters::{AnthropicProvider, GeminiProvider, OpenAiProvider};
+pub use control::{CancelToken, Timeouts};
 pub mod cost;
+pub use settings::run_structured;
 
 mod settings {
     use super::*;
@@ -84,6 +100,8 @@ mod settings {
         #[serde(default = "default_kind")]
         kind: String,
         native_schema: bool,
+        #[serde(default)]
+        timeouts: Timeouts,
         #[serde(default)]
         providers: std::collections::HashMap<String, Metadata>,
     }
@@ -186,7 +204,7 @@ mod settings {
             .cloned()
             .unwrap_or_default();
         Ok(
-            json!({"endpoint":settings.endpoint, "model":settings.model, "kind":if settings.kind.is_empty() { "openai" } else { &settings.kind }, "nativeSchema":settings.native_schema, "keyLastFour":metadata.key_last_four, "remote":remote, "confirmed":metadata.confirmed}),
+            json!({"endpoint":settings.endpoint, "model":settings.model, "kind":if settings.kind.is_empty() { "openai" } else { &settings.kind }, "nativeSchema":settings.native_schema, "timeouts":settings.timeouts.effective(), "keyLastFour":metadata.key_last_four, "remote":remote, "confirmed":metadata.confirmed}),
         )
     }
     fn configure(args: Value, _: &mut EventSink<'_>) -> CommandResult {
@@ -213,6 +231,11 @@ mod settings {
         if !matches!(kind, "openai" | "anthropic" | "gemini") {
             return Err(error("invalid_settings", "Invalid provider type"));
         }
+        // Without `timeouts` the current ones stay; `timeouts: {}` restores the defaults.
+        let timeouts = match args.get("timeouts") {
+            Some(value) => Timeouts::parse(value)?,
+            None => old.timeouts,
+        };
         let settings = Settings {
             endpoint,
             model,
@@ -221,6 +244,7 @@ mod settings {
                 .get("nativeSchema")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
+            timeouts,
             providers: old.providers,
         };
         write(&settings)?;
@@ -286,7 +310,8 @@ mod settings {
         write(&settings)?;
         Ok(json!({}))
     }
-    fn call_inner(args: Value) -> CommandResult {
+    /// `provider.structured` with a cancellation token, for the AI job executor (#121).
+    pub fn run_structured(args: Value, cancel: &CancelToken) -> CommandResult {
         let route = crate::assistant::route(args.get("task").and_then(Value::as_str))?;
         let cli = match route {
             crate::assistant::Route::Cli(kind) => Some(kind),
@@ -296,7 +321,8 @@ mod settings {
         if let Some(kind) = cli {
             let request: StructuredRequest = serde_json::from_value(args)
                 .map_err(|_| error("invalid_request", "Invalid structured request"))?;
-            return crate::provider_cli::CliProvider(kind).structured(&request);
+            return crate::provider_cli::CliProvider(kind, crate::provider_cli::timeout()?)
+                .structured_with(&request, cancel);
         }
         let settings = {
             let _guard = locked()?;
@@ -328,17 +354,20 @@ mod settings {
             "" | "openai" => {
                 let mut p = OpenAiProvider::new(settings.endpoint, settings.model, key)?;
                 p.confirm(metadata.confirmed);
-                p.structured(&request)
+                p.with_timeouts(settings.timeouts)
+                    .structured_with(&request, cancel)
             }
             "anthropic" => {
                 let mut p = AnthropicProvider::new(settings.endpoint, settings.model, key)?;
                 p.confirm(metadata.confirmed);
-                p.structured(&request)
+                p.with_timeouts(settings.timeouts)
+                    .structured_with(&request, cancel)
             }
             "gemini" => {
                 let mut p = GeminiProvider::new(settings.endpoint, settings.model, key)?;
                 p.confirm(metadata.confirmed);
-                p.structured(&request)
+                p.with_timeouts(settings.timeouts)
+                    .structured_with(&request, cancel)
             }
             _ => Err(error("invalid_settings", "Invalid provider type")),
         }
@@ -352,7 +381,7 @@ mod settings {
             message: "Preparing provider request".into(),
             error: None,
         });
-        let result = call_inner(args);
+        let result = run_structured(args, &CancelToken::default());
         events(crate::ProgressEvent {
             project: None,
             job: "provider.structured".into(),
@@ -400,6 +429,13 @@ mod settings {
             )
             .unwrap();
             assert_eq!(settings.kind, "openai");
+            assert_eq!(settings.timeouts, Timeouts::default());
+            let configured: Settings = serde_json::from_value(
+                json!({"endpoint":"http://localhost:1/v1", "model":"m", "nativeSchema":false, "timeouts":{"local":900}}),
+            )
+            .unwrap();
+            assert_eq!(configured.timeouts.endpoint(true), Duration::from_secs(900));
+            assert_eq!(configured.timeouts.endpoint(false), Duration::from_secs(60));
         }
         #[test]
         fn headless_dispatch_uses_fake_vault_and_never_returns_key() {
@@ -572,7 +608,7 @@ mod security_tests {
             connections.len()
         });
         let mut provider = OpenAiProvider::new(endpoint, "model".into(), None).unwrap();
-        provider.0.timeout = Duration::from_millis(100);
+        provider.0.timeout = Some(Duration::from_millis(100));
         assert_eq!(
             provider.structured(&input()).unwrap_err().code,
             "timeout_uncertain"
