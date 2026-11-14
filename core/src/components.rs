@@ -515,14 +515,25 @@ mod tests {
                 .as_nanos()
         ))
     }
+    fn read_headers(stream: &mut std::net::TcpStream) -> String {
+        stream.set_nonblocking(false).unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(3)))
+            .unwrap();
+        let mut request = Vec::new();
+        while !request.ends_with(b"\r\n\r\n") {
+            let mut byte = [0u8; 1];
+            stream.read_exact(&mut byte).unwrap();
+            request.push(byte[0]);
+        }
+        String::from_utf8(request).unwrap()
+    }
     fn server(response: &'static [u8]) -> (String, thread::JoinHandle<String>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         let handle = thread::spawn(move || {
             let (mut s, _) = listener.accept().unwrap();
-            let mut request = [0; 4096];
-            let n = s.read(&mut request).unwrap();
-            let request = String::from_utf8_lossy(&request[..n]).to_string();
+            let request = read_headers(&mut s);
             let _ = s.write_all(response);
             request
         });
@@ -570,12 +581,27 @@ mod tests {
     #[test]
     fn cancelled_download_keeps_partial_data_for_resume() {
         let p = path();
-        let (url, handle) =
-            server(b"HTTP/1.1 200 OK\r\nContent-Length: 6\r\nConnection: close\r\n\r\nyes");
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (send, received) = std::sync::mpsc::channel();
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            read_headers(&mut stream);
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 6\r\nConnection: close\r\n\r\nyes")
+                .unwrap();
+            received
+                .recv_timeout(std::time::Duration::from_secs(3))
+                .unwrap();
+            let _ = stream.write_all(b"yes");
+        });
+        let url = format!("http://{addr}/file");
         let cancel = AtomicBool::new(false);
         assert_eq!(
-            fetch(&url, &hash(b"yesyes"), 6, &p, &cancel, |_| cancel
-                .store(true, Ordering::Relaxed))
+            fetch(&url, &hash(b"yesyes"), 6, &p, &cancel, |_| {
+                cancel.store(true, Ordering::Relaxed);
+                let _ = send.send(());
+            })
             .unwrap_err()
             .code,
             "cancelled"

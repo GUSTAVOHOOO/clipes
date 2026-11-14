@@ -36,6 +36,7 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Sintoma:** teste de Provedor espera `provider_http`, mas recebe `network` no CI Windows.
 - **Causa:** o servidor falso responde e fecha antes de ler a requisição inteira; o fechamento pode causar reset TCP. Um socket aceito de listener não bloqueante também pode permanecer não bloqueante no Windows.
 - **Ação:** coloque o socket aceito em modo bloqueante com timeout e leia os cabeçalhos até `\r\n\r\n` e o corpo inteiro pelo `Content-Length` antes de responder; teste também a requisição fragmentada.
+- **Cancelamento de download:** não feche uma resposta com `Content-Length` maior que o corpo enviado para simular progresso: no Windows a leitura pode falhar antes do callback. Mantenha a resposta aberta e sincronize a entrega do restante com o callback de progresso.
 
 ### Sem CI
 - Até o PR #86 entrar, o repo não tinha CI (`gh pr checks` responde `no checks reported`). Sem checks, revise pelo diff, pelos critérios de aceite e pela evidência de testes do worker, e diga isso no resumo.
