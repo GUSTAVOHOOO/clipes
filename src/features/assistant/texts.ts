@@ -61,7 +61,6 @@ export const texts = {
     missingDefault: 'O perfil padrão removido “{id}” não existe mais. O padrão voltou a “nenhum”; escolha outro perfil.',
     suggestion: 'Sugestão do assistente (ainda não medida):',
     apply: 'Aplicar',
-    profileSuffix: 'perfil',
   },
   en: {
     title: 'Choose how Clipes will use AI',
@@ -125,6 +124,5 @@ export const texts = {
     missingDefault: 'The removed default profile “{id}” no longer exists. The default went back to “none”; choose another profile.',
     suggestion: 'Assistant suggestion (not measured yet):',
     apply: 'Apply',
-    profileSuffix: 'profile',
   },
 } as const;
