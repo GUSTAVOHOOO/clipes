@@ -310,7 +310,13 @@ pub fn run_with(
         .optional()
     })?
     .ok_or_else(|| error("transcript_missing", "Transcrição não encontrada."))?;
-    debug_assert_eq!(duration_us, duration);
+    if duration_us != duration {
+        // A Fonte foi verificada de novo com outra duração desde que a Transcrição começou.
+        return Err(error(
+            "source_changed",
+            "A Fonte está indisponível ou foi alterada.",
+        ));
+    }
     let wav = work.join(format!("job-{id}.wav"));
     let mut last_percentage = u8::MAX;
     loop {

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { modelTexts } from './modelTexts';
 
-type Model = { id: string; label: string; repo: string; revision: string; license: string; source_url: string; size: number; installed: boolean; recommended: boolean };
+type Model = { worker_installed: boolean; id: string; label: string; repo: string; revision: string; license: string; source_url: string; size: number; installed: boolean; recommended: boolean };
 type Progress = { job: string; stage: string; percentage: number };
 function message(error: unknown) { return typeof error === 'object' && error !== null && 'message' in error ? String(error.message) : String(error); }
 const gigabytes = (bytes: number) => bytes >= 1e9 ? `${(bytes / 1e9).toFixed(2)} GB` : `${(bytes / 1e6).toFixed(0)} MB`;
@@ -23,8 +23,9 @@ export function ModelsCard() {
   const [note, setNote] = useState('');
   const focus = useRef<HTMLButtonElement | null>(null);
   async function refresh() {
-    setModels(await coreDispatch<Model[]>('components.models.manifest', {}));
-    setWorkerInstalled((await coreDispatch<{ installed: boolean }>('components.worker.status', {})).installed);
+    const list = await coreDispatch<Model[]>('components.models.manifest', {});
+    setModels(list);
+    setWorkerInstalled(list.every(model => model.worker_installed));
   }
   useEffect(() => {
     refresh().catch(e => setNote(message(e)));

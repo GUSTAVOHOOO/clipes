@@ -187,6 +187,7 @@ fn client() -> Result<reqwest::blocking::Client, CoreError> {
 fn manifest(_: Value, _: &mut EventSink<'_>) -> CommandResult {
     let settings = load_settings()?;
     let wanted = recommended(&settings).id;
+    let worker_installed = super::worker::installed(&settings);
     Ok(json!(MODELS
         .iter()
         .map(|m| json!({
@@ -201,6 +202,7 @@ fn manifest(_: Value, _: &mut EventSink<'_>) -> CommandResult {
             "device": m.device,
             "files": m.files.iter().map(|f| json!({"name": f.0, "size": f.1, "sha256": f.2})).collect::<Vec<_>>(),
             "installed": m.installed(&settings),
+            "worker_installed": worker_installed,
             "recommended": m.id == wanted,
         }))
         .collect::<Vec<_>>()))
