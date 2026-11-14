@@ -1,0 +1,26 @@
+# Política do ADR-0003; Componentes executáveis separados são verificados à parte.
+[licenses]
+allow = [
+  "MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Zlib",
+  "Unicode-3.0", "MPL-2.0", "MIT-0", "CDLA-Permissive-2.0", "bzip2-1.0.6",
+  "OFL-1.1", "0BSD", "Unlicense", "Apache-2.0 WITH LLVM-exception",
+]
+
+[advisories]
+ignore = [
+  # pgp só verifica assinatura com chave pública, sem segredo (core/src/components/update.rs).
+  "RUSTSEC-2023-0071", # rsa: tempo de operações com chave privada
+  "RUSTSEC-2026-0387", # crypto-bigint: operações sobre inteiros secretos
+  # Correção rastreada no #104; risco real: Projetos portáteis podem vir de terceiros.
+  "RUSTSEC-2026-0459",
+  # Macro de compilação sem código em runtime; depende do upstream gtk-rs/Tauri.
+  "RUSTSEC-2024-0370",
+]
+
+[bans]
+# Versões múltiplas já existem no grafo e não são uma incompatibilidade de licença.
+multiple-versions = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

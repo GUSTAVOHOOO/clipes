@@ -410,7 +410,7 @@ fn install(item: &Component, part: &Path, exe: &Path) -> Result<(), CoreError> {
                 let idx = (0..zip.len())
                     .find(|i| {
                         zip.by_index(*i)
-                            .map(|f| f.name().ends_with(name))
+                            .map(|f| f.name().is_ok_and(|path| path.ends_with(name)))
                             .unwrap_or(false)
                     })
                     .ok_or_else(|| error("install", "Executável FFmpeg ou ffprobe ausente"))?;
