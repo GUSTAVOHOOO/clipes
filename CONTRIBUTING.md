@@ -7,7 +7,7 @@ Obrigado por contribuir! Consulte o [glossário](GLOSSARY.md) e os [ADRs](docs/a
 - Para erros, ideias e propostas de Provedor ou modelo, escolha o formulário em [Issues](https://github.com/GUSTAVOHOOO/clipes/issues/new/choose). Confira se já existe uma issue parecida. Descreva o contexto e revise o texto antes de publicá-lo: issues são públicas.
 - Para dúvidas de uso, use [Discussions](https://github.com/GUSTAVOHOOO/clipes/discussions). Para vulnerabilidades, siga [SECURITY.md](SECURITY.md), sem abrir issue pública.
 - Para contribuir com código, procure uma issue existente ou abra uma para discutir o trabalho. Crie um fork e uma branch a partir de `master`, faça alterações focadas e abra um pull request para `master` explicando o que mudou, a issue relacionada e como testou. Responda à revisão e atualize o PR quando necessário.
-- Consulte os guias de [Provedor](docs/contribuindo/provedor.md) e [Motor de transcrição](docs/contribuindo/motor-de-transcricao.md) para contribuições nessas áreas.
+- Consulte os guias de [Provedor](docs/contribuindo/provedor.md), [Motor de transcrição](docs/contribuindo/motor-de-transcricao.md) e [Tarefa de IA](docs/contribuindo/tarefa-de-ia.md) para contribuições nessas áreas.
 
 ## DCO e licença
 
@@ -90,6 +90,12 @@ Para testes headless, defina `CLIPES_DATA_DIR` no ambiente do processo para isol
 O cache de onda usa o formato binário `CLPWAVE\0`, versão 1, com inteiros little-endian: quatro `u32` (versão, taxa de picos por segundo, canais e quantidade de níveis), seguidos por uma tabela de níveis com `u64` de offset absoluto em bytes e `u64` de contagem de instantes. Cada instante tem um par `i16` mínimo/máximo por canal, intercalados na ordem dos canais. Há 100 instantes por segundo; cada nível seguinte agrega quatro picos consecutivos por canal até restar aproximadamente um pico por segundo ou menos. A tabela permite ler apenas o nível e intervalo necessários para a timeline.
 
 Documentos `clip`, `style`, `script` e `packaging` são objetos JSON com `schemaVersion` igual a 1 e `revision` inteira não negativa. Cada tipo registra seu validador e suas migrações próprias; campos de domínio serão definidos pelos tickets correspondentes. O comando `documents.validate` migra e valida o documento no núcleo; versões futuras são recusadas.
+
+## Perfis de Provedor
+
+`provider.json` tem a versão 2 com `profiles[]` ([ADR-0010](docs/adr/0010-perfis-multiplos-de-provedor-tarefa-para-perfil-e-somente-local.md)). Um arquivo antigo (só `endpoint`, `model`, `kind`, `nativeSchema`) é lido como o perfil `legacy` e **não é reescrito** até o usuário editar. A conta do cofre é o endpoint (o perfil `legacy` e os perfis sem `ownKey` a compartilham, junto do consentimento, que também é por endpoint); só `ownKey: true` usa a conta `profile:<id>`. A localidade é calculada por `is_local_endpoint`, nunca guardada; os CLIs `codex` e `claude` aparecem em `provider.profiles.list` como perfis não locais, mas continuam ativados por `provider.cli.*` com o aviso do #39.
+
+`provider.configure` sem `profileId` age como antes (substitui o `legacy` e desativa o CLI); com `profileId` faz *upsert* sem tocar no CLI. `provider.status`, `provider.key.*`, `provider.confirm`, `provider.test` e `provider.structured` aceitam `profileId` opcional (sem ele, valem para o `legacy`). Os `timeouts` do #117 continuam globais em `provider.json` (valem para todos os perfis). O preço de um perfil é o de `provider.prices.*` para o par tipo e modelo (sobrescrita do usuário ou tabela embutida). Os testes headless estão em `core/tests/provider_profiles.rs` (arquivos no formato antigo, com `CLIPES_DATA_DIR`) e nos testes de `core/src/provider.rs` (cofre falso).
 
 ## Worker de ML
 
