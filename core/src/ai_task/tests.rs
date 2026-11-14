@@ -191,7 +191,7 @@ fn changing_the_prompt_without_a_new_version_fails() {
     // Quebra de linha do Windows não muda o hash.
     assert_eq!(
         prompt_hash(EXAMPLE_PROMPT),
-        prompt_hash(&EXAMPLE_PROMPT.replace('\n', "\r\n"))
+        prompt_hash(&normalized_prompt(EXAMPLE_PROMPT).replace('\n', "\r\n"))
     );
     // Uma tarefa cujo hash declarado não bate com o texto não roda.
     let stale = AiTask {
