@@ -35,5 +35,18 @@ def main():
     args.output.write_text(json.dumps({'words': result}, ensure_ascii=False, indent=2) + '\n', encoding='utf8')
 
 
+def candidates(words, segment_start, segment_end, generated):
+    result = []
+    for i, word in enumerate(words):
+        text = word['word'].strip(' .,!?;:')
+        left = word['start'] - (words[i - 1]['end'] if i else segment_start)
+        right = (words[i + 1]['start'] if i + 1 < len(words) else segment_end) - word['end']
+        if (len(text) >= 3 and .12 <= word['end'] - word['start'] <= 1 and
+                max(left, right) >= .02 and not word['normalized'] and
+                text.casefold() not in generated):
+            result.append(word)
+    return result
+
+
 if __name__ == '__main__':
     main()

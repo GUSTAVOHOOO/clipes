@@ -23,3 +23,12 @@ class ImportLabelsTests(unittest.TestCase):
                 path.write_text(label, encoding='utf8')
                 with self.assertRaises(ValueError):
                     import_labels([item], Path(temp))
+
+class SelectionTests(unittest.TestCase):
+    def test_filters_normalized_g2p_short_and_adjacent_words(self):
+        from kit_bordas import candidates
+        words = [{'word': 'longo', 'start': 1, 'end': 1.3, 'normalized': False},
+                 {'word': 'outro', 'start': 1.4, 'end': 1.7, 'normalized': True},
+                 {'word': 'gerada', 'start': 1.8, 'end': 2.1, 'normalized': False},
+                 {'word': 'a', 'start': 2.2, 'end': 2.3, 'normalized': False}]
+        self.assertEqual([w['word'] for w in candidates(words, 0, 3, {'gerada'})], ['longo'])
