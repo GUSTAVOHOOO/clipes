@@ -14,6 +14,7 @@ use std::{
 };
 
 inventory::submit! { projects::Migration { id:"0041_001_sources", sql:"CREATE TABLE sources (id INTEGER PRIMARY KEY, path TEXT NOT NULL, size INTEGER NOT NULL, duration_us INTEGER NOT NULL, partial_hash TEXT NOT NULL, full_hash TEXT, metadata TEXT NOT NULL, permission TEXT NOT NULL, audio_track INTEGER NOT NULL);" } }
+inventory::submit! { projects::Migration { id:"0041_002_source_mtime", sql:"ALTER TABLE sources ADD COLUMN modified TEXT;" } }
 fn err(code: &str, message: &str) -> CoreError {
     CoreError {
         code: code.into(),
@@ -110,6 +111,15 @@ fn partial(path: &Path) -> Result<(u64, String), CoreError> {
             .map_err(|_| err("source_read", "Não foi possível ler a Fonte"))?;
     }
     Ok((size, format!("{:x}", hash.finalize())))
+}
+fn modified(path: &Path) -> Result<String, CoreError> {
+    let time = fs::metadata(path)
+        .and_then(|m| m.modified())
+        .map_err(|_| err("source_unavailable", "Fonte indisponível"))?;
+    Ok(match time.duration_since(std::time::UNIX_EPOCH) {
+        Ok(d) => d.as_nanos().to_string(),
+        Err(e) => format!("-{}", e.duration().as_nanos()),
+    })
 }
 type Flags = Mutex<HashMap<String, Arc<AtomicBool>>>;
 fn jobs() -> &'static Flags {
@@ -274,20 +284,29 @@ fn import(v: Value, events: &mut EventSink<'_>) -> CommandResult {
         full_hash = Some(result?);
         path = Path::new("media").join(name);
     }
+    let modified = modified(&resolve_path(&v, &path.to_string_lossy())?)?;
     let conn = writer(&v)?;
-    conn.execute("INSERT INTO sources(path,size,duration_us,partial_hash,full_hash,metadata,permission,audio_track) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",params![path.to_string_lossy(),size as i64,dur,part,full_hash,metadata.to_string(),v["permission"].to_string(),audio]).map_err(|_|err("source_save","Não foi possível salvar a Fonte"))?;
+    conn.execute("INSERT INTO sources(path,size,duration_us,partial_hash,full_hash,metadata,permission,audio_track,modified) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",params![path.to_string_lossy(),size as i64,dur,part,full_hash,metadata.to_string(),v["permission"].to_string(),audio,modified]).map_err(|_|err("source_save","Não foi possível salvar a Fonte"))?;
     let id = conn.last_insert_rowid();
     drop(conn);
     get(&v, id)
 }
 fn get(v: &Value, id: i64) -> CommandResult {
     let conn = writer(v)?;
-    let (path,metadata,permission,audio,hash,size,partial_hash):(String,String,String,i64,Option<String>,i64,String)=conn.query_row("SELECT path,metadata,permission,audio_track,full_hash,size,partial_hash FROM sources WHERE id=?1",[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?))).map_err(|_|err("source_missing","Fonte não encontrada"))?;
+    let (path,metadata,permission,audio,hash,size,partial_hash,mtime):(String,String,String,i64,Option<String>,i64,String,Option<String>)=conn.query_row("SELECT path,metadata,permission,audio_track,full_hash,size,partial_hash,modified FROM sources WHERE id=?1",[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?,r.get(7)?))).map_err(|_|err("source_missing","Fonte não encontrada"))?;
     let resolved = resolve_path(v, &path)?;
-    let available =
-        partial(&resolved).is_ok_and(|fingerprint| fingerprint == (size as u64, partial_hash));
+    let state = if !resolved.is_file() {
+        "offline"
+    } else if partial(&resolved).is_ok_and(|f| f == (size as u64, partial_hash))
+        && modified(&resolved).ok().as_ref() == mtime.as_ref()
+        && mtime.is_some()
+    {
+        "available"
+    } else {
+        "changed"
+    };
     Ok(
-        json!({"id":id,"available":available,"path":resolved,"metadata":serde_json::from_str::<Value>(&metadata).unwrap_or(Value::Null),"permission":serde_json::from_str::<Value>(&permission).unwrap_or(Value::Null),"audio_track":audio,"verified":hash.is_some()}),
+        json!({"id":id,"status":state,"available":state=="available","path":resolved,"metadata":serde_json::from_str::<Value>(&metadata).unwrap_or(Value::Null),"permission":serde_json::from_str::<Value>(&permission).unwrap_or(Value::Null),"audio_track":audio,"verified":hash.is_some()}),
     )
 }
 fn list(v: Value, _: &mut EventSink<'_>) -> CommandResult {
@@ -312,39 +331,66 @@ fn hash_source(v: Value, events: &mut EventSink<'_>) -> CommandResult {
         .as_i64()
         .ok_or_else(|| err("source_missing", "Fonte não encontrada"))?;
     let conn = writer(&v)?;
-    let (path, size, part, previous_hash): (String, i64, String, Option<String>) = conn
+    let (path, size, part, mtime, previous_hash): (
+        String,
+        i64,
+        String,
+        Option<String>,
+        Option<String>,
+    ) = conn
         .query_row(
-            "SELECT path,size,partial_hash,full_hash FROM sources WHERE id=?1",
+            "SELECT path,size,partial_hash,modified,full_hash FROM sources WHERE id=?1",
             [id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
         )
         .map_err(|_| err("source_missing", "Fonte não encontrada"))?;
     drop(conn);
     let resolved = resolve_path(&v, &path)?;
     let before = partial(&resolved)?;
-    if before != (size as u64, part.clone()) {
-        return Err(err("source_changed", "A Fonte foi alterada"));
+    let before_mtime = modified(&resolved)?;
+    let changed = before != (size as u64, part.clone()) || mtime.as_deref() != Some(&before_mtime);
+    if changed && previous_hash.is_none() && v["confirmed"] != true {
+        return Err(err(
+            "confirmation_required",
+            "Não há hash original; confirme que é a mesma Fonte",
+        ));
     }
     let hash = run_hash(
         &resolved,
         v["job"].as_str().unwrap_or("source-hash"),
         events,
     )?;
-    if partial(&resolved)? != before {
-        return Err(err("source_changed", "A Fonte foi alterada"));
+    if partial(&resolved)? != before || modified(&resolved)? != before_mtime {
+        return Err(err(
+            "source_changed",
+            "A Fonte foi alterada durante a verificação",
+        ));
     }
-    if previous_hash
-        .as_ref()
-        .is_some_and(|previous| previous != &hash)
-    {
-        return Err(err("source_changed", "A Fonte foi alterada"));
+    if previous_hash.as_ref().is_some_and(|old| old != &hash) && v["confirmed"] != true {
+        return Err(err(
+            "confirmation_required",
+            "O hash não confere; confirme que é a mesma Fonte",
+        ));
+    }
+    let metadata = if changed {
+        Some(probe(&resolved)?)
+    } else {
+        None
+    };
+    if partial(&resolved)? != before || modified(&resolved)? != before_mtime {
+        return Err(err(
+            "source_changed",
+            "A Fonte foi alterada durante a verificação",
+        ));
     }
     let conn = writer(&v)?;
-    conn.execute(
-        "UPDATE sources SET full_hash=?1 WHERE id=?2 AND path=?3 AND partial_hash=?4",
-        params![hash, id, path, part],
-    )
-    .map_err(|_| err("source_save", "Não foi possível salvar a verificação"))?;
+    let updated=conn.execute("UPDATE sources SET full_hash=?1,size=?2,partial_hash=?3,modified=?4,metadata=COALESCE(?5,metadata),duration_us=COALESCE(?6,duration_us) WHERE id=?7 AND path=?8 AND partial_hash=?9",params![hash,before.0 as i64,before.1,before_mtime,metadata.as_ref().map(Value::to_string),metadata.as_ref().and_then(duration),id,path,part]).map_err(|_|err("source_save","Não foi possível salvar a verificação"))?;
+    if updated != 1 {
+        return Err(err(
+            "source_changed",
+            "A Fonte foi alterada durante a verificação",
+        ));
+    }
     Ok(json!({"verified":true}))
 }
 fn relocate(v: Value, events: &mut EventSink<'_>) -> CommandResult {
@@ -373,6 +419,7 @@ fn relocate(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     if hash.is_none() && v["confirmed"] != true {
         return Err(err("confirmation_required","Tamanho, duração e amostras conferem; confirme a relocalização sem verificação completa"));
     }
+    let candidate_mtime = modified(&candidate)?;
     let candidate_hash = run_hash(
         &candidate,
         v["job"].as_str().unwrap_or("source-relocate"),
@@ -381,7 +428,7 @@ fn relocate(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     if hash.as_ref().is_some_and(|h| h != &candidate_hash) {
         return Err(err("source_mismatch", "O arquivo não corresponde à Fonte"));
     }
-    if partial(&candidate)? != (size as u64, part) {
+    if partial(&candidate)? != (size as u64, part) || modified(&candidate)? != candidate_mtime {
         return Err(err("source_changed", "A Fonte foi alterada"));
     }
     let path = candidate
@@ -389,8 +436,8 @@ fn relocate(v: Value, events: &mut EventSink<'_>) -> CommandResult {
         .map_err(|_| err("source_unavailable", "Fonte indisponível"))?;
     let conn = writer(&v)?;
     conn.execute(
-        "UPDATE sources SET path=?1,full_hash=?2 WHERE id=?3",
-        params![path.to_string_lossy(), candidate_hash, id],
+        "UPDATE sources SET path=?1,full_hash=?2,modified=?3 WHERE id=?4",
+        params![path.to_string_lossy(), candidate_hash, candidate_mtime, id],
     )
     .map_err(|_| err("source_save", "Não foi possível relocalizar a Fonte"))?;
     drop(conn);

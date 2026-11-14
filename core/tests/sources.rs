@@ -81,6 +81,29 @@ fn local_source_lifecycle() {
         json!({"project":project,"id":id,"job":"test-hash"}),
     )
     .unwrap();
+    let replacement = root.join("replacement.mkv");
+    fs::rename(&media, &replacement).unwrap();
+    fs::copy(&replacement, &media).unwrap();
+    fs::remove_file(&replacement).unwrap();
+    let file = fs::OpenOptions::new().write(true).open(&media).unwrap();
+    file.set_times(
+        fs::FileTimes::new()
+            .set_modified(UNIX_EPOCH + std::time::Duration::from_secs(1_000_000_000)),
+    )
+    .unwrap();
+    drop(file);
+    let altered = run("sources.list", json!({"project":project})).unwrap();
+    assert_eq!(altered[0]["status"], "changed");
+    assert_eq!(altered[0]["available"], false);
+    run(
+        "sources.hash",
+        json!({"project":project,"id":id,"job":"verify-changed"}),
+    )
+    .unwrap();
+    assert_eq!(
+        run("sources.list", json!({"project":project})).unwrap()[0]["status"],
+        "available"
+    );
     let original = fs::read(&media).unwrap();
     let mut changed = original.clone();
     changed[0] ^= 1;
@@ -195,7 +218,32 @@ fn local_source_lifecycle() {
         )
         .unwrap_err()
         .code,
-        "source_changed"
+        "confirmation_required"
+    );
+    assert_eq!(
+        run("sources.list", json!({"project":project}))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["id"] == large_id)
+            .unwrap()["status"],
+        "changed"
+    );
+    run(
+        "sources.hash",
+        json!({"project":project,"id":large_id,"job":"confirm-changed","confirmed":true}),
+    )
+    .unwrap();
+    assert_eq!(
+        run("sources.list", json!({"project":project}))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["id"] == large_id)
+            .unwrap()["status"],
+        "available"
     );
     let moved_project = root.join("Canal-movido.clipes");
     fs::rename(project, &moved_project).unwrap();
