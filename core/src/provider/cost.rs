@@ -157,6 +157,17 @@ fn micro_usd(tokens: u64, per_million: f64) -> u64 {
     (tokens as f64 * per_million).round() as u64
 }
 
+/// The single point that turns tokens into micro-USD for a priced model. It receives the
+/// input tokens of the request so a long-context tier (requests above a size cost more, still
+/// undecided: research #115) can replace the flat rate here without touching the callers.
+/// Today the base price applies to every request.
+pub(crate) fn price_micro_usd(price: &Price, input_tokens: u64, output_tokens: u64) -> u64 {
+    micro_usd(input_tokens, price.input_per_million)
+        + micro_usd(output_tokens, price.output_per_million)
+}
+
+/// The one estimator of input tokens (chars/4 today; #115 found it undercounts, and a ticket of
+/// its own will replace it). Every budget check and estimate goes through here.
 pub fn estimate_input_tokens(request: &StructuredRequest) -> u64 {
     let chars = request.instruction.chars().count()
         + request.transcript.chars().count()
@@ -182,12 +193,12 @@ pub fn estimate(target: &Target, request: &StructuredRequest) -> Result<Value, C
             match price_for(provider, model)? {
                 None => ("unknown", ceiling, None, None, None),
                 Some((p, source)) => {
-                    let low = micro_usd(input, p.input_per_million);
+                    let low = price_micro_usd(&p, input, 0);
                     (
                         "usd",
                         ceiling,
                         Some(low),
-                        ceiling.map(|c| low + micro_usd(c, p.output_per_million)),
+                        ceiling.map(|c| price_micro_usd(&p, input, c)),
                         Some(source),
                     )
                 }
@@ -223,8 +234,7 @@ pub fn actual(target: &Target, usage: &Value) -> Result<Cost, CoreError> {
             match price_for(provider, model)? {
                 None => Cost::Unknown,
                 Some((p, source)) => Cost::Usd {
-                    micro_usd: micro_usd(i, p.input_per_million)
-                        + micro_usd(o, p.output_per_million),
+                    micro_usd: price_micro_usd(&p, i, o),
                     source,
                 },
             }
@@ -239,6 +249,135 @@ fn cost_json(c: &Cost) -> Value {
 inventory::submit! { projects::Migration { id: "0040_001_provider_costs", sql: "CREATE TABLE provider_costs (id INTEGER PRIMARY KEY, task TEXT NOT NULL, batch TEXT, provider TEXT NOT NULL, model TEXT NOT NULL, input_tokens INTEGER, output_tokens INTEGER, calls INTEGER NOT NULL, cost_kind TEXT NOT NULL CHECK(cost_kind IN ('usd','zero','plan_quota','unknown')), cost_micro_usd INTEGER, price_source TEXT, table_updated_at TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000000)); CREATE INDEX provider_costs_batch ON provider_costs(batch);" } }
 
 inventory::submit! { projects::Migration { id: "0120_001_provider_costs_profile", sql: "ALTER TABLE provider_costs ADD COLUMN profile TEXT;" } }
+
+// #124: one row per call (and per repair), linked to job, task version and outcome. The columns
+// are all nullable, so rows written by #40 and #120 stay readable. `jobs.batch` labels a batch
+// (#56); `ai_budgets` holds the accumulated limits per task or batch and `ai_pauses` the queues
+// that stopped on one.
+inventory::submit! { projects::Migration { id: "0124_001_ai_call_costs_and_budgets", sql: "ALTER TABLE provider_costs ADD COLUMN job_id INTEGER; ALTER TABLE provider_costs ADD COLUMN task_version INTEGER; ALTER TABLE provider_costs ADD COLUMN attempt INTEGER CHECK(attempt IS NULL OR attempt IN (0,1)); ALTER TABLE provider_costs ADD COLUMN outcome TEXT CHECK(outcome IS NULL OR outcome IN ('ok','invalid_json','truncated','refused','timeout_uncertain','rate_limit','provider_http','cancelled')); ALTER TABLE provider_costs ADD COLUMN code TEXT; ALTER TABLE provider_costs ADD COLUMN estimate_micro_usd INTEGER; ALTER TABLE provider_costs ADD COLUMN duration_ms INTEGER; CREATE INDEX provider_costs_job ON provider_costs(job_id); ALTER TABLE jobs ADD COLUMN batch TEXT; CREATE TABLE ai_budgets (scope TEXT NOT NULL CHECK(scope IN ('task','batch')), key TEXT NOT NULL, max_calls INTEGER, max_tokens INTEGER, max_wall_ms INTEGER, max_cost_micro_usd INTEGER, unknown_confirmed INTEGER NOT NULL DEFAULT 0, since INTEGER NOT NULL, PRIMARY KEY(scope,key)); CREATE TABLE ai_pauses (scope TEXT NOT NULL CHECK(scope IN ('task','batch')), key TEXT NOT NULL, reason TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000000), PRIMARY KEY(scope,key));" } }
+
+/// Normalizes a typed error code to one of the eight outcomes stored in `provider_costs.outcome`.
+/// The raw code is kept in its own column. Codes with no better match (`network`) map to
+/// `provider_http`; a response that failed schema or verification maps to `invalid_json`.
+pub fn outcome_of(code: &str) -> &'static str {
+    match code {
+        "ok" => "ok",
+        "output_truncated" | "truncated" => "truncated",
+        "refusal" | "refused" => "refused",
+        "timeout_uncertain" | "budget_time" => "timeout_uncertain",
+        "rate_limit" => "rate_limit",
+        "cancelled" => "cancelled",
+        "invalid_json" | "invalid_response" | "output_invalid" | "verification_failed"
+        | "budget_calls" => "invalid_json",
+        _ => "provider_http",
+    }
+}
+
+/// One call to the Provider, as written to `provider_costs`.
+pub struct CallRow<'a> {
+    pub profile: Option<&'a str>,
+    pub target: &'a Target,
+    pub task: &'a str,
+    pub task_version: Option<u32>,
+    pub batch: Option<&'a str>,
+    pub job: Option<i64>,
+    /// 0 for the call, 1 for the repair.
+    pub attempt: Option<u8>,
+    pub usage: &'a Value,
+    pub calls: u64,
+    pub cost: &'a Cost,
+    pub code: &'a str,
+    pub estimate_micro_usd: Option<u64>,
+    pub duration_ms: Option<u64>,
+}
+
+/// Records one call with its job, outcome and estimate (#124).
+pub fn record_call(row: &CallRow<'_>) -> Result<(), CoreError> {
+    let (provider, model) = row.target.label();
+    let table = embedded().updated_at;
+    projects::with_writer(|c| {
+        c.execute(
+            "INSERT INTO provider_costs(task,batch,provider,model,input_tokens,output_tokens,calls,cost_kind,cost_micro_usd,price_source,table_updated_at,profile,job_id,task_version,attempt,outcome,code,estimate_micro_usd,duration_ms) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)",
+            rusqlite::params![
+                row.task,
+                row.batch,
+                provider,
+                model,
+                row.usage["inputTokens"].as_u64().map(|v| v as i64),
+                row.usage["outputTokens"].as_u64().map(|v| v as i64),
+                row.calls as i64,
+                row.cost.kind(),
+                row.cost.micro().map(|v| v as i64),
+                row.cost.source(),
+                table,
+                row.profile,
+                row.job,
+                row.task_version.map(i64::from),
+                row.attempt.map(i64::from),
+                outcome_of(row.code),
+                row.code,
+                row.estimate_micro_usd.map(|v| v as i64),
+                row.duration_ms.map(|v| v as i64)
+            ],
+        )?;
+        Ok(())
+    })
+}
+
+/// The Provider that serves `task` now: its target and the id of its profile. A "local only"
+/// task fails here, before any call.
+pub fn route_for(task: &str) -> Result<(Target, String), CoreError> {
+    target_now(Some(task), None)
+}
+
+/// Totals of `provider_costs` grouped by `column` (`task`, `profile` or `batch`), keyed by the
+/// column value; rows with a null key are left out. Unknown cost is counted apart, never as zero.
+pub fn totals_by(column: &str) -> Result<std::collections::HashMap<String, Value>, CoreError> {
+    let column = match column {
+        "task" | "profile" | "batch" => column,
+        _ => return Err(error("invalid_request", "Invalid cost grouping")),
+    };
+    projects::with_reader(|c| {
+        let mut s = c.prepare(&format!("SELECT {column},{TOTALS} FROM provider_costs WHERE {column} IS NOT NULL GROUP BY {column}"))?;
+        let rows = s.query_map([], |r| Ok((r.get::<_, String>(0)?, totals_row(r, 1)?)))?;
+        rows.collect::<rusqlite::Result<std::collections::HashMap<_, _>>>()
+    })
+}
+
+const TOTALS: &str = "COALESCE(SUM(calls),0),COALESCE(SUM(input_tokens),0),COALESCE(SUM(output_tokens),0),COALESCE(SUM(CASE WHEN cost_kind IN ('usd','zero') THEN cost_micro_usd ELSE 0 END),0),COALESCE(SUM(cost_kind='unknown'),0),COALESCE(SUM(cost_kind='plan_quota'),0),COALESCE(SUM(duration_ms),0)";
+
+/// `{calls, inputTokens, outputTokens, microUsd, unknownCostCalls, planQuotaCalls, durationMs,
+/// costLabel}`. `microUsd` sums only what has a known price; `costLabel` says what the sum
+/// leaves out ("custo desconhecido", "consome a cota do plano") and is null when it leaves out
+/// nothing.
+pub(crate) fn totals_row(r: &rusqlite::Row<'_>, at: usize) -> rusqlite::Result<Value> {
+    let (unknown, plan): (i64, i64) = (r.get(at + 4)?, r.get(at + 5)?);
+    Ok(json!({
+        "calls": r.get::<_, i64>(at)?,
+        "inputTokens": r.get::<_, i64>(at + 1)?,
+        "outputTokens": r.get::<_, i64>(at + 2)?,
+        "microUsd": r.get::<_, i64>(at + 3)?,
+        "unknownCostCalls": unknown,
+        "planQuotaCalls": plan,
+        "durationMs": r.get::<_, i64>(at + 6)?,
+        "costLabel": if unknown > 0 { json!("custo desconhecido") } else if plan > 0 { json!("consome a cota do plano") } else { Value::Null },
+    }))
+}
+
+/// Totals of the rows matching `column = key` (`task` or `batch`) created at or after `since`.
+pub(crate) fn totals_since(column: &str, key: &str, since: i64) -> Result<Value, CoreError> {
+    let column = match column {
+        "task" | "batch" => column,
+        _ => return Err(error("invalid_request", "Invalid cost grouping")),
+    };
+    projects::with_reader(|c| {
+        c.query_row(
+            &format!("SELECT {TOTALS} FROM provider_costs WHERE {column}=?1 AND created_at>=?2"),
+            rusqlite::params![key, since],
+            |r| totals_row(r, 0),
+        )
+    })
+}
 
 /// Records one finished call in the open Project; `batch` stays null until batches exist (#56).
 pub fn record(
@@ -309,9 +448,24 @@ pub fn run_costed_for(
     if task.trim().is_empty() {
         return Err(error("invalid_request", "Task is required"));
     }
-    let settle = |usage: &Value, calls: u64| -> Result<Value, CoreError> {
+    let settle = |usage: &Value, calls: u64, code: &str| -> Result<Value, CoreError> {
         let cost = actual(target, usage)?;
-        let recorded = record_for(profile, target, task, batch, usage, calls, &cost).is_ok();
+        let row = CallRow {
+            profile,
+            target,
+            task,
+            task_version: None,
+            batch,
+            job: None,
+            attempt: None,
+            usage,
+            calls,
+            cost: &cost,
+            code,
+            estimate_micro_usd: None,
+            duration_ms: None,
+        };
+        let recorded = record_call(&row).is_ok();
         let mut v = cost_json(&cost);
         v["recorded"] = json!(recorded);
         Ok(v)
@@ -319,7 +473,7 @@ pub fn run_costed_for(
     match call() {
         Ok(mut value) => {
             let calls = value["calls"].as_u64().unwrap_or(1);
-            value["cost"] = settle(&value["usage"].clone(), calls)?;
+            value["cost"] = settle(&value["usage"].clone(), calls, "ok")?;
             Ok(value)
         }
         Err(mut e) => {
@@ -327,10 +481,10 @@ pub fn run_costed_for(
             // invalid JSON, refusal). A timeout may have been billed: unknown, never zero.
             if let Some(info) = e.usage.clone().filter(|i| i.get("calls").is_some()) {
                 let calls = info["calls"].as_u64().unwrap_or(1);
-                let cost = settle(&info["usage"], calls)?;
+                let cost = settle(&info["usage"], calls, &e.code)?;
                 e.usage = Some(json!({"usage":info["usage"],"calls":calls,"cost":cost}));
             } else if e.code == "timeout_uncertain" {
-                settle(&Value::Null, 1)?;
+                settle(&Value::Null, 1, &e.code)?;
             }
             Err(e)
         }

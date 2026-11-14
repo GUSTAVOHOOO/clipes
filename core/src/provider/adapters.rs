@@ -320,7 +320,11 @@ impl Adapter {
         let mut input = None;
         let mut output = None;
         let mut calls = 0;
+        // One entry per call of this request (attempt 0, then the repair): `{attempt, calls,
+        // usage, code, durationMs}`. The AI job executor writes one cost row per entry (#124).
+        let mut log: Vec<Value> = Vec::new();
         for repair in 0..2 {
+            let started = std::time::Instant::now();
             let mut body = match self.kind {
                 Kind::OpenAi => {
                     let mut m = vec![json!({"role":"system","content":system})];
@@ -361,8 +365,13 @@ impl Adapter {
                 Err(mut e) => {
                     // A failure whose body reported usage was billed: add it to what the
                     // earlier calls of this request already cost.
-                    if let Some(info) = e.usage.take() {
-                        calls += info["calls"].as_u64().unwrap_or(1);
+                    let info = e.usage.take();
+                    let mut entry_calls = 1;
+                    let mut entry_usage = Value::Null;
+                    if let Some(info) = &info {
+                        entry_calls = info["calls"].as_u64().unwrap_or(1);
+                        entry_usage = info["usage"].clone();
+                        calls += entry_calls;
                         add(
                             &mut input,
                             info["usage"]["inputTokens"].as_u64(),
@@ -373,7 +382,13 @@ impl Adapter {
                             info["usage"]["outputTokens"].as_u64(),
                             repair == 0,
                         );
-                        e.usage = Some(json!({"usage":usage_value(input, output),"calls":calls}));
+                    }
+                    log.push(json!({"attempt":repair,"calls":entry_calls,"usage":entry_usage,"code":e.code,"durationMs":started.elapsed().as_millis() as u64}));
+                    // An earlier call of this request was billed even if this one was not.
+                    if info.is_some() || log.len() > 1 {
+                        e.usage = Some(
+                            json!({"usage":usage_value(input, output),"calls":calls,"log":log}),
+                        );
                     }
                     return Err(e);
                 }
@@ -383,6 +398,7 @@ impl Adapter {
             add(&mut input, i, repair == 0);
             add(&mut output, o, repair == 0);
             let usage = usage_value(input, output);
+            log.push(json!({"attempt":repair,"calls":attempts,"usage":usage_value(i, o),"code":"ok","durationMs":started.elapsed().as_millis() as u64}));
             let truncated = match self.kind {
                 Kind::OpenAi => response.pointer("/choices/0/finish_reason"),
                 Kind::Anthropic => response.get("stop_reason"),
@@ -391,13 +407,20 @@ impl Adapter {
             .and_then(Value::as_str)
             .is_some_and(|reason| matches!(reason, "length" | "max_tokens" | "MAX_TOKENS"));
             // Every failure after a response was received was already billed: carry the usage.
-            let billed = |code: &str, message: &str| {
+            let billed = |code: &str, message: &str, log: &mut Vec<Value>| {
+                if let Some(last) = log.last_mut() {
+                    last["code"] = json!(code);
+                }
                 let mut e = error(code, message);
-                e.usage = Some(json!({"usage":usage,"calls":calls}));
+                e.usage = Some(json!({"usage":usage,"calls":calls,"log":log}));
                 e
             };
             if truncated {
-                return Err(billed("output_truncated", "Provider output was truncated"));
+                return Err(billed(
+                    "output_truncated",
+                    "Provider output was truncated",
+                    &mut log,
+                ));
             }
             // A refusal is the model's answer, not a malformed one: no repair. The refusal
             // text is not copied into the error.
@@ -407,7 +430,11 @@ impl Adapter {
                     .and_then(Value::as_str)
                     .is_some_and(|refusal| !refusal.is_empty())
             {
-                return Err(billed("refusal", "Provider refused the request"));
+                return Err(billed(
+                    "refusal",
+                    "Provider refused the request",
+                    &mut log,
+                ));
             }
             let text = match self.kind {
                 Kind::OpenAi => response
@@ -421,22 +448,41 @@ impl Adapter {
                     .pointer("/candidates/0/content/parts/0/text")
                     .and_then(Value::as_str),
             }
-            .ok_or_else(|| billed("invalid_response", "Provider response contains no text"))?;
+            .ok_or_else(|| {
+                billed(
+                    "invalid_response",
+                    "Provider response contains no text",
+                    &mut log,
+                )
+            })?;
             if let Ok(value) = serde_json::from_str::<Value>(text) {
                 if value.get("schemaVersion").is_some() && validator.is_valid(&value) {
-                    return Ok(json!({"data":value,"usage":usage,"calls":calls}));
+                    return Ok(json!({"data":value,"usage":usage,"calls":calls,"log":log}));
                 }
             }
             if request.native_schema {
                 return Err(billed(
                     "invalid_json",
                     "Provider response failed validation",
+                    &mut log,
                 ));
             }
             if repair == 1 {
                 return Err(billed(
                     "invalid_json",
                     "Provider response failed validation after repair",
+                    &mut log,
+                ));
+            }
+            if let Some(last) = log.last_mut() {
+                last["code"] = json!("invalid_json");
+            }
+            // The repair is a second paid call: the job's call budget can forbid it (#124).
+            if control::call_limit().is_some_and(|max| calls >= max) {
+                return Err(billed(
+                    "budget_calls",
+                    "Call budget reached before the repair",
+                    &mut log,
                 ));
             }
             messages.push(json!({"role":"assistant","content":text}));

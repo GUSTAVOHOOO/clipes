@@ -23,6 +23,24 @@ impl CancelToken {
     }
 }
 
+thread_local! {
+    static CALL_LIMIT: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
+}
+
+/// Runs `f` with a ceiling of HTTP calls for the structured request it makes on this thread
+/// (the AI job executor sets it, #124). The adapter skips the paid repair call once the
+/// calls made reach it. There is no limit outside this scope.
+pub(crate) fn with_call_limit<T>(limit: Option<u64>, f: impl FnOnce() -> T) -> T {
+    let previous = CALL_LIMIT.replace(limit);
+    let result = f();
+    CALL_LIMIT.set(previous);
+    result
+}
+
+pub(crate) fn call_limit() -> Option<u64> {
+    CALL_LIMIT.get()
+}
+
 pub(crate) const CANCEL_POLL: Duration = Duration::from_millis(25);
 
 pub(crate) fn cancelled() -> CoreError {
