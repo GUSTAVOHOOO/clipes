@@ -372,6 +372,7 @@ fn tasks(_: Value, _: &mut EventSink<'_>) -> CommandResult {
                 "measured": false,
             })
         });
+    let project_local_only = crate::projects::project_local_only()?;
     let mut rows = Vec::new();
     for task in TASKS {
         let own = settings.tasks.get(task).filter(|c| !c.is_empty());
@@ -388,7 +389,8 @@ fn tasks(_: Value, _: &mut EventSink<'_>) -> CommandResult {
             None
         };
         let local_only = settings.local_only.get(task).copied().unwrap_or(false);
-        let blocked = local_only && target.as_ref().is_some_and(|t| t["local"] == json!(false));
+        let blocked = (local_only || project_local_only)
+            && target.as_ref().is_some_and(|t| t["local"] == json!(false));
         let unchosen = target.is_none();
         rows.push(json!({
             "task": task,
@@ -401,7 +403,7 @@ fn tasks(_: Value, _: &mut EventSink<'_>) -> CommandResult {
             "suggestion": if unchosen { suggestion.clone().unwrap_or(Value::Null) } else { Value::Null },
         }));
     }
-    Ok(json!({"tasks": rows}))
+    Ok(json!({"tasks": rows, "projectLocalOnly": project_local_only}))
 }
 
 fn complete(args: Value, _: &mut EventSink<'_>) -> CommandResult {

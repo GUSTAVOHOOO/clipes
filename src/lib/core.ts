@@ -19,6 +19,7 @@ const isLocalHost = (endpoint: string) => ['localhost', '127.0.0.1', '[::1]'].in
 let priceOverrides: { provider: string; model: string; inputPerMillion: number; outputPerMillion: number }[] = [];
 const assistantTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('assistant-test');
 let assistantMock = { completed: !assistantTest, skipped: false, needsSetup: assistantTest, default: '', tasks: { selection: '', packaging: '', script: '', translation: '' } as Record<string, string>, localOnly: { selection: false, packaging: false, script: false, translation: false } as Record<string, boolean> };
+let projectVetoMock = false;
 const knownProfile = (id: string) => (id === 'legacy' ? !!providerMock.endpoint : profileMocks.some(p => p.id === id));
 const staleProfile = (choice: string) => choice.startsWith('profile:') && !knownProfile(choice.slice(8));
 const assistantView = () => {
@@ -36,14 +37,14 @@ const taskTarget = (choice: string) => {
   const found = profileMocks.find(p => p.id === id);
   return found ? profileRow(found.id, found.label, found.kind, found.model, found.endpoint) : null;
 };
-const assistantTasks = () => ({ tasks: Object.keys(assistantMock.tasks).map(task => {
+const assistantTasks = () => ({ projectLocalOnly: sourceTest && projectVetoMock, tasks: Object.keys(assistantMock.tasks).map(task => {
   const own = assistantMock.tasks[task];
   const choice = own || assistantMock.default;
   const profile = taskTarget(choice);
   const missing = !profile && staleProfile(choice) ? choice.slice(8) : null;
   const localOnly = assistantMock.localOnly[task] ?? false;
   const firstLocal = profileMocks.find(p => isLocalHost(p.endpoint));
-  return { task, choice: missing ? '' : own, source: missing ? 'none' : own ? 'task' : assistantMock.default ? 'default' : 'none', profile, localOnly, blocked: localOnly && !!profile && !profile.local, missing,
+  return { task, choice: missing ? '' : own, source: missing ? 'none' : own ? 'task' : assistantMock.default ? 'default' : 'none', profile, localOnly, blocked: (localOnly || (sourceTest && projectVetoMock)) && !!profile && !profile.local, missing,
     suggestion: !profile && firstLocal ? { choice: `profile:${firstLocal.id}`, label: firstLocal.label, measured: false } : null };
 }) });
 let providerCliMock = { selected: '', codexConfirmed: false, claudeConfirmed: false };
@@ -52,6 +53,8 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'diagnostic.get') return { text: "Clipes: 0.1.0\nSistema operacional: indisponível" } as T;
     if (name === 'projects.recent') return [] as T;
     if (name === 'projects.current') return (sourceTest ? { name:'Teste', path:'/test/Teste.clipes', id:'test-project' } : null) as T;
+    if (name === 'projects.local_only.get') return { open: sourceTest, enabled: sourceTest && projectVetoMock } as T;
+    if (name === 'projects.local_only.set') { projectVetoMock = (args as { enabled: boolean }).enabled; return { open: true, enabled: projectVetoMock } as T; }
     if (name === 'jobs.list') return (sourceTest ? jobItems : []) as T;
     if (sourceTest && name === 'jobs.estimate') return { safety: 'paid', estimate: { kind: 'unknown' } } as T;
     if (sourceTest && (name === 'jobs.retry' || name === 'jobs.discard' || name === 'jobs.cancel')) {
