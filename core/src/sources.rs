@@ -70,6 +70,7 @@ fn probe(path: &Path) -> Result<Value, CoreError> {
             std::ffi::OsStr::new("json"),
             path.as_os_str(),
         ],
+        None,
     )
     .map_err(|_| {
         err(
