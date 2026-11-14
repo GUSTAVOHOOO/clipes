@@ -24,6 +24,7 @@ fn local_source_lifecycle() {
     ));
     fs::create_dir_all(&root).unwrap();
     std::env::set_var("CLIPES_DATA_DIR", root.join("data"));
+    std::env::set_var("CLIPES_FFPROBE", "ffprobe");
     let media = root.join("source.mkv");
     assert!(Command::new("ffmpeg")
         .args([
@@ -276,5 +277,7 @@ fn local_source_lifecycle() {
         .unwrap();
     assert_eq!(copy["available"], true);
     run("projects.close", json!({})).unwrap();
+    std::env::remove_var("CLIPES_FFPROBE");
+    std::env::remove_var("CLIPES_DATA_DIR");
     fs::remove_dir_all(root).unwrap();
 }
