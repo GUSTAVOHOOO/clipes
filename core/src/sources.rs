@@ -38,25 +38,11 @@ fn resolve_path(v: &Value, stored: &str) -> Result<PathBuf, CoreError> {
         Ok(Path::new(project).join(path))
     }
 }
-fn probe_path() -> PathBuf {
+fn probe_path() -> Result<PathBuf, CoreError> {
     if let Some(p) = std::env::var_os("CLIPES_FFPROBE") {
-        return p.into();
+        return Ok(p.into());
     }
-    if let Some(p) = crate::components::configured_ffmpeg() {
-        let sibling = p.with_file_name(if cfg!(windows) {
-            "ffprobe.exe"
-        } else {
-            "ffprobe"
-        });
-        if sibling.is_file() {
-            return sibling;
-        }
-    }
-    PathBuf::from(if cfg!(windows) {
-        "ffprobe.exe"
-    } else {
-        "ffprobe"
-    })
+    crate::components::ffprobe_executable(crate::components::configured_ffmpeg().as_deref())
 }
 fn probe(path: &Path) -> Result<Value, CoreError> {
     let path = path
@@ -66,7 +52,7 @@ fn probe(path: &Path) -> Result<Value, CoreError> {
         return Err(err("source_unavailable", "Fonte indisponível"));
     }
     let child = crate::process::spawn(
-        probe_path(),
+        probe_path()?,
         [
             std::ffi::OsStr::new("-v"),
             std::ffi::OsStr::new("error"),

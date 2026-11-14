@@ -102,6 +102,75 @@ fn load_settings() -> Result<Settings, CoreError> {
 pub(crate) fn configured_ffmpeg() -> Option<PathBuf> {
     load_settings().ok().and_then(|s| s.ffmpeg_path)
 }
+fn probe_name() -> &'static str {
+    if cfg!(windows) {
+        "ffprobe.exe"
+    } else {
+        "ffprobe"
+    }
+}
+fn managed_incomplete(settings: &Settings) -> bool {
+    let Some(path) = &settings.ffmpeg_path else {
+        return false;
+    };
+    let managed = settings.data_dir.join("components").join(if cfg!(windows) {
+        "ffmpeg.exe"
+    } else {
+        "ffmpeg"
+    });
+    path == &managed && (!path.is_file() || !path.with_file_name(probe_name()).is_file())
+}
+pub(crate) fn ffprobe_executable(ffmpeg: Option<&Path>) -> Result<PathBuf, CoreError> {
+    let settings = load_settings()
+        .map_err(|_| error("ffprobe_missing", "Não foi possível verificar o ffprobe"))?;
+    if managed_incomplete(&settings) && ffmpeg == settings.ffmpeg_path.as_deref() {
+        return Err(error(
+            "ffprobe_missing",
+            "Componente FFmpeg incompleto; reinstale-o",
+        ));
+    }
+    let sibling = ffmpeg
+        .map(|p| p.with_file_name(probe_name()))
+        .filter(|p| p.is_file());
+    let managed = settings.ffmpeg_path.as_deref() == ffmpeg
+        && ffmpeg
+            == Some(
+                settings
+                    .data_dir
+                    .join("components")
+                    .join(if cfg!(windows) {
+                        "ffmpeg.exe"
+                    } else {
+                        "ffmpeg"
+                    })
+                    .as_path(),
+            );
+    let mut candidates = Vec::new();
+    if let Some(path) = sibling {
+        candidates.push(path);
+    }
+    if !managed {
+        candidates.push(PathBuf::from(probe_name()));
+    }
+    for executable in candidates {
+        let valid = crate::process::spawn(&executable, ["-version"])
+            .and_then(|child| child.wait_with_output())
+            .is_ok_and(|o| {
+                o.status.success()
+                    && String::from_utf8_lossy(&o.stdout).starts_with("ffprobe version ")
+            });
+        if valid {
+            return Ok(executable);
+        }
+    }
+    Err(error(
+        "ffprobe_missing",
+        "ffprobe indisponível; verifique os Componentes",
+    ))
+}
+fn ffmpeg_status(_: Value, _: &mut EventSink<'_>) -> CommandResult {
+    Ok(json!({"incomplete":managed_incomplete(&load_settings()?)}))
+}
 fn save_settings(s: &Settings) -> Result<(), CoreError> {
     let p = settings_path()?;
     fs::create_dir_all(p.parent().unwrap()).map_err(|e| error("settings", e))?;
@@ -134,6 +203,7 @@ fn ffmpeg_system(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     if !output.status.success() || !version.starts_with("ffmpeg version ") {
         return Err(error("invalid_ffmpeg", "FFmpeg inválido"));
     }
+    ffprobe_executable(Some(Path::new(path)))?;
     let mut s = load_settings()?;
     s.ffmpeg_path = Some(path.into());
     save_settings(&s)?;
@@ -304,63 +374,103 @@ fn fetch(
     Ok(())
 }
 fn install(item: &Component, part: &Path, exe: &Path) -> Result<(), CoreError> {
-    let tmp = exe.with_extension("installing");
     if item.id == "yt-dlp" {
+        let tmp = exe.with_extension("installing");
         fs::copy(part, &tmp).map_err(|e| error("install", e))?;
-    } else if cfg!(windows) {
-        let mut zip = zip::ZipArchive::new(File::open(part).map_err(|e| error("install", e))?)
-            .map_err(|e| error("install", e))?;
-        let idx = (0..zip.len())
-            .find(|i| {
-                zip.by_index(*i)
-                    .map(|f| f.name().ends_with("/bin/ffmpeg.exe"))
-                    .unwrap_or(false)
-            })
-            .ok_or_else(|| error("install", "Executável FFmpeg ausente"))?;
-        let mut src = zip.by_index(idx).map_err(|e| error("install", e))?;
-        io::copy(
-            &mut src,
-            &mut File::create(&tmp).map_err(|e| error("install", e))?,
-        )
-        .map_err(|e| error("install", e))?;
-    } else {
-        let decoder = xz2::read::XzDecoder::new(File::open(part).map_err(|e| error("install", e))?);
-        let mut archive = tar::Archive::new(decoder);
-        let mut found = false;
-        for entry in archive.entries().map_err(|e| error("install", e))? {
-            let mut entry = entry.map_err(|e| error("install", e))?;
-            if entry
-                .path()
-                .map_err(|e| error("install", e))?
-                .to_string_lossy()
-                .ends_with("/bin/ffmpeg")
-                && entry.header().entry_type().is_file()
-            {
+        return promote(&tmp, exe);
+    }
+    let probe = exe.with_file_name(probe_name());
+    let tmp_exe = exe.with_extension("installing");
+    let tmp_probe = probe.with_extension("installing");
+    let result = (|| {
+        let mut found = [false; 2];
+        if cfg!(windows) {
+            let mut zip = zip::ZipArchive::new(File::open(part).map_err(|e| error("install", e))?)
+                .map_err(|e| error("install", e))?;
+            for (index, name) in ["/bin/ffmpeg.exe", "/bin/ffprobe.exe"].iter().enumerate() {
+                let idx = (0..zip.len())
+                    .find(|i| {
+                        zip.by_index(*i)
+                            .map(|f| f.name().ends_with(name))
+                            .unwrap_or(false)
+                    })
+                    .ok_or_else(|| error("install", "Executável FFmpeg ou ffprobe ausente"))?;
+                let mut src = zip.by_index(idx).map_err(|e| error("install", e))?;
+                let target = if index == 0 { &tmp_exe } else { &tmp_probe };
                 io::copy(
-                    &mut entry,
-                    &mut File::create(&tmp).map_err(|e| error("install", e))?,
+                    &mut src,
+                    &mut File::create(target).map_err(|e| error("install", e))?,
                 )
                 .map_err(|e| error("install", e))?;
-                found = true;
-                break;
+                found[index] = true;
+            }
+        } else {
+            let decoder =
+                xz2::read::XzDecoder::new(File::open(part).map_err(|e| error("install", e))?);
+            let mut archive = tar::Archive::new(decoder);
+            for entry in archive.entries().map_err(|e| error("install", e))? {
+                let mut entry = entry.map_err(|e| error("install", e))?;
+                let path = entry
+                    .path()
+                    .map_err(|e| error("install", e))?
+                    .to_string_lossy()
+                    .into_owned();
+                let index = if path.ends_with("/bin/ffmpeg") {
+                    Some(0)
+                } else if path.ends_with("/bin/ffprobe") {
+                    Some(1)
+                } else {
+                    None
+                };
+                if let Some(index) = index {
+                    if !entry.header().entry_type().is_file() || found[index] {
+                        continue;
+                    }
+                    let target = if index == 0 { &tmp_exe } else { &tmp_probe };
+                    io::copy(
+                        &mut entry,
+                        &mut File::create(target).map_err(|e| error("install", e))?,
+                    )
+                    .map_err(|e| error("install", e))?;
+                    found[index] = true;
+                }
             }
         }
-        if !found {
-            return Err(error("install", "Executável FFmpeg ausente"));
+        if !found.into_iter().all(|f| f) {
+            return Err(error("install", "Executável FFmpeg ou ffprobe ausente"));
         }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            for tmp in [&tmp_exe, &tmp_probe] {
+                fs::set_permissions(tmp, fs::Permissions::from_mode(0o755))
+                    .map_err(|e| error("install", e))?;
+            }
+        }
+        promote(&tmp_probe, &probe)?;
+        promote(&tmp_exe, exe)?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&tmp_exe);
+        let _ = fs::remove_file(&tmp_probe);
     }
+    result
+}
+fn promote(tmp: &Path, exe: &Path) -> Result<(), CoreError> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&tmp, fs::Permissions::from_mode(0o755))
+        fs::set_permissions(tmp, fs::Permissions::from_mode(0o755))
             .map_err(|e| error("install", e))?;
     }
     if exe.exists() {
         fs::remove_file(exe).map_err(|e| error("install", e))?;
     }
-    fs::rename(tmp, exe).map_err(|e| error("install", e))?;
-    Ok(())
+    fs::rename(tmp, exe).map_err(|e| error("install", e))
 }
+
+inventory::submit! { CommandRegistration { name: "components.ffmpeg.status", execute: ffmpeg_status } }
 inventory::submit! { CommandRegistration { name: "components.manifest", execute: manifest_command } }
 inventory::submit! { CommandRegistration { name: "components.download", execute: download } }
 inventory::submit! { CommandRegistration { name: "components.cancel", execute: cancel } }
@@ -454,5 +564,83 @@ mod tests {
         assert_eq!(fs::read(&p).unwrap(), b"yes");
         handle.join().unwrap();
         fs::remove_file(p).unwrap();
+    }
+    fn archive(path: &Path, include_probe: bool) {
+        if cfg!(windows) {
+            let mut zip = zip::ZipWriter::new(File::create(path).unwrap());
+            let options = zip::write::SimpleFileOptions::default();
+            zip.start_file("package/bin/ffmpeg.exe", options).unwrap();
+            zip.write_all(b"ffmpeg").unwrap();
+            if include_probe {
+                zip.start_file("package/bin/ffprobe.exe", options).unwrap();
+                zip.write_all(b"ffprobe").unwrap();
+            }
+            zip.finish().unwrap();
+        } else {
+            let encoder = xz2::write::XzEncoder::new(File::create(path).unwrap(), 6);
+            let mut archive = tar::Builder::new(encoder);
+            for (name, contents) in [
+                ("package/bin/ffmpeg", b"ffmpeg".as_slice()),
+                ("package/bin/ffprobe", b"ffprobe".as_slice()),
+            ] {
+                if !include_probe && name.ends_with("ffprobe") {
+                    continue;
+                }
+                let mut header = tar::Header::new_gnu();
+                header.set_size(contents.len() as u64);
+                header.set_mode(0o755);
+                header.set_cksum();
+                archive.append_data(&mut header, name, contents).unwrap();
+            }
+            archive.into_inner().unwrap().finish().unwrap();
+        }
+    }
+    #[test]
+    fn install_ffmpeg_also_installs_ffprobe_and_preserves_old_files_if_missing() {
+        let dir = path();
+        fs::create_dir_all(&dir).unwrap();
+        let package = dir.join("package");
+        let exe = dir.join(if cfg!(windows) {
+            "ffmpeg.exe"
+        } else {
+            "ffmpeg"
+        });
+        let probe = exe.with_file_name(if cfg!(windows) {
+            "ffprobe.exe"
+        } else {
+            "ffprobe"
+        });
+        let item = manifest().into_iter().find(|c| c.id == "ffmpeg").unwrap();
+        archive(&package, true);
+        install(&item, &package, &exe).unwrap();
+        assert_eq!(fs::read(&exe).unwrap(), b"ffmpeg");
+        assert_eq!(fs::read(&probe).unwrap(), b"ffprobe");
+        archive(&package, false);
+        assert!(install(&item, &package, &exe).is_err());
+        assert_eq!(fs::read(&exe).unwrap(), b"ffmpeg");
+        assert_eq!(fs::read(&probe).unwrap(), b"ffprobe");
+        fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn older_managed_install_is_incomplete_until_probe_exists() {
+        let root = path();
+        let dir = root.join("components");
+        fs::create_dir_all(&dir).unwrap();
+        let ffmpeg = dir.join(if cfg!(windows) {
+            "ffmpeg.exe"
+        } else {
+            "ffmpeg"
+        });
+        fs::write(&ffmpeg, b"ffmpeg").unwrap();
+        let settings = Settings {
+            data_dir: root.clone(),
+            cache_dir: root.join("cache"),
+            cache_limit_bytes: 1,
+            ffmpeg_path: Some(ffmpeg.clone()),
+        };
+        assert!(managed_incomplete(&settings));
+        fs::write(ffmpeg.with_file_name(probe_name()), b"ffprobe").unwrap();
+        assert!(!managed_incomplete(&settings));
+        fs::remove_dir_all(root).unwrap();
     }
 }
