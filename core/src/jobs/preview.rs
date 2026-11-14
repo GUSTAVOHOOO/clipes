@@ -50,7 +50,7 @@ pub(crate) fn check(id: i64, stop: &AtomicBool) -> Result<(), crate::CoreError> 
 
 pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
     while !stop.load(Ordering::SeqCst) {
-        let next = projects::with_reader(|c| c.query_row("SELECT id,source_id,kind FROM jobs WHERE kind IN ('preview','transcribe') AND safety='local' AND state='queued' ORDER BY id LIMIT 1", [], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?))).optional()).ok().flatten();
+        let next = projects::with_reader(|c| c.query_row("SELECT id,source_id,kind FROM jobs WHERE kind IN ('preview','transcription') AND safety='local' AND state='queued' ORDER BY id LIMIT 1", [], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?))).optional()).ok().flatten();
         if let Some((id, source, kind)) = next {
             let Ok(_guard) = projects::start_job() else {
                 break;
@@ -59,7 +59,7 @@ pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
                 break;
             }
             if begin(id).unwrap_or(false) {
-                let result = if kind == "transcribe" {
+                let result = if kind == "transcription" {
                     crate::transcription::run(id, source, &project, &stop)
                 } else {
                     generate(id, source, &project, &stop)
@@ -99,8 +99,8 @@ fn progress_event(
         stage: if err.is_some() { "failed" } else { "complete" }.into(),
         percentage: if err.is_some() { 0 } else { 100 },
         message: match (kind, err.is_some()) {
-            ("transcribe", true) => "Transcrição interrompida",
-            ("transcribe", false) => "Transcrição pronta",
+            ("transcription", true) => "Transcrição interrompida",
+            ("transcription", false) => "Transcrição pronta",
             (_, true) => "Prévia interrompida",
             (_, false) => "Prévia pronta",
         }

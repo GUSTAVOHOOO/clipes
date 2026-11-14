@@ -158,8 +158,8 @@ impl Env {
     }
 
     fn wait_transcribe(&self, state: &str) {
-        wait(&format!("job transcribe {state}"), || {
-            self.job_state("transcribe").is_some_and(|(s, _)| {
+        wait(&format!("job transcription {state}"), || {
+            self.job_state("transcription").is_some_and(|(s, _)| {
                 assert!(s != "failed" || state == "failed", "o job falhou");
                 s == state
             })
@@ -283,7 +283,7 @@ fn closing_the_app_mid_transcription_requeues_and_resumes() {
     std::env::set_var("CLIPES_FAKE_WORKER_HOLD", &hold);
     env.start(source).unwrap();
     wait("transcrição em andamento", || {
-        env.job_state("transcribe")
+        env.job_state("transcription")
             .is_some_and(|(s, _)| s == "running")
     });
     run("projects.close", json!({})).unwrap();
@@ -291,7 +291,7 @@ fn closing_the_app_mid_transcription_requeues_and_resumes() {
     run("projects.open", json!({"path":env.project})).unwrap();
     env.wait_transcribe("completed");
     assert_eq!(
-        env.job_state("transcribe").unwrap().1,
+        env.job_state("transcription").unwrap().1,
         2,
         "reiniciou uma vez"
     );
@@ -308,7 +308,7 @@ fn cancelling_stops_the_job_and_a_new_start_continues() {
     std::env::set_var("CLIPES_FAKE_WORKER_HOLD", &hold);
     let started = env.start(source).unwrap();
     wait("transcrição em andamento", || {
-        env.job_state("transcribe")
+        env.job_state("transcription")
             .is_some_and(|(s, _)| s == "running")
     });
     run("jobs.cancel", json!({"id":started["job_id"]})).unwrap();
@@ -344,7 +344,7 @@ fn missing_model_is_a_typed_error_before_any_job() {
     let source = env.import(0);
     let error = env.start(source).unwrap_err();
     assert_eq!(error.code, "model_missing");
-    assert!(env.job_state("transcribe").is_none());
+    assert!(env.job_state("transcription").is_none());
 }
 
 #[test]

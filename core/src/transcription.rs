@@ -1,6 +1,6 @@
 //! Transcrição local em blocos com checkpoint (#48).
 //!
-//! A Transcrição de uma Fonte roda como job da fila do Projeto (`kind = 'transcribe'`,
+//! A Transcrição de uma Fonte roda como job da fila do Projeto (`kind = 'transcription'`,
 //! safety local). O núcleo corta o áudio da faixa escolhida na Fonte em blocos (10 min),
 //! pede cada bloco ao Motor e grava palavras, silêncios e o ponto de retomada numa única
 //! transação: matar o processo no meio retoma do último bloco concluído, sem duplicar
@@ -520,14 +520,14 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         )?;
         let mut job: Option<i64> = tx
             .query_row(
-                "SELECT id FROM jobs WHERE kind='transcribe' AND source_id=?1 AND state IN ('queued','running') ORDER BY id LIMIT 1",
+                "SELECT id FROM jobs WHERE kind='transcription' AND source_id=?1 AND state IN ('queued','running') ORDER BY id LIMIT 1",
                 [source],
                 |r| r.get(0),
             )
             .optional()?;
         if state != "complete" && job.is_none() {
             tx.execute(
-                "INSERT INTO jobs(kind,safety,state,source_id) VALUES ('transcribe','local','queued',?1)",
+                "INSERT INTO jobs(kind,safety,state,source_id) VALUES ('transcription','local','queued',?1)",
                 [source],
             )?;
             job = Some(tx.last_insert_rowid());
@@ -553,7 +553,7 @@ fn status(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             .optional()?;
         let job = c
             .query_row(
-                "SELECT id, state, progress FROM jobs WHERE kind='transcribe' AND source_id=?1 ORDER BY id DESC LIMIT 1",
+                "SELECT id, state, progress FROM jobs WHERE kind='transcription' AND source_id=?1 ORDER BY id DESC LIMIT 1",
                 [source],
                 |r| Ok(json!({"id": r.get::<_, i64>(0)?, "state": r.get::<_, String>(1)?, "progress": r.get::<_, i64>(2)?})),
             )
