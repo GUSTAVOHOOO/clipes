@@ -155,3 +155,17 @@ def test_read_wav_requires_16khz_mono_16bit(tmp_path):
             read_wav(bad)
     with pytest.raises(WorkerError):
         read_wav(tmp_path / "nao-existe.wav")
+
+
+def test_native_libraries_are_imported_before_the_stdin_reader_starts(monkeypatch):
+    # No Windows, importar numpy com outra thread bloqueada no stdin travava o worker.
+    from clipes_worker import server
+
+    imported = []
+    monkeypatch.setattr(server.importlib, "import_module", imported.append)
+    server.preload_native_libraries()
+    assert imported == ["numpy", "faster_whisper"]
+    monkeypatch.setattr(
+        server.importlib, "import_module", lambda name: (_ for _ in ()).throw(ImportError(name))
+    )
+    server.preload_native_libraries()  # ausente: segue, a tarefa responde o erro tipado

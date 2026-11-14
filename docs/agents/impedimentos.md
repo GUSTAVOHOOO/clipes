@@ -89,6 +89,11 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Sintoma:** `Library cublas64_12.dll is not found or cannot be loaded`, mesmo com as bibliotecas NVIDIA instaladas no ambiente virtual.
 - **Ação:** acrescente ao `PATH` da sessão as pastas `Lib\site-packages\nvidia\cublas\bin` e `Lib\site-packages\nvidia\cudnn\bin` desse ambiente antes de iniciar o Python. Mantenha o ambiente e os modelos fora do repo.
 
+### Worker de ML trava no primeiro pedido, sem CPU (Windows)
+- **Sintoma:** o handshake responde, mas o primeiro pedido `transcribe` nunca volta; o `python` do worker fica ocioso (~30 MB) e `faulthandler` mostra a thread principal parada em `import numpy` (`LoadLibrary`) e a thread de leitura esperando o stdin.
+- **Causa:** no Windows, com o stdin num pipe do núcleo, importar bibliotecas nativas enquanto outra thread já bloqueia no stdin trava o carregamento da DLL. Num shell (Git Bash) o mesmo comando funciona, o que esconde o problema.
+- **Ação:** o worker importa `numpy` e `faster_whisper` em `server.preload_native_libraries()` antes de iniciar a thread de leitura; não mova esses imports para dentro da tarefa. Para reproduzir, inicie o worker com `subprocess.Popen` e pipes e mande o pedido depois do handshake (não use `printf | python`).
+
 ### Repositório do modelo no Hugging Face mudou de nome
 - **Sintoma:** `huggingface.co/api/models/mobiuslabsgmbh/faster-whisper-large-v3-turbo/...` responde `307` para `dropbox-dash/faster-whisper-large-v3-turbo`; `curl` sem `-L` recebe só o texto do redirecionamento.
 - **Causa:** o repositório foi renomeado; a revisão fixada continua a mesma (`0a363e91...`) e o SHA-256 dos arquivos também.
