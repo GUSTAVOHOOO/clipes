@@ -1,0 +1,68 @@
+anyio==4.16.0
+av==18.1.0
+click==8.5.1
+colorama==0.4.6
+ctranslate2==4.9.0
+faster-whisper==1.2.1
+filelock==4.2.10
+flatbuffers==25.12.19
+fsspec==2026.9.0
+h11==0.16.0
+httpcore2==2.16.0
+httpx2==2.16.0
+huggingface_hub==2.4.0
+idna==3.20
+numpy==2.4.6
+nvidia-cublas-cu12==12.9.1.4
+nvidia-cudnn-cu12==9.10.2.21
+nvidia-ml-py==12.575.51
+onnxruntime==1.32.0
+packaging==26.3
+protobuf==7.36.2
+pynvml==12.0.0
+PyYAML==6.0.3
+tokenizers==0.23.3
+tqdm==4.70.1
+truststore==0.10.5
+typing_extensions==4.16.0
+hf_xet==1.2.0
+
+# Ambiente separado de alinhamento CTC (registo das versões instaladas):
+# CTC certifi==2026.10.23
+# CTC cffi==2.1.1
+# CTC charset-normalizer==3.5.2
+# CTC click==8.5.1
+# CTC cloudpickle==3.1.2
+# CTC colorama==0.4.6
+# CTC filelock==4.2.10
+# CTC fsspec==2026.9.0
+# CTC hf-xet==1.2.0
+# CTC huggingface_hub==0.36.2
+# CTC idna==3.20
+# CTC Jinja2==3.1.6
+# CTC joblib==1.6.0
+# CTC MarkupSafe==3.0.4
+# CTC mpmath==1.3.0
+# CTC networkx==3.6.1
+# CTC nltk==3.9.2
+# CTC numpy==2.0.2
+# CTC packaging==26.3
+# CTC pandas==2.2.3
+# CTC pycparser==3.12
+# CTC python-dateutil==4.0.0
+# CTC pytz==2026.6
+# CTC PyYAML==6.0.3
+# CTC regex==2026.11.9
+# CTC requests==2.34.2
+# CTC safetensors==0.8.0
+# CTC soundfile==0.13.1
+# CTC sympy==1.14.0
+# CTC tokenizers==0.22.2
+# CTC torch==2.8.0
+# CTC torchaudio==2.8.0
+# CTC tqdm==4.70.1
+# CTC transformers==4.57.6
+# CTC typing_extensions==4.16.0
+# CTC tzdata==2026.6
+# CTC urllib3==2.8.0
+# CTC whisperx==3.7.4
