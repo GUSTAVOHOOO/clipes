@@ -8,18 +8,19 @@ from metrics import alignment, boundary_score, exclude_uncertain, tokens
 DATA = Path(__file__).resolve().parents[1]/'dataset'
 
 
-def measure(rows, ctc=False):
+def measure(rows, ctc=False, references=None):
     manifest = json.loads((DATA/'manifest.json').read_text(encoding='utf8'))
     sources = {i['id']:i for i in manifest['items']}
     total = {t: [0,0,0] for t in (.05,.1,.2,.5)}
     errors = {'start': [], 'end': []}
     for row in rows:
         item = sources[row['source']]
-        ref = next(s for s in json.loads((DATA/item['transcricao']['file']).read_text(encoding='utf8'))['samples'] if s['start'] == row['start'])
+        ref = (references[(row['source'], row['start'])] if references is not None else
+               next(s for s in json.loads((DATA/item['transcricao']['file']).read_text(encoding='utf8'))['samples'] if s['start'] == row['start']))
         indexed = [(i,w) for i,w in enumerate(ref['words']) if exclude_uncertain([w],ref['incertos'])]
         reference = [w for _,w in indexed]
-        uncertain = {(j,b['edge']) for j,(i,_) in enumerate(indexed) for b in ref['bordas_incertas'] if b['word_index']==i}
-        hypothesis = row['aligned'] if ctc else exclude_uncertain(row['hypothesis'],ref['incertos'])
+        uncertain = {(j,b['edge']) for j,(i,_) in enumerate(indexed) for b in ref.get('bordas_incertas', []) if b['word_index']==i}
+        hypothesis = exclude_uncertain(row['aligned'] if ctc else row['hypothesis'], ref['incertos'])
         ref_tokens = [' '.join(tokens(w['word'])) for w in reference]
         hyp_tokens = [' '.join(tokens(w['word'])) for w in hypothesis]
         _, pairs = alignment(ref_tokens,hyp_tokens)

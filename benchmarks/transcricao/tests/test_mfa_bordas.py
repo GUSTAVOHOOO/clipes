@@ -64,3 +64,16 @@ class ReadMfaTests(unittest.TestCase):
         from mfa_bordas import read_mfa_words
         with self.assertRaises(ValueError):
             read_mfa_words({'tiers': {'words': {'entries': [[1, .5, 'erro']]}}}, 0)
+
+class DiagnoseMfaTests(unittest.TestCase):
+    def test_measure_uses_new_reference_and_excludes_uncertain_hypothesis(self):
+        from diagnose import measure
+        references = {('rtZyZL3FfH4', 0): {'words': [{'word': 'oi', 'start': 1, 'end': 2}],
+                                               'incertos': [{'start': 3, 'end': 4}]}}
+        rows = [{'source': 'rtZyZL3FfH4', 'start': 0,
+                 'hypothesis': [{'word': 'oi', 'start': 1.04, 'end': 2.04},
+                                {'word': 'omitida', 'start': 3.1, 'end': 3.5}]}]
+        result = measure(rows, references=references)
+        self.assertAlmostEqual(result['mediana_inicio_ms'], 40)
+        self.assertAlmostEqual(result['mediana_fim_ms'], 40)
+        self.assertEqual(result['f1']['50'], 1)
