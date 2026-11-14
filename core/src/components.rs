@@ -75,15 +75,19 @@ struct Settings {
     ffmpeg_path: Option<PathBuf>,
 }
 fn settings_path() -> Result<PathBuf, CoreError> {
+    if let Some(dir) = std::env::var_os("CLIPES_DATA_DIR") {
+        return Ok(PathBuf::from(dir).join("component-settings.json"));
+    }
     Ok(dirs::config_local_dir()
         .ok_or_else(|| error("settings", "Diretório local indisponível"))?
         .join("Clipes")
         .join("settings.json"))
 }
 fn default_settings() -> Result<Settings, CoreError> {
-    let dir = dirs::data_local_dir()
-        .ok_or_else(|| error("settings", "Diretório local indisponível"))?
-        .join("Clipes");
+    let dir = std::env::var_os("CLIPES_DATA_DIR")
+        .map(PathBuf::from)
+        .or_else(|| dirs::data_local_dir().map(|p| p.join("Clipes")))
+        .ok_or_else(|| error("settings", "Diretório local indisponível"))?;
     Ok(Settings {
         cache_dir: dir.join("cache"),
         data_dir: dir,
@@ -98,6 +102,19 @@ fn load_settings() -> Result<Settings, CoreError> {
         Err(e) if e.kind() == io::ErrorKind::NotFound => default_settings(),
         Err(e) => Err(error("settings", e)),
     }
+}
+pub(crate) fn ytdlp_executable() -> Result<PathBuf, CoreError> {
+    let settings = load_settings()
+        .map_err(|_| error("component_missing", "Componente yt-dlp indisponível"))?;
+    let executable = settings.data_dir.join("components").join(if cfg!(windows) {
+        "yt-dlp.exe"
+    } else {
+        "yt-dlp"
+    });
+    if !executable.is_file() {
+        return Err(error("component_missing", "Instale o Componente yt-dlp"));
+    }
+    Ok(executable)
 }
 pub(crate) fn configured_ffmpeg() -> Option<PathBuf> {
     load_settings().ok().and_then(|s| s.ffmpeg_path)
