@@ -248,7 +248,14 @@ impl Adapter {
             } else {
                 json!({"inputTokens":input,"outputTokens":output})
             };
-            if matches!(self.kind, Kind::Anthropic) && response["stop_reason"] == "max_tokens" {
+            let truncated = match self.kind {
+                Kind::OpenAi => response.pointer("/choices/0/finish_reason"),
+                Kind::Anthropic => response.get("stop_reason"),
+                Kind::Gemini => response.pointer("/candidates/0/finishReason"),
+            }
+            .and_then(Value::as_str)
+            .is_some_and(|reason| matches!(reason, "length" | "max_tokens" | "MAX_TOKENS"));
+            if truncated {
                 let mut e = error("output_truncated", "Provider output was truncated");
                 e.usage = Some(json!({"usage":usage,"calls":calls}));
                 return Err(e);

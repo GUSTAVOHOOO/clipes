@@ -68,6 +68,7 @@ pub trait Provider {
 
 mod adapters;
 pub use adapters::{AnthropicProvider, GeminiProvider, OpenAiProvider};
+pub mod cost;
 
 mod settings {
     use super::*;
