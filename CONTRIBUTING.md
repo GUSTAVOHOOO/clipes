@@ -48,6 +48,8 @@ bun run build
 
 O crate `core` não depende do Tauri. A UI chama o único adaptador `core_dispatch`, que repassa nome e argumentos JSON ao mesmo `dispatch` usado pelo harness. Cada módulo de feature registra seus próprios comandos com `inventory::submit!`; incluir o módulo no crate exige no máximo uma linha `mod`, sem alterar uma lista central de comandos. Os eventos `core-progress` usam o mesmo `ProgressEvent` serializável, com job, etapa, porcentagem, mensagem e erro tipado opcional. O callback do despacho entrega os eventos ao adaptador Tauri ou ao harness. Processos externos devem usar `core::process::spawn`, que inicia o executável diretamente, sem shell.
 
+Na inicialização, `set_event_emitter` instala uma única vez o receptor compartilhado dos eventos assíncronos da fila; sem receptor, eles são descartados. Eventos da fila identificam o Projeto e o job. O despacho síncrono continua usando seu callback emprestado. Cada Projeto aberto tem um único thread de fila, que executa um job de cada vez; a interface consulta também `jobs.list` para recuperar o estado atual.
+
 ## Demonstração do design system
 
 A demonstração Foco pode ser executada em design-system com bun install --frozen-lockfile e bun run dev --host 127.0.0.1 --port 5180 --strictPort. Abra http://localhost:5180. Execute bun run build em design-system para verificar a compilação. A [documentação](design-system/README.md) explica os limites e outras verificações. Ela não processa vídeo de produção.

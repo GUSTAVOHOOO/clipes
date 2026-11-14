@@ -455,6 +455,7 @@ mod settings {
     }
     fn call(args: Value, events: &mut EventSink<'_>) -> CommandResult {
         events(crate::ProgressEvent {
+            project: None,
             job: "provider.structured".into(),
             stage: "starting".into(),
             percentage: 0,
@@ -463,6 +464,7 @@ mod settings {
         });
         let result = call_inner(args);
         events(crate::ProgressEvent {
+            project: None,
             job: "provider.structured".into(),
             stage: if result.is_ok() { "complete" } else { "failed" }.into(),
             percentage: 100,

@@ -40,7 +40,46 @@ pub fn checkpoint(id: i64, checkpoint: &str) -> Result<(), crate::CoreError> {
     })
 }
 
-inventory::submit! { projects::Migration { id: "0044_001_jobs", sql: "CREATE TABLE jobs (id INTEGER PRIMARY KEY, kind TEXT NOT NULL, safety TEXT NOT NULL CHECK(safety IN ('local','paid')), state TEXT NOT NULL CHECK(state IN ('queued','running','uncertain','completed','cancelled','failed')), attempts INTEGER NOT NULL DEFAULT 0, checkpoint TEXT, progress INTEGER NOT NULL DEFAULT 0);" } }
+inventory::submit! { projects::Migration { id: "0044_001_jobs", sql: "CREATE TABLE jobs (id INTEGER PRIMARY KEY, kind TEXT NOT NULL, safety TEXT NOT NULL CHECK(safety IN ('local','paid')), state TEXT NOT NULL CHECK(state IN ('queued','running','uncertain','completed','cancelled','failed')), attempts INTEGER NOT NULL DEFAULT 0, checkpoint TEXT, progress INTEGER NOT NULL DEFAULT 0, cancel_requested INTEGER NOT NULL DEFAULT 0); CREATE TABLE queue_project_identity (id TEXT NOT NULL); INSERT INTO queue_project_identity VALUES (lower(hex(randomblob(16))));" } }
+
+pub fn progress(
+    id: i64,
+    stage: &str,
+    percentage: u8,
+    message: &str,
+) -> Result<(), crate::CoreError> {
+    let project = projects::with_writer(|c| {
+        c.execute(
+            "UPDATE jobs SET progress=?2 WHERE id=?1 AND state='running'",
+            (id, percentage.min(100)),
+        )?;
+        c.query_row("SELECT id FROM queue_project_identity", [], |r| {
+            r.get::<_, String>(0)
+        })
+    })?;
+    crate::emit_background(crate::ProgressEvent {
+        job: id.to_string(),
+        project: Some(project),
+        stage: stage.into(),
+        percentage: percentage.min(100),
+        message: message.into(),
+        error: None,
+    });
+    Ok(())
+}
+
+fn cancel(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let id = v["id"].as_i64().ok_or_else(|| crate::CoreError {
+        code: "invalid_job".into(),
+        message: "Tarefa inválida.".into(),
+    })?;
+    projects::with_writer(|c| {
+        c.execute("UPDATE jobs SET state=CASE WHEN state='queued' THEN 'cancelled' ELSE state END, cancel_requested=1 WHERE id=?1 AND state IN ('queued','running')", [id])?;
+        Ok(())
+    })?;
+    Ok(Value::Null)
+}
+inventory::submit! { CommandRegistration { name: "jobs.cancel", execute: cancel } }
 
 pub(crate) fn reconcile() -> Result<(), crate::CoreError> {
     projects::with_writer(|c| {

@@ -220,6 +220,7 @@ fn update_inner(flag: &AtomicBool, events: &mut EventSink<'_>) -> CommandResult 
                 .map_err(|_| error("update_io", "Não foi possível preparar a atualização"))?;
             count += n as u64;
             events(ProgressEvent {
+                project: None,
                 job: "yt-dlp".into(),
                 stage: "update".into(),
                 percentage: size
@@ -234,6 +235,7 @@ fn update_inner(flag: &AtomicBool, events: &mut EventSink<'_>) -> CommandResult 
         drop(file);
         install_update(&exe, &temp, tag, &hash, flag)?;
         events(ProgressEvent {
+            project: None,
             job: "yt-dlp".into(),
             stage: "complete".into(),
             percentage: 100,

@@ -139,6 +139,7 @@ fn handle_line(line: &str, job: &str, events: &mut EventSink<'_>, filename: &mut
         if let Ok(pct) = p.trim().trim_end_matches('%').parse::<f64>() {
             if pct.is_finite() {
                 events(ProgressEvent {
+                    project: None,
                     job: job.into(),
                     stage: "download".into(),
                     percentage: pct.clamp(0.0, 100.0) as u8,

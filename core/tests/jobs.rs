@@ -73,6 +73,26 @@ fn crash_reconciles_running_jobs_and_retains_checkpoint() {
     assert_eq!(jobs[0]["checkpoint"], "checkpoint");
     assert_eq!(jobs[1]["state"], "uncertain");
     assert_eq!(jobs[1]["checkpoint"], "sent");
+    dispatch("jobs.cancel", json!({"id":jobs[0]["id"]}), &mut |_| {}).unwrap();
+    let updated = dispatch("jobs.list", json!({}), &mut |_| {}).unwrap();
+    assert_eq!(updated[0]["state"], "cancelled");
+    let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let captured = events.clone();
+    assert!(
+        clipes_core::set_event_emitter(std::sync::Arc::new(move |event| captured
+            .lock()
+            .unwrap()
+            .push(event)))
+        .is_ok()
+    );
+    let id = jobs::enqueue("test", Safety::Local).unwrap();
+    assert!(jobs::begin(id).unwrap());
+    jobs::progress(id, "render", 42, "Gerando prévia").unwrap();
+    let events = events.lock().unwrap();
+    assert_eq!(events[0].job, id.to_string());
+    assert!(events[0].project.as_ref().is_some_and(|id| !id.is_empty()));
+    assert_eq!(events[0].percentage, 42);
+    drop(events);
     dispatch("projects.close", json!({}), &mut |_| {}).unwrap();
     fs::remove_dir_all(root).unwrap();
 }

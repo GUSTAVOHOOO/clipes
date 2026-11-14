@@ -162,6 +162,7 @@ fn full(
         let pct = ((done.saturating_mul(100) / size.max(1)).min(100)) as u8;
         if pct != last {
             events(ProgressEvent {
+                project: None,
                 job: job.into(),
                 stage: "hash".into(),
                 percentage: pct,
