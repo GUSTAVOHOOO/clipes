@@ -97,3 +97,15 @@ class PlausibilityTests(unittest.TestCase):
         self.assertEqual(words, [{'word': 'fim', 'start': 13, 'end': 13.5, 'normalized': False}])
         self.assertEqual(exclusions, [(10, 12.1)])
         self.assertEqual(reason, 'duracao')
+
+class ReferenceCoverageTests(unittest.TestCase):
+    def test_missing_original_words_are_explicitly_excluded(self):
+        from gerar_referencia_mfa import exclude_unmatched
+        original = [{'word': 'oi', 'start': 1, 'end': 1.2},
+                    {'word': 'faltou', 'start': 2, 'end': 2}]
+        aligned = [{'word': 'oi', 'start': 1.1, 'end': 1.3}]
+        words, spans, missing = exclude_unmatched(original, aligned, [])
+        self.assertEqual(words, aligned)
+        self.assertEqual(missing, 1)
+        self.assertLess(spans[0]['start'], 2)
+        self.assertGreater(spans[0]['end'], 2)

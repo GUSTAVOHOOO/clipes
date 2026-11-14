@@ -4,10 +4,32 @@ import json
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from metrics import exclude_uncertain
+from metrics import alignment, exclude_uncertain, tokens
 from mfa_bordas import assess_chunk, normalize_word
 
 DATA = Path(__file__).resolve().parents[1] / 'dataset'
+
+
+def exclude_unmatched(original, words, spans):
+    spans = list(spans)
+    missing_count = 0
+    while True:
+        old = exclude_uncertain(original, spans)
+        words = exclude_uncertain(words, spans)
+        left = [' '.join(tokens(w['word'])) for w in old]
+        right = [' '.join(tokens(w['word'])) for w in words]
+        _, pairs = alignment(left, right)
+        matched = {i for i, j in pairs if left[i] == right[j]}
+        missing = [word for i, word in enumerate(old) if i not in matched]
+        if not missing:
+            return words, spans, missing_count
+        for word in missing:
+            start, end = word['start'], word['end']
+            if start == end:
+                start -= .000001
+                end += .000001
+            spans.append({'start': start, 'end': end})
+        missing_count += len(missing)
 
 
 def build_references(chunks, aligned, generated):
@@ -49,7 +71,8 @@ def build_references(chunks, aligned, generated):
                     for word in found:
                         word['g2p'] = any(token in generated[chunk['language']] for token in normalize_word(word['word'], chunk['language'])['words'])
                 words.extend(found)
-            words = exclude_uncertain(words, spans)
+            words, spans, missing_count = exclude_unmatched(original, words, spans)
+            cov['sem_borda'] += missing_count
             cov['depois'] += len(words)
             results.append({'source': item['id'], 'start': sample['start'], 'end': sample['end'],
                             'words': words, 'incertos': spans})
