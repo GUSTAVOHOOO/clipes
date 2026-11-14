@@ -44,3 +44,21 @@ Limitações da tabela: usa só o preço base (Standard, sem cache, sem Batch, s
 - Tipos de custo: `usd`; `zero` (endpoint loopback); `plan_quota` (CLI, sem valor em dinheiro); `unknown` (modelo sem preço ou `usage` incompleto), nunca zero.
 
 OpenAI (`finish_reason: length`) e Gemini (`finishReason: MAX_TOKENS`) também devolvem `output_truncated` com `usage`, sem reparo automático.
+
+## Contrato dos adaptadores: erros, cancelamento e timeout
+
+Erros tipados dos adaptadores HTTP (`CoreError.code`, mensagem fixa em inglês, sem texto da resposta nem caminhos):
+
+- `refusal`: a OpenAI respondeu com `message.refusal`. É a resposta do modelo, não um JSON malformado: não há reparo, e o erro carrega `usage`. Não é `invalid_response`. O texto da recusa não é copiado para o erro.
+- `output_truncated`, `invalid_json` e `invalid_response` (sem texto) também carregam `usage`, como antes.
+- `rate_limit` e `provider_http` carregam `{usage, calls}` quando o corpo da resposta de erro informa tokens de uso (mesmo formato de cada Provedor); sem uso no corpo, `usage` fica ausente, pois nada prova que a chamada foi cobrada. `calls` conta toda tentativa HTTP, e o uso de reparos anteriores é somado.
+- `cancelled`: o chamador pediu o cancelamento. `timeout_uncertain`: o prazo estourou e a requisição pode ter sido processada; nunca é repetida às cegas.
+
+**Cancelamento.** `Provider::structured_with(request, &CancelToken)` aceita um `CancelToken` (clones compartilham a mesma bandeira; `cancel()` a levanta). Ele é observado em fatias de 25 ms: na espera do `Retry-After` do 429, no recuo entre tentativas de conexão, com a requisição HTTP em voo (a resposta é lida numa thread auxiliar, que termina sozinha no timeout) e na espera de um CLI. Cancelar um CLI mata o processo e os filhos (grupo de processos no Unix, Job Object no Windows, como em `core/src/process.rs`) e recolhe o processo, sem zumbi. `Provider::structured` equivale a um token que nunca é cancelado. `provider::run_structured(args, &CancelToken)` é o mesmo que `provider.structured` com a rota por tarefa; é o ponto que o executor de jobs de IA (#121) usará: ele guarda um clone do token e cancela quando `jobs.cancel` marcar `cancel_requested`. O comando `provider.structured` do despacho usa um token que nunca cancela, e esta camada não cria fila.
+
+**Timeout por tipo de Provedor.** Padrões: API remota 60 s, modelo local (endpoint em loopback) 300 s, CLI (Codex ou Claude Code) 300 s. Um modelo local em CPU pode ser lento, o que justifica o teto maior. Os valores aceitos vão de 1 a 3600 s.
+
+- API: `provider.configure` aceita `timeouts: {remote?, local?}` em segundos (`null` ou campo ausente usa o padrão; `timeouts: {}` restaura os padrões; sem o campo `timeouts` os atuais ficam). Vai em `provider.json` e o `provider.json` antigo, sem o campo, continua válido. `provider.status` devolve os valores em vigor em `timeouts`. Quem usa os adaptadores direto pode chamar `with_timeouts(Timeouts)`.
+- CLI: `provider.cli.configure` aceita `timeoutSeconds` (ausente mantém, `null` restaura o padrão); fica em `provider-cli.json` e `provider.cli.status` o devolve. Estourar o prazo mata o processo e os filhos e devolve `timeout_uncertain`.
+
+Testes: `cargo test -p clipes-core --test provider_contract --test provider_cli_cancel`, com servidor HTTP falso (lê a requisição inteira antes de responder) e um CLI falso que nunca termina e cria um filho (`core/tests/fixtures/fake_slow_cli.rs`).

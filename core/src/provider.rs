@@ -80,9 +80,9 @@ pub trait Provider {
 }
 
 mod adapters;
-mod control;
-pub use control::{CancelToken, Timeouts};
+pub(crate) mod control;
 pub use adapters::{AnthropicProvider, GeminiProvider, OpenAiProvider};
+pub use control::{CancelToken, Timeouts};
 pub mod cost;
 pub use settings::run_structured;
 
@@ -321,11 +321,8 @@ mod settings {
         if let Some(kind) = cli {
             let request: StructuredRequest = serde_json::from_value(args)
                 .map_err(|_| error("invalid_request", "Invalid structured request"))?;
-            let timeout = {
-                let _guard = locked()?;
-                read().map(|s| s.timeouts).unwrap_or_default().cli()
-            };
-            return crate::provider_cli::CliProvider(kind, timeout).structured_with(&request, cancel);
+            return crate::provider_cli::CliProvider(kind, crate::provider_cli::timeout()?)
+                .structured_with(&request, cancel);
         }
         let settings = {
             let _guard = locked()?;
@@ -357,17 +354,20 @@ mod settings {
             "" | "openai" => {
                 let mut p = OpenAiProvider::new(settings.endpoint, settings.model, key)?;
                 p.confirm(metadata.confirmed);
-                p.with_timeouts(settings.timeouts).structured_with(&request, cancel)
+                p.with_timeouts(settings.timeouts)
+                    .structured_with(&request, cancel)
             }
             "anthropic" => {
                 let mut p = AnthropicProvider::new(settings.endpoint, settings.model, key)?;
                 p.confirm(metadata.confirmed);
-                p.with_timeouts(settings.timeouts).structured_with(&request, cancel)
+                p.with_timeouts(settings.timeouts)
+                    .structured_with(&request, cancel)
             }
             "gemini" => {
                 let mut p = GeminiProvider::new(settings.endpoint, settings.model, key)?;
                 p.confirm(metadata.confirmed);
-                p.with_timeouts(settings.timeouts).structured_with(&request, cancel)
+                p.with_timeouts(settings.timeouts)
+                    .structured_with(&request, cancel)
             }
             _ => Err(error("invalid_settings", "Invalid provider type")),
         }
@@ -429,6 +429,13 @@ mod settings {
             )
             .unwrap();
             assert_eq!(settings.kind, "openai");
+            assert_eq!(settings.timeouts, Timeouts::default());
+            let configured: Settings = serde_json::from_value(
+                json!({"endpoint":"http://localhost:1/v1", "model":"m", "nativeSchema":false, "timeouts":{"local":900}}),
+            )
+            .unwrap();
+            assert_eq!(configured.timeouts.endpoint(true), Duration::from_secs(900));
+            assert_eq!(configured.timeouts.endpoint(false), Duration::from_secs(60));
         }
         #[test]
         fn headless_dispatch_uses_fake_vault_and_never_returns_key() {

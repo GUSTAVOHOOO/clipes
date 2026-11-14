@@ -381,7 +381,7 @@ fn refusal_carries_usage() {
     let error = failure(vec![
         json!({"choices":[{"finish_reason":"stop","message":{"content":null,"refusal":"no"}}],"usage":{"prompt_tokens":7,"completion_tokens":2}}),
     ]);
-    assert_eq!(error.code, "invalid_response");
+    assert_eq!(error.code, "refusal");
     assert_eq!(
         error.usage,
         Some(json!({"usage":{"inputTokens":7,"outputTokens":2},"calls":1}))

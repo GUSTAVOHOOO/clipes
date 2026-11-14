@@ -154,13 +154,7 @@ fn usage_value(input: Option<u64>, output: Option<u64>) -> Value {
 
 impl Adapter {
     /// An HTTP failure whose body reports token usage was billed: carry `{usage, calls}`.
-    fn http_failure(
-        &self,
-        reply: &Reply,
-        code: &str,
-        message: &str,
-        calls: u64,
-    ) -> CoreError {
+    fn http_failure(&self, reply: &Reply, code: &str, message: &str, calls: u64) -> CoreError {
         let mut e = error(code, message);
         let usage = reply
             .body
@@ -369,8 +363,16 @@ impl Adapter {
                     // earlier calls of this request already cost.
                     if let Some(info) = e.usage.take() {
                         calls += info["calls"].as_u64().unwrap_or(1);
-                        add(&mut input, info["usage"]["inputTokens"].as_u64(), repair == 0);
-                        add(&mut output, info["usage"]["outputTokens"].as_u64(), repair == 0);
+                        add(
+                            &mut input,
+                            info["usage"]["inputTokens"].as_u64(),
+                            repair == 0,
+                        );
+                        add(
+                            &mut output,
+                            info["usage"]["outputTokens"].as_u64(),
+                            repair == 0,
+                        );
                         e.usage = Some(json!({"usage":usage_value(input, output),"calls":calls}));
                     }
                     return Err(e);

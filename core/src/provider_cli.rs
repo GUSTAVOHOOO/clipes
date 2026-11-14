@@ -1,5 +1,8 @@
 use crate::{
-    provider::{CancelToken, Provider, StructuredRequest},
+    provider::{
+        control::{cli_timeout, parse_seconds},
+        CancelToken, Provider, StructuredRequest,
+    },
     CommandRegistration, CommandResult, CoreError, EventSink,
 };
 use serde::{Deserialize, Serialize};
@@ -19,6 +22,8 @@ struct Settings {
     selected: String,
     codex_confirmed: bool,
     claude_confirmed: bool,
+    #[serde(default)]
+    timeout_seconds: Option<u64>,
 }
 fn error(code: &str, message: &str) -> CoreError {
     CoreError {
@@ -66,10 +71,12 @@ fn status(_: Value, _: &mut EventSink<'_>) -> CommandResult {
         .map_err(|_| error("settings", "Could not access provider settings"))?;
     let s = read()?;
     Ok(
-        json!({"selected": s.selected, "codexConfirmed": s.codex_confirmed, "claudeConfirmed": s.claude_confirmed}),
+        json!({"selected": s.selected, "codexConfirmed": s.codex_confirmed, "claudeConfirmed": s.claude_confirmed, "timeoutSeconds": cli_timeout(s.timeout_seconds).as_secs()}),
     )
 }
 fn configure(args: Value, _: &mut EventSink<'_>) -> CommandResult {
+    // Absent keeps the current timeout; null restores the default.
+    let timeout = args.get("timeoutSeconds").map(parse_seconds).transpose()?;
     let kind = args.get("kind").and_then(Value::as_str).unwrap_or("");
     if !matches!(kind, "" | "codex" | "claude") {
         return Err(error("invalid_settings", "Invalid provider"));
@@ -79,6 +86,9 @@ fn configure(args: Value, _: &mut EventSink<'_>) -> CommandResult {
         .map_err(|_| error("settings", "Could not access provider settings"))?;
     let mut s = read()?;
     s.selected = kind.into();
+    if let Some(timeout) = timeout {
+        s.timeout_seconds = timeout;
+    }
     write(&s)?;
     drop(_lock);
     if kind.is_empty() {
@@ -133,6 +143,13 @@ pub(crate) fn confirmed(kind: &str) -> Result<bool, CoreError> {
         "claude" => s.claude_confirmed,
         _ => false,
     })
+}
+/// How long a CLI call may run before it is killed (`provider.cli.configure` `timeoutSeconds`).
+pub(crate) fn timeout() -> Result<Duration, CoreError> {
+    let _lock = LOCK
+        .lock()
+        .map_err(|_| error("settings", "Could not access provider settings"))?;
+    Ok(cli_timeout(read()?.timeout_seconds))
 }
 pub(crate) fn clear() -> Result<(), CoreError> {
     let _lock = LOCK

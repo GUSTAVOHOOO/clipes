@@ -49,8 +49,25 @@ pub const DEFAULT_LOCAL_TIMEOUT_SECS: u64 = 300;
 pub const DEFAULT_CLI_TIMEOUT_SECS: u64 = 300;
 const MAX_TIMEOUT_SECS: u64 = 3600;
 
-/// Optional overrides, in seconds, of the timeout per Provider kind: `remote` (API over
-/// the network), `local` (loopback endpoint) and `cli` (Codex or Claude Code).
+/// A configured timeout in seconds: 1 to 3600, or null for the default.
+pub(crate) fn parse_seconds(value: &Value) -> Result<Option<u64>, CoreError> {
+    match value {
+        Value::Null => Ok(None),
+        v => v
+            .as_u64()
+            .filter(|n| (1..=MAX_TIMEOUT_SECS).contains(n))
+            .map(Some)
+            .ok_or_else(|| error("invalid_settings", "Invalid timeout")),
+    }
+}
+
+/// The timeout of a subscription CLI (Codex or Claude Code), kept in `provider-cli.json`.
+pub(crate) fn cli_timeout(seconds: Option<u64>) -> Duration {
+    Duration::from_secs(seconds.unwrap_or(DEFAULT_CLI_TIMEOUT_SECS))
+}
+
+/// Optional overrides, in seconds, of the timeout of an API Provider: `remote` for an
+/// endpoint over the network, `local` for a loopback endpoint (a local model can be slow).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Timeouts {
@@ -58,31 +75,21 @@ pub struct Timeouts {
     pub remote: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub local: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cli: Option<u64>,
 }
 
 impl Timeouts {
-    /// Reads `{remote?, local?, cli?}` (seconds, 1 to 3600; null keeps the default).
+    /// Reads `{remote?, local?}`; a null or missing field keeps the default.
     pub fn parse(value: &Value) -> Result<Self, CoreError> {
-        let invalid = || error("invalid_settings", "Invalid timeout");
-        let object = value.as_object().ok_or_else(invalid)?;
+        let object = value
+            .as_object()
+            .ok_or_else(|| error("invalid_settings", "Invalid timeout"))?;
         let mut timeouts = Self::default();
         for (key, seconds) in object {
-            let slot = match key.as_str() {
-                "remote" => &mut timeouts.remote,
-                "local" => &mut timeouts.local,
-                "cli" => &mut timeouts.cli,
-                _ => return Err(invalid()),
-            };
-            *slot = match seconds {
-                Value::Null => None,
-                v => Some(
-                    v.as_u64()
-                        .filter(|n| (1..=MAX_TIMEOUT_SECS).contains(n))
-                        .ok_or_else(invalid)?,
-                ),
-            };
+            match key.as_str() {
+                "remote" => timeouts.remote = parse_seconds(seconds)?,
+                "local" => timeouts.local = parse_seconds(seconds)?,
+                _ => return Err(error("invalid_settings", "Invalid timeout")),
+            }
         }
         Ok(timeouts)
     }
@@ -93,11 +100,8 @@ impl Timeouts {
             self.remote.unwrap_or(DEFAULT_REMOTE_TIMEOUT_SECS)
         })
     }
-    pub fn cli(&self) -> Duration {
-        Duration::from_secs(self.cli.unwrap_or(DEFAULT_CLI_TIMEOUT_SECS))
-    }
     /// The values in force, for `provider.status`.
     pub fn effective(&self) -> Value {
-        json!({"remote":self.endpoint(false).as_secs(),"local":self.endpoint(true).as_secs(),"cli":self.cli().as_secs()})
+        json!({"remote":self.endpoint(false).as_secs(),"local":self.endpoint(true).as_secs()})
     }
 }
