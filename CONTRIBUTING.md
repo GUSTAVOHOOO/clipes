@@ -93,7 +93,7 @@ Documentos `clip`, `style`, `script` e `packaging` são objetos JSON com `schema
 
 ## Worker de ML
 
-O worker Python (`worker/`) roda a transcrição e os demais modelos; o núcleo o instala sob demanda pelo Componente `uv` e fala com ele por JSON lines versionado, conforme o [ADR-0004](docs/adr/0004-stack-tauri-react-nucleo-rust-worker-python.md). O protocolo, as mensagens de exemplo compartilhadas e a instalação estão em [worker/protocol/README.md](worker/protocol/README.md). A instalação é um Componente global (`components.worker.install`, com `components.cancel` e id `worker` para cancelar), não um job da fila de Projetos. Para testar, sem Python no sistema, instale o `uv` na versão fixada em `core/src/components.rs` e rode `uv run --project worker pytest`; o núcleo é testado contra um worker falso com `cargo test -p clipes-core --test worker`.
+O worker Python (`worker/`) roda a transcrição e os demais modelos; o núcleo o instala sob demanda pelo Componente `uv` e fala com ele por JSON lines versionado, conforme o [ADR-0004](docs/adr/0004-stack-tauri-react-nucleo-rust-worker-python.md). O protocolo, as mensagens de exemplo compartilhadas e a instalação estão em [worker/protocol/README.md](worker/protocol/README.md). A instalação é um Componente global (`components.worker.install`, com `components.cancel` e id `worker` para cancelar), não um job da fila de Projetos. Para testar, sem Python no sistema, instale o `uv` na versão fixada em `core/src/components.rs` e rode `uv run --project worker pytest worker/tests`; o núcleo é testado contra um worker falso com `cargo test -p clipes-core --test worker`.
 
 ## Atualização do yt-dlp
 

@@ -57,4 +57,4 @@ Para mudar o protocolo, aumente `PROTOCOL_VERSION` nos dois lados, atualize os e
 
 O Componente `uv` (versão, URL e SHA-256 fixados em `core/src/components.rs`) instala um Python standalone gerenciado e as dependências travadas em `uv.lock` num ambiente dentro do diretório de dados do app (`worker/venv`). O núcleo passa `UV_PYTHON_PREFERENCE=only-managed`, `--python-preference only-managed` e `--frozen`, e remove variáveis que apontariam para outro Python. O extra `cuda` só é instalado se `nvidia-smi` detectar uma GPU NVIDIA.
 
-Para testar localmente: `uv run --project worker pytest` e `uv run --project worker python worker/check_licenses.py`. Para atualizar uma dependência, edite `worker/pyproject.toml`, rode `uv lock --project worker` e confira as licenças.
+Para testar localmente: `uv run --project worker pytest worker/tests` e `uv run --project worker python worker/check_licenses.py`. Para atualizar uma dependência, edite `worker/pyproject.toml`, rode `uv lock --project worker` e confira as licenças.
