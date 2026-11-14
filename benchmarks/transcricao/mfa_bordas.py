@@ -58,3 +58,15 @@ def collapse_words(mapping, aligned):
                        'end': paired[offset + count - 1]['end'], 'normalized': item['normalized']})
         offset += count
     return result
+
+
+def read_mfa_words(data, offset):
+    words = []
+    for start, end, text in data['tiers']['words']['entries']:
+        if not text.strip():
+            continue
+        if not 0 <= start < end:
+            raise ValueError('Intervalo inválido na saída MFA')
+        words.append({'word': text, 'start': round(offset + start, 6),
+                      'end': round(offset + end, 6)})
+    return words

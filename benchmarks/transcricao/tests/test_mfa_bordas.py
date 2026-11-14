@@ -51,3 +51,16 @@ class NormalizeTests(unittest.TestCase):
         self.assertEqual(collapse_words(mapping, aligned), [
             {'word': ' 24', 'start': .1, 'end': .4, 'normalized': True},
             {'word': ' cats', 'start': .5, 'end': .8, 'normalized': False}])
+
+class ReadMfaTests(unittest.TestCase):
+    def test_reads_word_tier_with_offset_and_ignores_silence(self):
+        from mfa_bordas import read_mfa_words
+        data = {'tiers': {'words': {'entries': [[0, .2, ''], [.2, .5, 'oi'], [.5, .7, 'mundo']]},
+                          'phones': {'entries': [[0, .1, 'x']]}}}
+        self.assertEqual(read_mfa_words(data, 10), [{'word': 'oi', 'start': 10.2, 'end': 10.5},
+                                                   {'word': 'mundo', 'start': 10.5, 'end': 10.7}])
+
+    def test_rejects_invalid_interval(self):
+        from mfa_bordas import read_mfa_words
+        with self.assertRaises(ValueError):
+            read_mfa_words({'tiers': {'words': {'entries': [[1, .5, 'erro']]}}}, 0)
