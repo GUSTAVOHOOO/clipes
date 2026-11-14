@@ -14,6 +14,7 @@ O app desktop também baixa, ao instalar o worker de ML:
 
 - **Python standalone gerenciado** (instalado pelo uv no ambiente do worker): licença PSF-2.0, texto em [python.org/psf/license](https://docs.python.org/3/license.html).
 - **Bibliotecas do worker de ML** (faster-whisper, onnxruntime, numpy, opencv-python-headless e dependências, fixadas em `worker/uv.lock`): licenças permissivas, conferidas no CI por `worker/check_licenses.py`.
+- **Modelos de transcrição** (baixados em Componentes, com consentimento, revisão fixa e SHA-256 por arquivo): [`dropbox-dash/faster-whisper-large-v3-turbo`](https://huggingface.co/dropbox-dash/faster-whisper-large-v3-turbo/tree/0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf) (antes `mobiuslabsgmbh/faster-whisper-large-v3-turbo`), conversão CTranslate2 do Whisper large-v3-turbo da OpenAI, licença MIT; e [`Systran/faster-whisper-small`](https://huggingface.co/Systran/faster-whisper-small/tree/536b0662742c02347bc0e980a01041f333bce120), conversão CTranslate2 do Whisper small da OpenAI, licença MIT. Os model cards declaram MIT; nenhum peso é distribuído neste repositório.
 - **Bibliotecas CUDA da NVIDIA** (`nvidia-cublas-cu12`, `nvidia-cudnn-cu12`), baixadas só quando há GPU NVIDIA: proprietárias, sob o [EULA da NVIDIA](https://docs.nvidia.com/cuda/eula/index.html).
 
 ## @base-ui/react@1.9.0

@@ -89,6 +89,11 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Sintoma:** `Library cublas64_12.dll is not found or cannot be loaded`, mesmo com as bibliotecas NVIDIA instaladas no ambiente virtual.
 - **Ação:** acrescente ao `PATH` da sessão as pastas `Lib\site-packages\nvidia\cublas\bin` e `Lib\site-packages\nvidia\cudnn\bin` desse ambiente antes de iniciar o Python. Mantenha o ambiente e os modelos fora do repo.
 
+### Repositório do modelo no Hugging Face mudou de nome
+- **Sintoma:** `huggingface.co/api/models/mobiuslabsgmbh/faster-whisper-large-v3-turbo/...` responde `307` para `dropbox-dash/faster-whisper-large-v3-turbo`; `curl` sem `-L` recebe só o texto do redirecionamento.
+- **Causa:** o repositório foi renomeado; a revisão fixada continua a mesma (`0a363e91...`) e o SHA-256 dos arquivos também.
+- **Ação:** use o nome canônico atual no download e no `source_url` (um redirecionamento de repo renomeado pode sumir) e cite o nome antigo só para rastrear o benchmark. O cliente de download só segue redirecionamentos para `huggingface.co` e `hf.co`.
+
 ### Download de modelo preso após interromper `py` no Windows
 - **Sintoma:** outro processo de download fica esperando um lock do cache Hugging Face; o arquivo `.incomplete` continua com zero bytes.
 - **Causa:** interromper o processo que chamou `py` pode deixar o interpretador filho ainda ativo segurando o lock.

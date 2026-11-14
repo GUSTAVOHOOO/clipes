@@ -104,6 +104,16 @@ pub struct LocalEngine {
 }
 
 impl LocalEngine {
+    /// Monta o Motor com um worker já iniciado e o modelo dado (`id`, `dir`, `device`,
+    /// `compute_type`); usado pelo teste real manual, que não passa pela instalação.
+    pub fn with_worker(client: WorkerClient, model: Value, batch_size: u32) -> Self {
+        LocalEngine {
+            client,
+            model,
+            batch_size,
+        }
+    }
+
     pub fn start() -> Result<Self, CoreError> {
         let selection = models::selection()?;
         let client = start_worker()?;
@@ -182,16 +192,26 @@ fn is_cancelled(id: i64) -> bool {
 
 /// Corta `len_us` de áudio da faixa escolhida da Fonte, a partir de `start_us`, em WAV
 /// 16 kHz mono. O `ffmpeg` roda sem shell e é encerrado se o job for cancelado ou interrompido.
-fn extract(
-    ffmpeg: &Path,
-    source: &Path,
+struct Slice<'a> {
+    source: &'a Path,
     track: i64,
     start_us: i64,
     len_us: i64,
+}
+
+fn extract(
+    ffmpeg: &Path,
+    slice: &Slice<'_>,
     output: &Path,
     id: i64,
     stop: &AtomicBool,
 ) -> Result<(), CoreError> {
+    let Slice {
+        source,
+        track,
+        start_us,
+        len_us,
+    } = *slice;
     let seconds = |us: i64| format!("{:.6}", us as f64 / 1_000_000.0);
     let args: Vec<std::ffi::OsString> = vec![
         "-v".into(),
@@ -307,7 +327,18 @@ pub fn run_with(
         }
         let len = block_us().min(duration_us - resume);
         let final_block = resume + len >= duration_us;
-        extract(&ffmpeg, &source, track, resume, len, &wav, id, stop)?;
+        extract(
+            &ffmpeg,
+            &Slice {
+                source: &source,
+                track,
+                start_us: resume,
+                len_us: len,
+            },
+            &wav,
+            id,
+            stop,
+        )?;
         let flag = AtomicBool::new(false);
         let finished = AtomicBool::new(false);
         let outcome = std::thread::scope(|scope| {
@@ -370,7 +401,9 @@ fn commit(
         block.covered_us.min(len)
     };
     let next = resume + covered;
-    let mut rows: Vec<(i64, &str, &str, i64, i64, Option<&str>)> = Vec::new();
+    // (ordem no mesmo instante, tipo, texto, início, fim, idioma)
+    type Row<'a> = (i64, &'a str, &'a str, i64, i64, Option<&'a str>);
+    let mut rows: Vec<Row<'_>> = Vec::new();
     for (start, end) in &block.silences {
         let (start, end) = (resume + start, resume + (*end).max(*start));
         if end > start {
