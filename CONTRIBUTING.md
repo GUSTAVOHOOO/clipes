@@ -86,3 +86,7 @@ Registre cada migração SQL com `inventory` como `projects::Migration`. Use um 
 Para testes headless, defina `CLIPES_DATA_DIR` no ambiente do processo para isolar o índice de Projetos em `projects.json` nesse diretório; sem a variável, usa-se o diretório de dados local do app. Os comandos do núcleo não aceitam um caminho de biblioteca da UI.
 
 Documentos `clip`, `style`, `script` e `packaging` são objetos JSON com `schemaVersion` igual a 1 e `revision` inteira não negativa. Cada tipo registra seu validador e suas migrações próprias; campos de domínio serão definidos pelos tickets correspondentes. O comando `documents.validate` migra e valida o documento no núcleo; versões futuras são recusadas.
+
+## Atualização do yt-dlp
+
+A atualização é iniciada somente após confirmação, sem consulta automática. O núcleo consulta a release nightly oficial e verifica localmente a assinatura OpenPGP destacada de `SHA2-256SUMS` antes de aceitar o SHA-256 exato do executável. A chave incorporada vem de [public.key do yt-dlp](https://github.com/yt-dlp/yt-dlp/blob/master/public.key), com fingerprint `AC0CBBE6848D6A873464AF4E57CF65933B5A7581`; se a chave oficial mudar, é necessário atualizar o app com a nova chave e fingerprint verificados. A versão anterior é preservada até o novo executável passar em `--version`.

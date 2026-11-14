@@ -1,3 +1,4 @@
+mod update;
 use crate::{CommandRegistration, CommandResult, CoreError, EventSink, ProgressEvent};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -75,15 +76,19 @@ struct Settings {
     ffmpeg_path: Option<PathBuf>,
 }
 fn settings_path() -> Result<PathBuf, CoreError> {
+    if let Some(dir) = std::env::var_os("CLIPES_DATA_DIR") {
+        return Ok(PathBuf::from(dir).join("component-settings.json"));
+    }
     Ok(dirs::config_local_dir()
         .ok_or_else(|| error("settings", "Diretório local indisponível"))?
         .join("Clipes")
         .join("settings.json"))
 }
 fn default_settings() -> Result<Settings, CoreError> {
-    let dir = dirs::data_local_dir()
-        .ok_or_else(|| error("settings", "Diretório local indisponível"))?
-        .join("Clipes");
+    let dir = std::env::var_os("CLIPES_DATA_DIR")
+        .map(PathBuf::from)
+        .or_else(|| dirs::data_local_dir().map(|p| p.join("Clipes")))
+        .ok_or_else(|| error("settings", "Diretório local indisponível"))?;
     Ok(Settings {
         cache_dir: dir.join("cache"),
         data_dir: dir,
@@ -98,6 +103,20 @@ fn load_settings() -> Result<Settings, CoreError> {
         Err(e) if e.kind() == io::ErrorKind::NotFound => default_settings(),
         Err(e) => Err(error("settings", e)),
     }
+}
+pub(crate) fn ytdlp_executable() -> Result<PathBuf, CoreError> {
+    let settings = load_settings()
+        .map_err(|_| error("component_missing", "Componente yt-dlp indisponível"))?;
+    let executable = settings.data_dir.join("components").join(if cfg!(windows) {
+        "yt-dlp.exe"
+    } else {
+        "yt-dlp"
+    });
+    if !executable.is_file() {
+        return Err(error("component_missing", "Instale o Componente yt-dlp"));
+    }
+    update::installed(&executable)?;
+    Ok(executable)
 }
 pub(crate) fn configured_ffmpeg() -> Option<PathBuf> {
     load_settings().ok().and_then(|s| s.ffmpeg_path)
@@ -496,14 +515,25 @@ mod tests {
                 .as_nanos()
         ))
     }
+    fn read_headers(stream: &mut std::net::TcpStream) -> String {
+        stream.set_nonblocking(false).unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(3)))
+            .unwrap();
+        let mut request = Vec::new();
+        while !request.ends_with(b"\r\n\r\n") {
+            let mut byte = [0u8; 1];
+            stream.read_exact(&mut byte).unwrap();
+            request.push(byte[0]);
+        }
+        String::from_utf8(request).unwrap()
+    }
     fn server(response: &'static [u8]) -> (String, thread::JoinHandle<String>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         let handle = thread::spawn(move || {
             let (mut s, _) = listener.accept().unwrap();
-            let mut request = [0; 4096];
-            let n = s.read(&mut request).unwrap();
-            let request = String::from_utf8_lossy(&request[..n]).to_string();
+            let request = read_headers(&mut s);
             let _ = s.write_all(response);
             request
         });
@@ -551,12 +581,27 @@ mod tests {
     #[test]
     fn cancelled_download_keeps_partial_data_for_resume() {
         let p = path();
-        let (url, handle) =
-            server(b"HTTP/1.1 200 OK\r\nContent-Length: 6\r\nConnection: close\r\n\r\nyes");
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (send, received) = std::sync::mpsc::channel();
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            read_headers(&mut stream);
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 6\r\nConnection: close\r\n\r\nyes")
+                .unwrap();
+            received
+                .recv_timeout(std::time::Duration::from_secs(3))
+                .unwrap();
+            let _ = stream.write_all(b"yes");
+        });
+        let url = format!("http://{addr}/file");
         let cancel = AtomicBool::new(false);
         assert_eq!(
-            fetch(&url, &hash(b"yesyes"), 6, &p, &cancel, |_| cancel
-                .store(true, Ordering::Relaxed))
+            fetch(&url, &hash(b"yesyes"), 6, &p, &cancel, |_| {
+                cancel.store(true, Ordering::Relaxed);
+                let _ = send.send(());
+            })
             .unwrap_err()
             .code,
             "cancelled"
@@ -642,5 +687,80 @@ mod tests {
         fs::write(ffmpeg.with_file_name(probe_name()), b"ffprobe").unwrap();
         assert!(!managed_incomplete(&settings));
         fs::remove_dir_all(root).unwrap();
+    }
+}
+
+fn verified_checksum(
+    key: &impl pgp::types::VerifyingKey,
+    sums: &[u8],
+    signature: &[u8],
+    asset: &str,
+) -> Result<String, CoreError> {
+    use pgp::composed::{Deserializable, DetachedSignature};
+    let invalid = || error("update_signature", "Assinatura da atualização inválida");
+    let sig = DetachedSignature::from_bytes(signature).map_err(|_| invalid())?;
+    sig.verify(key, sums).map_err(|_| invalid())?;
+    let text = std::str::from_utf8(sums)
+        .map_err(|_| error("update_checksum", "Lista de hashes inválida"))?;
+    let mut matches = text.lines().filter_map(|line| {
+        let (hash, filename) = line.split_once(' ')?;
+        let filename = filename
+            .strip_prefix(' ')
+            .or_else(|| filename.strip_prefix('*'))?;
+        (filename == asset && hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()))
+            .then(|| hash.to_ascii_lowercase())
+    });
+    let hash = matches
+        .next()
+        .ok_or_else(|| error("update_checksum", "Hash da atualização ausente"))?;
+    if matches.next().is_some() {
+        return Err(error("update_checksum", "Lista de hashes inválida"));
+    }
+    Ok(hash)
+}
+
+#[cfg(test)]
+mod signature_tests {
+    use pgp::{
+        composed::{DetachedSignature, KeyType, SecretKeyParamsBuilder},
+        crypto::hash::HashAlgorithm,
+        ser::Serialize,
+        types::Password,
+    };
+    #[test]
+    fn verifies_signed_sums_and_rejects_tampering_or_missing_asset() {
+        let key = SecretKeyParamsBuilder::default()
+            .key_type(KeyType::Ed25519)
+            .can_sign(true)
+            .primary_user_id("test".into())
+            .build()
+            .unwrap()
+            .generate(rand::thread_rng())
+            .unwrap();
+        let sums = format!("{}  yt-dlp.exe\n", "a".repeat(64));
+        let sig = DetachedSignature::sign_binary_data(
+            rand::thread_rng(),
+            &key.primary_key,
+            &Password::empty(),
+            HashAlgorithm::Sha256,
+            sums.as_bytes(),
+        )
+        .unwrap();
+        let bytes = sig.to_bytes().unwrap();
+        assert_eq!(
+            super::verified_checksum(key.public_key(), sums.as_bytes(), &bytes, "yt-dlp.exe")
+                .unwrap(),
+            "a".repeat(64)
+        );
+        assert!(
+            super::verified_checksum(key.public_key(), b"tampered", &bytes, "yt-dlp.exe").is_err()
+        );
+        assert!(super::verified_checksum(
+            key.public_key(),
+            sums.as_bytes(),
+            &bytes,
+            "yt-dlp_linux"
+        )
+        .is_err());
     }
 }
