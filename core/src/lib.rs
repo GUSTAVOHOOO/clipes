@@ -59,10 +59,10 @@ pub fn dispatch(name: &str, arguments: Value, events: &mut EventSink<'_>) -> Com
 pub mod ai_task;
 mod assistant;
 mod audit;
+pub mod chat;
 mod components;
 mod context_notice;
 pub mod corrections;
-pub mod chat;
 pub mod energy;
 pub mod export;
 pub mod jobs;

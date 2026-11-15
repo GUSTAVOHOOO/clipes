@@ -120,7 +120,10 @@ fn a_raid_is_a_peak_against_the_sources_own_median() {
         x.messages = 40;
     }
     let found = peaks(&series, INTERVAL_US);
-    assert_eq!(found.iter().map(|p| p.interval).collect::<Vec<_>>(), [180, 181, 182]);
+    assert_eq!(
+        found.iter().map(|p| p.interval).collect::<Vec<_>>(),
+        [180, 181, 182]
+    );
     assert_eq!(found[0].ratio_tenths, 47);
 }
 
@@ -199,8 +202,14 @@ fn the_mark_has_the_energy_style_and_never_carries_text() {
     };
     assert_eq!(mark(&m(31, Some(Reaction::Laugh))), "[chat 3,1× · risadas]");
     assert_eq!(mark(&m(20, None)), "[chat 2,0×]");
-    assert_eq!(mark(&m(120, Some(Reaction::Clip))), "[chat 12,0× · pedido de clip]");
-    assert_eq!(mark(&m(45, Some(Reaction::Surprise))), "[chat 4,5× · surpresa]");
+    assert_eq!(
+        mark(&m(120, Some(Reaction::Clip))),
+        "[chat 12,0× · pedido de clip]"
+    );
+    assert_eq!(
+        mark(&m(45, Some(Reaction::Surprise))),
+        "[chat 4,5× · surpresa]"
+    );
 }
 
 #[test]

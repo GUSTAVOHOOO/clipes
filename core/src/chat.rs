@@ -112,7 +112,8 @@ impl Interval {
         .into_iter()
         .filter(|(_, n)| {
             *n >= REACTION_MIN_MESSAGES
-                && u64::from(*n) * 100 >= u64::from(self.messages) * u64::from(REACTION_DOMINANCE_PERCENT)
+                && u64::from(*n) * 100
+                    >= u64::from(self.messages) * u64::from(REACTION_DOMINANCE_PERCENT)
         })
         .max_by_key(|(r, n)| (*n, std::cmp::Reverse(*r)))
         .map(|(r, _)| r)
@@ -456,7 +457,12 @@ pub fn marks_for_sentences(peaks: &[Peak], interval_us: i64, frases: &[Sentence]
 
 /// As marcas que caem no trecho `frases[start..=end]` de um Corte, uma por pico, para a revisão
 /// (#55) mostrar o porquê. Só números e o rótulo de reação.
-pub fn candidate_marks(marks: &ChatMarks, frases: &[Sentence], start: usize, end: usize) -> Vec<Value> {
+pub fn candidate_marks(
+    marks: &ChatMarks,
+    frases: &[Sentence],
+    start: usize,
+    end: usize,
+) -> Vec<Value> {
     let mut seen = HashSet::new();
     frases[start..=end]
         .iter()
@@ -487,14 +493,7 @@ fn store(source: i64, series: &[Interval], interval_us: i64, kept: u64) -> Resul
         let mut insert = tx.prepare("INSERT INTO chat_series(source_id,idx,people,messages,paid,laugh,surprise,clip) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)")?;
         for (i, x) in series.iter().enumerate() {
             insert.execute((
-                source,
-                i as i64,
-                x.people,
-                x.messages,
-                x.paid,
-                x.laugh,
-                x.surprise,
-                x.clip,
+                source, i as i64, x.people, x.messages, x.paid, x.laugh, x.surprise, x.clip,
             ))?;
         }
         drop(insert);
@@ -563,7 +562,10 @@ pub fn load(source: i64) -> Result<Option<Stored>, CoreError> {
 
 /// Marcas de chat da Transcrição (a Fonte dela) sobre as Frases, ou `None` se a Fonte não tem
 /// chat. A seleção então roda sem marcas e o resumo da execução diz isso.
-pub(crate) fn load_marks(transcript: i64, frases: &[Sentence]) -> Result<Option<ChatMarks>, CoreError> {
+pub(crate) fn load_marks(
+    transcript: i64,
+    frases: &[Sentence],
+) -> Result<Option<ChatMarks>, CoreError> {
     let source: Option<i64> = projects::with_reader(|c| {
         c.query_row(
             "SELECT source_id FROM transcripts WHERE id=?1",
@@ -682,7 +684,12 @@ fn fetch(url: &str, target: &Path, id: i64, stop: &AtomicBool) -> Result<bool, C
 
 /// Executa o job: usa o replay que já está ao lado da mídia ou o busca (só com URL de origem),
 /// agrega e grava a série numa só transação. Idempotente.
-pub(crate) fn run(id: i64, source: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreError> {
+pub(crate) fn run(
+    id: i64,
+    source: i64,
+    project: &Path,
+    stop: &AtomicBool,
+) -> Result<(), CoreError> {
     preview::check(id, stop)?;
     let origin = origin_of(source, project)?;
     let target = replay_path(&origin.media);
@@ -703,7 +710,7 @@ pub(crate) fn run(id: i64, source: i64, project: &Path, stop: &AtomicBool) -> Re
     let mut lines = 0_u64;
     let (series, kept) = aggregate_file(&target, INTERVAL_US, || {
         lines += 1;
-        if lines % 1024 == 0 {
+        if lines.is_multiple_of(1024) {
             preview::check(id, stop)?;
         }
         Ok(())
@@ -736,14 +743,14 @@ fn source_of(v: &Value) -> Result<i64, CoreError> {
 }
 
 fn pending_job(source: i64) -> Result<Option<i64>, CoreError> {
-    Ok(projects::with_reader(|c| {
+    projects::with_reader(|c| {
         c.query_row(
             "SELECT id FROM jobs WHERE kind='chat' AND source_id=?1 AND state IN ('queued','running') ORDER BY id LIMIT 1",
             [source],
             |r| r.get(0),
         )
         .optional()
-    })?)
+    })
 }
 
 /// `chat.fetch {source_id}`: "buscar o chat depois". Só para Fonte importada por URL; roda na
@@ -751,8 +758,12 @@ fn pending_job(source: i64) -> Result<Option<i64>, CoreError> {
 fn fetch_command(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let source = source_of(&v)?;
     let url: Option<String> = projects::with_reader(|c| {
-        c.query_row("SELECT origin_url FROM sources WHERE id=?1", [source], |r| r.get(0))
-            .optional()
+        c.query_row(
+            "SELECT origin_url FROM sources WHERE id=?1",
+            [source],
+            |r| r.get(0),
+        )
+        .optional()
     })?
     .ok_or_else(|| error("source_missing", "Fonte não encontrada"))?;
     if url.is_none() {
@@ -787,8 +798,12 @@ fn status_command(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .optional()
     })?;
     let url: Option<String> = projects::with_reader(|c| {
-        c.query_row("SELECT origin_url FROM sources WHERE id=?1", [source], |r| r.get(0))
-            .optional()
+        c.query_row(
+            "SELECT origin_url FROM sources WHERE id=?1",
+            [source],
+            |r| r.get(0),
+        )
+        .optional()
     })?
     .ok_or_else(|| error("source_missing", "Fonte não encontrada"))?;
     let peak_count = load(source)?
