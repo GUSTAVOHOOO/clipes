@@ -4,6 +4,7 @@ import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { Kbd } from '@/components/ui/Kbd';
 import { clock, fill } from './selectionFormat';
+import { Packaging } from './Packaging';
 import { ExportButton } from '@/features/export/ExportButton';
 
 type Weight = { key: string; weight: number };
@@ -178,6 +179,7 @@ export function CandidateReview({ sourceId, run, candidates, weights, onOpenPrev
           <Button aria-pressed={review?.status === 'rejected'} onClick={() => decide('rejected')} atalho="R">{t.reject}</Button>
           <ExportButton key={`${sourceId}-${current.id}`} sourceId={sourceId} candidateId={current.id} title={current.title} startId={review?.startId} endId={review?.endId} approved={review?.status === 'approved'} />
         </div>
+        {review?.status === 'approved' && <Packaging key={current.id} candidate={current.id} />}
       </section>}
     </div>
     {error && <p role="alert" className="text-danger">{error}</p>}
