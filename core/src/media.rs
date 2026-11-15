@@ -160,10 +160,10 @@ pub(crate) fn touch(path: &Path) {
 
 /// Serve `resource` com o cabeçalho `Range` opcional.
 pub fn serve(resource: &str, range: Option<&str>) -> MediaResponse {
-    let path = match parse_resource(resource) {
-        Some(Resource::Proxy(key)) => proxy_path(&key),
-        Some(Resource::Source(id)) => source_path(id),
-        None => None,
+    let (path, cached) = match parse_resource(resource) {
+        Some(Resource::Proxy(key)) => (proxy_path(&key), true),
+        Some(Resource::Source(id)) => (source_path(id), false),
+        None => (None, false),
     };
     let Some(path) = path else {
         return not_found();
@@ -196,8 +196,8 @@ pub fn serve(resource: &str, range: Option<&str>) -> MediaResponse {
     if file.seek(SeekFrom::Start(start)).is_err() || file.read_exact(&mut body).is_err() {
         return not_found();
     }
-    if start == 0 {
-        // Uso recente para o LRU do cache; só no primeiro trecho, para não tocar a cada Range.
+    if cached {
+        // Uso recente para o LRU, inclusive ao buscar no meio. Nunca altera a Fonte.
         touch(&path);
     }
     let mut headers = vec![

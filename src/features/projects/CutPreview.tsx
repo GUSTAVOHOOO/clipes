@@ -121,7 +121,7 @@ export function CutPreview({ sourceId, startUs, endUs }: { sourceId: number; sta
   const sourceUs = proxy ? proxy.windowStartUs + time * 1_000_000 : startUs;
   return <section aria-label={t.title} data-preview-state={proxy?.state ?? (error ? 'error' : 'loading')} data-seek-us={lastSeekUs ?? undefined} className="flex w-full max-w-[18rem] flex-col gap-2 text-sm">
     {!proxy && !error && <p aria-live="polite" className="text-fg-2">{t.preparing}</p>}
-    {error && <p role="alert" className="rounded-md border border-line bg-warning-subtle p-3 text-fg">{t.code[error.code] ?? (error.message || t.error)}</p>}
+    {error && <p role="alert" className="rounded-md border border-line bg-warning-subtle p-3 text-fg">{t.code[error.code] ?? t.error}</p>}
     {working && proxy && <div className="flex flex-col gap-2" aria-live="polite">
       <span>{proxy.state === 'queued' ? t.queued : `${t.running}: ${proxy.progress}%`}</span>
       <progress className="w-full" max={100} value={proxy.progress} aria-label={t.running} />

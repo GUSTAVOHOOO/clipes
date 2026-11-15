@@ -330,9 +330,15 @@ fn proxy_lifecycle_cache_offline_and_cancel() {
     let ftyp = media::serve(&format!("proxy/{key}"), Some("bytes=4-7"));
     assert_eq!(ftyp.body, b"ftyp");
     // A Fonte registrada também é servida pelo id, nunca por caminho.
+    let modified = fs::metadata(&media_file).unwrap().modified().unwrap();
     let src = media::serve(&format!("source/{source_id}"), Some("bytes=0-3"));
     assert_eq!(src.status, 206);
     assert_eq!(src.body, fs::read(&media_file).unwrap()[..4]);
+    assert_eq!(
+        fs::metadata(&media_file).unwrap().modified().unwrap(),
+        modified,
+        "servir a Fonte não pode alterar seu mtime nem marcá-la como alterada"
+    );
     assert_eq!(
         media::serve(&format!("source/{}", source_id + 1), None).status,
         404

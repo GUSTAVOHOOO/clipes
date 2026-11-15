@@ -2,9 +2,10 @@
 //! gerado pelo FFmpeg numa tarefa local da fila e guardado num cache **fora do Projeto**, com
 //! limpeza LRU por tamanho total. O arquivo é servido pelo protocolo de mídia (`media.rs`).
 //!
-//! Parâmetros medidos no protótipo v2 do #15 (WebView2, Fonte de 2 h): 960×540, quadro-chave
-//! a cada 0,5 s, sem quadros B, ~2,5 Mb/s, AAC 128 kb/s; busca de ~33 ms contra ~277 ms na
-//! Fonte direta. Não há detecção de encoder de vídeo no núcleo (a de `hardware.rs` é só da
+//! Inspirado no protótipo do #15 (~33 ms contra ~277 ms na Fonte direta). Este ticket usa
+//! altura máxima 540, quadro-chave a cada 0,5 s, sem quadros B, ~2,5 Mb/s e AAC 128 kb/s;
+//! sua medição fica em docs/research/2026-11-15-busca-no-proxy.md. Não há detecção de encoder
+//! de vídeo no núcleo (a de `hardware.rs` é só da
 //! Transcrição), então o encoder é sempre x264 (ADR-0003: o FFmpeg baixado é a build GPL).
 use crate::{jobs, projects, CommandRegistration, CommandResult, CoreError, EventSink};
 use serde_json::{json, Value};
