@@ -65,6 +65,7 @@ pub mod corrections;
 pub mod energy;
 pub mod jobs;
 pub mod media;
+pub mod packaging;
 pub mod process;
 pub mod projects;
 pub mod provider;
