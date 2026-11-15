@@ -5,6 +5,7 @@ import { coreDispatch, type ExportRequest } from '@/lib/core';
 import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { Kbd } from '@/components/ui/Kbd';
+import { ExportButton } from '@/features/export/ExportButton';
 import { CabecalhoGaveta, GavetaBorda, Puxador, ZonaBorda, useGaveta } from '@/components/shell/Gaveta';
 import { CutPreview, previewSeekEvent, type PreviewSeekEvent } from '@/features/projects/CutPreview';
 import { clock, fill } from '@/features/projects/selectionFormat';
@@ -21,7 +22,7 @@ type Timeline = { state: 'queued' | 'running' | 'ready' | 'failed' | 'cancelled'
 const texts = {
   'pt-BR': {
     title: 'Editor do Corte', close: 'Fechar editor', timeline: 'Timeline do Corte', transcript: 'Transcrição do editor', borders: 'Bordas do Corte',
-    markIn: 'Marcar entrada', markOut: 'Marcar saída', back: 'Voltar', pause: 'Pausar', forward: 'Avançar', rate: 'Velocidade', export: 'Exportar', exportSoon: 'A exportação chega com o ticket #59.',
+    markIn: 'Marcar entrada', markOut: 'Marcar saída', back: 'Voltar', pause: 'Pausar', forward: 'Avançar', rate: 'Velocidade', export: 'Exportar', exportNeedsCandidate: 'Abra um candidato aprovado para exportar.',
     shortcuts: 'Atalhos', hintPlay: 'voltar · pausar · avançar', hintMark: 'entrada · saída (Frase inteira)', hintFrame: 'quadro', hintSentence: 'Frase anterior/próxima', hintDrawers: 'gavetas',
     duration: 'Duração {value}', start: 'Entrada', end: 'Saída', startEarlier: 'Entrada antes', startLater: 'Entrada depois', endEarlier: 'Saída antes', endLater: 'Saída depois',
     loading: 'Abrindo o editor…', timelinePreparing: 'Preparando miniaturas e onda…', timelineFailed: 'Não foi possível gerar as miniaturas e a onda.', cancel: 'Cancelar', retry: 'Gerar de novo',
@@ -30,7 +31,7 @@ const texts = {
   },
   en: {
     title: 'Clip editor', close: 'Close editor', timeline: 'Clip timeline', transcript: 'Editor Transcript', borders: 'Clip borders',
-    markIn: 'Mark in', markOut: 'Mark out', back: 'Reverse', pause: 'Pause', forward: 'Forward', rate: 'Speed', export: 'Export', exportSoon: 'Export arrives with ticket #59.',
+    markIn: 'Mark in', markOut: 'Mark out', back: 'Reverse', pause: 'Pause', forward: 'Forward', rate: 'Speed', export: 'Export', exportNeedsCandidate: 'Open an approved candidate to export.',
     shortcuts: 'Shortcuts', hintPlay: 'reverse · pause · forward', hintMark: 'in · out (whole Sentence)', hintFrame: 'frame', hintSentence: 'previous/next Sentence', hintDrawers: 'drawers',
     duration: 'Duration {value}', start: 'In', end: 'Out', startEarlier: 'In earlier', startLater: 'In later', endEarlier: 'Out earlier', endLater: 'Out later',
     loading: 'Opening the editor…', timelinePreparing: 'Preparing thumbnails and waveform…', timelineFailed: 'Could not generate thumbnails and waveform.', cancel: 'Cancel', retry: 'Generate again',
@@ -256,7 +257,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
       <h2 className="text-base font-semibold">{t.title}</h2>
       {range && <span className="font-mono text-xs text-fg-2">{clock(range.startUs)} – {clock(range.endUs)} · {fill(t.duration, { value: clock(range.endUs - range.startUs) })}</span>}
       <div className="flex-1" />
-      <Button tamanho="sm" disabled title={t.exportSoon}>{t.export}</Button>
+      {request.candidate_id !== undefined ? <ExportButton sourceId={request.source_id} candidateId={request.candidate_id} title={`Corte ${request.candidate_id}`} startId={startId} endId={endId} approved /> : <Button tamanho="sm" disabled title={t.exportNeedsCandidate}>{t.export}</Button>}
       <Button tamanho="sm" variante="fantasma" icone={<X size={14} />} onClick={onClose} aria-label={t.close} atalho="Escape" />
     </header>
     {error && <p role="alert" className="border-b border-line bg-warning-subtle px-4 py-2 text-sm text-fg">{failedText}</p>}

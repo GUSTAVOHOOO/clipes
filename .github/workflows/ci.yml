@@ -17,7 +17,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf ffmpeg
+      # Harness #59: executável separado com libass e x264, só mídia sintética.
+      - name: Install FFmpeg with libass (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg --yes --no-progress
+      - name: Verify libass for export parity
+        shell: bash
+        run: ffmpeg -hide_banner -h filter=ass
       - run: bun install --frozen-lockfile
       - name: Testar métricas do benchmark
         shell: bash

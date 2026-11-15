@@ -4,6 +4,7 @@ import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { Kbd } from '@/components/ui/Kbd';
 import { clock, fill } from './selectionFormat';
+import { ExportButton } from '@/features/export/ExportButton';
 
 type Weight = { key: string; weight: number };
 type Axis = { score: number; why: string };
@@ -45,7 +46,7 @@ const texts = {
 const emptyMoves: Moves = { startEarlier: false, startLater: false, endEarlier: false, endLater: false };
 
 /** Tela de revisão dos candidatos (#55): lista pela Nota, detalhe, aprovar, rejeitar e ajustar as bordas. */
-export function CandidateReview({ run, candidates, weights, onOpenPreview, onOpenEditor }: { run: number; candidates: ReviewCandidate[]; weights: Weight[]; onOpenPreview?: (candidate: number, startUs: number, endUs: number) => void; onOpenEditor?: (candidate: number, startId: number, endId: number) => void }) {
+export function CandidateReview({ sourceId, run, candidates, weights, onOpenPreview, onOpenEditor }: { sourceId: number; run: number; candidates: ReviewCandidate[]; weights: Weight[]; onOpenPreview?: (candidate: number, startUs: number, endUs: number) => void; onOpenEditor?: (candidate: number, startId: number, endId: number) => void }) {
   const t = useText(texts);
   const [items, setItems] = useState<Record<number, Review>>({});
   const [canUndo, setCanUndo] = useState(false);
@@ -175,6 +176,7 @@ export function CandidateReview({ run, candidates, weights, onOpenPreview, onOpe
         <div className="flex flex-wrap items-center gap-2">
           <Button variante="primario" aria-pressed={review?.status === 'approved'} onClick={() => decide('approved')} atalho="A">{t.approve}</Button>
           <Button aria-pressed={review?.status === 'rejected'} onClick={() => decide('rejected')} atalho="R">{t.reject}</Button>
+          <ExportButton key={`${sourceId}-${current.id}`} sourceId={sourceId} candidateId={current.id} title={current.title} startId={review?.startId} endId={review?.endId} approved={review?.status === 'approved'} />
         </div>
       </section>}
     </div>
