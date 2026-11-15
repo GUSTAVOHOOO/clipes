@@ -136,7 +136,7 @@ function selectionMockDispatch(name: string, args: object): unknown {
       { id: 2, rank: 1, startId: 40, endId: 41, startUs: 390_000_000, endUs: 420_000_000, axes: selectionAxes([8, 6, 7, 9, 5]), total: 7.1, title: '', windows: [0], adjusted: true, adjust: { extendedAfter: 1 } },
       { id: 3, rank: 2, startId: 200, endId: 203, startUs: 1_990_000_000, endUs: 2_030_000_000, axes: selectionAxes([4, 4, 4, 4, 4]), total: 4, title: 'Piada longa', windows: [2], adjusted: true, adjust: { trimmedEnd: 3 } },
     ];
-    return { run: { id: 1, state: run.state, weights: selectionWeights, budgetPause: null, createdAt: '2026-11-15T12:00:00Z', counts: { windows: 4, completed: done, failed: states.filter(s => s === 'failed' || s === 'cancelled').length, kept: candidates.length, discarded: 0, merged: 1 } }, windows, candidates };
+    return { run: { id: 1, state: run.state, summary: { energy: selectionFlag('selection-energy') ? { measured: true, high: 4, peak: 2 } : { measured: false } }, weights: selectionWeights, budgetPause: null, createdAt: '2026-11-15T12:00:00Z', counts: { windows: 4, completed: done, failed: states.filter(s => s === 'failed' || s === 'cancelled').length, kept: candidates.length, discarded: 0, merged: 1 } }, windows, candidates };
   }
   throw { code: 'run_not_found', message: 'Execução de seleção não encontrada.' };
 }

@@ -565,6 +565,12 @@ try {
   await page.screenshot({ path: 'shots/selection.png', fullPage: true });
   await selection.getByRole('button', { name: 'Refazer janela 3' }).click();
   await selection.getByText(/Seleção concluída/).waitFor({ timeout: 15000 });
+  assert.match(await selection.innerText(), /Energia do áudio não medida/);
+  await page.goto(`${url}?source-test=1&transcript-test=1&selection-energy=1`);
+  const energySelection = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
+  await energySelection.getByRole('button', { name: 'Selecionar Cortes' }).click();
+  await energySelection.getByText(/Seleção com janelas pendentes/).waitFor({ timeout: 15000 });
+  assert.match(await energySelection.innerText(), /4 Frases com energia alta e 2 com pico/);
   await page.goto(`${url}?source-test=1&transcript-test=1&selection-paid=1`);
   const paidSelection = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
   await paidSelection.getByText(/entre US\$ 0.0012 e US\$ 0.0054/).waitFor();

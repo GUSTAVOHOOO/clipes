@@ -12,7 +12,7 @@ type Preview = { paid: boolean; profile?: string; plan?: { state: 'full' | 'redu
 type Axis = { score: number; why: string };
 type Candidate = { id: number; rank: number; startId: number; endId: number; startUs: number; endUs: number; axes: Record<string, Axis>; total: number; title: string; windows: number[]; adjusted: boolean; adjust: { extendedBefore?: number; extendedAfter?: number; trimmedEnd?: number } | null };
 type Win = { index: number; startUs: number; endUs: number; state: string; code: string | null };
-type Run = { id: number; state: 'running' | 'completed' | 'partial'; weights: Weight[]; budgetPause: string | null; counts: { windows: number; completed: number; failed: number; kept: number; discarded: number; merged: number }; createdAt: string };
+type Run = { summary?: { energy?: { measured: boolean; high?: number; peak?: number } } | null; id: number; state: 'running' | 'completed' | 'partial'; weights: Weight[]; budgetPause: string | null; counts: { windows: number; completed: number; failed: number; kept: number; discarded: number; merged: number }; createdAt: string };
 type Detail = { run: Run; windows: Win[]; candidates: Candidate[] };
 type Pending = { kind: 'start' } | { kind: 'redo'; windows?: number[] };
 
@@ -24,6 +24,7 @@ const texts = {
     progress: 'Progresso da seleção', windowsDone: '{done} de {total} janelas', window: 'Janela {n}', paused: 'Pausada pelo orçamento do lote. Aumente o teto e continue na fila.',
     done: 'Seleção concluída', partial: 'Seleção com janelas pendentes', running: 'Selecionando',
     summary: '{kept} candidatos · {merged} juntados · {discarded} descartados',
+    energyOn: 'Energia do áudio: {high} Frases com energia alta e {peak} com pico entraram na seleção.', energyOff: 'Energia do áudio não medida: a seleção rodou sem as marcas de energia.',
     minScore: 'Nota mínima', none: 'Nenhum candidato nesta seleção: o modelo não achou Cortes que valessem a pena.', noneFilter: 'Nenhum candidato com essa Nota.',
     total: 'Nota total', weight: 'peso {value}%', adjusted: 'Bordas ajustadas', extendedBefore: 'começo estendido', extendedAfter: 'fim estendido', trimmedEnd: 'fim encurtado', origin: 'Janelas de origem', candidates: 'Candidatos a Corte', run: 'Execução', error: 'Não foi possível atualizar a seleção.',
     state: { queued: 'na fila', running: 'em andamento', completed: 'concluída', failed: 'falhou', cancelled: 'cancelada', uncertain: 'incerta', unscheduled: 'não iniciada' },
@@ -37,6 +38,7 @@ const texts = {
     progress: 'Selection progress', windowsDone: '{done} of {total} windows', window: 'Window {n}', paused: 'Paused by the batch budget. Raise the cap and continue in the queue.',
     done: 'Selection finished', partial: 'Selection with pending windows', running: 'Selecting',
     summary: '{kept} candidates · {merged} merged · {discarded} discarded',
+    energyOn: 'Audio energy: {high} high-energy and {peak} peak sentences were part of the selection.', energyOff: 'Audio energy not measured: the selection ran without energy marks.',
     minScore: 'Minimum score', none: 'No candidates in this selection: the model found no Clips worth keeping.', noneFilter: 'No candidate with this score.',
     total: 'Total score', weight: 'weight {value}%', adjusted: 'Borders adjusted', extendedBefore: 'start extended', extendedAfter: 'end extended', trimmedEnd: 'end shortened', origin: 'Source windows', candidates: 'Clip candidates', run: 'Run', error: 'Could not update the selection.',
     state: { queued: 'queued', running: 'running', completed: 'completed', failed: 'failed', cancelled: 'cancelled', uncertain: 'uncertain', unscheduled: 'not started' },
@@ -146,6 +148,7 @@ export function Selection({ sourceId }: { sourceId: number }) {
         </li>)}
       </ul>
       {!running && <p className="text-fg-2">{fill(t.summary, { kept: head.counts.kept, merged: head.counts.merged, discarded: head.counts.discarded })}</p>}
+      {!running && head.summary?.energy && <p className="text-fg-2" data-energy={head.summary.energy.measured ? 'measured' : 'missing'}>{head.summary.energy.measured ? fill(t.energyOn, { high: head.summary.energy.high ?? 0, peak: head.summary.energy.peak ?? 0 }) : t.energyOff}</p>}
       <label className="flex items-center gap-2">{t.minScore}<input type="number" min={0} max={10} step={0.5} value={minScore} onChange={e => setMinScore(Math.min(10, Math.max(0, Number(e.target.value) || 0)))} className="h-8 w-20 rounded-md border border-line-strong bg-field px-2" /></label>
       {!running && detail.candidates.length === 0 && head.state === 'completed' && <p>{t.none}</p>}
       {detail.candidates.length > 0 && shown.length === 0 && <p>{t.noneFilter}</p>}
