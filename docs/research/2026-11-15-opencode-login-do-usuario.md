@@ -6,6 +6,12 @@ config, sessão ou login reais do dev foi lido ou executado. Código lido no tag
 empírica usou só um diretório temporário e uma credencial FALSA
 (`sk-FAKE-not-a-real-key`), sem nenhuma chamada de inferência.
 
+## Decisão
+
+Dev, 15/11/2026: encerrado só com o spike; modelos pagos seguem pelos Perfis de API.
+Nenhuma das opções abaixo foi construída. O risco de rotação do refresh token (opção 2)
+e a observação de que a opção 3 já é coberta pelos Perfis `openai` estão no fim do relatório.
+
 ## Onde fica a credencial
 
 - Tabela `credential` do **mesmo SQLite** que guarda sessões e histórico:
