@@ -44,9 +44,9 @@ jobs:
         with:
           version: '0.13.8'
       - name: Testar o worker contra as mensagens de exemplo
-        run: uv run --frozen --project worker pytest worker/tests
+        run: uv run --frozen --extra cpu --project worker pytest worker/tests
       - name: Verificar licenças do ambiente Python fixado
-        run: uv run --frozen --project worker python worker/check_licenses.py
+        run: uv run --frozen --extra cpu --project worker python worker/check_licenses.py
   licenses:
     runs-on: ubuntu-latest
     steps:

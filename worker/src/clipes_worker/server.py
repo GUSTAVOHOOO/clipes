@@ -27,7 +27,10 @@ def installed_libs():
         try:
             versions[name] = metadata.version(name)
         except metadata.PackageNotFoundError:
-            versions[name] = None
+            try:
+                versions[name] = metadata.version("onnxruntime-gpu") if name == "onnxruntime" else None
+            except metadata.PackageNotFoundError:
+                versions[name] = None
     return versions
 
 
@@ -170,7 +173,7 @@ def preload_native_libraries():
     sempre: o primeiro pedido de `transcribe` nunca respondia (docs/agents/impedimentos.md).
     Importar tudo antes de `serve()` evita isso e tira o custo do primeiro pedido.
     """
-    for name in ("numpy", "faster_whisper"):
+    for name in ("numpy", "faster_whisper", "cv2", "onnxruntime"):
         try:
             importlib.import_module(name)
         except Exception:  # ausente (testes) ou quebrada: a tarefa responde o erro tipado

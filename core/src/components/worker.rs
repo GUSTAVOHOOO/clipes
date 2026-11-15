@@ -59,6 +59,14 @@ const FILES: &[(&str, &[u8])] = &[
         include_bytes!("../../../worker/src/clipes_worker/tasks.py"),
     ),
     (
+        "src/clipes_worker/reframe.py",
+        include_bytes!("../../../worker/src/clipes_worker/reframe.py"),
+    ),
+    (
+        "src/clipes_worker/reframe_camera.py",
+        include_bytes!("../../../worker/src/clipes_worker/reframe_camera.py"),
+    ),
+    (
         "src/clipes_worker/transcribe.py",
         include_bytes!("../../../worker/src/clipes_worker/transcribe.py"),
     ),
@@ -208,9 +216,7 @@ fn sync_args(project: &Path, cuda: bool) -> Vec<OsString> {
     .map(Into::into)
     .to_vec();
     args.push(project.into());
-    if cuda {
-        args.extend(["--extra", "cuda"].map(OsString::from));
-    }
+    args.extend(["--extra", if cuda { "cuda" } else { "cpu" }].map(OsString::from));
     args
 }
 
@@ -525,7 +531,8 @@ mod tests {
             cpu.contains(&"--frozen".to_string()),
             "versões travadas pelo lockfile"
         );
-        assert_eq!(&gpu[..gpu.len() - 2], &cpu[..]);
+        assert!(cpu.windows(2).any(|w| w == ["--extra", "cpu"]));
+        assert_eq!(&gpu[..gpu.len() - 2], &cpu[..cpu.len() - 2]);
     }
 
     #[test]
