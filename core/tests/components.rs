@@ -70,7 +70,7 @@ fn yt_dlp_update_requires_confirmation() {
 fn transcription_models_are_pinned_licensed_and_need_consent_and_the_worker() {
     let models = dispatch("components.models.manifest", json!({}), &mut |_| {}).unwrap();
     let models = models.as_array().unwrap();
-    assert_eq!(models.len(), 2);
+    assert_eq!(models.len(), 3);
     for model in models {
         let id = model["id"].as_str().unwrap();
         assert_eq!(model["license"], "MIT", "{id}");
@@ -78,7 +78,11 @@ fn transcription_models_are_pinned_licensed_and_need_consent_and_the_worker() {
         assert!(model["source_url"]
             .as_str()
             .unwrap()
-            .starts_with("https://huggingface.co/"));
+            .starts_with(if id == "yunet" {
+                "https://github.com/opencv/opencv_zoo/"
+            } else {
+                "https://huggingface.co/"
+            }));
         assert!(model["source_url"]
             .as_str()
             .unwrap()

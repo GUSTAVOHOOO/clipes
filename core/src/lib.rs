@@ -72,6 +72,7 @@ pub mod projects;
 pub mod provider;
 mod provider_cli;
 mod proxy;
+pub mod reframe;
 pub mod selection;
 pub mod selection_windows;
 pub mod sentences;

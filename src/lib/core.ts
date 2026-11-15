@@ -325,6 +325,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'components.models.manifest') return [
       { worker_installed: true, id: 'whisper-turbo', label: 'Whisper large-v3-turbo (GPU NVIDIA)', repo: 'dropbox-dash/faster-whisper-large-v3-turbo', revision: '0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf', license: 'MIT', source_url: 'https://huggingface.co/dropbox-dash/faster-whisper-large-v3-turbo/tree/0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf', size: 1621666000, installed: false, recommended: true },
       { worker_installed: true, id: 'whisper-small', label: 'Whisper small (CPU)', repo: 'Systran/faster-whisper-small', revision: '536b0662742c02347bc0e980a01041f333bce120', license: 'MIT', source_url: 'https://huggingface.co/Systran/faster-whisper-small/tree/536b0662742c02347bc0e980a01041f333bce120', size: 486212372, installed: true, recommended: false },
+      { worker_installed: true, id: 'yunet', label: 'YuNet (reenquadramento)', repo: 'opencv/opencv_zoo', revision: '48b10fa505aeb51fbd127fc60a5c660040e823b7', license: 'MIT', source_url: 'https://github.com/opencv/opencv_zoo/tree/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/face_detection_yunet', size: 232589, installed: false, recommended: false },
     ] as T;
     if (name.startsWith('transcription.hardware.') || name === 'transcription.estimate') return hardwareMockDispatch(name, args) as T;
     if (name === 'components.models.download') return { id: (args as { id: string }).id } as T;
@@ -356,7 +357,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   return invoke<T>('core_dispatch', { name, arguments: args });
 }
 
-
+
 // Editor simulado (#61): a Frase n ocupa [(n-1)*10 s, n*10 s]; o Corte vale de 20 a 180 s; a janela do proxy é o Corte ±2 min.
 const editorTest = transcriptTest && typeof location !== 'undefined' && new URLSearchParams(location.search).has('editor-test');
 const editorKey = 'ab'.repeat(32);

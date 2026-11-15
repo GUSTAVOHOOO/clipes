@@ -7,13 +7,14 @@ license = "Apache-2.0"
 dependencies = [
     "faster-whisper==1.2.1",
     "numpy==2.4.6",
-    "onnxruntime==1.32.0",
     "opencv-python-headless==5.0.0.93",
 ]
 
 [project.optional-dependencies]
+cpu = ["onnxruntime==1.32.0"]
 # Só instalado quando o núcleo detecta uma GPU NVIDIA.
 cuda = [
+    "onnxruntime-gpu==1.32.0; sys_platform == 'linux' or sys_platform == 'win32'",
     "nvidia-cublas-cu12==12.9.1.4; sys_platform == 'linux' or sys_platform == 'win32'",
     "nvidia-cudnn-cu12==9.10.2.21; sys_platform == 'linux' or sys_platform == 'win32'",
 ]
@@ -24,6 +25,7 @@ dev = ["pytest==8.4.2"]
 [tool.uv]
 # O código do worker é copiado pelo núcleo e usado via PYTHONPATH; não é empacotado.
 package = false
+conflicts = [[{extra = "cpu"}, {extra = "cuda"}]]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
