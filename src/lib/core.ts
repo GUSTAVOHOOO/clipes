@@ -7,12 +7,13 @@ const sourceTest = typeof location !== 'undefined' && new URLSearchParams(locati
 const budgetTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('budget-test');
 const transcriptTest = sourceTest && typeof location !== 'undefined' && new URLSearchParams(location.search).has('transcript-test');
 // Transcrição simulada: a Frase n tem as palavras n*10 (“Frase”) e n*10+1 (“n”); correções, desfazer e refazer valem por Fonte e posição.
+let mockProxyPolls = 0;
 const mockCorrected = new Map<string, string>();
 let mockDone: {source:number; position:number; before:string|null; after:string|null}[] = [];
 let mockUndone: typeof mockDone = [];
 const mockOriginal = (position: number) => position % 10 === 0 ? 'Frase' : String(Math.floor(position / 10));
 const mockFold = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-function mockWords(source: number, id: number) { return [0, 1].map(k => { const position = id * 10 + k; const value = mockCorrected.get(source + ':' + position); return { position, text: value ?? mockOriginal(position), corrected: value !== undefined }; }); }
+function mockWords(source: number, id: number) { return [0, 1].map(k => { const position = id * 10 + k; const value = mockCorrected.get(source + ':' + position); return { position, text: value ?? mockOriginal(position), corrected: value !== undefined, start_us: id * 1_000_000 + k * 500_000 }; }); }
 function mockApply(source: number, position: number, value: string | null) { if (value === null) mockCorrected.delete(source + ':' + position); else mockCorrected.set(source + ':' + position, value); }
 function mockStep(source: number, position: number, changed: boolean) { const value = mockCorrected.get(source + ':' + position); return { changed, source_id: source, transcript_id: 1, position, sentence_id: Math.floor(position / 10), text: ' ' + (value ?? mockOriginal(position)), corrected: value !== undefined, can_undo: mockDone.length > 0, can_redo: mockUndone.length > 0 }; }
 let sourceItems = [
@@ -321,6 +322,9 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name.startsWith('transcription.hardware.') || name === 'transcription.estimate') return hardwareMockDispatch(name, args) as T;
     if (name === 'components.models.download') return { id: (args as { id: string }).id } as T;
     if (sourceTest && new URLSearchParams(location.search).has('transcript-test') && name === 'transcription.segment') return {} as T;
+    // Preview do Corte simulado (#58): a Fonte 2 está offline; a primeira consulta de um Corte gera (40%), a seguinte já está pronta.
+    if (transcriptTest && name === 'proxy.request') { const a = args as {source_id:number; start_us:number; end_us:number}; if (a.source_id === 2) throw {code:'source_offline', message:'A Fonte está offline: reconecte ou relocalize a Fonte para ver o preview.'}; const key = 'ab'.repeat(32); mockProxyPolls = 0; return {state:'running', key, job:7, progress:40, error:null, windowStartUs:Math.max(0, a.start_us - 120_000_000), windowEndUs:a.end_us + 120_000_000} as T; }
+    if (transcriptTest && name === 'proxy.status') { mockProxyPolls += 1; return {state:mockProxyPolls > 1 ? 'ready' : 'running', key:(args as {key:string}).key, job:7, progress:mockProxyPolls > 1 ? 100 : 60, error:null} as T; }
     if (transcriptTest && name.startsWith('selection.')) return selectionMockDispatch(name, args) as T;
     if (transcriptTest && name === 'transcription.timeline') { const {source_id, offset, limit} = args as {source_id:number; offset:number; limit:number}; const total=30001; return {total, items:Array.from({length:Math.min(limit,total-offset)}, (_, n) => { const i=offset+n; if (i===1) return {type:'silence',start_us:1000000,end_us:2000000}; const id=i===0?1:i; const words=mockWords(source_id,id); return {type:'sentence',id,start_us:i*1000000,end_us:(i+1)*1000000,language:'pt',text:words.map(w=>w.text).join(' '),first_position:id*10,last_position:id*10+1,words}; })} as T; }
     if (transcriptTest && name === 'transcription.correct') { const {source_id, position, text} = args as {source_id:number; position:number; text:string}; const value=text.normalize('NFC').trim(); if (!value) throw {code:'invalid_correction',message:'O texto da correção é inválido.'}; const key=source_id+':'+position; const before=mockCorrected.get(key) ?? null; const after=value===mockOriginal(position) ? null : value; if ((after ?? mockOriginal(position)) === (before ?? mockOriginal(position))) return mockStep(source_id, position, false) as T; mockUndone = []; mockDone.push({source:source_id, position, before, after}); mockApply(source_id, position, after); return mockStep(source_id, position, true) as T; }

@@ -112,6 +112,10 @@ As fronteiras e os IDs das Frases são função só do texto original e dos temp
 
 Desfazer e refazer usam uma pilha por Projeto em `transcript_corrections` (texto antes e depois), persistida no SQLite do Projeto; uma correção nova limpa o refazer. A busca (`transcription.search`) usa a tabela FTS5 `sentence_search` (`unicode61 remove_diacritics 2`, então “acao” acha “ação”) sobre o texto efetivo das Frases de todas as Transcrições do Projeto. Gatilhos em `sentences` mantêm o índice na mesma transação de qualquer gravação de Frases e o limpam na exclusão em cascata. A entrada do usuário nunca vai crua ao `MATCH`: cada termo é citado e o último aceita prefixo.
 
+## Preview do Corte (#58)
+
+O preview de um Corte usa um proxy H.264 de GOP curto, só da janela do Corte ±2 min, gerado como job local da fila e guardado num cache **fora do Projeto** (`<cache>/proxies`, LRU por tamanho). Ele é servido pelo protocolo de mídia `clipes-media`, implementado no núcleo (`core::media::serve`, com `Range`) e traduzido pelo adaptador em `src-tauri`. O protocolo só serve um id opaco (`proxy/<chave>` ou `source/<id>`), nunca um caminho vindo da URL. A UI é `CutPreview` (`{ sourceId, startUs, endUs }`), e clicar numa palavra da Transcrição posiciona o preview nela. Fonte offline não gera nada. Detalhes, constantes e testes em [Preview do Corte](docs/contribuindo/preview-do-corte.md).
+
 ## Perfis de Provedor
 
 `provider.json` tem a versão 2 com `profiles[]` ([ADR-0010](docs/adr/0010-perfis-multiplos-de-provedor-tarefa-para-perfil-e-somente-local.md)). Um arquivo antigo (só `endpoint`, `model`, `kind`, `nativeSchema`) é lido como o perfil `legacy` e **não é reescrito** até o usuário editar. A conta do cofre é o endpoint (o perfil `legacy` e os perfis sem `ownKey` a compartilham, junto do consentimento, que também é por endpoint); só `ownKey: true` usa a conta `profile:<id>`. A localidade é calculada por `is_local_endpoint`, nunca guardada; os CLIs `codex` e `claude` aparecem em `provider.profiles.list` como perfis não locais, mas continuam ativados por `provider.cli.*` com o aviso do #39.

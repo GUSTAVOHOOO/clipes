@@ -558,7 +558,7 @@ try {
     const detail = review.locator('[data-detail]');
     assert.match(await detail.innerText(), /8\.35/);
     assert.match(await detail.innerText(), /30%/);
-    assert.equal(await review.locator('[data-preview-slot]').isDisabled(), true, 'ponto de encaixe do preview (#58) desabilitado');
+    assert.equal(await review.locator('[data-preview-slot]').isEnabled(), true, 'a revisão abre o preview do candidato (#58)');
     assert.match(await review.innerText(), new RegExp(L.hintKeys));
     assert.equal(await review.getByRole('button', { name: L.export }).isDisabled(), true, 'só exporta candidato aprovado');
     await review.focus();
@@ -581,6 +581,11 @@ try {
     // ] e [ movem o começo e não abrem as gavetas globais dentro da revisão.
     await page.keyboard.press('[');
     await detail.getByText(L.start80).waitFor();
+    await page.evaluate(() => window.addEventListener('clipes-preview-open', e => { window.__lastCutPreview = e.detail; }, { once: true }));
+    await review.locator('[data-preview-slot]').click();
+    assert.deepEqual(await page.evaluate(() => window.__lastCutPreview), { sourceId: 1, startUs: 80_000_000, endUs: 140_000_000 }, 'o preview recebe as bordas ajustadas da revisão');
+    await page.getByRole('button', { name: L.closePreview }).click();
+    await review.focus();
     await page.keyboard.press(']');
     await page.keyboard.press(']');
     await detail.getByText(L.start100).waitFor();
@@ -609,12 +614,13 @@ try {
     await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
     await page.keyboard.press(']');
     await page.locator('aside[data-aberta="true"]').waitFor();
-    await page.waitForFunction(() => document.activeElement?.closest('aside[data-aberta="true"]') !== null);
+    // A gaveta transfere o foco em requestAnimationFrame; Escape só chega a ela depois disso.
+    await page.waitForFunction(() => document.activeElement?.closest('aside[data-aberta="true"]'));
     await page.keyboard.press('Escape');
     await page.locator('aside[data-aberta="true"]').waitFor({ state: 'detached' });
   };
-  const PT = { lang: 'pt-BR', region: 'Seleção de Cortes', review: 'Revisão dos candidatos', counts: '{a} aprovados · {r} rejeitados · {p} pendentes', hintKeys: 'aprova', start80: '01:20', start100: '01:40', end150: '02:30', end130: '02:10', tooShort: 'O Corte ficaria abaixo da duração mínima.', endEarlier: 'Fim antes', undo: 'Desfazer decisão' };
-  const EN = { lang: 'en', region: 'Clip selection', review: 'Candidate review', counts: '{a} approved · {r} rejected · {p} pending', hintKeys: 'approve', start80: '01:20', start100: '01:40', end150: '02:30', end130: '02:10', tooShort: 'The Clip would fall below the minimum duration.', endEarlier: 'End earlier', undo: 'Undo decision' };
+  const PT = { lang: 'pt-BR', region: 'Seleção de Cortes', review: 'Revisão dos candidatos', counts: '{a} aprovados · {r} rejeitados · {p} pendentes', hintKeys: 'aprova', start80: '01:20', start100: '01:40', end150: '02:30', end130: '02:10', tooShort: 'O Corte ficaria abaixo da duração mínima.', endEarlier: 'Fim antes', undo: 'Desfazer decisão', closePreview: 'Fechar preview' };
+  const EN = { lang: 'en', region: 'Clip selection', review: 'Candidate review', counts: '{a} approved · {r} rejected · {p} pending', hintKeys: 'approve', start80: '01:20', start100: '01:40', end150: '02:30', end130: '02:10', tooShort: 'The Clip would fall below the minimum duration.', endEarlier: 'End earlier', undo: 'Undo decision', closePreview: 'Close preview' };
   // Seleção de Cortes (#53): estimativa antes, progresso por Janela, Nota com pesos, filtro e refazer.
   Object.assign(PT, { export: 'Exportar', exportRunning: 'Exportando Corte · 35%', exportCancel: 'Cancelar export', exportCancelled: 'Export cancelado.', exportCompleted: 'Corte exportado.', exportExists: 'Já existe um arquivo no destino. Escolha outro nome.' });
   Object.assign(EN, { export: 'Export', exportRunning: 'Exporting Clip · 35%', exportCancel: 'Cancel export', exportCancelled: 'Export cancelled.', exportCompleted: 'Clip exported.', exportExists: 'A file already exists at this destination. Choose another name.' });
@@ -638,6 +644,30 @@ try {
   await reviewChecks(PT);
   await selection.getByRole('button', { name: 'Refazer janela 3' }).click();
   await selection.getByText(/Seleção concluída/).waitFor({ timeout: 15000 });
+  // Preview do Corte (#58): abre a partir do candidato, gera com progresso, 9:16 em Fit e clique na palavra.
+  await selection.getByRole('button', { name: 'Abrir preview' }).click();
+  const cutPreview = page.getByRole('region', { name: 'Preview do Corte' });
+  await cutPreview.getByText('Gerando o preview: 40%').waitFor();
+  await cutPreview.getByRole('button', { name: 'Reproduzir' }).waitFor({ timeout: 10000 });
+  assert.equal(await cutPreview.getAttribute('data-preview-state'), 'ready');
+  const fit = await cutPreview.locator('video').evaluate(v => { const r = v.parentElement.getBoundingClientRect(); return { fit: getComputedStyle(v).objectFit, ratio: r.width / r.height }; });
+  assert.equal(fit.fit, 'contain', 'Fit: barras, sem corte');
+  assert.ok(Math.abs(fit.ratio - 9 / 16) < 0.01, 'moldura 9:16');
+  await cutPreview.getByRole('slider', { name: 'Posição no preview' }).waitFor();
+  await timeline.evaluate(e => { e.scrollTop = 0; });
+  await timeline.locator('[data-word="10"]').click();
+  assert.equal(await cutPreview.getAttribute('data-seek-us'), '1000000', 'clicar na palavra posiciona o preview no tempo dela');
+  await timeline.evaluate(e => { e.scrollTop = e.scrollHeight; });
+  await timeline.getByText('Frase 30000', { exact: true }).waitFor();
+  await timeline.locator('[data-word="300000"]').click();
+  await cutPreview.getByText(/fora do preview deste Corte/).waitFor();
+  await page.screenshot({ path: 'shots/cut-preview.png', fullPage: true });
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('clipes-preview-open', { detail: { sourceId: 2, startUs: 1_000_000, endUs: 2_000_000 } })));
+  const offline = page.getByRole('region', { name: 'Preview do Corte' }).filter({ hasText: /offline/ });
+  await offline.getByRole('alert').waitFor();
+  assert.match(await offline.innerText(), /A Fonte está offline/);
+  assert.equal(await offline.locator('video').count(), 0, 'Fonte offline: nada é gerado nem tocado');
+  assert.equal(await offline.getByRole('progressbar').count(), 0);
   assert.match(await selection.innerText(), /Energia do áudio não medida/);
   await page.goto(`${url}?source-test=1&transcript-test=1&selection-energy=1`);
   const energySelection = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
