@@ -6,8 +6,8 @@
 
 **Restrições:** somente este worktree e branch; commits DCO; `CARGO_BUILD_JOBS=2`; testes sem rede com `CLIPES_DATA_DIR`; dados desconhecidos ausentes; mensagens de erro fixas; UI existente Foco em PT/EN.
 
-- [ ] Testar pelo harness as fronteiras de cada modelo, intervalo cruzando o limiar, sobrescritas antigas e usage incompleto; executar e observar falha antes de implementar.
-- [ ] Estender catálogo e cálculo no seam existente; confirmar preços e limites nas fontes oficiais, preservando as entradas e sobrescritas antigas.
-- [ ] Mostrar intervalo e faixa na estimativa existente; documentar catálogo e regra futura de cache Anthropic.
+- [x] Testar pelo harness as fronteiras de cada modelo, intervalo cruzando o limiar, sobrescritas antigas e usage incompleto; executar e observar falha antes de implementar.
+- [x] Estender catálogo e cálculo no seam existente; confirmar preços e limites nas fontes oficiais, preservando as entradas e sobrescritas antigas.
+- [x] Mostrar intervalo e faixa na estimativa existente; documentar catálogo e regra futura de cache Anthropic.
 - [ ] Integrar master se #140/#142 entrarem; executar fmt, testes workspace, clippy, typecheck, build e UI.
 - [ ] Atualizar PR com fontes e desconhecidos; aguardar CI Ubuntu/Windows/licenses/DCO verde e tirar do draft.

@@ -157,8 +157,7 @@ fn micro_usd(tokens: u64, per_million: f64) -> u64 {
 }
 
 /// The single point that turns tokens into micro-USD for a priced model. It receives the
-/// input tokens of the request so context tiers (research #115, a separate ticket) can replace
-/// the flat rate here without touching the callers.
+/// input tokens of the request so its context tier prices the entire request, including output.
 pub(crate) fn price_micro_usd(price: &Price, input_tokens: u64, output_tokens: u64) -> u64 {
     let (input, output) = price.rates(input_tokens);
     micro_usd(input_tokens, input).saturating_add(micro_usd(output_tokens, output))
@@ -723,6 +722,7 @@ mod tests {
                 p.model
             );
             assert!(valid_price(p));
+            assert_eq!(p.updated_at.as_deref().map(str::len), Some(10));
             assert!(p
                 .source
                 .as_deref()
