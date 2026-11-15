@@ -5,13 +5,14 @@ import { Button } from '@/components/ui/Button';
 import { Kbd } from '@/components/ui/Kbd';
 import { clock, fill } from './selectionFormat';
 import { VideoKindBadge, type VideoKind } from './videoKind';
+import { ExportButton } from '@/features/export/ExportButton';
 
 type Weight = { key: string; weight: number };
 type Axis = { score: number; why: string };
 export type ReviewCandidate = { id: number; rank: number; startUs: number; endUs: number; axes: Record<string, Axis>; total: number; title: string; windows: number[]; adjusted: boolean; adjust: { extendedBefore?: number; extendedAfter?: number; trimmedEnd?: number } | null };
 type Status = 'pending' | 'approved' | 'rejected';
 type Moves = { startEarlier: boolean; startLater: boolean; endEarlier: boolean; endLater: boolean };
-type Review = { candidate: number; status: Status; adjusted?: boolean; startUs?: number; endUs?: number; startText?: string; endText?: string; moves?: Moves };
+type Review = { candidate: number; status: Status; adjusted?: boolean; startId?: number; endId?: number; startUs?: number; endUs?: number; startText?: string; endText?: string; moves?: Moves };
 type Answer = { item: Review | null; canUndo: boolean };
 
 const texts = {
@@ -46,7 +47,7 @@ const texts = {
 const emptyMoves: Moves = { startEarlier: false, startLater: false, endEarlier: false, endLater: false };
 
 /** Tela de revisão dos candidatos (#55): lista pela Nota, detalhe, aprovar, rejeitar e ajustar as bordas. */
-export function CandidateReview({ run, videoKind = 'direct', candidates, weights, onOpenPreview }: { run: number; videoKind?: VideoKind; candidates: ReviewCandidate[]; weights: Weight[]; onOpenPreview?: (candidate: number, startUs: number, endUs: number) => void }) {
+export function CandidateReview({ sourceId, run, videoKind = 'direct', candidates, weights, onOpenPreview }: { sourceId: number; run: number; videoKind?: VideoKind; candidates: ReviewCandidate[]; weights: Weight[]; onOpenPreview?: (candidate: number, startUs: number, endUs: number) => void }) {
   const t = useText(texts);
   const [items, setItems] = useState<Record<number, Review>>({});
   const [canUndo, setCanUndo] = useState(false);
@@ -176,6 +177,7 @@ export function CandidateReview({ run, videoKind = 'direct', candidates, weights
         <div className="flex flex-wrap items-center gap-2">
           <Button variante="primario" aria-pressed={review?.status === 'approved'} onClick={() => decide('approved')} atalho="A">{t.approve}</Button>
           <Button aria-pressed={review?.status === 'rejected'} onClick={() => decide('rejected')} atalho="R">{t.reject}</Button>
+          <ExportButton key={`${sourceId}-${current.id}`} sourceId={sourceId} candidateId={current.id} title={current.title} startId={review?.startId} endId={review?.endId} approved={review?.status === 'approved'} />
         </div>
       </section>}
     </div>
