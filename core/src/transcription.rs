@@ -448,6 +448,8 @@ pub fn run_with(
         commit(id, transcript, step, duration_us, block, config)?;
     }
     crate::sentences::segment_transcript(transcript)?;
+    // A energia do áudio (#54) é medida sozinha; falhar em enfileirar não afeta a Transcrição.
+    crate::energy::enqueue_after_transcription(source_id);
     Ok(())
 }
 
