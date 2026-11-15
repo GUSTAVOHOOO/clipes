@@ -61,6 +61,9 @@ pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
             if begin(id).unwrap_or(false) {
                 if kind.starts_with(ai::KIND_PREFIX) {
                     ai::execute(id, &stop);
+                    if kind == crate::selection::JOB_KIND {
+                        crate::selection::on_job_settled(id);
+                    }
                     continue;
                 }
                 let result = if kind == "transcription" {
