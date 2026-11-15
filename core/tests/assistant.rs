@@ -83,7 +83,7 @@ fn detects_everything_installed() {
     )]);
     let lmstudio = serve(vec![("/v1/models", r#"{"data":[{"id":"gemma-3"}]}"#)]);
     let llamacpp = serve(vec![("/v1/models", r#"{"data":[{"id":"model.gguf"}]}"#)]);
-    let (_dir, path) = fake_path(&["codex", "claude"]);
+    let (_dir, path) = fake_path(&["codex", "claude", "opencode"]);
     let found = run(
         "assistant.detect",
         json!({"ollama":ollama,"lmStudio":lmstudio,"llamaCpp":llamacpp,"path":path}),
@@ -96,6 +96,7 @@ fn detects_everything_installed() {
     assert_eq!(found["llamaCpp"]["models"], json!(["model.gguf"]));
     assert_eq!(found["codex"]["found"], true);
     assert_eq!(found["claude"]["found"], true);
+    assert_eq!(found["opencode"]["found"], true);
 }
 
 #[test]
@@ -106,7 +107,9 @@ fn detects_nothing_when_nothing_is_installed() {
         json!({"ollama":closed_port(),"lmStudio":closed_port(),"llamaCpp":closed_port(),"path":path}),
     )
     .unwrap();
-    for key in ["ollama", "lmStudio", "llamaCpp", "codex", "claude"] {
+    for key in [
+        "ollama", "lmStudio", "llamaCpp", "codex", "claude", "opencode",
+    ] {
         assert_eq!(found[key]["found"], false, "{key}");
     }
     assert_eq!(found["ollama"]["models"], json!([]));

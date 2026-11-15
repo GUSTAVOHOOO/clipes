@@ -20,6 +20,12 @@ O campo `kind` de `provider.configure` seleciona `openai`, `anthropic` ou `gemin
 No Gemini, `outputTokens` inclui `candidatesTokenCount` e `thoughtsTokenCount` quando informado, conforme os metadados da API.
 ## Provedores por assinatura via CLI
 
+O [OpenCode experimental](opencode.md) segue o mesmo seam de CLI, com modelo salvo
+no perfil, ferramentas negadas e execução isolada sem usar o login do usuário.
+O guia documenta as opções verificadas da v2.2.7, modelos gratuitos, erros e a
+pendência de teste real por cota esgotada. A detecção do assistente também procura
+`opencode` no PATH, e Somente local o recusa antes de executar qualquer processo.
+
 Codex CLI e Claude Code CLI são experimentais e só são selecionados por escolha explícita; o usuário instala o CLI e faz login, e o Clipes não lê nem guarda seus tokens. Cada chamada exige confirmação prévia do envio de texto e consome a cota do plano. O Codex 0.169 não oferece opção comprovada para desligar todas as ferramentas: usa execução efêmera, sem configuração ou regras do usuário, sandbox somente leitura, diretório temporário e schema de saída, com ferramentas opcionais desligadas. Ainda pode executar comandos de leitura; uma Transcrição maliciosa pode causar leitura e envio de arquivos à OpenAI, portanto use Fontes confiáveis. O Claude Code usa modo de impressão, schema JSON, ferramentas embutidas e MCP desligados, sem comandos, persistência de sessão ou configurações de usuário/projeto/local. A Anthropic ainda não confirmou por escrito o uso por apps de terceiros. Se o Claude instalado não oferecer `--tools`, o núcleo recusa a execução. Ambos recebem o prompt pelo stdin e rodam sem shell, e a resposta é validada localmente. Os testes usam CLIs falsos, sem chamadas pagas.
 
 Os adaptadores CLI retornam `usage: null` e `calls: 1`, pois nao informam tokens.

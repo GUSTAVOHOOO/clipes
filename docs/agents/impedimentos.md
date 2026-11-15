@@ -83,6 +83,11 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 
 ## Ambiente Windows
 
+### OpenCode isolado: cota gratuita esgotada
+- **Sintoma:** teste real pendente: cota gratuita do OpenCode esgotada (HTTP 429 `provider.free-limit`, ~22 h), isolamento confirmado com `debug agents` e 3 tentativas fora do adaptador que chegaram ao serviço.
+- **Causa:** o serviço recusou `opencode/big-pickle`, `opencode/glm-5.3-flash-free` (DB em memória) e `opencode/beam-free` (SQLite temporário). Trocar o banco não resolveu; não é falha das migrações/locks do modo `:memory:`.
+- **Ação:** manter `OPENCODE_DB=:memory:` e o isolamento documentado em [OpenCode](../contribuindo/opencode.md). O adaptador retorna `cli_free_limit` com mensagem fixa e o `retryAfterMs` convertido em segundos, quando informado, sem repetir sozinho. Não usar login ou chave para contornar a cota. A prova de resposta estruturada real segue no #122 quando a cota repuser; o coordenador autorizou entregar o #135 com essa pendência explícita. Nenhum teste automático faz inferência real.
+
 - `python` pode abrir o alias da Microsoft Store (`Python was not found`). Use `py`.
 - `awk`, `sed` e `grep` não existem no PowerShell; rode-os pelo Git Bash.
 

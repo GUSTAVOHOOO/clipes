@@ -275,6 +275,28 @@ fn per_call_cost_rows_and_budgets() {
     assert_eq!(fake.count("ok: c3"), 0);
     dispatch("jobs.cancel", json!({"id": c3}), &mut |_| {}).unwrap();
 
+    // Free OpenCode is remote CLI: zero price, still only call-count budgets.
+    jobs::set_ai_route(Some((
+        Target::OpenCode {
+            model: "opencode/big-pickle".into(),
+        },
+        "opencode".into(),
+    )));
+    call(
+        "jobs.budget.set",
+        json!({"scope":"batch","key":"opencode","maxCalls":1,"maxCostMicroUsd":0,"maxTokens":0,"maxWallMs":0}),
+    );
+    let oc1 = enqueue("ok: opencode1", "opencode");
+    wait_state(oc1, "completed");
+    let r = &rows(oc1)[0];
+    assert_eq!(r["costKind"], "zero");
+    assert_eq!(r["microUsd"], 0);
+    assert!(r["inputTokens"].is_null() && r["outputTokens"].is_null());
+    let oc2 = enqueue("ok: opencode2", "opencode");
+    assert_eq!(wait_paused("batch", "opencode"), "budget_calls");
+    assert_eq!(fake.count("ok: opencode2"), 0);
+    call("jobs.cancel", json!({"id":oc2}));
+
     // Perfil sem preço: "custo desconhecido", fora do teto por custo, e o lote pede confirmação.
     jobs::set_ai_route(Some((api("sem-preco"), "p2".into())));
     call(
