@@ -275,8 +275,10 @@ fn resolve_value(
         (fallback, Source::Fallback)
     };
     let mut capped = false;
+    // Ollama reloads the model with the `num_ctx` a call asks for, so what is loaded now is
+    // where the value starts (user, then loaded, then 4096), not a ceiling above the user.
     for (ceiling, origin) in [
-        (found.loaded, Source::Loaded),
+        (found.loaded.filter(|_| kind != "ollama"), Source::Loaded),
         (found.max_context, Source::Server),
         (catalog.0, Source::Catalog),
     ] {
@@ -663,16 +665,29 @@ fn cli_result(kind: &str) -> Value {
     )
 }
 
+fn catalog_limits(t: &ContextTarget) -> (Option<u64>, Option<u64>) {
+    super::cost::price_for(&t.kind, &t.model)
+        .ok()
+        .flatten()
+        .map_or((None, None), |(p, _)| (p.context_window, p.max_output))
+}
+
+/// The context a call uses, from the cache only (no probe): the same resolution as
+/// `provider.context.get`. For Ollama it is the `num_ctx` sent: user, else loaded, else 4096,
+/// never the advertised maximum, which would allocate a huge KV cache.
+pub(super) fn cached_effective(t: &ContextTarget) -> u64 {
+    let local = is_loopback_endpoint(&t.endpoint);
+    let found = cache_get(t).unwrap_or_default();
+    resolve_value(&t.kind, local, t.user_context, &found, catalog_limits(t)).value
+}
+
 fn target_result(
     t: ContextTarget,
     task: Option<&str>,
     refresh: bool,
     cancel: &CancelToken,
 ) -> CommandResult {
-    let catalog = super::cost::price_for(&t.kind, &t.model)
-        .ok()
-        .flatten()
-        .map_or((None, None), |(p, _)| (p.context_window, p.max_output));
+    let catalog = catalog_limits(&t);
     let loopback_literal = is_loopback_endpoint(&t.endpoint);
     let plan = plan_for(&t.kind, &t.endpoint, loopback_literal);
     let resolved_addr = resolve(&t.endpoint).ok();
@@ -822,6 +837,10 @@ mod tests {
             ..Found::default()
         };
         let r = resolve_value("ollama", true, Some(32768), &loaded, (None, None));
+        assert_eq!((r.value, r.source, r.capped), (32768, Source::User, false));
+        let r = resolve_value("ollama", true, None, &loaded, (None, None));
+        assert_eq!((r.value, r.source), (4096, Source::Loaded));
+        let r = resolve_value("openai", true, Some(32768), &loaded, (None, None));
         assert_eq!((r.value, r.source, r.capped), (4096, Source::Loaded, true));
         let r = resolve_value("ollama", true, Some(2048), &loaded, (None, None));
         assert_eq!((r.value, r.source, r.capped), (2048, Source::User, false));

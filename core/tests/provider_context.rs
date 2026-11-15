@@ -185,10 +185,11 @@ fn ollama_loaded_context_caps_override_and_preload_requires_explicit_refresh() {
     server.configure("ollama", Some(32768));
     let before = std::fs::read(root.path().join("provider.json")).unwrap();
     let passive = run("provider.context.get", json!({"profileId":"test"})).unwrap();
-    assert_eq!(passive["value"], 4096);
-    assert_eq!(passive["source"], "loaded");
+    assert_eq!(passive["value"], 32768);
+    assert_eq!(passive["source"], "user");
     assert_eq!(passive["maxContext"]["value"], 131072);
-    assert_eq!(passive["capped"], true);
+    assert_eq!(passive["capped"], false);
+    assert_eq!(passive["loaded"]["value"], 4096);
     assert!(!server
         .calls
         .lock()
@@ -200,7 +201,7 @@ fn ollama_loaded_context_caps_override_and_preload_requires_explicit_refresh() {
         json!({"profileId":"test","refresh":true}),
     )
     .unwrap();
-    assert_eq!(refreshed["value"], 4096);
+    assert_eq!(refreshed["value"], 32768);
     let calls = server.calls.lock().unwrap();
     let preload = calls.iter().find(|(p, _)| p == "/api/chat").unwrap();
     assert_eq!(preload.1["options"]["num_ctx"], 32768);
@@ -337,4 +338,56 @@ fn compatible_models_metadata_missing_limits_and_unavailable_server_fall_back() 
     }
     run("provider.profiles.remove", json!({"profileId":"test"})).unwrap();
     assert!(run("provider.context.get", json!({"profileId":"test"})).is_err());
+}
+
+fn chat_num_ctx(server: &Server) -> Value {
+    run("provider.structured", json!({"profileId":"test","instruction":"x","transcript":"y","nativeSchema":false,
+        "schema":{"type":"object","properties":{"schemaVersion":{"type":"integer"}},"required":["schemaVersion"]}})).unwrap();
+    let calls = server.calls.lock().unwrap();
+    let chat = calls.iter().rev().find(|(p, _)| p == "/api/chat").unwrap();
+    chat.1["options"]["num_ctx"].clone()
+}
+
+#[test]
+fn ollama_num_ctx_sent_is_the_effective_context_reported() {
+    let _guard = ENV.lock().unwrap();
+    let _root = isolated("clipes-context-numctx");
+    let chat = (
+        "/api/chat",
+        json!({"done":true,"message":{"role":"assistant","content":"{\"schemaVersion\":1}"}}),
+    );
+    // Loaded 32k, no user value: the call asks for exactly what get reports.
+    let loaded = Server::new(&[
+        (
+            "/api/show",
+            json!({"model_info":{"llama.context_length":131072}}),
+        ),
+        (
+            "/api/ps",
+            json!({"models":[{"name":"model:latest","context_length":32768}]}),
+        ),
+        chat.clone(),
+    ]);
+    loaded.configure("ollama", None);
+    let got = run("provider.context.get", json!({"profileId":"test"})).unwrap();
+    assert_eq!(
+        (got["value"].clone(), got["source"].clone()),
+        (json!(32768), json!("loaded"))
+    );
+    assert_eq!(chat_num_ctx(&loaded), json!(32768));
+    drop(loaded);
+    // Advertised maximum 128k and nothing loaded: never the maximum.
+    let idle = Server::new(&[
+        (
+            "/api/show",
+            json!({"model_info":{"llama.context_length":131072}}),
+        ),
+        ("/api/ps", json!({"models":[]})),
+        chat,
+    ]);
+    idle.configure("ollama", None);
+    let got = run("provider.context.get", json!({"profileId":"test"})).unwrap();
+    assert_eq!(got["value"], 4096);
+    assert_eq!(got["maxContext"]["value"], 131072);
+    assert_eq!(chat_num_ctx(&idle), json!(4096));
 }

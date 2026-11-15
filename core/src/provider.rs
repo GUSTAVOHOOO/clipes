@@ -324,10 +324,13 @@ mod settings {
         let profile = pick_by(&settings, profile_id.as_deref())?
             .filter(|p| !p.endpoint.is_empty())
             .ok_or_else(|| error("invalid_settings", "Configure the provider first"))?;
+        Ok(ContextPick::Profile(context_target(&settings, profile)))
+    }
+    fn context_target(settings: &Settings, profile: Profile) -> ContextTarget {
         let account = profile.account();
-        Ok(ContextPick::Profile(ContextTarget {
-            confirmed: metadata(&settings, &profile.endpoint).confirmed,
-            account: metadata(&settings, &account)
+        ContextTarget {
+            confirmed: metadata(settings, &profile.endpoint).confirmed,
+            account: metadata(settings, &account)
                 .key_last_four
                 .is_some()
                 .then_some(account),
@@ -338,7 +341,7 @@ mod settings {
             user_context: profile.context,
             native_schema: profile.native_schema,
             timeouts: settings.timeouts,
-        }))
+        }
     }
     pub(super) fn data_file(name: &str) -> Result<PathBuf, CoreError> {
         Ok(path()?.with_file_name(name))
@@ -917,9 +920,11 @@ mod settings {
                 p.structured(&request)
             }
             "ollama" => {
+                let context =
+                    super::context::cached_effective(&context_target(&settings, profile.clone()));
                 let mut p = OllamaProvider::new(profile.endpoint, profile.model, key)?
                     .with_timeouts(settings.timeouts)
-                    .with_context(profile.context);
+                    .with_context(Some(context));
                 p.confirm(consent.confirmed);
                 p.structured_with(&request, cancel)
             }
