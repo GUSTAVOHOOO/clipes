@@ -250,3 +250,21 @@ fn request(
     }
     unreachable!()
 }
+
+#[test]
+fn groq_key_commands_never_return_the_secret() {
+    let secret = "not-a-real-key";
+    let result = crate::dispatch(
+        "transcription.groq.key.set",
+        json!({"key":secret}),
+        &mut |_| {},
+    )
+    .unwrap();
+    assert!(!result.to_string().contains(secret));
+    let status = crate::dispatch("transcription.groq.key.status", json!({}), &mut |_| {}).unwrap();
+    assert_eq!(status["configured"], true);
+    assert!(!status.to_string().contains(secret));
+    crate::dispatch("transcription.groq.key.remove", json!({}), &mut |_| {}).unwrap();
+    let status = crate::dispatch("transcription.groq.key.status", json!({}), &mut |_| {}).unwrap();
+    assert_eq!(status["configured"], false);
+}

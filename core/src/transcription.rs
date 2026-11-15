@@ -592,3 +592,5 @@ inventory::submit! { CommandRegistration { name: "transcription.words", execute:
 
 #[cfg(test)]
 mod groq_tests;
+
+mod groq;
