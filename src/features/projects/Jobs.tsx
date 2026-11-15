@@ -13,6 +13,7 @@ const texts = {
 };
 export function Jobs({projectId}: {projectId:string}) {
   const t = useText(texts);
+  const { exportLabel } = useText({ 'pt-BR': { exportLabel: 'Export de Corte' }, en: { exportLabel: 'Clip export' } });
   const [items, setItems] = useState<Job[]>([]);
   const [pending, setPending] = useState<number|null>(null);
   const [estimate, setEstimate] = useState('');
@@ -63,7 +64,7 @@ export function Jobs({projectId}: {projectId:string}) {
     <h2 id="jobs-title" className="text-base font-semibold">{t.title}</h2>
     {error && <p role="alert" className="mt-3 text-danger">{error}</p>}
     {items.length === 0 ? <p className="mt-3 text-sm text-fg-2">{t.empty}</p> : <ul className="mt-3 divide-y divide-line border-y border-line">{items.map(item => <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-      <div><p>{item.kind === 'preview' ? t.preview : item.kind === 'transcription' ? t.transcribe : item.kind.startsWith('ai:') ? t.ai : t.provider}</p><p className="text-sm text-fg-2">{stateLabel(item)}{item.state === 'running' && ` · ${item.progress}%`}</p>{costLabel(item) && <p className="text-sm text-fg-2">{costLabel(item)}</p>}{item.state === 'running' && <progress className="mt-1 w-48 max-w-full" value={item.progress} max={100} aria-label={t.running} />}</div>
+      <div><p>{item.kind === 'export' ? exportLabel : item.kind === 'preview' ? t.preview : item.kind === 'transcription' ? t.transcribe : item.kind.startsWith('ai:') ? t.ai : t.provider}</p><p className="text-sm text-fg-2">{stateLabel(item)}{item.state === 'running' && ` · ${item.progress}%`}</p>{costLabel(item) && <p className="text-sm text-fg-2">{costLabel(item)}</p>}{item.state === 'running' && <progress className="mt-1 w-48 max-w-full" value={item.progress} max={100} aria-label={t.running} />}</div>
       <div className="flex gap-2">{(item.state === 'queued' || item.state === 'running') && <Button disabled={busy} onClick={() => void action('jobs.cancel', item.id)}>{t.cancel}</Button>}{item.state === 'uncertain' && <><Button ref={retryFocus} disabled={busy} onClick={() => void askRetry(item)}>{t.repeat}</Button><Button disabled={busy} onClick={() => void action('jobs.discard', item.id)}>{t.discard}</Button></>}</div>
     </li>)}</ul>}
     <ConfirmDialog open={pending !== null} onOpenChange={open => { if (!open) setPending(null); }} title={t.retryTitle} description={`${t.retryDescription} ${estimate}`} cancelLabel={t.cancelDialog} confirmLabel={t.repeat} finalFocus={retryFocus} onConfirm={() => { const id = pending; setPending(null); if (id !== null) void action('jobs.retry', id, true); }}/>

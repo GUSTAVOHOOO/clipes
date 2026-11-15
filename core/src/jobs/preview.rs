@@ -51,7 +51,7 @@ pub(crate) fn check(id: i64, stop: &AtomicBool) -> Result<(), crate::CoreError> 
 pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
     while !stop.load(Ordering::SeqCst) {
         crate::source_batches::tick();
-        let next = projects::with_reader(|c| c.query_row("SELECT id,COALESCE(source_id,0),kind FROM jobs WHERE ((kind='preview' AND safety='local') OR kind='transcription' OR kind='energy' OR (kind='reframe' AND safety='local') OR (kind='proxy' AND safety='local') OR kind LIKE 'ai:%') AND state='queued' AND NOT EXISTS (SELECT 1 FROM ai_pauses p WHERE (p.scope='task' AND jobs.kind='ai:'||p.key) OR (p.scope='batch' AND jobs.batch=p.key)) ORDER BY id LIMIT 1", [], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?))).optional()).ok().flatten();
+        let next = projects::with_reader(|c| c.query_row("SELECT id,COALESCE(source_id,0),kind FROM jobs WHERE ((kind IN ('preview','proxy','export') AND safety='local') OR kind='transcription' OR kind='energy' OR (kind='reframe' AND safety='local') OR kind LIKE 'ai:%') AND state='queued' AND NOT EXISTS (SELECT 1 FROM ai_pauses p WHERE (p.scope='task' AND jobs.kind='ai:'||p.key) OR (p.scope='batch' AND jobs.batch=p.key)) ORDER BY id LIMIT 1", [], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?))).optional()).ok().flatten();
         if let Some((id, source, kind)) = next {
             let Ok(_guard) = projects::start_job() else {
                 break;
@@ -75,6 +75,8 @@ pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
                     crate::proxy::run(id, source, &project, &stop)
                 } else if kind == crate::energy::JOB_KIND {
                     crate::energy::run(id, source, &project, &stop)
+                } else if kind == crate::export::JOB_KIND {
+                    crate::export::run(id, source, &project, &stop)
                 } else {
                     generate(id, source, &project, &stop)
                 };
@@ -122,6 +124,8 @@ fn progress_event(
             ("transcription", false) => "Transcrição pronta",
             ("energy", true) => "Medição de energia interrompida",
             ("energy", false) => "Energia do áudio medida",
+            ("export", true) => "Export interrompido",
+            ("export", false) => "Corte exportado",
             (_, true) => "Prévia interrompida",
             (_, false) => "Prévia pronta",
         }

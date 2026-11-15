@@ -35,6 +35,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## Fonte das legendas exportadas
+
+`core/assets/fonts/NotoSans-Bold.ttf`: Noto Sans Bold, Copyright 2018 The Noto
+Project Authors, sob a SIL Open Font License 1.1. O texto integral acompanha a
+fonte em `core/assets/fonts/OFL.txt`. Origem: [notofonts/noto-fonts, revisão
+ffebf8c1ee449e544955a7e813c54f9b73848eac](https://github.com/notofonts/noto-fonts/tree/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSans).
+SHA-256: `c976e4b1b99edc88775377fcc21692ca4bfa46b6d6ca6522bfda505b28ff9d6a`.
+O núcleo inclui os bytes no executável e os entrega ao libass por `fontsdir`;
+nenhuma fonte do sistema é exigida.
+
 ## Quadros de demonstração
 
 Tears of Steel, © Blender Foundation, 2012. Filme original: [mango.blender.org](https://mango.blender.org/). Licença [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/). Os arquivos em `design-system/src/data/img/` são quadros reduzidos e recortados do filme, usados apenas na demonstração do editor; o áudio e as falas derivam do mesmo filme.

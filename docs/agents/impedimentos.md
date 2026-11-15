@@ -88,6 +88,14 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 
 ## Ambiente Windows
 
+### Fixture de vídeo sem rotação no FFmpeg 8
+- **Sintoma:** remuxar com `-metadata:s:v:0 rotate=90` termina com sucesso, mas
+  `ffprobe` não encontra display matrix e o vídeo continua sem rotação.
+- **Causa:** nessa versão, a tag sozinha não produz a matriz de exibição.
+- **Ação:** para gerar o fixture sintético, use `-display_rotation 90` **antes**
+  de `-i`, com `-c copy`, e confirme `side_data_list.rotation` via `ffprobe`.
+  O harness `export_parity` faz essa confirmação antes de comparar os quadros.
+
 ### OpenCode isolado: cota gratuita esgotada
 - **Sintoma:** teste real pendente: cota gratuita do OpenCode esgotada (HTTP 429 `provider.free-limit`, ~22 h), isolamento confirmado com `debug agents` e 3 tentativas fora do adaptador que chegaram ao serviço.
 - **Causa:** o serviço recusou `opencode/big-pickle`, `opencode/glm-5.3-flash-free` (DB em memória) e `opencode/beam-free` (SQLite temporário). Trocar o banco não resolveu; não é falha das migrações/locks do modo `:memory:`.
