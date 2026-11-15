@@ -476,7 +476,7 @@ pub fn plan_for_profile_marked(
             id: s.id,
             start_us: s.start_us,
             end_us: s.end_us,
-            chars: escaped_chars(&format!("{} {}\n", s.id, s.text)),
+            chars: escaped_chars(&sentences::line(s, marks)),
         })
         .collect();
 

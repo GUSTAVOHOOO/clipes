@@ -72,10 +72,7 @@ fn loud_stretches_of_a_synthetic_tone_get_the_marks() {
     assert_eq!(levels[29], EnergyLevel::Peak);
     assert_eq!(levels[19], EnergyLevel::High);
     assert_eq!(
-        levels
-            .iter()
-            .filter(|l| mark(**l).is_some())
-            .count(),
+        levels.iter().filter(|l| mark(**l).is_some()).count(),
         3,
         "só as três Frases fortes têm marca"
     );
@@ -118,7 +115,10 @@ fn a_source_without_variation_has_no_peak_and_no_mark() {
         .iter()
         .all(|l| *l == EnergyLevel::Mid));
     // Variação pequena (menos de 3 dB da mediana) também não marca ninguém.
-    let wobble = blocks_of(&tone(200, |s| if (s / 5) % 2 == 0 { 3_000.0 } else { 3_600.0 }));
+    let wobble = blocks_of(&tone(
+        200,
+        |s| if (s / 5) % 2 == 0 { 3_000.0 } else { 3_600.0 },
+    ));
     assert!(levels_of(&frases, &wobble)
         .iter()
         .all(|l| mark(*l).is_none()));
@@ -135,7 +135,10 @@ fn few_sentences_and_silence_get_no_marks() {
     let silent = blocks_of(&vec![0u8; 200 * RATE as usize * 2]);
     let l = levels_of(&frases(40), &silent);
     assert!(l.iter().all(|l| *l == EnergyLevel::Mid));
-    assert_eq!(sentence_loudness(&silent, 0, 5_000_000), Some(SILENCE_FLOOR_CENTI));
+    assert_eq!(
+        sentence_loudness(&silent, 0, 5_000_000),
+        Some(SILENCE_FLOOR_CENTI)
+    );
     // Frase além do fim do áudio: sem medida.
     assert_eq!(sentence_loudness(&silent, 900_000_000, 905_000_000), None);
 }
@@ -161,12 +164,18 @@ fn marked_text_has_the_mark_and_costs_more_characters() {
         "## 00:00\n1 uma frase qualquer.\n2 [energia alta] uma frase qualquer.\n3 [energia pico] uma frase qualquer.\n"
     );
     let plain = sentences::compact(&frases);
-    assert_eq!(plain, sentences::compact_marked(&frases, &EnergyMarks::new()));
+    assert_eq!(
+        plain,
+        sentences::compact_marked(&frases, &EnergyMarks::new())
+    );
     assert!(text.chars().count() > plain.chars().count());
     // Sem número de loudness nem tempo na marca.
     assert!(!text.contains("dB") && !text.contains("loud"));
     let hinted = sentences::compact_with_hint_marked(&frases, &marks);
     assert_eq!(hinted.text, text);
     let plain_hint = sentences::compact_with_hint(&frases).hint;
-    assert_eq!((hinted.hint.format, hinted.hint.language), (plain_hint.format, plain_hint.language));
+    assert_eq!(
+        (hinted.hint.format, hinted.hint.language),
+        (plain_hint.format, plain_hint.language)
+    );
 }
