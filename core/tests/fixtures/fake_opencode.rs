@@ -25,6 +25,11 @@ fn main() {
         Command::new(env::current_exe().unwrap()).arg("child").spawn().unwrap();
         beat("beat");
     }
+    if mode == "free-limit" || mode == "free-limit-no-delay" {
+        let delay = if mode == "free-limit" { ",\"retryAfterMs\":79180001" } else { "" };
+        println!("{{\"type\":\"error\",\"error\":{{\"type\":\"provider.free-limit\",\"message\":\"secret /personal/path\"{delay}}}}}");
+        std::process::exit(1);
+    }
     if mode == "tool" { println!("{{\"type\":\"tool_use\",\"part\":{{}}}}"); return; }
     if mode == "error" { println!("{{\"type\":\"error\",\"error\":{{\"message\":\"secret /personal/path\"}}}}"); return; }
     let version = if mode == "invalid" { 2 } else { 1 };

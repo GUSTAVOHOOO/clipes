@@ -26,6 +26,8 @@ Versão mínima testada e única aceita: **2.2.7**. Outras versões recusam com
 | `OPENCODE_CONFIG_PROJECT_DISABLE=1` | Não procura config em cwd nem ancestrais; `packages/cli/src/server-process.ts` e `packages/core/src/config/discovery.ts`. |
 | `OPENCODE_DISABLE_CLAUDE_CODE=1` | Não lê compatibilidade com `.claude`; `server-process.ts`. |
 | `OPENCODE_CONFIG_CONTENT` próprio | Agente `clipes` com `permissions: [{action:"*",resource:"*",effect:"deny"}]`, no nível global e do agente; `packages/core/src/config/plugin/agent.ts`. `packages/core/src/tool.ts` remove todas as ferramentas e Code Mode quando a última regra é deny para `*`. |
+| `OPENCODE_DISABLE_MODELS_FETCH=1` | Usa o catálogo embutido na versão verificada, sem atualização remota; `packages/cli/src/server-process.ts`. |
+| `OPENCODE_DISABLE_FILEWATCHER=1`, `OPENCODE_DISABLE_FFF=1` | Desliga watchers e o índice de arquivos, desnecessários para texto estruturado; `server-process.ts`. |
 | `policies` deny | `tool.use`, `mcp.use`, `plugin.use`, `skill.use`, `websearch.use` e `integration.connect` negados para `*`; `packages/core/src/config/plugin/policy.ts` e [políticas oficiais](https://opencode.ai/docs/policies/). |
 | `XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_CONFIG_HOME`, `XDG_STATE_HOME`, `OPENCODE_TEST_HOME`, `TEMP`, `TMP`, `TMPDIR` temporários | Estado, cache, logs e diretório home isolados; `packages/util/src/global-roots.ts`, `global.ts`. Tudo removido ao recolher o processo. Cwd é um subdiretório vazio. |
 | Ambiente por allowlist | Só variáveis de sistema necessárias para iniciar o executável, mais as opções acima. Não herda chaves, proxies, `OPENCODE_CONFIG`, hooks de runtime ou flags experimentais. |
@@ -54,3 +56,16 @@ Testes automáticos usam um executável falso e `CLIPES_DATA_DIR` temporário,
 sem rede. O teste `real_opencode_isolated` é `#[ignore]`: execução manual única
 com texto sintético, modelo gratuito explicitamente escolhido, banco em memória
 e sem login; modelo, latência e validação são registrados no PR.
+
+**Prova real pendente, autorizada pelo coordenador:** cota gratuita do OpenCode
+esgotada (HTTP 429 `provider.free-limit`, ~22 h), isolamento confirmado com
+`debug agents` e 3 tentativas fora do adaptador que chegaram ao serviço. Foram
+testados `opencode/big-pickle` e `opencode/glm-5.3-flash-free` com banco em memória,
+e `opencode/beam-free` com SQLite temporário apagado. Todos retornaram o mesmo
+limite; nenhum produziu saída estruturada. O banco continua em memória. A prova
+real passa ao #122, depois da reposição da cota, sem novas inferências neste PR.
+
+`cli_free_limit` usa só o tipo do erro e o número `retryAfterMs` da CLI: mensagem
+sob template fixo, em segundos arredondados para cima; sem prazo informado diz
+para tentar mais tarde. Mensagem/corpo do serviço e stderr são descartados. A UI
+traduz esse template PT-BR/EN e não repete a chamada automaticamente.

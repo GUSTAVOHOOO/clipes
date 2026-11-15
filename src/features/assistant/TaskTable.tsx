@@ -38,7 +38,7 @@ export function TaskTable({ status, onChange }: { status: unknown; onChange: () 
     try { await coreDispatch(name, args); await load(); onChange(); setMessage(t.saved); } catch { setMessage(t.failed); }
   }
   const labels: Record<string, string> = { selection: t.taskSelection, packaging: t.taskPackaging, script: t.taskScript, translation: t.taskTranslation };
-  const cli = (kind: 'codex' | 'claude' | 'opencode' | 'opencode') => profiles.find(p => p.id === kind);
+  const cli = (kind: 'codex' | 'claude' | 'opencode') => profiles.find(p => p.id === kind);
   const saved = profiles.filter(p => !p.cli && p.id !== 'legacy');
   const seal = (row: Row) => !row.profile ? t.sealNone : row.profile.cli ? t.sealCli : row.profile.local ? t.sealLocal : t.sealRemote;
   function cost(row: Row) {
@@ -74,7 +74,6 @@ export function TaskTable({ status, onChange }: { status: unknown; onChange: () 
                   <option value="endpoint">{t.endpointName}</option>
                   <option value="codex" disabled={!cli('codex')?.confirmed}>{`${t.codex}${cli('codex')?.confirmed ? '' : ` (${t.needsConfirm})`}`}</option>
                   <option value="claude" disabled={!cli('claude')?.confirmed}>{`${t.claude}${cli('claude')?.confirmed ? '' : ` (${t.needsConfirm})`}`}</option>
-                  <option value="opencode" disabled={!cli('opencode')?.confirmed}>{`${t.opencode}${cli('opencode')?.confirmed ? '' : ` (${t.needsConfirm})`}`}</option>
                   <option value="opencode" disabled={!cli('opencode')?.confirmed}>{`${t.opencode}${cli('opencode')?.confirmed ? '' : ` (${t.needsConfirm})`}`}</option>
                   {saved.map(p => <option key={p.id} value={`profile:${p.id}`}>{p.label}</option>)}
                 </select>

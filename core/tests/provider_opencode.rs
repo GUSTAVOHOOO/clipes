@@ -78,6 +78,12 @@ fn headless_opencode_isolation_routing_validation_and_cancellation() {
         run("provider.structured", request()).unwrap_err().code,
         "confirmation_required"
     );
+    let mut unconfirmed = request();
+    unconfirmed["profileId"] = json!("opencode");
+    assert_eq!(
+        run("provider.structured", unconfirmed).unwrap_err().code,
+        "confirmation_required"
+    );
     run("provider.cli.confirm", json!({"kind":"opencode"})).unwrap();
     run(
         "assistant.task.set",
@@ -103,6 +109,16 @@ fn headless_opencode_isolation_routing_validation_and_cancellation() {
     .unwrap();
     assert_eq!(
         run("provider.structured", req.clone()).unwrap()["data"],
+        json!({"schemaVersion":1})
+    );
+    let mut explicit = req.clone();
+    explicit["profileId"] = json!("opencode");
+    assert_eq!(
+        run("provider.structured", explicit).unwrap()["data"],
+        json!({"schemaVersion":1})
+    );
+    assert_eq!(
+        run("provider.test", json!({"profileId":"opencode"})).unwrap()["data"],
         json!({"schemaVersion":1})
     );
     let args = fs::read_to_string(root.path().join("args")).unwrap();
@@ -150,6 +166,47 @@ fn headless_opencode_isolation_routing_validation_and_cancellation() {
         run("provider.cost.estimate", req.clone()).unwrap()["kind"],
         "zero"
     );
+    run(
+        "projects.create",
+        json!({"parent":root.path(),"name":"OpenCode test"}),
+    )
+    .unwrap();
+    run("projects.local_only.set", json!({"enabled":true})).unwrap();
+    fs::remove_file(root.path().join("prompt")).unwrap();
+    let mut project_request = req.clone();
+    project_request["profileId"] = json!("opencode");
+    for command in [
+        "provider.structured",
+        "provider.cost.estimate",
+        "provider.cost.run",
+    ] {
+        assert_eq!(
+            run(command, project_request.clone()).unwrap_err().code,
+            "local_only_violation"
+        );
+    }
+    assert!(!root.path().join("prompt").exists());
+    run("projects.local_only.set", json!({"enabled":false})).unwrap();
+    assert_eq!(
+        run("provider.cost.run", req.clone()).unwrap()["cost"]["kind"],
+        "zero"
+    );
+    run("projects.close", json!({})).unwrap();
+    for (mode, message) in [
+        (
+            "free-limit",
+            "OpenCode free quota exhausted; retry after 79181 seconds; no automatic retry",
+        ),
+        (
+            "free-limit-no-delay",
+            "OpenCode free quota exhausted; try again later; no automatic retry",
+        ),
+    ] {
+        fs::write(root.path().join("mode"), mode).unwrap();
+        let e = run("provider.structured", req.clone()).unwrap_err();
+        assert_eq!(e.code, "cli_free_limit");
+        assert_eq!(e.message, message);
+    }
     for (mode, code) in [
         ("unsupported", "unsupported_cli"),
         ("invalid", "invalid_json"),

@@ -250,7 +250,7 @@ mod settings {
     /// call time, never stored. Only the app settings choose; the Project never does.
     fn pick_target(task: Option<&str>, explicit: Option<&str>) -> Result<Picked, CoreError> {
         let mut profile_id = explicit.map(str::to_owned);
-        let mut cli = None;
+        let mut cli = explicit.filter(|id| *id == "opencode").map(str::to_owned);
         if explicit.is_none() {
             match crate::assistant::route(task)? {
                 crate::assistant::Route::Cli(kind) => cli = Some(kind),
@@ -271,6 +271,11 @@ mod settings {
             // CLIs are never local.
             return if local_only {
                 Err(local_only_violation())
+            } else if !crate::provider_cli::confirmed(&kind)? {
+                Err(error(
+                    "confirmation_required",
+                    "Confirm sending text to this provider first",
+                ))
             } else {
                 Ok(Picked::Cli(kind))
             };
@@ -718,7 +723,11 @@ mod settings {
         let (native, profile_id) = {
             let _guard = locked()?;
             let settings = read()?;
-            let profile = pick(&settings, &args)?;
+            let profile = if args["profileId"] == "opencode" {
+                None
+            } else {
+                pick(&settings, &args)?
+            };
             (
                 profile.is_some_and(|p| p.native_schema),
                 args.get("profileId").cloned(),
