@@ -567,6 +567,11 @@ try {
     // ] e [ movem o começo e não abrem as gavetas globais dentro da revisão.
     await page.keyboard.press('[');
     await detail.getByText(L.start80).waitFor();
+    await page.evaluate(() => window.addEventListener('clipes-preview-open', e => { window.__lastCutPreview = e.detail; }, { once: true }));
+    await review.locator('[data-preview-slot]').click();
+    assert.deepEqual(await page.evaluate(() => window.__lastCutPreview), { sourceId: 1, startUs: 80_000_000, endUs: 140_000_000 }, 'o preview recebe as bordas ajustadas da revisão');
+    await page.getByRole('button', { name: L.closePreview }).click();
+    await review.focus();
     await page.keyboard.press(']');
     await page.keyboard.press(']');
     await detail.getByText(L.start100).waitFor();
@@ -600,8 +605,8 @@ try {
     await page.keyboard.press('Escape');
     await page.locator('aside[data-aberta="true"]').waitFor({ state: 'detached' });
   };
-  const PT = { lang: 'pt-BR', region: 'Seleção de Cortes', review: 'Revisão dos candidatos', counts: '{a} aprovados · {r} rejeitados · {p} pendentes', hintKeys: 'aprova', start80: '01:20', start100: '01:40', end150: '02:30', end130: '02:10', tooShort: 'O Corte ficaria abaixo da duração mínima.', endEarlier: 'Fim antes', undo: 'Desfazer decisão' };
-  const EN = { lang: 'en', region: 'Clip selection', review: 'Candidate review', counts: '{a} approved · {r} rejected · {p} pending', hintKeys: 'approve', start80: '01:20', start100: '01:40', end150: '02:30', end130: '02:10', tooShort: 'The Clip would fall below the minimum duration.', endEarlier: 'End earlier', undo: 'Undo decision' };
+  const PT = { lang: 'pt-BR', region: 'Seleção de Cortes', review: 'Revisão dos candidatos', counts: '{a} aprovados · {r} rejeitados · {p} pendentes', hintKeys: 'aprova', start80: '01:20', start100: '01:40', end150: '02:30', end130: '02:10', tooShort: 'O Corte ficaria abaixo da duração mínima.', endEarlier: 'Fim antes', undo: 'Desfazer decisão', closePreview: 'Fechar preview' };
+  const EN = { lang: 'en', region: 'Clip selection', review: 'Candidate review', counts: '{a} approved · {r} rejected · {p} pending', hintKeys: 'approve', start80: '01:20', start100: '01:40', end150: '02:30', end130: '02:10', tooShort: 'The Clip would fall below the minimum duration.', endEarlier: 'End earlier', undo: 'Undo decision', closePreview: 'Close preview' };
   // Seleção de Cortes (#53): estimativa antes, progresso por Janela, Nota com pesos, filtro e refazer.
   const selection = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
   await selection.getByText('Estimativa: 4 janelas · sem custo (modelo local)').waitFor();
