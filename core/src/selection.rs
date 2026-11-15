@@ -19,6 +19,7 @@ use std::collections::BTreeMap;
 
 pub mod cut;
 mod review;
+pub(crate) use review::approved_cut;
 
 pub const TASK_ID: &str = "selection";
 /// Tipo do job de cada Janela na fila.
