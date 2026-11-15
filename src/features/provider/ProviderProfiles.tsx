@@ -38,6 +38,7 @@ export function ProviderProfiles({ refreshKey = 0, onChange }: { refreshKey?: nu
   const [contexts, setContexts] = useState<Record<string, Ctx>>({});
   const [checking, setChecking] = useState<string | null>(null);
   const [ctxConsent, setCtxConsent] = useState<Profile | null>(null);
+  const [probing, setProbing] = useState<Profile | null>(null);
   const addButton = useRef<HTMLButtonElement>(null);
   const field = 'foco mt-2 block h-9 w-full max-w-lg rounded-md border border-line-strong bg-field px-3 text-fg';
   const number = new Intl.NumberFormat(language, { maximumFractionDigits: 6 });
@@ -62,6 +63,12 @@ export function ProviderProfiles({ refreshKey = 0, onChange }: { refreshKey?: nu
   async function test(profile: Profile) {
     if (!profile.local && !profile.confirmed) { setConsent(profile); return false; }
     await coreDispatch('provider.test', { profileId: profile.id });
+  }
+  async function measure(profile: Profile) {
+    const result = await coreDispatch<{ truncated: boolean; measured: number | null }>('provider.test', { profileId: profile.id, probeContext: true });
+    await loadContext(profile);
+    setMessage(result.truncated && result.measured !== null ? `${t.probeCut} ${number.format(result.measured)} ${t.ctxTokens}.` : t.probeWhole);
+    return false;
   }
   function seal(profile: Profile) {
     if (profile.cli) return [t.subscription, t.experimental];
@@ -123,6 +130,7 @@ export function ProviderProfiles({ refreshKey = 0, onChange }: { refreshKey?: nu
           <div className="flex flex-wrap gap-2">
             <Button type="button" disabled={busy} onClick={() => void run(() => test(profile), t.success)}>{t.test}</Button>
             <Button type="button" disabled={busy || checking !== null} title={profile.kind === 'ollama' ? t.ctxHintOllama : t.ctxHintOther} onClick={() => profile.local || profile.confirmed ? void refreshContext(profile) : setCtxConsent(profile)}>{checking === profile.id ? t.ctxChecking : t.ctxRefresh}</Button>
+            {profile.local && <Button type="button" disabled={busy} onClick={() => setProbing(profile)}>{t.probe}</Button>}
             {profile.id !== 'legacy' && <Button type="button" disabled={busy} onClick={() => setDraft({ id: profile.id, label: profile.label, kind: profile.kind as Draft['kind'], endpoint: profile.endpoint ?? '', model: profile.model ?? '', nativeSchema: profile.nativeSchema, ownKey: profile.ownKey, context: profile.context?.toString() ?? '' })}>{t.edit}</Button>}
             {profile.id !== 'legacy' && <Button type="button" variante="perigo" disabled={busy} onClick={() => setRemoving(profile)}>{t.remove}</Button>}
           </div>
@@ -145,6 +153,9 @@ export function ProviderProfiles({ refreshKey = 0, onChange }: { refreshKey?: nu
     </ConfirmDialog>
     <ConfirmDialog open={ctxConsent !== null} onOpenChange={open => { if (!open) setCtxConsent(null); }} title={t.ctxConsentTitle} description={t.ctxConsent} cancelLabel={t.cancel} confirmLabel={t.ctxConsentYes} finalFocus={addButton} onConfirm={() => { const target = ctxConsent; setCtxConsent(null); if (target) void run(async () => { await coreDispatch('provider.confirm', { profileId: target.id, endpoint: target.endpoint }); await loadContext(target, true); }, t.saved); }}>
       <p className="break-all px-5 pb-4">{ctxConsent?.endpoint}</p>
+    </ConfirmDialog>
+    <ConfirmDialog open={probing !== null} onOpenChange={open => { if (!open) setProbing(null); }} title={t.probeTitle} description={t.probeText} cancelLabel={t.cancel} confirmLabel={t.probeYes} finalFocus={addButton} onConfirm={() => { const target = probing; setProbing(null); if (target) void run(() => measure(target), t.success); }}>
+      <p className="break-all px-5 pb-4">{probing?.endpoint}</p>
     </ConfirmDialog>
     <ConfirmDialog open={removing !== null} onOpenChange={open => { if (!open) setRemoving(null); }} title={t.removeTitle} description={t.removeText} cancelLabel={t.cancel} confirmLabel={t.remove} finalFocus={addButton} onConfirm={() => { const target = removing; setRemoving(null); if (target) void run(async () => { await coreDispatch('provider.profiles.remove', { profileId: target.id }); }, t.removed); }}>
       <p className="break-all px-5 pb-4">{removing?.label}</p>

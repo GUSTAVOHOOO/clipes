@@ -135,6 +135,7 @@ mod context;
 #[cfg(test)]
 pub(crate) mod contract_probe;
 pub(crate) mod control;
+mod truncation;
 pub use adapters::{AnthropicProvider, GeminiProvider, OllamaProvider, OpenAiProvider};
 pub use control::{CancelToken, Timeouts};
 pub mod cost;
@@ -905,7 +906,9 @@ mod settings {
         request.native_schema = profile.native_schema;
         match profile.kind.as_str() {
             "" | "openai" => {
-                let mut p = OpenAiProvider::new(profile.endpoint, profile.model, key)?;
+                let sent = super::context::cached_sent(&context_target(&settings, profile.clone()));
+                let mut p =
+                    OpenAiProvider::new(profile.endpoint, profile.model, key)?.with_context(sent);
                 p.confirm(consent.confirmed);
                 p.structured(&request)
             }
@@ -957,6 +960,19 @@ mod settings {
         result
     }
     fn test(args: Value, events: &mut EventSink<'_>) -> CommandResult {
+        // Optional, explicit and local only (#145): measures the context with a synthetic text.
+        if args["probeContext"] == true {
+            let explicit = args.get("profileId").and_then(Value::as_str);
+            return match context_pick(None, explicit)? {
+                ContextPick::Cli(_) => Err(error(
+                    "probe_not_local",
+                    "The context probe only runs on a local provider",
+                )),
+                ContextPick::Profile(target) => {
+                    super::context::probe(target, &CancelToken::default())
+                }
+            };
+        }
         let (native, profile_id) = {
             let _guard = locked()?;
             let settings = read()?;

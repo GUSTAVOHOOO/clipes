@@ -509,6 +509,7 @@ fn reached_provider(code: &str) -> bool {
             | "provider_http"
             | "network"
             | "output_truncated"
+            | "context_truncated"
             | "refusal"
             | "invalid_json"
             | "invalid_response"

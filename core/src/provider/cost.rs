@@ -169,7 +169,7 @@ pub(crate) fn price_micro_usd(price: &Price, input_tokens: u64, output_tokens: u
 
 /// Number of valid calls retained per profile/model/format/language.
 pub const CALIBRATION_SAMPLES: usize = 20;
-const CALIBRATION_MIN_SAMPLES: usize = 3;
+pub(crate) const CALIBRATION_MIN_SAMPLES: usize = 3;
 const INITIAL_LOW: f64 = 0.8;
 const INITIAL_HIGH: f64 = 1.5;
 const OBSERVED_LOW: f64 = 0.95;
@@ -266,6 +266,19 @@ pub fn token_range(
         high: (chars * high).ceil() as u64,
     })
 }
+/// Valid observations kept for the key of this request (profile, model, format, language).
+fn calibration_samples(profile: &str, model: &str, request: &StructuredRequest) -> usize {
+    super::settings::calibration_read()
+        .unwrap_or_default()
+        .iter()
+        .find(|v| {
+            v.profile == profile
+                && v.model == model
+                && v.format == request.estimate_hint.format
+                && v.language == request.estimate_hint.language
+        })
+        .map_or(0, |v| v.samples.len())
+}
 pub fn observe_tokens(
     profile: &str,
     model: &str,
@@ -317,6 +330,7 @@ pub fn estimate_for(
         Value::Null
     };
     value["initialRatio"] = json!(initial_ratio(request));
+    value["calibrationSamples"] = json!(calibration_samples(profile, model, request));
     Ok(value)
 }
 /// Learn only successful calls, using the exact request metadata captured before sending.
@@ -477,7 +491,7 @@ pub fn now_micros() -> i64 {
 pub fn outcome_of(code: &str) -> &'static str {
     match code {
         "ok" => "ok",
-        "output_truncated" | "truncated" => "truncated",
+        "output_truncated" | "context_truncated" | "truncated" => "truncated",
         "refusal" | "refused" => "refused",
         "timeout_uncertain" | "budget_time" => "timeout_uncertain",
         "rate_limit" => "rate_limit",
