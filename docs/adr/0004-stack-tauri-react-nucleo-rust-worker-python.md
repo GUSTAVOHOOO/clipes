@@ -31,7 +31,7 @@ O protótipo provou que o Tauri 2 com WebView2 dá conta do editor. A condição
 
 ## Camada de Provedor com adaptadores próprios
 
-Os adaptadores HTTP são nossos e ficam no Rust. Bastam três formatos:
+Os adaptadores HTTP são nossos e ficam no Rust. A decisão original previa três formatos (ver a emenda ao final para o Ollama):
 - Anthropic;
 - compatível com OpenAI, que cobre OpenAI, OpenRouter, Ollama e qualquer endpoint compatível;
 - Gemini.
@@ -46,3 +46,11 @@ O Codex entra como subprocesso. As chaves ficam no cofre e a UI nunca as lê. A 
 - **Um processo Python por modelo:** isola melhor, mas multiplica runtimes e não resolve a VRAM, que já exige a fila sequencial.
 - **AI SDK na UI:** exporia as chaves ao WebView.
 - **LiteLLM no worker Python:** poria as chaves e o custo no processo de ML e traria uma dependência grande para três formatos de API.
+
+## Emenda de 14/11/2026: adaptador nativo do Ollama como quarto formato HTTP
+
+Decisão do dev em 14/11/2026, a partir da [pesquisa de lives longas e contexto (#115)](https://github.com/GUSTAVOHOOO/clipes/issues/115). A camada de Provedor passa a permitir **um quarto formato HTTP, exclusivo do Ollama**: `/api/chat` com `options.num_ctx` explícito por chamada. O padrão de 4 mil tokens na máquina-alvo pode cortar a Transcrição em silêncio; a API compatível com OpenAI não permite definir esse contexto por requisição.
+
+O adaptador é próprio, no núcleo Rust, e usa o contexto efetivo do Perfil de Provedor para definir `num_ctx`. O máximo anunciado pelo modelo não prova quanto contexto foi carregado: o núcleo descobre e confere o limite da configuração usada. O tipo `ollama` estende a lista de tipos de Perfil de Provedor do [ADR-0010](0010-perfis-multiplos-de-provedor-tarefa-para-perfil-e-somente-local.md).
+
+É uma exceção para controlar o contexto do Ollama, não uma abertura para formatos nativos de outros servidores. LM Studio, llama.cpp e os demais endpoints compatíveis continuam no formato OpenAI. Valem os mesmos contratos de saída e validação, custo, cancelamento, consentimento e "Somente local"; local continua sendo só loopback. Não há troca automática de Provedor.

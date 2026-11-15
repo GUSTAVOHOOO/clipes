@@ -359,3 +359,34 @@ fn start_requires_the_open_project() {
     .unwrap_err();
     assert_eq!(error.code, "invalid_project");
 }
+
+#[test]
+fn sentences_are_created_and_stable_after_reopening_and_resegmenting() {
+    let env = Env::new(25);
+    env.install_models();
+    let source = env.import(0);
+    env.start(source).unwrap();
+    env.wait_transcribe("completed");
+    let before = run("transcription.sentences", json!({"source_id":source})).unwrap();
+    assert!(!before.as_array().unwrap().is_empty());
+    assert_eq!(before[0]["id"], 1);
+    assert_eq!(before[0]["language"], "pt");
+    let timeline = run("transcription.timeline", json!({"source_id":source})).unwrap();
+    assert_eq!(
+        timeline["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|item| item["type"] == "silence")
+            .count(),
+        26
+    );
+    run("projects.close", json!({})).unwrap();
+    run("projects.open", json!({"path":env.project})).unwrap();
+    let result = run("transcription.segment", json!({"source_id":source})).unwrap();
+    assert_eq!(result["changed"], false);
+    assert_eq!(
+        before,
+        run("transcription.sentences", json!({"source_id":source})).unwrap()
+    );
+}
