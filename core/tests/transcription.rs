@@ -177,6 +177,20 @@ impl Env {
     fn status(&self, source: i64) -> Value {
         run("transcription.status", json!({"source_id":source})).unwrap()
     }
+
+    fn paid_job(&self, source: i64) -> i64 {
+        wait("prévia", || {
+            self.job_state("preview")
+                .is_some_and(|(s, _)| s == "completed")
+        });
+        let job=clipes_core::projects::with_writer(|c| {
+            c.execute("INSERT INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,duration_us) SELECT id,audio_track,'groq','whisper-large-v3-turbo','','remote',duration_us FROM sources WHERE id=?1",[source])?;
+            c.execute("INSERT INTO jobs(kind,safety,state,source_id) VALUES ('transcription','paid','running',?1)",[source])?;
+            Ok(c.last_insert_rowid())
+        }).unwrap();
+        run("transcription.groq.confirm",json!({"endpoint":"https://api.groq.com/openai/v1/audio/transcriptions","confirmed":true})).unwrap();
+        job
+    }
 }
 
 impl Drop for Env {
@@ -419,6 +433,61 @@ fn remote_start_is_vetoed_before_consent_and_key_access() {
     .unwrap_err();
     assert_eq!(error.code, "local_only_violation");
     assert!(env.status(source)["transcript"].is_null());
+    run("projects.local_only.set", json!({"enabled":false})).unwrap();
+    let e = run(
+        "transcription.start",
+        json!({"project":env.project,"source_id":source,"engine":"groq"}),
+    )
+    .unwrap_err();
+    assert_eq!(e.code, "confirmation_required");
+    let e = run(
+        "transcription.groq.confirm",
+        json!({"endpoint":"https://other.invalid","confirmed":true}),
+    )
+    .unwrap_err();
+    assert_eq!(e.code, "confirmation_required");
+}
+
+#[test]
+fn switching_partial_requires_loss_review_and_erases_words_without_losing_charges() {
+    let env = Env::new(25);
+    env.install_models();
+    let source = env.import(0);
+    wait("prévia", || {
+        env.job_state("preview")
+            .is_some_and(|(s, _)| s == "completed")
+    });
+    clipes_core::projects::with_writer(|c| {
+        c.execute("INSERT INTO transcripts(id,source_id,audio_track,engine,model,revision,compute_type,duration_us,resume_us) VALUES (1,?1,0,'groq','whisper-large-v3-turbo','','remote',25000000,8000000)",[source])?;
+        c.execute("INSERT INTO jobs(id,kind,safety,state,source_id) VALUES (100,'transcription','paid','cancelled',?1)",[source])?;
+        c.execute("INSERT INTO transcript_words(transcript_id,position,kind,text,start_us,end_us) VALUES (1,0,'word','REMOTA',0,500000)",[])?;
+        c.execute("INSERT INTO transcription_blocks VALUES (1,0,8000000)",[])?;
+        c.execute("INSERT INTO transcription_calls(transcript_id,job_id,start_us,end_us,state,estimated_usd) VALUES (1,100,0,8000000,'completed',0.00012)",[])?;
+        Ok(())
+    }).unwrap();
+    // Sem escolha explícita, continua sendo Groq; nunca cai no Motor local.
+    let e = env.start(source).unwrap_err();
+    assert_eq!(e.code, "confirmation_required");
+    let e = run(
+        "transcription.start",
+        json!({"project":env.project,"source_id":source,"engine":"local"}),
+    )
+    .unwrap_err();
+    assert_eq!(e.code, "engine_change_confirmation");
+    let loss = e.usage.unwrap();
+    assert_eq!(loss["blocks"], 1);
+    assert_eq!(loss["paid_audio_us"], 8_000_000);
+    assert_eq!(env.rows(source)[0]["text"], "REMOTA");
+    run(
+        "transcription.start",
+        json!({"project":env.project,"source_id":source,"engine":"local","replace_confirmed":true}),
+    )
+    .unwrap();
+    env.wait_transcribe("completed");
+    assert_eq!(env.status(source)["transcript"]["engine"], "local");
+    assert_complete_transcript(&env.rows(source));
+    let retained=clipes_core::projects::with_reader(|c|c.query_row("SELECT COUNT(*) FROM transcription_calls WHERE transcript_id IS NULL AND state='completed'",[],|r|r.get::<_,i64>(0))).unwrap();
+    assert_eq!(retained, 1);
 }
 
 #[test]
@@ -487,19 +556,7 @@ fn groq_uses_vad_checkpoints_absolute_times_and_one_paid_call_per_block() {
             .unwrap();
         }
     });
-    let job = clipes_core::jobs::enqueue("transcription", clipes_core::jobs::Safety::Paid).unwrap();
-    clipes_core::projects::with_writer(|c| {
-        c.execute("UPDATE jobs SET source_id=?2 WHERE id=?1",(job,source))?;
-        c.execute("INSERT INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,duration_us) VALUES (?1,0,'groq','whisper-large-v3-turbo','','remote',25000000)",[source])?;
-        // O teste executa pelo mesmo run_with do núcleo, sem corrida com a fila.
-        c.execute("UPDATE jobs SET state='running' WHERE id=?1",[job])?;
-        Ok(())
-    }).unwrap();
-    run(
-        "transcription.groq.confirm",
-        json!({"endpoint":"https://api.groq.com/openai/v1/audio/transcriptions","confirmed":true}),
-    )
-    .unwrap();
+    let job = env.paid_job(source);
     let client =
         clipes_core::worker::WorkerClient::start(FAKE_WORKER, ["--scenario", "unused"], |_| {})
             .unwrap();
@@ -536,4 +593,107 @@ fn groq_uses_vad_checkpoints_absolute_times_and_one_paid_call_per_block() {
     })
     .unwrap();
     assert_eq!(count, 3);
+}
+
+#[test]
+fn groq_timeout_preserves_partial_and_requires_confirmation_to_retry_after_reopening() {
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        sync::atomic::AtomicBool,
+    };
+    let env = Env::new(25);
+    let source = env.import(0);
+    let job = env.paid_job(source);
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || {
+        for index in 0..2 {
+            let (mut socket, _) = listener.accept().unwrap();
+            socket.set_nonblocking(false).unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut bytes = Vec::new();
+            let mut buffer = [0; 4096];
+            loop {
+                let n = socket.read(&mut buffer).unwrap();
+                assert!(n > 0);
+                bytes.extend_from_slice(&buffer[..n]);
+                if let Some(end) = bytes.windows(4).position(|w| w == b"\r\n\r\n") {
+                    let len = String::from_utf8_lossy(&bytes[..end])
+                        .lines()
+                        .find_map(|l| {
+                            l.to_lowercase()
+                                .strip_prefix("content-length: ")
+                                .and_then(|s| s.parse::<usize>().ok())
+                        })
+                        .unwrap();
+                    if bytes.len() >= end + 4 + len {
+                        break;
+                    }
+                }
+            }
+            if index == 1 {
+                std::thread::sleep(Duration::from_millis(250));
+            }
+            let body = include_str!("fixtures/groq-words.json");
+            let _ = write!(
+                socket,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+        }
+    });
+    let client =
+        clipes_core::worker::WorkerClient::start(FAKE_WORKER, ["--scenario", "unused"], |_| {})
+            .unwrap();
+    let mut engine = clipes_core::transcription::GroqEngine::with_worker(
+        client,
+        "fake".into(),
+        endpoint,
+        env.root.path().join(exe("fake-ffmpeg")),
+        Duration::from_millis(100),
+    );
+    let e = clipes_core::transcription::run_with(
+        &mut engine,
+        job,
+        source,
+        Path::new(&env.project),
+        &AtomicBool::new(false),
+    )
+    .unwrap_err();
+    assert_eq!(e.code, "timeout_uncertain");
+    clipes_core::jobs::finish(job, Err(e)).unwrap();
+    server.join().unwrap();
+    assert_eq!(env.status(source)["transcript"]["resume_us"], 8_000_000);
+    assert_eq!(env.rows(source).len(), 1);
+    assert_eq!(
+        env.start(source).unwrap_err().code,
+        "transcription_uncertain"
+    );
+    let e = run("jobs.retry", json!({"id":job})).unwrap_err();
+    assert_eq!(e.code, "confirmation_required");
+    assert_eq!(e.usage.unwrap()["estimate"]["kind"], "usd");
+    // Simula queda durante a segunda chamada: reconciliação não a repete.
+    clipes_core::projects::with_writer(|c| {
+        c.execute("UPDATE jobs SET state='running' WHERE id=?1", [job])?;
+        c.execute(
+            "UPDATE transcription_calls SET state='pending' WHERE job_id=?1 AND state='uncertain'",
+            [job],
+        )?;
+        Ok(())
+    })
+    .unwrap();
+    run("projects.close", json!({})).unwrap();
+    run("projects.open", json!({"path":env.project})).unwrap();
+    assert_eq!(env.status(source)["job"]["state"], "uncertain");
+    assert_eq!(env.rows(source).len(), 1);
+    // Até uma repetição autorizada precisa passar de novo pelo veto, sem rede.
+    run("projects.local_only.set", json!({"enabled":true})).unwrap();
+    run("jobs.retry", json!({"id":job,"confirmed":true})).unwrap();
+    env.wait_transcribe("failed");
+    assert_eq!(env.status(source)["transcript"]["engine"], "groq");
+    assert_eq!(env.status(source)["transcript"]["resume_us"], 8_000_000);
 }

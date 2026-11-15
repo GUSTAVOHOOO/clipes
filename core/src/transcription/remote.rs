@@ -14,8 +14,9 @@ fn consent_path() -> Result<PathBuf, CoreError> {
 
 fn consents() -> Result<Value, CoreError> {
     match fs::read(consent_path()?) {
-        Ok(bytes) => serde_json::from_slice::<std::collections::BTreeMap<String,bool>>(&bytes)
-            .map(|value|json!(value)).map_err(|_| error("settings", "Não foi possível ler o consentimento.")),
+        Ok(bytes) => serde_json::from_slice::<std::collections::BTreeMap<String, bool>>(&bytes)
+            .map(|value| json!(value))
+            .map_err(|_| error("settings", "Não foi possível ler o consentimento.")),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(json!({})),
         Err(_) => Err(error("settings", "Não foi possível ler o consentimento.")),
     }
