@@ -118,7 +118,7 @@ mod settings {
 
     /// Id of the profile synthesized from the single-endpoint settings (v1).
     pub(super) const LEGACY: &str = "legacy";
-    const CLI_IDS: [&str; 2] = ["codex", "claude"];
+    const CLI_IDS: [&str; 3] = ["codex", "claude", "opencode"];
 
     #[derive(Clone, Default, Serialize, Deserialize)]
     #[serde(rename_all = "camelCase")]
@@ -434,8 +434,9 @@ mod settings {
     }
     fn cli_view(kind: &str, status: &Value) -> Value {
         json!({
-            "id": kind, "label": if kind == "codex" { "Codex CLI" } else { "Claude Code CLI" },
-            "kind": kind, "endpoint": null, "model": null, "nativeSchema": false,
+            "id": kind, "label": crate::provider_cli::label(kind),
+            "kind": kind, "endpoint": null, "model": if kind == "opencode" { status["opencodeModel"].clone() } else { Value::Null }, "nativeSchema": false,
+            "cost": if kind == "opencode" { crate::provider_cli::opencode_cost(status["opencodeModel"].as_str().unwrap_or("")) } else { json!({"kind":"plan_quota"}) },
             "ownKey": false, "keyLastFour": null, "local": false,
             "confirmed": status[format!("{kind}Confirmed")].as_bool().unwrap_or(false),
             "active": status["selected"] == kind, "price": null, "cli": true,

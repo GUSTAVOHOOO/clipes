@@ -8,10 +8,10 @@ import { texts as cliTexts } from '@/features/provider/CliSettings';
 import { texts } from './texts';
 
 export const REOPEN_EVENT = 'clipes:assistant-open';
-export type Choice = '' | 'endpoint' | 'codex' | 'claude' | `profile:${string}`;
+export type Choice = '' | 'endpoint' | 'codex' | 'claude' | 'opencode' | `profile:${string}`;
 export type AssistantStatus = { completed: boolean; skipped: boolean; needsSetup: boolean; default: Choice; tasks: Record<string, Choice>; localOnly?: Record<string, boolean>; missing?: Record<string, string> };
 type Server = { found: boolean; endpoint: string | null; models: string[] };
-type Detection = { ollama: Server; lmStudio: Server; llamaCpp: Server; codex: { found: boolean }; claude: { found: boolean } };
+type Detection = { ollama: Server; lmStudio: Server; llamaCpp: Server; codex: { found: boolean }; claude: { found: boolean }; opencode: { found: boolean } };
 
 const SERVERS = [['ollama', 'Ollama'], ['lmStudio', 'LM Studio'], ['llamaCpp', 'llama.cpp']] as const;
 
@@ -23,7 +23,8 @@ export function Assistant() {
   const [status, setStatus] = useState<AssistantStatus | null>(null);
   const [detection, setDetection] = useState<Detection | null>(null);
   const [detectFailed, setDetectFailed] = useState(false);
-  const [pendingCli, setPendingCli] = useState<'codex' | 'claude' | null>(null);
+  const [pendingCli, setPendingCli] = useState<'codex' | 'claude' | 'opencode' | null>(null);
+  const [openCodeModel, setOpenCodeModel] = useState('');
   const [models, setModels] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -53,14 +54,14 @@ export function Assistant() {
     await coreDispatch('assistant.default.set', { choice: 'endpoint' });
   });
   const useApi = () => run(async () => { await coreDispatch('assistant.default.set', { choice: 'endpoint' }); setMessage(t.apiNext); });
-  const activateCli = (kind: 'codex' | 'claude') => run(async () => {
-    await coreDispatch('provider.cli.configure', { kind });
-    await coreDispatch('provider.cli.confirm', { kind });
+  const activateCli = (kind: 'codex' | 'claude' | 'opencode') => run(async () => {
+    await coreDispatch('provider.cli.configure', { kind, ...(kind === 'opencode' ? { model: openCodeModel.trim() } : {}) });
+    await coreDispatch('provider.cli.confirm', { kind, ...(kind === 'opencode' ? { model: openCodeModel.trim() } : {}) });
     await coreDispatch('assistant.default.set', { choice: kind });
   });
-  const name = (choice: Choice) => choice === 'codex' ? t.codex : choice === 'claude' ? t.claude : choice === 'endpoint' ? t.endpointName : choice.startsWith('profile:') ? choice.slice(8) : '';
+  const name = (choice: Choice) => choice === 'codex' ? t.codex : choice === 'claude' ? t.claude : choice === 'opencode' ? t.opencode : choice === 'endpoint' ? t.endpointName : choice.startsWith('profile:') ? choice.slice(8) : '';
   const card = 'rounded-lg border border-line bg-field p-4';
-  const anyCli = detection && (detection.codex.found || detection.claude.found);
+  const anyCli = detection && (detection.codex.found || detection.claude.found || detection.opencode.found);
   const anyServer = detection && SERVERS.some(([key]) => detection[key].found);
 
   return <><D.Root open={open} onOpenChange={setOpen}>
@@ -78,6 +79,7 @@ export function Assistant() {
               {SERVERS.filter(([key]) => detection[key].found).map(([key, label]) => <li key={key}>{label}{detection[key].models.length ? ` — ${t.models}: ${detection[key].models.slice(0, 5).join(', ')}` : ''}</li>)}
               {detection.codex.found && <li>{t.codex}</li>}
               {detection.claude.found && <li>{t.claude}</li>}
+              {detection.opencode.found && <li>{t.opencode}</li>}
             </ul>}
           </section>
           <section className={card} aria-labelledby="assistant-api">
@@ -89,9 +91,11 @@ export function Assistant() {
             <h3 id="assistant-cli" className="font-semibold">{t.cliTitle}</h3>
             <p className="mt-1 text-sm text-fg-2">{t.cliBody}</p>
             {detection && !anyCli && <p className="mt-2 text-sm">{t.cliMissing}</p>}
+            {detection?.opencode.found && <><p className="mt-2 text-sm text-fg-2">{cli.opencodeWarning}</p><label className="mt-3 block text-sm">{cli.modelLabel}<input className="foco mt-1 block h-9 w-full rounded-md border border-line-strong bg-field px-3 text-fg" value={openCodeModel} placeholder="opencode/big-pickle" disabled={busy} onChange={e => setOpenCodeModel(e.target.value)} /></label></>}
             {detection && <div className="mt-3 flex flex-wrap gap-2">
               {detection.codex.found && <Button disabled={busy} onClick={() => setPendingCli('codex')}>{`${t.useCli} ${t.codex}`}</Button>}
               {detection.claude.found && <Button disabled={busy} onClick={() => setPendingCli('claude')}>{`${t.useCli} ${t.claude}`}</Button>}
+              {detection.opencode.found && <Button disabled={busy || !openCodeModel.trim()} onClick={() => setPendingCli('opencode')}>{`${t.useCli} ${t.opencode}`}</Button>}
             </div>}
           </section>
           <section className={card} aria-labelledby="assistant-local">
@@ -113,7 +117,7 @@ export function Assistant() {
     </D.Portal>
   </D.Root>
     <ConfirmDialog open={pendingCli !== null} onOpenChange={o => { if (!o) setPendingCli(null); }} title={cli.confirmTitle} description={cli.confirm} cancelLabel={cli.cancel} confirmLabel={cli.accept} onConfirm={() => { const kind = pendingCli; setPendingCli(null); if (kind) void activateCli(kind); }}>
-      <p className="px-5 pb-3 text-sm">{pendingCli === 'codex' ? cli.codexWarning : cli.claudeWarning}</p>
-      <p className="px-5 pb-3 text-sm">{cli.quota}</p>
+      <p className="px-5 pb-3 text-sm">{pendingCli === 'opencode' ? cli.opencodeWarning : pendingCli === 'codex' ? cli.codexWarning : cli.claudeWarning}</p>
+      <p className="px-5 pb-3 text-sm">{pendingCli === 'opencode' ? openCodeModel : cli.quota}</p>
     </ConfirmDialog></>;
 }

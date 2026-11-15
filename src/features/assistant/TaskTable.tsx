@@ -38,13 +38,13 @@ export function TaskTable({ status, onChange }: { status: unknown; onChange: () 
     try { await coreDispatch(name, args); await load(); onChange(); setMessage(t.saved); } catch { setMessage(t.failed); }
   }
   const labels: Record<string, string> = { selection: t.taskSelection, packaging: t.taskPackaging, script: t.taskScript, translation: t.taskTranslation };
-  const cli = (kind: 'codex' | 'claude') => profiles.find(p => p.id === kind);
+  const cli = (kind: 'codex' | 'claude' | 'opencode' | 'opencode') => profiles.find(p => p.id === kind);
   const saved = profiles.filter(p => !p.cli && p.id !== 'legacy');
   const seal = (row: Row) => !row.profile ? t.sealNone : row.profile.cli ? t.sealCli : row.profile.local ? t.sealLocal : t.sealRemote;
   function cost(row: Row) {
     const c = row.profile?.cost;
     if (!c) return '—';
-    if (c.kind === 'zero') return t.costZero;
+    if (c.kind === 'zero') return row.profile?.kind === 'opencode' ? t.costFreeCli : t.costZero;
     if (c.kind === 'plan_quota') return t.costQuota;
     if (c.kind === 'unknown') return t.costUnknown;
     return `US$ ${number.format(c.inputPerMillion ?? 0)} / ${number.format(c.outputPerMillion ?? 0)} ${t.costUnit}`;
@@ -74,6 +74,8 @@ export function TaskTable({ status, onChange }: { status: unknown; onChange: () 
                   <option value="endpoint">{t.endpointName}</option>
                   <option value="codex" disabled={!cli('codex')?.confirmed}>{`${t.codex}${cli('codex')?.confirmed ? '' : ` (${t.needsConfirm})`}`}</option>
                   <option value="claude" disabled={!cli('claude')?.confirmed}>{`${t.claude}${cli('claude')?.confirmed ? '' : ` (${t.needsConfirm})`}`}</option>
+                  <option value="opencode" disabled={!cli('opencode')?.confirmed}>{`${t.opencode}${cli('opencode')?.confirmed ? '' : ` (${t.needsConfirm})`}`}</option>
+                  <option value="opencode" disabled={!cli('opencode')?.confirmed}>{`${t.opencode}${cli('opencode')?.confirmed ? '' : ` (${t.needsConfirm})`}`}</option>
                   {saved.map(p => <option key={p.id} value={`profile:${p.id}`}>{p.label}</option>)}
                 </select>
                 {row.profile && <p className="mt-1 text-xs text-fg-2">{row.profile.label}{row.profile.model ? ` · ${row.profile.model}` : ''}{row.source === 'default' ? ` ${t.viaDefault}` : ''}</p>}

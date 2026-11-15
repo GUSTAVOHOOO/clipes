@@ -82,6 +82,8 @@ fn write_overrides(o: &Overrides) -> Result<(), CoreError> {
 pub enum Target {
     /// Codex or Claude Code subscription: no money value, consumes the plan quota.
     Cli { name: String },
+    /// Isolated OpenCode: a model with an exact, officially verified free price, or unknown.
+    OpenCode { model: String },
     /// HTTP adapter (`openai`, `anthropic`, `gemini`); `local` means loopback.
     Api {
         provider: String,
@@ -93,6 +95,7 @@ impl Target {
     fn label(&self) -> (String, String) {
         match self {
             Target::Cli { name } => (format!("cli:{name}"), String::new()),
+            Target::OpenCode { model } => ("cli:opencode".into(), model.clone()),
             Target::Api {
                 provider, model, ..
             } => (provider.clone(), model.clone()),
@@ -170,6 +173,13 @@ pub fn estimate(target: &Target, request: &StructuredRequest) -> Result<Value, C
     let input = estimate_input_tokens(request);
     let (kind, ceiling, min, max, source) = match target {
         Target::Cli { .. } => ("plan_quota", None, None, None, None),
+        Target::OpenCode { model } => {
+            if crate::provider_cli::opencode_cost(model)["kind"] == "zero" {
+                ("zero", None, Some(0), Some(0), None)
+            } else {
+                ("unknown", None, None, None, None)
+            }
+        }
         Target::Api { local: true, .. } => ("zero", None, Some(0), Some(0), None),
         Target::Api {
             provider, model, ..
@@ -210,6 +220,13 @@ pub fn estimate(target: &Target, request: &StructuredRequest) -> Result<Value, C
 pub fn actual(target: &Target, usage: &Value) -> Result<Cost, CoreError> {
     Ok(match target {
         Target::Cli { .. } => Cost::PlanQuota,
+        Target::OpenCode { model } => {
+            if crate::provider_cli::opencode_cost(model)["kind"] == "zero" {
+                Cost::Zero
+            } else {
+                Cost::Unknown
+            }
+        }
         Target::Api { local: true, .. } => Cost::Zero,
         Target::Api {
             provider, model, ..
@@ -343,6 +360,12 @@ pub fn run_costed_for(
 // any call.
 fn target_now(task: Option<&str>, explicit: Option<&str>) -> Result<(Target, String), CoreError> {
     Ok(match super::routed(task, explicit)? {
+        super::Routed::Cli(name) if name == "opencode" => (
+            Target::OpenCode {
+                model: crate::provider_cli::opencode_model()?,
+            },
+            name,
+        ),
         super::Routed::Cli(name) => (Target::Cli { name: name.clone() }, name),
         super::Routed::Api { profile, local } => (
             Target::Api {
@@ -372,6 +395,7 @@ fn cmd_run(args: Value, events: &mut EventSink<'_>) -> CommandResult {
     // The profile and model that serve the call are recorded in the Project and returned.
     let route = match &target {
         Target::Cli { name } => json!({"profileId": profile, "kind": name, "model": null}),
+        Target::OpenCode { model } => json!({"profileId":profile,"kind":"opencode","model":model}),
         Target::Api {
             provider, model, ..
         } => json!({"profileId": profile, "kind": provider, "model": model}),
