@@ -116,7 +116,8 @@ impl TranscriptionEngine for GroqEngine {
         }
         let token = crate::provider::CancelToken::new();
         let finished = AtomicBool::new(false);
-        let call = remote::begin(job, transcript, resume, covered)?;
+        let mut response_sha256 = None;
+        let call = remote::begin(job, transcript, resume, covered, &self.endpoint, &audio)?;
         progress(0);
         let result = std::thread::scope(|scope| {
             scope.spawn(|| {
@@ -128,10 +129,18 @@ impl TranscriptionEngine for GroqEngine {
                     std::thread::sleep(Duration::from_millis(20));
                 }
             });
-            let result = request(&self.endpoint, &self.key, &audio, &token, self.timeout);
+            let result = request_audited(
+                &self.endpoint,
+                &self.key,
+                &audio,
+                &token,
+                self.timeout,
+                &mut response_sha256,
+            );
             finished.store(true, Ordering::SeqCst);
             result
         });
+        remote::audit_response(call, response_sha256);
         match result {
             Ok(words) => {
                 // Nunca aceitar tempos fora do bloco ou fora de ordem.
@@ -252,13 +261,79 @@ fn test_key(_: Value, _: &mut EventSink<'_>) -> CommandResult {
 }
 inventory::submit! { CommandRegistration { name: "transcription.groq.key.test", execute: test_key } }
 
+const BOUNDARY: &str = "clipes-transcription-boundary";
+
+/// O corpo multipart exato enviado ao Groq (a trilha de auditoria, #125, conta seus bytes).
+pub(super) fn multipart_body(audio: &[u8]) -> Vec<u8> {
+    let boundary = BOUNDARY;
+    let mut body = Vec::with_capacity(audio.len() + 1024);
+    for (name, value) in [
+        ("model", "whisper-large-v3-turbo"),
+        ("response_format", "verbose_json"),
+        ("timestamp_granularities[]", "word"),
+    ] {
+        body.extend_from_slice(
+            format!(
+                "--{boundary}
+Content-Disposition: form-data; name=\"{name}\"
+
+{value}
+"
+            )
+            .as_bytes(),
+        );
+    }
+    body.extend_from_slice(
+        format!(
+            "--{boundary}
+Content-Disposition: form-data; name=\"file\"; filename=\"audio.flac\"
+Content-Type: audio/flac
+
+"
+        )
+        .as_bytes(),
+    );
+    body.extend_from_slice(audio);
+    body.extend_from_slice(
+        format!(
+            "
+--{boundary}--
+"
+        )
+        .as_bytes(),
+    );
+    body
+}
+
+/// Só o host do endpoint (sem esquema, caminho, consulta, porta nem credenciais).
+pub(super) fn host_of(endpoint: &str) -> Option<String> {
+    reqwest::Url::parse(endpoint)
+        .ok()?
+        .host_str()
+        .map(|h| h.trim_matches(['[', ']']).to_owned())
+}
+
 /// Cliente da API de transcrição. Não registra chave, áudio nem respostas.
+#[cfg(test)]
 pub(super) fn request(
     endpoint: &str,
     key: &str,
     audio: &[u8],
     cancel: &crate::provider::CancelToken,
     timeout: Duration,
+) -> Result<Vec<Word>, CoreError> {
+    request_audited(endpoint, key, audio, cancel, timeout, &mut None)
+}
+
+/// Como `request`, e guarda em `response_sha256` o SHA-256 do último corpo de resposta
+/// recebido (qualquer status), para a trilha de auditoria (#125).
+pub(super) fn request_audited(
+    endpoint: &str,
+    key: &str,
+    audio: &[u8],
+    cancel: &crate::provider::CancelToken,
+    timeout: Duration,
+    response_sha256: &mut Option<String>,
 ) -> Result<Vec<Word>, CoreError> {
     use std::sync::mpsc;
     if cancel.is_cancelled() {
@@ -270,18 +345,8 @@ pub(super) fn request(
             "O bloco de áudio excede o limite do Groq.",
         ));
     }
-    let boundary = "clipes-transcription-boundary";
-    let mut body = Vec::with_capacity(audio.len() + 1024);
-    for (name, value) in [
-        ("model", "whisper-large-v3-turbo"),
-        ("response_format", "verbose_json"),
-        ("timestamp_granularities[]", "word"),
-    ] {
-        body.extend_from_slice(format!("--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n").as_bytes());
-    }
-    body.extend_from_slice(format!("--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.flac\"\r\nContent-Type: audio/flac\r\n\r\n").as_bytes());
-    body.extend_from_slice(audio);
-    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    let boundary = BOUNDARY;
+    let body = multipart_body(audio);
     let client = reqwest::blocking::Client::builder()
         .timeout(timeout)
         .redirect(reqwest::redirect::Policy::none())
@@ -338,6 +403,7 @@ pub(super) fn request(
                 }
             }
         };
+        *response_sha256 = Some(crate::provider::cost::sha256_hex(&reply.2));
         match reply.0 {
             401 => return Err(error("groq_key", "Chave do Groq inválida.")),
             413 => {
