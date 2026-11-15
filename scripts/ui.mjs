@@ -564,6 +564,20 @@ try {
     await page.keyboard.press('a');
     await review.locator('[data-review-counts]').getByText(counts(1, 0, 2)).waitFor();
     assert.equal(await review.locator('[data-candidate="1"]').getAttribute('data-status'), 'approved');
+    // Empacotamento (#68): gerar no candidato aprovado, crédito do núcleo, contador e limite.
+    const pack = review.locator('[data-packaging]');
+    await pack.getByRole('button', { name: /Gerar título|Generate title/ }).click();
+    await pack.locator('[data-credit]').waitFor();
+    assert.match(await pack.locator('[data-credit]').innerText(), /Canal Exemplo/);
+    const packTitle = pack.getByLabel(/^(Título|Title)/);
+    assert.match(await packTitle.inputValue(), /Título gerado 1/);
+    await packTitle.fill('x'.repeat(101));
+    assert.equal(await pack.locator('[data-over="true"]').count(), 1, 'o contador marca o título acima do limite');
+    await pack.getByRole('button', { name: /Salvar edições|Save edits/ }).click();
+    await pack.getByRole('alert').waitFor();
+    await packTitle.fill('Meu título');
+    await pack.getByRole('button', { name: /Salvar edições|Save edits/ }).click();
+    await pack.getByRole('status').filter({ hasText: /salvas|saved/ }).waitFor();
     // ] e [ movem o começo e não abrem as gavetas globais dentro da revisão.
     await page.keyboard.press('[');
     await detail.getByText(L.start80).waitFor();
