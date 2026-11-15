@@ -23,6 +23,9 @@ jobs:
         shell: bash
         run: PYTHONPATH=benchmarks/transcricao python -m unittest discover -s benchmarks/transcricao/tests
       - run: cargo test --workspace
+      - name: TEMP #175 repetir o teste do worker
+        shell: bash
+        run: for i in $(seq 40); do cargo test -p clipes-core --test worker -- --test-threads 16 || exit 1; done
       - run: bun run typecheck
       - run: bun run build
       - name: Install browser dependencies (Linux)

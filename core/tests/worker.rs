@@ -268,7 +268,32 @@ fn install_uses_only_managed_python_and_status_reports_handshake_versions() {
     assert_eq!(result["handshake"]["protocol"], 1);
 
     // O uv foi chamado só com Python gerenciado, sem tocar no do sistema.
-    let log = fs::read_to_string(data.worker().join("uv-calls.log")).unwrap();
+    // DIAGNÓSTICO TEMPORÁRIO (#175)
+    let log = match fs::read_to_string(data.worker().join("uv-calls.log")) {
+        Ok(log) => log,
+        Err(e) => {
+            fn walk(dir: &Path, depth: usize, out: &mut String) {
+                if let Ok(rd) = fs::read_dir(dir) {
+                    for entry in rd.flatten() {
+                        out.push_str(&format!("{}{:?}\n", "  ".repeat(depth), entry.path()));
+                        if entry.path().is_dir() && depth < 4 {
+                            walk(&entry.path(), depth + 1, out);
+                        }
+                    }
+                }
+            }
+            let mut tree = String::new();
+            walk(data.root.path(), 0, &mut tree);
+            let env: Vec<_> = std::env::vars()
+                .filter(|(k, _)| k.starts_with("UV_") || k.starts_with("CLIPES_"))
+                .collect();
+            panic!(
+                "DIAG {e}\nroot={:?}\nenv={env:?}\nresult={result}\nevents={}\ntree:\n{tree}",
+                data.root.path(),
+                events.len()
+            );
+        }
+    };
     assert!(
         log.contains("ENV UV_PYTHON_PREFERENCE=only-managed"),
         "{log}"
