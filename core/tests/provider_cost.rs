@@ -18,6 +18,7 @@ impl Provider for Fake {
 
 fn request(transcript: &str, max: Option<u64>) -> StructuredRequest {
     StructuredRequest {
+        estimate_hint: Default::default(),
         instruction: "x".repeat(40),
         transcript: transcript.into(),
         schema: json!({"type":"object"}),
@@ -43,14 +44,17 @@ fn estimate_actual_and_project_record() {
     std::fs::create_dir_all(&root).unwrap();
     std::env::set_var("CLIPES_DATA_DIR", root.join("data"));
 
-    // Estimate: input from chars/4 (40 + 400 + `{"type":"object"}` = 17 chars -> 457 -> 115),
-    // output capped by maxOutputTokens. gpt-5: $1.25 in / $10 out per million.
+    // Input is an interval; output is capped by maxOutputTokens.
     let r = request(&"a".repeat(400), Some(1000));
-    assert_eq!(cost::estimate_input_tokens(&r), 115);
+    let high = cost::estimate_input_tokens(&r);
     let e = cost::estimate(&api("openai", "gpt-5", false), &r).unwrap();
     assert_eq!(e["kind"], "usd");
-    assert_eq!(e["minMicroUsd"], 144); // 115 * 1.25 = 143.75
-    assert_eq!(e["maxMicroUsd"], 10240); // conservative input range + 1000 * 10
+    assert!(e["inputTokensLow"].as_u64().unwrap() < high);
+    assert_eq!(e["inputTokensRange"]["max"], high);
+    assert_eq!(
+        e["maxMicroUsd"],
+        (high as f64 * 1.25).round() as u64 + 10000
+    );
     assert_eq!(e["priceSource"], "table");
     assert!(e["tableUpdatedAt"].is_string());
     // Without a ceiling there is no maximum (OpenAI sends no limit); Anthropic assumes 8192.

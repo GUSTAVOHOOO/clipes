@@ -58,6 +58,14 @@ fn ai_jobs_follow_the_cost_and_cancellation_rules() {
             .all(|e| !serde_json::to_string(e).unwrap().contains("segredo")));
     }
 
+    // Metadata from old data must never prevent a queued AI call.
+    for language in ["haw", "private-invalid-value"] {
+        let mut data = input("ok: metadata");
+        data.estimate_hint.language = language.into();
+        let id = jobs::enqueue_ai("example", &data, Safety::Paid).unwrap();
+        assert_eq!(wait_state(id, "completed")["outcome"], "ok");
+    }
+
     // invalid_json com resposta recebida: failed (não uncertain), usage preservado.
     let bad = enqueue("invalid: x", Safety::Paid);
     let job = wait_state(bad, "failed");

@@ -124,6 +124,7 @@ fn fake_replies(replies: Vec<&'static str>) -> (String, thread::JoinHandle<()>) 
 
 fn request() -> clipes_core::provider::StructuredRequest {
     clipes_core::provider::StructuredRequest {
+        estimate_hint: Default::default(),
         instruction: "Return data".into(),
         transcript: "untrusted".into(),
         schema: json!({"type":"object","required":["schemaVersion"],"properties":{"schemaVersion":{"const":1}}}),

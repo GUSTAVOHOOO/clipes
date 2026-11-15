@@ -62,6 +62,7 @@ inventory::submit! {
 
 pub fn input(transcript: &str) -> TaskInput {
     TaskInput {
+        estimate_hint: Default::default(),
         transcript: transcript.into(),
         context: json!({"ids": [1, 2, 3]}),
         native_schema: false,
