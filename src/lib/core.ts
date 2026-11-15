@@ -49,9 +49,13 @@ const assistantTasks = () => ({ projectLocalOnly: sourceTest && projectVetoMock,
     suggestion: !profile && firstLocal ? { choice: `profile:${firstLocal.id}`, label: firstLocal.label, measured: false } : null };
 }) });
 let groqKeyConfigured = false;
+let groqConsent = false;
 let providerCliMock = { selected: '', codexConfirmed: false, claudeConfirmed: false };
 export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   if (import.meta.env.VITE_CORE_MOCK === '1' && !isTauri()) {
+    if (name === 'transcription.groq.info') return {endpoint:'https://api.groq.com/openai/v1/audio/transcriptions',configured:groqKeyConfigured,confirmed:groqConsent,local_only:projectVetoMock} as T;
+    if (name === 'transcription.groq.estimate') return {kind:'usd',usd:0.00012,hourly_usd:0.04,checked:'2026-11-15',source:'https://console.groq.com/docs/speech-to-text'} as T;
+    if (name === 'transcription.groq.confirm') { groqConsent = true; return {confirmed:true} as T; }
     if (name === 'transcription.groq.key.status') return {configured:groqKeyConfigured} as T;
     if (name === 'transcription.groq.key.set') { groqKeyConfigured = true; return {configured:true} as T; }
     if (name === 'transcription.groq.key.remove') { groqKeyConfigured = false; return {configured:false} as T; }
@@ -163,7 +167,13 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (sourceTest && new URLSearchParams(location.search).has('transcript-test') && name === 'transcription.timeline') { const {offset, limit} = args as {offset:number; limit:number}; const total=30001; return {total, items:Array.from({length:Math.min(limit,total-offset)}, (_, n) => { const i=offset+n; return i===1 ? {type:'silence',start_us:1000000,end_us:2000000} : {type:'sentence',id:i===0?1:i,start_us:i*1000000,end_us:(i+1)*1000000,language:'pt',text:'Frase '+(i===0?1:i)}; })} as T; }
     if (sourceTest && new URLSearchParams(location.search).has('transcript-test') && name === 'transcription.status') return {transcript:{id:1,state:'complete',resume_us:36000000000,duration_us:36000000000,words:30000},job:null} as T;
     if (name === 'transcription.status') return { transcript: transcribeMock.transcript, job: transcribeMock.job } as T;
-    if (name === 'transcription.start') { transcribeMock = { transcript: { id: 1, state: 'running', resume_us: 4000000, duration_us: 10000000, words: 0 }, job: { id: 99, state: 'running', progress: 40 } }; return { transcript_id: 1, state: 'running', job_id: 99 } as T; }
+    if (name === 'transcription.start') {
+      const {engine = 'local', replace_confirmed} = args as {engine?:string;replace_confirmed?:boolean};
+      const previous = transcribeMock.transcript as {engine?:string;state?:string} | null;
+      if (previous && previous.engine !== engine && !replace_confirmed) throw {code:'engine_change_confirmation',usage:{blocks:1,paid_audio_us:previous.engine==='groq'?4e6:0,paid_usd:previous.engine==='groq'?0.00012:0}};
+      if (engine === 'groq' && !groqConsent) throw {code:'confirmation_required'};
+      transcribeMock = { transcript: { id: 1, engine, state: 'running', resume_us: 4000000, duration_us: 10000000, words: 0 }, job: { id: 99, state: 'running', progress: 40 } }; return { transcript_id: 1, state: 'running', job_id: 99 } as T;
+    }
     if (name === 'components.settings.get') return { data_dir: '/test/data', cache_dir: '/test/cache', cache_limit_bytes: 10000000000, ffmpeg_path: null } as T;
     throw new Error(`Unknown core command: ${name}`);
   }
