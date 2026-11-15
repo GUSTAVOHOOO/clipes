@@ -125,6 +125,10 @@ pub(crate) mod control;
 pub use adapters::{AnthropicProvider, GeminiProvider, OllamaProvider, OpenAiProvider};
 pub use control::{CancelToken, Timeouts};
 pub mod cost;
+fn token_calibration_diagnostic() -> String {
+    settings::calibration_status()
+}
+inventory::submit! { crate::diagnostic::DiagnosticField { kind: crate::diagnostic::DiagnosticKind::TokenCalibration, value: token_calibration_diagnostic } }
 pub use settings::run_structured;
 pub(crate) use settings::{profile_infos, routed, Routed};
 
@@ -141,8 +145,6 @@ mod settings {
     #[derive(Clone, Default, Serialize, Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct Settings {
-        #[serde(default)]
-        token_calibration: Vec<super::cost::Calibration>,
         /// Absent in files written before profiles existed (v1).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         schema_version: Option<u32>,
@@ -579,9 +581,67 @@ mod settings {
         }
         Ok(json!({"profileId": target}))
     }
+    #[derive(Default, Serialize, Deserialize)]
+    struct CalibrationFile {
+        version: u32,
+        entries: Vec<super::cost::Calibration>,
+    }
+    const CALIBRATION_VERSION: u32 = 1;
+    fn calibration_path() -> Result<PathBuf, CoreError> {
+        Ok(path()?.with_file_name("token-calibration.json"))
+    }
+    // None preserves an unreadable, malformed, or future-version file.
+    fn calibration_load() -> Option<CalibrationFile> {
+        let file = match fs::read(calibration_path().ok()?) {
+            Ok(bytes) => serde_json::from_slice::<CalibrationFile>(&bytes).ok()?,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Some(CalibrationFile {
+                    version: CALIBRATION_VERSION,
+                    entries: Vec::new(),
+                })
+            }
+            Err(_) => return None,
+        };
+        (file.version == CALIBRATION_VERSION
+            && file.entries.iter().all(|v| {
+                v.samples.len() <= super::cost::CALIBRATION_SAMPLES
+                    && v.samples.iter().all(|(chars, _)| *chars > 0)
+            }))
+        .then_some(file)
+    }
+    fn calibration_save(file: &CalibrationFile) -> Result<(), CoreError> {
+        use std::io::Write;
+        let target = calibration_path()?;
+        let parent = target
+            .parent()
+            .ok_or_else(|| error("settings", "Could not save token calibration"))?;
+        fs::create_dir_all(parent)
+            .map_err(|_| error("settings", "Could not save token calibration"))?;
+        let mut tmp = tempfile::NamedTempFile::new_in(parent)
+            .map_err(|_| error("settings", "Could not save token calibration"))?;
+        serde_json::to_writer(&mut tmp, file)
+            .map_err(|_| error("settings", "Could not save token calibration"))?;
+        tmp.flush()
+            .map_err(|_| error("settings", "Could not save token calibration"))?;
+        tmp.persist(&target)
+            .map_err(|_| error("settings", "Could not save token calibration"))?;
+        Ok(())
+    }
+    pub(crate) fn calibration_status() -> String {
+        let Ok(_guard) = locked() else {
+            return "indisponível".into();
+        };
+        match calibration_path() {
+            Ok(path) if !path.exists() => "sem calibração".into(),
+            _ if calibration_load().is_some() => "disponível".into(),
+            _ => "calibração indisponível ou inválida".into(),
+        }
+    }
     pub(crate) fn calibration_read() -> Result<Vec<super::cost::Calibration>, CoreError> {
-        let _guard = locked()?;
-        Ok(read()?.token_calibration)
+        let Ok(_guard) = locked() else {
+            return Ok(Vec::new());
+        };
+        Ok(calibration_load().map_or_else(Vec::new, |f| f.entries))
     }
     pub(crate) fn calibration_add(
         profile: &str,
@@ -591,32 +651,31 @@ mod settings {
         tokens: u64,
     ) -> Result<(), CoreError> {
         let _guard = locked()?;
-        let mut settings = read()?;
-        let entry = if let Some(i) = settings.token_calibration.iter().position(|v| {
+        let Some(mut file) = calibration_load() else {
+            return Ok(());
+        };
+        let entry = if let Some(i) = file.entries.iter().position(|v| {
             v.profile == profile
                 && v.model == model
                 && v.format == hint.format
                 && v.language == hint.language
         }) {
-            &mut settings.token_calibration[i]
+            &mut file.entries[i]
         } else {
-            settings.token_calibration.push(super::cost::Calibration {
+            file.entries.push(super::cost::Calibration {
                 profile: profile.into(),
                 model: model.into(),
                 format: hint.format.clone(),
                 language: hint.language.clone(),
                 samples: Vec::new(),
             });
-            settings
-                .token_calibration
-                .last_mut()
-                .expect("just inserted")
+            file.entries.last_mut().expect("just inserted")
         };
         entry.samples.push((chars, tokens));
         if entry.samples.len() > super::cost::CALIBRATION_SAMPLES {
             entry.samples.remove(0);
         }
-        write(&settings)
+        calibration_save(&file)
     }
     fn profile_remove(args: Value, _: &mut EventSink<'_>) -> CommandResult {
         let id = args
@@ -642,10 +701,11 @@ mod settings {
             settings.providers.remove(&account);
         }
         store(&mut settings, list);
-        settings
-            .token_calibration
-            .retain(|entry| entry.profile != id);
         write(&settings)?;
+        if let Some(mut file) = calibration_load() {
+            file.entries.retain(|entry| entry.profile != id);
+            let _ = calibration_save(&file);
+        }
         Ok(json!({}))
     }
     fn key_set(args: Value, _: &mut EventSink<'_>) -> CommandResult {

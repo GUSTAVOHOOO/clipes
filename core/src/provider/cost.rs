@@ -7,8 +7,6 @@ use std::{fs, path::PathBuf, sync::Mutex};
 
 /// Anthropic requires a limit; this mirrors the adapter default.
 const ANTHROPIC_DEFAULT_MAX_OUTPUT_TOKENS: u64 = 8192;
-/// Input tokens are estimated as one token per 4 characters, rounded up.
-pub const CHARS_PER_TOKEN: u64 = 4;
 const EMBEDDED: &str = include_str!("prices.json");
 static LOCK: Mutex<()> = Mutex::new(());
 

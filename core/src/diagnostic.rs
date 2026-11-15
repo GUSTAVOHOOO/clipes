@@ -14,6 +14,7 @@ pub enum DiagnosticKind {
     Encoder,
     TranscriptionEngine,
     Provider,
+    TokenCalibration,
 }
 impl DiagnosticKind {
     fn label(self) -> &'static str {
@@ -23,6 +24,7 @@ impl DiagnosticKind {
             Self::Encoder => "Encoder",
             Self::TranscriptionEngine => "Motor de transcrição",
             Self::Provider => "Provedor",
+            Self::TokenCalibration => "Calibração de tokens",
         }
     }
 }
@@ -107,6 +109,7 @@ fn get(_: Value, _: &mut EventSink<'_>) -> CommandResult {
         DiagnosticKind::Encoder,
         DiagnosticKind::TranscriptionEngine,
         DiagnosticKind::Provider,
+        DiagnosticKind::TokenCalibration,
     ] {
         let value = inventory::iter::<DiagnosticField>
             .into_iter()

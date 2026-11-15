@@ -16,10 +16,13 @@ fn token_estimates_have_conservative_ranges_and_are_profile_specific() {
     let root = std::env::temp_dir().join(format!("clipes-estimator-{}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();
     std::env::set_var("CLIPES_DATA_DIR", &root);
+    let legacy = br#"{"endpoint":"http://localhost","model":"legacy"}"#;
+    std::fs::write(root.join("provider.json"), legacy).unwrap();
     let r = request(&"a".repeat(1000), Some(100));
     let before = cost::token_range("first", "model", &r).unwrap();
     assert!(before.low < before.high);
     cost::observe_tokens("first", "model", &r, 600, "ok").unwrap();
+    assert_eq!(std::fs::read(root.join("provider.json")).unwrap(), legacy);
     let after = cost::token_range("first", "model", &r).unwrap();
     assert!(after.high > before.high);
     assert_eq!(cost::token_range("second", "model", &r).unwrap(), before);
@@ -43,12 +46,17 @@ fn token_estimates_have_conservative_ranges_and_are_profile_specific() {
     r.estimate_hint.language = "en".into();
     assert_ne!(cost::token_range("p", "m", &r).unwrap(), before);
     let settings: serde_json::Value =
-        serde_json::from_slice(&std::fs::read(root.join("provider.json")).unwrap()).unwrap();
+        serde_json::from_slice(&std::fs::read(root.join("token-calibration.json")).unwrap())
+            .unwrap();
+    assert_eq!(settings["version"], 1);
     assert_eq!(
-        settings["tokenCalibration"][0]["samples"]
-            .as_array()
-            .unwrap()
-            .len(),
+        settings["entries"][0]["samples"].as_array().unwrap().len(),
         20
     );
+    let path = root.join("token-calibration.json");
+    std::fs::write(&path, b"invalid").unwrap();
+    let no_calibration = cost::token_range("p", "m", &r).unwrap();
+    cost::observe_tokens("p", "m", &r, chars / 2, "ok").unwrap();
+    assert_eq!(std::fs::read(&path).unwrap(), b"invalid");
+    assert_eq!(cost::token_range("p", "m", &r).unwrap(), no_calibration);
 }
