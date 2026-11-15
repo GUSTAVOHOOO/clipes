@@ -384,6 +384,7 @@ pub fn run_with(
         };
         commit(id, transcript, resume, len, final_block, duration_us, block)?;
     }
+    crate::sentences::segment_transcript(transcript)?;
     Ok(())
 }
 
