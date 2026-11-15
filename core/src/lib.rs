@@ -60,6 +60,7 @@ pub mod ai_task;
 mod assistant;
 mod audit;
 mod components;
+pub mod corrections;
 pub mod jobs;
 pub mod process;
 pub mod projects;

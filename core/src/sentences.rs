@@ -101,6 +101,15 @@ fn language_of(words: &[WordRow]) -> Option<String> {
     best.map(|(l, _)| l.to_owned())
 }
 
+/// Texto de uma Frase a partir do texto das suas palavras (aparado, sem vazios, com um espaço).
+pub(crate) fn join_text<'a>(words: impl Iterator<Item = &'a str>) -> String {
+    words
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Segmenta as palavras (em ordem de posição) em Frases com IDs 1, 2, 3…
 pub fn segment(words: &[WordRow]) -> Vec<Sentence> {
     let mut ranges: Vec<(usize, usize)> = Vec::new();
@@ -124,12 +133,7 @@ pub fn segment(words: &[WordRow]) -> Vec<Sentence> {
                 start_us: slice[0].start_us,
                 end_us: slice[slice.len() - 1].end_us,
                 language: language_of(slice),
-                text: slice
-                    .iter()
-                    .map(|w| w.text.trim())
-                    .filter(|t| !t.is_empty())
-                    .collect::<Vec<_>>()
-                    .join(" "),
+                text: join_text(slice.iter().map(|w| w.text.as_str())),
             }
         })
         .collect()
@@ -161,7 +165,22 @@ pub(crate) fn segment_transcript(transcript: i64) -> Result<(usize, bool), CoreE
             })?;
             rows.collect::<rusqlite::Result<Vec<_>>>()?
         };
-        let computed = segment(&words);
+        // Fronteiras e IDs vêm só do texto original do Motor e dos tempos (estáveis por
+        // contrato); o texto de cada Frase vem do texto efetivo (com as correções, #52).
+        let mut computed = segment(&words);
+        let effective = {
+            let mut q = tx.prepare(&format!(
+                "SELECT {} FROM transcript_words WHERE transcript_id=?1 AND kind='word' ORDER BY position",
+                crate::corrections::EFFECTIVE_TEXT
+            ))?;
+            let rows = q.query_map([transcript], |r| r.get::<_, String>(0))?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        for sentence in &mut computed {
+            let first = words.partition_point(|w| w.position < sentence.first_position);
+            let last = words.partition_point(|w| w.position <= sentence.last_position);
+            sentence.text = join_text(effective[first..last].iter().map(String::as_str));
+        }
         let stored = load(&tx, transcript)?;
         let changed = stored != computed;
         if changed {
@@ -212,7 +231,7 @@ fn load(conn: &rusqlite::Connection, transcript: i64) -> rusqlite::Result<Vec<Se
     rows.collect()
 }
 
-fn source_transcript(v: &Value) -> Result<i64, CoreError> {
+pub(crate) fn source_transcript(v: &Value) -> Result<i64, CoreError> {
     let source = v["source_id"]
         .as_i64()
         .ok_or_else(|| error("source_missing", "Fonte não encontrada"))?;
@@ -274,9 +293,67 @@ fn timeline_command(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                 json!({"type": "silence", "start_us": r.get::<_, i64>(2)?, "end_us": r.get::<_, i64>(3)?})
             })
         })?;
-        let items = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        let mut items = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        attach_words(c, transcript, &mut items)?;
         Ok(json!({"total": total, "offset": offset, "items": items}))
     })
+}
+
+/// Acrescenta a cada Frase da página `first_position`, `last_position` e `words`
+/// (`position`, `text` efetivo, `corrected`), para a UI focar e corrigir palavra a palavra.
+fn attach_words(
+    c: &rusqlite::Connection,
+    transcript: i64,
+    items: &mut [Value],
+) -> rusqlite::Result<()> {
+    let ids: Vec<i64> = items.iter().filter_map(|i| i["id"].as_i64()).collect();
+    let (Some(min), Some(max)) = (ids.iter().min(), ids.iter().max()) else {
+        return Ok(());
+    };
+    let mut q = c.prepare(
+        "SELECT id, first_position, last_position FROM sentences WHERE transcript_id=?1 AND id BETWEEN ?2 AND ?3",
+    )?;
+    let ranges = q
+        .query_map((transcript, min, max), |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, i64>(1)?,
+                r.get::<_, i64>(2)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let low = ranges.iter().map(|r| r.1).min().unwrap_or(0);
+    let high = ranges.iter().map(|r| r.2).max().unwrap_or(-1);
+    let mut q = c.prepare(&format!(
+        "SELECT position, {}, corrected_text IS NOT NULL FROM transcript_words WHERE transcript_id=?1 AND kind='word' AND position BETWEEN ?2 AND ?3 ORDER BY position",
+        crate::corrections::EFFECTIVE_TEXT
+    ))?;
+    let words = q
+        .query_map((transcript, low, high), |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, bool>(2)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for item in items.iter_mut() {
+        let Some(id) = item["id"].as_i64() else {
+            continue;
+        };
+        let Some(&(_, first, last)) = ranges.iter().find(|r| r.0 == id) else {
+            continue;
+        };
+        let from = words.partition_point(|w| w.0 < first);
+        let to = words.partition_point(|w| w.0 <= last);
+        item["first_position"] = json!(first);
+        item["last_position"] = json!(last);
+        item["words"] = words[from..to]
+            .iter()
+            .map(|(p, t, c)| json!({"position": p, "text": t.trim(), "corrected": c}))
+            .collect();
+    }
+    Ok(())
 }
 
 inventory::submit! { CommandRegistration { name: "transcription.segment", execute: segment_command } }
