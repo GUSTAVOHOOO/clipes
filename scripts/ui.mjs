@@ -87,6 +87,22 @@ try {
   await modelDialog.getByRole('button', { name: 'Cancelar' }).click();
   await modelDialog.waitFor({ state: 'hidden' });
 
+  const hardwareCard = page.getByRole('region', { name: 'Hardware da transcrição' });
+  const hardwareText = await hardwareCard.innerText();
+  assert.match(hardwareText, /NVIDIA GeForce RTX 3050 Laptop GPU/);
+  assert.match(hardwareText, /VRAM livre 3962 MiB de 4096 MiB/);
+  assert.match(hardwareText, /Em uso: Whisper large-v3-turbo · GPU · int8_float16 \(automática\)/);
+  assert.equal(await hardwareCard.getByText('Sem GPU compatível, a Transcrição pode demorar.').count(), 0);
+  await hardwareCard.getByLabel('Configuração').selectOption({ label: 'Whisper large-v3-turbo · GPU · float16' });
+  await hardwareCard.getByText(/Em uso: Whisper large-v3-turbo · GPU · float16 \(escolha manual\)/).waitFor();
+  await hardwareCard.getByLabel('Configuração').selectOption({ label: 'Whisper large-v3-turbo · CPU · int8' });
+  await hardwareCard.getByText(/bem mais lento que o Whisper small/).waitFor();
+  await page.screenshot({ path: 'shots/hardware.png', fullPage: true });
+  await hardwareCard.getByRole('button', { name: 'Voltar ao automático' }).click();
+  await hardwareCard.getByText(/\(automática\)/).waitFor();
+  await hardwareCard.getByRole('button', { name: 'Medir hardware' }).click();
+  await hardwareCard.getByText('Medição concluída.').waitFor();
+
   page.once('dialog', dialog => dialog.dismiss());
   await page.getByRole('button', { name: 'Baixar' }).first().click();
   await page.screenshot({ path: 'shots/components.png' });
@@ -326,6 +342,10 @@ try {
   await page.getByText('/test/downloaded.mp4').first().waitFor();
   assert.equal(await terms.count(), 0);
   const downloadedRow = page.locator('li').filter({hasText:'/test/downloaded.mp4'}).first();
+  await downloadedRow.getByRole('button', {name:'Estimar tempo'}).click();
+  await downloadedRow.getByText(/Estimativa: cerca de 3 h 52 min/).waitFor();
+  assert.match(await downloadedRow.innerText(), /É uma estimativa, não uma garantia/);
+  assert.equal(await downloadedRow.getByText('Sem GPU compatível, a Transcrição pode demorar.').count(), 0);
   await downloadedRow.getByRole('button', {name:'Transcrever'}).click();
   await downloadedRow.getByText('Transcrevendo: 40%').waitFor();
   await downloadedRow.getByRole('button', {name:'Cancelar transcrição'}).click();
@@ -527,6 +547,15 @@ try {
   await retryAudio.getByRole('button',{name:'Confirmar e transcrever'}).click();
   await retryAudio.waitFor({state:'hidden'});
   await uncertainAudio.getByText('Transcrevendo: 40%').waitFor();
+  await page.goto(`${url}?source-test=1&hardware-cpu=1`);
+  const cpuRow = page.locator('li').filter({hasText:'/test/downloaded.mp4'}).first();
+  await cpuRow.getByText('Sem GPU compatível, a Transcrição pode demorar.').waitFor();
+  await cpuRow.getByRole('button',{name:'Estimar tempo'}).click();
+  await cpuRow.getByText(/Estimativa: cerca de 25 h 42 min \(entre 17 h 59 min e 38 h 33 min\)/).waitFor();
+  assert.match(await cpuRow.innerText(), /Whisper small · CPU · int8/);
+  await page.screenshot({path:'shots/estimate-cpu.png',fullPage:true});
+  await cpuRow.getByRole('button',{name:'Usar o Motor Groq'}).click();
+  assert.equal(await cpuRow.getByLabel('Motor de transcrição').inputValue(), 'groq');
   assert.deepEqual(errors, []);
   console.log('UI keyboard, preferences, about, drawer and screenshots: OK');
 } finally { await browser?.close(); server.kill(); }

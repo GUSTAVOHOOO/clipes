@@ -30,6 +30,10 @@ use std::{
 // fora da v1). Tempos em µs inteiros.
 inventory::submit! { projects::Migration { id: "0048_001_transcripts", sql: "CREATE TABLE transcripts (id INTEGER PRIMARY KEY, source_id INTEGER NOT NULL REFERENCES sources(id), audio_track INTEGER NOT NULL, engine TEXT NOT NULL, model TEXT NOT NULL, revision TEXT NOT NULL, compute_type TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'running' CHECK(state IN ('running','complete')), resume_us INTEGER NOT NULL DEFAULT 0, duration_us INTEGER NOT NULL, UNIQUE(source_id, audio_track)); CREATE TABLE transcript_words (transcript_id INTEGER NOT NULL REFERENCES transcripts(id) ON DELETE CASCADE, position INTEGER NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('word','silence')), text TEXT NOT NULL DEFAULT '', start_us INTEGER NOT NULL, end_us INTEGER NOT NULL, language TEXT, speaker TEXT, PRIMARY KEY (transcript_id, position)) WITHOUT ROWID; CREATE INDEX transcript_words_by_time ON transcript_words(transcript_id, start_us);" } }
 
+// Dispositivo e precisão de cada bloco (#50): podem mudar entre blocos (queda da cadeia, nova
+// sonda); o modelo da Transcrição não.
+inventory::submit! { projects::Migration { id: "0050_001_transcription_block_config", sql: "CREATE TABLE transcription_block_config (transcript_id INTEGER NOT NULL REFERENCES transcripts(id) ON DELETE CASCADE, start_us INTEGER NOT NULL, device TEXT NOT NULL, compute_type TEXT NOT NULL, PRIMARY KEY(transcript_id,start_us)) WITHOUT ROWID;" } }
+
 /// Duração de cada bloco de áudio. `CLIPES_TRANSCRIBE_BLOCK_SECONDS` existe só para os testes.
 const BLOCK_US: i64 = 600_000_000;
 fn block_us() -> i64 {
@@ -90,6 +94,10 @@ pub struct BlockRequest<'a> {
 pub trait TranscriptionEngine {
     /// Contexto do checkpoint; não é enviado ao serviço remoto.
     fn prepare(&mut self, _job: i64, _transcript: i64, _resume_us: i64) {}
+    /// Dispositivo e precisão usados no último bloco (dado técnico gravado por bloco; só o Motor local informa).
+    fn block_config(&self) -> Option<(String, String)> {
+        None
+    }
     fn transcribe_block(
         &mut self,
         request: &BlockRequest<'_>,
@@ -103,6 +111,8 @@ pub struct LocalEngine {
     client: WorkerClient,
     model: Value,
     batch_size: u32,
+    /// O modelo da Transcrição: nunca muda; a precisão e o dispositivo podem mudar entre blocos.
+    model_id: String,
 }
 
 impl LocalEngine {
@@ -111,34 +121,48 @@ impl LocalEngine {
     pub fn with_worker(client: WorkerClient, model: Value, batch_size: u32) -> Self {
         LocalEngine {
             client,
+            model_id: model["id"].as_str().unwrap_or_default().to_owned(),
             model,
             batch_size,
         }
     }
 
-    pub fn start() -> Result<Self, CoreError> {
-        let selection = models::selection()?;
+    /// Inicia o Motor para o `model_id` já gravado na Transcrição.
+    pub fn start_for(model_id: &str) -> Result<Self, CoreError> {
+        let selection = models::selection_for(model_id)?;
         let client = start_worker()?;
         Ok(LocalEngine {
             client,
             model: json!({
                 "id": selection.spec.id,
                 "dir": selection.dir,
-                "device": selection.spec.device,
-                "compute_type": selection.spec.compute_type,
+                "device": selection.config.device,
+                "compute_type": selection.config.compute_type,
             }),
-            batch_size: selection.spec.batch_size,
+            batch_size: selection.config.batch_size(),
+            model_id: model_id.to_owned(),
         })
     }
 }
 
 impl TranscriptionEngine for LocalEngine {
+    fn block_config(&self) -> Option<(String, String)> {
+        Some((
+            self.model["device"].as_str()?.to_owned(),
+            self.model["compute_type"].as_str()?.to_owned(),
+        ))
+    }
     fn transcribe_block(
         &mut self,
         request: &BlockRequest<'_>,
         cancel: &AtomicBool,
         progress: &mut dyn FnMut(u8),
     ) -> Result<BlockResult, CoreError> {
+        // A precisão e o dispositivo valem para este bloco: uma nova sonda ou escolha manual entra aqui.
+        if let Ok(selection) = models::selection_for(&self.model_id) {
+            self.model = json!({"id": selection.spec.id, "dir": selection.dir, "device": selection.config.device, "compute_type": selection.config.compute_type});
+            self.batch_size = selection.config.batch_size();
+        }
         let params = json!({
             "audio": request.audio,
             "final": request.final_block,
@@ -208,6 +232,15 @@ fn extract(
     id: i64,
     stop: &AtomicBool,
 ) -> Result<(), CoreError> {
+    extract_checked(ffmpeg, slice, output, &|| preview::check(id, stop))
+}
+
+fn extract_checked(
+    ffmpeg: &Path,
+    slice: &Slice<'_>,
+    output: &Path,
+    check: &dyn Fn() -> Result<(), CoreError>,
+) -> Result<(), CoreError> {
     let Slice {
         source,
         track,
@@ -267,7 +300,7 @@ fn extract(
     })
     .collect();
     let result = loop {
-        if let Err(e) = preview::check(id, stop) {
+        if let Err(e) = check() {
             group.terminate();
             let _ = child.wait();
             break Err(e);
@@ -295,15 +328,15 @@ pub(crate) fn run(
     stop: &AtomicBool,
 ) -> Result<(), CoreError> {
     preview::check(id, stop)?;
-    let engine = projects::with_reader(|c| {
+    let (engine, model) = projects::with_reader(|c| {
         c.query_row(
-        "SELECT t.engine FROM transcripts t JOIN sources s ON t.source_id=s.id AND t.audio_track=s.audio_track WHERE s.id=?1",[source_id],|r|r.get::<_,String>(0))
+        "SELECT t.engine,t.model FROM transcripts t JOIN sources s ON t.source_id=s.id AND t.audio_track=s.audio_track WHERE s.id=?1",[source_id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))
     })?;
     if engine == "groq" {
         let mut engine = groq::GroqEngine::start()?;
         run_with(&mut engine, id, source_id, project, stop)
     } else if engine == "local" {
-        let mut engine = LocalEngine::start()?;
+        let mut engine = LocalEngine::start_for(&model)?;
         run_with(&mut engine, id, source_id, project, stop)
     } else {
         Err(error("invalid_engine", "Motor de transcrição inválido."))
@@ -406,7 +439,13 @@ pub fn run_with(
             }
             other => other?,
         };
-        commit(id, transcript, resume, len, final_block, duration_us, block)?;
+        let config = engine.block_config();
+        let step = Step {
+            resume,
+            len,
+            final_block,
+        };
+        commit(id, transcript, step, duration_us, block, config)?;
     }
     crate::sentences::segment_transcript(transcript)?;
     Ok(())
@@ -414,15 +453,26 @@ pub fn run_with(
 
 /// Grava as linhas do bloco, o novo ponto de retomada e o checkpoint do job numa só
 /// transação: ou o bloco inteiro vale, ou nada vale.
-fn commit(
-    job: i64,
-    transcript: i64,
+/// Onde o bloco começa, quanto mede e se é o último da Fonte.
+struct Step {
     resume: i64,
     len: i64,
     final_block: bool,
+}
+
+fn commit(
+    job: i64,
+    transcript: i64,
+    step: Step,
     duration_us: i64,
     block: BlockResult,
+    config: Option<(String, String)>,
 ) -> Result<(), CoreError> {
+    let Step {
+        resume,
+        len,
+        final_block,
+    } = step;
     if block.covered_us == 0 && !final_block {
         return Err(bad_result());
     }
@@ -456,6 +506,9 @@ fn commit(
     projects::with_writer(|conn| {
         let tx = conn.transaction()?;
         tx.execute("INSERT OR REPLACE INTO transcription_blocks(transcript_id,start_us,end_us) VALUES (?1,?2,?3)",(transcript,resume,next))?;
+        if let Some((device, compute_type)) = &config {
+            tx.execute("INSERT OR REPLACE INTO transcription_block_config(transcript_id,start_us,device,compute_type) VALUES (?1,?2,?3,?4)", (transcript, resume, device, compute_type))?;
+        }
         tx.execute("UPDATE transcription_calls SET state='completed' WHERE transcript_id=?1 AND job_id=?2 AND start_us=?3 AND state='pending'",(transcript,job,resume))?;
         let mut position: i64 = tx.query_row(
             "SELECT COALESCE(MAX(position)+1, 0) FROM transcript_words WHERE transcript_id=?1",
@@ -501,7 +554,13 @@ fn commit(
             "UPDATE jobs SET checkpoint=?2, progress=?3 WHERE id=?1 AND state='running'",
             (
                 job,
-                json!({"resume_us": next}).to_string(),
+                match &config {
+                    Some((device, compute_type)) => {
+                        json!({"resume_us": next, "device": device, "compute_type": compute_type})
+                    }
+                    None => json!({"resume_us": next}),
+                }
+                .to_string(),
                 (next * 100 / duration_us.max(1)).clamp(0, 99),
             ),
         )?;
@@ -537,13 +596,14 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         preview::source(source, Path::new(v["project"].as_str().unwrap_or_default()))?;
     let existing = projects::with_reader(|c| {
         c.query_row(
-            "SELECT id,state,engine FROM transcripts WHERE source_id=?1 AND audio_track=?2",
+            "SELECT id,state,engine,model FROM transcripts WHERE source_id=?1 AND audio_track=?2",
             (source, track),
             |r| {
                 Ok((
                     r.get::<_, i64>(0)?,
                     r.get::<_, String>(1)?,
                     r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
                 ))
             },
         )
@@ -557,8 +617,16 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     if !matches!(engine, "local" | "groq") {
         return Err(error("invalid_engine", "Motor de transcrição inválido."));
     }
-    let switching = existing.as_ref().is_some_and(|t| t.2 != engine);
-    if switching && existing.as_ref().is_some_and(|t| t.1 == "complete") {
+    let engine_switch = existing.as_ref().is_some_and(|t| t.2 != engine);
+    // Escolha manual de outro modelo (#50): o modelo da Transcrição nunca muda sozinho; só a
+    // troca manual de uma parcial, com confirmação, recomeça do zero. Numa completa a troca
+    // vale só para uma retranscrição futura e não mexe na atual.
+    let model_switch = engine == "local"
+        && existing.as_ref().is_some_and(|t| t.2 == "local")
+        && crate::components::hardware::manual_model()
+            .is_some_and(|m| existing.as_ref().is_some_and(|t| t.3 != m));
+    let switching = engine_switch || model_switch;
+    if engine_switch && existing.as_ref().is_some_and(|t| t.1 == "complete") {
         return Err(error(
             "transcript_complete",
             "Uma Transcrição completa não permite trocar o Motor.",
@@ -591,12 +659,12 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     if switching && v["replace_confirmed"] != true {
         let mut e = error(
             "engine_change_confirmation",
-            "Trocar o Motor apaga a Transcrição parcial.",
+            "Trocar o Motor ou o modelo apaga a Transcrição parcial.",
         );
         e.usage = Some(loss(existing.as_ref().unwrap().0)?);
         return Err(e);
     }
-    if let Some((transcript, _, _)) = existing
+    if let Some((transcript, _, _, _)) = existing
         .as_ref()
         .filter(|_| !switching && active.is_none() && v["retry_confirmed"] != true)
     {
@@ -633,7 +701,7 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         (
             selection.spec.id,
             selection.spec.revision,
-            selection.spec.compute_type,
+            selection.config.compute_type.as_str(),
         )
     } else {
         (groq::MODEL, "", "remote")
@@ -663,7 +731,12 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         tx.commit()?;
         Ok((transcript, state, job))
     })?;
-    Ok(json!({"transcript_id": transcript, "state": state, "job_id": job}))
+    let warnings = if engine == "local" {
+        crate::components::hardware::current_start_warnings()
+    } else {
+        Vec::new()
+    };
+    Ok(json!({"transcript_id": transcript, "state": state, "job_id": job, "warnings": warnings}))
 }
 
 fn loss(transcript: i64) -> Result<Value, CoreError> {
@@ -696,6 +769,20 @@ fn status(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     })
 }
 
+/// `transcription.blocks`: dispositivo e precisão de cada bloco concluído, para o diagnóstico
+/// explicar diferenças entre blocos. Dado técnico, sem texto.
+fn blocks(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let source = source_id(&v)?;
+    projects::with_reader(|c| {
+        let mut q = c.prepare("SELECT b.start_us,b.end_us,k.device,k.compute_type FROM transcription_blocks b JOIN transcripts t ON t.id=b.transcript_id LEFT JOIN transcription_block_config k ON k.transcript_id=b.transcript_id AND k.start_us=b.start_us WHERE t.source_id=?1 ORDER BY b.start_us")?;
+        let rows = q.query_map([source], |r| {
+            Ok(json!({"start_us": r.get::<_, i64>(0)?, "end_us": r.get::<_, i64>(1)?, "device": r.get::<_, Option<String>>(2)?, "compute_type": r.get::<_, Option<String>>(3)?}))
+        })?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+    })
+    .map(Value::from)
+}
+
 /// `transcription.words`: linhas (palavras e silêncios) da Fonte que tocam o intervalo.
 fn words(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let source = source_id(&v)?;
@@ -717,10 +804,12 @@ fn words(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 inventory::submit! { CommandRegistration { name: "transcription.start", execute: start } }
 inventory::submit! { CommandRegistration { name: "transcription.status", execute: status } }
 inventory::submit! { CommandRegistration { name: "transcription.words", execute: words } }
+inventory::submit! { CommandRegistration { name: "transcription.blocks", execute: blocks } }
 
 #[cfg(test)]
 mod groq_tests;
 
+mod estimate;
 mod groq;
 pub use groq::GroqEngine;
 

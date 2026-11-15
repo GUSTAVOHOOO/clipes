@@ -31,6 +31,18 @@ const FILES: &[(&str, &[u8])] = &[
         include_bytes!("../../../worker/src/clipes_worker/__main__.py"),
     ),
     (
+        "src/clipes_worker/hardware_probe.py",
+        include_bytes!("../../../worker/src/clipes_worker/hardware_probe.py"),
+    ),
+    (
+        "src/clipes_worker/data/probe-pt.wav",
+        include_bytes!("../../../worker/src/clipes_worker/data/probe-pt.wav"),
+    ),
+    (
+        "src/clipes_worker/data/probe-en.wav",
+        include_bytes!("../../../worker/src/clipes_worker/data/probe-en.wav"),
+    ),
+    (
         "src/clipes_worker/models.py",
         include_bytes!("../../../worker/src/clipes_worker/models.py"),
     ),
@@ -129,9 +141,13 @@ pub(super) fn cuda_installed(settings: &Settings) -> bool {
 
 /// Há GPU NVIDIA? Sem ela, o worker usa só a variante CPU (sem libs CUDA).
 fn has_nvidia_gpu() -> bool {
-    crate::process::spawn("nvidia-smi", ["-L"], None)
-        .and_then(|child| child.wait_with_output())
-        .is_ok_and(|o| o.status.success() && String::from_utf8_lossy(&o.stdout).contains("GPU "))
+    crate::process::spawn(
+        std::env::var_os("CLIPES_NVIDIA_SMI").unwrap_or_else(|| "nvidia-smi".into()),
+        ["-L"],
+        None,
+    )
+    .and_then(|child| child.wait_with_output())
+    .is_ok_and(|o| o.status.success() && String::from_utf8_lossy(&o.stdout).contains("GPU "))
 }
 
 /// Variáveis que mantêm o `uv` no ambiente do Clipes e fora do Python do sistema.
@@ -524,6 +540,18 @@ mod tests {
                     "{key} ausente de FILES"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn embedded_files_cover_the_probe_clip() {
+        let data = Path::new(env!("CARGO_MANIFEST_DIR")).join("../worker/src/clipes_worker/data");
+        for entry in fs::read_dir(data).unwrap() {
+            let name = entry.unwrap().file_name().to_string_lossy().into_owned();
+            let key = format!("src/clipes_worker/data/{name}");
+            let embedded = FILES.iter().find(|(n, _)| *n == key);
+            assert!(embedded.is_some(), "{key} ausente de FILES");
+            assert_eq!(&embedded.unwrap().1[..4], b"RIFF", "{key} corrompido");
         }
     }
 

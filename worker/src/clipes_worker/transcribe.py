@@ -25,7 +25,7 @@ VAD_MIN_SILENCE_MS = 200
 VAD_MAX_SPEECH_S = 30
 BEAM_SIZE = 5
 DEVICES = ("cuda", "cpu")
-COMPUTE_TYPES = ("int8_float16", "int8")
+COMPUTE_TYPES = ("int8_float16", "float16", "int8")
 
 
 def read_wav(path):
@@ -97,9 +97,9 @@ class Transcriber:
     devolve palavras `(texto, início_s, fim_s)` relativas ao trecho.
     """
 
-    def __init__(self, speech_spans, detect_language, transcribe, close=None):
+    def __init__(self, speech_spans, detect_language, transcribe, close=None, clip=None):
         self._spans, self._language, self._transcribe = speech_spans, detect_language, transcribe
-        self._close = close
+        self._close, self.clip = close, clip
 
     def close(self):
         if self._close:
@@ -153,9 +153,13 @@ def load_faster_whisper(model_dir, device, compute_type):
     def detect_language(chunk):
         return model.detect_language(audio=chunk)[0]
 
-    return Transcriber(
-        speech_spans, detect_language, transcribe
-    )
+    def clip(batch_size):
+        # Só a sonda de hardware (#50) usa o clipe embutido; a Transcrição real não passa por aqui.
+        from .hardware_probe import clip_parts, run_clip
+
+        return run_clip(pipeline, clip_parts(), batch_size)
+
+    return Transcriber(speech_spans, detect_language, transcribe, clip=clip)
 
 
 def _check_params(params):
@@ -186,7 +190,7 @@ def transcribe_task(loader=load_faster_whisper, reader=read_wav):
 
     def resolve(params):
         model_id, directory, device, compute_type = _check_params(params)
-        return f"faster-whisper:{model_id}", lambda: loader(directory, device, compute_type)
+        return f"faster-whisper:{model_id}:{device}:{compute_type}", lambda: loader(directory, device, compute_type)
 
     def run(transcriber, params, ctx):
         return transcriber.block(reader(params["audio"]), params["final"], params["batch_size"], ctx)

@@ -51,6 +51,11 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Causa:** a execução já tinha compilado a biblioteca anterior ao merge e depois compilou o teste novo; a árvore mudou durante o comando.
 - **Ação:** finalize o merge antes de executar a verificação e repita o comando com a árvore estável. Não altere o Provedor para contornar o resultado da execução antiga.
 
+### Arquivo binário em `worker/` corrompido no commit
+- **Sintoma:** um `.wav` (ou outro binário) novo em `worker/` entra no commit com tamanho diferente do original; o teste que confere o cabeçalho `RIFF` ou o hash falha.
+- **Causa:** `.gitattributes` marca `worker/** text eol=lf`, e o Git converte CRLF dentro do binário.
+- **Ação:** acrescente uma regra `binary` específica depois da regra geral (já existe para `worker/src/clipes_worker/data/*.wav`) e confira com `git show :caminho | wc -c`.
+
 ### Tickets da mesma onda mexendo nos mesmos arquivos da raiz
 - **Ação:** faça o merge de um PR e mande o outro worker fazer rebase em `origin/master` antes de abrir (ou atualizar) o PR. Nada de push forçado em branch alheia.
 
