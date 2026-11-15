@@ -520,7 +520,8 @@ mod settings {
             None => {}
         }
         let context = match args.get("context") {
-            None | Some(Value::Null) => None,
+            None => existing.and_then(|i| list[i].context),
+            Some(Value::Null) => None,
             Some(value) => Some(
                 value
                     .as_u64()

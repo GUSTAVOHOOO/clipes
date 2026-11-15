@@ -101,6 +101,24 @@ fn files_in_the_old_format_keep_working_and_are_not_rewritten() {
     let list = run("provider.profiles.list", json!({})).unwrap();
     assert_eq!(profile(&list, "ollama")["kind"], "ollama");
     assert_eq!(profile(&list, "ollama")["context"], 8192);
+    run(
+        "provider.configure",
+        json!({"profileId":"ollama","kind":"ollama","endpoint":"http://127.0.0.1:11434","model":"qwen2"}),
+    )
+    .unwrap();
+    assert_eq!(
+        profile(&run("provider.profiles.list", json!({})).unwrap(), "ollama")["context"],
+        8192
+    );
+    run(
+        "provider.configure",
+        json!({"profileId":"ollama","kind":"ollama","endpoint":"http://127.0.0.1:11434","model":"qwen2","context":null}),
+    )
+    .unwrap();
+    assert_eq!(
+        profile(&run("provider.profiles.list", json!({})).unwrap(), "ollama")["context"],
+        Value::Null
+    );
     let saved = fs::read_to_string(root.join("provider.json")).unwrap();
     assert!(!saved.contains("\"local\":true") && !saved.contains("\"local\":false"));
     let saved: Value = serde_json::from_str(&saved).unwrap();
