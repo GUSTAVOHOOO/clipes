@@ -23,6 +23,69 @@ impl CancelToken {
     }
 }
 
+pub(crate) type CallGuard = Box<dyn Fn(&StructuredRequest, &[Value]) -> Result<Value, CoreError>>;
+
+#[derive(Default)]
+struct CallScope {
+    limit: Option<u64>,
+    log: Vec<Value>,
+    guard: Option<CallGuard>,
+}
+thread_local! {
+    static SCOPE: std::cell::RefCell<Option<CallScope>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `f` (a structured request on this thread) with a ceiling of HTTP calls and collects
+/// one entry per call it makes: `{attempt, calls, usage, code, durationMs}` (the AI job
+/// executor writes a cost row per entry, #124). The adapter checks the guard and ceiling before
+/// each send, including retries and repairs. Outside a scope there is no ceiling or collection,
+/// so the public reply of a Provider does not change.
+pub(crate) fn with_call_scope<T>(
+    limit: Option<u64>,
+    guard: Option<CallGuard>,
+    f: impl FnOnce() -> T,
+) -> (T, Vec<Value>) {
+    let previous = SCOPE.replace(Some(CallScope {
+        limit,
+        log: Vec::new(),
+        guard,
+    }));
+    let result = f();
+    let scope = SCOPE.replace(previous).unwrap_or_default();
+    (result, scope.log)
+}
+
+/// Called immediately before every HTTP send, including rate-limit retries and repairs.
+/// The completed entries are metadata only; the guard uses their real usage for the next gate.
+pub(crate) fn before_call(request: &StructuredRequest, log: &[Value]) -> Result<Value, CoreError> {
+    SCOPE.with_borrow(|scope| {
+        let Some(scope) = scope else {
+            return Ok(Value::Null);
+        };
+        if scope.limit.is_some_and(|max| log.len() as u64 >= max) {
+            return Err(error("budget_calls", "Call budget reached before sending"));
+        }
+        match &scope.guard {
+            Some(guard) => guard(request, log),
+            None => Ok(Value::Null),
+        }
+    })
+}
+
+/// Calls of one request, handed to the open scope when dropped (also on an early return).
+#[derive(Default)]
+pub(crate) struct CallLog(pub(crate) Vec<Value>);
+impl Drop for CallLog {
+    fn drop(&mut self) {
+        let entries = std::mem::take(&mut self.0);
+        SCOPE.with_borrow_mut(|s| {
+            if let Some(s) = s {
+                s.log.extend(entries);
+            }
+        });
+    }
+}
+
 pub(crate) const CANCEL_POLL: Duration = Duration::from_millis(25);
 
 pub(crate) fn cancelled() -> CoreError {
