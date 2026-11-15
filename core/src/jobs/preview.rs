@@ -51,7 +51,7 @@ pub(crate) fn check(id: i64, stop: &AtomicBool) -> Result<(), crate::CoreError> 
 pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
     while !stop.load(Ordering::SeqCst) {
         crate::source_batches::tick();
-        let next = projects::with_reader(|c| c.query_row("SELECT id,COALESCE(source_id,0),kind FROM jobs WHERE ((kind IN ('preview','proxy') AND safety='local') OR kind='transcription' OR kind='energy' OR kind LIKE 'ai:%') AND state='queued' AND NOT EXISTS (SELECT 1 FROM ai_pauses p WHERE (p.scope='task' AND jobs.kind='ai:'||p.key) OR (p.scope='batch' AND jobs.batch=p.key)) ORDER BY id LIMIT 1", [], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?))).optional()).ok().flatten();
+        let next = projects::with_reader(|c| c.query_row("SELECT id,COALESCE(source_id,0),kind FROM jobs WHERE ((kind IN ('preview','proxy','timeline') AND safety='local') OR kind='transcription' OR kind='energy' OR kind LIKE 'ai:%') AND state='queued' AND NOT EXISTS (SELECT 1 FROM ai_pauses p WHERE (p.scope='task' AND jobs.kind='ai:'||p.key) OR (p.scope='batch' AND jobs.batch=p.key)) ORDER BY id LIMIT 1", [], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?))).optional()).ok().flatten();
         if let Some((id, source, kind)) = next {
             let Ok(_guard) = projects::start_job() else {
                 break;
@@ -69,6 +69,8 @@ pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
                 }
                 let result = if kind == "transcription" {
                     crate::transcription::run(id, source, &project, &stop)
+                } else if kind == crate::editor::assets::JOB_KIND {
+                    crate::editor::assets::run(id, source, &project, &stop)
                 } else if kind == "proxy" {
                     crate::proxy::run(id, source, &project, &stop)
                 } else if kind == crate::energy::JOB_KIND {
@@ -116,6 +118,8 @@ fn progress_event(
         message: match (kind, err.is_some()) {
             ("transcription", true) => "Transcrição interrompida",
             ("transcription", false) => "Transcrição pronta",
+            ("timeline", true) => "Timeline do Corte interrompida",
+            ("timeline", false) => "Timeline do Corte pronta",
             ("energy", true) => "Medição de energia interrompida",
             ("energy", false) => "Energia do áudio medida",
             (_, true) => "Prévia interrompida",

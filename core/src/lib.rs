@@ -62,6 +62,7 @@ mod audit;
 mod components;
 mod context_notice;
 pub mod corrections;
+pub mod editor;
 pub mod energy;
 pub mod jobs;
 pub mod media;
