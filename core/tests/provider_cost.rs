@@ -50,7 +50,7 @@ fn estimate_actual_and_project_record() {
     let e = cost::estimate(&api("openai", "gpt-5", false), &r).unwrap();
     assert_eq!(e["kind"], "usd");
     assert_eq!(e["minMicroUsd"], 144); // 115 * 1.25 = 143.75
-    assert_eq!(e["maxMicroUsd"], 10144); // + 1000 * 10
+    assert_eq!(e["maxMicroUsd"], 10240); // conservative input range + 1000 * 10
     assert_eq!(e["priceSource"], "table");
     assert!(e["tableUpdatedAt"].is_string());
     // Without a ceiling there is no maximum (OpenAI sends no limit); Anthropic assumes 8192.
