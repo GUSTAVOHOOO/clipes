@@ -149,9 +149,9 @@ fn no_repeats_and_limit(input: &TaskInput, output: &Value) -> Vec<Violation> {
 inventory::submit! {
     AiTask {
         id: TASK_ID,
-        version: 1,
+        version: 2,
         prompt: PROMPT,
-        prompt_sha256: "c17df5c8f1cc2bef1ed06f7ecc6c99b634f231240c9ca66fe71f5a4659db32e1",
+        prompt_sha256: "8be769b3c853e1dcbbc9650d51c81670b52d901e8c217ac31606b35822878304",
         wire_schema: WIRE,
         full_schema: FULL,
         verifiers: &[
