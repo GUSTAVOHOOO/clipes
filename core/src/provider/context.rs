@@ -13,6 +13,8 @@
 //! - Ollama is preloaded (empty `messages`, `num_predict` 1, per the docs) only on
 //!   `refresh: true`, on a loopback or private-network server, because loading a model takes
 //!   RAM/VRAM and may unload another one;
+//! - the "Test Provider" probe (`provider.test` with `probeContext`, #145) is the one call that
+//!   generates text: synthetic, loopback only, user-triggered, saved here as `measured`;
 //! - a remote endpoint without the existing consent, and any task or Project with "local only"
 //!   on, is never probed: the catalog and the fallback answer, and the origin says so.
 //!
@@ -38,8 +40,8 @@ const PROBE_TIMEOUT: Duration = Duration::from_secs(8);
 const MAX_BODY: usize = 8 * 1024 * 1024;
 static CACHE_LOCK: Mutex<()> = Mutex::new(());
 
-/// Where a number comes from. `Measured` is reserved for a value confirmed by the usage a
-/// Provider reported; nothing produces it yet (the planner of #144 will).
+/// Where a number comes from. `Measured` is what the context probe of "Test Provider" (#145)
+/// saw the server keep from a text of known size.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum Source {
@@ -48,7 +50,6 @@ enum Source {
     Server,
     Catalog,
     Fallback,
-    #[allow(dead_code)]
     Measured,
 }
 impl Source {
@@ -92,6 +93,9 @@ enum Server {
 #[serde(rename_all = "camelCase")]
 struct Found {
     loaded: Option<u64>,
+    /// Tokens a server kept from the probe text (#145): the context it really runs with.
+    #[serde(default)]
+    measured: Option<u64>,
     max_context: Option<u64>,
     max_output: Option<u64>,
     /// The reported maximum is what a call can really use (hosted APIs). For local servers
@@ -102,10 +106,14 @@ struct Found {
 }
 impl Found {
     fn any(&self) -> bool {
-        self.loaded.is_some() || self.max_context.is_some() || self.max_output.is_some()
+        self.loaded.is_some()
+            || self.measured.is_some()
+            || self.max_context.is_some()
+            || self.max_output.is_some()
     }
     fn merge(&mut self, other: Found) {
         self.loaded = self.loaded.or(other.loaded);
+        self.measured = self.measured.or(other.measured);
         if self.max_context.is_none() {
             self.operating = other.operating;
         }
@@ -275,6 +283,8 @@ fn resolve_value(
     let catalog_operates = !local && kind != "ollama";
     let (mut value, mut source) = if let Some(n) = user {
         (n, Source::User)
+    } else if let Some(n) = found.measured {
+        (n, Source::Measured)
     } else if let Some(n) = found.loaded {
         (n, Source::Loaded)
     } else if let Some(n) = found.max_context.filter(|_| found.operating) {
@@ -288,6 +298,10 @@ fn resolve_value(
     // Ollama reloads the model with the `num_ctx` a call asks for, so what is loaded now is
     // where the value starts (user, then loaded, then 4096), not a ceiling above the user.
     for (ceiling, origin) in [
+        (
+            found.measured.filter(|_| kind != "ollama"),
+            Source::Measured,
+        ),
         (found.loaded.filter(|_| kind != "ollama"), Source::Loaded),
         (found.max_context, Source::Server),
         (catalog.0, Source::Catalog),
@@ -597,7 +611,7 @@ fn cache_get(t: &ContextTarget) -> Option<Found> {
         .into_iter()
         .find(|e| e.key == key)
         .filter(|e| {
-            let ttl = if e.found.loaded.is_some() {
+            let ttl = if e.found.loaded.is_some() || e.found.measured.is_some() {
                 TTL_LOADED_SECS
             } else {
                 TTL_STATIC_SECS
@@ -655,7 +669,8 @@ fn result(
     json!({
         "profileId": id, "kind": kind, "value": resolved.value, "source": resolved.source,
         "detail": found.server, "explanation": resolved.source.explanation(),
-        "capped": resolved.capped, "warning": warning, "measured": false,
+        "capped": resolved.capped, "warning": warning,
+        "measured": resolved.source == Source::Measured,
         "userContext": user, "loaded": found.loaded.map(|value| json!({"value": value})),
         "maxContext": pair(resolved.max_context), "maxOutput": pair(resolved.max_output),
         "refreshed": refreshed,
@@ -689,6 +704,83 @@ pub(super) fn cached_effective(t: &ContextTarget) -> u64 {
     let local = is_loopback_endpoint(&t.endpoint);
     let found = cache_get(t).unwrap_or_default();
     resolve_value(&t.kind, local, t.user_context, &found, catalog_limits(t)).value
+}
+
+/// The context a call is known to run with, for the input-truncation defence (#145): for Ollama
+/// the `num_ctx` sent; for the others only a value that is not the blind fallback or the
+/// catalog (the user's, the loaded one or a measured one), because pinning against a guess
+/// would flag good answers.
+pub(super) fn cached_sent(t: &ContextTarget) -> Option<u64> {
+    let local = is_loopback_endpoint(&t.endpoint);
+    let found = cache_get(t).unwrap_or_default();
+    let r = resolve_value(&t.kind, local, t.user_context, &found, catalog_limits(t));
+    (t.kind == "ollama" || matches!(r.source, Source::User | Source::Loaded | Source::Measured))
+        .then_some(r.value)
+}
+
+/// The optional probe of "Test Provider" (#145): one synthetic text of known size, a little
+/// above the effective context, with the smallest possible output. Only on an explicit user
+/// action and only for a loopback, zero-cost server. It never uses a Transcript and never goes
+/// through the cost log, so it cannot calibrate the estimator. Whether the server cut the text
+/// tells the context it really runs with, saved in the cache with origin `measured`.
+pub(super) fn probe(t: ContextTarget, cancel: &CancelToken) -> CommandResult {
+    use super::truncation::*;
+    if !is_loopback_endpoint(&t.endpoint) {
+        return Err(error(
+            "probe_not_local",
+            "The context probe only runs on a local provider",
+        ));
+    }
+    let context = cached_effective(&t);
+    let characters = context.saturating_mul(PROBE_CHARS_PER_CONTEXT_TOKEN);
+    if characters > PROBE_MAX_CHARS {
+        return Err(error(
+            "probe_unavailable",
+            "The context is too large to probe",
+        ));
+    }
+    let key = t.key()?;
+    let adapter = match t.kind.as_str() {
+        "" | "openai" => {
+            OpenAiProvider::new(t.endpoint.clone(), t.model.clone(), key)?
+                .with_timeouts(t.timeouts)
+                .with_context(Some(context))
+                .0
+        }
+        "ollama" => {
+            OllamaProvider::new(t.endpoint.clone(), t.model.clone(), key)?
+                .with_timeouts(t.timeouts)
+                .with_context(Some(context))
+                .0
+        }
+        _ => return Err(error("invalid_settings", "Invalid provider type")),
+    };
+    let (input, explicit) = adapter.probe(&probe_text(characters), cancel)?;
+    let verdict = probe_verdict(characters, context, input, explicit);
+    if let Some(measured) = verdict.measured {
+        let _guard = CACHE_LOCK.lock().ok();
+        let mut found = cache_load()
+            .entries
+            .into_iter()
+            .find(|e| e.key == identity(&t))
+            .map(|e| e.found)
+            .unwrap_or_default();
+        found.measured = Some(measured);
+        drop(_guard);
+        cache_put(&t, &found);
+    }
+    let resolved = resolve_value(
+        &t.kind,
+        true,
+        t.user_context,
+        &cache_get(&t).unwrap_or_default(),
+        catalog_limits(&t),
+    );
+    Ok(json!({
+        "profileId": t.id, "contextSent": context, "inputTokens": input,
+        "truncated": verdict.truncated, "measured": verdict.measured,
+        "value": resolved.value, "source": resolved.source,
+    }))
 }
 
 /// What the window planner (#144) reads: the cached effective context of a profile or CLI.
@@ -779,6 +871,7 @@ fn target_result(
                 if !found.any() && prober.unavailable {
                     warning = Some("unavailable");
                 } else {
+                    found.measured = found.measured.or(cache_get(&t).and_then(|c| c.measured));
                     cache_put(&t, &found);
                 }
             }

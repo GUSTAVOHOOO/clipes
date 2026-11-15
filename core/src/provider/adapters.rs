@@ -3,6 +3,7 @@ use super::*;
 use reqwest::blocking::{Client, RequestBuilder};
 
 const ANTHROPIC_DEFAULT_MAX_OUTPUT_TOKENS: u64 = 8192;
+const OLLAMA_DEFAULT_CONTEXT: u64 = 4096;
 #[derive(Clone, Copy)]
 enum Kind {
     OpenAi,
@@ -54,6 +55,12 @@ macro_rules! provider {
                 self.0.timeouts = timeouts;
                 self
             }
+            /// The context the call is known to run with (#143): `num_ctx` for Ollama and the
+            /// reference of the input-truncation defence (#145) for every kind.
+            pub fn with_context(mut self, context: Option<u64>) -> Self {
+                self.0.context = context;
+                self
+            }
         }
         impl Provider for $name {
             fn structured(&self, request: &StructuredRequest) -> Result<Value, CoreError> {
@@ -73,14 +80,6 @@ provider!(OpenAiProvider, OpenAi, "openai");
 provider!(AnthropicProvider, Anthropic, "anthropic");
 provider!(GeminiProvider, Gemini, "gemini");
 provider!(OllamaProvider, Ollama, "ollama");
-
-impl OllamaProvider {
-    /// Effective context can later be supplied by context discovery (#143).
-    pub fn with_context(mut self, context: Option<u64>) -> Self {
-        self.0.context = context;
-        self
-    }
-}
 
 /// A whole HTTP reply, body included, read on a helper thread so a cancellation does not
 /// have to wait for a slow Provider.
@@ -154,6 +153,48 @@ fn usage_value(input: Option<u64>, output: Option<u64>) -> Value {
 }
 
 impl Adapter {
+    /// The context a call is known to run with: Ollama always sends one (`num_ctx`, default
+    /// 4096); for the others only a value the caller discovered counts.
+    fn sent_context(&self) -> Option<u64> {
+        match self.kind {
+            Kind::Ollama => Some(self.context.unwrap_or(OLLAMA_DEFAULT_CONTEXT)),
+            _ => self.context,
+        }
+    }
+    /// One minimal call for the context probe: `text` as the whole prompt, one token of output,
+    /// no schema and no repair. Only a loopback endpoint is accepted, checked before any send.
+    pub(super) fn probe(
+        &self,
+        text: &str,
+        cancel: &CancelToken,
+    ) -> Result<(Option<u64>, truncation::Explicit), CoreError> {
+        if !is_local_endpoint(&self.endpoint)? {
+            return Err(error(
+                "probe_not_local",
+                "The context probe only runs on a local provider",
+            ));
+        }
+        let messages = json!([{"role":"user","content":text}]);
+        let body = match self.kind {
+            Kind::OpenAi => json!({"model":self.model,"messages":messages,"max_tokens":1}),
+            Kind::Ollama => json!({"model":self.model,"messages":messages,"stream":false,
+                "options":{"num_ctx":self.sent_context(),"num_predict":1}}),
+            _ => return Err(error("invalid_settings", "Invalid provider type")),
+        };
+        let request = StructuredRequest {
+            estimate_hint: Default::default(),
+            instruction: String::new(),
+            transcript: text.to_owned(),
+            schema: Value::Null,
+            native_schema: false,
+            max_output_tokens: Some(1),
+        };
+        let (response, _, _) = self.send(&body, &request, 0, &mut Vec::new(), cancel)?;
+        Ok((
+            self.capabilities.usage_of(&response).0,
+            self.capabilities.input_truncation(&response),
+        ))
+    }
     /// An HTTP failure whose body reports token usage was billed: carry `{usage, calls}`.
     fn http_failure(&self, reply: &Reply, code: &str, message: &str, calls: u64) -> CoreError {
         let mut e = error(code, message);
@@ -176,7 +217,7 @@ impl Adapter {
         repair: u8,
         log: &mut Vec<Value>,
         cancel: &CancelToken,
-    ) -> Result<(Value, u64), CoreError> {
+    ) -> Result<(Value, u64, bool), CoreError> {
         let (mut url, addresses) = resolve(&self.endpoint)?;
         let local = addresses.iter().all(|address| address.ip().is_loopback());
         if !self.remote_confirmed && !local {
@@ -338,7 +379,7 @@ impl Adapter {
             }
             let result = match reply.body {
                 Ok(bytes) => serde_json::from_slice(&bytes)
-                    .map(|value| (value, calls))
+                    .map(|value| (value, calls, local))
                     .map_err(|_| {
                         error("invalid_response", "Provider returned an invalid response")
                     }),
@@ -391,7 +432,7 @@ impl Adapter {
             };
             if matches!(self.kind, Kind::Ollama) {
                 body["stream"] = json!(false);
-                body["options"]["num_ctx"] = json!(self.context.unwrap_or(4096));
+                body["options"]["num_ctx"] = json!(self.sent_context());
             }
             if let Some(limit) = request.max_output_tokens {
                 match self.kind {
@@ -414,7 +455,7 @@ impl Adapter {
                     }
                 }
             }
-            let (response, attempts) =
+            let (response, attempts, local) =
                 match self.send(&body, &estimate_request, repair, log, cancel) {
                     Ok(sent) => sent,
                     Err(mut e) => {
@@ -456,6 +497,18 @@ impl Adapter {
                 e.usage = Some(json!({"usage":usage,"calls":calls}));
                 e
             };
+            // Input cut in silence (#145). Checked first: a prompt that fills the context also
+            // tends to end in `length`, and the cut input is the cause. `i` is the usage of this
+            // call, not the running total.
+            if truncation::suspect(&truncation::Reading {
+                local,
+                input: i,
+                context: self.sent_context(),
+                estimate: log.last().map(|entry| &entry["estimate"]),
+                explicit: self.capabilities.input_truncation(&response),
+            }) {
+                return Err(billed("context_truncated", truncation::MESSAGE, &mut *log));
+            }
             if truncated {
                 return Err(billed(
                     "output_truncated",

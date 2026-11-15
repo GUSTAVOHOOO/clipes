@@ -63,7 +63,7 @@ fn ids_exist_in_window(input: &TaskInput, output: &Value) -> Vec<Violation> {
 
 ## Erros de `run`
 
-`TaskError { code, message, violations, usage }`: erros do Provedor mantêm o `code` (`refusal`, `output_truncated`, `timeout_uncertain`, `cancelled`, ...) e o `usage`; `output_invalid` (schema completo) e `verification_failed` (verificadores) levam as `violations` e o `usage` já gasto; `invalid_task` indica uma definição quebrada (hash, schema fio ou completo). `run` não tenta reparo próprio além do que o adaptador já faz, e não troca de Provedor.
+`TaskError { code, message, violations, usage }`: erros do Provedor mantêm o `code` (`refusal`, `output_truncated`, `context_truncated`, `timeout_uncertain`, `cancelled`, ...) e o `usage`; `output_invalid` (schema completo) e `verification_failed` (verificadores) levam as `violations` e o `usage` já gasto; `invalid_task` indica uma definição quebrada (hash, schema fio ou completo). `run` não tenta reparo próprio além do que o adaptador já faz, e não troca de Provedor.
 
 ## Cancelamento
 

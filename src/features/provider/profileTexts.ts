@@ -19,6 +19,7 @@ export const profileTexts = {
     ctxCapped: 'Seu valor foi reduzido ao menor limite conhecido.',
     ctxWarn: { consent_required: 'Servidor remoto sem confirmação de envio: não foi consultado. Confirme o endereço para consultar.', local_only: 'Somente local está ligado: este servidor remoto não foi consultado.', unavailable: 'Servidor indisponível ou sem acesso: usando catálogo ou padrão.', not_measured: 'CLI não mede contexto nem uso: valor conservador.' },
     ctxConsentTitle: 'Consultar este servidor?', ctxConsent: 'O endereço abaixo receberá só o nome do modelo, para ler os limites. Nenhum texto seu é enviado.', ctxConsentYes: 'Consultar',
+    probe: 'Medir contexto', probeChecking: 'Medindo…', probeTitle: 'Medir o contexto deste servidor?', probeText: 'O núcleo envia ao servidor local um texto sintético grande, gerado por ele, perto do contexto efetivo, com saída mínima. Nenhuma Transcrição sua é enviada. Pode demorar e carrega o modelo na memória. Não há custo.', probeYes: 'Medir', probeCut: 'O servidor cortou o texto: contexto medido de', probeWhole: 'O servidor aceitou o texto inteiro, sem corte.',
   },
   en: {
     title: 'Providers', intro: 'Each profile keeps one ready-to-use Provider. Profiles on the same endpoint share the key and the send-text confirmation.',
@@ -40,5 +41,6 @@ export const profileTexts = {
     ctxCapped: 'Your value was reduced to the lowest known limit.',
     ctxWarn: { consent_required: 'Remote server without send confirmation: not queried. Confirm the endpoint to query it.', local_only: 'Local only is on: this remote server was not queried.', unavailable: 'Server unavailable or access denied: using catalog or default.', not_measured: 'A CLI measures neither context nor usage: conservative value.' },
     ctxConsentTitle: 'Query this server?', ctxConsent: 'The address below receives only the model name, to read its limits. None of your text is sent.', ctxConsentYes: 'Query',
+    probe: 'Measure context', probeChecking: 'Measuring…', probeTitle: 'Measure this server context?', probeText: 'The core sends the local server a large synthetic text it generated, near the effective context, with minimal output. None of your Transcript is sent. It may take a while and loads the model into memory. There is no cost.', probeYes: 'Measure', probeCut: 'The server cut the text: measured context of', probeWhole: 'The server accepted the whole text, with no cut.',
   },
 } as const;
