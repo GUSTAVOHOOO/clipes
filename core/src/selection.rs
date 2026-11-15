@@ -310,7 +310,7 @@ struct Setup {
 
 /// Rota da seleção, com os dois vetos "somente local" (por tarefa e por Projeto) aplicados
 /// antes de qualquer envio: devolve o id do perfil e se a chamada é paga.
-fn route_safety() -> Result<(String, Safety), CoreError> {
+pub(crate) fn route_safety() -> Result<(String, Safety), CoreError> {
     Ok(match provider::routed(Some(TASK_ID), None)? {
         provider::Routed::Cli(name) => (name, Safety::Paid),
         provider::Routed::Api { profile, local } => {
@@ -495,9 +495,39 @@ fn batch_of(run: i64) -> String {
     format!("selection-{run}")
 }
 
+/// Lote da execução: o do pedido (lote de Fontes, #56) ou o próprio `selection-<run>`. Refazer
+/// e retomar leem o que a execução gravou, para continuar sob o mesmo teto.
+fn batch_for(run: i64) -> String {
+    projects::with_reader(|c| {
+        c.query_row("SELECT batch FROM selection_runs WHERE id=?1", [run], |r| {
+            r.get::<_, String>(0)
+        })
+    })
+    .ok()
+    .filter(|b| !b.is_empty())
+    .unwrap_or_else(|| batch_of(run))
+}
+
+/// Chave de lote aceita no pedido: curta, sem texto livre.
+fn requested_batch(v: &Value) -> Result<Option<String>, CoreError> {
+    match v.get("batch") {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(b))
+            if !b.is_empty()
+                && b.len() <= 80
+                && b.bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_') =>
+        {
+            Ok(Some(b.clone()))
+        }
+        _ => Err(error("invalid_batch", "Lote inválido.")),
+    }
+}
+
 /// `selection.start {source_id, minUs?, maxUs?, confirmed?}`: planeja, cria a execução e
 /// enfileira um job de IA por Janela, todos no lote da execução.
 fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let batch = requested_batch(&v)?;
     let s = setup(&v)?;
     let inputs: Vec<TaskInput> = s
         .plan
@@ -535,7 +565,7 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         let run = tx.last_insert_rowid();
         tx.execute(
             "UPDATE selection_runs SET batch=?2 WHERE id=?1",
-            (run, batch_of(run)),
+            (run, batch.clone().unwrap_or_else(|| batch_of(run))),
         )?;
         for (i, w) in s.plan.windows.iter().enumerate() {
             tx.execute(
@@ -553,7 +583,7 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .collect();
     enqueue_windows(run, &pending, s.safety)?;
     Ok(
-        json!({"run": run, "batch": batch_of(run), "windows": s.plan.windows.len(), "planState": state_label(s.plan.state), "weights": weights_json()}),
+        json!({"run": run, "batch": batch_for(run), "windows": s.plan.windows.len(), "planState": state_label(s.plan.state), "weights": weights_json()}),
     )
 }
 
@@ -562,7 +592,7 @@ fn enqueue_windows(
     windows: &[(i64, TaskInput)],
     safety: Safety,
 ) -> Result<(), CoreError> {
-    let batch = batch_of(run);
+    let batch = batch_for(run);
     for (idx, input) in windows {
         let job = jobs::enqueue_ai_in_batch(TASK_ID, input, safety, Some(&batch))?;
         projects::with_writer(|c| {
