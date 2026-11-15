@@ -456,6 +456,15 @@ try {
     await profilesPt.getByRole('article', { name }).waitFor();
   };
   await addPt('Local rápido', 'http://127.0.0.1:11434/v1', 'qwen-4b');
+  const contextProfile = profilesPt.getByRole('article', { name: 'Local rápido' });
+  await contextProfile.getByText('Contexto efetivo', { exact: true }).waitFor();
+  await contextProfile.getByText('Padrão conservador', { exact: true }).waitFor();
+  await contextProfile.getByRole('button', { name: 'Editar', exact: true }).click();
+  await profilesPt.getByLabel('Contexto em tokens (opcional)').fill('16384');
+  await profilesPt.getByRole('button', { name: 'Salvar perfil', exact: true }).click();
+  await contextProfile.getByText('Informado por você', { exact: true }).waitFor();
+  await contextProfile.getByRole('button', { name: 'Atualizar contexto', exact: true }).click();
+  await contextProfile.getByText('Informado por você', { exact: true }).waitFor();
   await addPt('Nuvem barata', 'https://example.com/v1', 'cheap');
   const table = page.getByRole('group', { name: 'Tarefas' });
   const scriptRow = table.getByRole('row').filter({ hasText: 'Roteiro' });

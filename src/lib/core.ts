@@ -151,6 +151,14 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       const cli = (kind: string, label: string, confirmed: boolean) => ({ id: kind, label, kind, endpoint: null, model: null, nativeSchema: false, ownKey: false, keyLastFour: null, local: false, confirmed, active: providerCliMock.selected === kind, price: null, cli: true, experimental: true });
       return { profiles: [...main, ...profileMocks.map(view), cli('codex', 'Codex CLI', providerCliMock.codexConfirmed), cli('claude', 'Claude Code CLI', providerCliMock.claudeConfirmed), {...cli('opencode', 'OpenCode CLI', providerCliMock.opencodeConfirmed), model:providerCliMock.opencodeModel, cost:{kind:providerCliMock.opencodeModel === 'opencode/big-pickle' ? 'zero' : 'unknown'}}] } as T;
     }
+    if (name === 'provider.context.get') {
+      const id = (args as { profileId?: string }).profileId ?? 'legacy';
+      const p = id === 'legacy' ? { context: providerMock.context, kind: providerMock.kind } : profileMocks.find(x => x.id === id);
+      if (!p) throw { code: 'invalid_settings', message: 'Profile not found' };
+      const source = p.context ? 'user' : 'fallback';
+      const why = { user: 'Value set by you for this profile.', fallback: 'Conservative default: no limit was discovered.' };
+      return { profileId: id, kind: p.kind, value: p.context ?? (p.kind === 'ollama' ? 4096 : 8192), source, detail: null, explanation: why[source], capped: false, warning: null, measured: false, userContext: p.context, loaded: null, maxContext: null, maxOutput: null, refreshed: !!(args as { refresh?: boolean }).refresh } as T;
+    }
     if (name === 'provider.profiles.remove') { profileMocks = profileMocks.filter(p => p.id !== (args as { profileId: string }).profileId); return {} as T; }
     if (name === 'provider.status') return { ...providerMock } as T;
     if (name === 'provider.cli.status') return { ...providerCliMock } as T;
