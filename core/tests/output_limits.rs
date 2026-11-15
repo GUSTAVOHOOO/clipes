@@ -505,3 +505,44 @@ fn truncated_output_keeps_its_usage_and_is_never_repaired() {
         "no automatic repair that bills another call"
     );
 }
+
+fn target(provider: &str, model: &str) -> Target {
+    Target::Api {
+        provider: provider.into(),
+        model: model.into(),
+        local: false,
+    }
+}
+fn estimate_request(ask: Option<u64>) -> StructuredRequest {
+    StructuredRequest {
+        estimate_hint: Default::default(),
+        instruction: "Return data".into(),
+        transcript: "untrusted".into(),
+        schema: schema(),
+        native_schema: false,
+        max_output_tokens: ask,
+    }
+}
+
+/// The cost estimate (and so the budget gate) uses the same ceiling as the wire (#147): the
+/// Anthropic with no limit known in the catalog no longer assumes a blind 8192.
+#[test]
+fn cost_estimate_uses_the_same_ceiling_as_the_call() {
+    use clipes_core::provider::{cost, limits::FALLBACK_MAX_OUTPUT_TOKENS};
+    let _env = ENV.lock().unwrap_or_else(|e| e.into_inner());
+    let _dir = isolated("limits-estimate");
+    let ceiling = |t: &Target, ask| {
+        cost::estimate(t, &estimate_request(ask)).unwrap()["maxOutputTokens"].clone()
+    };
+    // Anthropic always has one; the model is not in the catalog, so: the fallback.
+    let anthropic = target("anthropic", "claude-haiku-4-5");
+    assert_eq!(ceiling(&anthropic, None), FALLBACK_MAX_OUTPUT_TOKENS);
+    assert_eq!(ceiling(&anthropic, Some(300)), 300);
+    assert_eq!(ceiling(&anthropic, Some(9000)), FALLBACK_MAX_OUTPUT_TOKENS);
+    // A catalog limit (128000) keeps a request below it and cuts one above it.
+    let luna = target("openai", "gpt-6-luna");
+    assert_eq!(ceiling(&luna, Some(8192)), 8192);
+    assert_eq!(ceiling(&luna, Some(500_000)), 128_000);
+    // OpenAI with no request: no ceiling, as before.
+    assert!(ceiling(&luna, None).is_null());
+}

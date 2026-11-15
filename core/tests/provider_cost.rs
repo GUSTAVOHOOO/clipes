@@ -57,20 +57,9 @@ fn estimate_actual_and_project_record() {
     );
     assert_eq!(e["priceSource"], "table");
     assert!(e["tableUpdatedAt"].is_string());
-    // Without a ceiling there is no maximum (OpenAI sends no limit). Anthropic always sends
-    // one: with no limit known for the model (#147) it is the explicit conservative fallback,
-    // no longer a blind 8192 (a catalog limit of 8192 or more keeps a smaller request).
+    // Without a ceiling there is no maximum (OpenAI sends no limit).
     let e = cost::estimate(&api("openai", "gpt-5", false), &request("", None)).unwrap();
     assert!(e["maxMicroUsd"].is_null() && e["minMicroUsd"].is_u64());
-    let e = cost::estimate(
-        &api("anthropic", "claude-haiku-4-5", false),
-        &request("", None),
-    )
-    .unwrap();
-    assert_eq!(
-        e["maxOutputTokens"],
-        clipes_core::provider::limits::FALLBACK_MAX_OUTPUT_TOKENS
-    );
     // Unknown model: "unknown", never zero. Local: zero. CLI: plan quota, no money.
     let e = cost::estimate(&api("openai", "mystery", false), &r).unwrap();
     assert_eq!(

@@ -149,17 +149,22 @@ fn request(chars: usize) -> clipes_core::provider::StructuredRequest {
     }
 }
 
+/// #147: an input whose calibrated estimate already exceeds the context is refused before any
+/// send, so a calibrated cut can no longer reach the server. The calibrated suspicion rule
+/// ("pinned and below the low end of the estimate") needs input < low <= high/1.33 while being
+/// pinned at >= 98% of the context, and the check before sending needs high + 512 <= context:
+/// both cannot hold. The rule stays covered by `truncation::tests::
+/// after_calibration_pinned_and_below_the_low_end`; the uncalibrated cut (the real case where
+/// the estimate says it fits) is `pinned_before_calibration_is_suspected_and_keeps_usage`.
 #[test]
-fn after_calibration_it_needs_pinned_and_below_the_estimate() {
+fn calibrated_input_over_the_context_is_refused_before_any_send() {
     let _env = ENV.lock().unwrap_or_else(|e| e.into_inner());
-    let _dir = isolated("trunc-calibrated");
+    let _dir = isolated("trunc-refused");
     let big = request(20_000);
     let chars = cost::input_characters(&big);
     for _ in 0..3 {
         cost::observe_tokens("local", "model", &big, chars / 3, "ok").unwrap();
     }
-    // 20 000 characters in a context of 1000 tokens: since #147 the high estimate leaves no
-    // room for an answer, so the call is refused before any send (no connection is made).
     let (url, bodies, server) = serve("127.0.0.1", vec![]);
     configure(&url, "ollama", Some(1000));
     assert_eq!(
@@ -171,8 +176,14 @@ fn after_calibration_it_needs_pinned_and_below_the_estimate() {
     // The suspect call did not calibrate.
     let estimate = cost::estimate_for(&target(), "local", &big).unwrap();
     assert_eq!(estimate["calibrationSamples"], 3);
+}
 
-    // Pinned too, but not below the low end of a small request: accepted.
+/// Calibrated, the estimate fits and the server pins its usage at the context: accepted when
+/// the usage is not below the low end of the estimate (a prompt cache can explain it).
+#[test]
+fn calibrated_and_pinned_but_not_below_the_estimate_is_accepted() {
+    let _env = ENV.lock().unwrap_or_else(|e| e.into_inner());
+    let _dir = isolated("trunc-calibrated");
     let small = request(300);
     for _ in 0..3 {
         cost::observe_tokens("local", "model", &small, 90, "ok").unwrap();
