@@ -15,8 +15,13 @@ use std::{
 const FAKE: &str = env!("CARGO_BIN_EXE_fake-worker");
 // CLIPES_DATA_DIR é global ao processo: os testes de dispatch rodam um por vez.
 static ENV: Mutex<()> = Mutex::new(());
+// Linux recusa executar (ETXTBSY) um binário que ainda está aberto para escrita, e um fork de outro
+// thread herda esse descritor até o exec. Copiar o uv falso não pode coincidir com nenhum spawn
+// dos testes que não pegam ENV: os spawns pegam leitura, a cópia pega escrita (#175).
+static SPAWN: std::sync::RwLock<()> = std::sync::RwLock::new(());
 
 fn client(scenario: &str) -> WorkerClient {
+    let _spawning = SPAWN.read().unwrap_or_else(|e| e.into_inner());
     WorkerClient::start(FAKE, ["--scenario", scenario], |_| {}).unwrap()
 }
 fn idle() -> AtomicBool {
@@ -141,6 +146,7 @@ fn contract_violation_by_the_core_makes_the_fake_fail() {
 
 #[test]
 fn missing_executable_is_a_typed_error_without_paths() {
+    let _spawning = SPAWN.read().unwrap_or_else(|e| e.into_inner());
     let error = WorkerClient::start("/nao/existe/worker", ["x"], |_| {})
         .err()
         .unwrap();
@@ -212,6 +218,7 @@ impl Data {
             .to_owned();
         let dir = self.root.path().join("components");
         fs::create_dir_all(&dir).unwrap();
+        let _copying = SPAWN.write().unwrap_or_else(|e| e.into_inner());
         fs::copy(FAKE, dir.join(Self::exe("uv"))).unwrap();
         fs::write(dir.join("uv.version"), version).unwrap();
     }
