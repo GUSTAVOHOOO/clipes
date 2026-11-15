@@ -9,5 +9,7 @@
 - [x] Testar pelo harness as fronteiras de cada modelo, intervalo cruzando o limiar, sobrescritas antigas e usage incompleto; executar e observar falha antes de implementar.
 - [x] Estender catálogo e cálculo no seam existente; confirmar preços e limites nas fontes oficiais, preservando as entradas e sobrescritas antigas.
 - [x] Mostrar intervalo e faixa na estimativa existente; documentar catálogo e regra futura de cache Anthropic.
-- [ ] Integrar master se #140/#142 entrarem; executar fmt, testes workspace, clippy, typecheck, build e UI.
-- [ ] Atualizar PR com fontes e desconhecidos; aguardar CI Ubuntu/Windows/licenses/DCO verde e tirar do draft.
+- [x] Integrar master se #140/#142 entrarem; executar fmt, testes workspace, clippy, typecheck, build e UI. #142 integrado; #140 ainda aberto. Testes passaram; clippy estrito para em quatro avisos anteriores, sem alterações nos arquivos apontados. A varredura com `--cap-lints warn` terminou sem novos avisos.
+- [x] Abrir PR #158 em draft e registrar fontes, desconhecidos e evidências de teste.
+
+A promoção do PR é feita somente depois de CI Ubuntu/Windows/licenses/DCO verde. O #140 permanece uma integração posterior enquanto seu PR estiver aberto; o adaptador temporário fica concentrado em `input_range`.
