@@ -144,3 +144,8 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Sintoma:** MFA 3.4.3 instalado em um caminho com espaços falha na checagem do Kaldi, mesmo com o executável presente.
 - **Causa:** `thirdparty_binary` acrescenta aspas ao caminho e as passa como parte do nome para `subprocess` no Windows.
 - **Ação:** antes de executar o MFA, anteponha ao `PATH` o caminho curto 8.3 da pasta `Library\bin` do ambiente conda. Exemplo: `$short = cmd /c 'for %I in ("%TEMP%\clipes-mfa-env") do @echo %~sI'; $env:PATH="$short\Library\bin;$short\Scripts;$short;$env:PATH"`; execute `& "$short\python.exe" -m montreal_forced_aligner ...`. Mantenha o ambiente e `MFA_ROOT_DIR` no TEMP.
+
+### Comparação de detectores de cena em mídia real (#60)
+- **Sintoma:** a avaliação do `scdet`/PySceneDetect/TransNet V2 em gameplay do #28 ficou sem rodar.
+- **Causa:** `yt-dlp --download-sections` trava; só 2 downloads nativos (≤480p, sem cookies, fora do repo, timeout de 15 min) foram autorizados, e o TransNet V2 exige TensorFlow.
+- **Ação:** o #60 entregou `scdet` conservador com comparação sintética em `docs/research/2026-11-15-reenquadramento-deteccao.md`. Rode `benchmarks/reenquadramento/compare.py` localmente para fechar a pendência; só agregados vão ao repo.
