@@ -415,3 +415,8 @@ pub fn compact_with_hint(sentences: &[Sentence]) -> CompactTranscript {
         },
     }
 }
+
+/// Todas as Frases da Transcrição por ID crescente (texto efetivo, #52), para o núcleo.
+pub(crate) fn load_for(transcript: i64) -> Result<Vec<Sentence>, CoreError> {
+    projects::with_reader(|c| load(c, transcript))
+}
