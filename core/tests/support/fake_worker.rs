@@ -31,6 +31,10 @@ const EXAMPLES: &[(&str, &str)] = &[
         include_str!("../../../worker/protocol/examples/transcribe-block.jsonl"),
     ),
     (
+        "vad-block",
+        include_str!("../../../worker/protocol/examples/vad-block.jsonl"),
+    ),
+    (
         "model-swap",
         include_str!("../../../worker/protocol/examples/model-swap.jsonl"),
     ),
