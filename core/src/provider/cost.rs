@@ -691,11 +691,33 @@ pub(crate) fn totals_since(column: &str, key: &str, since: i64) -> Result<Value,
         "task" | "batch" => column,
         _ => return Err(error("invalid_request", "Invalid cost grouping")),
     };
-    projects::with_reader(|c| {
+    let mut totals = projects::with_reader(|c| {
         c.query_row(
             &format!("SELECT {TOTALS} FROM provider_costs WHERE {column}=?1 AND created_at>=?2"),
             rusqlite::params![key, since],
             |r| totals_row(r, 0),
+        )
+    })?;
+    if column == "batch" {
+        // O áudio pago (Groq, #51) de um lote de Fontes entra no mesmo teto que a seleção (#56).
+        let audio = batch_audio_micro_usd(key, since)?;
+        totals["audioMicroUsd"] = json!(audio);
+        totals["microUsd"] = json!(totals["microUsd"]
+            .as_i64()
+            .unwrap_or(0)
+            .saturating_add(audio));
+    }
+    Ok(totals)
+}
+
+/// Estimated audio spend (µUS$, rounded up per call) of the transcription jobs in `batch` since
+/// `since`. Pending and uncertain calls count as spent: the charge may have happened.
+pub(crate) fn batch_audio_micro_usd(batch: &str, since: i64) -> Result<i64, CoreError> {
+    projects::with_reader(|c| {
+        c.query_row(
+            "SELECT COALESCE(SUM(CAST(c.estimated_usd*1000000.0+0.999999 AS INTEGER)),0) FROM transcription_calls c JOIN jobs j ON j.id=c.job_id WHERE j.batch=?1 AND c.created_at>=?2 AND c.state IN ('pending','completed','uncertain') AND c.estimated_usd IS NOT NULL",
+            rusqlite::params![batch, since],
+            |r| r.get::<_, i64>(0),
         )
     })
 }

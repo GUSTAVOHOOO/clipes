@@ -617,6 +617,11 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     if !matches!(engine, "local" | "groq") {
         return Err(error("invalid_engine", "Motor de transcrição inválido."));
     }
+    let batch = match v.get("batch") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(b)) if !b.is_empty() && b.len() <= 80 => Some(b.clone()),
+        _ => return Err(error("invalid_batch", "Lote inválido.")),
+    };
     let engine_switch = existing.as_ref().is_some_and(|t| t.2 != engine);
     // Escolha manual de outro modelo (#50): o modelo da Transcrição nunca muda sozinho; só a
     // troca manual de uma parcial, com confirmação, recomeça do zero. Numa completa a troca
@@ -725,8 +730,14 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         )?;
         let mut job = active.as_ref().map(|j| j.0);
         if job.is_none() {
-            tx.execute("INSERT INTO jobs(kind,safety,state,source_id) VALUES ('transcription',?1,'queued',?2)",(if engine == "groq" {"paid"} else {"local"},source))?;
+            tx.execute("INSERT INTO jobs(kind,safety,state,source_id,batch) VALUES ('transcription',?1,'queued',?2,?3)",(if engine == "groq" {"paid"} else {"local"},source,batch.as_deref()))?;
             job = Some(tx.last_insert_rowid());
+        } else if let Some(batch) = batch.as_deref() {
+            // Um lote de Fontes (#56) adota o job ativo: a pausa do lote vale para ele também.
+            tx.execute(
+                "UPDATE jobs SET batch=?2 WHERE id=?1 AND batch IS NULL",
+                (job, batch),
+            )?;
         }
         tx.commit()?;
         Ok((transcript, state, job))
@@ -737,6 +748,20 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         Vec::new()
     };
     Ok(json!({"transcript_id": transcript, "state": state, "job_id": job, "warnings": warnings}))
+}
+
+/// Custo máximo estimado (µUS$) do áudio que falta transcrever da Fonte no Groq; `None` se o
+/// preço é desconhecido. O lote de Fontes (#56) o confere contra o teto antes de começar.
+pub(crate) fn paid_audio_estimate_micro(source_id: i64) -> Option<i64> {
+    let remaining = projects::with_reader(|c| {
+        c.query_row(
+            "SELECT COALESCE((SELECT t.duration_us-t.resume_us FROM transcripts t WHERE t.source_id=s.id AND t.audio_track=s.audio_track),s.duration_us) FROM sources s WHERE s.id=?1",
+            [source_id],
+            |r| r.get::<_, i64>(0),
+        )
+    })
+    .ok()?;
+    groq::estimate_cost(groq::MODEL, remaining.max(0))["maxMicroUsd"].as_i64()
 }
 
 fn loss(transcript: i64) -> Result<Value, CoreError> {
