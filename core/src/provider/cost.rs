@@ -80,6 +80,8 @@ fn write_overrides(o: &Overrides) -> Result<(), CoreError> {
 pub enum Target {
     /// Codex or Claude Code subscription: no money value, consumes the plan quota.
     Cli { name: String },
+    /// Isolated OpenCode: a model with an exact, officially verified free price, or unknown.
+    OpenCode { model: String },
     /// HTTP adapter (`openai`, `anthropic`, `gemini`); `local` means loopback.
     Api {
         provider: String,
@@ -88,9 +90,13 @@ pub enum Target {
     },
 }
 impl Target {
+    pub(crate) fn is_cli(&self) -> bool {
+        matches!(self, Self::Cli { .. } | Self::OpenCode { .. })
+    }
     fn label(&self) -> (String, String) {
         match self {
             Target::Cli { name } => (format!("cli:{name}"), String::new()),
+            Target::OpenCode { model } => ("cli:opencode".into(), model.clone()),
             Target::Api {
                 provider, model, ..
             } => (provider.clone(), model.clone()),
@@ -296,7 +302,7 @@ pub fn estimate_for(
     request: &StructuredRequest,
 ) -> Result<Value, CoreError> {
     let model = match target {
-        Target::Api { model, .. } => model.as_str(),
+        Target::Api { model, .. } | Target::OpenCode { model } => model.as_str(),
         Target::Cli { name } => name.as_str(),
     };
     let range = token_range(profile, model, request)?;
@@ -323,7 +329,7 @@ pub fn observe_entry(profile: &str, target: &Target, entry: &Value) -> Result<()
         return Ok(());
     }
     let model = match target {
-        Target::Api { model, .. } => model.as_str(),
+        Target::Api { model, .. } | Target::OpenCode { model } => model.as_str(),
         Target::Cli { name } => name.as_str(),
     };
     let Some(chars) = entry["estimate"]["inputCharacters"]
@@ -357,6 +363,13 @@ pub(crate) fn estimate_with_input(
 ) -> Result<Value, CoreError> {
     let (kind, ceiling, min, max, source) = match target {
         Target::Cli { .. } => ("plan_quota", None, None, None, None),
+        Target::OpenCode { model } => {
+            if crate::provider_cli::opencode_cost(model)["kind"] == "zero" {
+                ("zero", None, Some(0), Some(0), None)
+            } else {
+                ("unknown", None, None, None, None)
+            }
+        }
         Target::Api { local: true, .. } => {
             ("zero", request.max_output_tokens, Some(0), Some(0), None)
         }
@@ -385,6 +398,7 @@ pub(crate) fn estimate_with_input(
     };
     Ok(json!({
         "kind": kind,
+        "callsOnly": target.is_cli(),
         "inputTokens": input,
         "maxOutputTokens": ceiling,
         "minMicroUsd": min,
@@ -399,6 +413,13 @@ pub(crate) fn estimate_with_input(
 pub fn actual(target: &Target, usage: &Value) -> Result<Cost, CoreError> {
     Ok(match target {
         Target::Cli { .. } => Cost::PlanQuota,
+        Target::OpenCode { model } => {
+            if crate::provider_cli::opencode_cost(model)["kind"] == "zero" {
+                Cost::Zero
+            } else {
+                Cost::Unknown
+            }
+        }
         Target::Api { local: true, .. } => Cost::Zero,
         Target::Api {
             provider, model, ..
@@ -672,7 +693,7 @@ pub fn run_costed_for(
         let mut recorded = true;
         for entry in entries {
             let _ = observe_entry(profile.unwrap_or(""), target, entry);
-            let usage = if matches!(target, Target::Cli { .. })
+            let usage = if target.is_cli()
                 || matches!(
                     entry["code"].as_str(),
                     Some("cancelled" | "timeout_uncertain")
@@ -732,6 +753,12 @@ pub fn run_costed_for(
 // any call.
 fn target_now(task: Option<&str>, explicit: Option<&str>) -> Result<(Target, String), CoreError> {
     Ok(match super::routed(task, explicit)? {
+        super::Routed::Cli(name) if name == "opencode" => (
+            Target::OpenCode {
+                model: crate::provider_cli::opencode_model()?,
+            },
+            name,
+        ),
         super::Routed::Cli(name) => (Target::Cli { name: name.clone() }, name),
         super::Routed::Api { profile, local } => (
             Target::Api {
@@ -761,6 +788,7 @@ fn cmd_run(args: Value, events: &mut EventSink<'_>) -> CommandResult {
     // The profile and model that serve the call are recorded in the Project and returned.
     let route = match &target {
         Target::Cli { name } => json!({"profileId": profile, "kind": name, "model": null}),
+        Target::OpenCode { model } => json!({"profileId":profile,"kind":"opencode","model":model}),
         Target::Api {
             provider, model, ..
         } => json!({"profileId": profile, "kind": provider, "model": model}),

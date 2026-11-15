@@ -85,6 +85,16 @@ fn definition_limits_fail_without_charging_and_cli_ignores_non_call_limits() {
     let cli = jobs::enqueue_ai("cli-only-calls", &input("ok: cli"), Safety::Paid).unwrap();
     wait_state(cli, "completed");
     assert_eq!(fake.count("ok: cli"), 1);
+    jobs::set_ai_route(Some((
+        Target::OpenCode {
+            model: "opencode/big-pickle".into(),
+        },
+        "opencode".into(),
+    )));
+    let opencode =
+        jobs::enqueue_ai("cli-only-calls", &input("ok: opencode"), Safety::Paid).unwrap();
+    wait_state(opencode, "completed");
+    assert_eq!(fake.count("ok: opencode"), 1);
     // O veto do Projeto prevalece sobre qualquer pausa por custo desconhecido, sem enviar.
     jobs::set_ai_route(None);
     dispatch(

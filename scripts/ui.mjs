@@ -194,6 +194,33 @@ try {
   assert.match(await codexCard.innerText(), /Subscription/);
   assert.match(await codexCard.innerText(), /Experimental/);
   assert.match(await codexCard.innerText(), /Uses your plan quota/);
+  const openCodeCard = profiles.getByRole('article', { name: 'OpenCode CLI' });
+  assert.match(await openCodeCard.innerText(), /Experimental/);
+  assert.match(await openCodeCard.innerText(), /your OpenCode login is not used/);
+  const cliSettings = page.locator('section[aria-labelledby="cli-provider-title"]');
+  await cliSettings.getByLabel('OpenCode model (provider/model)').fill('opencode/big-pickle');
+  await cliSettings.getByRole('button', { name: 'Use OpenCode CLI', exact: true }).click();
+  const openCodeConsent = page.getByRole('alertdialog', { name: 'Send text to provider?' });
+  await openCodeConsent.waitFor();
+  assert.match(await openCodeConsent.innerText(), /only models that work without login/);
+  assert.match(await openCodeConsent.innerText(), /opencode\/big-pickle/);
+  await openCodeConsent.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await openCodeConsent.waitFor({ state: 'hidden' });
+  await cliSettings.getByRole('button', { name: 'Use OpenCode CLI', exact: true }).click();
+  await openCodeConsent.getByRole('button', { name: 'Enable and allow sending' }).click();
+  await openCodeConsent.waitFor({ state: 'hidden' });
+  await cliSettings.getByText('Selected provider: OpenCode CLI').waitFor();
+  await openCodeCard.getByText('opencode/big-pickle', { exact: true }).waitFor();
+  const taskSelects = page.locator('[aria-labelledby="task-table-title"] select');
+  assert.equal(await taskSelects.count(), 4);
+  for (const select of await taskSelects.all()) {
+    assert.equal(await select.locator('option[value="opencode"]').count(), 1);
+  }
+  await page.evaluate(() => history.replaceState(null, '', '?opencode-free-limit=1'));
+  await cliSettings.getByRole('button', { name: 'Test CLI', exact: true }).click();
+  await cliSettings.getByRole('status').getByText('OpenCode free quota exhausted. Retry after 79181 seconds; no automatic retry.', { exact: true }).waitFor();
+  await cliSettings.getByRole('button', { name: 'Disable CLI', exact: true }).click();
+  await page.evaluate(() => history.replaceState(null, '', location.pathname));
   await localCard.getByLabel('API key (Quick local)').fill('local-key-9999');
   await localCard.getByRole('button', { name: 'Save profile key' }).click();
   await localCard.getByText(/…9999/).waitFor();

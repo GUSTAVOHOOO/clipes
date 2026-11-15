@@ -3,13 +3,14 @@ import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { coreDispatch } from '@/lib/core';
 import { LanguageContext, useText } from '@/lib/i18n';
+import { texts as cliTexts } from './CliSettings';
 import { profileTexts } from './profileTexts';
 
 type Price = { inputPerMillion: number; outputPerMillion: number; source: 'override' | 'table' };
 type Profile = {
-  id: string; label: string; kind: 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'codex' | 'claude'; endpoint: string | null; model: string | null;
+  id: string; label: string; kind: 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'codex' | 'claude' | 'opencode'; endpoint: string | null; model: string | null;
   nativeSchema: boolean; ownKey: boolean; context: number | null; keyLastFour: string | null; local: boolean; confirmed: boolean; price: Price | null;
-  cli: boolean; active?: boolean; experimental?: boolean;
+  cost?: { kind: string }; cli: boolean; active?: boolean; experimental?: boolean;
 };
 type Draft = { id: string | null; label: string; kind: 'openai' | 'anthropic' | 'gemini' | 'ollama'; endpoint: string; model: string; nativeSchema: boolean; ownKey: boolean; context: string };
 const emptyDraft: Draft = { id: null, label: '', kind: 'openai', endpoint: '', model: '', nativeSchema: false, ownKey: false, context: '' };
@@ -17,12 +18,13 @@ const emptyDraft: Draft = { id: null, label: '', kind: 'openai', endpoint: '', m
 function slug(label: string, taken: string[]) {
   const base = label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'perfil';
   let id = base;
-  for (let n = 2; taken.includes(id) || id === 'legacy' || id === 'codex' || id === 'claude'; n++) id = `${base}-${n}`;
+  for (let n = 2; taken.includes(id) || id === 'legacy' || id === 'codex' || id === 'claude' || id === 'opencode'; n++) id = `${base}-${n}`;
   return id;
 }
 
 export function ProviderProfiles({ refreshKey = 0, onChange }: { refreshKey?: number; onChange?: () => void } = {}) {
   const t = useText(profileTexts);
+  const cli = useText(cliTexts);
   const language = useContext(LanguageContext);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -49,6 +51,7 @@ export function ProviderProfiles({ refreshKey = 0, onChange }: { refreshKey?: nu
     return [profile.local ? t.local : t.remote];
   }
   function price(profile: Profile) {
+    if (profile.kind === 'opencode') return profile.cost?.kind === 'zero' ? cli.free : t.unknown;
     if (profile.cli) return t.quota;
     if (profile.local) return t.free;
     if (!profile.price) return t.unknown;
@@ -79,13 +82,14 @@ export function ProviderProfiles({ refreshKey = 0, onChange }: { refreshKey?: nu
           {profile.cli && <span className="text-xs text-fg-2">{profile.active ? t.cliActive : t.cliOff}</span>}
         </div>
         <dl className="mt-3 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[8rem_1fr]">
+          {profile.kind === 'opencode' && <><dt className="text-fg-2">{t.model}</dt><dd className="break-all">{profile.model || '—'}</dd></>}
           {!profile.cli && <><dt className="text-fg-2">{t.model}</dt><dd className="break-all">{profile.kind} · {profile.model}</dd>
             <dt className="text-fg-2">{t.endpoint}</dt><dd className="break-all">{profile.endpoint}</dd>
             <dt className="text-fg-2">{t.key}</dt><dd>{profile.keyLastFour ? `…${profile.keyLastFour}` : t.noKey}{profile.keyLastFour && ` · ${profile.ownKey ? t.ownKey : t.sharedKey}`}</dd></>}
           <dt className="text-fg-2">{t.price}</dt><dd>{price(profile)}</dd>
           {!profile.cli && <><dt className="text-fg-2">{t.consent}</dt><dd>{consentText(profile)}</dd></>}
         </dl>
-        {profile.cli ? <p className="mt-3 text-sm text-fg-2">{t.cliHelp}</p> : <div className="mt-4 flex flex-col gap-3">
+        {profile.cli ? <p className="mt-3 text-sm text-fg-2">{profile.kind === 'opencode' ? cli.opencodeWarning : t.cliHelp}</p> : <div className="mt-4 flex flex-col gap-3">
           <form className="flex flex-wrap items-end gap-2" onSubmit={e => { e.preventDefault(); const submitted = keys[profile.id] ?? ''; setKeys({ ...keys, [profile.id]: '' }); void run(async () => { await coreDispatch('provider.key.set', { profileId: profile.id, key: submitted }); }, t.keySaved); }}>
             <label className="text-sm">{t.keyLabel}<input aria-label={`${t.keyLabel} (${profile.label})`} className={field} type="password" autoComplete="off" value={keys[profile.id] ?? ''} onChange={e => setKeys({ ...keys, [profile.id]: e.target.value })} /></label>
             <Button type="submit" disabled={busy || !(keys[profile.id] ?? '')}>{t.setKey}</Button>
