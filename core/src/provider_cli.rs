@@ -392,6 +392,8 @@ impl Provider for CliProvider {
             self.1,
             None,
         )?;
+        #[cfg(test)]
+        crate::provider::contract_probe::observe_cli(&self.0, &output);
         if !output.status.success() {
             return Err(error("cli", "Provider CLI failed"));
         }

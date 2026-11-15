@@ -287,7 +287,10 @@ fn parse(bytes: &[u8]) -> Result<Value, CoreError> {
             ),
             Some("step_finish") => match event["part"]["reason"].as_str() {
                 Some("stop" | "end_turn") => finished = true,
-                Some("length" | "max_tokens") => {
+                _ if crate::provider::capabilities::lookup("opencode")
+                    .expect("Registered adapter")
+                    .truncated(&event) =>
+                {
                     return Err(error("output_truncated", "Provider response was truncated"))
                 }
                 _ => return Err(error("cli", "OpenCode request did not complete")),
