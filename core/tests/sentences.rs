@@ -51,3 +51,20 @@ fn compact_keeps_original_ids_and_marks_each_new_minute() {
         "## 00:01\n2 Hi!\n3 Fim.\n"
     );
 }
+
+#[test]
+fn compact_metadata_uses_character_weighted_language_and_mixed_bucket() {
+    let mut rows = segment(&[word(0, "abcd.", 0, 1), word(1, "Hi.", 2, 3)]);
+    rows[0].language = Some("pt".into());
+    rows[1].language = Some("en".into());
+    let output = clipes_core::sentences::compact_with_hint(&rows);
+    assert_eq!(output.hint.format, "compact");
+    assert_eq!(output.hint.language, "mul");
+    rows[1].language = Some("pt".into());
+    assert_eq!(
+        clipes_core::sentences::compact_with_hint(&rows)
+            .hint
+            .language,
+        "pt"
+    );
+}

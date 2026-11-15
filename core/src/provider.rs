@@ -74,9 +74,27 @@ pub(crate) fn local_only_violation() -> CoreError {
     )
 }
 
+/// Internal token estimation metadata; adapters construct wire bodies explicitly.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EstimateHint {
+    pub format: String,
+    pub language: String,
+}
+impl Default for EstimateHint {
+    fn default() -> Self {
+        Self {
+            format: "generic".into(),
+            language: "und".into(),
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StructuredRequest {
+    #[serde(default)]
+    pub estimate_hint: EstimateHint,
     pub instruction: String,
     pub transcript: String,
     pub schema: Value,
@@ -123,6 +141,8 @@ mod settings {
     #[derive(Clone, Default, Serialize, Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct Settings {
+        #[serde(default)]
+        token_calibration: Vec<super::cost::Calibration>,
         /// Absent in files written before profiles existed (v1).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         schema_version: Option<u32>,
@@ -545,6 +565,45 @@ mod settings {
         }
         Ok(json!({"profileId": target}))
     }
+    pub(crate) fn calibration_read() -> Result<Vec<super::cost::Calibration>, CoreError> {
+        let _guard = locked()?;
+        Ok(read()?.token_calibration)
+    }
+    pub(crate) fn calibration_add(
+        profile: &str,
+        model: &str,
+        hint: &EstimateHint,
+        chars: u64,
+        tokens: u64,
+    ) -> Result<(), CoreError> {
+        let _guard = locked()?;
+        let mut settings = read()?;
+        let entry = if let Some(i) = settings.token_calibration.iter().position(|v| {
+            v.profile == profile
+                && v.model == model
+                && v.format == hint.format
+                && v.language == hint.language
+        }) {
+            &mut settings.token_calibration[i]
+        } else {
+            settings.token_calibration.push(super::cost::Calibration {
+                profile: profile.into(),
+                model: model.into(),
+                format: hint.format.clone(),
+                language: hint.language.clone(),
+                samples: Vec::new(),
+            });
+            settings
+                .token_calibration
+                .last_mut()
+                .expect("just inserted")
+        };
+        entry.samples.push((chars, tokens));
+        if entry.samples.len() > super::cost::CALIBRATION_SAMPLES {
+            entry.samples.remove(0);
+        }
+        write(&settings)
+    }
     fn profile_remove(args: Value, _: &mut EventSink<'_>) -> CommandResult {
         let id = args
             .get("profileId")
@@ -569,6 +628,9 @@ mod settings {
             settings.providers.remove(&account);
         }
         store(&mut settings, list);
+        settings
+            .token_calibration
+            .retain(|entry| entry.profile != id);
         write(&settings)?;
         Ok(json!({}))
     }
@@ -1097,6 +1159,7 @@ mod security_tests {
 
     fn input() -> StructuredRequest {
         StructuredRequest {
+            estimate_hint: Default::default(),
             instruction: "Return JSON".into(),
             transcript: String::new(),
             schema: json!({"type":"object"}),

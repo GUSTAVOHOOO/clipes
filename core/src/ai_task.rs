@@ -37,6 +37,7 @@ impl Violation {
 #[derive(Debug, Clone, Default)]
 pub struct TaskInput {
     pub transcript: String,
+    pub estimate_hint: crate::provider::EstimateHint,
     pub context: Value,
     /// Usa o schema nativo do Provedor quando ele existe (ADR-0008, regra 4).
     pub native_schema: bool,
@@ -267,6 +268,7 @@ pub fn run(
         return Err(TaskError::new("cancelled", "Operation cancelled"));
     }
     let request = StructuredRequest {
+        estimate_hint: input.estimate_hint.clone(),
         instruction: normalized_prompt(task.prompt),
         transcript: input.transcript.clone(),
         schema: wire,

@@ -64,6 +64,7 @@ fn run(kind: &str) {
         .unwrap();
     });
     let request = StructuredRequest {
+        estimate_hint: Default::default(),
         instruction: "Return JSON".into(),
         transcript: "untrusted".into(),
         schema: json!({"type":"object","required":["schemaVersion"],"properties":{"schemaVersion":{"const":1}}}),
@@ -137,6 +138,7 @@ fn anthropic_truncation_preserves_usage_without_repair() {
         .unwrap();
     });
     let request = StructuredRequest {
+        estimate_hint: Default::default(),
         instruction: "Return JSON".into(),
         transcript: "".into(),
         schema: json!({"type":"object"}),
@@ -196,6 +198,7 @@ fn repair_with_usage(kind: &str) {
         }
     });
     let request = StructuredRequest {
+        estimate_hint: Default::default(),
         instruction: "Return JSON".into(),
         transcript: "".into(),
         schema: json!({"type":"object"}),
@@ -271,6 +274,7 @@ fn truncation(kind: &str, reply: Value) {
         assert!(listener.accept().is_err(), "unexpected repair call");
     });
     let request = StructuredRequest {
+        estimate_hint: Default::default(),
         instruction: "Return JSON".into(),
         transcript: "".into(),
         schema: json!({"type":"object"}),
@@ -351,6 +355,7 @@ fn failure(replies: Vec<Value>) -> clipes_core::CoreError {
         }
     });
     let request = StructuredRequest {
+        estimate_hint: Default::default(),
         instruction: "Return JSON".into(),
         transcript: "".into(),
         schema: json!({"type":"object"}),

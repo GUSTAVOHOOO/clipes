@@ -195,6 +195,7 @@ fn a_repair_is_its_own_cost_row_and_the_call_budget_can_forbid_it() {
     let direct = OpenAiProvider::new(serve(vec![bad, good]), "m".into(), None).unwrap();
     let definition = clipes_core::ai_task::find("example").unwrap();
     let request = StructuredRequest {
+        estimate_hint: Default::default(),
         instruction: clipes_core::ai_task::normalized_prompt(definition.prompt),
         transcript: "direct".into(),
         schema: serde_json::from_str(definition.wire_schema).unwrap(),

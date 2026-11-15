@@ -155,7 +155,8 @@ impl Provider for Probe<'_> {
         let batch = self.batch.clone();
         let route = self.route.clone();
         let guard = Box::new(move |request: &StructuredRequest, entries: &[Value]| {
-            let heuristic = cost::estimate_input_tokens(request);
+            let mut estimate = cost::estimate_for(&route.0, &route.1, request)?;
+            let heuristic = estimate["inputTokens"].as_u64().unwrap_or(0);
             // Actual usage corrects an underestimate before the next send, including repairs.
             let correction = entries.last().map_or(0, |last| {
                 last["usage"]["inputTokens"]
@@ -167,8 +168,15 @@ impl Provider for Probe<'_> {
                             .unwrap_or(heuristic),
                     )
             });
-            let estimate =
-                cost::estimate_with_input(&route.0, request, heuristic.saturating_add(correction))?;
+            if correction > 0 {
+                let corrected = cost::estimate_with_input(
+                    &route.0,
+                    request,
+                    heuristic.saturating_add(correction),
+                )?;
+                estimate["inputTokens"] = corrected["inputTokens"].clone();
+                estimate["maxMicroUsd"] = corrected["maxMicroUsd"].clone();
+            }
             let pending = pending_usage(&route.0, entries)?;
             if let Some((code, message)) = job_limit(task, &estimate) {
                 return Err(error(code, message));
@@ -237,6 +245,7 @@ pub fn enqueue_ai_in_batch(
             "transcript": input.transcript,
             "context": input.context,
             "nativeSchema": input.native_schema,
+            "estimateHint": input.estimate_hint,
         },
     })
     .to_string();
@@ -289,6 +298,8 @@ fn load(id: i64) -> Result<Unit, CoreError> {
         input: TaskInput {
             transcript: input["transcript"].as_str().ok_or_else(invalid)?.into(),
             context: input["context"].clone(),
+            estimate_hint: serde_json::from_value(input["estimateHint"].clone())
+                .unwrap_or_default(),
             native_schema: input["nativeSchema"].as_bool().unwrap_or(false),
         },
         paid: safety != "local",
@@ -397,6 +408,7 @@ fn fail_fixed(id: i64, task: &str, e: CoreError) {
 fn request_of(unit: &Unit) -> Option<StructuredRequest> {
     let (wire, _) = ai_task::check_definition(unit.task).ok()?;
     Some(StructuredRequest {
+        estimate_hint: unit.input.estimate_hint.clone(),
         instruction: ai_task::normalized_prompt(unit.task.prompt),
         transcript: unit.input.transcript.clone(),
         schema: wire,
@@ -508,6 +520,7 @@ fn record_calls(
         .as_u64()
         .or_else(|| estimate["minMicroUsd"].as_u64());
     for entry in entries {
+        let _ = cost::observe_entry(&route.1, &route.0, entry);
         let usage = if matches!(route.0, Target::Cli { .. })
             || matches!(
                 entry["code"].as_str(),
@@ -570,7 +583,7 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
         Err(e) => return fail_fixed(id, task, e),
     };
     let estimate = request_of(&unit)
-        .and_then(|request| cost::estimate(&route.0, &request).ok())
+        .and_then(|request| cost::estimate_for(&route.0, &route.1, &request).ok())
         .unwrap_or_else(|| json!({"kind":"unknown"}));
     if let Some((code, message)) = job_limit(unit.task, &estimate) {
         return fail_fixed(id, task, error(code, message));
@@ -753,7 +766,7 @@ pub(super) fn estimate(id: i64) -> Value {
     let Some(request) = request_of(&unit) else {
         return json!({"kind":"unknown"});
     };
-    cost::estimate(&route.0, &request).unwrap_or_else(|_| json!({"kind":"unknown"}))
+    cost::estimate_for(&route.0, &route.1, &request).unwrap_or_else(|_| json!({"kind":"unknown"}))
 }
 
 fn job_id(v: &Value) -> Result<i64, CoreError> {

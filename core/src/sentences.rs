@@ -299,3 +299,37 @@ pub fn compact(sentences: &[Sentence]) -> String {
     }
     result
 }
+
+/// Character share needed to assign one language to a selection.
+pub const LANGUAGE_MAJORITY_PERCENT: usize = 80;
+
+/// Compact text and internal metadata for the token estimator.
+pub struct CompactTranscript {
+    pub text: String,
+    pub hint: crate::provider::EstimateHint,
+}
+
+pub fn compact_with_hint(sentences: &[Sentence]) -> CompactTranscript {
+    let mut counts = std::collections::BTreeMap::<&str, usize>::new();
+    for s in sentences {
+        *counts
+            .entry(s.language.as_deref().unwrap_or("und"))
+            .or_default() += s.text.chars().count();
+    }
+    let total: usize = counts.values().sum();
+    let language = if total == 0 {
+        "und"
+    } else {
+        counts
+            .into_iter()
+            .find(|(_, n)| n.saturating_mul(100) >= total.saturating_mul(LANGUAGE_MAJORITY_PERCENT))
+            .map_or("mul", |(language, _)| language)
+    };
+    CompactTranscript {
+        text: compact(sentences),
+        hint: crate::provider::EstimateHint {
+            format: "compact".into(),
+            language: language.into(),
+        },
+    }
+}
