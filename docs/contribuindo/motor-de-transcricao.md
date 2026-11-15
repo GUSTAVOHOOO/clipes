@@ -20,3 +20,13 @@ O [ADR-0004](../adr/0004-stack-tauri-react-nucleo-rust-worker-python.md) prevê 
 - **Testes:** `cargo test -p clipes-core --test transcription` (worker falso, com crash e retomada) e `uv run --project worker pytest worker/tests` (modelos falsos). Nenhum teste acessa a rede.
 
 A tarefa `vad` do worker expõe as mesmas fronteiras e silêncios da transcrição local sem carregar um modelo Whisper; o Silero está incluído no pacote faster-whisper. O Motor remoto requer o Componente worker instalado.
+
+Para validar a API durante o desenvolvimento foi feita uma chamada paga manual em
+2026-11-14 com `whisper-large-v3-turbo` e 21,76 s do áudio CC0
+[Richard Rogers - voice - en.ogg](https://commons.wikimedia.org/wiki/File:Richard_Rogers_-_voice_-_en.ogg),
+convertido a FLAC mono 16 kHz em pasta temporária fora do repositório. Retornou 48
+palavras com timestamps ordenados e dentro da duração do áudio. O teste ignorado lê
+`CLIPES_GROQ_KEY_FILE` e `CLIPES_GROQ_TEST_AUDIO`, e os testes automáticos não usam rede.
+A documentação oficial do Groq informa US$ 0,04/h para `whisper-large-v3-turbo`,
+mínimo cobrado de 10 s por chamada e limite de upload de 25 MB:
+<https://console.groq.com/docs/speech-to-text> (consultada em 2026-11-14).

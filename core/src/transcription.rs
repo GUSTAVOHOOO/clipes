@@ -589,3 +589,6 @@ fn words(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 inventory::submit! { CommandRegistration { name: "transcription.start", execute: start } }
 inventory::submit! { CommandRegistration { name: "transcription.status", execute: status } }
 inventory::submit! { CommandRegistration { name: "transcription.words", execute: words } }
+
+#[cfg(test)]
+mod groq_tests;
