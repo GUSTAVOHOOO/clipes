@@ -67,6 +67,8 @@ pub(super) fn begin(
     transcript: i64,
     start: i64,
     duration: i64,
+    endpoint: &str,
+    audio: &[u8],
 ) -> Result<i64, CoreError> {
     guard()?;
     let estimate = groq::estimate_cost(groq::MODEL, duration);
@@ -75,6 +77,17 @@ pub(super) fn begin(
         tx.execute("INSERT INTO transcription_calls(transcript_id,job_id,start_us,end_us,state,estimated_usd) VALUES (?1,?2,?3,?4,'pending',?5)",
             (transcript, job, start, start + duration, estimate["usd"].as_f64()))?;
         let call = tx.last_insert_rowid();
+        // Trilha de auditoria (#125), na mesma transação da chamada: só hashes e metadados.
+        tx.execute(
+            "INSERT INTO call_audit(transcription_call_id,provider_kind,host,model,input_sha256,sent_bytes) VALUES (?1,'transcription',?2,?3,?4,?5)",
+            (
+                call,
+                groq::host_of(endpoint),
+                groq::MODEL,
+                crate::provider::cost::sha256_hex(audio),
+                (groq::multipart_body(&[]).len() + audio.len()) as i64,
+            ),
+        )?;
         tx.execute(
             "UPDATE jobs SET checkpoint=?2 WHERE id=?1 AND state='running'",
             (
@@ -86,6 +99,19 @@ pub(super) fn begin(
         tx.commit()?;
         Ok(call)
     })
+}
+
+/// Guarda o hash do corpo da resposta recebida na linha de auditoria da chamada.
+pub(super) fn audit_response(call: i64, response_sha256: Option<String>) {
+    if let Some(hash) = response_sha256 {
+        let _ = projects::with_writer(|c| {
+            c.execute(
+                "UPDATE call_audit SET response_sha256=?2 WHERE transcription_call_id=?1",
+                (call, hash),
+            )?;
+            Ok(())
+        });
+    }
 }
 
 pub(super) fn failed(call: i64, uncertain: bool) -> Result<(), CoreError> {

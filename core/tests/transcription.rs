@@ -635,6 +635,28 @@ fn groq_uses_vad_checkpoints_absolute_times_and_one_paid_call_per_block() {
     })
     .unwrap();
     assert_eq!(count, 3);
+    // Trilha de auditoria (#125): uma linha por chamada paga, só com hashes e metadados.
+    let audit = dispatch("provider.audit.list", json!({}), &mut |_| {}).unwrap();
+    let audit = audit.as_array().unwrap();
+    assert_eq!(audit.len(), 3);
+    let response = include_str!("fixtures/groq-words.json");
+    for row in audit {
+        assert_eq!(row["providerKind"], "transcription");
+        assert_eq!(row["host"], "127.0.0.1");
+        assert_eq!(row["model"], "whisper-large-v3-turbo");
+        assert!(row["promptSha256"].is_null() && row["costId"].is_null());
+        assert!(row["transcriptionCallId"].is_i64());
+        assert_eq!(row["outcome"], "completed");
+        assert_eq!(row["inputSha256"].as_str().unwrap().len(), 64);
+        assert!(row["sentBytes"].as_i64().unwrap() > 0);
+        assert_eq!(
+            row["responseSha256"],
+            format!(
+                "{:x}",
+                <sha2::Sha256 as sha2::Digest>::digest(response.as_bytes())
+            )
+        );
+    }
 }
 
 #[test]
