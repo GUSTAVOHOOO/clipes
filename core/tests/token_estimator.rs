@@ -59,4 +59,9 @@ fn token_estimates_have_conservative_ranges_and_are_profile_specific() {
     cost::observe_tokens("p", "m", &r, chars / 2, "ok").unwrap();
     assert_eq!(std::fs::read(&path).unwrap(), b"invalid");
     assert_eq!(cost::token_range("p", "m", &r).unwrap(), no_calibration);
+    let invalid_numbers = json!({"version":1,"entries":[{"profile":"p","model":"m","format":"generic","language":"en","samples":[[u64::MAX,1],[1,1]]}]}).to_string();
+    std::fs::write(&path, &invalid_numbers).unwrap();
+    assert_eq!(cost::token_range("p", "m", &r).unwrap(), no_calibration);
+    cost::observe_tokens("p", "m", &r, chars / 2, "ok").unwrap();
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), invalid_numbers);
 }

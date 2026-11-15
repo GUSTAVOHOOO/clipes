@@ -606,6 +606,12 @@ mod settings {
             && file.entries.iter().all(|v| {
                 v.samples.len() <= super::cost::CALIBRATION_SAMPLES
                     && v.samples.iter().all(|(chars, _)| *chars > 0)
+                    && v.samples
+                        .iter()
+                        .try_fold((0u64, 0u64), |(chars, tokens), (c, t)| {
+                            Some((chars.checked_add(*c)?, tokens.checked_add(*t)?))
+                        })
+                        .is_some()
             }))
         .then_some(file)
     }
