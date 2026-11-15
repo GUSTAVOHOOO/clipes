@@ -103,6 +103,9 @@ pub trait Provider {
 }
 
 mod adapters;
+pub mod capabilities;
+#[cfg(test)]
+pub(crate) mod contract_probe;
 pub(crate) mod control;
 pub use adapters::{AnthropicProvider, GeminiProvider, OllamaProvider, OpenAiProvider};
 pub use control::{CancelToken, Timeouts};
