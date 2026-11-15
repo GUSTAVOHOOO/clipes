@@ -172,20 +172,26 @@ mod tests {
     #[test]
     fn fake_server_exercises_each_http_capability_record() {
         for kind in ["openai", "anthropic", "gemini", "ollama"] {
-            let caps = lookup(kind).unwrap();
             for truncated in [false, true] {
                 let listener = TcpListener::bind("127.0.0.1:0").unwrap();
                 let endpoint = format!("http://{}", listener.local_addr().unwrap());
-                let caps = caps.clone();
                 let server = thread::spawn(move || {
                     let (mut stream, _) = listener.accept().unwrap();
                     let bytes = super::super::test_http::read_request(&mut stream);
                     let start = bytes.windows(4).position(|v| v == b"\r\n\r\n").unwrap() + 4;
                     let wire: Value = serde_json::from_slice(&bytes[start..]).unwrap();
-                    let mut expected = json!({});
-                    caps.apply_schema(&mut expected, &json!({"type":"object","properties":{"schemaVersion":{"enum":[1]}},"required":["schemaVersion"],"additionalProperties":false}));
-                    for (key, value) in expected.as_object().unwrap() {
-                        assert_eq!(&wire[key], value);
+                    let schema_pointer = match kind {
+                        "openai" => "/response_format/json_schema/schema",
+                        "anthropic" => "/output_config/format/schema",
+                        "gemini" => "/generationConfig/responseJsonSchema",
+                        _ => "/format",
+                    };
+                    assert_eq!(
+                        wire.pointer(schema_pointer).unwrap(),
+                        &json!({"type":"object","properties":{"schemaVersion":{"enum":[1]}},"required":["schemaVersion"],"additionalProperties":false})
+                    );
+                    if kind == "openai" {
+                        assert_eq!(wire["response_format"]["json_schema"]["strict"], true);
                     }
                     let text = "{\"schemaVersion\":1}";
                     let body = match kind {

@@ -1,6 +1,21 @@
 {
   "openai": {
     "models": {
+      "openai/gpt-oss-120b": {
+        "nativeSchemaSupport": "accepted_and_validated",
+        "service": "groq",
+        "observedAt": "2026-11-15"
+      },
+      "openai/gpt-oss-20b": {
+        "nativeSchemaSupport": "accepted_and_validated",
+        "service": "groq",
+        "observedAt": "2026-11-15"
+      },
+      "qwen/qwen3.8-27b": {
+        "nativeSchemaSupport": "accepted_and_validated",
+        "service": "groq",
+        "observedAt": "2026-11-15"
+      },
       "inclusionai/ling-3.2-flash:free": {
         "nativeSchemaSupport": "accepted_and_validated",
         "service": "openrouter",

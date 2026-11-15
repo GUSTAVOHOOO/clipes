@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory)][ValidateSet('openrouter','groq','codex','claude','ollama','lmstudio','llamacpp')][string]$Service,
     [Parameter(Mandatory)][string]$Models,
     [string]$Endpoint,
+    [ValidateSet('matrix','prompt-truncation','schema-smoke')][string]$Case = 'matrix',
     [string]$Ledger = (Join-Path $env:TEMP 'clipes-contract-122-ledger.json')
 )
 $ErrorActionPreference = 'Stop'
@@ -21,6 +22,7 @@ try {
     $env:CLIPES_CONTRACT_MODELS = $Models
     $env:CLIPES_CONTRACT_ENDPOINT = $Endpoint
     $env:CLIPES_CONTRACT_LEDGER = $Ledger
+    $env:CLIPES_CONTRACT_CASE = $Case
     $env:RUST_LOG = 'off'
     $env:RUST_BACKTRACE = '0'
     # CLIPES_GROQ_KEY_FILE / CLIPES_OPENROUTER_KEY_FILE are paths, never key values.

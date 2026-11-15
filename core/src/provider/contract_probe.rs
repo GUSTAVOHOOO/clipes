@@ -188,6 +188,15 @@ fn real_provider_contract() {
             }
         }
         scenarios.extend([(true, "truncation", 0), (false, "refusal", 0)]);
+        match std::env::var("CLIPES_CONTRACT_CASE")
+            .as_deref()
+            .unwrap_or("matrix")
+        {
+            "matrix" => {}
+            "prompt-truncation" if !cli => scenarios = vec![(false, "truncation", 0)],
+            "schema-smoke" if !cli => scenarios = vec![(true, "normal", 0), (false, "normal", 0)],
+            _ => panic!("Invalid manual probe case"),
+        }
         if cli {
             scenarios = vec![
                 (true, "normal", 0),
