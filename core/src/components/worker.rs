@@ -217,6 +217,12 @@ fn sync_args(project: &Path, cuda: bool) -> Vec<OsString> {
     .to_vec();
     args.push(project.into());
     args.extend(["--extra", if cuda { "cuda" } else { "cpu" }].map(OsString::from));
+    // faster-whisper requires the CPU distribution by name. Both distributions
+    // own `onnxruntime/`; installing both makes the selected provider depend on
+    // extraction order. Keep it resolved in the lock, install only the GPU wheel.
+    if cuda {
+        args.extend(["--no-install-package", "onnxruntime"].map(OsString::from));
+    }
     args
 }
 
@@ -532,7 +538,10 @@ mod tests {
             "versões travadas pelo lockfile"
         );
         assert!(cpu.windows(2).any(|w| w == ["--extra", "cpu"]));
-        assert_eq!(&gpu[..gpu.len() - 2], &cpu[..cpu.len() - 2]);
+        assert!(gpu
+            .windows(2)
+            .any(|w| w == ["--no-install-package", "onnxruntime"]));
+        assert_eq!(&gpu[..gpu.len() - 4], &cpu[..cpu.len() - 2]);
     }
 
     #[test]
