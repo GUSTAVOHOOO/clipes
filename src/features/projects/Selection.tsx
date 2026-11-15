@@ -8,14 +8,15 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { openCutPreview } from './CutPreview';
 import { CandidateReview } from './CandidateReview';
 import { clock, fill, message } from './selectionFormat';
+import { VideoKindBadge, VideoKindPicker, WeightsLine, kindOf, type VideoKind } from './videoKind';
 
 type Estimate = { kind: string; windows: number; inputTokens: number; minMicroUsd: number | null; maxMicroUsd: number | null };
 type Weight = { key: string; weight: number };
-type Preview = { paid: boolean; profile?: string; plan?: { state: 'full' | 'reduced'; windows: unknown[] }; weights?: Weight[]; estimate: Estimate };
+type Preview = { paid: boolean; videoKind?: VideoKind; profile?: string; plan?: { state: 'full' | 'reduced'; windows: unknown[] }; weights?: Weight[]; estimate: Estimate };
 type Axis = { score: number; why: string };
 type Candidate = { id: number; rank: number; startId: number; endId: number; startUs: number; endUs: number; axes: Record<string, Axis>; total: number; title: string; windows: number[]; adjusted: boolean; adjust: { extendedBefore?: number; extendedAfter?: number; trimmedEnd?: number } | null };
 type Win = { index: number; startUs: number; endUs: number; state: string; code: string | null };
-type Run = { summary?: { energy?: { measured: boolean; high?: number; peak?: number } } | null; id: number; state: 'running' | 'completed' | 'partial'; weights: Weight[]; budgetPause: string | null; counts: { windows: number; completed: number; failed: number; kept: number; discarded: number; merged: number }; createdAt: string };
+type Run = { videoKind?: VideoKind; summary?: { energy?: { measured: boolean; high?: number; peak?: number } } | null; id: number; state: 'running' | 'completed' | 'partial'; weights: Weight[]; budgetPause: string | null; counts: { windows: number; completed: number; failed: number; kept: number; discarded: number; merged: number }; createdAt: string };
 type Detail = { run: Run; windows: Win[]; candidates: Candidate[] };
 type Pending = { kind: 'start' } | { kind: 'redo'; windows?: number[] };
 
@@ -60,6 +61,7 @@ export function Selection({ sourceId }: { sourceId: number }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [minScore, setMinScore] = useState(0);
+  const [videoKind, setVideoKind] = useState<VideoKind>('direct');
   const [pending, setPending] = useState<Pending | null>(null);
   const [redoPaid, setRedoPaid] = useState<Preview | null>(null);
   const focus = useRef<HTMLButtonElement>(null);
@@ -73,10 +75,14 @@ export function Selection({ sourceId }: { sourceId: number }) {
   useEffect(() => {
     let active = true;
     setBlocked(''); setPreview(null);
-    coreDispatch<Preview>('selection.estimate', { source_id: sourceId }).then(p => { if (active) setPreview(p); }).catch(e => { if (active) setBlocked(message(e)); });
+    coreDispatch<Preview>('selection.estimate', { source_id: sourceId, videoKind }).then(p => { if (active) setPreview(p); }).catch(e => { if (active) setBlocked(message(e)); });
+    return () => { active = false; };
+  }, [sourceId, videoKind]);
+  useEffect(() => {
+    let active = true;
     loadRuns().catch(() => { if (active) setError(t.error); });
     return () => { active = false; };
-  }, [sourceId, loadRuns, t.error]);
+  }, [loadRuns, t.error]);
   useEffect(() => {
     if (current === null) return;
     let active = true;
@@ -100,7 +106,7 @@ export function Selection({ sourceId }: { sourceId: number }) {
   }
   async function startNow(confirmed: boolean) {
     await run(async () => {
-      const started = await coreDispatch<{ run: number }>('selection.start', { source_id: sourceId, confirmed });
+      const started = await coreDispatch<{ run: number }>('selection.start', { source_id: sourceId, videoKind, confirmed });
       setCurrent(started.run); await loadDetail(started.run);
     });
   }
@@ -124,7 +130,10 @@ export function Selection({ sourceId }: { sourceId: number }) {
   const shown = (detail?.candidates ?? []).filter(c => c.total >= minScore);
   const dialogEstimate = pending?.kind === 'start' ? preview?.estimate : redoPaid?.estimate;
   const weights = head?.weights ?? preview?.weights ?? [];
+  const runKind = kindOf(head?.videoKind);
   return <section aria-label={t.title} className="mt-3 flex w-full flex-col gap-3 text-sm">
+    <VideoKindPicker value={videoKind} onChange={setVideoKind} disabled={busy || running} />
+    {preview?.weights && <WeightsLine weights={preview.weights} />}
     <div className="flex flex-wrap items-center gap-3">
       <Button ref={focus} variante="primario" disabled={busy || running || preview === null} onClick={begin}>{t.start}</Button>
       {preview && <span className="text-fg-2">{fill(t.estimate, { windows: preview.estimate.windows })} · {costText(preview.estimate)}{preview.plan?.state === 'reduced' ? ` · ${t.reduced}` : ''}</span>}
@@ -134,6 +143,7 @@ export function Selection({ sourceId }: { sourceId: number }) {
     {blocked && <p role="alert" className="rounded-md border border-line bg-warning-subtle p-3 text-fg">{blocked}</p>}
     {head && <div className="flex flex-col gap-2" aria-live="polite">
       <div className="flex flex-wrap items-center gap-3">
+        <VideoKindBadge kind={runKind} />
         <span>{running ? t.running : head.state === 'completed' ? t.done : t.partial} · {fill(t.windowsDone, { done: head.counts.completed, total: head.counts.windows })}</span>
         <progress className="w-40 max-w-full" max={head.counts.windows} value={head.counts.completed + head.counts.failed} aria-label={t.progress} />
         {!running && needsRedo && <Button disabled={busy} onClick={() => void askRedo()}>{t.resume}</Button>}
@@ -150,7 +160,7 @@ export function Selection({ sourceId }: { sourceId: number }) {
       <label className="flex items-center gap-2">{t.minScore}<input type="number" min={0} max={10} step={0.5} value={minScore} onChange={e => setMinScore(Math.min(10, Math.max(0, Number(e.target.value) || 0)))} className="h-8 w-20 rounded-md border border-line-strong bg-field px-2" /></label>
       {!running && detail.candidates.length === 0 && head.state === 'completed' && <p>{t.none}</p>}
       {detail.candidates.length > 0 && shown.length === 0 && <p>{t.noneFilter}</p>}
-      {current !== null && shown.length > 0 && <CandidateReview run={current} candidates={shown} weights={weights} onOpenPreview={(_, startUs, endUs) => openCutPreview({ sourceId, startUs, endUs })} />}
+      {current !== null && shown.length > 0 && <CandidateReview run={current} videoKind={runKind} candidates={shown} weights={weights} onOpenPreview={(_, startUs, endUs) => openCutPreview({ sourceId, startUs, endUs })} />}
     </div>}
     {error && <p role="alert" className="text-danger">{error}</p>}
     <ConfirmDialog open={pending !== null} onOpenChange={open => { if (!open) setPending(null); }} title={t.confirmTitle}

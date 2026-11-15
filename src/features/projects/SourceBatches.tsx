@@ -4,11 +4,12 @@ import { coreDispatch } from '@/lib/core';
 import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { VideoKindBadge, VideoKindPicker, kindOf, type VideoKind } from './videoKind';
 
 type SourceRow = { id: number; path: string; status: string };
 type Item = { position: number; sourceId: number; name: string | null; state: 'pending' | 'transcribing' | 'selecting' | 'completed' | 'paused' | 'cancelled'; error: string | null; progress: number | null };
 type Budget = { maxCostMicroUsd: number | null; usage: { microUsd: number; audioMicroUsd?: number; costLabel: string | null } } | null;
-type Batch = { id: number; key: string; status: 'running' | 'paused' | 'budget_paused' | 'attention' | 'completed' | 'cancelled'; pause: string | null; budget: Budget; counts: { total: number; completed: number; paused: number; active: number; pending: number; cancelled: number }; items: Item[] };
+type Batch = { id: number; key: string; videoKind?: VideoKind; status: 'running' | 'paused' | 'budget_paused' | 'attention' | 'completed' | 'cancelled'; pause: string | null; budget: Budget; counts: { total: number; completed: number; paused: number; active: number; pending: number; cancelled: number }; items: Item[] };
 type Pending =
   | { kind: 'create'; usage: { selectionPaid?: boolean; transcriptionPaid?: boolean; audioEstimateMicroUsd?: number | null; maxCostMicroUsd?: number | null; sources?: number } }
   | { kind: 'item'; batch: number; source: number; estimate: string }
@@ -68,6 +69,7 @@ export function SourceBatches({ project, projectId }: { project: string; project
   const [chosen, setChosen] = useState<number[]>([]);
   const [engine, setEngine] = useState<'local' | 'groq'>('local');
   const [cap, setCap] = useState('');
+  const [videoKind, setVideoKind] = useState<VideoKind>('direct');
   const [batches, setBatches] = useState<Batch[]>([]);
   const [capEdit, setCapEdit] = useState<Record<number, string>>({});
   const [pending, setPending] = useState<Pending | null>(null);
@@ -97,7 +99,7 @@ export function SourceBatches({ project, projectId }: { project: string; project
   const capMicro = toMicro(cap);
   async function create(confirmed: boolean) {
     await run(
-      () => coreDispatch('batches.create', { sourceIds: chosen, engine, ...(capMicro !== null ? { maxCostMicroUsd: capMicro } : {}), ...(confirmed ? { confirmed: true } : {}) }).then(() => { setChosen([]); setCap(''); }),
+      () => coreDispatch('batches.create', { sourceIds: chosen, engine, videoKind, ...(capMicro !== null ? { maxCostMicroUsd: capMicro } : {}), ...(confirmed ? { confirmed: true } : {}) }).then(() => { setChosen([]); setCap(''); }),
       f => { if (f.code === 'confirmation_required') { setPending({ kind: 'create', usage: (f as { usage?: Extract<Pending, { kind: 'create' }>['usage'] }).usage ?? {} }); return true; } return false; },
     );
   }
@@ -138,6 +140,7 @@ export function SourceBatches({ project, projectId }: { project: string; project
     <fieldset className="mt-3"><legend className="text-sm">{t.pick}</legend>
       {sources.length === 0 ? <p className="text-sm text-fg-2">{t.none}</p> : <ul className="mt-1 flex flex-col gap-1">{sources.map(s => <li key={s.id}><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={chosen.includes(s.id)} onChange={() => toggle(s.id)} />{name(s.path)}</label></li>)}</ul>}
     </fieldset>
+    <div className="mt-3 text-sm"><VideoKindPicker value={videoKind} onChange={setVideoKind} disabled={busy} /></div>
     <div className="mt-3 flex flex-wrap items-end gap-3">
       <label className="flex flex-col gap-1 text-sm">{t.engine}<select className="foco h-8 rounded-md border border-line-strong bg-field px-3 text-fg" value={engine} onChange={e => setEngine(e.target.value as 'local' | 'groq')}><option value="local">{t.local}</option><option value="groq">{t.groq}</option></select></label>
       <label className="flex flex-col gap-1 text-sm">{t.cap}<input inputMode="decimal" className="foco h-8 w-40 rounded-md border border-line-strong bg-field px-3 text-fg" value={cap} onChange={e => setCap(e.target.value)} /></label>
@@ -147,7 +150,7 @@ export function SourceBatches({ project, projectId }: { project: string; project
     {batches.length > 0 && <h3 className="mt-5 text-sm font-semibold">{t.created}</h3>}
     <ul className="mt-2 flex flex-col gap-4">{batches.map(b => <li key={b.id} className="rounded-md border border-line p-3" aria-label={`${t.title} ${b.id}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><p className="font-medium">{t.title} {b.id} · {t.status[b.status]}</p><p className="text-sm text-fg-2">{fill(t.summary, { done: b.counts.completed, total: b.counts.total })}</p>{costLine(b) && <p className="text-sm text-fg-2">{costLine(b)}</p>}</div>
+        <div><p className="flex flex-wrap items-center gap-2 font-medium">{t.title} {b.id} · {t.status[b.status]} <VideoKindBadge kind={kindOf(b.videoKind)} /></p><p className="text-sm text-fg-2">{fill(t.summary, { done: b.counts.completed, total: b.counts.total })}</p>{costLine(b) && <p className="text-sm text-fg-2">{costLine(b)}</p>}</div>
         <div className="flex gap-2">
           {(b.status === 'running' || b.status === 'attention' || b.status === 'budget_paused') && <Button disabled={busy} onClick={() => void run(() => coreDispatch('batches.pause', { id: b.id }))}>{t.pause}</Button>}
           {b.status === 'paused' && <Button disabled={busy} onClick={() => void run(() => coreDispatch('batches.resume', { id: b.id }))}>{t.resume}</Button>}
