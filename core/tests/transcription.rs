@@ -916,3 +916,44 @@ fn manually_switching_the_model_of_a_partial_transcript_asks_before_discarding_i
     assert_eq!(kept["state"], "complete");
     assert_eq!(env.status(source)["transcript"]["model"], "whisper-turbo");
 }
+
+#[test]
+fn resuming_a_partial_transcript_never_overwrites_corrections() {
+    let env = Env::new(25);
+    env.install_models();
+    let source = env.import(0);
+    let crash = env.root.path().join("crash");
+    fs::write(&crash, b"1").unwrap();
+    std::env::set_var("CLIPES_FAKE_WORKER_CRASH", &crash);
+    env.start(source).unwrap();
+    env.wait_transcribe("failed");
+    // Transcrição parcial (sem Frases ainda): corrige a primeira palavra gravada.
+    let first = env
+        .rows(source)
+        .into_iter()
+        .find(|r| r["kind"] == "word")
+        .unwrap();
+    let position = first["position"].as_i64().unwrap();
+    let original = first["text"].as_str().unwrap().to_owned();
+    run(
+        "transcription.correct",
+        json!({"source_id":source,"position":position,"text":"CORRIGIDA"}),
+    )
+    .unwrap();
+    env.start(source).unwrap();
+    wait("transcrição completa", || {
+        env.status(source)["transcript"]["state"] == "complete"
+    });
+    let rows = env.rows(source);
+    let word = rows.iter().find(|r| r["position"] == position).unwrap();
+    assert_eq!(word["text"].as_str().unwrap().trim(), "CORRIGIDA");
+    assert_eq!(word["original_text"], original);
+    assert_eq!(word["corrected"], true);
+    // Blocos novos acrescentaram palavras sem repetir nem mexer nas anteriores.
+    assert_eq!(rows.iter().filter(|r| r["corrected"] == true).count(), 1);
+    // Frase e busca já nascem com o texto corrigido.
+    let sentences = run("transcription.sentences", json!({"source_id":source})).unwrap();
+    assert!(sentences[0]["text"].as_str().unwrap().contains("CORRIGIDA"));
+    let hits = run("transcription.search", json!({"query":"corrigida"})).unwrap();
+    assert_eq!(hits.as_array().unwrap().len(), 1);
+}

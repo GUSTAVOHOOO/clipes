@@ -791,10 +791,10 @@ fn words(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let limit = v["limit"].as_i64().unwrap_or(10_000).clamp(1, 100_000);
     projects::with_reader(|c| {
         let mut q = c.prepare(
-            "SELECT w.position, w.kind, w.text, w.start_us, w.end_us, w.language, w.speaker FROM transcript_words w JOIN transcripts t ON t.id=w.transcript_id WHERE t.source_id=?1 AND w.end_us>=?2 AND w.start_us<=?3 ORDER BY w.position LIMIT ?4",
+            "SELECT w.position, w.kind, COALESCE(w.corrected_text, w.text), w.start_us, w.end_us, w.language, w.speaker, w.text, w.corrected_text IS NOT NULL FROM transcript_words w JOIN transcripts t ON t.id=w.transcript_id WHERE t.source_id=?1 AND w.end_us>=?2 AND w.start_us<=?3 ORDER BY w.position LIMIT ?4",
         )?;
         let rows = q.query_map((source, from, to, limit), |r| {
-            Ok(json!({"position": r.get::<_, i64>(0)?, "kind": r.get::<_, String>(1)?, "text": r.get::<_, String>(2)?, "start_us": r.get::<_, i64>(3)?, "end_us": r.get::<_, i64>(4)?, "language": r.get::<_, Option<String>>(5)?, "speaker": r.get::<_, Option<String>>(6)?}))
+            Ok(json!({"position": r.get::<_, i64>(0)?, "kind": r.get::<_, String>(1)?, "text": r.get::<_, String>(2)?, "start_us": r.get::<_, i64>(3)?, "end_us": r.get::<_, i64>(4)?, "language": r.get::<_, Option<String>>(5)?, "speaker": r.get::<_, Option<String>>(6)?, "original_text": r.get::<_, String>(7)?, "corrected": r.get::<_, bool>(8)?}))
         })?;
         rows.collect::<rusqlite::Result<Vec<_>>>()
     })
