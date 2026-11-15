@@ -1,6 +1,112 @@
+use super::groq::{language_code, request};
 use super::*;
 use std::io::{Read, Write};
 use std::net::TcpListener;
+
+#[test]
+fn estimate_accounts_for_minimum_billing_and_unknown_models() {
+    let estimate = super::groq::estimate_cost("whisper-large-v3-turbo", 1_000_000);
+    assert!((estimate["usd"].as_f64().unwrap() - 0.04 / 360.0).abs() < 1e-10);
+    assert_eq!(
+        super::groq::estimate_cost("unknown", 10_000_000)["kind"],
+        "unknown"
+    );
+}
+
+fn server_reply(
+    status: u16,
+    headers: &str,
+    delay: Duration,
+) -> (String, std::thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let headers = headers.to_owned();
+    let thread = std::thread::spawn(move || {
+        let (mut socket, _) = listener.accept().unwrap();
+        socket.set_nonblocking(false).unwrap();
+        socket
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let mut request = Vec::new();
+        let mut buffer = [0; 4096];
+        loop {
+            let n = socket.read(&mut buffer).unwrap();
+            assert!(n > 0);
+            request.extend_from_slice(&buffer[..n]);
+            if let Some(end) = request.windows(4).position(|w| w == b"\r\n\r\n") {
+                let len = String::from_utf8_lossy(&request[..end])
+                    .lines()
+                    .find_map(|l| {
+                        l.to_lowercase()
+                            .strip_prefix("content-length: ")
+                            .and_then(|s| s.parse::<usize>().ok())
+                    })
+                    .unwrap();
+                if request.len() >= end + 4 + len {
+                    break;
+                }
+            }
+        }
+        std::thread::sleep(delay);
+        let _ = write!(socket,"HTTP/1.1 {status} Status\r\n{headers}Content-Length: 2\r\nConnection: close\r\n\r\n{{}}");
+    });
+    (url, thread)
+}
+
+#[test]
+fn http_errors_are_typed_and_never_echo_responses() {
+    for (status, code) in [
+        (401, "groq_key"),
+        (413, "audio_too_large"),
+        (429, "rate_limit"),
+        (500, "groq_http"),
+    ] {
+        let (url, thread) = server_reply(status, "", Duration::ZERO);
+        let e = request(
+            &url,
+            "fake",
+            b"audio",
+            &crate::provider::CancelToken::new(),
+            Duration::from_secs(2),
+        )
+        .unwrap_err();
+        assert_eq!(e.code, code);
+        assert!(!e.message.contains(&url));
+        thread.join().unwrap();
+    }
+}
+
+#[test]
+fn paid_timeout_is_uncertain_and_is_not_retried() {
+    let (url, thread) = server_reply(200, "", Duration::from_millis(200));
+    let e = request(
+        &url,
+        "fake",
+        b"audio",
+        &crate::provider::CancelToken::new(),
+        Duration::from_millis(40),
+    )
+    .unwrap_err();
+    assert_eq!(e.code, "timeout_uncertain");
+    thread.join().unwrap();
+}
+
+#[test]
+fn retry_after_wait_can_be_cancelled_without_another_call() {
+    let (url, thread) = server_reply(429, "Retry-After: 30\r\n", Duration::ZERO);
+    let token = crate::provider::CancelToken::new();
+    let other = token.clone();
+    let canceller = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(100));
+        other.cancel();
+    });
+    let start = std::time::Instant::now();
+    let e = request(&url, "fake", b"audio", &token, Duration::from_secs(2)).unwrap_err();
+    assert_eq!(e.code, "cancelled");
+    assert!(start.elapsed() < Duration::from_secs(2));
+    thread.join().unwrap();
+    canceller.join().unwrap();
+}
 
 #[test]
 fn parses_words_from_official_format_and_submits_word_timestamps() {
@@ -81,179 +187,6 @@ fn groq_real_audio() {
     );
 }
 
-/// Cliente da API de transcrição. Não registra chave, áudio nem respostas.
-fn request(
-    endpoint: &str,
-    key: &str,
-    audio: &[u8],
-    cancel: &crate::provider::CancelToken,
-    timeout: Duration,
-) -> Result<Vec<Word>, CoreError> {
-    use std::sync::mpsc;
-    if cancel.is_cancelled() {
-        return Err(error("cancelled", "Transcrição cancelada."));
-    }
-    if audio.len() > 24_000_000 {
-        return Err(error(
-            "audio_too_large",
-            "O bloco de áudio excede o limite do Groq.",
-        ));
-    }
-    let boundary = "clipes-transcription-boundary";
-    let mut body = Vec::with_capacity(audio.len() + 1024);
-    for (name, value) in [
-        ("model", "whisper-large-v3-turbo"),
-        ("response_format", "verbose_json"),
-        ("timestamp_granularities[]", "word"),
-    ] {
-        body.extend_from_slice(format!("--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n").as_bytes());
-    }
-    body.extend_from_slice(format!("--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.flac\"\r\nContent-Type: audio/flac\r\n\r\n").as_bytes());
-    body.extend_from_slice(audio);
-    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
-    let client = reqwest::blocking::Client::builder()
-        .timeout(timeout)
-        .redirect(reqwest::redirect::Policy::none())
-        .no_proxy()
-        .build()
-        .map_err(|_| error("network", "Não foi possível iniciar a conexão."))?;
-    for attempt in 0..3 {
-        if cancel.is_cancelled() {
-            return Err(error("cancelled", "Transcrição cancelada."));
-        }
-        let call = client
-            .post(endpoint)
-            .bearer_auth(key)
-            .header(
-                reqwest::header::CONTENT_TYPE,
-                format!("multipart/form-data; boundary={boundary}"),
-            )
-            .body(body.clone());
-        let (tx, rx) = mpsc::channel();
-        std::thread::spawn(move || {
-            let result = call.send().and_then(|response| {
-                let status = response.status().as_u16();
-                let retry = response
-                    .headers()
-                    .get(reqwest::header::RETRY_AFTER)
-                    .and_then(|v| v.to_str().ok())
-                    .map(str::to_owned);
-                response.bytes().map(|bytes| (status, retry, bytes))
-            });
-            let _ = tx.send(result);
-        });
-        let reply = loop {
-            match rx.recv_timeout(Duration::from_millis(25)) {
-                Ok(result) => {
-                    break result.map_err(|_| {
-                        error(
-                            "timeout_uncertain",
-                            "O resultado da chamada ao Groq é incerto.",
-                        )
-                    })?
-                }
-                Err(mpsc::RecvTimeoutError::Timeout) if cancel.is_cancelled() => {
-                    return Err(error(
-                        "timeout_uncertain",
-                        "O resultado da chamada ao Groq é incerto.",
-                    ))
-                }
-                Err(mpsc::RecvTimeoutError::Timeout) => {}
-                Err(_) => {
-                    return Err(error(
-                        "timeout_uncertain",
-                        "O resultado da chamada ao Groq é incerto.",
-                    ))
-                }
-            }
-        };
-        match reply.0 {
-            401 => return Err(error("groq_key", "Chave do Groq inválida.")),
-            413 => {
-                return Err(error(
-                    "audio_too_large",
-                    "O bloco de áudio excede o limite do Groq.",
-                ))
-            }
-            429 if attempt < 2 => {
-                let secs = reply
-                    .1
-                    .as_deref()
-                    .and_then(|s| s.parse::<u64>().ok())
-                    .ok_or_else(|| error("rate_limit", "O Groq limitou as chamadas."))?;
-                let end = std::time::Instant::now() + Duration::from_secs(secs);
-                while std::time::Instant::now() < end {
-                    if cancel.is_cancelled() {
-                        return Err(error("cancelled", "Transcrição cancelada."));
-                    }
-                    std::thread::sleep(
-                        end.saturating_duration_since(std::time::Instant::now())
-                            .min(Duration::from_millis(25)),
-                    );
-                }
-            }
-            429 => return Err(error("rate_limit", "O Groq limitou as chamadas.")),
-            200..=299 => {
-                let value: Value = serde_json::from_slice(&reply.2).map_err(|_| {
-                    error("invalid_response", "O Groq retornou uma resposta inválida.")
-                })?;
-                let words = value["words"].as_array().ok_or_else(|| {
-                    error("invalid_response", "O Groq retornou uma resposta inválida.")
-                })?;
-                return words
-                    .iter()
-                    .map(|word| {
-                        let time = |name: &str| {
-                            word[name]
-                                .as_f64()
-                                .filter(|v| {
-                                    v.is_finite()
-                                        && *v >= 0.0
-                                        && *v < (i64::MAX as f64 / 1_000_000.0)
-                                })
-                                .map(|v| (v * 1_000_000.0).round() as i64)
-                                .ok_or_else(|| {
-                                    error(
-                                        "invalid_response",
-                                        "O Groq retornou uma resposta inválida.",
-                                    )
-                                })
-                        };
-                        let start_us = time("start")?;
-                        let end_us = time("end")?;
-                        if end_us < start_us {
-                            return Err(error(
-                                "invalid_response",
-                                "O Groq retornou uma resposta inválida.",
-                            ));
-                        }
-                        Ok(Word {
-                            text: word["word"]
-                                .as_str()
-                                .ok_or_else(|| {
-                                    error(
-                                        "invalid_response",
-                                        "O Groq retornou uma resposta inválida.",
-                                    )
-                                })?
-                                .trim()
-                                .into(),
-                            start_us,
-                            end_us,
-                            language: value["language"]
-                                .as_str()
-                                .and_then(language_code)
-                                .map(str::to_owned),
-                        })
-                    })
-                    .collect();
-            }
-            _ => return Err(error("groq_http", "O Groq recusou a chamada.")),
-        }
-    }
-    unreachable!()
-}
-
 #[test]
 fn groq_key_commands_never_return_the_secret() {
     let secret = "not-a-real-key";
@@ -308,112 +241,32 @@ fn whisper_languages_are_normalized_to_iso_codes() {
     assert_eq!(language_code("made-up"), None);
 }
 
-// Whisper tokenizer LANGUAGES, excluding the three-letter `yue`, which is not ISO-639-1.
-// https://github.com/openai/whisper/blob/main/whisper/tokenizer.py
-const LANGUAGES: &[(&str, &str)] = &[
-    ("en", "english"),
-    ("zh", "chinese"),
-    ("de", "german"),
-    ("es", "spanish"),
-    ("ru", "russian"),
-    ("ko", "korean"),
-    ("fr", "french"),
-    ("ja", "japanese"),
-    ("pt", "portuguese"),
-    ("tr", "turkish"),
-    ("pl", "polish"),
-    ("ca", "catalan"),
-    ("nl", "dutch"),
-    ("ar", "arabic"),
-    ("sv", "swedish"),
-    ("it", "italian"),
-    ("id", "indonesian"),
-    ("hi", "hindi"),
-    ("fi", "finnish"),
-    ("vi", "vietnamese"),
-    ("he", "hebrew"),
-    ("uk", "ukrainian"),
-    ("el", "greek"),
-    ("ms", "malay"),
-    ("cs", "czech"),
-    ("ro", "romanian"),
-    ("da", "danish"),
-    ("hu", "hungarian"),
-    ("ta", "tamil"),
-    ("no", "norwegian"),
-    ("th", "thai"),
-    ("ur", "urdu"),
-    ("hr", "croatian"),
-    ("bg", "bulgarian"),
-    ("lt", "lithuanian"),
-    ("la", "latin"),
-    ("mi", "maori"),
-    ("ml", "malayalam"),
-    ("cy", "welsh"),
-    ("sk", "slovak"),
-    ("te", "telugu"),
-    ("fa", "persian"),
-    ("lv", "latvian"),
-    ("bn", "bengali"),
-    ("sr", "serbian"),
-    ("az", "azerbaijani"),
-    ("sl", "slovenian"),
-    ("kn", "kannada"),
-    ("et", "estonian"),
-    ("mk", "macedonian"),
-    ("br", "breton"),
-    ("eu", "basque"),
-    ("is", "icelandic"),
-    ("hy", "armenian"),
-    ("ne", "nepali"),
-    ("mn", "mongolian"),
-    ("bs", "bosnian"),
-    ("kk", "kazakh"),
-    ("sq", "albanian"),
-    ("sw", "swahili"),
-    ("gl", "galician"),
-    ("mr", "marathi"),
-    ("pa", "punjabi"),
-    ("si", "sinhala"),
-    ("km", "khmer"),
-    ("sn", "shona"),
-    ("yo", "yoruba"),
-    ("so", "somali"),
-    ("af", "afrikaans"),
-    ("oc", "occitan"),
-    ("ka", "georgian"),
-    ("be", "belarusian"),
-    ("tg", "tajik"),
-    ("sd", "sindhi"),
-    ("gu", "gujarati"),
-    ("am", "amharic"),
-    ("yi", "yiddish"),
-    ("lo", "lao"),
-    ("uz", "uzbek"),
-    ("fo", "faroese"),
-    ("ht", "haitian creole"),
-    ("ps", "pashto"),
-    ("tk", "turkmen"),
-    ("nn", "nynorsk"),
-    ("mt", "maltese"),
-    ("sa", "sanskrit"),
-    ("lb", "luxembourgish"),
-    ("my", "myanmar"),
-    ("bo", "tibetan"),
-    ("tl", "tagalog"),
-    ("mg", "malagasy"),
-    ("as", "assamese"),
-    ("tt", "tatar"),
-    ("ln", "lingala"),
-    ("ha", "hausa"),
-    ("ba", "bashkir"),
-    ("jw", "javanese"),
-    ("su", "sundanese"),
-];
-
-fn language_code(input: &str) -> Option<&'static str> {
-    LANGUAGES
-        .iter()
-        .find(|(code, name)| input.eq_ignore_ascii_case(code) || input.eq_ignore_ascii_case(name))
-        .map(|(code, _)| *code)
+#[test]
+fn oversized_or_cancelled_audio_never_connects() {
+    let token = crate::provider::CancelToken::new();
+    token.cancel();
+    assert_eq!(
+        request(
+            "http://127.0.0.1:1",
+            "fake",
+            b"a",
+            &token,
+            Duration::from_secs(1)
+        )
+        .unwrap_err()
+        .code,
+        "cancelled"
+    );
+    assert_eq!(
+        request(
+            "http://127.0.0.1:1",
+            "fake",
+            &vec![0; 24_000_001],
+            &crate::provider::CancelToken::new(),
+            Duration::from_secs(1)
+        )
+        .unwrap_err()
+        .code,
+        "audio_too_large"
+    );
 }
