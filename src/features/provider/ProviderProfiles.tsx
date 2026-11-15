@@ -7,12 +7,12 @@ import { profileTexts } from './profileTexts';
 
 type Price = { inputPerMillion: number; outputPerMillion: number; source: 'override' | 'table' };
 type Profile = {
-  id: string; label: string; kind: 'openai' | 'anthropic' | 'gemini' | 'codex' | 'claude'; endpoint: string | null; model: string | null;
-  nativeSchema: boolean; ownKey: boolean; keyLastFour: string | null; local: boolean; confirmed: boolean; price: Price | null;
+  id: string; label: string; kind: 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'codex' | 'claude'; endpoint: string | null; model: string | null;
+  nativeSchema: boolean; ownKey: boolean; context: number | null; keyLastFour: string | null; local: boolean; confirmed: boolean; price: Price | null;
   cli: boolean; active?: boolean; experimental?: boolean;
 };
-type Draft = { id: string | null; label: string; kind: 'openai' | 'anthropic' | 'gemini'; endpoint: string; model: string; nativeSchema: boolean; ownKey: boolean };
-const emptyDraft: Draft = { id: null, label: '', kind: 'openai', endpoint: '', model: '', nativeSchema: false, ownKey: false };
+type Draft = { id: string | null; label: string; kind: 'openai' | 'anthropic' | 'gemini' | 'ollama'; endpoint: string; model: string; nativeSchema: boolean; ownKey: boolean; context: string };
+const emptyDraft: Draft = { id: null, label: '', kind: 'openai', endpoint: '', model: '', nativeSchema: false, ownKey: false, context: '' };
 
 function slug(label: string, taken: string[]) {
   const base = label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'perfil';
@@ -64,7 +64,7 @@ export function ProviderProfiles({ refreshKey = 0, onChange }: { refreshKey?: nu
     const id = draft.id ?? slug(draft.label, profiles.map(p => p.id));
     const current = draft;
     void run(async () => {
-      await coreDispatch('provider.configure', { profileId: id, label: current.label, kind: current.kind, endpoint: current.endpoint, model: current.model, nativeSchema: current.nativeSchema, ownKey: current.ownKey });
+      await coreDispatch('provider.configure', { profileId: id, label: current.label, kind: current.kind, endpoint: current.endpoint, model: current.model, nativeSchema: current.nativeSchema, ownKey: current.ownKey, context: current.kind === 'ollama' && current.context ? Number(current.context) : null });
       setDraft(null);
     }, t.saved);
   }
@@ -93,7 +93,7 @@ export function ProviderProfiles({ refreshKey = 0, onChange }: { refreshKey?: nu
           </form>
           <div className="flex flex-wrap gap-2">
             <Button type="button" disabled={busy} onClick={() => void run(() => test(profile), t.success)}>{t.test}</Button>
-            {profile.id !== 'legacy' && <Button type="button" disabled={busy} onClick={() => setDraft({ id: profile.id, label: profile.label, kind: profile.kind as Draft['kind'], endpoint: profile.endpoint ?? '', model: profile.model ?? '', nativeSchema: profile.nativeSchema, ownKey: profile.ownKey })}>{t.edit}</Button>}
+            {profile.id !== 'legacy' && <Button type="button" disabled={busy} onClick={() => setDraft({ id: profile.id, label: profile.label, kind: profile.kind as Draft['kind'], endpoint: profile.endpoint ?? '', model: profile.model ?? '', nativeSchema: profile.nativeSchema, ownKey: profile.ownKey, context: profile.context?.toString() ?? '' })}>{t.edit}</Button>}
             {profile.id !== 'legacy' && <Button type="button" variante="perigo" disabled={busy} onClick={() => setRemoving(profile)}>{t.remove}</Button>}
           </div>
         </div>}
@@ -101,10 +101,11 @@ export function ProviderProfiles({ refreshKey = 0, onChange }: { refreshKey?: nu
     </div>
     {draft ? <form className="mt-5 flex flex-col gap-4 rounded-md border border-line p-4" aria-label={draft.id ? t.edit : t.add} onSubmit={submit}>
       <label>{t.label}<input className={field} required value={draft.label} onChange={e => setDraft({ ...draft, label: e.target.value })} /></label>
-      <label>{t.kind}<select className={field} value={draft.kind} onChange={e => setDraft({ ...draft, kind: e.target.value as Draft['kind'] })}><option value="openai">OpenAI-compatible</option><option value="anthropic">Anthropic</option><option value="gemini">Gemini</option></select></label>
+      <label>{t.kind}<select className={field} value={draft.kind} onChange={e => setDraft({ ...draft, kind: e.target.value as Draft['kind'] })}><option value="openai">OpenAI-compatible</option><option value="anthropic">Anthropic</option><option value="gemini">Gemini</option><option value="ollama">Ollama</option></select></label>
       <label>{t.endpoint}<input className={field} type="url" required value={draft.endpoint} onChange={e => setDraft({ ...draft, endpoint: e.target.value })} /></label>
       <label>{t.model}<input className={field} required value={draft.model} onChange={e => setDraft({ ...draft, model: e.target.value })} /></label>
-      <label className="flex items-center gap-2"><input type="checkbox" checked={draft.nativeSchema} onChange={e => setDraft({ ...draft, nativeSchema: e.target.checked })} />{t.schema}</label>
+      {draft.kind === 'ollama' && <label>{t.context}<input className={field} type="number" min="1" max="4294967295" step="1" placeholder="4096" value={draft.context} onChange={e => setDraft({ ...draft, context: e.target.value })} /></label>}
+      {draft.kind !== 'ollama' && <label className="flex items-center gap-2"><input type="checkbox" checked={draft.nativeSchema} onChange={e => setDraft({ ...draft, nativeSchema: e.target.checked })} />{t.schema}</label>}
       <label className="flex items-center gap-2"><input type="checkbox" checked={draft.ownKey} onChange={e => setDraft({ ...draft, ownKey: e.target.checked })} />{t.ownKeyOption}</label>
       <div className="flex gap-2"><Button type="submit" variante="primario" disabled={busy}>{t.save}</Button><Button type="button" onClick={() => setDraft(null)}>{t.cancel}</Button></div>
     </form> : <div className="mt-5"><Button ref={addButton} type="button" disabled={busy} onClick={() => setDraft(emptyDraft)}>{t.add}</Button></div>}
