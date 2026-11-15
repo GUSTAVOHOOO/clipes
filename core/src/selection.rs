@@ -19,6 +19,7 @@ use std::collections::BTreeMap;
 
 pub mod cut;
 mod review;
+pub(crate) use review::{approved_cut, ApprovedCut};
 
 pub const TASK_ID: &str = "selection";
 /// Tarefa de IA do Vídeo transformado (#67): prompt e schema próprios, com o 6º eixo. Roteia
