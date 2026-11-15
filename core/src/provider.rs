@@ -131,6 +131,7 @@ pub trait Provider {
 
 mod adapters;
 pub mod capabilities;
+mod context;
 #[cfg(test)]
 pub(crate) mod contract_probe;
 pub(crate) mod control;
@@ -272,6 +273,75 @@ mod settings {
         let _guard = locked()?;
         let settings = read()?;
         Ok(profiles(&settings).iter().map(ProfileInfo::from).collect())
+    }
+    /// What context discovery (#143) needs about one profile. The key is read separately,
+    /// after the vetoes, so a skipped probe never touches the vault.
+    pub(super) struct ContextTarget {
+        pub id: String,
+        pub kind: String,
+        pub endpoint: String,
+        pub model: String,
+        pub user_context: Option<u64>,
+        pub native_schema: bool,
+        pub confirmed: bool,
+        pub timeouts: Timeouts,
+        account: Option<String>,
+    }
+    impl ContextTarget {
+        pub fn key(&self) -> Result<Option<String>, CoreError> {
+            self.account.as_deref().map(vault_get).transpose()
+        }
+    }
+    pub(super) enum ContextPick {
+        Cli(String),
+        Profile(ContextTarget),
+    }
+    /// Read-only: the explicit `profileId`, else the route of the task (same choice as a call).
+    pub(super) fn context_pick(
+        task: Option<&str>,
+        explicit: Option<&str>,
+    ) -> Result<ContextPick, CoreError> {
+        let mut profile_id = explicit.map(str::to_owned);
+        if let Some(id) = explicit.filter(|id| CLI_IDS.contains(id)) {
+            return Ok(ContextPick::Cli(id.to_owned()));
+        }
+        if explicit.is_none() {
+            match crate::assistant::route(task)? {
+                crate::assistant::Route::Cli(kind) => return Ok(ContextPick::Cli(kind)),
+                crate::assistant::Route::Profile(id) => profile_id = Some(id),
+                crate::assistant::Route::Endpoint => {}
+                crate::assistant::Route::Unset => {
+                    if let Some(kind) = crate::provider_cli::selected()? {
+                        return Ok(ContextPick::Cli(kind));
+                    }
+                }
+            }
+        }
+        let settings = {
+            let _guard = locked()?;
+            read()?
+        };
+        let profile = pick_by(&settings, profile_id.as_deref())?
+            .filter(|p| !p.endpoint.is_empty())
+            .ok_or_else(|| error("invalid_settings", "Configure the provider first"))?;
+        let account = profile.account();
+        Ok(ContextPick::Profile(ContextTarget {
+            confirmed: metadata(&settings, &profile.endpoint).confirmed,
+            account: metadata(&settings, &account)
+                .key_last_four
+                .is_some()
+                .then_some(account),
+            id: profile.id,
+            kind: profile.kind,
+            endpoint: profile.endpoint,
+            model: profile.model,
+            user_context: profile.context,
+            native_schema: profile.native_schema,
+            timeouts: settings.timeouts,
+        }))
+    }
+    pub(super) fn data_file(name: &str) -> Result<PathBuf, CoreError> {
+        Ok(path()?.with_file_name(name))
     }
     /// Where a call goes, already past the "local only" veto. Used by the cost estimate.
     pub(crate) enum Routed {
@@ -730,6 +800,7 @@ mod settings {
             file.entries.retain(|entry| entry.profile != id);
             let _ = calibration_save(&file);
         }
+        super::context::forget(id);
         Ok(json!({}))
     }
     fn key_set(args: Value, _: &mut EventSink<'_>) -> CommandResult {
