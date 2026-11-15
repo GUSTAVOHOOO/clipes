@@ -13,5 +13,10 @@
     "id": "selection",
     "version": 2,
     "sha256": "8be769b3c853e1dcbbc9650d51c81670b52d901e8c217ac31606b35822878304"
+  },
+  {
+    "id": "packaging",
+    "version": 1,
+    "sha256": "6a0ccbcd85b760aab2b3232d61445b413f0edc50c92108625dd8d903d20aaaf9"
   }
 ]

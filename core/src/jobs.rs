@@ -2,6 +2,7 @@ use crate::{projects, CommandRegistration, CommandResult, EventSink};
 use serde_json::{json, Value};
 mod ai;
 mod budget;
+pub(crate) use ai::route_of_profile;
 pub(crate) mod preview;
 pub mod redo;
 pub use ai::{

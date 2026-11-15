@@ -297,6 +297,49 @@ fn outcome(run: i64, candidate: Option<i64>) -> CommandResult {
     Ok(json!({"run": snap.run, "item": item, "canUndo": snap.can_undo()}))
 }
 
+/// Corte aprovado na revisão, com a identidade estável do candidato e as bordas atuais (#68).
+pub(crate) struct ApprovedCut {
+    pub run: i64,
+    pub transcript: i64,
+    /// Identidade `(Frase inicial, Frase final)` do candidato como o #53 o propôs.
+    pub identity: (i64, i64),
+    /// Frases (já ajustadas pelo usuário) que formam o Corte.
+    pub sentences: Vec<Sentence>,
+}
+
+/// O Corte do candidato `id`, se foi aprovado: `candidate_not_found` ou `not_approved`.
+pub(crate) fn approved_cut(id: i64) -> Result<ApprovedCut, CoreError> {
+    let run = candidate_run(id)?;
+    let snap = snapshot(run)?;
+    let candidate = snap
+        .candidates
+        .iter()
+        .find(|c| c.id == id)
+        .ok_or_else(not_found)?;
+    let state = state_of(candidate, &snap.decisions);
+    if state.status != "approved" {
+        return Err(error(
+            "not_approved",
+            "Aprove o candidato antes de gerar o empacotamento.",
+        ));
+    }
+    let (Some(start), Some(end)) = (
+        index_of(&snap.frases, state.start_id),
+        index_of(&snap.frases, state.end_id),
+    ) else {
+        return Err(error(
+            "adjust_out_of_transcript",
+            "A borda não pode sair da Transcrição.",
+        ));
+    };
+    Ok(ApprovedCut {
+        run,
+        transcript: read_run(run)?.transcript,
+        identity: (candidate.start_id, candidate.end_id),
+        sentences: snap.frases[start..=end].to_vec(),
+    })
+}
+
 /// `selection.review {run}`: estado de revisão de cada candidato da execução (na ordem da Nota):
 /// situação (`pending`, `approved`, `rejected`), bordas atuais, o trecho de cada borda e quais
 /// movimentos de uma Frase cabem na faixa de duração. `canUndo` diz se há decisão a desfazer.
