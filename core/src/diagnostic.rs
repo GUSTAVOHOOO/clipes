@@ -15,6 +15,8 @@ pub enum DiagnosticKind {
     TranscriptionEngine,
     Provider,
     TokenCalibration,
+    TaskVersion,
+    PromptHash,
 }
 impl DiagnosticKind {
     fn label(self) -> &'static str {
@@ -25,6 +27,8 @@ impl DiagnosticKind {
             Self::TranscriptionEngine => "Motor de transcrição",
             Self::Provider => "Provedor",
             Self::TokenCalibration => "Calibração de tokens",
+            Self::TaskVersion => "Versão da Tarefa de IA",
+            Self::PromptHash => "Hash do prompt (SHA-256)",
         }
     }
 }
@@ -118,6 +122,8 @@ fn get(_: Value, _: &mut EventSink<'_>) -> CommandResult {
         DiagnosticKind::TranscriptionEngine,
         DiagnosticKind::Provider,
         DiagnosticKind::TokenCalibration,
+        DiagnosticKind::TaskVersion,
+        DiagnosticKind::PromptHash,
     ] {
         let value = inventory::iter::<DiagnosticField>
             .into_iter()
