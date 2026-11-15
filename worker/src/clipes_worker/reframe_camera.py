@@ -136,8 +136,10 @@ class Camera:
     def step(self, x, y, dt):
         target = tuple(f.step(v, dt) for f, v in zip(self.filters, (x, y)))
         delta = tuple(v - p for v, p in zip(target, self.position))
-        desired = (0.0, 0.0) if math.hypot(*delta) <= DEAD_ZONE else limited(
-            tuple(v / dt for v in delta), SPEED_LIMIT
+        distance = math.hypot(*delta)
+        braking_speed = math.sqrt(2 * ACCELERATION_LIMIT * max(0, distance - DEAD_ZONE))
+        desired = (0.0, 0.0) if distance <= DEAD_ZONE else limited(
+            tuple(v / dt for v in delta), min(SPEED_LIMIT, braking_speed)
         )
         change = limited(tuple(v - old for v, old in zip(desired, self.velocity)), ACCELERATION_LIMIT * dt)
         self.velocity = tuple(v + d for v, d in zip(self.velocity, change))

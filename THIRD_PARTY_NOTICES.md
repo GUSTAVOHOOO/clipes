@@ -2,6 +2,39 @@
 
 Gerado por `node design-system/scripts/avisos.ts` a partir dos pacotes instalados e fixados em `design-system/bun.lock`. Os avisos abaixo cobrem as dependências de runtime desta interface e suas dependências transitivas.
 
+## YuNet — modelo de reenquadramento sob demanda (#60)
+
+Código e pesos `face_detection_yunet_2023mar.onnx`, OpenCV Zoo, revisão
+`48b10fa505aeb51fbd127fc60a5c660040e823b7`, sob MIT.
+[Licença oficial do diretório do modelo](https://github.com/opencv/opencv_zoo/blob/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/face_detection_yunet/LICENSE).
+SHA-256: `8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4`.
+Os pesos não são redistribuídos no repositório: Componentes mostra MIT, fonte,
+revisão e integridade antes de pedir o download explícito.
+
+```text
+MIT License
+
+Copyright (c) 2020 Shiqi Yu <shiqi.yu@gmail.com>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ## Quadros de demonstração
 
 Tears of Steel, © Blender Foundation, 2012. Filme original: [mango.blender.org](https://mango.blender.org/). Licença [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/). Os arquivos em `design-system/src/data/img/` são quadros reduzidos e recortados do filme, usados apenas na demonstração do editor; o áudio e as falas derivam do mesmo filme.

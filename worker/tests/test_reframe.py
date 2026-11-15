@@ -5,7 +5,11 @@ import numpy as np
 import pytest
 
 from clipes_worker.protocol import WorkerError
-from clipes_worker.reframe import Yunet, reframe_task, analyze
+from clipes_worker.reframe import Yunet, reframe_task, analyze, scene_frames
+
+
+def test_adjacent_exposure_signals_are_a_single_scene_boundary():
+    assert scene_frames("lavfi.scd.time=0.0\nlavfi.scd.time=1.0\nlavfi.scd.time=1.2\nlavfi.scd.time=2.0") == {5, 10}
 from clipes_worker.server import Server
 
 

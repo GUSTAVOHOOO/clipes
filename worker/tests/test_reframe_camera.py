@@ -31,6 +31,12 @@ def test_camera_limits_speed_and_acceleration_for_a_moving_target():
         previous, velocity = point, current
 
 
+def test_camera_brakes_before_the_crop_boundary_without_an_output_clamp():
+    camera = Camera(0.2, 0.5)
+    positions = [camera.step(0.84, 0.5, 0.2)[0] for _ in range(60)]
+    assert max(positions) <= 0.84
+
+
 def test_association_is_stable_when_detection_order_changes():
     tracker = Tracker()
     first, _ = tracker.update([face(0.2), face(0.8, 0.08)])

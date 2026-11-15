@@ -13,10 +13,20 @@ from .tasks import Task
 PROXY_HEIGHT = 480
 ANALYSIS_FPS = 5
 SCENE_THRESHOLD = 10.0
+SCENE_MIN_GAP_FRAMES = 2  # 400 ms: evita dois disparos consecutivos na mesma transição.
 YUNET_SIZE = 640
 FACE_THRESHOLD = 0.7
 NMS_THRESHOLD = 0.3
 ORT_THREADS = 2
+
+
+def scene_frames(log):
+    result = []
+    for frame in sorted({round(float(value) * ANALYSIS_FPS) for value in
+                         re.findall(r"lavfi\.scd\.time=([0-9.]+)", log)}):
+        if frame > 0 and (not result or frame - result[-1] >= SCENE_MIN_GAP_FRAMES):
+            result.append(frame)
+    return set(result)
 
 
 class Yunet:
@@ -127,12 +137,11 @@ def analyze(detector, params, ctx):
         ffmpeg_run([params["ffmpeg"], "-nostdin", "-y", "-v", "error", "-threads", "2",
                     "-ss", f"{start / 1e6:.6f}", "-i", params["source"], "-t", f"{duration:.6f}",
                     "-map", "0:v:0", "-an", "-sn", "-vf",
-                    f"fps={ANALYSIS_FPS},scale=-2:{PROXY_HEIGHT},setsar=1", "-c:v", "ffv1", proxy], ctx)
+                    f"fps={ANALYSIS_FPS},scale=trunc(oh*dar/2)*2:{PROXY_HEIGHT},setsar=1", "-c:v", "ffv1", proxy], ctx)
         ctx.progress("reframe_scenes", 20, "Analisando cenas do Corte")
         log = ffmpeg_run([params["ffmpeg"], "-nostdin", "-v", "info", "-threads", "2", "-i", proxy,
                           "-vf", f"scdet=t={SCENE_THRESHOLD},metadata=print", "-an", "-f", "null", "-"], ctx)
-        cuts = {round(float(value) * ANALYSIS_FPS) for value in
-                re.findall(r"lavfi\.scd\.time=([0-9.]+)", log)}
+        cuts = scene_frames(log)
         video = cv2.VideoCapture(proxy)
         if not video.isOpened():
             raise WorkerError("internal")
