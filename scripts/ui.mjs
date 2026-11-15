@@ -252,7 +252,10 @@ try {
   await costs.getByLabel('Output token ceiling (optional)').fill('100');
   await costs.getByRole('button', { name: 'Estimate cost' }).click();
   await costs.getByText(/Estimate \(ceiling, not the final amount\)/).waitFor();
-  assert.match(await costs.getByRole('status').innerText(), /10 estimated input tokens, output ceiling 100/);
+  assert.match(await costs.getByRole('status').innerText(), /10–17 estimated input tokens, output ceiling 100/);
+  await costs.getByLabel('Sample text (Transcript)').fill('a'.repeat(300_000));
+  await costs.getByRole('button', { name: 'Estimate cost' }).click();
+  await costs.getByText(/Higher tier above 100000 input tokens; the estimate may cross this threshold/).waitFor();
   await costs.getByLabel('Model to override').fill('mock-model');
   await costs.getByLabel('Input (US$ per million)').fill('2');
   await costs.getByLabel('Output (US$ per million)').fill('4');
