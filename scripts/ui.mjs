@@ -124,6 +124,16 @@ try {
   await page.getByLabel('Incluir diagnóstico').uncheck();
   assert.equal(await page.getByLabel('Diagnóstico', { exact: true }).count(), 0);
   await page.getByRole('button', { name: 'Preferências' }).click();
+  const groqSettings = page.getByRole('region', { name: 'Motor de transcrição' });
+  await groqSettings.getByText('Chave não configurada.').waitFor();
+  await groqSettings.getByLabel('Chave Groq').fill('fake-key');
+  await groqSettings.getByRole('button', { name: 'Salvar chave' }).click();
+  await groqSettings.getByText('Chave configurada.').waitFor();
+  assert.equal(await groqSettings.getByLabel('Chave Groq').inputValue(), '');
+  await groqSettings.getByRole('button', { name: 'Testar chave' }).click();
+  await groqSettings.getByText('Chave testada.').waitFor();
+  await groqSettings.getByRole('button', { name: 'Remover chave' }).click();
+  await groqSettings.getByText('Chave não configurada.').waitFor();
   await page.getByLabel('Tema').selectOption('claro');
   await page.getByLabel('Idioma').selectOption('en');
   await page.reload();
@@ -147,7 +157,7 @@ try {
   await page.getByRole('button', { name: 'Save provider' }).click();
   await page.getByText('Settings saved.').waitFor();
   await page.getByLabel('API key', { exact: true }).fill('fixture-value-1234');
-  await page.getByRole('button', { name: 'Save key' }).click();
+  await page.locator('section[aria-labelledby="provider-title"]').getByRole('button', { name: 'Save key' }).click();
   await page.getByText('Key saved, ending in 1234').waitFor();
   assert.equal(await page.getByLabel('API key', { exact: true }).inputValue(), '');
   await page.getByRole('button', { name: 'Test connection' }).click();

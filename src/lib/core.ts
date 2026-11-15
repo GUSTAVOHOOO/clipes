@@ -48,9 +48,14 @@ const assistantTasks = () => ({ projectLocalOnly: sourceTest && projectVetoMock,
   return { task, choice: missing ? '' : own, source: missing ? 'none' : own ? 'task' : assistantMock.default ? 'default' : 'none', profile, localOnly, blocked: (localOnly || (sourceTest && projectVetoMock)) && !!profile && !profile.local, missing,
     suggestion: !profile && firstLocal ? { choice: `profile:${firstLocal.id}`, label: firstLocal.label, measured: false } : null };
 }) });
+let groqKeyConfigured = false;
 let providerCliMock = { selected: '', codexConfirmed: false, claudeConfirmed: false };
 export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   if (import.meta.env.VITE_CORE_MOCK === '1' && !isTauri()) {
+    if (name === 'transcription.groq.key.status') return {configured:groqKeyConfigured} as T;
+    if (name === 'transcription.groq.key.set') { groqKeyConfigured = true; return {configured:true} as T; }
+    if (name === 'transcription.groq.key.remove') { groqKeyConfigured = false; return {configured:false} as T; }
+    if (name === 'transcription.groq.key.test') return {ok:true} as T;
     if (name === 'diagnostic.get') return { text: "Clipes: 0.1.0\nSistema operacional: indisponível" } as T;
     if (name === 'projects.recent') return [] as T;
     if (name === 'projects.current') return (sourceTest ? { name:'Teste', path:'/test/Teste.clipes', id:'test-project' } : null) as T;
