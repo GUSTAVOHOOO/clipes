@@ -44,8 +44,10 @@ When your output names a domain concept (in an issue title, a refactor proposal,
 
 If the concept you need isn't in the glossary yet, that's a signal: either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
 
-## Flag ADR conflicts
+## ADRs: follow them, question them
 
-If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
+An ADR is the best decision with what was known when it was written. Follow it by default, and keep thinking past it: when you find a fact its authors didn't have (a measurement, how a tool really behaves, a new constraint) that makes the decision look wrong or outdated, question it. Name the ADR, show the new evidence, and say what you would change:
 
-> _Contradicts ADR-0007 (event-sourced orders), but worth reopening because…_
+> _Contradicts ADR-0004 (three Provider formats), but worth reopening because research #115 found Ollama's default 4k context silently cuts long transcripts, and only its native API lets the app fix that._
+
+Raise it where the dev will see it (`ask` if you are an Orca worker; otherwise the issue or the conversation) and keep working on everything the question doesn't touch. The dev decides; an accepted change lands as an amendment to the ADR or a new ADR, so every departure from an ADR is visible and approved.

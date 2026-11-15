@@ -65,3 +65,52 @@ fn yt_dlp_update_requires_confirmation() {
     let err = dispatch("components.ytdlp.update", json!({}), &mut |_| {}).unwrap_err();
     assert_eq!(err.code, "confirmation_required");
 }
+
+#[test]
+fn transcription_models_are_pinned_licensed_and_need_consent_and_the_worker() {
+    let models = dispatch("components.models.manifest", json!({}), &mut |_| {}).unwrap();
+    let models = models.as_array().unwrap();
+    assert_eq!(models.len(), 2);
+    for model in models {
+        let id = model["id"].as_str().unwrap();
+        assert_eq!(model["license"], "MIT", "{id}");
+        assert_eq!(model["revision"].as_str().unwrap().len(), 40, "{id}");
+        assert!(model["source_url"]
+            .as_str()
+            .unwrap()
+            .starts_with("https://huggingface.co/"));
+        assert!(model["source_url"]
+            .as_str()
+            .unwrap()
+            .contains(model["revision"].as_str().unwrap()));
+        let files = model["files"].as_array().unwrap();
+        assert_eq!(
+            model["size"].as_u64().unwrap(),
+            files
+                .iter()
+                .map(|f| f["size"].as_u64().unwrap())
+                .sum::<u64>()
+        );
+        for file in files {
+            assert_eq!(file["sha256"].as_str().unwrap().len(), 64, "{id}");
+        }
+    }
+    assert_eq!(
+        models.iter().filter(|m| m["recommended"] == true).count(),
+        1
+    );
+    let error = dispatch(
+        "components.models.download",
+        json!({"id":"whisper-small"}),
+        &mut |_| {},
+    )
+    .unwrap_err();
+    assert_eq!(error.code, "confirmation_required");
+    let error = dispatch(
+        "components.models.download",
+        json!({"id":"inexistente","confirmed":true}),
+        &mut |_| {},
+    )
+    .unwrap_err();
+    assert_eq!(error.code, "unknown_component");
+}

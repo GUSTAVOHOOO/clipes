@@ -1,5 +1,6 @@
 """Laço principal: JSON lines no stdin/stdout. O worker nunca abre o banco."""
 
+import importlib
 import platform
 import queue
 import sys
@@ -145,7 +146,8 @@ class Server:
                 raise WorkerError("invalid_message")
             ctx = Context(self, request_id, cancel)
             ctx.checkpoint()
-            model = self._slot.acquire(task.model, task.load)
+            name, loader = task.resolve(params) if task.resolve else (task.model, task.load)
+            model = self._slot.acquire(name, loader)
             ctx.checkpoint()
             data = task.run(model, params, ctx)
             self.send({"v": PROTOCOL_VERSION, "type": "result", "id": request_id, "data": data})
@@ -160,7 +162,23 @@ class Server:
                 self._cancels.pop(request_id, None)
 
 
+def preload_native_libraries():
+    """Importa as bibliotecas nativas antes de a thread de leitura bloquear no stdin.
+
+    No Windows, com o stdin do worker num pipe do núcleo, importar o numpy (ou carregar
+    suas DLLs) enquanto outra thread já esperava no stdin travava o `LoadLibrary` para
+    sempre: o primeiro pedido de `transcribe` nunca respondia (docs/agents/impedimentos.md).
+    Importar tudo antes de `serve()` evita isso e tira o custo do primeiro pedido.
+    """
+    for name in ("numpy", "faster_whisper"):
+        try:
+            importlib.import_module(name)
+        except Exception:  # ausente (testes) ou quebrada: a tarefa responde o erro tipado
+            pass
+
+
 def main():
+    preload_native_libraries()
     sys.stdin.reconfigure(encoding="utf-8")
     sys.stdout.reconfigure(encoding="utf-8", newline="\n")
     return Server(sys.stdin, sys.stdout).serve()

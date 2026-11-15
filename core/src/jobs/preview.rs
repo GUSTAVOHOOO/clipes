@@ -30,7 +30,7 @@ fn interrupted() -> crate::CoreError {
 fn cancelled() -> crate::CoreError {
     error("cancelled", "Tarefa cancelada.")
 }
-fn is_cancelled(id: i64) -> bool {
+pub(crate) fn is_cancelled(id: i64) -> bool {
     projects::with_reader(|c| {
         c.query_row("SELECT cancel_requested FROM jobs WHERE id=?1", [id], |r| {
             r.get::<_, bool>(0)
@@ -38,7 +38,7 @@ fn is_cancelled(id: i64) -> bool {
     })
     .unwrap_or(true)
 }
-fn check(id: i64, stop: &AtomicBool) -> Result<(), crate::CoreError> {
+pub(crate) fn check(id: i64, stop: &AtomicBool) -> Result<(), crate::CoreError> {
     if stop.load(Ordering::SeqCst) {
         Err(interrupted())
     } else if is_cancelled(id) {
@@ -50,7 +50,7 @@ fn check(id: i64, stop: &AtomicBool) -> Result<(), crate::CoreError> {
 
 pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
     while !stop.load(Ordering::SeqCst) {
-        let next = projects::with_reader(|c| c.query_row("SELECT id,COALESCE(source_id,0),kind FROM jobs WHERE ((kind='preview' AND safety='local') OR kind LIKE 'ai:%') AND state='queued' AND NOT EXISTS (SELECT 1 FROM ai_pauses p WHERE (p.scope='task' AND jobs.kind='ai:'||p.key) OR (p.scope='batch' AND jobs.batch=p.key)) ORDER BY id LIMIT 1", [], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?))).optional()).ok().flatten();
+        let next = projects::with_reader(|c| c.query_row("SELECT id,COALESCE(source_id,0),kind FROM jobs WHERE ((kind IN ('preview','transcription') AND safety='local') OR kind LIKE 'ai:%') AND state='queued' AND NOT EXISTS (SELECT 1 FROM ai_pauses p WHERE (p.scope='task' AND jobs.kind='ai:'||p.key) OR (p.scope='batch' AND jobs.batch=p.key)) ORDER BY id LIMIT 1", [], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?))).optional()).ok().flatten();
         if let Some((id, source, kind)) = next {
             let Ok(_guard) = projects::start_job() else {
                 break;
@@ -63,7 +63,11 @@ pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
                     ai::execute(id, &stop);
                     continue;
                 }
-                let result = generate(id, source, &project, &stop);
+                let result = if kind == "transcription" {
+                    crate::transcription::run(id, source, &project, &stop)
+                } else {
+                    generate(id, source, &project, &stop)
+                };
                 if result.as_ref().is_err_and(|e| e.code == "interrupted") {
                     let _ = projects::with_writer(|c| {
                         c.execute(
@@ -75,7 +79,7 @@ pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
                 } else {
                     let err = result.as_ref().err().cloned();
                     let _ = finish(id, result);
-                    let _ = progress_event(id, err);
+                    let _ = progress_event(id, err, &kind);
                 }
             }
         } else {
@@ -83,7 +87,11 @@ pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
         }
     }
 }
-fn progress_event(id: i64, err: Option<crate::CoreError>) -> Result<(), crate::CoreError> {
+fn progress_event(
+    id: i64,
+    err: Option<crate::CoreError>,
+    kind: &str,
+) -> Result<(), crate::CoreError> {
     let project = projects::with_reader(|c| {
         c.query_row("SELECT id FROM queue_project_identity", [], |r| {
             r.get::<_, String>(0)
@@ -94,17 +102,21 @@ fn progress_event(id: i64, err: Option<crate::CoreError>) -> Result<(), crate::C
         project: Some(project),
         stage: if err.is_some() { "failed" } else { "complete" }.into(),
         percentage: if err.is_some() { 0 } else { 100 },
-        message: if err.is_some() {
-            "Prévia interrompida"
-        } else {
-            "Prévia pronta"
+        message: match (kind, err.is_some()) {
+            ("transcription", true) => "Transcrição interrompida",
+            ("transcription", false) => "Transcrição pronta",
+            (_, true) => "Prévia interrompida",
+            (_, false) => "Prévia pronta",
         }
         .into(),
         error: err,
     });
     Ok(())
 }
-fn source(id: i64, project: &Path) -> Result<(PathBuf, String, i64, i64, usize), crate::CoreError> {
+pub(crate) fn source(
+    id: i64,
+    project: &Path,
+) -> Result<(PathBuf, String, i64, i64, usize), crate::CoreError> {
     let (stored, hash, audio, size, duration, metadata): (String, String, i64, i64, i64, String) =
         projects::with_reader(|c| {
             c.query_row(

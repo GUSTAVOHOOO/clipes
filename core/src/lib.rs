@@ -65,6 +65,7 @@ pub mod projects;
 pub mod provider;
 mod provider_cli;
 mod sources;
+pub mod transcription;
 mod url_import;
 mod version;
 pub mod worker;

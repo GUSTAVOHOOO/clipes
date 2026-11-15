@@ -2,7 +2,7 @@ use crate::{projects, CommandRegistration, CommandResult, EventSink};
 use serde_json::{json, Value};
 mod ai;
 mod budget;
-mod preview;
+pub(crate) mod preview;
 pub use ai::{enqueue_ai, enqueue_ai_in_batch, set_ai_provider, set_ai_route};
 
 #[derive(Clone, Copy)]
