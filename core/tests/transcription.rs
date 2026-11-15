@@ -260,6 +260,11 @@ fn transcribes_in_blocks_and_stores_words_with_orders_and_silences() {
     assert_eq!(started["state"], "running");
     env.wait_transcribe("completed");
     assert_complete_transcript(&env.rows(source));
+    // A energia do áudio (#54) é enfileirada sozinha quando a Transcrição fica completa.
+    assert!(
+        env.job_state("energy").is_some(),
+        "job de energia enfileirado"
+    );
     let status = env.status(source);
     assert_eq!(status["transcript"]["state"], "complete");
     assert_eq!(status["transcript"]["resume_us"], 25_000_000);

@@ -1,6 +1,9 @@
 //! #144: o wrapper monta o plano a partir do perfil, sem rede (dados isolados, endpoint
 //! documentário 192.0.2.x sem consentimento: nada é sondado).
-use clipes_core::selection_windows::{plan_for_profile, PlanState, ProfileRequest, MAX_CUT_US};
+use clipes_core::energy::{EnergyLevel, EnergyMarks};
+use clipes_core::selection_windows::{
+    plan_for_profile, plan_for_profile_marked, PlanState, ProfileRequest, MAX_CUT_US,
+};
 use clipes_core::sentences::Sentence;
 use clipes_core::{dispatch, CoreError};
 use serde_json::{json, Value};
@@ -63,6 +66,14 @@ fn profile_context_origin_and_price_threshold_drive_the_plan() {
 
     let reduced = plan_for_profile(&request("eight", &schema), &frases).unwrap();
     assert_eq!(reduced.state, PlanState::Reduced);
+
+    // #54: as marcas de energia são texto enviado; o planejador conta cada uma.
+    let marks: EnergyMarks = frases.iter().map(|s| (s.id, EnergyLevel::Peak)).collect();
+    let marked = plan_for_profile_marked(&request("eight", &schema), &frases, &marks).unwrap();
+    let total = |p: &clipes_core::selection_windows::Plan| {
+        p.windows.iter().map(|w| w.tokens_high).sum::<u64>()
+    };
+    assert!(total(&marked) > total(&reduced));
 
     // Catálogo (1 M) com limiar de preço de 100 mil: entrada em até 85 mil tokens.
     let capped = plan_for_profile(&request("haiku", &schema), &frases).unwrap();

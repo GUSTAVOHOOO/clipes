@@ -9,7 +9,10 @@
 //! A segmentação roda ao fim do job de transcrição (e sob demanda, para Transcrições antigas)
 //! e é idempotente: se as Frases gravadas já são as calculadas, nada é escrito.
 
-use crate::{projects, CommandRegistration, CommandResult, CoreError, EventSink};
+use crate::{
+    energy::{self, EnergyMarks},
+    projects, CommandRegistration, CommandResult, CoreError, EventSink,
+};
 use rusqlite::OptionalExtension;
 use serde_json::{json, Value};
 
@@ -361,9 +364,32 @@ inventory::submit! { CommandRegistration { name: "transcription.segment", execut
 inventory::submit! { CommandRegistration { name: "transcription.sentences", execute: sentences_command } }
 inventory::submit! { CommandRegistration { name: "transcription.timeline", execute: timeline_command } }
 
+/// Uma linha do formato compacto: `ID texto`, ou `ID [energia alta] texto` quando a Frase tem
+/// marca de energia (#54, [`crate::energy::mark`]). É a **única** função que monta a linha:
+/// o serializador, o planejador de Janelas (#144) e o estimador (#140) contam o mesmo texto.
+pub fn line(sentence: &Sentence, marks: &EnergyMarks) -> String {
+    match marks.get(&sentence.id).copied().and_then(energy::mark) {
+        Some(mark) => format!(
+            "{} {} {}
+",
+            sentence.id, mark, sentence.text
+        ),
+        None => format!(
+            "{} {}
+",
+            sentence.id, sentence.text
+        ),
+    }
+}
+
 /// Serialize a selection using the stable IDs of the full transcript. Minute markers are
 /// context only; timestamps for any returned IDs must be resolved by the core.
 pub fn compact(sentences: &[Sentence]) -> String {
+    compact_marked(sentences, &EnergyMarks::new())
+}
+
+/// [`compact`] com as marcas de energia do áudio (#54) nas Frases que as têm.
+pub fn compact_marked(sentences: &[Sentence], marks: &EnergyMarks) -> String {
     use std::fmt::Write;
     let mut result = String::new();
     let mut previous = None;
@@ -373,7 +399,7 @@ pub fn compact(sentences: &[Sentence]) -> String {
             let _ = writeln!(result, "## {:02}:{:02}", minute / 60, minute % 60);
             previous = Some(minute);
         }
-        let _ = writeln!(result, "{} {}", sentence.id, sentence.text);
+        result.push_str(&line(sentence, marks));
     }
     result
 }
@@ -388,6 +414,12 @@ pub struct CompactTranscript {
 }
 
 pub fn compact_with_hint(sentences: &[Sentence]) -> CompactTranscript {
+    compact_with_hint_marked(sentences, &EnergyMarks::new())
+}
+
+/// [`compact_with_hint`] com as marcas de energia: o texto (e portanto a estimativa de tokens)
+/// inclui as marcas, que são texto enviado.
+pub fn compact_with_hint_marked(sentences: &[Sentence], marks: &EnergyMarks) -> CompactTranscript {
     let mut counts = std::collections::BTreeMap::<&str, usize>::new();
     for s in sentences {
         *counts
@@ -409,7 +441,7 @@ pub fn compact_with_hint(sentences: &[Sentence]) -> CompactTranscript {
             .map_or("mul", |(language, _)| language)
     };
     CompactTranscript {
-        text: compact(sentences),
+        text: compact_marked(sentences, marks),
         hint: crate::provider::EstimateHint {
             format: "compact".into(),
             language: language.into(),
