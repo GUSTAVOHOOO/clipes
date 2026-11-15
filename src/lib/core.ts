@@ -2,6 +2,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { version } from '../../package.json';
 
 const sourceTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('source-test');
+const budgetTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('budget-test');
 let sourceItems = [
   { id: 1, path: '/test/changed.mp4', status: 'changed', available: false, verified: false, permission: {status:'none'} },
   { id: 2, path: '/test/offline.mp4', status: 'offline', available: false, verified: false, permission: {status:'none'} },
@@ -11,6 +12,11 @@ let urlSettingsMock = {terms_accepted:false, download_dir:'/test/downloads'};
 let jobItems = [
   { id: 1, kind: 'preview', state: 'running', progress: 42, project: 'test-project' },
   { id: 2, kind: 'ai:example', safety: 'paid', state: 'uncertain', progress: 0, project: 'test-project' },
+  ...(budgetTest ? [
+    { id: 3, kind: 'ai:selection', state: 'queued', progress: 0, project: 'test-project', budgetPause: 'budget_cost', taskCost: {costLabel: null} },
+    { id: 4, kind: 'ai:selection', state: 'queued', progress: 0, project: 'test-project', budgetPause: 'cost_unknown', taskCost: {costLabel: 'custo desconhecido'} },
+    { id: 5, kind: 'ai:script', state: 'completed', progress: 100, project: 'test-project', budgetPause: null, taskCost: {costLabel: 'consome a cota do plano'} },
+  ] : []),
 ];
 let transcribeMock: { transcript: object | null; job: object | null } = { transcript: null, job: null };
 let providerMock = { kind: 'openai', endpoint: '', model: '', nativeSchema: false, keyLastFour: null as string | null, remote: false, confirmed: false, confirmedEndpoints: [] as string[] };
@@ -156,6 +162,9 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       { worker_installed: true, id: 'whisper-small', label: 'Whisper small (CPU)', repo: 'Systran/faster-whisper-small', revision: '536b0662742c02347bc0e980a01041f333bce120', license: 'MIT', source_url: 'https://huggingface.co/Systran/faster-whisper-small/tree/536b0662742c02347bc0e980a01041f333bce120', size: 486212372, installed: true, recommended: false },
     ] as T;
     if (name === 'components.models.download') return { id: (args as { id: string }).id } as T;
+    if (sourceTest && new URLSearchParams(location.search).has('transcript-test') && name === 'transcription.segment') return {} as T;
+    if (sourceTest && new URLSearchParams(location.search).has('transcript-test') && name === 'transcription.timeline') { const {offset, limit} = args as {offset:number; limit:number}; const total=30001; return {total, items:Array.from({length:Math.min(limit,total-offset)}, (_, n) => { const i=offset+n; return i===1 ? {type:'silence',start_us:1000000,end_us:2000000} : {type:'sentence',id:i===0?1:i,start_us:i*1000000,end_us:(i+1)*1000000,language:'pt',text:'Frase '+(i===0?1:i)}; })} as T; }
+    if (sourceTest && new URLSearchParams(location.search).has('transcript-test') && name === 'transcription.status') return {transcript:{id:1,state:'complete',resume_us:36000000000,duration_us:36000000000,words:30000},job:null} as T;
     if (name === 'transcription.status') return { transcript: transcribeMock.transcript, job: transcribeMock.job } as T;
     if (name === 'transcription.start') { transcribeMock = { transcript: { id: 1, state: 'running', resume_us: 4000000, duration_us: 10000000, words: 0 }, job: { id: 99, state: 'running', progress: 40 } }; return { transcript_id: 1, state: 'running', job_id: 99 } as T; }
     if (name === 'components.settings.get') return { data_dir: '/test/data', cache_dir: '/test/cache', cache_limit_bytes: 10000000000, ffmpeg_path: null } as T;
@@ -163,3 +172,4 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   }
   return invoke<T>('core_dispatch', { name, arguments: args });
 }
+

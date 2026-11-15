@@ -255,6 +255,20 @@ try {
   await page.getByLabel('Theme').selectOption('escuro');
   await page.screenshot({ path: 'shots/app-dark.png' });
   await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
+  await page.goto(`${url}?source-test=1&budget-test=1`);
+  const budgetJobs = page.locator('section[aria-labelledby="jobs-title"]');
+  await budgetJobs.getByText('Pausada pelo orçamento', {exact:true}).waitFor();
+  await budgetJobs.getByText('Aguardando confirmação do custo', {exact:true}).waitFor();
+  await budgetJobs.getByText('Custo desconhecido', {exact:true}).waitFor();
+  await budgetJobs.getByText('Consome a cota do plano', {exact:true}).waitFor();
+  assert.doesNotMatch(await budgetJobs.innerText(), /budget_cost|cost_unknown/);
+  await page.evaluate(() => localStorage.setItem('clipes.language', 'en'));
+  await page.reload();
+  await budgetJobs.getByText('Paused by budget', {exact:true}).waitFor();
+  await budgetJobs.getByText('Awaiting cost confirmation', {exact:true}).waitFor();
+  await budgetJobs.getByText('Unknown cost', {exact:true}).waitFor();
+  await budgetJobs.getByText('Uses your plan quota', {exact:true}).waitFor();
+  await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
   await page.goto(`${url}?source-test=1`);
   await page.getByText('Resultado incerto').waitFor();
   await page.locator('section[aria-labelledby="jobs-title"]').getByRole('button', {name:'Repetir'}).click();
@@ -407,6 +421,16 @@ try {
   await wizard.waitFor();
   await wizard.getByRole('button', {name:'Pular por enquanto'}).click();
   await wizard.waitFor({state:'hidden'});
+  await page.goto(`${url}?source-test=1&transcript-test=1`);
+  const timeline = page.getByRole('region', { name: 'Transcrição' }).first();
+  await timeline.getByText('Frase 1', { exact: true }).waitFor();
+  assert.match(await timeline.innerText(), /Silêncio/);
+  assert.match(await timeline.innerText(), /pt/);
+  assert.ok(await timeline.locator('[data-timeline-row]').count() < 100);
+  await timeline.evaluate(e => { e.scrollTop = e.scrollHeight; });
+  await timeline.getByText('Frase 30000', { exact: true }).waitFor();
   assert.deepEqual(errors, []);
   console.log('UI keyboard, preferences, about, drawer and screenshots: OK');
 } finally { await browser?.close(); server.kill(); }
+
+
