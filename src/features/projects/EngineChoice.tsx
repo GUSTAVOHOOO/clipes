@@ -4,6 +4,7 @@ import { useComandosCtx } from '@/lib/comandos';
 import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { LocalEstimate, RamWarnings } from './LocalEstimate';
 import type { Transcript } from './Transcription';
 
 type Engine = 'local' | 'groq';
@@ -27,6 +28,7 @@ export function EngineChoice({ project, sourceId, transcript, available, onStart
   const [pending, setPending] = useState<Pending | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [warnings, setWarnings] = useState<string[]>([]);
   useEffect(() => { setEngine(transcript?.engine ?? 'local'); }, [transcript?.id, transcript?.engine]);
   useEffect(() => {
     let active = true;
@@ -42,7 +44,8 @@ export function EngineChoice({ project, sourceId, transcript, available, onStart
     setBusy(true); setError('');
     try {
       if (consent && info) await coreDispatch('transcription.groq.confirm', { endpoint: info.endpoint, confirmed: true });
-      await coreDispatch('transcription.start', { project, source_id: sourceId, engine, replace_confirmed: replace, retry_confirmed: retry });
+      const started = await coreDispatch<{ warnings?: string[] }>('transcription.start', { project, source_id: sourceId, engine, replace_confirmed: replace, retry_confirmed: retry });
+      setWarnings(started.warnings ?? []);
       await onStarted();
     } catch (e) {
       const failure = e as { code?: string; message?: string; usage?: Loss & { estimate?: Estimate } };
@@ -64,6 +67,8 @@ export function EngineChoice({ project, sourceId, transcript, available, onStart
     {engine === 'groq' && info && !info.configured && <Button variante="fantasma" className="underline" onClick={() => commands.lista().find(c => c.id === 'preferences')?.executar?.()}>{t.configure}</Button>}
     <Button ref={focus} disabled={busy || !available || (engine === 'groq' && (!info?.configured || info.local_only || !estimate))} onClick={() => void start()}>{transcript && transcript.engine !== engine ? t.change : transcript ? t.resume : t.start}</Button>
     {engine === 'groq' && <div className="w-full text-fg-2"><p>{cost}</p>{estimate?.hourly_usd !== undefined && <p className="mt-1 max-w-prose text-xs">{t.rate.replace('{value}', String(estimate.hourly_usd)).replace('{date}', estimate.checked ?? '')} <a className="foco underline" href={estimate.source} target="_blank" rel="noreferrer">Groq</a></p>}{info?.local_only && <p role="alert" className="text-danger">{t.localOnly}</p>}</div>}
+    {engine === 'local' && available && <LocalEstimate project={project} sourceId={sourceId} onUseRemote={() => setEngine('groq')} />}
+    <RamWarnings codes={warnings} />
     {error && <p role="alert" className="text-danger">{error}</p>}
     <ConfirmDialog open={pending !== null} onOpenChange={open => { if (!open) setPending(null); }} title={pending?.kind === 'replace' ? t.replaceTitle : pending?.kind === 'retry' ? t.retryTitle : t.privacyTitle} description={description} cancelLabel={t.cancel} confirmLabel={t.confirm} finalFocus={focus} onConfirm={() => { const next = pending; setPending(null); if (next) void start(next.kind === 'replace' || (next.kind === 'remote' && next.replace), next.kind === 'remote', next.kind === 'retry'); }} />
   </div>;
