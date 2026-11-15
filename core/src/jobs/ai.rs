@@ -138,6 +138,8 @@ struct Probe<'a> {
     task: &'static AiTask,
     batch: Option<String>,
     route: (Target, String),
+    /// Fim do orçamento de tempo do job: nenhum timeout de chamada passa dele (#147).
+    deadline: Option<std::time::Instant>,
 }
 
 impl Provider for Probe<'_> {
@@ -223,6 +225,7 @@ impl Provider for Probe<'_> {
         });
         let ((reply, transport), log) =
             crate::provider::control::with_call_scope(Some(self.max_calls), Some(guard), || {
+                crate::provider::control::set_deadline(self.deadline);
                 let reply = self.inner.structured_with(request, cancel);
                 (reply, crate::provider::control::take_transport())
             });
@@ -652,6 +655,17 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
                 local: !unit.paid,
             })
         });
+    let started = std::time::Instant::now();
+    let wall = if route.0.is_cli() {
+        Duration::MAX
+    } else {
+        let own = Duration::from_secs(unit.task.budget.max_wall_clock_secs);
+        match budget::remaining_wall(task, unit.batch.as_deref()) {
+            Ok(Some(remaining)) => own.min(remaining),
+            Ok(None) => own,
+            Err(e) => return fail_fixed(id, task, e),
+        }
+    };
     let sent = AtomicBool::new(false);
     let call_log: Mutex<Vec<Value>> = Mutex::new(Vec::new());
     let cli_transport: Mutex<Option<Value>> = Mutex::new(None);
@@ -665,22 +679,12 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
         task: unit.task,
         batch: unit.batch.clone(),
         route: route.clone(),
+        deadline: started.checked_add(wall),
     };
     let token = CancelToken::new();
     let finished = AtomicBool::new(false);
     let shutdown = AtomicBool::new(false);
     let timed_out = AtomicBool::new(false);
-    let started = std::time::Instant::now();
-    let wall = if route.0.is_cli() {
-        Duration::MAX
-    } else {
-        let own = Duration::from_secs(unit.task.budget.max_wall_clock_secs);
-        match budget::remaining_wall(task, unit.batch.as_deref()) {
-            Ok(Some(remaining)) => own.min(remaining),
-            Ok(None) => own,
-            Err(e) => return fail_fixed(id, task, e),
-        }
-    };
     stage(id, task, "call", 10, "Chamando o Provedor");
     let run = std::thread::scope(|scope| {
         scope.spawn(|| {
