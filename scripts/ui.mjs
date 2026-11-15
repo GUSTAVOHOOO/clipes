@@ -465,6 +465,19 @@ try {
   await contextProfile.getByText('Informado por você', { exact: true }).waitFor();
   await contextProfile.getByRole('button', { name: 'Atualizar contexto', exact: true }).click();
   await contextProfile.getByText('Informado por você', { exact: true }).waitFor();
+  // Limites de saída e timeout (#147): valor efetivo e origem; os dois campos são do Perfil.
+  await contextProfile.getByText('Saída máxima aplicada', { exact: true }).waitFor();
+  await contextProfile.getByText('Padrão conservador: nenhum limite foi descoberto', { exact: true }).waitFor();
+  await contextProfile.getByText('Padrão do tipo de Provedor', { exact: true }).waitFor();
+  await contextProfile.getByText(/Mais 1 s por mil tokens de entrada/).waitFor();
+  await contextProfile.getByRole('button', { name: 'Editar', exact: true }).click();
+  await profilesPt.getByLabel('Saída máxima em tokens (opcional)').fill('2000');
+  await profilesPt.getByLabel('Tempo limite em segundos (opcional)').fill('90');
+  await profilesPt.getByRole('button', { name: 'Salvar perfil', exact: true }).click();
+  await contextProfile.getByText('Definido no perfil', { exact: true }).first().waitFor();
+  assert.equal(await contextProfile.getByText('Definido no perfil', { exact: true }).count(), 2);
+  await contextProfile.getByText('2.000 tokens', { exact: true }).waitFor();
+  await contextProfile.getByText('90 s', { exact: true }).waitFor();
   await addPt('Nuvem barata', 'https://example.com/v1', 'cheap');
   const table = page.getByRole('group', { name: 'Tarefas' });
   const scriptRow = table.getByRole('row').filter({ hasText: 'Roteiro' });
