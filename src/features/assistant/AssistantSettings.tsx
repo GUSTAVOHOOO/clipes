@@ -10,14 +10,14 @@ import { TaskTable } from './TaskTable';
 export function AssistantSettings({ refreshKey = 0 }: { refreshKey?: number } = {}) {
   const t = useText(texts);
   const [status, setStatus] = useState<AssistantStatus | null>(null);
-  const [confirmed, setConfirmed] = useState({ codex: false, claude: false });
+  const [confirmed, setConfirmed] = useState({ codex: false, claude: false, opencode: false });
   const [saved, setSaved] = useState<{ id: string; label: string }[]>([]);
   const [message, setMessage] = useState('');
   const select = 'foco mt-1 block h-9 w-full max-w-sm rounded-md border border-line-strong bg-field px-3 text-fg';
   async function refresh() {
     setStatus(await coreDispatch<AssistantStatus>('assistant.status', {}));
-    const cli = await coreDispatch<{ codexConfirmed: boolean; claudeConfirmed: boolean }>('provider.cli.status', {});
-    setConfirmed({ codex: cli.codexConfirmed, claude: cli.claudeConfirmed });
+    const cli = await coreDispatch<{ codexConfirmed: boolean; claudeConfirmed: boolean; opencodeConfirmed: boolean }>('provider.cli.status', {});
+    setConfirmed({ codex: cli.codexConfirmed, claude: cli.claudeConfirmed, opencode: cli.opencodeConfirmed });
     const list = await coreDispatch<{ profiles: { id: string; label: string; cli: boolean }[] }>('provider.profiles.list', {});
     setSaved(list.profiles.filter(p => !p.cli && p.id !== 'legacy'));
   }
@@ -31,6 +31,7 @@ export function AssistantSettings({ refreshKey = 0 }: { refreshKey?: number } = 
     <option value="endpoint">{t.endpointName}</option>
     <option value="codex" disabled={!confirmed.codex}>{`${t.codex}${confirmed.codex ? '' : ` (${t.needsConfirm})`}`}</option>
     <option value="claude" disabled={!confirmed.claude}>{`${t.claude}${confirmed.claude ? '' : ` (${t.needsConfirm})`}`}</option>
+    <option value="opencode" disabled={!confirmed.opencode}>{`${t.opencode}${confirmed.opencode ? '' : ` (${t.needsConfirm})`}`}</option>
     {saved.map(p => <option key={p.id} value={`profile:${p.id}`}>{p.label}</option>)}
   </>;
   return <section className="mt-10 max-w-3xl border-t border-line pt-8" aria-labelledby="assistant-settings-title">

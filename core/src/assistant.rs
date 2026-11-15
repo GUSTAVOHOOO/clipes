@@ -112,11 +112,12 @@ const PROFILE_PREFIX: &str = "profile:";
 fn profile_id(choice: &str) -> Option<&str> {
     choice
         .strip_prefix(PROFILE_PREFIX)
-        .filter(|id| !id.is_empty() && !matches!(*id, "codex" | "claude"))
+        .filter(|id| !id.is_empty() && !matches!(*id, "codex" | "claude" | "opencode"))
 }
 
 fn valid_choice(choice: &str) -> bool {
-    matches!(choice, "" | "endpoint" | "codex" | "claude") || profile_id(choice).is_some()
+    matches!(choice, "" | "endpoint" | "codex" | "claude" | "opencode")
+        || profile_id(choice).is_some()
 }
 
 fn valid_task(task: &str) -> bool {
@@ -146,7 +147,7 @@ pub(crate) fn route(task: Option<&str>) -> Result<Route, CoreError> {
     match choice.as_str() {
         "" => Ok(Route::Unset),
         "endpoint" => Ok(Route::Endpoint),
-        kind @ ("codex" | "claude") => {
+        kind @ ("codex" | "claude" | "opencode") => {
             if crate::provider_cli::confirmed(kind)? {
                 Ok(Route::Cli(kind.into()))
             } else {
@@ -177,7 +178,7 @@ pub(crate) fn local_only(task: &str) -> Result<bool, CoreError> {
 pub(crate) fn forget_cli() -> Result<(), CoreError> {
     let _lock = locked()?;
     let mut settings = read()?;
-    let is_cli = |choice: &String| matches!(choice.as_str(), "codex" | "claude");
+    let is_cli = |choice: &String| matches!(choice.as_str(), "codex" | "claude" | "opencode");
     let before = (settings.default.clone(), settings.tasks.len());
     if is_cli(&settings.default) {
         settings.default.clear();
@@ -244,7 +245,8 @@ fn check_choice(choice: &str) -> Result<(), CoreError> {
     if !valid_choice(choice) {
         return Err(error("invalid_settings", "Invalid provider"));
     }
-    if matches!(choice, "codex" | "claude") && !crate::provider_cli::confirmed(choice)? {
+    if matches!(choice, "codex" | "claude" | "opencode") && !crate::provider_cli::confirmed(choice)?
+    {
         return Err(error(
             "confirmation_required",
             "Confirm sending text to this provider first",
@@ -350,10 +352,10 @@ fn tasks(_: Value, _: &mut EventSink<'_>) -> CommandResult {
     let target = |choice: &str| -> Result<Option<Value>, CoreError> {
         match choice {
             "endpoint" => from_profile("legacy"),
-            "codex" | "claude" => Ok(Some(json!({
-                "id": choice, "kind": choice, "model": null, "local": false, "cli": true,
-                "label": if choice == "codex" { "Codex CLI" } else { "Claude Code CLI" },
-                "cost": {"kind": "plan_quota"},
+            "codex" | "claude" | "opencode" => Ok(Some(json!({
+                "id": choice, "kind": choice, "model": if choice == "opencode" { json!(crate::provider_cli::opencode_model()?) } else { Value::Null }, "local": false, "cli": true,
+                "label": crate::provider_cli::label(choice),
+                "cost": if choice == "opencode" { crate::provider_cli::opencode_cost(&crate::provider_cli::opencode_model()?) } else { json!({"kind":"plan_quota"}) },
             }))),
             other => match profile_id(other) {
                 Some(id) => from_profile(id),
@@ -573,6 +575,7 @@ fn detect(args: Value, _: &mut EventSink<'_>) -> CommandResult {
         "llamaCpp": llamacpp,
         "codex": {"found": on_path("codex", &search)},
         "claude": {"found": on_path("claude", &search)},
+        "opencode": {"found": on_path("opencode", &search)},
     }))
 }
 

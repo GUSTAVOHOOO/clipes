@@ -1,3 +1,5 @@
+mod opencode;
+
 use crate::{
     provider::{
         control::{cli_timeout, parse_seconds},
@@ -22,6 +24,10 @@ struct Settings {
     selected: String,
     codex_confirmed: bool,
     claude_confirmed: bool,
+    #[serde(default)]
+    opencode_confirmed: bool,
+    #[serde(default)]
+    opencode_model: String,
     #[serde(default)]
     timeout_seconds: Option<u64>,
 }
@@ -71,20 +77,29 @@ fn status(_: Value, _: &mut EventSink<'_>) -> CommandResult {
         .map_err(|_| error("settings", "Could not access provider settings"))?;
     let s = read()?;
     Ok(
-        json!({"selected": s.selected, "codexConfirmed": s.codex_confirmed, "claudeConfirmed": s.claude_confirmed, "timeoutSeconds": cli_timeout(s.timeout_seconds).as_secs()}),
+        json!({"selected": s.selected, "codexConfirmed": s.codex_confirmed, "claudeConfirmed": s.claude_confirmed, "opencodeConfirmed": s.opencode_confirmed, "opencodeModel": s.opencode_model, "timeoutSeconds": cli_timeout(s.timeout_seconds).as_secs()}),
     )
 }
 fn configure(args: Value, _: &mut EventSink<'_>) -> CommandResult {
     // Absent keeps the current timeout; null restores the default.
     let timeout = args.get("timeoutSeconds").map(parse_seconds).transpose()?;
     let kind = args.get("kind").and_then(Value::as_str).unwrap_or("");
-    if !matches!(kind, "" | "codex" | "claude") {
+    if !matches!(kind, "" | "codex" | "claude" | "opencode") {
         return Err(error("invalid_settings", "Invalid provider"));
     }
     let _lock = LOCK
         .lock()
         .map_err(|_| error("settings", "Could not access provider settings"))?;
     let mut s = read()?;
+    if kind == "opencode" {
+        if let Some(model) = args.get("model") {
+            let model = model
+                .as_str()
+                .filter(|m| opencode::valid_model(m))
+                .ok_or_else(|| error("invalid_settings", "Invalid OpenCode model"))?;
+            s.opencode_model = model.into();
+        }
+    }
     s.selected = kind.into();
     if let Some(timeout) = timeout {
         s.timeout_seconds = timeout;
@@ -111,6 +126,7 @@ fn confirm(args: Value, _: &mut EventSink<'_>) -> CommandResult {
     match kind {
         "codex" => s.codex_confirmed = true,
         "claude" => s.claude_confirmed = true,
+        "opencode" => s.opencode_confirmed = true,
         _ => return Err(error("invalid_settings", "Select a provider first")),
     }
     write(&s)?;
@@ -125,7 +141,8 @@ pub(crate) fn selected() -> Result<Option<String>, CoreError> {
         "" => Ok(None),
         "codex" if s.codex_confirmed => Ok(Some(s.selected)),
         "claude" if s.claude_confirmed => Ok(Some(s.selected)),
-        "codex" | "claude" => Err(error(
+        "opencode" if s.opencode_confirmed => Ok(Some(s.selected)),
+        "codex" | "claude" | "opencode" => Err(error(
             "confirmation_required",
             "Confirm sending text to this provider first",
         )),
@@ -141,6 +158,7 @@ pub(crate) fn confirmed(kind: &str) -> Result<bool, CoreError> {
     Ok(match kind {
         "codex" => s.codex_confirmed,
         "claude" => s.claude_confirmed,
+        "opencode" => s.opencode_confirmed,
         _ => false,
     })
 }
@@ -159,6 +177,22 @@ pub(crate) fn clear() -> Result<(), CoreError> {
     s.selected.clear();
     write(&s)
 }
+pub(crate) fn opencode_model() -> Result<String, CoreError> {
+    let _lock = LOCK
+        .lock()
+        .map_err(|_| error("settings", "Could not access provider settings"))?;
+    Ok(read()?.opencode_model)
+}
+pub(crate) fn label(kind: &str) -> &'static str {
+    match kind {
+        "codex" => "Codex CLI",
+        "opencode" => "OpenCode CLI",
+        _ => "Claude Code CLI",
+    }
+}
+pub(crate) fn opencode_cost(model: &str) -> Value {
+    json!({"kind": if opencode::free_model(model) { "zero" } else { "unknown" }})
+}
 pub(crate) struct CliProvider(pub String, pub std::time::Duration);
 /// Runs a CLI without a shell, feeds it `input` on stdin and waits for it. A cancellation
 /// or the timeout kills the whole process tree and reaps the child before returning
@@ -170,9 +204,13 @@ fn run(
     input: Vec<u8>,
     cancel: &CancelToken,
     timeout: Duration,
+    isolation: Option<&opencode::Isolation>,
 ) -> Result<Output, CoreError> {
     let (mut child, group) = crate::process::spawn_managed_with(program, args, |command| {
         command.current_dir(dir).stdin(Stdio::piped());
+        if let Some(isolation) = isolation {
+            isolation.apply(command);
+        }
     })
     .map_err(|_| error("cli_unavailable", "Could not start provider CLI"))?;
     let (Some(mut stdin), Some(mut stdout), Some(mut stderr)) =
@@ -243,6 +281,13 @@ impl Provider for CliProvider {
     ) -> Result<Value, CoreError> {
         let validator = jsonschema::validator_for(&request.schema)
             .map_err(|_| error("invalid_schema", "Invalid JSON schema"))?;
+        if self.0 == "opencode" {
+            let value = opencode::structured(request, &opencode_model()?, cancel, self.1)?;
+            if value.get("schemaVersion").is_none() || !validator.is_valid(&value) {
+                return Err(error("invalid_json", "Provider response failed validation"));
+            }
+            return Ok(json!({"data":value,"usage":null,"calls":1}));
+        }
         let dir = tempfile::tempdir()
             .map_err(|_| error("cli", "Could not create temporary directory"))?;
         let schema = serde_json::to_string(&request.schema)
@@ -305,6 +350,7 @@ impl Provider for CliProvider {
                 Vec::new(),
                 cancel,
                 self.1,
+                None,
             )?;
             if !output.status.success()
                 || !String::from_utf8_lossy(&output.stdout)
@@ -344,6 +390,7 @@ impl Provider for CliProvider {
             prompt.into_bytes(),
             cancel,
             self.1,
+            None,
         )?;
         if !output.status.success() {
             return Err(error("cli", "Provider CLI failed"));
