@@ -8,6 +8,7 @@ enum Kind {
     OpenAi,
     Anthropic,
     Gemini,
+    Ollama,
 }
 pub(super) struct Adapter {
     endpoint: String,
@@ -18,6 +19,7 @@ pub(super) struct Adapter {
     pub(super) timeout: Option<Duration>,
     pub(super) timeouts: Timeouts,
     kind: Kind,
+    context: Option<u64>,
 }
 macro_rules! provider {
     ($name:ident, $kind:ident) => {
@@ -37,6 +39,7 @@ macro_rules! provider {
                     timeout: None,
                     timeouts: Timeouts::default(),
                     kind: Kind::$kind,
+                    context: None,
                 }))
             }
             pub(super) fn confirm(&mut self, confirmed: bool) {
@@ -65,6 +68,15 @@ macro_rules! provider {
 provider!(OpenAiProvider, OpenAi);
 provider!(AnthropicProvider, Anthropic);
 provider!(GeminiProvider, Gemini);
+provider!(OllamaProvider, Ollama);
+
+impl OllamaProvider {
+    /// Effective context can later be supplied by context discovery (#143).
+    pub fn with_context(mut self, context: Option<u64>) -> Self {
+        self.0.context = context;
+        self
+    }
+}
 
 /// A whole HTTP reply, body included, read on a helper thread so a cancellation does not
 /// have to wait for a slow Provider.
@@ -118,6 +130,10 @@ fn usage_of(kind: Kind, response: &Value) -> (Option<u64>, Option<u64>) {
         Kind::Anthropic => (
             response.pointer("/usage/input_tokens"),
             response.pointer("/usage/output_tokens"),
+        ),
+        Kind::Ollama => (
+            response.get("prompt_eval_count"),
+            response.get("eval_count"),
         ),
         Kind::Gemini => (
             response.pointer("/usageMetadata/promptTokenCount"),
@@ -188,6 +204,7 @@ impl Adapter {
         let path = match self.kind {
             Kind::OpenAi => format!("{base}/chat/completions"),
             Kind::Anthropic => format!("{base}/messages"),
+            Kind::Ollama => format!("{base}/api/chat"),
             Kind::Gemini => {
                 if !self
                     .model
@@ -217,7 +234,7 @@ impl Adapter {
             let mut call = client.post(url.clone()).json(body);
             if let Some(key) = &self.key {
                 call = match self.kind {
-                    Kind::OpenAi => call.bearer_auth(key),
+                    Kind::OpenAi | Kind::Ollama => call.bearer_auth(key),
                     Kind::Anthropic => call.header("x-api-key", key),
                     Kind::Gemini => call.header("x-goog-api-key", key),
                 };
@@ -322,7 +339,7 @@ impl Adapter {
         let mut calls = 0;
         for repair in 0..2 {
             let mut body = match self.kind {
-                Kind::OpenAi => {
+                Kind::OpenAi | Kind::Ollama => {
                     let mut m = vec![json!({"role":"system","content":system})];
                     m.extend(messages.clone());
                     json!({"model":self.model,"messages":m})
@@ -334,11 +351,17 @@ impl Adapter {
                     json!({"systemInstruction":{"parts":[{"text":system}]},"contents":messages.iter().map(|m| json!({"role":if m["role"]=="assistant" {"model"} else {"user"},"parts":[{"text":m["content"]}]})).collect::<Vec<_>>()})
                 }
             };
+            if matches!(self.kind, Kind::Ollama) {
+                body["stream"] = json!(false);
+                body["options"]["num_ctx"] = json!(self.context.unwrap_or(4096));
+                body["format"] = request.schema.clone();
+            }
             if let Some(limit) = request.max_output_tokens {
                 match self.kind {
                     Kind::OpenAi => body["max_tokens"] = json!(limit),
                     Kind::Gemini => body["generationConfig"]["maxOutputTokens"] = json!(limit),
                     Kind::Anthropic => {}
+                    Kind::Ollama => body["options"]["num_predict"] = json!(limit),
                 }
             }
             if request.native_schema {
@@ -350,6 +373,7 @@ impl Adapter {
                         body["output_config"]["format"] =
                             json!({"type":"json_schema","schema":request.schema})
                     }
+                    Kind::Ollama => {}
                     Kind::Gemini => {
                         body["generationConfig"]["responseMimeType"] = json!("application/json");
                         body["generationConfig"]["responseJsonSchema"] = request.schema.clone();
@@ -386,6 +410,7 @@ impl Adapter {
             let truncated = match self.kind {
                 Kind::OpenAi => response.pointer("/choices/0/finish_reason"),
                 Kind::Anthropic => response.get("stop_reason"),
+                Kind::Ollama => response.get("done_reason"),
                 Kind::Gemini => response.pointer("/candidates/0/finishReason"),
             }
             .and_then(Value::as_str)
@@ -413,6 +438,7 @@ impl Adapter {
                 Kind::OpenAi => response
                     .pointer("/choices/0/message/content")
                     .and_then(Value::as_str),
+                Kind::Ollama => response.pointer("/message/content").and_then(Value::as_str),
                 Kind::Anthropic => response["content"]
                     .as_array()
                     .and_then(|blocks| blocks.iter().find(|b| b["type"] == "text"))
@@ -427,7 +453,7 @@ impl Adapter {
                     return Ok(json!({"data":value,"usage":usage,"calls":calls}));
                 }
             }
-            if request.native_schema {
+            if request.native_schema && !matches!(self.kind, Kind::Ollama) {
                 return Err(billed(
                     "invalid_json",
                     "Provider response failed validation",
