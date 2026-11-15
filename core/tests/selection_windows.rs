@@ -75,3 +75,42 @@ fn profile_context_origin_and_price_threshold_drive_the_plan() {
     let error = plan_for_profile(&long_cut, &frases).unwrap_err();
     assert_eq!(error.code, "max_cut_too_long");
 }
+
+/// #173: uma só razão de planejamento. Sem calibração o planejador usa o ponto ×1,2; com
+/// `CALIBRATION_MIN_SAMPLES` amostras, a ponta alta calibrada. `token_range().high` (orçamento e
+/// guard de envio) não muda.
+#[test]
+fn planning_ratio_is_point_times_1_2_until_calibrated() {
+    use clipes_core::provider::cost::{
+        observe_tokens, planning_range, token_range, PLANNING_UNCALIBRATED_FACTOR,
+    };
+    use clipes_core::provider::{EstimateHint, StructuredRequest};
+    let _guard = ENV.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", dir.path());
+    let request = StructuredRequest {
+        estimate_hint: EstimateHint {
+            format: "compact".into(),
+            language: "pt".into(),
+        },
+        instruction: "Escolha.".into(),
+        transcript: "frase falada ".repeat(2_000),
+        schema: json!({"type": "object"}),
+        native_schema: true,
+        max_output_tokens: None,
+    };
+    let uncalibrated = token_range("p", "m", &request).unwrap();
+    let planning = planning_range("p", "m", &request).unwrap();
+    let point = uncalibrated.high as f64 / 1.5;
+    assert_eq!(planning.low, uncalibrated.low);
+    assert!(planning.high < uncalibrated.high);
+    assert!((planning.high as f64 - point * PLANNING_UNCALIBRATED_FACTOR).abs() <= 2.0);
+
+    let chars = clipes_core::provider::cost::input_characters(&request);
+    for _ in 0..3 {
+        observe_tokens("p", "m", &request, chars / 2, "ok").unwrap();
+    }
+    let calibrated = token_range("p", "m", &request).unwrap();
+    let planning = planning_range("p", "m", &request).unwrap();
+    assert_eq!(planning, calibrated);
+}

@@ -171,6 +171,8 @@ pub const CALIBRATION_SAMPLES: usize = 20;
 pub(crate) const CALIBRATION_MIN_SAMPLES: usize = 3;
 const INITIAL_LOW: f64 = 0.8;
 const INITIAL_HIGH: f64 = 1.5;
+/// Fator sobre o ponto da estimativa que o planejador de Janelas (#144) usa antes da calibração (#173).
+pub const PLANNING_UNCALIBRATED_FACTOR: f64 = 1.2;
 const OBSERVED_LOW: f64 = 0.95;
 const OBSERVED_HIGH: f64 = 1.10;
 const MIN_RANGE_LOW: f64 = 0.9;
@@ -264,6 +266,40 @@ pub fn token_range(
         low: (chars * low).floor() as u64,
         high: (chars * high).ceil() as u64,
     })
+}
+/// Fonte única da razão de planejamento (#173): sem calibração (menos de
+/// [`CALIBRATION_MIN_SAMPLES`] amostras da chave) vale o ponto × [`PLANNING_UNCALIBRATED_FACTOR`];
+/// com calibração, a ponta alta calibrada. Orçamento e guard de envio NÃO usam esta função:
+/// ficam em `token_range(..).high`.
+pub fn planning_range(
+    profile: &str,
+    model: &str,
+    request: &StructuredRequest,
+) -> Result<TokenRange, CoreError> {
+    let range = token_range(profile, model, request)?;
+    if calibration_samples(profile, model, request) >= CALIBRATION_MIN_SAMPLES {
+        return Ok(range);
+    }
+    let high = (range.high as f64 * PLANNING_UNCALIBRATED_FACTOR / INITIAL_HIGH).ceil() as u64;
+    Ok(TokenRange {
+        low: range.low,
+        high: high.max(range.low),
+    })
+}
+/// Tokens da parte fixa (envelope, instrução, schema) para o planejamento (#173). Esse texto é o
+/// mesmo em toda janela e o núcleo o conhece inteiro; a margem ×1,2 cobre a variação da FALA, não
+/// dele. Sem calibração vale o ponto ×1,0; com calibração, a ponta alta calibrada. A margem de
+/// 15 % do contexto continua cobrindo o erro do estimador. Orçamento e guard não usam isto.
+pub fn planning_fixed_tokens(
+    profile: &str,
+    model: &str,
+    request: &StructuredRequest,
+) -> Result<u64, CoreError> {
+    let range = token_range(profile, model, request)?;
+    if calibration_samples(profile, model, request) >= CALIBRATION_MIN_SAMPLES {
+        return Ok(range.high);
+    }
+    Ok((range.high as f64 / INITIAL_HIGH).ceil() as u64)
 }
 /// Valid observations kept for the key of this request (profile, model, format, language).
 fn calibration_samples(profile: &str, model: &str, request: &StructuredRequest) -> usize {

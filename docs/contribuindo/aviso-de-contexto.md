@@ -20,7 +20,7 @@
 | Instrução e schema | ≈ 1,5 mil tokens | premissa P da seção 6.2; a instrução real é do #53 |
 | Saída e raciocínio reservados | `DEFAULT_OUTPUT_RESERVE` (1 000) e 0 | planejador (#144) |
 
-**Resultado medido sem calibração** (perfil `openai` sem limiar de preço): 4 096 e 8 192 tokens bloqueiam; 12 000 reduz (primeira janela de 11 min); 16 384 e 32 768 são cheios. A tabela da pesquisa (seção 6.2) marcava 8 192 como reduzida porque usa a estimativa pontual; o planejador do #144 usa a ponta **alta** da estimativa (×1,5 sem calibração), então é mais conservador. Os números 8/16/32 mil são só referência; o estado vem do planejador.
+**Resultado medido sem calibração** (perfil `openai` sem limiar de preço, regra do #173: fala ×1,2, parte fixa ×1,0): 4 096 bloqueia; 7 936 bloqueia e 7 968 reduz (limiar medido); 8 192 reduz; 16 384 e 32 768 são cheios. Antes do #173 o planejador usava a ponta alta (×1,5) e 8 192 bloqueava. Depois da calibração vale a ponta alta calibrada. Os números são só referência; o estado vem do planejador (ver `janelas-de-selecao.md`).
 
 ## Instruções práticas
 
