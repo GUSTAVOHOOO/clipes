@@ -1,1 +1,2 @@
 worker/** text eol=lf
+worker/src/clipes_worker/data/*.wav binary
