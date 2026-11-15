@@ -2,6 +2,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { version } from '../../package.json';
 
 const sourceTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('source-test');
+const budgetTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('budget-test');
 let sourceItems = [
   { id: 1, path: '/test/changed.mp4', status: 'changed', available: false, verified: false, permission: {status:'none'} },
   { id: 2, path: '/test/offline.mp4', status: 'offline', available: false, verified: false, permission: {status:'none'} },
@@ -11,6 +12,11 @@ let urlSettingsMock = {terms_accepted:false, download_dir:'/test/downloads'};
 let jobItems = [
   { id: 1, kind: 'preview', state: 'running', progress: 42, project: 'test-project' },
   { id: 2, kind: 'ai:example', safety: 'paid', state: 'uncertain', progress: 0, project: 'test-project' },
+  ...(budgetTest ? [
+    { id: 3, kind: 'ai:selection', state: 'queued', progress: 0, project: 'test-project', budgetPause: 'budget_cost', taskCost: {costLabel: null} },
+    { id: 4, kind: 'ai:selection', state: 'queued', progress: 0, project: 'test-project', budgetPause: 'cost_unknown', taskCost: {costLabel: 'custo desconhecido'} },
+    { id: 5, kind: 'ai:script', state: 'completed', progress: 100, project: 'test-project', budgetPause: null, taskCost: {costLabel: 'consome a cota do plano'} },
+  ] : []),
 ];
 let transcribeMock: { transcript: object | null; job: object | null } = { transcript: null, job: null };
 let providerMock = { kind: 'openai', endpoint: '', model: '', nativeSchema: false, keyLastFour: null as string | null, remote: false, confirmed: false, confirmedEndpoints: [] as string[] };

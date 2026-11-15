@@ -6,10 +6,10 @@ import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 type Estimate = { kind: 'zero'|'plan_quota'|'usd'|'unknown'; minMicroUsd?: number|null; maxMicroUsd?: number|null };
-type Job = { id: number; kind: string; safety?: 'local'|'paid'; state: 'queued'|'running'|'uncertain'|'completed'|'cancelled'|'failed'; progress: number; project: string };
+type Job = { id: number; kind: string; safety?: 'local'|'paid'; state: 'queued'|'running'|'uncertain'|'completed'|'cancelled'|'failed'; progress: number; project: string; budgetPause?: string|null; taskCost?: {costLabel?: string|null}|null; batchCost?: {costLabel?: string|null}|null };
 const texts = {
-  'pt-BR': {title:'Tarefas', empty:'Nenhuma tarefa neste Projeto.', preview:'Onda e miniaturas', transcribe:'Transcrição', provider:'Provedor', ai:'Tarefa de IA', estimateZero:'Custo estimado da repetição: zero (modelo local).', estimateQuota:'Custo estimado da repetição: consome a cota do plano.', estimateUsd:'Custo estimado da repetição: até US$ {value}.', estimateUnknown:'Custo estimado da repetição: desconhecido.', queued:'Na fila', running:'Em andamento', uncertain:'Resultado incerto', completed:'Concluída', cancelled:'Cancelada', failed:'Falhou', cancel:'Cancelar tarefa', repeat:'Repetir', discard:'Descartar', retryTitle:'Repetir tarefa?', retryDescription:'O resultado da chamada é incerto. Repetir pode gerar uma nova cobrança.', cancelDialog:'Cancelar', failedAction:'Não foi possível atualizar a tarefa.'},
-  en: {title:'Tasks', empty:'No tasks in this Project.', preview:'Waveform and thumbnails', transcribe:'Transcription', provider:'Provider', ai:'AI task', estimateZero:'Estimated cost of retrying: zero (local model).', estimateQuota:'Estimated cost of retrying: uses your plan quota.', estimateUsd:'Estimated cost of retrying: up to US$ {value}.', estimateUnknown:'Estimated cost of retrying: unknown.', queued:'Queued', running:'In progress', uncertain:'Uncertain result', completed:'Completed', cancelled:'Cancelled', failed:'Failed', cancel:'Cancel task', repeat:'Retry', discard:'Discard', retryTitle:'Retry task?', retryDescription:'The result of the request is uncertain. Retrying may incur another charge.', cancelDialog:'Cancel', failedAction:'Could not update the task.'},
+  'pt-BR': {budgetPaused:'Pausada pelo orçamento', costConfirmation:'Aguardando confirmação do custo', costUnknown:'Custo desconhecido', costQuota:'Consome a cota do plano', title:'Tarefas', empty:'Nenhuma tarefa neste Projeto.', preview:'Onda e miniaturas', transcribe:'Transcrição', provider:'Provedor', ai:'Tarefa de IA', estimateZero:'Custo estimado da repetição: zero (modelo local).', estimateQuota:'Custo estimado da repetição: consome a cota do plano.', estimateUsd:'Custo estimado da repetição: até US$ {value}.', estimateUnknown:'Custo estimado da repetição: desconhecido.', queued:'Na fila', running:'Em andamento', uncertain:'Resultado incerto', completed:'Concluída', cancelled:'Cancelada', failed:'Falhou', cancel:'Cancelar tarefa', repeat:'Repetir', discard:'Descartar', retryTitle:'Repetir tarefa?', retryDescription:'O resultado da chamada é incerto. Repetir pode gerar uma nova cobrança.', cancelDialog:'Cancelar', failedAction:'Não foi possível atualizar a tarefa.'},
+  en: {budgetPaused:'Paused by budget', costConfirmation:'Awaiting cost confirmation', costUnknown:'Unknown cost', costQuota:'Uses your plan quota', title:'Tasks', empty:'No tasks in this Project.', preview:'Waveform and thumbnails', transcribe:'Transcription', provider:'Provider', ai:'AI task', estimateZero:'Estimated cost of retrying: zero (local model).', estimateQuota:'Estimated cost of retrying: uses your plan quota.', estimateUsd:'Estimated cost of retrying: up to US$ {value}.', estimateUnknown:'Estimated cost of retrying: unknown.', queued:'Queued', running:'In progress', uncertain:'Uncertain result', completed:'Completed', cancelled:'Cancelled', failed:'Failed', cancel:'Cancel task', repeat:'Retry', discard:'Discard', retryTitle:'Retry task?', retryDescription:'The result of the request is uncertain. Retrying may incur another charge.', cancelDialog:'Cancel', failedAction:'Could not update the task.'},
 };
 export function Jobs({projectId}: {projectId:string}) {
   const t = useText(texts);
@@ -19,6 +19,16 @@ export function Jobs({projectId}: {projectId:string}) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const retryFocus = useRef<HTMLButtonElement>(null);
+  function stateLabel(item: Job) {
+    if (item.state === 'queued' && item.budgetPause) return item.budgetPause === 'cost_unknown' ? t.costConfirmation : t.budgetPaused;
+    return t[item.state];
+  }
+  function costLabel(item: Job) {
+    const label = item.batchCost?.costLabel ?? item.taskCost?.costLabel;
+    if (item.budgetPause === 'cost_unknown' || label === 'custo desconhecido') return t.costUnknown;
+    if (label === 'consome a cota do plano') return t.costQuota;
+    return null;
+  }
   async function refresh() { setItems(await coreDispatch<Job[]>('jobs.list', {})); }
   useEffect(() => {
     let active = true;
@@ -52,7 +62,7 @@ export function Jobs({projectId}: {projectId:string}) {
     <h2 id="jobs-title" className="text-base font-semibold">{t.title}</h2>
     {error && <p role="alert" className="mt-3 text-danger">{error}</p>}
     {items.length === 0 ? <p className="mt-3 text-sm text-fg-2">{t.empty}</p> : <ul className="mt-3 divide-y divide-line border-y border-line">{items.map(item => <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-      <div><p>{item.kind === 'preview' ? t.preview : item.kind === 'transcription' ? t.transcribe : item.kind.startsWith('ai:') ? t.ai : t.provider}</p><p className="text-sm text-fg-2">{t[item.state]}{item.state === 'running' && ` · ${item.progress}%`}</p>{item.state === 'running' && <progress className="mt-1 w-48 max-w-full" value={item.progress} max={100} aria-label={t.running} />}</div>
+      <div><p>{item.kind === 'preview' ? t.preview : item.kind === 'transcription' ? t.transcribe : item.kind.startsWith('ai:') ? t.ai : t.provider}</p><p className="text-sm text-fg-2">{stateLabel(item)}{item.state === 'running' && ` · ${item.progress}%`}</p>{costLabel(item) && <p className="text-sm text-fg-2">{costLabel(item)}</p>}{item.state === 'running' && <progress className="mt-1 w-48 max-w-full" value={item.progress} max={100} aria-label={t.running} />}</div>
       <div className="flex gap-2">{(item.state === 'queued' || item.state === 'running') && <Button disabled={busy} onClick={() => void action('jobs.cancel', item.id)}>{t.cancel}</Button>}{item.state === 'uncertain' && <><Button ref={retryFocus} disabled={busy} onClick={() => void askRetry(item)}>{t.repeat}</Button><Button disabled={busy} onClick={() => void action('jobs.discard', item.id)}>{t.discard}</Button></>}</div>
     </li>)}</ul>}
     <ConfirmDialog open={pending !== null} onOpenChange={open => { if (!open) setPending(null); }} title={t.retryTitle} description={`${t.retryDescription} ${estimate}`} cancelLabel={t.cancelDialog} confirmLabel={t.repeat} finalFocus={retryFocus} onConfirm={() => { const id = pending; setPending(null); if (id !== null) void action('jobs.retry', id, true); }}/>
