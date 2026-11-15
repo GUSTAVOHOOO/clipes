@@ -5,6 +5,8 @@ import { coreDispatch } from '@/lib/core';
 import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { CandidateReview } from './CandidateReview';
+import { clock, fill, message } from './selectionFormat';
 
 type Estimate = { kind: string; windows: number; inputTokens: number; minMicroUsd: number | null; maxMicroUsd: number | null };
 type Weight = { key: string; weight: number };
@@ -25,10 +27,9 @@ const texts = {
     done: 'Seleção concluída', partial: 'Seleção com janelas pendentes', running: 'Selecionando',
     summary: '{kept} candidatos · {merged} juntados · {discarded} descartados',
     minScore: 'Nota mínima', none: 'Nenhum candidato nesta seleção: o modelo não achou Cortes que valessem a pena.', noneFilter: 'Nenhum candidato com essa Nota.',
-    total: 'Nota total', weight: 'peso {value}%', adjusted: 'Bordas ajustadas', extendedBefore: 'começo estendido', extendedAfter: 'fim estendido', trimmedEnd: 'fim encurtado', origin: 'Janelas de origem', candidates: 'Candidatos a Corte', run: 'Execução', error: 'Não foi possível atualizar a seleção.',
+    run: 'Execução', error: 'Não foi possível atualizar a seleção.',
     state: { queued: 'na fila', running: 'em andamento', completed: 'concluída', failed: 'falhou', cancelled: 'cancelada', uncertain: 'incerta', unscheduled: 'não iniciada' },
     code: { verification_failed: 'a resposta não passou na verificação', output_invalid: 'a resposta fugiu do formato', invalid_json: 'a resposta não era JSON válido', context_truncated: 'a Transcrição foi cortada pelo Provedor; a resposta não foi aceita', cancelled: 'cancelada', timeout_uncertain: 'tempo esgotado, resultado incerto', not_started: 'não iniciada', output_truncated: 'a resposta foi cortada', refusal: 'o Provedor recusou', default: 'falhou' },
-    axis: { hook: 'Gancho', selfContained: 'Autossuficiência', energy: 'Emoção/energia', value: 'Valor', closing: 'Fechamento' } as Record<string, string>,
   },
   en: {
     title: 'Clip selection', start: 'Select Clips', cancel: 'Cancel selection', resume: 'Resume windows', redo: 'Redo window',
@@ -38,15 +39,11 @@ const texts = {
     done: 'Selection finished', partial: 'Selection with pending windows', running: 'Selecting',
     summary: '{kept} candidates · {merged} merged · {discarded} discarded',
     minScore: 'Minimum score', none: 'No candidates in this selection: the model found no Clips worth keeping.', noneFilter: 'No candidate with this score.',
-    total: 'Total score', weight: 'weight {value}%', adjusted: 'Borders adjusted', extendedBefore: 'start extended', extendedAfter: 'end extended', trimmedEnd: 'end shortened', origin: 'Source windows', candidates: 'Clip candidates', run: 'Run', error: 'Could not update the selection.',
+    run: 'Run', error: 'Could not update the selection.',
     state: { queued: 'queued', running: 'running', completed: 'completed', failed: 'failed', cancelled: 'cancelled', uncertain: 'uncertain', unscheduled: 'not started' },
     code: { verification_failed: 'the answer failed verification', output_invalid: 'the answer did not match the format', invalid_json: 'the answer was not valid JSON', context_truncated: 'the Provider cut the Transcript; the answer was not accepted', cancelled: 'cancelled', timeout_uncertain: 'timed out, result uncertain', not_started: 'not started', output_truncated: 'the answer was cut off', refusal: 'the Provider refused', default: 'failed' },
-    axis: { hook: 'Hook', selfContained: 'Self-contained', energy: 'Emotion/energy', value: 'Value', closing: 'Closing' } as Record<string, string>,
   },
 };
-const fill = (text: string, values: Record<string, string | number>) => text.replace(/\{(\w+)\}/g, (_, k: string) => String(values[k] ?? ''));
-function message(error: unknown) { return typeof error === 'object' && error !== null && 'message' in error ? String(error.message) : String(error); }
-function clock(us: number) { const s = Math.floor(us / 1_000_000); const h = Math.floor(s / 3600); const m = String(Math.floor(s / 60) % 60).padStart(2, '0'); const ss = String(s % 60).padStart(2, '0'); return h > 0 ? `${h}:${m}:${ss}` : `${m}:${ss}`; }
 const usd = (micro: number) => (micro / 1_000_000).toFixed(4);
 
 /** Seleção de Cortes de uma Fonte transcrita: estimativa, execução por Janela e candidatos. */
@@ -149,24 +146,7 @@ export function Selection({ sourceId }: { sourceId: number }) {
       <label className="flex items-center gap-2">{t.minScore}<input type="number" min={0} max={10} step={0.5} value={minScore} onChange={e => setMinScore(Math.min(10, Math.max(0, Number(e.target.value) || 0)))} className="h-8 w-20 rounded-md border border-line-strong bg-field px-2" /></label>
       {!running && detail.candidates.length === 0 && head.state === 'completed' && <p>{t.none}</p>}
       {detail.candidates.length > 0 && shown.length === 0 && <p>{t.noneFilter}</p>}
-      <ol aria-label={t.candidates} className="flex flex-col gap-2">
-        {shown.map(c => <li key={c.id} data-candidate={c.id} className="rounded-md border border-line p-3">
-          <div className="flex flex-wrap items-baseline gap-x-3">
-            <strong>{t.total}: {c.total.toFixed(2)}</strong>
-            <span>{clock(c.startUs)}–{clock(c.endUs)}</span>
-            {c.title && <span className="text-fg-2">{c.title}</span>}
-            {c.adjusted && <span className="text-fg-2">{t.adjusted}: {[c.adjust?.extendedBefore ? t.extendedBefore : '', c.adjust?.extendedAfter ? t.extendedAfter : '', c.adjust?.trimmedEnd ? t.trimmedEnd : ''].filter(Boolean).join(', ')}</span>}
-            <span className="text-fg-2">{t.origin}: {c.windows.map(n => n + 1).join(', ')}</span>
-          </div>
-          <dl className="mt-2 grid gap-x-3 gap-y-1 sm:grid-cols-[max-content_max-content_1fr]">
-            {weights.map(w => <div key={w.key} className="contents">
-              <dt className="font-medium">{t.axis[w.key] ?? w.key}</dt>
-              <dd>{c.axes[w.key]?.score} <span className="text-fg-2">({fill(t.weight, { value: Math.round(w.weight * 100) })})</span></dd>
-              <dd className="text-fg-2">{c.axes[w.key]?.why}</dd>
-            </div>)}
-          </dl>
-        </li>)}
-      </ol>
+      {current !== null && shown.length > 0 && <CandidateReview run={current} candidates={shown} weights={weights} />}
     </div>}
     {error && <p role="alert" className="text-danger">{error}</p>}
     <ConfirmDialog open={pending !== null} onOpenChange={open => { if (!open) setPending(null); }} title={t.confirmTitle}
