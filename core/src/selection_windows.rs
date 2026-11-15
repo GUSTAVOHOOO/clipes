@@ -432,12 +432,12 @@ pub fn plan_for_profile(
     // (tokens fixos).
     let full = structured(compact.text);
     let full_chars = cost::input_characters(&full).max(1);
-    let range = cost::token_range(&profile.profile_id, &profile.model, &full)?;
+    let range = cost::planning_range(&profile.profile_id, &profile.model, &full)?;
     let ratio = TokenRatio {
         low: (range.low as f64 / full_chars as f64).max(f64::MIN_POSITIVE),
         high: (range.high as f64 / full_chars as f64).max(f64::MIN_POSITIVE),
     };
-    let fixed_tokens = cost::token_range(
+    let fixed_tokens = cost::planning_range(
         &profile.profile_id,
         &profile.model,
         &structured(String::new()),

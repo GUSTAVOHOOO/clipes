@@ -49,6 +49,9 @@ fn context_decides_full_reduced_or_blocked_for_dense_speech() {
         .collect();
     // Os números são só referência: o estado vem do planejador (#144), não de portões fixos.
     assert_eq!(states[0], "blocked");
+    // #173: sem calibração o planejador usa o ponto ×1,2, então 8192 é reduzida.
+    assert_eq!(states[1], "reduced");
+    assert_eq!(states[2], "full");
     assert_eq!(states[3], "full");
     // Monotônico: mais contexto nunca piora o estado.
     let rank = |s: &str| {
