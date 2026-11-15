@@ -569,6 +569,87 @@ try {
   await page.screenshot({path:'shots/estimate-cpu.png',fullPage:true});
   await cpuRow.getByRole('button',{name:'Usar o Motor Groq'}).click();
   assert.equal(await cpuRow.getByLabel('Motor de transcrição').inputValue(), 'groq');
+  // Estado do perfil para a seleção de Cortes (#146): três estados, em PT-BR e EN, só informativo.
+  for (const L of [
+    { lang: 'pt-BR', prefs: 'Preferências', add: 'Adicionar perfil', name: 'Nome do perfil', endpoint: 'Endereço da API', model: 'Modelo', ctx: 'Contexto em tokens (opcional)', save: 'Salvar perfil', edit: 'Editar',
+      full: 'Janela cheia', reduced: 'Janela reduzida', blocked: 'Bloqueada', estimate: /Estimativa para fala densa de 60 min/, blockedText: /Outras Tarefas de IA que couberem continuam disponíveis/, reducedText: /mais chamadas e possíveis limitações/,
+      fix: /Ollama: no app do Ollama/, lm: /LM Studio: defina o tamanho do contexto/, llama: /llama.cpp: inicie o servidor com `-c`/, remote: /não troca de Provedor sozinho/, notRec: /Não recomendado para a seleção de Cortes/, origin: 'Padrão conservador', userOrigin: 'Informado por você', taskLabel: 'Seleção de Cortes', section: 'Seleção com este perfil' },
+    { lang: 'en', prefs: 'Preferences', add: 'Add profile', name: 'Profile name', endpoint: 'API endpoint', model: 'Model', ctx: 'Context in tokens (optional)', save: 'Save profile', edit: 'Edit',
+      full: 'Full window', reduced: 'Reduced window', blocked: 'Blocked', estimate: /Estimate for dense speech, 60 min/, blockedText: /Other AI Tasks that fit stay available/, reducedText: /more calls and possible limitations/,
+      fix: /Ollama: in the Ollama app/, lm: /LM Studio: set the context size/, llama: /llama.cpp: start the server with `-c`/, remote: /never switches Providers by itself/, notRec: /Not recommended for Clip selection/, origin: 'Conservative default', userOrigin: 'Set by you', taskLabel: 'Clip selection', section: 'Selection with this profile' },
+  ]) {
+    await page.evaluate(lang => localStorage.setItem('clipes.language', lang), L.lang);
+    await page.goto(url);
+    await page.getByRole('button', { name: L.prefs }).click();
+    const prefs = page.locator('section[aria-labelledby="profiles-title"]');
+    const addProfile = async (name, endpoint, model, kind) => {
+      await prefs.getByRole('button', { name: L.add }).click();
+      if (kind) await prefs.getByLabel(/Provider type|Tipo de provedor/).selectOption(kind);
+      await prefs.getByLabel(L.name).fill(name);
+      await prefs.getByLabel(L.endpoint).fill(endpoint);
+      await prefs.getByLabel(L.model, { exact: true }).fill(model);
+      await prefs.getByRole('button', { name: L.save, exact: true }).click();
+      await prefs.getByRole('article', { name }).waitFor();
+    };
+    const setContext = async (card, name, value) => {
+      await card.getByRole('button', { name: L.edit, exact: true }).click();
+      await prefs.getByLabel(L.ctx).fill(value);
+      await prefs.getByRole('button', { name: L.save, exact: true }).click();
+      await prefs.getByRole('article', { name }).waitFor();
+    };
+    await addProfile('Estado local', 'http://127.0.0.1:1234/v1', 'qwen-4b');
+    const card = prefs.getByRole('article', { name: 'Estado local' });
+    const box = card.getByRole('region', { name: L.section });
+    // Padrão conservador de 8192 tokens: bloqueada para a seleção (fala densa), com as três instruções locais.
+    await box.getByText(L.blocked, { exact: true }).waitFor();
+    assert.equal(await box.getAttribute('data-selection-state'), 'blocked');
+    assert.match(await box.innerText(), L.estimate);
+    assert.match(await box.innerText(), L.blockedText);
+    assert.match(await box.innerText(), L.fix);
+    assert.match(await box.innerText(), L.lm);
+    assert.match(await box.innerText(), L.llama);
+    assert.match(await card.innerText(), /qwen-4b/);
+    assert.match(await card.innerText(), /8[.,\s\u00a0]?192/);
+    assert.match(await card.innerText(), new RegExp(L.origin));
+    // Só informativo: nada é desativado e outras Tarefas continuam disponíveis.
+    assert.equal(await card.getByRole('button', { name: L.edit, exact: true }).isEnabled(), true);
+    const docLink = box.getByRole('link').first();
+    assert.match(await docLink.getAttribute('href'), /^https:/);
+    const tasks = page.getByRole('group', { name: /Tarefas|Tasks/ });
+    await tasks.getByText(L.notRec).waitFor();
+    // Assistente: o perfil escolhido para a seleção mostra modelo, contexto, origem e estado.
+    await page.getByLabel(L.taskLabel, { exact: true }).selectOption('profile:estado-local');
+    const selectionRow = tasks.getByRole('row').filter({ hasText: L.taskLabel });
+    const rowBox = selectionRow.getByRole('region', { name: L.section });
+    await rowBox.getByText(L.blocked, { exact: true }).waitFor();
+    assert.match(await rowBox.innerText(), /qwen-4b/);
+    assert.match(await rowBox.innerText(), /8[.,\s\u00a0]?192/);
+    assert.match(await rowBox.innerText(), new RegExp(L.origin));
+    await page.screenshot({ path: `shots/selection-state-${L.lang}.png`, fullPage: true });
+    // Reduzida.
+    await setContext(card, 'Estado local', '12000');
+    await box.getByText(L.reduced, { exact: true }).waitFor();
+    assert.equal(await box.getAttribute('data-selection-state'), 'reduced');
+    assert.match(await box.innerText(), L.reducedText);
+    assert.match(await box.innerText(), L.estimate);
+    assert.match(await box.innerText(), L.lm);
+    await rowBox.getByText(L.reduced, { exact: true }).waitFor();
+    assert.match(await rowBox.innerText(), new RegExp(L.userOrigin));
+    // Cheia.
+    await setContext(card, 'Estado local', '32768');
+    await box.getByText(L.full, { exact: true }).waitFor();
+    assert.equal(await box.getAttribute('data-selection-state'), 'full');
+    assert.doesNotMatch(await box.innerText(), L.lm);
+    // Perfil remoto bloqueado: instrução genérica, sem Provedor trocado sozinho.
+    await addProfile('Estado nuvem', 'https://example.com/v1', 'pequeno');
+    const cloud = prefs.getByRole('article', { name: 'Estado nuvem' });
+    await setContext(cloud, 'Estado nuvem', '4096');
+    const cloudBox = cloud.getByRole('region', { name: L.section });
+    await cloudBox.getByText(L.blocked, { exact: true }).waitFor();
+    assert.match(await cloudBox.innerText(), L.remote);
+    assert.doesNotMatch(await cloudBox.innerText(), L.lm);
+  }
+  await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
   assert.deepEqual(errors, []);
   console.log('UI keyboard, preferences, about, drawer and screenshots: OK');
 } finally { await browser?.close(); server.kill(); }
