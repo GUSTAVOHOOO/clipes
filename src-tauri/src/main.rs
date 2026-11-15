@@ -41,7 +41,9 @@ fn main() {
     tauri::Builder::default()
         .register_asynchronous_uri_scheme_protocol("clipes-media", |_ctx, request, responder| {
             // Leitura de disco fora da thread principal.
-            tauri::async_runtime::spawn_blocking(move || responder.respond(media_response(&request)));
+            tauri::async_runtime::spawn_blocking(move || {
+                responder.respond(media_response(&request))
+            });
         })
         .setup(|app| {
             let handle = app.handle().clone();

@@ -595,6 +595,8 @@ try {
     await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
     await page.keyboard.press(']');
     await page.locator('aside[data-aberta="true"]').waitFor();
+    // A gaveta transfere o foco em requestAnimationFrame; Escape só chega a ela depois disso.
+    await page.waitForFunction(() => document.activeElement?.closest('aside[data-aberta="true"]'));
     await page.keyboard.press('Escape');
     await page.locator('aside[data-aberta="true"]').waitFor({ state: 'detached' });
   };
