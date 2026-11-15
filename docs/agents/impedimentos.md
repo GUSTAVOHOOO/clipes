@@ -46,6 +46,11 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Causa:** a animação de saída ainda mantém o botão do diálogo na árvore enquanto o teste tenta abrir o próximo diálogo.
 - **Ação:** aguarde o diálogo anterior ficar oculto e restrinja o seletor de abertura à seção que contém o botão.
 
+### Testes com biblioteca e fontes de momentos diferentes após merge
+- **Sintoma:** um `cargo test --workspace` iniciado antes do merge falha com `Invalid provider type` num teste de Ollama adicionado pelo merge, embora o código atual aceite esse tipo.
+- **Causa:** a execução já tinha compilado a biblioteca anterior ao merge e depois compilou o teste novo; a árvore mudou durante o comando.
+- **Ação:** finalize o merge antes de executar a verificação e repita o comando com a árvore estável. Não altere o Provedor para contornar o resultado da execução antiga.
+
 ### Tickets da mesma onda mexendo nos mesmos arquivos da raiz
 - **Ação:** faça o merge de um PR e mande o outro worker fazer rebase em `origin/master` antes de abrir (ou atualizar) o PR. Nada de push forçado em branch alheia.
 
