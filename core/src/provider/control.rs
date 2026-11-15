@@ -30,6 +30,7 @@ struct CallScope {
     limit: Option<u64>,
     log: Vec<Value>,
     guard: Option<CallGuard>,
+    transport: Option<Value>,
 }
 thread_local! {
     static SCOPE: std::cell::RefCell<Option<CallScope>> = const { std::cell::RefCell::new(None) };
@@ -49,6 +50,7 @@ pub(crate) fn with_call_scope<T>(
         limit,
         log: Vec::new(),
         guard,
+        transport: None,
     }));
     let result = f();
     let scope = SCOPE.replace(previous).unwrap_or_default();
@@ -166,5 +168,48 @@ impl Timeouts {
     /// The values in force, for `provider.status`.
     pub fn effective(&self) -> Value {
         json!({"remote":self.endpoint(false).as_secs(),"local":self.endpoint(true).as_secs()})
+    }
+}
+
+/// Notes, for the audit trail (#125), the prompt a subscription CLI is about to receive on
+/// stdin. CLIs have no HTTP call log, so their transport facts travel on their own slot of the
+/// scope and are merged into the one cost entry by the caller (`take_transport`). Outside a
+/// scope these functions do nothing. Only the hash and size are kept, never the bytes.
+pub(crate) fn note_request(host: &str, bytes: &[u8]) {
+    SCOPE.with_borrow_mut(|scope| {
+        if let Some(scope) = scope {
+            scope.transport = Some(
+                json!({"host":host,"inputSha256":cost::sha256_hex(bytes),"sentBytes":bytes.len()}),
+            );
+        }
+    });
+}
+
+/// Notes the hash of what the CLI wrote on stdout.
+pub(crate) fn note_response(bytes: &[u8]) {
+    SCOPE.with_borrow_mut(|scope| {
+        if let Some(transport) = scope.as_mut().and_then(|s| s.transport.as_mut()) {
+            transport["responseSha256"] = json!(cost::sha256_hex(bytes));
+        }
+    });
+}
+
+/// The transport facts noted by the CLI call that ran in the open scope, if any.
+pub(crate) fn take_transport() -> Option<Value> {
+    SCOPE.with_borrow_mut(|scope| scope.as_mut().and_then(|s| s.transport.take()))
+}
+
+/// Fills the transport fields of the one fallback entry of a CLI call (`entries` has no HTTP
+/// log) with what the CLI noted.
+pub(crate) fn merge_transport(entries: &mut [Value], transport: &Option<Value>) {
+    let (Some(transport), [entry]) = (transport, entries) else {
+        return;
+    };
+    if entry.get("host").is_none() {
+        for key in ["host", "inputSha256", "sentBytes", "responseSha256"] {
+            if let Some(value) = transport.get(key) {
+                entry[key] = value.clone();
+            }
+        }
     }
 }
