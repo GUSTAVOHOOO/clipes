@@ -66,6 +66,14 @@ _Evitar_: legenda (legenda é o que aparece no Corte, derivada da Transcrição)
 Menor trecho da Transcrição que pode ser apontado: termina numa pontuação ou numa pausa da fala. As bordas de um Corte sempre coincidem com bordas de Frase.
 _Evitar_: segmento, sentença
 
+**Janela de contexto** (Context Window)
+Limite de tokens que um modelo comporta numa chamada, incluindo entrada, saída e raciocínio quando houver. O contexto efetivo de um Perfil de Provedor é o limite disponível para aquela configuração; pode ser menor que o máximo anunciado pelo modelo.
+_Evitar_: janela sozinha (confunde com Janela de seleção)
+
+**Janela de seleção** (Selection Window)
+Trecho da Transcrição analisado numa etapa da seleção de Cortes. Janelas vizinhas se sobrepõem para preservar Cortes nas bordas; o núcleo dimensiona cada uma para caber na Janela de contexto do Perfil de Provedor.
+_Evitar_: janela sozinha, Janela de contexto (é o limite do modelo, não o trecho)
+
 **Nota** (Score)
 Avaliação explicável do potencial de um Corte, formada por eixos nomeados (como Gancho, Autossuficiência e Fechamento), cada um com uma justificativa. Não é previsão de views.
 _Evitar_: score viral, pontuação de viralidade
