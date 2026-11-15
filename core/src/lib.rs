@@ -64,6 +64,7 @@ pub mod process;
 pub mod projects;
 pub mod provider;
 mod provider_cli;
+pub mod sentences;
 mod sources;
 pub mod transcription;
 mod url_import;
