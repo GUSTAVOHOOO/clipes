@@ -63,6 +63,20 @@ fn ollama_sends_native_chat_with_context_and_schema() {
     assert_eq!(result["data"]["schemaVersion"], 1);
     assert_eq!(result["usage"], json!({"inputTokens":10,"outputTokens":5}));
     server.join().unwrap();
+    run("provider.configure", json!({"profileId":"lan","kind":"ollama","endpoint":"http://192.168.1.2:11434","model":"qwen"})).unwrap();
+    let args = json!({"profileId":"lan","task":"translation","instruction":"x","transcript":"secret","schema":{"type":"object"},"nativeSchema":false});
+    assert_eq!(
+        run("provider.structured", args.clone()).unwrap_err().code,
+        "confirmation_required"
+    );
+    run(
+        "assistant.local_only.set",
+        json!({"task":"translation","enabled":true}),
+    )
+    .unwrap();
+    let err = run("provider.structured", args).unwrap_err();
+    assert_eq!(err.code, "local_only_violation");
+    assert!(!serde_json::to_string(&err).unwrap().contains("secret"));
     std::fs::remove_dir_all(root).unwrap();
 }
 
@@ -165,4 +179,35 @@ fn cancellation_prevents_request() {
             .code,
         "cancelled"
     );
+}
+
+#[test]
+fn cancellation_interrupts_inflight_call() {
+    use clipes_core::provider::{CancelToken, OllamaProvider, Provider};
+    use std::sync::mpsc;
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let (ready_tx, ready_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let server = thread::spawn(move || {
+        let (_stream, _) = listener.accept().unwrap();
+        ready_tx.send(()).unwrap();
+        release_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap();
+    });
+    let token = CancelToken::new();
+    let child = token.clone();
+    let worker = thread::spawn(move || {
+        OllamaProvider::new(endpoint, "model".into(), None)
+            .unwrap()
+            .structured_with(&request(), &child)
+    });
+    ready_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+    token.cancel();
+    assert_eq!(worker.join().unwrap().unwrap_err().code, "cancelled");
+    release_tx.send(()).unwrap();
+    server.join().unwrap();
 }
