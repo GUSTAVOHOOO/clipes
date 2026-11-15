@@ -287,6 +287,21 @@ pub fn planning_range(
         high: high.max(range.low),
     })
 }
+/// Tokens da parte fixa (envelope, instrução, schema) para o planejamento (#173). Esse texto é o
+/// mesmo em toda janela e o núcleo o conhece inteiro; a margem ×1,2 cobre a variação da FALA, não
+/// dele. Sem calibração vale o ponto ×1,0; com calibração, a ponta alta calibrada. A margem de
+/// 15 % do contexto continua cobrindo o erro do estimador. Orçamento e guard não usam isto.
+pub fn planning_fixed_tokens(
+    profile: &str,
+    model: &str,
+    request: &StructuredRequest,
+) -> Result<u64, CoreError> {
+    let range = token_range(profile, model, request)?;
+    if calibration_samples(profile, model, request) >= CALIBRATION_MIN_SAMPLES {
+        return Ok(range.high);
+    }
+    Ok((range.high as f64 / INITIAL_HIGH).ceil() as u64)
+}
 /// Valid observations kept for the key of this request (profile, model, format, language).
 fn calibration_samples(profile: &str, model: &str, request: &StructuredRequest) -> usize {
     super::settings::calibration_read()

@@ -242,3 +242,14 @@ fn diagnostic_export_is_still_a_user_reviewed_text() {
         "texto revisado pelo usuário"
     );
 }
+
+/// #173, fato medido na Fonte sintética do #146 sem calibração (regra: fala ×1,2, parte fixa
+/// ×1,0): 7936 tokens bloqueia e 7968 reduz. Não ajuste constantes para acertar este número.
+#[test]
+fn measured_threshold_sits_between_7936_and_7968() {
+    let (_guard, _dir) = isolated();
+    for (context, expected) in [(7_936, "blocked"), (7_968, "reduced")] {
+        configure("p", "openai", "https://192.0.2.10/v1", "m", Some(context));
+        assert_eq!(state("p")["state"], expected, "{context}");
+    }
+}
