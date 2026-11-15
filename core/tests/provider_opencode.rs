@@ -224,7 +224,6 @@ fn headless_opencode_isolation_routing_validation_and_cancellation() {
         run("provider.cost.run", req.clone()).unwrap()["cost"]["kind"],
         "zero"
     );
-    run("projects.close", json!({})).unwrap();
     for (mode, message) in [
         (
             "free-limit",
@@ -239,7 +238,37 @@ fn headless_opencode_isolation_routing_validation_and_cancellation() {
         let e = run("provider.structured", req.clone()).unwrap_err();
         assert_eq!(e.code, "cli_free_limit");
         assert_eq!(e.message, message);
+        assert_eq!(e.usage.unwrap(), json!({"usage":null,"calls":1}));
     }
+    let quota_job = jobs::enqueue_ai(
+        "selection",
+        &TaskInput {
+            transcript: "Synthetic text".into(),
+            context: Value::Null,
+            native_schema: false,
+        },
+        Safety::Paid,
+    )
+    .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        let result = run("jobs.result", json!({"id":quota_job})).unwrap();
+        if !result.is_null() {
+            assert_eq!(result["code"], "cli_free_limit");
+            break;
+        }
+        assert!(Instant::now() < deadline, "quota job did not settle");
+        thread::sleep(Duration::from_millis(25));
+    }
+    let quota_rows = run("provider.cost.list", json!({"job":quota_job})).unwrap();
+    assert_eq!(quota_rows.as_array().unwrap().len(), 1);
+    assert_eq!(quota_rows[0]["code"], "cli_free_limit");
+    assert_eq!(quota_rows[0]["calls"], 1);
+    assert_eq!(quota_rows[0]["costKind"], "zero");
+    let costed_quota = run("provider.cost.run", req.clone()).unwrap_err();
+    assert_eq!(costed_quota.code, "cli_free_limit");
+    assert_eq!(costed_quota.usage.unwrap()["cost"]["recorded"], true);
+    run("projects.close", json!({})).unwrap();
     for (mode, code) in [
         ("unsupported", "unsupported_cli"),
         ("invalid", "invalid_json"),

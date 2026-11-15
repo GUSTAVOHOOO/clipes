@@ -483,6 +483,7 @@ fn reached_provider(code: &str) -> bool {
             | "budget_cost"
             | "budget_tokens"
             | "rate_limit"
+            | "cli_free_limit"
             | "provider_http"
             | "network"
             | "output_truncated"

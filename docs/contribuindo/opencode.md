@@ -74,3 +74,5 @@ real passa ao #122, depois da reposição da cota, sem novas inferências neste 
 sob template fixo, em segundos arredondados para cima; sem prazo informado diz
 para tentar mais tarde. Mensagem/corpo do serviço e stderr são descartados. A UI
 traduz esse template PT-BR/EN e não repete a chamada automaticamente.
+Como o serviço já respondeu, a recusa registra uma chamada com tokens nulos na
+trilha de custo do Projeto, tanto na fila quanto em `provider.cost.run`.

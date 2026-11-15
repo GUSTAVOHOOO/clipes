@@ -264,7 +264,9 @@ fn response_error(event: &Value) -> CoreError {
             ),
             None => "OpenCode free quota exhausted; try again later; no automatic retry".into(),
         };
-        return error("cli_free_limit", &message);
+        let mut failure = error("cli_free_limit", &message);
+        failure.usage = Some(json!({"usage":null,"calls":1}));
+        return failure;
     }
     error("cli", "OpenCode request failed; check model availability")
 }
