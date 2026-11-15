@@ -34,6 +34,7 @@
 //! nos tokens; a capacidade mínima é verificada sobre o que existe (`min(mínimo, Fonte)`).
 //! Uma Frase nunca é dividida e as janelas nunca deixam lacuna entre Frases.
 
+use crate::energy::EnergyMarks;
 use crate::provider::{self, cost};
 use crate::sentences::{self, Sentence};
 use crate::CoreError;
@@ -417,6 +418,16 @@ pub fn plan_for_profile(
     request: &ProfileRequest<'_>,
     frases: &[Sentence],
 ) -> Result<Plan, CoreError> {
+    plan_for_profile_marked(request, frases, &EnergyMarks::new())
+}
+
+/// [`plan_for_profile`] sobre o texto com as marcas de energia do áudio (#54): as marcas são
+/// texto enviado, então a razão de tokens e o tamanho de cada Frase as contam.
+pub fn plan_for_profile_marked(
+    request: &ProfileRequest<'_>,
+    frases: &[Sentence],
+    marks: &EnergyMarks,
+) -> Result<Plan, CoreError> {
     let profile = provider::effective_cached(request.task, request.profile_id)?;
     // A reserva de saída é a da chamada (#147): o pedido, cortado pelo limite do Perfil e do
     // modelo. Sem Perfil (CLI) vale o que o chamador pediu.
@@ -424,7 +435,7 @@ pub fn plan_for_profile(
         provider::output_reserve(request.task, request.profile_id, request.output_reserve)?;
     let origin = ContextOrigin::parse(profile.origin).ok_or(PlanError::InvalidInput)?;
 
-    let compact = sentences::compact_with_hint(frases);
+    let compact = sentences::compact_with_hint_marked(frases, marks);
     let structured = |transcript: String| provider::StructuredRequest {
         estimate_hint: compact.hint.clone(),
         instruction: request.instruction.to_owned(),
@@ -465,7 +476,7 @@ pub fn plan_for_profile(
             id: s.id,
             start_us: s.start_us,
             end_us: s.end_us,
-            chars: escaped_chars(&format!("{} {}\n", s.id, s.text)),
+            chars: escaped_chars(&sentences::line(s, marks)),
         })
         .collect();
 

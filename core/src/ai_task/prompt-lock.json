@@ -8,5 +8,10 @@
     "id": "selection",
     "version": 1,
     "sha256": "c17df5c8f1cc2bef1ed06f7ecc6c99b634f231240c9ca66fe71f5a4659db32e1"
+  },
+  {
+    "id": "selection",
+    "version": 2,
+    "sha256": "8be769b3c853e1dcbbc9650d51c81670b52d901e8c217ac31606b35822878304"
   }
 ]
