@@ -63,3 +63,32 @@ banco. As opções reais:
   `provider.no-route` no `run`; expirado: `provider.auth`. Ambos viram erro tipado
   com a orientação "entre no OpenCode e tente de novo".
 - Custo: sem tabela oficial por modelo, o texto seria "consome a cota do seu plano".
+
+## Risco da opção 2: rotação do refresh token
+
+A renovação **grava um refresh token novo**, então renovar dentro de um banco
+temporário (cópia importada) invalida o login real: o token novo morre com o
+diretório temporário e o antigo deixa de valer se o provedor o revoga a cada uso.
+Evidência no tag v2.2.7:
+
+- Provedor `opencode`: [`packages/core/src/plugin/provider/opencode.ts`](https://github.com/anomalyco/opencode/blob/v2.2.7/packages/core/src/plugin/provider/opencode.ts)
+  linhas 142-160: `refresh` envia `grant_type: "refresh_token"` e devolve `refresh: token.refresh_token`;
+  o comentário da linha 156 diz "Persist rotated tokens". `invalid_grant` vira `SignedOutError`.
+- Provedor `openai`: [`packages/core/src/plugin/provider/openai.ts`](https://github.com/anomalyco/opencode/blob/v2.2.7/packages/core/src/plugin/provider/openai.ts)
+  linhas 358-370 e 386-393: o POST de refresh responde um `refresh_token` e `credential()`
+  grava `refresh: tokens.refresh_token`.
+- Persistência: `Credential.refresh` ([`credential.ts`](https://github.com/anomalyco/opencode/blob/v2.2.7/packages/core/src/credential.ts))
+  atualiza a linha no banco em uso, com trava de arquivo só entre processos que
+  **compartilham o mesmo banco**; um banco temporário não coordena com o real.
+- Renovação ocorre quando faltam menos de 5 minutos (`expiring`). Com o real
+  sendo usado em paralelo pelo OpenCode do usuário, os dois bancos disputam o mesmo
+  refresh token.
+
+Se o provedor rotaciona de fato não foi medido (exigiria login real), mas o código
+trata a rotação como esperada. Isto pesa contra a opção 2.
+
+## Opção 3 não acrescenta capacidade
+
+Chaves de API de provedor via variável de ambiente já são cobertas pelos Perfis de
+Provedor `openai` existentes (OpenRouter e Groq funcionaram no #122). Usá-las pelo
+OpenCode só acrescentaria uma camada.
