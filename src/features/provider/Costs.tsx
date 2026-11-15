@@ -7,7 +7,7 @@ import { costTexts } from './costTexts';
 type Price = { provider: string; model: string; inputPerMillion: number; outputPerMillion: number };
 type Prices = { updatedAt: string; prices: Price[]; overrides: Price[] };
 type Kind = 'usd' | 'zero' | 'plan_quota' | 'unknown';
-type Estimate = { kind: Kind; inputTokens: number; maxOutputTokens: number | null; minMicroUsd: number | null; maxMicroUsd: number | null };
+type Estimate = { kind: Kind; inputTokens: number; inputTokensRange: { min: number; max: number }; tier: { aboveInputTokens: number | null; upToInputTokens: number | null; crossesThreshold: boolean } | null; maxOutputTokens: number | null; minMicroUsd: number | null; maxMicroUsd: number | null };
 type Row = { id: number; task: string; batch: string | null; provider: string; model: string; costKind: Kind; microUsd: number | null };
 
 export function ProviderCosts() {
@@ -50,7 +50,7 @@ export function ProviderCosts() {
       <label>{t.ceiling}<input className={input} type="number" min="1" value={ceiling} onChange={e => setCeiling(e.target.value)} /></label>
       <div><Button type="submit">{t.estimate}</Button></div>
     </form>
-    {estimate && <p className="mt-3 text-sm" role="status">{describe(estimate)} <span className="text-fg-2">({estimate.inputTokens} {t.inputTokens}{estimate.maxOutputTokens !== null ? `, ${t.ceilingTokens} ${estimate.maxOutputTokens}` : ''}; {t.heuristic})</span></p>}
+    {estimate && <p className="mt-3 text-sm" role="status">{describe(estimate)} <span className="text-fg-2">({estimate.inputTokensRange.min}–{estimate.inputTokensRange.max} {t.inputTokens}{estimate.maxOutputTokens !== null ? `, ${t.ceilingTokens} ${estimate.maxOutputTokens}` : ''}; {t.heuristic})</span>{estimate.tier && <span className="mt-1 block text-fg-2">{estimate.tier.aboveInputTokens === null ? `${t.baseTier} ${estimate.tier.upToInputTokens} ${t.tierTokens}` : `${t.highTier} ${estimate.tier.aboveInputTokens} ${t.tierTokens}`}{estimate.tier.crossesThreshold ? `; ${t.crossesTier}` : ''}. {t.wholeRequest}</span>}</p>}
     <h3 className="mt-8 font-semibold">{t.pricesTitle}</h3>
     {prices && <p className="mt-2 text-sm text-fg-2">{t.tableDate} {prices.updatedAt}. {t.noNetwork}</p>}
     <table className="mt-3 w-full text-left text-sm"><thead><tr><th scope="col">{t.model}</th><th scope="col">{t.input}</th><th scope="col">{t.output}</th><th scope="col">{t.source}</th></tr></thead><tbody>
