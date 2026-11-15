@@ -61,7 +61,7 @@ pub fn set_ai_route(route: Option<(Target, String)>) {
 
 /// O alvo do job: o fixado, ou a rota configurada da Tarefa. Sem configuração, um Provedor pago
 /// fica sem preço (custo desconhecido, nunca zero) e um local custa zero.
-fn route_of(task: &str, paid: bool) -> Result<(Target, String), CoreError> {
+pub(crate) fn route_of(task: &str, paid: bool) -> Result<(Target, String), CoreError> {
     if let Some(route) = ROUTE.lock().ok().and_then(|slot| slot.clone()) {
         return Ok(route);
     }

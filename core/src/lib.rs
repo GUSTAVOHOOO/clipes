@@ -66,6 +66,7 @@ pub mod process;
 pub mod projects;
 pub mod provider;
 mod provider_cli;
+pub mod selection;
 pub mod selection_windows;
 pub mod sentences;
 mod sources;
