@@ -1,0 +1,7 @@
+{
+  "source": "https://console.groq.com/docs/speech-to-text",
+  "checked": "2026-11-15",
+  "currency": "USD",
+  "minimum_seconds": 10,
+  "models": { "whisper-large-v3-turbo": 0.04, "whisper-large-v3": 0.111 }
+}

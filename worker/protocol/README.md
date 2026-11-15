@@ -41,6 +41,10 @@ Um pedido transcreve **um bloco** de áudio; o núcleo corta o áudio da faixa d
 
 Parâmetros do Motor, do benchmark #32: VAD Silero com limiar 0,75 e silêncio mínimo de 200 ms, idioma detectado em cada trecho de VAD, `BatchedInferencePipeline`, beam 5, `word_timestamps=True`, tarefa `transcribe` (nunca traduz) e timestamps de palavra nativos, sem alinhamento (#102). Desvio do benchmark: `max_speech_duration_s=30`, porque o pipeline com `vad_filter=False` levanta `RuntimeError` num trecho de 30 s ou mais.
 
+### Tarefa `vad`
+
+Recebe `audio` (WAV PCM 16 kHz mono) e `final`. Retorna `covered_us`, `spans` e `silences` com tempos relativos em microssegundos, seguindo o mesmo VAD e regra de borda da tarefa `transcribe`. O Silero é distribuído no pacote faster-whisper e não exige download do modelo Whisper.
+
 ### Um modelo por vez
 
 O worker mantém no máximo um modelo carregado. Ao trocar de modelo, libera o anterior (`model_released`) antes de carregar o próximo (`model_loaded`). Ao encerrar, libera sem anunciar. Os modelos de ML são baixados por outro fluxo; sem o arquivo, a tarefa responde `model_missing`.
@@ -60,6 +64,7 @@ O worker mantém no máximo um modelo carregado. Ao trocar de modelo, libera o a
 | `cancel.jsonl` | Cancelamento no meio do pedido. |
 | `error.jsonl` | `model_missing` e `unknown_task`. |
 | `protocol-mismatch.jsonl` | `hello` com protocolo desconhecido (lado do worker). |
+| `vad-block.jsonl` | Fronteiras e silêncios da tarefa `vad`. |
 | `transcribe-block.jsonl` | Dois blocos de `transcribe`: o primeiro deixa a fala final para o segundo (`covered_us` menor que o bloco). |
 
 Para mudar o protocolo, aumente `PROTOCOL_VERSION` nos dois lados, atualize os exemplos e esta página.

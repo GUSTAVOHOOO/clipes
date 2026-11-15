@@ -88,6 +88,8 @@ pub struct BlockRequest<'a> {
 /// O que produz a Transcrição (GLOSSARY: Motor de transcrição). Trocável: o local usa o
 /// worker; um remoto implementaria a mesma interface.
 pub trait TranscriptionEngine {
+    /// Contexto do checkpoint; não é enviado ao serviço remoto.
+    fn prepare(&mut self, _job: i64, _transcript: i64, _resume_us: i64) {}
     fn transcribe_block(
         &mut self,
         request: &BlockRequest<'_>,
@@ -231,9 +233,19 @@ fn extract(
         "-ar".into(),
         "16000".into(),
         "-c:a".into(),
-        "pcm_s16le".into(),
+        if output.extension().is_some_and(|s| s == "flac") {
+            "flac"
+        } else {
+            "pcm_s16le"
+        }
+        .into(),
         "-f".into(),
-        "wav".into(),
+        if output.extension().is_some_and(|s| s == "flac") {
+            "flac"
+        } else {
+            "wav"
+        }
+        .into(),
         output.as_os_str().to_owned(),
     ];
     let (mut child, group) =
@@ -283,8 +295,19 @@ pub(crate) fn run(
     stop: &AtomicBool,
 ) -> Result<(), CoreError> {
     preview::check(id, stop)?;
-    let mut engine = LocalEngine::start()?;
-    run_with(&mut engine, id, source_id, project, stop)
+    let engine = projects::with_reader(|c| {
+        c.query_row(
+        "SELECT t.engine FROM transcripts t JOIN sources s ON t.source_id=s.id AND t.audio_track=s.audio_track WHERE s.id=?1",[source_id],|r|r.get::<_,String>(0))
+    })?;
+    if engine == "groq" {
+        let mut engine = groq::GroqEngine::start()?;
+        run_with(&mut engine, id, source_id, project, stop)
+    } else if engine == "local" {
+        let mut engine = LocalEngine::start()?;
+        run_with(&mut engine, id, source_id, project, stop)
+    } else {
+        Err(error("invalid_engine", "Motor de transcrição inválido."))
+    }
 }
 
 pub fn run_with(
@@ -331,7 +354,7 @@ pub fn run_with(
         if resume >= duration_us {
             break;
         }
-        let len = block_us().min(duration_us - resume);
+        let len = block_us().min(BLOCK_US).min(duration_us - resume);
         let final_block = resume + len >= duration_us;
         extract(
             &ffmpeg,
@@ -345,6 +368,7 @@ pub fn run_with(
             id,
             stop,
         )?;
+        engine.prepare(id, transcript, resume);
         let flag = AtomicBool::new(false);
         let finished = AtomicBool::new(false);
         let outcome = std::thread::scope(|scope| {
@@ -431,6 +455,8 @@ fn commit(
     let complete = next >= duration_us;
     projects::with_writer(|conn| {
         let tx = conn.transaction()?;
+        tx.execute("INSERT OR REPLACE INTO transcription_blocks(transcript_id,start_us,end_us) VALUES (?1,?2,?3)",(transcript,resume,next))?;
+        tx.execute("UPDATE transcription_calls SET state='completed' WHERE transcript_id=?1 AND job_id=?2 AND start_us=?3 AND state='pending'",(transcript,job,resume))?;
         let mut position: i64 = tx.query_row(
             "SELECT COALESCE(MAX(position)+1, 0) FROM transcript_words WHERE transcript_id=?1",
             [transcript],
@@ -509,40 +535,141 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let source = source_id(&v)?;
     let (_, _, track, duration, _) =
         preview::source(source, Path::new(v["project"].as_str().unwrap_or_default()))?;
-    let selection = models::selection()?;
+    let existing = projects::with_reader(|c| {
+        c.query_row(
+            "SELECT id,state,engine FROM transcripts WHERE source_id=?1 AND audio_track=?2",
+            (source, track),
+            |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                ))
+            },
+        )
+        .optional()
+    })?;
+    let engine = match v.get("engine") {
+        None | Some(Value::Null) => existing.as_ref().map_or("local", |t| t.2.as_str()),
+        Some(Value::String(e)) if e == "local" || e == "groq" => e.as_str(),
+        _ => return Err(error("invalid_engine", "Motor de transcrição inválido.")),
+    };
+    if !matches!(engine, "local" | "groq") {
+        return Err(error("invalid_engine", "Motor de transcrição inválido."));
+    }
+    let switching = existing.as_ref().is_some_and(|t| t.2 != engine);
+    if switching && existing.as_ref().is_some_and(|t| t.1 == "complete") {
+        return Err(error(
+            "transcript_complete",
+            "Uma Transcrição completa não permite trocar o Motor.",
+        ));
+    }
+    if existing.as_ref().is_some_and(|t| t.1 == "complete") {
+        return Ok(
+            json!({"transcript_id":existing.as_ref().unwrap().0,"state":"complete","job_id":null}),
+        );
+    }
+    if engine == "groq" && projects::project_local_only()? {
+        return Err(crate::provider::local_only_violation());
+    }
+    let active: Option<(i64, String)> = projects::with_reader(|c| {
+        c.query_row(
+        "SELECT id,state FROM jobs WHERE kind='transcription' AND source_id=?1 AND state IN ('queued','running','uncertain') ORDER BY id DESC LIMIT 1",[source],|r|Ok((r.get(0)?,r.get(1)?))).optional()
+    })?;
+    if switching && active.is_some() {
+        return Err(error(
+            "transcription_busy",
+            "Encerre a tarefa antes de trocar o Motor.",
+        ));
+    }
+    if active.as_ref().is_some_and(|j| j.1 == "uncertain") {
+        return Err(error(
+            "transcription_uncertain",
+            "Confirme a repetição da chamada incerta na fila de tarefas.",
+        ));
+    }
+    if switching && v["replace_confirmed"] != true {
+        let mut e = error(
+            "engine_change_confirmation",
+            "Trocar o Motor apaga a Transcrição parcial.",
+        );
+        e.usage = Some(loss(existing.as_ref().unwrap().0)?);
+        return Err(e);
+    }
+    if let Some((transcript, _, _)) = existing
+        .as_ref()
+        .filter(|_| !switching && active.is_none() && v["retry_confirmed"] != true)
+    {
+        let duration = projects::with_reader(|c| {
+            c.query_row(
+                "SELECT end_us-start_us FROM transcription_calls WHERE transcript_id=?1 AND start_us=(SELECT resume_us FROM transcripts WHERE id=?1) AND state IN ('pending','uncertain') ORDER BY id DESC LIMIT 1",
+                [transcript], |r|r.get::<_,i64>(0)).optional()
+        })?;
+        if let Some(duration) = duration {
+            let mut e = error(
+                "transcription_retry_confirmation",
+                "O resultado da chamada é incerto. Repetir pode gerar nova cobrança.",
+            );
+            e.usage = Some(json!({"estimate":groq::estimate_cost(groq::MODEL,duration)}));
+            return Err(e);
+        }
+    }
+    if engine == "groq" {
+        remote::guard()?;
+        if groq::get_key()?.is_none() {
+            return Err(error("groq_key_missing", "Configure a chave do Groq."));
+        }
+    }
     let (cache, _, ffmpeg) = crate::components::cache_settings()?;
     if ffmpeg.is_none() || cache.as_os_str().is_empty() {
         return Err(error("component_missing", "Instale o Componente FFmpeg."));
     }
+    let selection = if engine == "local" && (existing.is_none() || switching) {
+        Some(models::selection()?)
+    } else {
+        None
+    };
+    let (model, revision, compute) = if let Some(selection) = &selection {
+        (
+            selection.spec.id,
+            selection.spec.revision,
+            selection.spec.compute_type,
+        )
+    } else {
+        (groq::MODEL, "", "remote")
+    };
     let (transcript, state, job) = projects::with_writer(|conn| {
         let tx = conn.transaction()?;
+        if switching {
+            tx.execute(
+                "DELETE FROM transcripts WHERE id=?1",
+                [existing.as_ref().unwrap().0],
+            )?;
+        }
         tx.execute(
-            "INSERT OR IGNORE INTO transcripts(source_id, audio_track, engine, model, revision, compute_type, duration_us) VALUES (?1,?2,'local',?3,?4,?5,?6)",
-            (source, track, selection.spec.id, selection.spec.revision, selection.spec.compute_type, duration),
+            "INSERT OR IGNORE INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,duration_us) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            (source,track,engine,model,revision,compute,duration),
         )?;
         let (transcript, state): (i64, String) = tx.query_row(
-            "SELECT id, state FROM transcripts WHERE source_id=?1 AND audio_track=?2",
+            "SELECT id,state FROM transcripts WHERE source_id=?1 AND audio_track=?2",
             (source, track),
             |r| Ok((r.get(0)?, r.get(1)?)),
         )?;
-        let mut job: Option<i64> = tx
-            .query_row(
-                "SELECT id FROM jobs WHERE kind='transcription' AND source_id=?1 AND state IN ('queued','running') ORDER BY id LIMIT 1",
-                [source],
-                |r| r.get(0),
-            )
-            .optional()?;
-        if state != "complete" && job.is_none() {
-            tx.execute(
-                "INSERT INTO jobs(kind,safety,state,source_id) VALUES ('transcription','local','queued',?1)",
-                [source],
-            )?;
+        let mut job = active.as_ref().map(|j| j.0);
+        if job.is_none() {
+            tx.execute("INSERT INTO jobs(kind,safety,state,source_id) VALUES ('transcription',?1,'queued',?2)",(if engine == "groq" {"paid"} else {"local"},source))?;
             job = Some(tx.last_insert_rowid());
         }
         tx.commit()?;
         Ok((transcript, state, job))
     })?;
     Ok(json!({"transcript_id": transcript, "state": state, "job_id": job}))
+}
+
+fn loss(transcript: i64) -> Result<Value, CoreError> {
+    projects::with_reader(|c| {
+        c.query_row("SELECT CASE WHEN resume_us>0 AND NOT EXISTS (SELECT 1 FROM transcription_blocks WHERE transcript_id=?1) THEN NULL ELSE (SELECT COUNT(*) FROM transcription_blocks WHERE transcript_id=?1) END,COALESCE((SELECT SUM(end_us-start_us) FROM transcription_calls WHERE transcript_id=?1 AND state IN ('pending','completed','uncertain')),0),COALESCE((SELECT SUM(estimated_usd) FROM transcription_calls WHERE transcript_id=?1 AND state IN ('pending','completed','uncertain')),0) FROM transcripts WHERE id=?1",[transcript],|r|Ok(json!({"blocks":r.get::<_,Option<i64>>(0)?,"paid_audio_us":r.get::<_,i64>(1)?,"paid_usd":r.get::<_,f64>(2)?})))
+    })
 }
 
 /// `transcription.status`: estado da Transcrição da Fonte e do job mais recente.
@@ -590,3 +717,12 @@ fn words(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 inventory::submit! { CommandRegistration { name: "transcription.start", execute: start } }
 inventory::submit! { CommandRegistration { name: "transcription.status", execute: status } }
 inventory::submit! { CommandRegistration { name: "transcription.words", execute: words } }
+
+#[cfg(test)]
+mod groq_tests;
+
+mod groq;
+pub use groq::GroqEngine;
+
+mod remote;
+pub(crate) use remote::job_estimate;

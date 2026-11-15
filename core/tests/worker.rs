@@ -449,3 +449,23 @@ fn local_engine_follows_the_shared_transcribe_block_example() {
     assert_eq!(second.words[2].language.as_deref(), Some("en"));
     assert_eq!(percentages, [0, 100, 0, 50, 100]);
 }
+
+#[test]
+fn vad_contract() {
+    let mut client = client("vad-block");
+    let data = client
+        .run(
+            "vad",
+            json!({"audio":"bloco.wav","final":false}),
+            &idle(),
+            &mut |_| {},
+        )
+        .unwrap();
+    assert_eq!(data["covered_us"], 5_000_000);
+    assert_eq!(
+        data["spans"],
+        json!([{"start_us":1_000_000,"end_us":3_000_000}])
+    );
+    assert_eq!(data["silences"].as_array().unwrap().len(), 2);
+    client.shutdown();
+}

@@ -1,6 +1,7 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { version } from '../../package.json';
 
+const groqRetryTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('groq-retry-test');
 const sourceTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('source-test');
 const budgetTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('budget-test');
 let sourceItems = [
@@ -18,7 +19,8 @@ let jobItems = [
     { id: 5, kind: 'ai:script', state: 'completed', progress: 100, project: 'test-project', budgetPause: null, taskCost: {costLabel: 'consome a cota do plano'} },
   ] : []),
 ];
-let transcribeMock: { transcript: object | null; job: object | null } = { transcript: null, job: null };
+let transcribeMock: { transcript: object | null; job: object | null } = groqRetryTest ? {transcript:{id:1,engine:'groq',state:'running',resume_us:4e6,duration_us:10e6,words:1},job:{id:99,state:'cancelled',progress:40}} : { transcript: null, job: null };
+if (groqRetryTest) sourceItems.push({id:4,path:'/test/downloaded.mp4',status:'available',available:true,verified:true,permission:{status:'none'}});
 let providerMock = { kind: 'openai', endpoint: '', model: '', nativeSchema: false, context: null as number | null, keyLastFour: null as string | null, remote: false, confirmed: false, confirmedEndpoints: [] as string[] };
 type ProfileMock = { id: string; label: string; kind: string; endpoint: string; model: string; nativeSchema: boolean; ownKey: boolean; context: number | null; keyLastFour: string | null };
 let profileMocks: ProfileMock[] = [];
@@ -55,9 +57,19 @@ const assistantTasks = () => ({ projectLocalOnly: sourceTest && projectVetoMock,
   return { task, choice: missing ? '' : own, source: missing ? 'none' : own ? 'task' : assistantMock.default ? 'default' : 'none', profile, localOnly, blocked: (localOnly || (sourceTest && projectVetoMock)) && !!profile && !profile.local, missing,
     suggestion: !profile && firstLocal ? { choice: `profile:${firstLocal.id}`, label: firstLocal.label, measured: false } : null };
 }) });
+let groqKeyConfigured = groqRetryTest;
+let groqConsent = groqRetryTest;
+let groqUncertain = groqRetryTest;
 let providerCliMock = { selected: '', codexConfirmed: false, claudeConfirmed: false, opencodeConfirmed: false, opencodeModel: '' };
 export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   if (import.meta.env.VITE_CORE_MOCK === '1' && !isTauri()) {
+    if (name === 'transcription.groq.info') return {endpoint:'https://api.groq.com/openai/v1/audio/transcriptions',configured:groqKeyConfigured,confirmed:groqConsent,local_only:projectVetoMock} as T;
+    if (name === 'transcription.groq.estimate') return {kind:'usd',usd:0.00012,hourly_usd:0.04,checked:'2026-11-15',source:'https://console.groq.com/docs/speech-to-text'} as T;
+    if (name === 'transcription.groq.confirm') { groqConsent = true; return {confirmed:true} as T; }
+    if (name === 'transcription.groq.key.status') return {configured:groqKeyConfigured} as T;
+    if (name === 'transcription.groq.key.set') { groqKeyConfigured = true; return {configured:true} as T; }
+    if (name === 'transcription.groq.key.remove') { groqKeyConfigured = false; return {configured:false} as T; }
+    if (name === 'transcription.groq.key.test') return {ok:true} as T;
     if (name === 'diagnostic.get') return { text: "Clipes: 0.1.0\nSistema operacional: indisponível" } as T;
     if (name === 'projects.recent') return [] as T;
     if (name === 'projects.current') return (sourceTest ? { name:'Teste', path:'/test/Teste.clipes', id:'test-project' } : null) as T;
@@ -168,7 +180,15 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (sourceTest && new URLSearchParams(location.search).has('transcript-test') && name === 'transcription.timeline') { const {offset, limit} = args as {offset:number; limit:number}; const total=30001; return {total, items:Array.from({length:Math.min(limit,total-offset)}, (_, n) => { const i=offset+n; return i===1 ? {type:'silence',start_us:1000000,end_us:2000000} : {type:'sentence',id:i===0?1:i,start_us:i*1000000,end_us:(i+1)*1000000,language:'pt',text:'Frase '+(i===0?1:i)}; })} as T; }
     if (sourceTest && new URLSearchParams(location.search).has('transcript-test') && name === 'transcription.status') return {transcript:{id:1,state:'complete',resume_us:36000000000,duration_us:36000000000,words:30000},job:null} as T;
     if (name === 'transcription.status') return { transcript: transcribeMock.transcript, job: transcribeMock.job } as T;
-    if (name === 'transcription.start') { transcribeMock = { transcript: { id: 1, state: 'running', resume_us: 4000000, duration_us: 10000000, words: 0 }, job: { id: 99, state: 'running', progress: 40 } }; return { transcript_id: 1, state: 'running', job_id: 99 } as T; }
+    if (name === 'transcription.start') {
+      const {engine = 'local', replace_confirmed, retry_confirmed} = args as {engine?:string;replace_confirmed?:boolean;retry_confirmed?:boolean};
+      if (engine === 'groq' && groqUncertain && !retry_confirmed) throw {code:'transcription_retry_confirmation',usage:{estimate:{kind:'usd',usd:0.00012}}};
+      groqUncertain = false;
+      const previous = transcribeMock.transcript as {engine?:string;state?:string} | null;
+      if (previous && previous.engine !== engine && !replace_confirmed) throw {code:'engine_change_confirmation',usage:{blocks:1,paid_audio_us:previous.engine==='groq'?4e6:0,paid_usd:previous.engine==='groq'?0.00012:0}};
+      if (engine === 'groq' && !groqConsent) throw {code:'confirmation_required'};
+      transcribeMock = { transcript: { id: 1, engine, state: 'running', resume_us: 4000000, duration_us: 10000000, words: 0 }, job: { id: 99, state: 'running', progress: 40 } }; return { transcript_id: 1, state: 'running', job_id: 99 } as T;
+    }
     if (name === 'components.settings.get') return { data_dir: '/test/data', cache_dir: '/test/cache', cache_limit_bytes: 10000000000, ffmpeg_path: null } as T;
     throw new Error(`Unknown core command: ${name}`);
   }

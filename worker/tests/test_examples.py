@@ -16,7 +16,7 @@ import pytest
 from clipes_worker.protocol import WorkerError
 from clipes_worker.server import Server
 from clipes_worker.tasks import Task
-from clipes_worker.transcribe import Transcriber, transcribe_task
+from clipes_worker.transcribe import Transcriber, transcribe_task, vad_task
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "protocol" / "examples"
 TIMEOUT = 10
@@ -69,7 +69,7 @@ def block_tasks():
         ),
         reader=lambda path: [0.0] * 160000,
     )
-    return {"transcribe": task}
+    return {"transcribe": task, "vad": vad_task(spans=spans, reader=lambda path: [0.0] * 160000)}
 
 
 class Pipe:
@@ -119,7 +119,7 @@ def test_worker_follows_example_conversation(path):
     pipe = Pipe()
     result = {}
     thread = threading.Thread(
-        target=lambda: result.update(code=Server(pipe, pipe, block_tasks() if path.stem == "transcribe-block" else fake_tasks()).serve()), daemon=True
+        target=lambda: result.update(code=Server(pipe, pipe, block_tasks() if path.stem in ("transcribe-block", "vad-block") else fake_tasks()).serve()), daemon=True
     )
     thread.start()
     for entry in load(path):

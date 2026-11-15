@@ -765,6 +765,9 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
 /// Custo estimado de repetir o job (ADR-0009, regra 5): modelo local é zero; para o resto, a
 /// estimativa do #40 para a rota da Tarefa, ou `unknown` se não houver.
 pub(super) fn estimate(id: i64) -> Value {
+    if let Some(estimate) = crate::transcription::job_estimate(id) {
+        return estimate;
+    }
     let Ok(unit) = load(id) else {
         return json!({"kind":"unknown"});
     };
