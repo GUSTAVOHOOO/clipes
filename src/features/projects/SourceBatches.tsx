@@ -10,7 +10,7 @@ type Item = { position: number; sourceId: number; name: string | null; state: 'p
 type Budget = { maxCostMicroUsd: number | null; usage: { microUsd: number; audioMicroUsd?: number; costLabel: string | null } } | null;
 type Batch = { id: number; key: string; status: 'running' | 'paused' | 'budget_paused' | 'attention' | 'completed' | 'cancelled'; pause: string | null; budget: Budget; counts: { total: number; completed: number; paused: number; active: number; pending: number; cancelled: number }; items: Item[] };
 type Pending =
-  | { kind: 'create'; usage: { selectionPaid?: boolean; transcriptionPaid?: boolean; maxCostMicroUsd?: number | null; sources?: number } }
+  | { kind: 'create'; usage: { selectionPaid?: boolean; transcriptionPaid?: boolean; audioEstimateMicroUsd?: number | null; maxCostMicroUsd?: number | null; sources?: number } }
   | { kind: 'item'; batch: number; source: number; estimate: string }
   | { kind: 'unknown'; batch: number; key: string };
 
@@ -26,7 +26,7 @@ const texts = {
     setCap: 'Definir teto', newCap: 'Novo teto (US$)', continueCap: 'Continuar com este teto', budgetPaused: 'O teto de custo foi atingido: o lote parou. Aumente o teto e continue.',
     unknownPaused: 'O custo deste Provedor é desconhecido: o teto não vale para ele. Confirme para continuar o lote.', continueUnknown: 'Confirmar e continuar',
     unknownTitle: 'Continuar com custo desconhecido?', unknownBody: 'O Provedor não tem preço conhecido. O lote não tem como respeitar um teto de custo nele. Você confirma continuar?',
-    confirmTitle: 'Usar um serviço pago no lote?', confirmBody: 'O lote envia as Transcrições a um Provedor pago.', confirmAudio: 'O áudio vai ao Groq, com custo pelo tempo de áudio.',
+    confirmTitle: 'Usar um serviço pago no lote?', confirmBody: 'O lote envia as Transcrições a um Provedor pago.', confirmAudio: 'O áudio vai ao Groq, com custo pelo tempo de áudio.', audioEstimate: 'Estimativa do áudio: US$ {cost}, a partir da duração das Fontes.', audioUnknown: 'Estimativa do áudio indisponível.',
     confirmSelection: 'O custo da seleção só pode ser estimado por Fonte depois da Transcrição.', confirmCap: 'Teto do lote: US$ {cap}.', confirmNoCap: 'Sem teto de custo: considere definir um.',
     confirmConsent: 'Esta confirmação não substitui o consentimento do texto ao Provedor nem do áudio ao Groq.', confirmAction: 'Confirmar e criar lote', cancelDialog: 'Cancelar',
     itemTitle: 'Repetir esta Fonte?', itemBody: 'Repetir envia de novo só o que não foi concluído e pode gerar nova cobrança. Custo estimado: {cost}.', itemAction: 'Confirmar e repetir',
@@ -46,7 +46,7 @@ const texts = {
     setCap: 'Set cap', newCap: 'New cap (US$)', continueCap: 'Continue with this cap', budgetPaused: 'The cost cap was reached: the batch stopped. Raise the cap and continue.',
     unknownPaused: 'This Provider has no known price: the cap cannot apply to it. Confirm to continue the batch.', continueUnknown: 'Confirm and continue',
     unknownTitle: 'Continue with unknown cost?', unknownBody: 'The Provider has no known price, so the batch cannot enforce a cost cap on it. Do you confirm continuing?',
-    confirmTitle: 'Use a paid service in the batch?', confirmBody: 'The batch sends Transcripts to a paid Provider.', confirmAudio: 'Audio goes to Groq, billed by audio time.',
+    confirmTitle: 'Use a paid service in the batch?', confirmBody: 'The batch sends Transcripts to a paid Provider.', confirmAudio: 'Audio goes to Groq, billed by audio time.', audioEstimate: 'Estimated audio cost: US$ {cost}, based on Source duration.', audioUnknown: 'Audio cost estimate unavailable.',
     confirmSelection: 'The selection cost can only be estimated per Source after transcription.', confirmCap: 'Batch cap: US$ {cap}.', confirmNoCap: 'No cost cap: consider setting one.',
     confirmConsent: 'This confirmation does not replace the consent to send text to the Provider or audio to Groq.', confirmAction: 'Confirm and create batch', cancelDialog: 'Cancel',
     itemTitle: 'Retry this Source?', itemBody: 'Retrying sends again only what did not finish and may incur a new charge. Estimated cost: {cost}.', itemAction: 'Confirm and retry',
@@ -169,7 +169,7 @@ export function SourceBatches({ project, projectId }: { project: string; project
       </li>)}</ul>
     </li>)}</ul>
     <ConfirmDialog open={pending?.kind === 'create'} onOpenChange={open => { if (!open) setPending(null); }} title={t.confirmTitle}
-      description={[t.confirmBody, pendingCreate?.transcriptionPaid ? t.confirmAudio : '', t.confirmSelection, pendingCreate?.maxCostMicroUsd != null ? fill(t.confirmCap, { cap: usd(pendingCreate.maxCostMicroUsd) }) : t.confirmNoCap, t.confirmConsent].filter(Boolean).join(' ')}
+      description={[pendingCreate?.selectionPaid ? t.confirmBody : '', pendingCreate?.transcriptionPaid ? t.confirmAudio : '', pendingCreate?.transcriptionPaid ? (typeof pendingCreate.audioEstimateMicroUsd === 'number' ? fill(t.audioEstimate, { cost: usd(pendingCreate.audioEstimateMicroUsd) }) : t.audioUnknown) : '', t.confirmSelection, pendingCreate?.maxCostMicroUsd != null ? fill(t.confirmCap, { cap: usd(pendingCreate.maxCostMicroUsd) }) : t.confirmNoCap, t.confirmConsent].filter(Boolean).join(' ')}
       cancelLabel={t.cancelDialog} confirmLabel={t.confirmAction} finalFocus={focus} onConfirm={() => { setPending(null); void create(true); }} />
     <ConfirmDialog open={pending?.kind === 'item'} onOpenChange={open => { if (!open) setPending(null); }} title={t.itemTitle}
       description={pending?.kind === 'item' ? fill(t.itemBody, { cost: pending.estimate }) : ''} cancelLabel={t.cancelDialog} confirmLabel={t.itemAction} finalFocus={focus}

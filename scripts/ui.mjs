@@ -648,6 +648,14 @@ try {
   const batches = page.getByRole('region', { name: 'Lote de Fontes' });
   await batches.getByRole('button', { name: 'Criar lote' }).isDisabled();
   for (const file of ['changed.mp4', 'offline.mp4', 'mismatch.mp4']) await batches.getByLabel(file).check();
+  await batches.getByLabel('Motor de transcrição').selectOption('groq');
+  await batches.getByRole('button', { name: 'Criar lote' }).click();
+  const audioBatchDialog = page.getByRole('alertdialog', { name: 'Usar um serviço pago no lote?' });
+  await audioBatchDialog.waitFor();
+  assert.match(await audioBatchDialog.innerText(), /Estimativa do áudio: US\$ 0\.0120/);
+  await audioBatchDialog.getByRole('button', { name: 'Cancelar' }).click();
+  await audioBatchDialog.waitFor({ state: 'hidden' });
+  await batches.getByLabel('Motor de transcrição').selectOption('local');
   await batches.getByLabel('Teto de custo do lote (US$, opcional)').fill('0.5');
   await batches.getByRole('button', { name: 'Criar lote' }).click();
   const batchDialog = page.getByRole('alertdialog', { name: 'Usar um serviço pago no lote?' });

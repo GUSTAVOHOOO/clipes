@@ -33,6 +33,22 @@ fn batch_runs_sources_in_order_isolates_errors_and_respects_the_cap() {
     jobs::set_ai_provider(Some(fake.clone()));
     route(true);
 
+    let audio_source = seed(8);
+    with_writer(|c| {
+        c.execute("DELETE FROM transcripts WHERE source_id=?1", [audio_source])?;
+        Ok(())
+    })
+    .unwrap();
+    let audio_confirmation = fail(
+        "batches.create",
+        json!({"sourceIds":[audio_source],"engine":"groq"}),
+    );
+    assert!(
+        audio_confirmation.usage.unwrap()["audioEstimateMicroUsd"]
+            .as_i64()
+            .unwrap()
+            > 0
+    );
     // ---- Erro não transitório no meio do lote: só a Fonte 2 pausa; 1 e 3 terminam.
     fake.set(2, Behavior::Error("provider_http"));
     let created = call("batches.create", json!({"sourceIds": [s1, s2, s3]}));

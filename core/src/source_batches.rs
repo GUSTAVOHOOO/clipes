@@ -680,12 +680,28 @@ fn cmd_create(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     }
     let paid = matches!(safety, jobs::Safety::Paid) || engine == "groq";
     if paid && v["confirmed"] != true {
+        let mut audio_estimate = Some(0i64);
+        if engine == "groq" {
+            for source in &unique {
+                if !transcript_complete(*source) {
+                    let estimate = crate::dispatch(
+                        "transcription.groq.estimate",
+                        json!({"source_id":source}),
+                        &mut |_| {},
+                    )?;
+                    audio_estimate = audio_estimate
+                        .zip(estimate["maxMicroUsd"].as_i64())
+                        .map(|(total, next)| total.saturating_add(next));
+                }
+            }
+        }
         return Err(CoreError {
             code: "confirmation_required".into(),
             message: "Este lote usa um serviço pago: confirme antes de começar.".into(),
             usage: Some(json!({
                 "selectionPaid": matches!(safety, jobs::Safety::Paid),
                 "transcriptionPaid": engine == "groq",
+                "audioEstimateMicroUsd": audio_estimate,
                 "profile": profile,
                 "maxCostMicroUsd": cap,
                 "sources": unique.len(),
@@ -709,16 +725,15 @@ fn cmd_create(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                 (id, position as i64, source),
             )?;
         }
+        if let Some(cap) = cap {
+            tx.execute(
+                "INSERT INTO ai_budgets(scope,key,max_cost_micro_usd,since) VALUES ('batch',?1,?2,?3)",
+                (batch_key(id), cap, crate::provider::cost::now_micros()),
+            )?;
+        }
         tx.commit()?;
         Ok(id)
     })?;
-    if let Some(cap) = cap {
-        crate::dispatch(
-            "jobs.budget.set",
-            json!({"scope": "batch", "key": batch_key(id), "maxCostMicroUsd": cap}),
-            &mut |_| {},
-        )?;
-    }
     emit(id, "created", "Lote de Fontes criado", None);
     view(id)
 }

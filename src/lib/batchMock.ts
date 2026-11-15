@@ -26,9 +26,9 @@ function view(b: Mock) {
 
 /** `undefined` quando o comando não é do lote. */
 export function batchMockDispatch(name: string, args: object): unknown {
-  const a = args as { sourceIds?: number[]; confirmed?: boolean; maxCostMicroUsd?: number | null; sourceId?: number; scope?: string };
+  const a = args as { sourceIds?: number[]; engine?: string; confirmed?: boolean; maxCostMicroUsd?: number | null; sourceId?: number; scope?: string };
   if (name === 'batches.create') {
-    if (flag('batch-paid') && !a.confirmed) throw { code: 'confirmation_required', message: 'confirmação obrigatória', usage: { selectionPaid: true, transcriptionPaid: false, profile: 'legacy', maxCostMicroUsd: a.maxCostMicroUsd ?? null, sources: a.sourceIds?.length ?? 0 } };
+    if (flag('batch-paid') && !a.confirmed) throw { code: 'confirmation_required', message: 'confirmação obrigatória', usage: { selectionPaid: true, transcriptionPaid: a.engine === 'groq', audioEstimateMicroUsd: a.engine === 'groq' ? 12000 : null, profile: 'legacy', maxCostMicroUsd: a.maxCostMicroUsd ?? null, sources: a.sourceIds?.length ?? 0 } };
     const ids = a.sourceIds ?? [];
     batch = {
       id: 1, paused: false, cancelled: false, cap: a.maxCostMicroUsd ?? null, pause: flag('batch-unknown') ? 'cost_unknown' : null, spent: 1200,
