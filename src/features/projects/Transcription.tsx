@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { coreDispatch } from '@/lib/core';
 import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
+import { TranscriptTimeline } from './TranscriptTimeline';
 
 type Job = { id: number; state: 'queued' | 'running' | 'uncertain' | 'completed' | 'cancelled' | 'failed'; progress: number };
 type Transcript = { id: number; state: 'running' | 'complete'; resume_us: number; duration_us: number; words: number };
@@ -52,6 +53,8 @@ export function Transcription({ project, sourceId, available }: { project: strin
       {transcript && <span>{job?.state === 'failed' ? t.failed : t.interrupted} · {percentage}%</span>}
       <Button disabled={busy || !available} onClick={() => void start()}>{transcript ? t.resume : t.start}</Button>
     </>}
+    {transcript?.state === 'complete' && <TranscriptTimeline sourceId={sourceId} />}
     {error && <span role="alert" className="text-danger">{error}</span>}
   </div>;
 }
+
