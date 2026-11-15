@@ -78,6 +78,9 @@ pub(super) fn test_endpoint(url: &str, key: &str) -> Result<(), CoreError> {
     }
 }
 fn test_key(_: Value, _: &mut EventSink<'_>) -> CommandResult {
+    if projects::project_local_only()? {
+        return Err(crate::provider::local_only_violation());
+    }
     let key = get_key()?.ok_or_else(|| error("groq_key_missing", "Configure a chave do Groq."))?;
     test_endpoint("https://api.groq.com/openai/v1/models", &key)?;
     Ok(json!({"ok": true}))
