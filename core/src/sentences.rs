@@ -282,3 +282,20 @@ fn timeline_command(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 inventory::submit! { CommandRegistration { name: "transcription.segment", execute: segment_command } }
 inventory::submit! { CommandRegistration { name: "transcription.sentences", execute: sentences_command } }
 inventory::submit! { CommandRegistration { name: "transcription.timeline", execute: timeline_command } }
+
+/// Serialize a selection using the stable IDs of the full transcript. Minute markers are
+/// context only; timestamps for any returned IDs must be resolved by the core.
+pub fn compact(sentences: &[Sentence]) -> String {
+    use std::fmt::Write;
+    let mut result = String::new();
+    let mut previous = None;
+    for sentence in sentences {
+        let minute = sentence.start_us.max(0) / 60_000_000;
+        if previous != Some(minute) {
+            let _ = writeln!(result, "## {:02}:{:02}", minute / 60, minute % 60);
+            previous = Some(minute);
+        }
+        let _ = writeln!(result, "{} {}", sentence.id, sentence.text);
+    }
+    result
+}

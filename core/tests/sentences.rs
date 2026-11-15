@@ -37,3 +37,17 @@ fn long_sentence_splits_at_largest_internal_pause() {
         vec!["um dois", "três"]
     );
 }
+
+#[test]
+fn compact_keeps_original_ids_and_marks_each_new_minute() {
+    let rows = vec![
+        word(0, "Olá.", 0, 100_000),
+        word(1, "Hi!", 61_000_000, 61_100_000),
+        word(2, "Fim.", 62_000_000, 62_100_000),
+    ];
+    let sentences = segment(&rows);
+    assert_eq!(
+        clipes_core::sentences::compact(&sentences[1..]),
+        "## 00:01\n2 Hi!\n3 Fim.\n"
+    );
+}
