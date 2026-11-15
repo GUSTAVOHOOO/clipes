@@ -380,6 +380,16 @@ try {
   await wizard.waitFor();
   await wizard.getByRole('button', {name:'Pular por enquanto'}).click();
   await wizard.waitFor({state:'hidden'});
+  await page.goto(`${url}?source-test=1&transcript-test=1`);
+  const timeline = page.getByRole('region', { name: 'Transcrição' }).first();
+  await timeline.getByText('Frase 1', { exact: true }).waitFor();
+  assert.match(await timeline.innerText(), /Silêncio/);
+  assert.match(await timeline.innerText(), /pt/);
+  assert.ok(await timeline.locator('[data-timeline-row]').count() < 100);
+  await timeline.evaluate(e => { e.scrollTop = e.scrollHeight; });
+  await timeline.getByText('Frase 30000', { exact: true }).waitFor();
   assert.deepEqual(errors, []);
   console.log('UI keyboard, preferences, about, drawer and screenshots: OK');
 } finally { await browser?.close(); server.kill(); }
+
+
