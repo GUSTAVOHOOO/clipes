@@ -211,6 +211,18 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       const why = { user: 'Value set by you for this profile.', fallback: 'Conservative default: no limit was discovered.' };
       return { profileId: id, kind: p.kind, value: p.context ?? (p.kind === 'ollama' ? 4096 : 8192), source, detail: null, explanation: why[source], capped: false, warning: null, measured: false, userContext: p.context, loaded: null, maxContext: null, maxOutput: null, refreshed: !!(args as { refresh?: boolean }).refresh } as T;
     }
+    if (name === 'provider.selection_state') {
+      const id = (args as { profileId?: string }).profileId ?? 'legacy';
+      if (['codex', 'claude', 'opencode'].includes(id)) return { applicable: false } as T;
+      const p = id === 'legacy' ? { id, context: providerMock.context, kind: providerMock.kind, endpoint: providerMock.endpoint, model: providerMock.model } : profileMocks.find(x => x.id === id);
+      if (!p) throw { code: 'invalid_settings', message: 'Profile not found' };
+      // Limites só do simulador (o núcleo real usa o planejador): abaixo de 11 mil bloqueia, abaixo de 16 mil reduz.
+      const tokens = p.context ?? (p.kind === 'ollama' ? 4096 : 8192);
+      const state = tokens < 11000 ? 'blocked' : tokens < 16000 ? 'reduced' : 'full';
+      const guides = p.kind === 'ollama' ? ['ollama_profile'] : p.kind === 'openai' && isLocalHost(p.endpoint) ? ['ollama_server', 'lmstudio', 'llamacpp'] : [];
+      return { applicable: true, profileId: id, kind: p.kind, model: p.model, contextTokens: tokens, origin: p.context ? 'user' : 'fallback', state,
+        reference: { sourceMinutes: 60, maxWindowMinutes: 15, minWindowMinutes: 9, firstWindowMinutes: state === 'blocked' ? null : state === 'reduced' ? 12 : 15, windows: state === 'blocked' ? null : 5 }, guides } as T;
+    }
     if (name === 'provider.profiles.remove') { profileMocks = profileMocks.filter(p => p.id !== (args as { profileId: string }).profileId); return {} as T; }
     if (name === 'provider.status') return { ...providerMock } as T;
     if (name === 'provider.cli.status') return { ...providerCliMock } as T;

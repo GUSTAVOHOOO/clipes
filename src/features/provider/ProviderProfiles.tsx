@@ -5,6 +5,7 @@ import { coreDispatch } from '@/lib/core';
 import { LanguageContext, useText } from '@/lib/i18n';
 import { texts as cliTexts } from './CliSettings';
 import { profileTexts } from './profileTexts';
+import { SelectionState } from './SelectionState';
 
 type Price = { inputPerMillion: number; outputPerMillion: number; source: 'override' | 'table' };
 type Profile = {
@@ -121,6 +122,7 @@ export function ProviderProfiles({ refreshKey = 0, onChange }: { refreshKey?: nu
           <dt className="text-fg-2">{t.price}</dt><dd>{price(profile)}</dd>
           {!profile.cli && <><dt className="text-fg-2">{t.consent}</dt><dd>{consentText(profile)}</dd></>}
         </dl>
+        {!profile.cli && <SelectionState profileId={profile.id} version={`${contexts[profile.id]?.value}:${contexts[profile.id]?.source}:${profile.kind}:${profile.model}:${profile.endpoint}`} />}
         {profile.cli ? <p className="mt-3 text-sm text-fg-2">{profile.kind === 'opencode' ? cli.opencodeWarning : t.cliHelp}</p> : <div className="mt-4 flex flex-col gap-3">
           <form className="flex flex-wrap items-end gap-2" onSubmit={e => { e.preventDefault(); const submitted = keys[profile.id] ?? ''; setKeys({ ...keys, [profile.id]: '' }); void run(async () => { await coreDispatch('provider.key.set', { profileId: profile.id, key: submitted }); }, t.keySaved); }}>
             <label className="text-sm">{t.keyLabel}<input aria-label={`${t.keyLabel} (${profile.label})`} className={field} type="password" autoComplete="off" value={keys[profile.id] ?? ''} onChange={e => setKeys({ ...keys, [profile.id]: e.target.value })} /></label>

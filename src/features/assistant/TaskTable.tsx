@@ -2,6 +2,8 @@ import { useContext, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { coreDispatch } from '@/lib/core';
 import { LanguageContext, useText } from '@/lib/i18n';
+import { SelectionState, type SelectionEstimate } from '@/features/provider/SelectionState';
+import { selectionTexts } from '@/features/provider/selectionTexts';
 import { texts } from './texts';
 
 type Cost = { kind: 'zero' | 'plan_quota' | 'usd' | 'unknown'; inputPerMillion?: number; outputPerMillion?: number };
@@ -16,8 +18,10 @@ type Profile = { id: string; label: string; cli: boolean; confirmed: boolean };
 const TASKS = ['selection', 'packaging', 'script', 'translation'] as const;
 
 /** Tabela "Tarefas": perfil de cada Tarefa de IA, selo de localidade, custo e "somente local". */
-export function TaskTable({ status, onChange }: { status: unknown; onChange: () => void }) {
+export function TaskTable({ status, onChange, refreshKey = 0 }: { status: unknown; onChange: () => void; refreshKey?: number }) {
   const t = useText(texts);
+  const sel = useText(selectionTexts);
+  const [suggestionState, setSuggestionState] = useState<SelectionEstimate | null>(null);
   const language = useContext(LanguageContext);
   const [rows, setRows] = useState<Row[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -78,6 +82,7 @@ export function TaskTable({ status, onChange }: { status: unknown; onChange: () 
                   {saved.map(p => <option key={p.id} value={`profile:${p.id}`}>{p.label}</option>)}
                 </select>
                 {row.profile && <p className="mt-1 text-xs text-fg-2">{row.profile.label}{row.profile.model ? ` · ${row.profile.model}` : ''}{row.source === 'default' ? ` ${t.viaDefault}` : ''}</p>}
+                {task === 'selection' && row.profile && !row.profile.cli && <SelectionState profileId={row.profile.id} variant="assistant" version={`${row.choice}:${refreshKey}`} />}
               </td>
               <td className="py-3 pr-3"><span className="rounded-md border border-line-strong px-2 py-0.5 text-xs text-fg-2">{seal(row)}</span></td>
               <td className="py-3 pr-3">{cost(row)}</td>
@@ -92,10 +97,20 @@ export function TaskTable({ status, onChange }: { status: unknown; onChange: () 
     <p className="mt-2 text-xs text-fg-2">{t.localOnlyHelp}</p>
     {rows.filter(r => r.blocked).map(r => <p key={`b-${r.task}`} className="mt-2 text-sm text-danger" role="alert">{`${labels[r.task]}: ${t.blocked}`}</p>)}
     {rows.filter(r => r.missing).map(r => <p key={`m-${r.task}`} className="mt-2 text-sm" role="alert">{`${labels[r.task]}: ${t.missing.replace('{id}', r.missing ?? '')}`}</p>)}
-    {rows.filter(r => r.suggestion).map(r => <p key={`s-${r.task}`} className="mt-2 flex flex-wrap items-center gap-2 text-sm text-fg-2">
-      <span>{`${labels[r.task]} — ${t.suggestion} ${r.suggestion!.label}`}</span>
-      <Button onClick={() => void act('assistant.task.set', { task: r.task, choice: r.suggestion!.choice })}>{`${t.apply} (${labels[r.task]})`}</Button>
-    </p>)}
+    {rows.filter(r => r.suggestion).map(r => {
+      // Só informativo (#146): um perfil bloqueado para a seleção não é recomendado para ela, mas segue sugerido às demais Tarefas.
+      const notForSelection = r.task === 'selection' && suggestionState?.applicable === true && suggestionState.state === 'blocked';
+      return <div key={`s-${r.task}`} className="mt-2 text-sm text-fg-2">
+        <p className="flex flex-wrap items-center gap-2">
+          <span>{`${labels[r.task]} — ${t.suggestion} ${r.suggestion!.label}`}</span>
+          {!notForSelection && <Button onClick={() => void act('assistant.task.set', { task: r.task, choice: r.suggestion!.choice })}>{`${t.apply} (${labels[r.task]})`}</Button>}
+        </p>
+        {r.task === 'selection' && r.suggestion!.choice.startsWith('profile:') && <>
+          <SelectionState profileId={r.suggestion!.choice.slice(8)} variant="assistant" version={String(refreshKey)} onEstimate={setSuggestionState} />
+          {notForSelection && <p className="mt-1" role="status">{sel.notRecommended}</p>}
+        </>}
+      </div>;
+    })}
     {message && <p className="mt-3 text-sm" role="status">{message}</p>}
   </div>;
 }
