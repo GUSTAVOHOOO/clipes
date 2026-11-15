@@ -104,7 +104,7 @@ pub trait Provider {
 
 mod adapters;
 pub(crate) mod control;
-pub use adapters::{AnthropicProvider, GeminiProvider, OpenAiProvider};
+pub use adapters::{AnthropicProvider, GeminiProvider, OllamaProvider, OpenAiProvider};
 pub use control::{CancelToken, Timeouts};
 pub mod cost;
 pub use settings::run_structured;
@@ -167,6 +167,8 @@ mod settings {
         /// `None` means the vault account is the endpoint string (shared, and the v1 account).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         vault_account: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        context: Option<u64>,
     }
     impl Profile {
         fn account(&self) -> String {
@@ -194,6 +196,7 @@ mod settings {
             model: settings.model.clone(),
             native_schema: settings.native_schema,
             vault_account: None,
+            context: None,
         }]
     }
     fn find(settings: &Settings, id: &str) -> Option<Profile> {
@@ -407,7 +410,7 @@ mod settings {
         };
         let remote = !is_local_endpoint(&p.endpoint).unwrap_or(false);
         let key = metadata(settings, &p.account());
-        json!({"profileId":p.id, "endpoint":p.endpoint, "model":p.model, "kind":p.kind, "nativeSchema":p.native_schema, "timeouts":settings.timeouts.effective(), "keyLastFour":key.key_last_four, "remote":remote, "confirmed":metadata(settings, &p.endpoint).confirmed})
+        json!({"profileId":p.id, "endpoint":p.endpoint, "model":p.model, "kind":p.kind, "nativeSchema":p.native_schema, "context":p.context, "timeouts":settings.timeouts.effective(), "keyLastFour":key.key_last_four, "remote":remote, "confirmed":metadata(settings, &p.endpoint).confirmed})
     }
     fn status(args: Value, _: &mut EventSink<'_>) -> CommandResult {
         let _guard = locked()?;
@@ -424,7 +427,7 @@ mod settings {
             });
         json!({
             "id": p.id, "label": p.label, "kind": p.kind, "endpoint": p.endpoint,
-            "model": p.model, "nativeSchema": p.native_schema,
+            "model": p.model, "nativeSchema": p.native_schema, "context": p.context,
             "ownKey": p.vault_account.is_some(),
             "keyLastFour": metadata(settings, &p.account()).key_last_four,
             "local": is_local_endpoint(&p.endpoint).unwrap_or(false),
@@ -490,7 +493,7 @@ mod settings {
         let _guard = locked()?;
         let mut settings = read()?;
         let kind = args.get("kind").and_then(Value::as_str).unwrap_or("openai");
-        if !matches!(kind, "openai" | "anthropic" | "gemini") {
+        if !matches!(kind, "openai" | "anthropic" | "gemini" | "ollama") {
             return Err(error("invalid_settings", "Invalid provider type"));
         }
         let mut list = profiles(&settings);
@@ -516,6 +519,16 @@ mod settings {
             Some(false) => stale = vault_account.take(),
             None => {}
         }
+        let context = match args.get("context") {
+            None => existing.and_then(|i| list[i].context),
+            Some(Value::Null) => None,
+            Some(value) => Some(
+                value
+                    .as_u64()
+                    .filter(|n| *n > 0 && *n <= u32::MAX as u64)
+                    .ok_or_else(|| error("invalid_settings", "Invalid context"))?,
+            ),
+        };
         let profile = Profile {
             id: target.into(),
             label,
@@ -527,6 +540,7 @@ mod settings {
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
             vault_account,
+            context,
         };
         match existing {
             Some(i) => list[i] = profile,
@@ -684,6 +698,13 @@ mod settings {
                 let mut p = GeminiProvider::new(profile.endpoint, profile.model, key)?;
                 p.confirm(consent.confirmed);
                 p.structured(&request)
+            }
+            "ollama" => {
+                let mut p = OllamaProvider::new(profile.endpoint, profile.model, key)?
+                    .with_timeouts(settings.timeouts)
+                    .with_context(profile.context);
+                p.confirm(consent.confirmed);
+                p.structured_with(&request, cancel)
             }
             _ => Err(error("invalid_settings", "Invalid provider type")),
         }
