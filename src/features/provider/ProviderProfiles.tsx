@@ -12,6 +12,8 @@ type Profile = {
   nativeSchema: boolean; ownKey: boolean; context: number | null; keyLastFour: string | null; local: boolean; confirmed: boolean; price: Price | null;
   cost?: { kind: string }; cli: boolean; active?: boolean; experimental?: boolean;
 };
+type Source = 'user' | 'loaded' | 'server' | 'catalog' | 'fallback' | 'measured';
+type Ctx = { value: number; source: Source; capped: boolean; warning: 'consent_required' | 'local_only' | 'unavailable' | 'not_measured' | null; loaded: { value: number } | null; maxContext: { value: number } | null; maxOutput: { value: number } | null };
 type Draft = { id: string | null; label: string; kind: 'openai' | 'anthropic' | 'gemini' | 'ollama'; endpoint: string; model: string; nativeSchema: boolean; ownKey: boolean; context: string };
 const emptyDraft: Draft = { id: null, label: '', kind: 'openai', endpoint: '', model: '', nativeSchema: false, ownKey: false, context: '' };
 
@@ -33,10 +35,25 @@ export function ProviderProfiles({ refreshKey = 0, onChange }: { refreshKey?: nu
   const [busy, setBusy] = useState(false);
   const [consent, setConsent] = useState<Profile | null>(null);
   const [removing, setRemoving] = useState<Profile | null>(null);
+  const [contexts, setContexts] = useState<Record<string, Ctx>>({});
+  const [checking, setChecking] = useState<string | null>(null);
+  const [ctxConsent, setCtxConsent] = useState<Profile | null>(null);
   const addButton = useRef<HTMLButtonElement>(null);
   const field = 'foco mt-2 block h-9 w-full max-w-lg rounded-md border border-line-strong bg-field px-3 text-fg';
   const number = new Intl.NumberFormat(language, { maximumFractionDigits: 6 });
-  async function refresh() { setProfiles((await coreDispatch<{ profiles: Profile[] }>('provider.profiles.list', {})).profiles); }
+  async function loadContext(profile: Profile, force = false) {
+    const ctx = await coreDispatch<Ctx>('provider.context.get', { profileId: profile.id, refresh: force });
+    setContexts(prev => ({ ...prev, [profile.id]: ctx }));
+  }
+  async function refresh() {
+    const list = (await coreDispatch<{ profiles: Profile[] }>('provider.profiles.list', {})).profiles;
+    setProfiles(list);
+    await Promise.all(list.filter(p => !p.cli).map(p => loadContext(p).catch(() => undefined)));
+  }
+  async function refreshContext(profile: Profile) {
+    setChecking(profile.id); setMessage('');
+    try { await loadContext(profile, true); } catch { setMessage(t.failed); } finally { setChecking(null); }
+  }
   useEffect(() => { void refresh().catch(() => setMessage(t.failed)); }, [refreshKey]);
   async function run(action: () => Promise<void | boolean>, result: string) {
     setBusy(true); setMessage('');
@@ -67,7 +84,7 @@ export function ProviderProfiles({ refreshKey = 0, onChange }: { refreshKey?: nu
     const id = draft.id ?? slug(draft.label, profiles.map(p => p.id));
     const current = draft;
     void run(async () => {
-      await coreDispatch('provider.configure', { profileId: id, label: current.label, kind: current.kind, endpoint: current.endpoint, model: current.model, nativeSchema: current.nativeSchema, ownKey: current.ownKey, context: current.kind === 'ollama' && current.context ? Number(current.context) : null });
+      await coreDispatch('provider.configure', { profileId: id, label: current.label, kind: current.kind, endpoint: current.endpoint, model: current.model, nativeSchema: current.nativeSchema, ownKey: current.ownKey, context: current.context ? Number(current.context) : null });
       setDraft(null);
     }, t.saved);
   }
@@ -86,6 +103,14 @@ export function ProviderProfiles({ refreshKey = 0, onChange }: { refreshKey?: nu
           {!profile.cli && <><dt className="text-fg-2">{t.model}</dt><dd className="break-all">{profile.kind} · {profile.model}</dd>
             <dt className="text-fg-2">{t.endpoint}</dt><dd className="break-all">{profile.endpoint}</dd>
             <dt className="text-fg-2">{t.key}</dt><dd>{profile.keyLastFour ? `…${profile.keyLastFour}` : t.noKey}{profile.keyLastFour && ` · ${profile.ownKey ? t.ownKey : t.sharedKey}`}</dd></>}
+          {!profile.cli && contexts[profile.id] && <>
+            <dt className="text-fg-2">{t.ctx}</dt>
+            <dd><span>{number.format(contexts[profile.id].value)} {t.ctxTokens}</span> · <span>{t.ctxSource[contexts[profile.id].source]}</span>
+              <span className="block text-fg-2">{t.ctxWhy[contexts[profile.id].source]}{contexts[profile.id].capped && ` ${t.ctxCapped}`}</span>
+              {contexts[profile.id].warning && <span className="block text-fg-2">{t.ctxWarn[contexts[profile.id].warning!]}</span>}</dd>
+            {contexts[profile.id].loaded && <><dt className="text-fg-2">{t.ctxLoaded}</dt><dd>{number.format(contexts[profile.id].loaded!.value)} {t.ctxTokens}</dd></>}
+            {contexts[profile.id].maxContext && <><dt className="text-fg-2">{t.ctxMax}</dt><dd>{number.format(contexts[profile.id].maxContext!.value)} {t.ctxTokens}</dd></>}
+            {contexts[profile.id].maxOutput && <><dt className="text-fg-2">{t.ctxOutput}</dt><dd>{number.format(contexts[profile.id].maxOutput!.value)} {t.ctxTokens}</dd></>}</>}
           <dt className="text-fg-2">{t.price}</dt><dd>{price(profile)}</dd>
           {!profile.cli && <><dt className="text-fg-2">{t.consent}</dt><dd>{consentText(profile)}</dd></>}
         </dl>
@@ -97,6 +122,7 @@ export function ProviderProfiles({ refreshKey = 0, onChange }: { refreshKey?: nu
           </form>
           <div className="flex flex-wrap gap-2">
             <Button type="button" disabled={busy} onClick={() => void run(() => test(profile), t.success)}>{t.test}</Button>
+            <Button type="button" disabled={busy || checking !== null} title={profile.kind === 'ollama' ? t.ctxHintOllama : t.ctxHintOther} onClick={() => profile.local || profile.confirmed ? void refreshContext(profile) : setCtxConsent(profile)}>{checking === profile.id ? t.ctxChecking : t.ctxRefresh}</Button>
             {profile.id !== 'legacy' && <Button type="button" disabled={busy} onClick={() => setDraft({ id: profile.id, label: profile.label, kind: profile.kind as Draft['kind'], endpoint: profile.endpoint ?? '', model: profile.model ?? '', nativeSchema: profile.nativeSchema, ownKey: profile.ownKey, context: profile.context?.toString() ?? '' })}>{t.edit}</Button>}
             {profile.id !== 'legacy' && <Button type="button" variante="perigo" disabled={busy} onClick={() => setRemoving(profile)}>{t.remove}</Button>}
           </div>
@@ -108,7 +134,7 @@ export function ProviderProfiles({ refreshKey = 0, onChange }: { refreshKey?: nu
       <label>{t.kind}<select className={field} value={draft.kind} onChange={e => setDraft({ ...draft, kind: e.target.value as Draft['kind'] })}><option value="openai">OpenAI-compatible</option><option value="anthropic">Anthropic</option><option value="gemini">Gemini</option><option value="ollama">Ollama</option></select></label>
       <label>{t.endpoint}<input className={field} type="url" required value={draft.endpoint} onChange={e => setDraft({ ...draft, endpoint: e.target.value })} /></label>
       <label>{t.model}<input className={field} required value={draft.model} onChange={e => setDraft({ ...draft, model: e.target.value })} /></label>
-      {draft.kind === 'ollama' && <label>{t.context}<input className={field} type="number" min="1" max="4294967295" step="1" placeholder="4096" value={draft.context} onChange={e => setDraft({ ...draft, context: e.target.value })} /></label>}
+      <label>{t.context}<input className={field} type="number" min="1" max="4294967295" step="1" placeholder={draft.kind === 'ollama' ? '4096' : '8192'} value={draft.context} onChange={e => setDraft({ ...draft, context: e.target.value })} /></label>
       {draft.kind !== 'ollama' && <label className="flex items-center gap-2"><input type="checkbox" checked={draft.nativeSchema} onChange={e => setDraft({ ...draft, nativeSchema: e.target.checked })} />{t.schema}</label>}
       <label className="flex items-center gap-2"><input type="checkbox" checked={draft.ownKey} onChange={e => setDraft({ ...draft, ownKey: e.target.checked })} />{t.ownKeyOption}</label>
       <div className="flex gap-2"><Button type="submit" variante="primario" disabled={busy}>{t.save}</Button><Button type="button" onClick={() => setDraft(null)}>{t.cancel}</Button></div>
@@ -116,6 +142,9 @@ export function ProviderProfiles({ refreshKey = 0, onChange }: { refreshKey?: nu
     {message && <p className="mt-4 text-sm" role="status">{message}</p>}
     <ConfirmDialog open={consent !== null} onOpenChange={open => { if (!open) setConsent(null); }} title={t.confirmTitle} description={t.confirm} cancelLabel={t.cancel} confirmLabel={t.send} finalFocus={addButton} onConfirm={() => { const target = consent; setConsent(null); if (target) void run(async () => { await coreDispatch('provider.confirm', { profileId: target.id, endpoint: target.endpoint }); await coreDispatch('provider.test', { profileId: target.id }); }, t.success); }}>
       <p className="break-all px-5 pb-4">{consent?.endpoint}</p>
+    </ConfirmDialog>
+    <ConfirmDialog open={ctxConsent !== null} onOpenChange={open => { if (!open) setCtxConsent(null); }} title={t.ctxConsentTitle} description={t.ctxConsent} cancelLabel={t.cancel} confirmLabel={t.ctxConsentYes} finalFocus={addButton} onConfirm={() => { const target = ctxConsent; setCtxConsent(null); if (target) void run(async () => { await coreDispatch('provider.confirm', { profileId: target.id, endpoint: target.endpoint }); await loadContext(target, true); }, t.saved); }}>
+      <p className="break-all px-5 pb-4">{ctxConsent?.endpoint}</p>
     </ConfirmDialog>
     <ConfirmDialog open={removing !== null} onOpenChange={open => { if (!open) setRemoving(null); }} title={t.removeTitle} description={t.removeText} cancelLabel={t.cancel} confirmLabel={t.remove} finalFocus={addButton} onConfirm={() => { const target = removing; setRemoving(null); if (target) void run(async () => { await coreDispatch('provider.profiles.remove', { profileId: target.id }); }, t.removed); }}>
       <p className="break-all px-5 pb-4">{removing?.label}</p>

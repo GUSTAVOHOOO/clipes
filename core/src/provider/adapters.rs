@@ -84,10 +84,10 @@ impl OllamaProvider {
 
 /// A whole HTTP reply, body included, read on a helper thread so a cancellation does not
 /// have to wait for a slow Provider.
-struct Reply {
-    status: u16,
-    retry_after: Option<String>,
-    body: Result<Vec<u8>, reqwest::Error>,
+pub(super) struct Reply {
+    pub(super) status: u16,
+    pub(super) retry_after: Option<String>,
+    pub(super) body: Result<Vec<u8>, reqwest::Error>,
 }
 
 fn retry_delay(reply: &Reply) -> Option<u64> {
@@ -105,7 +105,7 @@ fn retry_delay(reply: &Reply) -> Option<u64> {
 
 /// Sends the request on a helper thread and waits for it in short slices. On cancellation
 /// the thread is abandoned; it ends by itself at the client timeout.
-fn send_cancellable(
+pub(super) fn send_cancellable(
     call: RequestBuilder,
     cancel: &CancelToken,
 ) -> Result<Result<Reply, reqwest::Error>, CoreError> {
