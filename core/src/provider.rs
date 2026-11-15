@@ -135,6 +135,7 @@ mod context;
 #[cfg(test)]
 pub(crate) mod contract_probe;
 pub(crate) mod control;
+pub mod limits;
 mod truncation;
 pub use adapters::{AnthropicProvider, GeminiProvider, OllamaProvider, OpenAiProvider};
 pub use control::{CancelToken, Timeouts};
@@ -144,7 +145,7 @@ fn token_calibration_diagnostic() -> String {
 }
 inventory::submit! { crate::diagnostic::DiagnosticField { kind: crate::diagnostic::DiagnosticKind::TokenCalibration, value: token_calibration_diagnostic } }
 pub(crate) use context::effective_cached;
-pub use settings::run_structured;
+pub use settings::{output_reserve, run_structured};
 pub(crate) use settings::{profile_infos, routed, Routed};
 
 mod settings {
@@ -206,6 +207,12 @@ mod settings {
         vault_account: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         context: Option<u64>,
+        /// Output ceiling the user sets for this profile (#147); absent keeps the model's.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max_output: Option<u64>,
+        /// Timeout in seconds the user sets for this profile (#147); absent uses the default.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        timeout_secs: Option<u64>,
     }
     impl Profile {
         fn account(&self) -> String {
@@ -234,6 +241,8 @@ mod settings {
             native_schema: settings.native_schema,
             vault_account: None,
             context: None,
+            max_output: None,
+            timeout_secs: None,
         }]
     }
     fn find(settings: &Settings, id: &str) -> Option<Profile> {
@@ -284,6 +293,7 @@ mod settings {
         pub endpoint: String,
         pub model: String,
         pub user_context: Option<u64>,
+        pub user_max_output: Option<u64>,
         pub native_schema: bool,
         pub confirmed: bool,
         pub timeouts: Timeouts,
@@ -328,6 +338,27 @@ mod settings {
             .ok_or_else(|| error("invalid_settings", "Configure the provider first"))?;
         Ok(ContextPick::Profile(context_target(&settings, profile)))
     }
+    /// Output tokens the window planner (#144) reserves for a call that asks for `ask`: the
+    /// same static ceiling the call applies (#147), so the plan and the call do not diverge.
+    /// It is the request cut by the profile's limit and the model's `max_output`. Cache only,
+    /// no network. A CLI has no output limit to apply: the request stays as it is.
+    pub fn output_reserve(
+        task: Option<&str>,
+        profile_id: Option<&str>,
+        ask: u64,
+    ) -> Result<u64, CoreError> {
+        let ContextPick::Profile(target) = context_pick(task, profile_id)? else {
+            return Ok(ask);
+        };
+        let known = super::context::cached_limits(&target);
+        Ok(super::limits::output_ceiling(super::limits::CeilingInput {
+            ask: Some(ask),
+            profile: target.user_max_output,
+            model: known.model_max_output,
+            requires_ceiling: false,
+        })
+        .map_or(ask, |limit| limit.tokens))
+    }
     fn context_target(settings: &Settings, profile: Profile) -> ContextTarget {
         let account = profile.account();
         ContextTarget {
@@ -341,6 +372,7 @@ mod settings {
             endpoint: profile.endpoint,
             model: profile.model,
             user_context: profile.context,
+            user_max_output: profile.max_output,
             native_schema: profile.native_schema,
             timeouts: settings.timeouts,
         }
@@ -524,13 +556,35 @@ mod settings {
         };
         let remote = !is_local_endpoint(&p.endpoint).unwrap_or(false);
         let key = metadata(settings, &p.account());
-        json!({"profileId":p.id, "endpoint":p.endpoint, "model":p.model, "kind":p.kind, "nativeSchema":p.native_schema, "context":p.context, "timeouts":settings.timeouts.effective(), "keyLastFour":key.key_last_four, "remote":remote, "confirmed":metadata(settings, &p.endpoint).confirmed})
+        json!({"profileId":p.id, "endpoint":p.endpoint, "model":p.model, "kind":p.kind, "nativeSchema":p.native_schema, "context":p.context, "maxOutput":p.max_output, "timeoutSecs":p.timeout_secs, "limits":limits_view(settings, p), "timeouts":settings.timeouts.effective(), "keyLastFour":key.key_last_four, "remote":remote, "confirmed":metadata(settings, &p.endpoint).confirmed})
     }
     fn status(args: Value, _: &mut EventSink<'_>) -> CommandResult {
         let _guard = locked()?;
         let settings = read()?;
         let profile = pick(&settings, &args)?;
         Ok(status_json(&settings, profile.as_ref()))
+    }
+    /// The limits in force for a profile with no task and no input (#147): the output ceiling
+    /// and where it comes from, the timeout before the share proportional to the input, and the
+    /// constants of the rule. The call itself also cuts the output to the free context.
+    fn limits_view(settings: &Settings, p: &Profile) -> Value {
+        let model_max = (!p.endpoint.is_empty())
+            .then(|| super::context::cached_limits(&context_target(settings, p.clone())))
+            .and_then(|l| l.model_max_output);
+        let output = super::limits::profile_output_limit(p.max_output, model_max);
+        let local = is_local_endpoint(&p.endpoint).unwrap_or(false);
+        let timeout = super::limits::timeout(
+            settings.timeouts.endpoint(local),
+            p.timeout_secs.map(Duration::from_secs),
+            0,
+            None,
+        );
+        json!({
+            "maxOutput": {"value": output.tokens, "source": output.source},
+            "timeout": {"seconds": timeout.duration.as_secs(), "source": timeout.source},
+            "timeoutMsPer1kInputTokens": super::limits::TIMEOUT_MS_PER_1K_INPUT_TOKENS,
+            "minUsefulOutput": super::limits::MIN_USEFUL_OUTPUT_TOKENS,
+        })
     }
     fn profile_view(settings: &Settings, p: &Profile) -> Value {
         let price = super::cost::price_for(&p.kind, &p.model)
@@ -542,6 +596,8 @@ mod settings {
         json!({
             "id": p.id, "label": p.label, "kind": p.kind, "endpoint": p.endpoint,
             "model": p.model, "nativeSchema": p.native_schema, "context": p.context,
+            "maxOutput": p.max_output, "timeoutSecs": p.timeout_secs,
+            "limits": limits_view(settings, p),
             "ownKey": p.vault_account.is_some(),
             "keyLastFour": metadata(settings, &p.account()).key_last_four,
             "local": is_local_endpoint(&p.endpoint).unwrap_or(false),
@@ -644,6 +700,20 @@ mod settings {
                     .ok_or_else(|| error("invalid_settings", "Invalid context"))?,
             ),
         };
+        let max_output = match args.get("maxOutput") {
+            None => existing.and_then(|i| list[i].max_output),
+            Some(Value::Null) => None,
+            Some(value) => Some(
+                value
+                    .as_u64()
+                    .filter(|n| *n > 0 && *n <= u32::MAX as u64)
+                    .ok_or_else(|| error("invalid_settings", "Invalid max output"))?,
+            ),
+        };
+        let timeout_secs = match args.get("timeoutSecs") {
+            None => existing.and_then(|i| list[i].timeout_secs),
+            Some(value) => super::control::parse_seconds(value)?,
+        };
         let profile = Profile {
             id: target.into(),
             label,
@@ -656,6 +726,8 @@ mod settings {
                 .unwrap_or(false),
             vault_account,
             context,
+            max_output,
+            timeout_secs,
         };
         match existing {
             Some(i) => list[i] = profile,
@@ -896,39 +968,65 @@ mod settings {
                 "Confirm sending text to this provider first",
             ));
         }
+        let mut request: StructuredRequest = serde_json::from_value(args)
+            .map_err(|_| error("invalid_request", "Invalid structured request"))?;
+        request.native_schema = profile.native_schema;
+        // Output limit (#147), after the vetoes and before the vault and the network: a call
+        // with no room for an answer is refused here, with nothing sent and nothing recorded.
+        let target = context_target(&settings, profile.clone());
+        let known = super::context::cached_limits(&target);
+        let input_high = super::cost::token_range(&profile.id, &profile.model, &request)?.high;
+        let ceiling = super::limits::output_ceiling(super::limits::CeilingInput {
+            ask: request.max_output_tokens,
+            profile: profile.max_output,
+            model: known.model_max_output,
+            requires_ceiling: profile.kind == "anthropic",
+        });
+        request.max_output_tokens = super::limits::apply_free_space(
+            ceiling,
+            super::limits::Space {
+                context: known.context,
+                input_high,
+                reasoning: super::limits::DEFAULT_REASONING_RESERVE,
+            },
+        )?
+        .map(|limit| limit.tokens);
         let account = profile.account();
         let key = if metadata(&settings, &account).key_last_four.is_some() {
             Some(vault_get(&account)?)
         } else {
             None
         };
-        let mut request: StructuredRequest = serde_json::from_value(args)
-            .map_err(|_| error("invalid_request", "Invalid structured request"))?;
-        request.native_schema = profile.native_schema;
+        let limits = (profile.timeout_secs, input_high);
         match profile.kind.as_str() {
             "" | "openai" => {
-                let sent = super::context::cached_sent(&context_target(&settings, profile.clone()));
-                let mut p =
-                    OpenAiProvider::new(profile.endpoint, profile.model, key)?.with_context(sent);
+                let sent = super::context::cached_sent(&target);
+                let mut p = OpenAiProvider::new(profile.endpoint, profile.model, key)?
+                    .with_timeouts(settings.timeouts)
+                    .with_context(sent)
+                    .with_call_limits(limits.0, limits.1);
                 p.confirm(consent.confirmed);
-                p.structured(&request)
+                p.structured_with(&request, cancel)
             }
             "anthropic" => {
-                let mut p = AnthropicProvider::new(profile.endpoint, profile.model, key)?;
+                let mut p = AnthropicProvider::new(profile.endpoint, profile.model, key)?
+                    .with_timeouts(settings.timeouts)
+                    .with_call_limits(limits.0, limits.1);
                 p.confirm(consent.confirmed);
-                p.structured(&request)
+                p.structured_with(&request, cancel)
             }
             "gemini" => {
-                let mut p = GeminiProvider::new(profile.endpoint, profile.model, key)?;
+                let mut p = GeminiProvider::new(profile.endpoint, profile.model, key)?
+                    .with_timeouts(settings.timeouts)
+                    .with_call_limits(limits.0, limits.1);
                 p.confirm(consent.confirmed);
-                p.structured(&request)
+                p.structured_with(&request, cancel)
             }
             "ollama" => {
-                let context =
-                    super::context::cached_effective(&context_target(&settings, profile.clone()));
                 let mut p = OllamaProvider::new(profile.endpoint, profile.model, key)?
                     .with_timeouts(settings.timeouts)
-                    .with_context(Some(context));
+                    .with_context(Some(known.context))
+                    .with_call_limits(limits.0, limits.1);
                 p.confirm(consent.confirmed);
                 p.structured_with(&request, cancel)
             }
@@ -1397,6 +1495,90 @@ mod security_tests {
             "timeout_uncertain"
         );
         assert_eq!(server.join().unwrap(), 1);
+    }
+
+    /// A server that answers the first connection after `delay` (valid OpenAI reply).
+    fn delayed(delay: Duration) -> (String, thread::JoinHandle<usize>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = format!("http://{}/v1", listener.local_addr().unwrap());
+        listener.set_nonblocking(true).unwrap();
+        let server = thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(3);
+            let mut connections = 0;
+            while Instant::now() < deadline {
+                if let Ok((mut stream, _)) = listener.accept() {
+                    connections += 1;
+                    let _ = super::test_http::read_request(&mut stream);
+                    thread::sleep(delay);
+                    let body = json!({"choices":[{"message":{"content":"{\"schemaVersion\":1}"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":3}}).to_string();
+                    let _ = std::io::Write::write_all(
+                        &mut stream,
+                        format!(
+                            "HTTP/1.1 200 OK
+Content-Length: {}
+Connection: close
+
+{body}",
+                            body.len()
+                        )
+                        .as_bytes(),
+                    );
+                }
+                thread::sleep(Duration::from_millis(5));
+            }
+            connections
+        });
+        (endpoint, server)
+    }
+
+    #[test]
+    fn default_timeout_grows_with_the_input_and_the_budget_caps_every_timeout() {
+        // Base 1 s; the same 1.5 s answer times out for a tiny input and succeeds when the
+        // estimated input adds 3 s.
+        let timeouts = Timeouts {
+            local: Some(1),
+            remote: Some(1),
+        };
+        let (endpoint, server) = delayed(Duration::from_millis(1500));
+        let small = OpenAiProvider::new(endpoint, "model".into(), None)
+            .unwrap()
+            .with_timeouts(timeouts);
+        assert_eq!(
+            small.structured(&input()).unwrap_err().code,
+            "timeout_uncertain"
+        );
+        server.join().unwrap();
+        let (endpoint, server) = delayed(Duration::from_millis(1500));
+        let big = OpenAiProvider::new(endpoint, "model".into(), None)
+            .unwrap()
+            .with_timeouts(timeouts)
+            .with_call_limits(None, 3_000);
+        assert!(big.structured(&input()).is_ok());
+        server.join().unwrap();
+
+        // The profile's 30 s is capped by the 300 ms the executor has left.
+        let (endpoint, server) = delayed(Duration::from_millis(1500));
+        let capped = OpenAiProvider::new(endpoint, "model".into(), None)
+            .unwrap()
+            .with_call_limits(Some(30), 0);
+        let started = Instant::now();
+        let (reply, _) = control::with_call_scope(None, None, || {
+            control::set_deadline(Some(Instant::now() + Duration::from_millis(300)));
+            capped.structured(&input())
+        });
+        assert_eq!(reply.unwrap_err().code, "timeout_uncertain");
+        assert!(started.elapsed() < Duration::from_secs(1));
+        server.join().unwrap();
+
+        // With no time left nothing is sent.
+        let (endpoint, server) = delayed(Duration::ZERO);
+        let none = OpenAiProvider::new(endpoint, "model".into(), None).unwrap();
+        let (reply, _) = control::with_call_scope(None, None, || {
+            control::set_deadline(Some(Instant::now()));
+            none.structured(&input())
+        });
+        assert_eq!(reply.unwrap_err().code, "time_budget_exhausted");
+        assert_eq!(server.join().unwrap(), 0);
     }
 
     #[test]

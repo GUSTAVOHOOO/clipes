@@ -417,6 +417,10 @@ pub fn plan_for_profile(
     frases: &[Sentence],
 ) -> Result<Plan, CoreError> {
     let profile = provider::effective_cached(request.task, request.profile_id)?;
+    // A reserva de saída é a da chamada (#147): o pedido, cortado pelo limite do Perfil e do
+    // modelo. Sem Perfil (CLI) vale o que o chamador pediu.
+    let output_reserve =
+        provider::output_reserve(request.task, request.profile_id, request.output_reserve)?;
     let origin = ContextOrigin::parse(profile.origin).ok_or(PlanError::InvalidInput)?;
 
     let compact = sentences::compact_with_hint(frases);
@@ -475,7 +479,7 @@ pub fn plan_for_profile(
         },
         ratio,
         fixed_tokens,
-        output_reserve: request.output_reserve,
+        output_reserve,
         reasoning_reserve: request.reasoning_reserve,
         max_cut_us: request.max_cut_us,
         price_threshold,

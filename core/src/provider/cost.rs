@@ -6,7 +6,6 @@ use serde_json::{json, Value};
 use std::{fs, path::PathBuf, sync::Mutex};
 
 /// Anthropic requires a limit; this mirrors the adapter default.
-const ANTHROPIC_DEFAULT_MAX_OUTPUT_TOKENS: u64 = 8192;
 const EMBEDDED: &str = include_str!("prices.json");
 static LOCK: Mutex<()> = Mutex::new(());
 mod catalog;
@@ -388,12 +387,17 @@ pub(crate) fn estimate_with_range(
         Target::Api {
             provider, model, ..
         } => {
-            let ceiling = request.max_output_tokens.or(if provider == "anthropic" {
-                Some(ANTHROPIC_DEFAULT_MAX_OUTPUT_TOKENS)
-            } else {
-                None
-            });
-            match price_for(provider, model)? {
+            let price = price_for(provider, model)?;
+            // The same ceiling the adapter sends (#147): the request, the model's `max_output`
+            // and the conservative fallback; Anthropic always has one.
+            let ceiling = super::limits::output_ceiling(super::limits::CeilingInput {
+                ask: request.max_output_tokens,
+                profile: None,
+                model: price.as_ref().and_then(|(p, _)| p.max_output),
+                requires_ceiling: provider == "anthropic",
+            })
+            .map(|limit| limit.tokens);
+            match price {
                 None => ("unknown", ceiling, None, None, None),
                 Some((p, source)) => {
                     if !p.tiers.is_empty() {
