@@ -1,0 +1,190 @@
+{
+  "openai": {
+    "models": {
+      "openai/gpt-oss-120b": {
+        "nativeSchemaSupport": "accepted_and_validated",
+        "service": "groq",
+        "observedAt": "2026-11-15"
+      },
+      "openai/gpt-oss-20b": {
+        "nativeSchemaSupport": "accepted_and_validated",
+        "service": "groq",
+        "observedAt": "2026-11-15"
+      },
+      "qwen/qwen3.8-27b": {
+        "nativeSchemaSupport": "accepted_and_validated",
+        "service": "groq",
+        "observedAt": "2026-11-15"
+      },
+      "inclusionai/ling-3.2-flash:free": {
+        "nativeSchemaSupport": "accepted_and_validated",
+        "service": "openrouter",
+        "observedAt": "2026-11-15"
+      },
+      "baidu/ernie-5.5-flash-preview:free": {
+        "nativeSchemaSupport": "accepted_and_validated",
+        "service": "openrouter",
+        "observedAt": "2026-11-15"
+      },
+      "liquid/lfm-3-1.7b:free": {
+        "nativeSchemaSupport": "accepted_and_validated",
+        "service": "openrouter",
+        "observedAt": "2026-11-15"
+      },
+      "particle-ai/particle-1:free": {
+        "nativeSchemaSupport": "accepted_and_validated",
+        "service": "openrouter",
+        "observedAt": "2026-11-15"
+      },
+      "nvidia/nemotron-3.5-lightning:free": {
+        "nativeSchemaSupport": "accepted_and_validated",
+        "service": "openrouter",
+        "observedAt": "2026-11-15"
+      },
+      "thinkingmachines/inkling-2-small:free": {
+        "nativeSchemaSupport": "not_observed",
+        "service": "openrouter",
+        "observedAt": "2026-11-15"
+      }
+    },
+    "nativeSchema": "response_format",
+    "nativeSchemaSupport": "model_dependent",
+    "usage": {
+      "input": "/usage/prompt_tokens",
+      "output": "/usage/completion_tokens",
+      "thinking": null
+    },
+    "refusalPointer": "/choices/0/message/refusal",
+    "truncationPointer": "/choices/0/finish_reason",
+    "truncationValues": [
+      "length",
+      "max_tokens",
+      "MAX_TOKENS"
+    ],
+    "repairNative": false,
+    "schemaAlways": false,
+    "contextSources": [
+      "model_catalog",
+      "server_discovery"
+    ]
+  },
+  "anthropic": {
+    "nativeSchema": "output_config",
+    "nativeSchemaSupport": "model_dependent",
+    "usage": {
+      "input": "/usage/input_tokens",
+      "output": "/usage/output_tokens",
+      "thinking": null
+    },
+    "refusalPointer": null,
+    "truncationPointer": "/stop_reason",
+    "truncationValues": [
+      "length",
+      "max_tokens",
+      "MAX_TOKENS"
+    ],
+    "repairNative": false,
+    "schemaAlways": false,
+    "contextSources": [
+      "model_catalog",
+      "server_discovery"
+    ]
+  },
+  "gemini": {
+    "nativeSchema": "generation_config",
+    "nativeSchemaSupport": "model_dependent",
+    "usage": {
+      "input": "/usageMetadata/promptTokenCount",
+      "output": "/usageMetadata/candidatesTokenCount",
+      "thinking": "/usageMetadata/thoughtsTokenCount"
+    },
+    "refusalPointer": null,
+    "truncationPointer": "/candidates/0/finishReason",
+    "truncationValues": [
+      "length",
+      "max_tokens",
+      "MAX_TOKENS"
+    ],
+    "repairNative": false,
+    "schemaAlways": false,
+    "contextSources": [
+      "model_catalog",
+      "server_discovery"
+    ]
+  },
+  "ollama": {
+    "nativeSchema": "ollama_format",
+    "nativeSchemaSupport": "model_dependent",
+    "usage": {
+      "input": "/prompt_eval_count",
+      "output": "/eval_count",
+      "thinking": null
+    },
+    "refusalPointer": null,
+    "truncationPointer": "/done_reason",
+    "truncationValues": [
+      "length",
+      "max_tokens",
+      "MAX_TOKENS"
+    ],
+    "repairNative": true,
+    "schemaAlways": true,
+    "contextSources": [
+      "model_catalog",
+      "server_discovery"
+    ]
+  },
+  "codex": {
+    "nativeSchema": "cli_schema",
+    "nativeSchemaSupport": "cli_contract",
+    "usage": null,
+    "refusalPointer": null,
+    "truncationPointer": null,
+    "truncationValues": [
+      "length",
+      "max_tokens",
+      "MAX_TOKENS"
+    ],
+    "repairNative": false,
+    "schemaAlways": false,
+    "contextSources": [
+      "model_catalog",
+      "cli_runtime"
+    ]
+  },
+  "claude": {
+    "nativeSchema": "cli_schema",
+    "nativeSchemaSupport": "cli_contract",
+    "usage": null,
+    "refusalPointer": null,
+    "truncationPointer": null,
+    "truncationValues": [
+      "length",
+      "max_tokens",
+      "MAX_TOKENS"
+    ],
+    "repairNative": false,
+    "schemaAlways": false,
+    "contextSources": [
+      "model_catalog",
+      "cli_runtime"
+    ]
+  },
+  "opencode": {
+    "nativeSchema": "prompt",
+    "nativeSchemaSupport": "unverified",
+    "usage": null,
+    "refusalPointer": null,
+    "truncationPointer": "/part/reason",
+    "truncationValues": [
+      "length",
+      "max_tokens"
+    ],
+    "repairNative": false,
+    "schemaAlways": false,
+    "contextSources": [
+      "model_catalog",
+      "cli_runtime"
+    ]
+  }
+}

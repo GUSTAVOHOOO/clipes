@@ -19,10 +19,11 @@ pub(super) struct Adapter {
     pub(super) timeout: Option<Duration>,
     pub(super) timeouts: Timeouts,
     kind: Kind,
+    capabilities: capabilities::Capabilities,
     context: Option<u64>,
 }
 macro_rules! provider {
-    ($name:ident, $kind:ident) => {
+    ($name:ident, $kind:ident, $capabilities:literal) => {
         pub struct $name(pub(super) Adapter);
         impl $name {
             pub fn new(
@@ -31,6 +32,8 @@ macro_rules! provider {
                 key: Option<String>,
             ) -> Result<Self, CoreError> {
                 resolve(&endpoint)?;
+                let capabilities =
+                    capabilities::for_model($capabilities, &model).expect("Registered adapter");
                 Ok(Self(Adapter {
                     endpoint,
                     model,
@@ -39,6 +42,7 @@ macro_rules! provider {
                     timeout: None,
                     timeouts: Timeouts::default(),
                     kind: Kind::$kind,
+                    capabilities,
                     context: None,
                 }))
             }
@@ -65,10 +69,10 @@ macro_rules! provider {
         }
     };
 }
-provider!(OpenAiProvider, OpenAi);
-provider!(AnthropicProvider, Anthropic);
-provider!(GeminiProvider, Gemini);
-provider!(OllamaProvider, Ollama);
+provider!(OpenAiProvider, OpenAi, "openai");
+provider!(AnthropicProvider, Anthropic, "anthropic");
+provider!(GeminiProvider, Gemini, "gemini");
+provider!(OllamaProvider, Ollama, "ollama");
 
 impl OllamaProvider {
     /// Effective context can later be supplied by context discovery (#143).
@@ -84,6 +88,19 @@ struct Reply {
     status: u16,
     retry_after: Option<String>,
     body: Result<Vec<u8>, reqwest::Error>,
+}
+
+fn retry_delay(reply: &Reply) -> Option<u64> {
+    reply.retry_after.as_deref().and_then(|v| {
+        v.parse::<u64>().ok().or_else(|| {
+            httpdate::parse_http_date(v).ok().map(|date| {
+                date.duration_since(std::time::SystemTime::now())
+                    .unwrap_or_default()
+                    .as_secs()
+                    .saturating_add(1)
+            })
+        })
+    })
 }
 
 /// Sends the request on a helper thread and waits for it in short slices. On cancellation
@@ -120,38 +137,6 @@ fn send_cancellable(
     }
 }
 
-/// Input and output tokens of a Provider response; the Gemini output includes thinking.
-fn usage_of(kind: Kind, response: &Value) -> (Option<u64>, Option<u64>) {
-    let (i, o) = match kind {
-        Kind::OpenAi => (
-            response.pointer("/usage/prompt_tokens"),
-            response.pointer("/usage/completion_tokens"),
-        ),
-        Kind::Anthropic => (
-            response.pointer("/usage/input_tokens"),
-            response.pointer("/usage/output_tokens"),
-        ),
-        Kind::Ollama => (
-            response.get("prompt_eval_count"),
-            response.get("eval_count"),
-        ),
-        Kind::Gemini => (
-            response.pointer("/usageMetadata/promptTokenCount"),
-            response.pointer("/usageMetadata/candidatesTokenCount"),
-        ),
-    };
-    let mut output = o.and_then(Value::as_u64);
-    if matches!(kind, Kind::Gemini) {
-        if let Some(thoughts) = response
-            .pointer("/usageMetadata/thoughtsTokenCount")
-            .and_then(Value::as_u64)
-        {
-            output = output.and_then(|n| n.checked_add(thoughts));
-        }
-    }
-    (i.and_then(Value::as_u64), output)
-}
-
 fn add(total: &mut Option<u64>, n: Option<u64>, first: bool) {
     *total = if first {
         n
@@ -177,7 +162,7 @@ impl Adapter {
             .as_ref()
             .ok()
             .and_then(|bytes| serde_json::from_slice::<Value>(bytes).ok())
-            .map(|body| usage_of(self.kind, &body))
+            .map(|body| self.capabilities.usage_of(&body))
             .filter(|(i, o)| i.is_some() || o.is_some());
         if let Some((i, o)) = usage {
             e.usage = Some(json!({"usage":usage_value(i, o),"calls":calls}));
@@ -264,7 +249,7 @@ impl Adapter {
                         .as_ref()
                         .ok()
                         .and_then(|b| serde_json::from_slice::<Value>(b).ok())
-                        .map(|v| usage_of(self.kind, &v))
+                        .map(|v| self.capabilities.usage_of(&v))
                         .map_or(Value::Null, |(i, o)| usage_value(i, o));
                     (code, usage)
                 }
@@ -279,6 +264,17 @@ impl Adapter {
                 Err(e) => (e.code.as_str(), Value::Null),
             };
             log.push(json!({"attempt":repair,"calls":1,"usage":usage,"code":code,"estimate":estimate,"durationMs":started.elapsed().as_millis() as u64}));
+            if let Ok(Ok(reply)) = &sent {
+                log.last_mut().unwrap()["httpStatus"] = json!(reply.status);
+            }
+            match &sent {
+                Ok(Ok(reply)) if reply.status == 429 => {
+                    let entry = log.last_mut().unwrap();
+                    entry["retryAfterPresent"] = json!(reply.retry_after.is_some());
+                    entry["retryAfterSeconds"] = json!(retry_delay(reply));
+                }
+                _ => {}
+            }
             let reply = match sent? {
                 Ok(reply) => reply,
                 Err(ref e) if e.is_timeout() => {
@@ -295,27 +291,14 @@ impl Adapter {
             };
             let calls = attempt + 1;
             if reply.status == 429 && attempt < 2 {
-                let delay = reply
-                    .retry_after
-                    .as_deref()
-                    .and_then(|v| {
-                        v.parse::<u64>().ok().or_else(|| {
-                            httpdate::parse_http_date(v).ok().map(|date| {
-                                date.duration_since(std::time::SystemTime::now())
-                                    .unwrap_or_default()
-                                    .as_secs()
-                                    .saturating_add(1)
-                            })
-                        })
-                    })
-                    .ok_or_else(|| {
-                        self.http_failure(
-                            &reply,
-                            "rate_limit",
-                            "Provider did not specify a valid retry delay",
-                            calls,
-                        )
-                    })?;
+                let delay = retry_delay(&reply).ok_or_else(|| {
+                    self.http_failure(
+                        &reply,
+                        "rate_limit",
+                        "Provider did not specify a valid retry delay",
+                        calls,
+                    )
+                })?;
                 if delay > 30 {
                     return Err(self.http_failure(
                         &reply,
@@ -399,7 +382,6 @@ impl Adapter {
             if matches!(self.kind, Kind::Ollama) {
                 body["stream"] = json!(false);
                 body["options"]["num_ctx"] = json!(self.context.unwrap_or(4096));
-                body["format"] = request.schema.clone();
             }
             if let Some(limit) = request.max_output_tokens {
                 match self.kind {
@@ -409,21 +391,8 @@ impl Adapter {
                     Kind::Ollama => body["options"]["num_predict"] = json!(limit),
                 }
             }
-            if request.native_schema {
-                match self.kind {
-                    Kind::OpenAi => {
-                        body["response_format"] = json!({"type":"json_schema","json_schema":{"name":"clipes_response","strict":true,"schema":request.schema}})
-                    }
-                    Kind::Anthropic => {
-                        body["output_config"]["format"] =
-                            json!({"type":"json_schema","schema":request.schema})
-                    }
-                    Kind::Ollama => {}
-                    Kind::Gemini => {
-                        body["generationConfig"]["responseMimeType"] = json!("application/json");
-                        body["generationConfig"]["responseJsonSchema"] = request.schema.clone();
-                    }
-                }
+            if request.native_schema || self.capabilities.schema_always {
+                self.capabilities.apply_schema(&mut body, &request.schema);
             }
             // Repairs carry the preceding response and instruction in addition to the input.
             // They use the same estimator, with those extra characters included.
@@ -463,18 +432,11 @@ impl Adapter {
                     }
                 };
             calls += attempts;
-            let (i, o) = usage_of(self.kind, &response);
+            let (i, o) = self.capabilities.usage_of(&response);
             add(&mut input, i, repair == 0);
             add(&mut output, o, repair == 0);
             let usage = usage_value(input, output);
-            let truncated = match self.kind {
-                Kind::OpenAi => response.pointer("/choices/0/finish_reason"),
-                Kind::Anthropic => response.get("stop_reason"),
-                Kind::Ollama => response.get("done_reason"),
-                Kind::Gemini => response.pointer("/candidates/0/finishReason"),
-            }
-            .and_then(Value::as_str)
-            .is_some_and(|reason| matches!(reason, "length" | "max_tokens" | "MAX_TOKENS"));
+            let truncated = self.capabilities.truncated(&response);
             // Every failure after a response was received was already billed: carry the usage.
             let billed = |code: &str, message: &str, log: &mut Vec<Value>| {
                 if let Some(last) = log.last_mut() {
@@ -493,12 +455,7 @@ impl Adapter {
             }
             // A refusal is the model's answer, not a malformed one: no repair. The refusal
             // text is not copied into the error.
-            if matches!(self.kind, Kind::OpenAi)
-                && response
-                    .pointer("/choices/0/message/refusal")
-                    .and_then(Value::as_str)
-                    .is_some_and(|refusal| !refusal.is_empty())
-            {
+            if self.capabilities.refused(&response) {
                 return Err(billed("refusal", "Provider refused the request", &mut *log));
             }
             let text = match self.kind {
@@ -526,7 +483,7 @@ impl Adapter {
                     return Ok(json!({"data":value,"usage":usage,"calls":calls}));
                 }
             }
-            if request.native_schema && !matches!(self.kind, Kind::Ollama) {
+            if request.native_schema && !self.capabilities.repair_native {
                 return Err(billed(
                     "invalid_json",
                     "Provider response failed validation",
