@@ -14,6 +14,22 @@ fn main() {
         return;
     }
 
+    if args.iter().any(|a| a == "--skip-download") {
+        // Modo do chat da live (#151): só o replay, nunca a mídia.
+        assert!(args.iter().any(|a| a == "--write-subs"));
+        assert!(args.windows(2).any(|w| w == ["--sub-langs", "live_chat"]));
+        assert!(!args.iter().any(|a| a == "--no-simulate"));
+        let end = args.iter().position(|a| a == "--").unwrap();
+        let url = &args[end + 1];
+        if url.ends_with("chat-fail") { eprintln!("secret path must not escape"); std::process::exit(1); }
+        if url.ends_with("chat-hang") { thread::sleep(Duration::from_secs(30)); }
+        if url.ends_with("chat-replay") {
+            let i = args.iter().position(|a| a == "-o").unwrap();
+            let target = args[i + 1].replace("%(id)s", "video123").replace("%(ext)s", "live_chat.json");
+            fs::copy(env::var("CLIPES_FAKE_CHAT_FILE").unwrap(), target).unwrap();
+        }
+        return;
+    }
     assert!(!args.iter().any(|a| a == "--no-color"));
     assert!(args.windows(2).any(|w| w == ["--match-filters", "live_status !=? is_live & live_status !=? is_upcoming & live_status !=? post_live"]));
 

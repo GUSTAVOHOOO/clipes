@@ -310,7 +310,7 @@ fn selection_runs_windows_adjusts_borders_and_resumes_without_repeating() {
     let done = finished(run1, "completed");
     assert_eq!(fake.total(), n);
     let head = &done["run"];
-    assert_eq!(head["taskVersion"], 2);
+    assert_eq!(head["taskVersion"], 3);
     assert_eq!(head["promptSha256"].as_str().unwrap().len(), 64);
     assert_eq!(head["profile"], "legacy");
     assert_eq!(head["counts"]["windows"], n);

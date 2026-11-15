@@ -426,7 +426,7 @@ pub fn plan_for_profile(
 pub fn plan_for_profile_marked(
     request: &ProfileRequest<'_>,
     frases: &[Sentence],
-    marks: &EnergyMarks,
+    marks: &impl sentences::SentenceMarks,
 ) -> Result<Plan, CoreError> {
     let profile = provider::effective_cached(request.task, request.profile_id)?;
     // A reserva de saída é a da chamada (#147): o pedido, cortado pelo limite do Perfil e do

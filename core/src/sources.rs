@@ -311,6 +311,10 @@ fn import(v: Value, events: &mut EventSink<'_>) -> CommandResult {
             "INSERT INTO jobs(kind,safety,state,source_id) VALUES ('preview','local','queued',?1)",
             [id],
         )?;
+        // Importada por URL: o chat da live (se houver replay) entra na fila junto (#151).
+        if origin_url.is_some() {
+            crate::chat::enqueue_in(&tx, id)?;
+        }
         tx.commit()?;
         Ok(id)
     })?;
