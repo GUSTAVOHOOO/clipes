@@ -251,14 +251,12 @@ fn sentences_command(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     .map(Value::from)
 }
 
-/// `transcription.timeline`: a Transcrição como a tela a mostra, Frases e silêncios entre
-/// elas em ordem de tempo, paginada por `offset`/`limit` (máx. 2 000). Silêncio dentro de uma
-/// Frase (pausa curta no meio da fala) não aparece: ele já está contido nela.
+/// `transcription.timeline`: Frases e todos os silêncios em ordem de tempo, paginados.
 fn timeline_command(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let transcript = source_transcript(&v)?;
     let offset = v["offset"].as_i64().unwrap_or(0).max(0);
     let limit = v["limit"].as_i64().unwrap_or(500).clamp(0, 2_000);
-    const ITEMS: &str = "SELECT 'sentence' AS type, id, start_us, end_us, language, text, 1 AS ord FROM sentences WHERE transcript_id=?1 UNION ALL SELECT 'silence', NULL, w.start_us, w.end_us, NULL, '', 0 FROM transcript_words w WHERE w.transcript_id=?1 AND w.kind='silence' AND COALESCE((SELECT s.end_us FROM sentences s WHERE s.transcript_id=?1 AND s.start_us<=w.start_us ORDER BY s.start_us DESC LIMIT 1), -1) <= w.start_us";
+    const ITEMS: &str = "SELECT 'sentence' AS type, id, start_us, end_us, language, text, 1 AS ord FROM sentences WHERE transcript_id=?1 UNION ALL SELECT 'silence', NULL, w.start_us, w.end_us, NULL, '', 0 FROM transcript_words w WHERE w.transcript_id=?1 AND w.kind='silence'";
     projects::with_reader(|c| {
         let total: i64 = c.query_row(
             &format!("SELECT COUNT(*) FROM ({ITEMS})"),
