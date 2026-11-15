@@ -105,6 +105,44 @@ const selectionFlag = (name: string) => typeof location !== 'undefined' && new U
 const selectionWeights = [{key:'hook',weight:0.3},{key:'selfContained',weight:0.2},{key:'energy',weight:0.2},{key:'value',weight:0.15},{key:'closing',weight:0.15}];
 const selectionMock = { run: null as null | { id: number; ticks: number; state: string; cancelled: boolean; redone: boolean } };
 function selectionAxes(scores: number[]) { return Object.fromEntries(selectionWeights.map((w, i) => [w.key, { score: scores[i], why: `Motivo do eixo ${w.key}.` }])); }
+// Revisão simulada (#55): Frases de 10 s (a Frase k vai de 10(k-1) s a 10k s), faixa de 20 s a 3 min e pilha de decisões.
+type MockReview = { status: 'pending' | 'approved' | 'rejected'; start: number; end: number; origin: [number, number] };
+const reviewMock = { items: new Map<number, MockReview>([[1, { status: 'pending', start: 10, end: 14, origin: [10, 14] }], [2, { status: 'pending', start: 40, end: 41, origin: [40, 41] }], [3, { status: 'pending', start: 200, end: 203, origin: [200, 203] }]]), history: [] as { id: number; before: MockReview }[] };
+function mockMoves(r: MockReview) {
+  const ok = (start: number, end: number) => start >= 1 && end <= 240 && start <= end && (end - start + 1) * 10 >= 20 && (end - start + 1) * 10 <= 180;
+  return { startEarlier: ok(r.start - 1, r.end), startLater: ok(r.start + 1, r.end), endEarlier: ok(r.start, r.end - 1), endLater: ok(r.start, r.end + 1) };
+}
+function mockItem(id: number) {
+  const r = reviewMock.items.get(id)!;
+  return { candidate: id, status: r.status, adjusted: r.start !== r.origin[0] || r.end !== r.origin[1], startId: r.start, endId: r.end, startUs: (r.start - 1) * 10_000_000, endUs: r.end * 10_000_000, startText: `Primeira frase ${r.start} do Corte.`, endText: `Última frase ${r.end} do Corte.`, moves: mockMoves(r) };
+}
+function selectionReviewMock(name: string, args: object): unknown {
+  const a = args as { candidate?: number; decision?: 'approved' | 'rejected'; edge?: 'start' | 'end'; delta?: number };
+  const answer = (id: number | null) => ({ run: 1, item: id === null ? null : mockItem(id), canUndo: reviewMock.history.length > 0 });
+  if (name === 'selection.review') return { run: 1, items: [...reviewMock.items.keys()].map(mockItem), canUndo: reviewMock.history.length > 0 };
+  if (name === 'selection.undo') {
+    const last = reviewMock.history.pop();
+    if (!last) throw { code: 'nothing_to_undo', message: 'Não há decisão para desfazer.' };
+    reviewMock.items.set(last.id, last.before);
+    return answer(last.id);
+  }
+  const r = reviewMock.items.get(a.candidate ?? -1);
+  if (!r) throw { code: 'candidate_not_found', message: 'Candidato não encontrado.' };
+  const before = { ...r };
+  if (name === 'selection.decide') {
+    if (r.status !== a.decision) { r.status = a.decision!; reviewMock.history.push({ id: a.candidate!, before }); }
+    return answer(a.candidate!);
+  }
+  const start = a.edge === 'start' ? r.start + a.delta! : r.start;
+  const end = a.edge === 'end' ? r.end + a.delta! : r.end;
+  const length = (end - start + 1) * 10;
+  if (start < 1 || end > 240) throw { code: 'adjust_out_of_transcript', message: 'A borda não pode sair da Transcrição.' };
+  if (start > end) throw { code: 'adjust_empty', message: 'O Corte precisa manter ao menos uma Frase.' };
+  if (length < 20) throw { code: 'adjust_too_short', message: 'O Corte ficaria abaixo da duração mínima.' };
+  if (length > 180) throw { code: 'adjust_too_long', message: 'O Corte ficaria acima da duração máxima.' };
+  r.start = start; r.end = end; reviewMock.history.push({ id: a.candidate!, before });
+  return answer(a.candidate!);
+}
 function selectionMockDispatch(name: string, args: object): unknown {
   const paid = selectionFlag('selection-paid');
   const estimate = { kind: paid ? 'usd' : 'zero', windows: 4, inputTokens: 40000, minMicroUsd: paid ? 1200 : 0, maxMicroUsd: paid ? 5400 : 0 };
@@ -125,6 +163,7 @@ function selectionMockDispatch(name: string, args: object): unknown {
     if (run) { run.redone = true; run.state = 'completed'; run.cancelled = false; }
     return { run: 1, windows: [2] };
   }
+  if (name === 'selection.review' || name === 'selection.decide' || name === 'selection.adjust' || name === 'selection.undo') return selectionReviewMock(name, args);
   if (name === 'selection.get' && run) {
     run.ticks += 1;
     const failing = !run.redone && !run.cancelled && run.ticks > 1;
@@ -134,7 +173,7 @@ function selectionMockDispatch(name: string, args: object): unknown {
     const done = states.filter(s => s === 'completed').length;
     const candidates = run.ticks === 1 && !run.cancelled ? [] : [
       { id: 1, rank: 0, startId: 10, endId: 14, startUs: 90_000_000, endUs: 140_000_000, axes: selectionAxes([9, 8, 7, 9, 8]), total: 8.35, title: 'A virada do jogo', windows: [0, 1], adjusted: false, adjust: null },
-      { id: 2, rank: 1, startId: 40, endId: 41, startUs: 390_000_000, endUs: 420_000_000, axes: selectionAxes([8, 6, 7, 9, 5]), total: 7.1, title: '', windows: [0], adjusted: true, adjust: { extendedAfter: 1 } },
+      { id: 2, rank: 1, startId: 40, endId: 41, startUs: 390_000_000, endUs: 410_000_000, axes: selectionAxes([8, 6, 7, 9, 5]), total: 7.1, title: '', windows: [0], adjusted: true, adjust: { extendedAfter: 1 } },
       { id: 3, rank: 2, startId: 200, endId: 203, startUs: 1_990_000_000, endUs: 2_030_000_000, axes: selectionAxes([4, 4, 4, 4, 4]), total: 4, title: 'Piada longa', windows: [2], adjusted: true, adjust: { trimmedEnd: 3 } },
     ];
     return { run: { id: 1, state: run.state, weights: selectionWeights, budgetPause: null, createdAt: '2026-11-15T12:00:00Z', counts: { windows: 4, completed: done, failed: states.filter(s => s === 'failed' || s === 'cancelled').length, kept: candidates.length, discarded: 0, merged: 1 } }, windows, candidates };

@@ -547,15 +547,70 @@ try {
   await timeline.getByText('Frase 29999', { exact: true }).waitFor();
   assert.equal(await page.evaluate(() => document.activeElement?.closest('[data-sentence]')?.getAttribute('data-sentence')), '29999', 'clicar no resultado leva ao trecho');
   await page.screenshot({ path: 'shots/transcript-search.png', fullPage: true });
+  // Revisão dos candidatos (#55): atalhos, ajuste por Frase inteira, desfazer e o encaixe do preview.
+  const reviewChecks = async L => {
+    const sel = page.getByRole('region', { name: L.region }).first();
+    const review = sel.getByRole('group', { name: L.review });
+    await review.waitFor();
+    const counts = (a, r, p) => L.counts.replace('{a}', a).replace('{r}', r).replace('{p}', p);
+    await review.locator('[data-review-counts]').getByText(counts(0, 0, 3)).waitFor();
+    assert.equal(await review.locator('[data-candidate]').count(), 3, 'lista ordenada pela Nota');
+    const detail = review.locator('[data-detail]');
+    assert.match(await detail.innerText(), /8\.35/);
+    assert.match(await detail.innerText(), /30%/);
+    assert.equal(await review.locator('[data-preview-slot]').isEnabled(), true, 'a revisão abre o preview do candidato (#58)');
+    assert.match(await review.innerText(), new RegExp(L.hintKeys));
+    await review.focus();
+    await page.keyboard.press('a');
+    await review.locator('[data-review-counts]').getByText(counts(1, 0, 2)).waitFor();
+    assert.equal(await review.locator('[data-candidate="1"]').getAttribute('data-status'), 'approved');
+    // ] e [ movem o começo e não abrem as gavetas globais dentro da revisão.
+    await page.keyboard.press('[');
+    await detail.getByText(L.start80).waitFor();
+    await page.keyboard.press(']');
+    await page.keyboard.press(']');
+    await detail.getByText(L.start100).waitFor();
+    assert.equal(await page.locator('aside[data-aberta="true"]').count(), 0, 'colchetes da revisão não abrem gaveta');
+    await page.keyboard.press('}');
+    await detail.getByText(L.end150).waitFor();
+    await page.keyboard.press('{');
+    await page.keyboard.press('{');
+    await detail.getByText(L.end130).waitFor();
+    await page.keyboard.press('ArrowDown');
+    await review.locator('[data-candidate="2"] button[aria-current="true"]').waitFor();
+    await page.keyboard.press('{');
+    await review.getByRole('alert').getByText(L.tooShort).waitFor();
+    assert.equal(await review.getByRole('button', { name: L.endEarlier }).isDisabled(), true, 'o botão reflete o limite da faixa');
+    await page.keyboard.press('r');
+    await review.locator('[data-review-counts]').getByText(counts(1, 1, 1)).waitFor();
+    await page.screenshot({ path: `shots/selection-review-${L.lang}.png`, fullPage: true });
+    await page.keyboard.press('Control+z');
+    await review.locator('[data-review-counts]').getByText(counts(1, 0, 2)).waitFor();
+    assert.equal(await review.getByRole('button', { name: L.undo }).isEnabled(), true);
+    await page.keyboard.press('ArrowUp');
+    for (let i = 0; i < 7; i++) await page.keyboard.press('Control+z'); // aprovação e seis ajustes
+    await review.locator('[data-review-counts]').getByText(counts(0, 0, 3)).waitFor();
+    assert.equal(await review.getByRole('button', { name: L.undo }).isDisabled(), true);
+    // Fora da revisão o ] continua abrindo a gaveta.
+    await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+    await page.keyboard.press(']');
+    await page.locator('aside[data-aberta="true"]').waitFor();
+    await page.keyboard.press('Escape');
+    await page.locator('aside[data-aberta="true"]').waitFor({ state: 'detached' });
+  };
+  const PT = { lang: 'pt-BR', region: 'Seleção de Cortes', review: 'Revisão dos candidatos', counts: '{a} aprovados · {r} rejeitados · {p} pendentes', hintKeys: 'aprova', start80: '01:20', start100: '01:40', end150: '02:30', end130: '02:10', tooShort: 'O Corte ficaria abaixo da duração mínima.', endEarlier: 'Fim antes', undo: 'Desfazer decisão' };
+  const EN = { lang: 'en', region: 'Clip selection', review: 'Candidate review', counts: '{a} approved · {r} rejected · {p} pending', hintKeys: 'approve', start80: '01:20', start100: '01:40', end150: '02:30', end130: '02:10', tooShort: 'The Clip would fall below the minimum duration.', endEarlier: 'End earlier', undo: 'Undo decision' };
   // Seleção de Cortes (#53): estimativa antes, progresso por Janela, Nota com pesos, filtro e refazer.
   const selection = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
   await selection.getByText('Estimativa: 4 janelas · sem custo (modelo local)').waitFor();
   await selection.getByRole('button', { name: 'Selecionar Cortes' }).click();
   await selection.getByText(/Seleção com janelas pendentes/).waitFor({ timeout: 15000 });
-  await selection.getByText('Nota total: 8.35').waitFor();
+  await selection.getByText('Nota total: 8.35').first().waitFor();
   assert.match(await selection.innerText(), /Gancho/);
   assert.match(await selection.innerText(), /peso 30%/);
+  await selection.locator('[data-candidate="2"] button').click();
   assert.match(await selection.innerText(), /Bordas ajustadas: fim estendido/);
+  await selection.locator('[data-candidate="1"] button').click();
   assert.match(await selection.innerText(), /a resposta não passou na verificação/);
   assert.equal(await selection.locator('[data-candidate]').count(), 3, 'candidatos ordenados pela Nota');
   assert.match(await selection.locator('[data-candidate]').first().innerText(), /8\.35/);
@@ -563,10 +618,11 @@ try {
   assert.equal(await selection.locator('[data-candidate]').count(), 2, 'filtro por Nota mínima');
   await selection.getByLabel('Nota mínima').fill('0');
   await page.screenshot({ path: 'shots/selection.png', fullPage: true });
+  await reviewChecks(PT);
   await selection.getByRole('button', { name: 'Refazer janela 3' }).click();
   await selection.getByText(/Seleção concluída/).waitFor({ timeout: 15000 });
   // Preview do Corte (#58): abre a partir do candidato, gera com progresso, 9:16 em Fit e clique na palavra.
-  await selection.getByRole('button', { name: 'Pré-visualizar 01:30' }).click();
+  await selection.getByRole('button', { name: 'Abrir preview' }).click();
   const cutPreview = page.getByRole('region', { name: 'Preview do Corte' });
   await cutPreview.getByText('Gerando o preview: 40%').waitFor();
   await cutPreview.getByRole('button', { name: 'Reproduzir' }).waitFor({ timeout: 10000 });
@@ -605,6 +661,13 @@ try {
   const blockedSelection = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
   await blockedSelection.getByText(/contexto efetivo de 4096 tokens/).waitFor();
   assert.equal(await blockedSelection.getByRole('button', { name: 'Selecionar Cortes' }).isDisabled(), true);
+  await page.evaluate(() => localStorage.setItem('clipes.language', 'en'));
+  await page.goto(`${url}?source-test=1&transcript-test=1`);
+  const enSelection = page.getByRole('region', { name: 'Clip selection' }).first();
+  await enSelection.getByRole('button', { name: 'Select Clips' }).click();
+  await enSelection.getByText(/Selection with pending windows/).waitFor({ timeout: 15000 });
+  await reviewChecks(EN);
+  await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
   await page.goto(`${url}?source-test=1&groq-retry-test=1`);
   const uncertainAudio = page.locator('li').filter({hasText:'/test/downloaded.mp4'}).first();
   await uncertainAudio.getByRole('button',{name:'Retomar'}).click();
