@@ -25,7 +25,7 @@ VAD_MIN_SILENCE_MS = 200
 VAD_MAX_SPEECH_S = 30
 BEAM_SIZE = 5
 DEVICES = ("cuda", "cpu")
-COMPUTE_TYPES = ("int8_float16", "int8")
+COMPUTE_TYPES = ("int8_float16", "float16", "int8")
 
 
 def read_wav(path):
@@ -161,7 +161,7 @@ def transcribe_task(loader=load_faster_whisper, reader=read_wav):
 
     def resolve(params):
         model_id, directory, device, compute_type = _check_params(params)
-        return f"faster-whisper:{model_id}", lambda: loader(directory, device, compute_type)
+        return f"faster-whisper:{model_id}:{device}:{compute_type}", lambda: loader(directory, device, compute_type)
 
     def run(transcriber, params, ctx):
         return transcriber.block(reader(params["audio"]), params["final"], params["batch_size"], ctx)

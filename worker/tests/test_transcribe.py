@@ -109,6 +109,15 @@ def run(params, tasks):
 MODEL = {"id": "m", "dir": "x", "device": "cpu", "compute_type": "int8"}
 
 
+def test_model_slot_distinguishes_device_and_precision():
+    task = transcribe_task(loader=lambda *a: make([]), reader=lambda p: [0.0])
+    params = {"audio": "a.wav", "final": True, "batch_size": 1, "model": MODEL}
+    cpu, _ = task.resolve(params)
+    cuda, _ = task.resolve({**params, "model": {**MODEL, "device": "cuda"}})
+    half, _ = task.resolve({**params, "model": {**MODEL, "device": "cuda", "compute_type": "float16"}})
+    assert len({cpu, cuda, half}) == 3
+
+
 @pytest.mark.parametrize(
     "params",
     [
