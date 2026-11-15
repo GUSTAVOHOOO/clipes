@@ -1497,6 +1497,90 @@ mod security_tests {
         assert_eq!(server.join().unwrap(), 1);
     }
 
+    /// A server that answers the first connection after `delay` (valid OpenAI reply).
+    fn delayed(delay: Duration) -> (String, thread::JoinHandle<usize>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = format!("http://{}/v1", listener.local_addr().unwrap());
+        listener.set_nonblocking(true).unwrap();
+        let server = thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(3);
+            let mut connections = 0;
+            while Instant::now() < deadline {
+                if let Ok((mut stream, _)) = listener.accept() {
+                    connections += 1;
+                    let _ = super::test_http::read_request(&mut stream);
+                    thread::sleep(delay);
+                    let body = json!({"choices":[{"message":{"content":"{\"schemaVersion\":1}"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":3}}).to_string();
+                    let _ = std::io::Write::write_all(
+                        &mut stream,
+                        format!(
+                            "HTTP/1.1 200 OK
+Content-Length: {}
+Connection: close
+
+{body}",
+                            body.len()
+                        )
+                        .as_bytes(),
+                    );
+                }
+                thread::sleep(Duration::from_millis(5));
+            }
+            connections
+        });
+        (endpoint, server)
+    }
+
+    #[test]
+    fn default_timeout_grows_with_the_input_and_the_budget_caps_every_timeout() {
+        // Base 1 s; the same 1.5 s answer times out for a tiny input and succeeds when the
+        // estimated input adds 3 s.
+        let timeouts = Timeouts {
+            local: Some(1),
+            remote: Some(1),
+        };
+        let (endpoint, server) = delayed(Duration::from_millis(1500));
+        let small = OpenAiProvider::new(endpoint, "model".into(), None)
+            .unwrap()
+            .with_timeouts(timeouts);
+        assert_eq!(
+            small.structured(&input()).unwrap_err().code,
+            "timeout_uncertain"
+        );
+        server.join().unwrap();
+        let (endpoint, server) = delayed(Duration::from_millis(1500));
+        let big = OpenAiProvider::new(endpoint, "model".into(), None)
+            .unwrap()
+            .with_timeouts(timeouts)
+            .with_call_limits(None, 3_000);
+        assert!(big.structured(&input()).is_ok());
+        server.join().unwrap();
+
+        // The profile's 30 s is capped by the 300 ms the executor has left.
+        let (endpoint, server) = delayed(Duration::from_millis(1500));
+        let capped = OpenAiProvider::new(endpoint, "model".into(), None)
+            .unwrap()
+            .with_call_limits(Some(30), 0);
+        let started = Instant::now();
+        let (reply, _) = control::with_call_scope(None, None, || {
+            control::set_deadline(Some(Instant::now() + Duration::from_millis(300)));
+            capped.structured(&input())
+        });
+        assert_eq!(reply.unwrap_err().code, "timeout_uncertain");
+        assert!(started.elapsed() < Duration::from_secs(1));
+        server.join().unwrap();
+
+        // With no time left nothing is sent.
+        let (endpoint, server) = delayed(Duration::ZERO);
+        let none = OpenAiProvider::new(endpoint, "model".into(), None).unwrap();
+        let (reply, _) = control::with_call_scope(None, None, || {
+            control::set_deadline(Some(Instant::now()));
+            none.structured(&input())
+        });
+        assert_eq!(reply.unwrap_err().code, "time_budget_exhausted");
+        assert_eq!(server.join().unwrap(), 0);
+    }
+
     #[test]
     fn remote_plain_http_with_key_is_rejected_before_connecting() {
         let mut provider = OpenAiProvider::new(
