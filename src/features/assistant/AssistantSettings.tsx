@@ -41,7 +41,7 @@ export function AssistantSettings({ refreshKey = 0 }: { refreshKey?: number } = 
       <label>{t.defaultLabel}<select className={select} value={status?.default ?? ''} onChange={e => void set('assistant.default.set', {}, e.target.value as Choice)}>{options(t.notChosen)}</select></label>
     </div>
     {status?.missing?.default && <p className="mt-3 text-sm" role="alert">{t.missingDefault.replace('{id}', status.missing.default)}</p>}
-    <TaskTable status={status} onChange={() => void refresh().catch(() => setMessage(t.failed))} />
+    <TaskTable status={status} refreshKey={refreshKey} onChange={() => void refresh().catch(() => setMessage(t.failed))} />
     <div className="mt-4"><Button onClick={() => window.dispatchEvent(new Event(REOPEN_EVENT))}>{t.reopen}</Button></div>
     {message && <p className="mt-3 text-sm" role="status">{message}</p>}
   </section>;

@@ -17,6 +17,8 @@ pub enum DiagnosticKind {
     TokenCalibration,
     TaskVersion,
     PromptHash,
+    EffectiveContextTokens,
+    EffectiveContextOrigin,
 }
 impl DiagnosticKind {
     fn label(self) -> &'static str {
@@ -29,6 +31,8 @@ impl DiagnosticKind {
             Self::TokenCalibration => "Calibração de tokens",
             Self::TaskVersion => "Versão da Tarefa de IA",
             Self::PromptHash => "Hash do prompt (SHA-256)",
+            Self::EffectiveContextTokens => "Contexto efetivo (tokens)",
+            Self::EffectiveContextOrigin => "Origem do contexto efetivo",
         }
     }
 }
@@ -124,6 +128,8 @@ fn get(_: Value, _: &mut EventSink<'_>) -> CommandResult {
         DiagnosticKind::TokenCalibration,
         DiagnosticKind::TaskVersion,
         DiagnosticKind::PromptHash,
+        DiagnosticKind::EffectiveContextTokens,
+        DiagnosticKind::EffectiveContextOrigin,
     ] {
         let value = inventory::iter::<DiagnosticField>
             .into_iter()
