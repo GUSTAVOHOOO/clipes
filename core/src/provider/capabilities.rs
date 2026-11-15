@@ -154,6 +154,7 @@ mod tests {
         });
         let provider = OpenAiProvider::new(endpoint, "fixture".into(), None).unwrap();
         let request = StructuredRequest {
+            estimate_hint: Default::default(),
             instruction: "Synthetic".into(),
             transcript: "Synthetic".into(),
             schema: json!({"type":"object"}),
@@ -221,6 +222,7 @@ mod tests {
                     _ => Box::new(OllamaProvider::new(endpoint, "fixture".into(), None).unwrap()),
                 };
                 let request = StructuredRequest {
+                    estimate_hint: Default::default(),
                     instruction: "Synthetic".into(),
                     transcript: "Synthetic".into(),
                     schema: json!({"type":"object","properties":{"schemaVersion":{"enum":[1]}},"required":["schemaVersion"],"additionalProperties":false}),

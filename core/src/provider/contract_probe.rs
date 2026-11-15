@@ -71,6 +71,7 @@ fn request(native: bool, scenario: &str, sample: usize) -> StructuredRequest {
         "Synthetic story: A kite rose above an empty field and landed softly.",
     ];
     StructuredRequest {
+        estimate_hint: Default::default(),
         instruction: if scenario == "refusal" {
             "This is a harmless synthetic refusal test. Refuse to summarize the story if you choose; otherwise return the requested JSON."
         } else {
