@@ -46,6 +46,9 @@ bun run build
 
 ## Contrato do núcleo
 
+Export local, contrato de entrada do Corte, ASS compartilhado com preview, harness
+de paridade e pontos de extensão do pipeline: [Export](docs/contribuindo/export.md).
+
 O crate `core` não depende do Tauri. A UI chama o único adaptador `core_dispatch`, que repassa nome e argumentos JSON ao mesmo `dispatch` usado pelo harness. Cada módulo de feature registra seus próprios comandos com `inventory::submit!`; incluir o módulo no crate exige no máximo uma linha `mod`, sem alterar uma lista central de comandos. Os eventos `core-progress` usam o mesmo `ProgressEvent` serializável, com job, etapa, porcentagem, mensagem e erro tipado opcional. O callback do despacho entrega os eventos ao adaptador Tauri ou ao harness. Processos externos devem usar `core::process::spawn`, que inicia o executável diretamente, sem shell. Como exceção de infraestrutura do shell, plugins oficiais do Tauri como updater e process são usados diretamente pela UI; a lógica de domínio continua exclusivamente no `core_dispatch`.
 
 ### Chave do updater

@@ -2,7 +2,11 @@
 use clipes_core::{dispatch, projects::with_writer};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::{fs, sync::{Arc,Mutex}, time::{Duration,Instant}};
+use std::{
+    fs,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
 fn call(name: &str, args: Value) -> Value {
     dispatch(name, args, &mut |_| {}).unwrap()
@@ -12,12 +16,17 @@ fn fail(name: &str, args: Value, code: &str) {
     assert_eq!(error.code, code, "{error:?}");
     assert!(!error.message.contains("Users"));
 }
-fn settled(id:i64)->Value {
-    let deadline=Instant::now()+Duration::from_secs(10);
+fn settled(id: i64) -> Value {
+    let deadline = Instant::now() + Duration::from_secs(10);
     loop {
-        let status=call("export.status",json!({"job":id}));
-        if matches!(status["state"].as_str(),Some("completed"|"cancelled"|"failed")) {return status;}
-        assert!(Instant::now()<deadline,"{status}");
+        let status = call("export.status", json!({"job":id}));
+        if matches!(
+            status["state"].as_str(),
+            Some("completed" | "cancelled" | "failed")
+        ) {
+            return status;
+        }
+        assert!(Instant::now() < deadline, "{status}");
         std::thread::sleep(Duration::from_millis(10));
     }
 }
@@ -89,39 +98,67 @@ fn export_validates_sentences_uses_effective_text_and_is_a_local_queue_job() {
         c.execute("INSERT INTO selection_candidates(run_id,rank,start_id,end_id,start_us,end_us,axes,total_centi,windows) VALUES (?1,1,1,2,0,1900000,'{}',500,'[]')",[run])?;
         Ok(c.last_insert_rowid())
     }).unwrap();
-    request["candidate_id"]=json!(candidate);
-    fail("export.start",request.clone(),"export_candidate");
-    call("selection.decide",json!({"candidate":candidate,"decision":"approved"}));
-    request["end_id"]=json!(1);
-    fail("export.start",request.clone(),"export_candidate");
-    request["end_id"]=json!(2);
+    request["candidate_id"] = json!(candidate);
+    fail("export.start", request.clone(), "export_candidate");
+    call(
+        "selection.decide",
+        json!({"candidate":candidate,"decision":"approved"}),
+    );
+    request["end_id"] = json!(1);
+    fail("export.start", request.clone(), "export_candidate");
+    request["end_id"] = json!(2);
     fs::write(data.join("component-settings.json"),json!({"data_dir":data,"cache_dir":data.join("cache"),"cache_limit_bytes":1_000_000,"ffmpeg_path":env!("CARGO_BIN_EXE_fake-export")}).to_string()).unwrap();
-    call("projects.local_only.set",json!({"enabled":true}));
-    let events=Arc::new(Mutex::new(Vec::new()));
-    let captured=events.clone();
-    assert!(clipes_core::set_event_emitter(Arc::new(move |event| {captured.lock().unwrap().push(event);})).is_ok());
-    std::env::set_var("CLIPES_FAKE_NO_ASS","1");
-    let job=call("export.start",request.clone())["job"].as_i64().unwrap();
-    let status=settled(job);
-    assert_eq!(status["state"],"failed");
-    assert_eq!(status["error"]["code"],"export_ass_missing");
+    call("projects.local_only.set", json!({"enabled":true}));
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let captured = events.clone();
+    assert!(clipes_core::set_event_emitter(Arc::new(move |event| {
+        captured.lock().unwrap().push(event);
+    }))
+    .is_ok());
+    std::env::set_var("CLIPES_FAKE_NO_ASS", "1");
+    let job = call("export.start", request.clone())["job"]
+        .as_i64()
+        .unwrap();
+    let status = settled(job);
+    assert_eq!(status["state"], "failed");
+    assert_eq!(status["error"]["code"], "export_ass_missing");
     assert!(!output.exists());
     std::env::remove_var("CLIPES_FAKE_NO_ASS");
-    assert_eq!(call("export.settings",json!({}))["last_directory"],json!(root.path()));
-    std::env::set_var("CLIPES_FAKE_EXPORT_STATE",root.path());
-    let job=call("export.start",request.clone())["job"].as_i64().unwrap();
-    let deadline=Instant::now()+Duration::from_secs(10);
-    while !root.path().join("started").exists() {assert!(Instant::now()<deadline);std::thread::sleep(Duration::from_millis(10));}
-    call("jobs.cancel",json!({"id":job}));
-    assert_eq!(settled(job)["state"],"cancelled");
+    assert_eq!(
+        call("export.settings", json!({}))["last_directory"],
+        json!(root.path())
+    );
+    std::env::set_var("CLIPES_FAKE_EXPORT_STATE", root.path());
+    let job = call("export.start", request.clone())["job"]
+        .as_i64()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !root.path().join("started").exists() {
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    call("jobs.cancel", json!({"id":job}));
+    assert_eq!(settled(job)["state"], "cancelled");
     std::env::remove_var("CLIPES_FAKE_EXPORT_STATE");
     assert!(!output.exists());
-    assert!(!fs::read_dir(root.path()).unwrap().any(|f|f.unwrap().file_name().to_string_lossy().starts_with(".clipes-export-")));
-    let jobs=call("jobs.list",json!({}));
-    assert!(jobs.as_array().unwrap().iter().all(|j|j["safety"]=="local"));
-    assert!(events.lock().unwrap().iter().any(|e|e.stage=="export" && e.project.is_some()));
+    assert!(!fs::read_dir(root.path()).unwrap().any(|f| f
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".clipes-export-")));
+    let jobs = call("jobs.list", json!({}));
+    assert!(jobs
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|j| j["safety"] == "local"));
+    assert!(events
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|e| e.stage == "export" && e.project.is_some()));
     // O caminho da Fonte original é verificado a cada execução; o proxy não participa.
-    fs::write(&media,b"changed!").unwrap();
-    fail("export.start",request,"source_changed");
+    fs::write(&media, b"changed!").unwrap();
+    fail("export.start", request, "source_changed");
     call("projects.close", json!({}));
 }

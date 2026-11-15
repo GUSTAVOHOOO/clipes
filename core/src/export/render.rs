@@ -274,7 +274,8 @@ pub fn render(
     if cancel.is_cancelled() {
         return Err(cancelled());
     }
-    if !captions::layout(&input.words).is_empty() && (!report.font_selected || report.font_fallback || !report.font_loaded)
+    if !captions::layout(&input.words).is_empty()
+        && (!report.font_selected || report.font_fallback || !report.font_loaded)
     {
         return Err(error(
             "export_font_missing",
