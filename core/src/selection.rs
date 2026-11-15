@@ -162,7 +162,7 @@ inventory::submit! {
         budget: Budget {
             max_calls: 2,
             max_input_tokens: 60_000,
-            max_output_tokens: 4_000,
+            max_output_tokens: 2_000,
             max_wall_clock_secs: 600,
             max_cost_micro_cents: None,
         },
