@@ -24,6 +24,7 @@ def _model_missing():
 
 
 def default_tasks():
+    from .hardware_probe import probe_task
     from .transcribe import transcribe_task, vad_task
 
     tasks = {
@@ -32,4 +33,5 @@ def default_tasks():
     }
     tasks["transcribe"] = transcribe_task()
     tasks["vad"] = vad_task()
+    tasks["probe"] = probe_task()
     return tasks
