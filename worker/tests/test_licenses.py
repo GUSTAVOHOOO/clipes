@@ -27,3 +27,12 @@ def test_cuda_extra_contains_only_reviewed_nvidia_packages():
     ok, names = policy.cuda_extra_is_only_nvidia(Path(policy.__file__).resolve().parent)
     assert ok, names
     assert names
+
+
+def test_onnx_variants_are_mutually_exclusive_and_pinned():
+    import tomllib
+    project = tomllib.loads((Path(policy.__file__).parent / "pyproject.toml").read_text())
+    extras = project["project"]["optional-dependencies"]
+    assert "onnxruntime==1.32.0" in extras["cpu"]
+    assert "onnxruntime-gpu==1.32.0; sys_platform == 'linux' or sys_platform == 'win32'" in extras["cuda"]
+    assert [{"extra": "cpu"}, {"extra": "cuda"}] in project["tool"]["uv"]["conflicts"]

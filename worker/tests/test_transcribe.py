@@ -176,7 +176,7 @@ def test_native_libraries_are_imported_before_the_stdin_reader_starts(monkeypatc
     imported = []
     monkeypatch.setattr(server.importlib, "import_module", imported.append)
     server.preload_native_libraries()
-    assert imported == ["numpy", "faster_whisper"]
+    assert imported == ["numpy", "faster_whisper", "cv2", "onnxruntime"]
     monkeypatch.setattr(
         server.importlib, "import_module", lambda name: (_ for _ in ()).throw(ImportError(name))
     )
