@@ -29,6 +29,8 @@ EXCEPTIONS = {
 # NVIDIA como extra `cuda`. Não são instaladas no CI; o script confere que o extra
 # contém apenas estes pacotes.
 NVIDIA_CUDA = {"nvidia-cublas-cu12", "nvidia-cudnn-cu12"}
+# ONNX Runtime GPU é MIT, como a variante CPU; apenas o extra CUDA a instala.
+CUDA_PACKAGES = NVIDIA_CUDA | {"onnxruntime-gpu"}
 
 CLASSIFIERS = {
     "License :: OSI Approved :: MIT License": "MIT",
@@ -82,7 +84,7 @@ def cuda_extra_is_only_nvidia(root):
     for package in lock["package"]:
         if package["name"] == "clipes-worker":
             names = {dep["name"] for dep in package["optional-dependencies"]["cuda"]}
-            return names <= NVIDIA_CUDA, names
+            return names <= CUDA_PACKAGES, names
     raise SystemExit("clipes-worker ausente do uv.lock")
 
 
@@ -102,7 +104,7 @@ def main():
     root = Path(__file__).resolve().parent
     only_nvidia, names = cuda_extra_is_only_nvidia(root)
     if not only_nvidia:
-        print(f"extra cuda contém pacotes não revisados: {sorted(names - NVIDIA_CUDA)}", file=sys.stderr)
+        print(f"extra cuda contém pacotes não revisados: {sorted(names - CUDA_PACKAGES)}", file=sys.stderr)
         failed = True
     if not checked:
         print("Nenhuma dependência verificada", file=sys.stderr)
