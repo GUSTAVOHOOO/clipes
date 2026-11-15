@@ -219,6 +219,20 @@ fn a_repair_is_its_own_cost_row_and_the_call_budget_can_forbid_it() {
     assert_eq!(direct_rows[0]["outcome"], "invalid_json");
     assert_eq!(direct_rows[1]["outcome"], "ok");
 
+    // Test the real call guard, not only a fake Provider that bypasses it.
+    let endpoint = serve(vec![good]);
+    jobs::set_ai_provider(Some(std::sync::Arc::new(
+        OpenAiProvider::new(endpoint, "m".into(), None).unwrap(),
+    )));
+    for language in ["haw", "private-invalid-value"] {
+        let mut data = input("x");
+        data.estimate_hint.language = language.into();
+        let id =
+            jobs::enqueue_ai_in_batch("example", &data, Safety::Paid, Some("bad-hint")).unwrap();
+        wait_state(id, "completed");
+        assert_eq!(rows(id)[0]["outcome"], "ok");
+    }
+
     jobs::set_ai_route(None);
     dispatch("projects.close", json!({}), &mut |_| {}).unwrap();
     let _ = std::fs::remove_dir_all(root);

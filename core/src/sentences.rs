@@ -313,7 +313,12 @@ pub fn compact_with_hint(sentences: &[Sentence]) -> CompactTranscript {
     let mut counts = std::collections::BTreeMap::<&str, usize>::new();
     for s in sentences {
         *counts
-            .entry(s.language.as_deref().unwrap_or("und"))
+            .entry(
+                s.language
+                    .as_deref()
+                    .filter(|language| crate::provider::valid_language(language))
+                    .unwrap_or("und"),
+            )
             .or_default() += s.text.chars().count();
     }
     let total: usize = counts.values().sum();

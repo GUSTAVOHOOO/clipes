@@ -207,6 +207,9 @@ pub fn input_characters(request: &StructuredRequest) -> u64 {
     (envelope.to_string().chars().count() + schema_chars) as u64
 }
 fn initial_ratio(request: &StructuredRequest) -> f64 {
+    if !request.estimate_hint.valid() {
+        return 1.0 / 3.3;
+    }
     let divisor = match request.estimate_hint.format.as_str() {
         "full" => 2.4,
         "compact" => 3.3,
@@ -220,15 +223,14 @@ pub fn token_range(
     model: &str,
     request: &StructuredRequest,
 ) -> Result<TokenRange, CoreError> {
-    let hint = &request.estimate_hint;
-    if !matches!(hint.format.as_str(), "generic" | "compact" | "full")
-        || !(matches!(hint.language.as_str(), "und" | "mul")
-            || (hint.language.len() == 2 && hint.language.bytes().all(|c| c.is_ascii_lowercase())))
-    {
-        return Err(error(
-            "invalid_request",
-            "Invalid token estimation metadata",
-        ));
+    if !request.estimate_hint.valid() {
+        crate::diagnostic::record(crate::diagnostic::DiagnosticEvent::InvalidEstimateHint);
+        let chars = input_characters(request) as f64;
+        let point = chars / 3.3;
+        return Ok(TokenRange {
+            low: (point * INITIAL_LOW).floor() as u64,
+            high: (point * INITIAL_HIGH).ceil() as u64,
+        });
     }
     let chars = input_characters(request) as f64;
     let observations = super::settings::calibration_read()?;
@@ -275,6 +277,9 @@ pub fn observe_tokens(
     code: &str,
 ) -> Result<(), CoreError> {
     let _ = token_range(profile, model, request)?;
+    if !request.estimate_hint.valid() {
+        return Ok(());
+    }
     let chars = input_characters(request);
     if !profile.is_empty()
         && chars > 0
@@ -319,7 +324,11 @@ pub fn estimate_for(
     }
     value["inputTokensLow"] = json!(range.low);
     value["inputCharacters"] = json!(input_characters(request));
-    value["estimateHint"] = json!(request.estimate_hint);
+    value["estimateHint"] = if request.estimate_hint.valid() {
+        json!(request.estimate_hint)
+    } else {
+        Value::Null
+    };
     value["initialRatio"] = json!(initial_ratio(request));
     Ok(value)
 }
@@ -349,7 +358,7 @@ pub fn observe_entry(profile: &str, target: &Target, entry: &Value) -> Result<()
     else {
         return Ok(());
     };
-    if tokens as f64 >= chars as f64 * ratio * INITIAL_LOW * TRUNCATION_THRESHOLD {
+    if hint.valid() && tokens as f64 >= chars as f64 * ratio * INITIAL_LOW * TRUNCATION_THRESHOLD {
         super::settings::calibration_add(profile, model, &hint, chars, tokens)?;
     }
     Ok(())

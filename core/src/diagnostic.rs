@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use std::{
     fs::{self, OpenOptions},
     io::{BufRead, BufReader, Write},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 /// Only these reviewed fields can be contributed by features.
@@ -39,16 +39,23 @@ inventory::collect!(DiagnosticField);
 #[derive(Clone, Copy)]
 pub enum DiagnosticEvent {
     ComponentFailure,
+    InvalidEstimateHint,
 }
 impl DiagnosticEvent {
     fn code(self) -> &'static str {
         match self {
             Self::ComponentFailure => "component_failure",
+            Self::InvalidEstimateHint => "invalid_estimate_hint",
         }
     }
 }
+fn log_dir() -> Option<PathBuf> {
+    std::env::var_os("CLIPES_DATA_DIR")
+        .map(PathBuf::from)
+        .or_else(|| dirs::data_local_dir().map(|p| p.join("Clipes")))
+}
 pub fn record(event: DiagnosticEvent) {
-    if let Some(dir) = dirs::data_local_dir().map(|p| p.join("Clipes")) {
+    if let Some(dir) = log_dir() {
         if fs::create_dir_all(&dir).is_ok() {
             if let Ok(mut file) = OpenOptions::new()
                 .create(true)
@@ -67,6 +74,7 @@ fn log_lines(path: &Path) -> Vec<&'static str> {
             // Reconstruct messages from an allowlist on export, even if the file is edited.
             let message = match line.as_str() {
                 "component_failure" => Some("Erro: falha em componente"),
+                "invalid_estimate_hint" => Some("Metadados de estimativa inválidos"),
                 _ => None,
             };
             if let Some(message) = message {
@@ -80,8 +88,8 @@ fn log_lines(path: &Path) -> Vec<&'static str> {
     lines.into_iter().collect()
 }
 fn get(_: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let logs = dirs::data_local_dir()
-        .map(|p| log_lines(&p.join("Clipes").join("diagnostic.log")))
+    let logs = log_dir()
+        .map(|p| log_lines(&p.join("diagnostic.log")))
         .unwrap_or_default();
     let mut lines = vec![
         format!("Clipes: {}", env!("CARGO_PKG_VERSION")),

@@ -68,3 +68,13 @@ fn compact_metadata_uses_character_weighted_language_and_mixed_bucket() {
         "pt"
     );
 }
+
+#[test]
+fn compact_treats_unsupported_and_malformed_whisper_codes_as_unknown() {
+    let mut rows = segment(&[word(0, "aloha.", 0, 1), word(1, "outro.", 2, 3)]);
+    rows[0].language = Some("haw".into());
+    rows[1].language = Some("private-invalid-value".into());
+    let result = clipes_core::sentences::compact_with_hint(&rows);
+    assert_eq!(result.hint.language, "und");
+    assert_eq!(result.hint.format, "compact");
+}

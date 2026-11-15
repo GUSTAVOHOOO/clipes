@@ -81,6 +81,15 @@ pub struct EstimateHint {
     pub format: String,
     pub language: String,
 }
+impl EstimateHint {
+    pub(crate) fn valid(&self) -> bool {
+        matches!(self.format.as_str(), "generic" | "compact" | "full")
+            && (matches!(self.language.as_str(), "und" | "mul") || valid_language(&self.language))
+    }
+}
+pub(crate) fn valid_language(language: &str) -> bool {
+    language.len() == 2 && language.bytes().all(|c| c.is_ascii_lowercase())
+}
 impl Default for EstimateHint {
     fn default() -> Self {
         Self {

@@ -53,6 +53,38 @@ fn token_estimates_have_conservative_ranges_and_are_profile_specific() {
         settings["entries"][0]["samples"].as_array().unwrap().len(),
         20
     );
+    // Bad internal metadata must use the uncalibrated generic range, never learn or leak.
+    let snapshot = std::fs::read(root.join("token-calibration.json")).unwrap();
+    for bad in ["haw", "private-invalid-value"] {
+        let mut invalid = r.clone();
+        invalid.estimate_hint.language = bad.into();
+        let mut generic = invalid.clone();
+        generic.estimate_hint = Default::default();
+        let expected = cost::token_range("unobserved", "m", &generic).unwrap();
+        assert_eq!(cost::token_range("p", "m", &invalid).unwrap(), expected);
+        cost::observe_tokens("p", "m", &invalid, chars / 2, "ok").unwrap();
+        let target = cost::Target::Api {
+            provider: "openai".into(),
+            model: "m".into(),
+            local: true,
+        };
+        let estimate = cost::estimate_for(&target, "p", &invalid).unwrap();
+        cost::observe_entry(
+            "p",
+            &target,
+            &json!({"code":"ok","usage":{"inputTokens":chars / 2},"estimate":estimate}),
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read(root.join("token-calibration.json")).unwrap(),
+            snapshot
+        );
+    }
+    let diagnostic = clipes_core::dispatch("diagnostic.get", json!({}), &mut |_| {})
+        .unwrap()
+        .to_string();
+    assert!(diagnostic.contains("Metadados de estimativa inválidos"));
+    assert!(!diagnostic.contains("private-invalid-value"));
     let path = root.join("token-calibration.json");
     std::fs::write(&path, b"invalid").unwrap();
     let no_calibration = cost::token_range("p", "m", &r).unwrap();
