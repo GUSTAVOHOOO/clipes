@@ -31,6 +31,8 @@ struct CallScope {
     log: Vec<Value>,
     guard: Option<CallGuard>,
     transport: Option<Value>,
+    /// When the executor's time budget (#121) ends; timeouts never go past it (#147).
+    deadline: Option<std::time::Instant>,
 }
 thread_local! {
     static SCOPE: std::cell::RefCell<Option<CallScope>> = const { std::cell::RefCell::new(None) };
@@ -51,10 +53,32 @@ pub(crate) fn with_call_scope<T>(
         log: Vec::new(),
         guard,
         transport: None,
+        deadline: None,
     }));
     let result = f();
     let scope = SCOPE.replace(previous).unwrap_or_default();
     (result, scope.log)
+}
+
+/// Sets, for the open scope, the instant the executor's time budget ends (#147). Called by the
+/// AI job executor inside the scope; outside one it does nothing.
+pub(crate) fn set_deadline(deadline: Option<std::time::Instant>) {
+    SCOPE.with_borrow_mut(|scope| {
+        if let Some(scope) = scope {
+            scope.deadline = deadline;
+        }
+    });
+}
+
+/// What is left of the executor's time budget, read before each send; `None` outside a scope
+/// or when the scope has no deadline.
+pub(crate) fn remaining_budget() -> Option<Duration> {
+    SCOPE.with_borrow(|scope| {
+        scope
+            .as_ref()
+            .and_then(|s| s.deadline)
+            .map(|d| d.saturating_duration_since(std::time::Instant::now()))
+    })
 }
 
 /// Called immediately before every HTTP send, including rate-limit retries and repairs.

@@ -2,7 +2,6 @@ use super::control::{cancelled, sleep, CANCEL_POLL};
 use super::*;
 use reqwest::blocking::{Client, RequestBuilder};
 
-const ANTHROPIC_DEFAULT_MAX_OUTPUT_TOKENS: u64 = 8192;
 const OLLAMA_DEFAULT_CONTEXT: u64 = 4096;
 #[derive(Clone, Copy)]
 enum Kind {
@@ -22,6 +21,10 @@ pub(super) struct Adapter {
     kind: Kind,
     capabilities: capabilities::Capabilities,
     context: Option<u64>,
+    /// The profile's own timeout (#147); exact, but still capped by the executor's budget.
+    profile_timeout: Option<Duration>,
+    /// High estimate of the input tokens, which lengthens the default timeout (#147).
+    input_high: u64,
 }
 macro_rules! provider {
     ($name:ident, $kind:ident, $capabilities:literal) => {
@@ -45,6 +48,8 @@ macro_rules! provider {
                     kind: Kind::$kind,
                     capabilities,
                     context: None,
+                    profile_timeout: None,
+                    input_high: 0,
                 }))
             }
             pub(super) fn confirm(&mut self, confirmed: bool) {
@@ -59,6 +64,18 @@ macro_rules! provider {
             /// reference of the input-truncation defence (#145) for every kind.
             pub fn with_context(mut self, context: Option<u64>) -> Self {
                 self.0.context = context;
+                self
+            }
+            /// The timeout of the profile in seconds, if it sets one, and the high estimate of
+            /// the input tokens (#147). Without a profile timeout, the one per kind grows with
+            /// the input (`limits::timeout`); the executor's remaining time caps both.
+            pub fn with_call_limits(
+                mut self,
+                profile_timeout_secs: Option<u64>,
+                input_high: u64,
+            ) -> Self {
+                self.0.profile_timeout = profile_timeout_secs.map(Duration::from_secs);
+                self.0.input_high = input_high;
                 self
             }
         }
@@ -195,6 +212,25 @@ impl Adapter {
             self.capabilities.input_truncation(&response),
         ))
     }
+    /// The timeout of the next HTTP attempt (#147): the profile's own value, else the one per
+    /// kind (#117) plus a share proportional to the input, capped by what is left of the
+    /// executor's time budget. With no time left nothing is sent.
+    fn attempt_timeout(&self, local: bool) -> Result<Duration, CoreError> {
+        let remaining = control::remaining_budget();
+        if remaining.is_some_and(|left| left.is_zero()) {
+            return Err(error(
+                "time_budget_exhausted",
+                "The time budget ended before the call; nothing was sent",
+            ));
+        }
+        Ok(limits::timeout(
+            self.timeouts.endpoint(local),
+            self.profile_timeout.or(self.timeout),
+            self.input_high,
+            remaining,
+        )
+        .duration)
+    }
     /// An HTTP failure whose body reports token usage was billed: carry `{usage, calls}`.
     fn http_failure(&self, reply: &Reply, code: &str, message: &str, calls: u64) -> CoreError {
         let mut e = error(code, message);
@@ -250,11 +286,9 @@ impl Adapter {
             }
         };
         url.set_path(&path);
+        // The timeout of each attempt is set on the request (`attempt_timeout`), so the time
+        // the executor has left (#121) shrinks across retry-after waits and repairs.
         let client = Client::builder()
-            .timeout(
-                self.timeout
-                    .unwrap_or_else(|| self.timeouts.endpoint(local)),
-            )
             .redirect(reqwest::redirect::Policy::none())
             .no_proxy()
             .resolve_to_addrs(&host, &addresses)
@@ -271,6 +305,7 @@ impl Adapter {
             let mut call = client
                 .post(url.clone())
                 .header(reqwest::header::CONTENT_TYPE, "application/json")
+                .timeout(self.attempt_timeout(local)?)
                 .body(payload.clone());
             if let Some(key) = &self.key {
                 call = match self.kind {
@@ -424,7 +459,7 @@ impl Adapter {
                     json!({"model":self.model,"messages":m})
                 }
                 Kind::Anthropic => {
-                    json!({"model":self.model,"max_tokens":request.max_output_tokens.unwrap_or(ANTHROPIC_DEFAULT_MAX_OUTPUT_TOKENS),"system":system,"messages":messages})
+                    json!({"model":self.model,"max_tokens":request.max_output_tokens.unwrap_or(limits::FALLBACK_MAX_OUTPUT_TOKENS),"system":system,"messages":messages})
                 }
                 Kind::Gemini => {
                     json!({"systemInstruction":{"parts":[{"text":system}]},"contents":messages.iter().map(|m| json!({"role":if m["role"]=="assistant" {"model"} else {"user"},"parts":[{"text":m["content"]}]})).collect::<Vec<_>>()})

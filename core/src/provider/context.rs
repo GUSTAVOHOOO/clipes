@@ -706,6 +706,25 @@ pub(super) fn cached_effective(t: &ContextTarget) -> u64 {
     resolve_value(&t.kind, local, t.user_context, &found, catalog_limits(t)).value
 }
 
+/// What the output limits (#147) read about a profile: the effective context (the same number
+/// as `cached_effective`) and the model's `max_output` (server, else catalog: the one
+/// `provider.context.get` shows as `maxOutput`).
+pub(super) struct LimitsInput {
+    pub context: u64,
+    pub model_max_output: Option<u64>,
+}
+
+/// Cache only, no probe and no network.
+pub(super) fn cached_limits(t: &ContextTarget) -> LimitsInput {
+    let local = is_loopback_endpoint(&t.endpoint);
+    let found = cache_get(t).unwrap_or_default();
+    let r = resolve_value(&t.kind, local, t.user_context, &found, catalog_limits(t));
+    LimitsInput {
+        context: r.value,
+        model_max_output: r.max_output.map(|(n, _)| n),
+    }
+}
+
 /// The context a call is known to run with, for the input-truncation defence (#145): for Ollama
 /// the `num_ctx` sent; for the others only a value that is not the blind fallback or the
 /// catalog (the user's, the loaded one or a measured one), because pinning against a guess

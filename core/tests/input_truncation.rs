@@ -158,14 +158,16 @@ fn after_calibration_it_needs_pinned_and_below_the_estimate() {
     for _ in 0..3 {
         cost::observe_tokens("local", "model", &big, chars / 3, "ok").unwrap();
     }
-    // Pinned (1000 of 1000) but far below what 20 000 characters need: a cut.
-    let (url, _, server) = serve("127.0.0.1", vec![ollama(1000)]);
+    // 20 000 characters in a context of 1000 tokens: since #147 the high estimate leaves no
+    // room for an answer, so the call is refused before any send (no connection is made).
+    let (url, bodies, server) = serve("127.0.0.1", vec![]);
     configure(&url, "ollama", Some(1000));
     assert_eq!(
         costed(&big.transcript).unwrap_err().code,
-        "context_truncated"
+        "output_space_insufficient"
     );
     server.join().unwrap();
+    assert!(bodies.lock().unwrap().is_empty());
     // The suspect call did not calibrate.
     let estimate = cost::estimate_for(&target(), "local", &big).unwrap();
     assert_eq!(estimate["calibrationSamples"], 3);
