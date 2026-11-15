@@ -440,16 +440,12 @@ pub fn run_with(
             other => other?,
         };
         let config = engine.block_config();
-        commit(
-            id,
-            transcript,
+        let step = Step {
             resume,
             len,
             final_block,
-            duration_us,
-            block,
-            config,
-        )?;
+        };
+        commit(id, transcript, step, duration_us, block, config)?;
     }
     crate::sentences::segment_transcript(transcript)?;
     Ok(())
@@ -457,16 +453,26 @@ pub fn run_with(
 
 /// Grava as linhas do bloco, o novo ponto de retomada e o checkpoint do job numa só
 /// transação: ou o bloco inteiro vale, ou nada vale.
-fn commit(
-    job: i64,
-    transcript: i64,
+/// Onde o bloco começa, quanto mede e se é o último da Fonte.
+struct Step {
     resume: i64,
     len: i64,
     final_block: bool,
+}
+
+fn commit(
+    job: i64,
+    transcript: i64,
+    step: Step,
     duration_us: i64,
     block: BlockResult,
     config: Option<(String, String)>,
 ) -> Result<(), CoreError> {
+    let Step {
+        resume,
+        len,
+        final_block,
+    } = step;
     if block.covered_us == 0 && !final_block {
         return Err(bad_result());
     }

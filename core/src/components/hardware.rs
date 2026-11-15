@@ -806,6 +806,29 @@ inventory::submit! { CommandRegistration { name: "transcription.hardware.choose"
 inventory::submit! { CommandRegistration { name: "transcription.hardware.diagnostic", execute: diagnostic_record } }
 inventory::submit! { crate::diagnostic::DiagnosticField { kind: crate::diagnostic::DiagnosticKind::GpuVram, value: diagnostic_text } }
 
+/// O modelo da escolha manual, se houver e ainda for válida; o resto do tempo `None`.
+pub(crate) fn manual_model() -> Option<String> {
+    let settings = load_settings().ok()?;
+    let manual = read_store(&settings).manual?;
+    candidates(&settings, detect_ram())
+        .iter()
+        .any(|c| c.enabled && c.config == manual)
+        .then_some(manual.model)
+}
+
+/// A configuração para um modelo já fixado numa Transcrição: a em uso, se for do mesmo modelo;
+/// senão a primeira opção habilitada desse modelo. Nunca troca de modelo.
+pub(crate) fn config_for_model(settings: &Settings, model: &str) -> Option<Config> {
+    let current = effective(settings);
+    if current.model == model {
+        return Some(current);
+    }
+    candidates(settings, detect_ram())
+        .into_iter()
+        .find(|c| c.enabled && c.config.model == model)
+        .map(|c| c.config)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -842,27 +865,4 @@ mod tests {
         assert_eq!(Config::new(&TURBO, "cuda", "int8").batch_size(), 1);
         assert_eq!(Config::new(&SMALL, "cpu", "int8").batch_size(), 8);
     }
-}
-
-/// O modelo da escolha manual, se houver e ainda for válida; o resto do tempo `None`.
-pub(crate) fn manual_model() -> Option<String> {
-    let settings = load_settings().ok()?;
-    let manual = read_store(&settings).manual?;
-    candidates(&settings, detect_ram())
-        .iter()
-        .any(|c| c.enabled && c.config == manual)
-        .then_some(manual.model)
-}
-
-/// A configuração para um modelo já fixado numa Transcrição: a em uso, se for do mesmo modelo;
-/// senão a primeira opção habilitada desse modelo. Nunca troca de modelo.
-pub(crate) fn config_for_model(settings: &Settings, model: &str) -> Option<Config> {
-    let current = effective(settings);
-    if current.model == model {
-        return Some(current);
-    }
-    candidates(settings, detect_ram())
-        .into_iter()
-        .find(|c| c.enabled && c.config.model == model)
-        .map(|c| c.config)
 }
