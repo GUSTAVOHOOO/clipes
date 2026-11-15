@@ -1,6 +1,7 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { version } from '../../package.json';
 
+const groqRetryTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('groq-retry-test');
 const sourceTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('source-test');
 const budgetTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('budget-test');
 let sourceItems = [
@@ -18,7 +19,8 @@ let jobItems = [
     { id: 5, kind: 'ai:script', state: 'completed', progress: 100, project: 'test-project', budgetPause: null, taskCost: {costLabel: 'consome a cota do plano'} },
   ] : []),
 ];
-let transcribeMock: { transcript: object | null; job: object | null } = { transcript: null, job: null };
+let transcribeMock: { transcript: object | null; job: object | null } = groqRetryTest ? {transcript:{id:1,engine:'groq',state:'running',resume_us:4e6,duration_us:10e6,words:1},job:{id:99,state:'cancelled',progress:40}} : { transcript: null, job: null };
+if (groqRetryTest) sourceItems.push({id:4,path:'/test/downloaded.mp4',status:'available',available:true,verified:true,permission:{status:'none'}});
 let providerMock = { kind: 'openai', endpoint: '', model: '', nativeSchema: false, context: null as number | null, keyLastFour: null as string | null, remote: false, confirmed: false, confirmedEndpoints: [] as string[] };
 type ProfileMock = { id: string; label: string; kind: string; endpoint: string; model: string; nativeSchema: boolean; ownKey: boolean; context: number | null; keyLastFour: string | null };
 let profileMocks: ProfileMock[] = [];
@@ -54,8 +56,9 @@ const assistantTasks = () => ({ projectLocalOnly: sourceTest && projectVetoMock,
   return { task, choice: missing ? '' : own, source: missing ? 'none' : own ? 'task' : assistantMock.default ? 'default' : 'none', profile, localOnly, blocked: (localOnly || (sourceTest && projectVetoMock)) && !!profile && !profile.local, missing,
     suggestion: !profile && firstLocal ? { choice: `profile:${firstLocal.id}`, label: firstLocal.label, measured: false } : null };
 }) });
-let groqKeyConfigured = false;
-let groqConsent = false;
+let groqKeyConfigured = groqRetryTest;
+let groqConsent = groqRetryTest;
+let groqUncertain = groqRetryTest;
 let providerCliMock = { selected: '', codexConfirmed: false, claudeConfirmed: false };
 export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   if (import.meta.env.VITE_CORE_MOCK === '1' && !isTauri()) {
@@ -174,7 +177,9 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (sourceTest && new URLSearchParams(location.search).has('transcript-test') && name === 'transcription.status') return {transcript:{id:1,state:'complete',resume_us:36000000000,duration_us:36000000000,words:30000},job:null} as T;
     if (name === 'transcription.status') return { transcript: transcribeMock.transcript, job: transcribeMock.job } as T;
     if (name === 'transcription.start') {
-      const {engine = 'local', replace_confirmed} = args as {engine?:string;replace_confirmed?:boolean};
+      const {engine = 'local', replace_confirmed, retry_confirmed} = args as {engine?:string;replace_confirmed?:boolean;retry_confirmed?:boolean};
+      if (engine === 'groq' && groqUncertain && !retry_confirmed) throw {code:'transcription_retry_confirmation',usage:{estimate:{kind:'usd',usd:0.00012}}};
+      groqUncertain = false;
       const previous = transcribeMock.transcript as {engine?:string;state?:string} | null;
       if (previous && previous.engine !== engine && !replace_confirmed) throw {code:'engine_change_confirmation',usage:{blocks:1,paid_audio_us:previous.engine==='groq'?4e6:0,paid_usd:previous.engine==='groq'?0.00012:0}};
       if (engine === 'groq' && !groqConsent) throw {code:'confirmation_required'};

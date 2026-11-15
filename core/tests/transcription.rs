@@ -478,6 +478,18 @@ fn switching_partial_requires_loss_review_and_erases_words_without_losing_charge
     assert_eq!(loss["blocks"], 1);
     assert_eq!(loss["paid_audio_us"], 8_000_000);
     assert_eq!(env.rows(source)[0]["text"], "REMOTA");
+    // Uma parcial anterior ao #51 não tem histórico de blocos: não inventar uma contagem.
+    clipes_core::projects::with_writer(|c| {
+        c.execute("DELETE FROM transcription_blocks", [])?;
+        Ok(())
+    })
+    .unwrap();
+    let legacy = run(
+        "transcription.start",
+        json!({"project":env.project,"source_id":source,"engine":"local"}),
+    )
+    .unwrap_err();
+    assert!(legacy.usage.unwrap()["blocks"].is_null());
     run(
         "transcription.start",
         json!({"project":env.project,"source_id":source,"engine":"local","replace_confirmed":true}),
@@ -488,6 +500,18 @@ fn switching_partial_requires_loss_review_and_erases_words_without_losing_charge
     assert_complete_transcript(&env.rows(source));
     let retained=clipes_core::projects::with_reader(|c|c.query_row("SELECT COUNT(*) FROM transcription_calls WHERE transcript_id IS NULL AND state='completed'",[],|r|r.get::<_,i64>(0))).unwrap();
     assert_eq!(retained, 1);
+}
+
+#[test]
+fn an_unknown_saved_engine_never_falls_back_to_local() {
+    let env = Env::new(5);
+    let source = env.import(0);
+    clipes_core::projects::with_writer(|c| {
+        c.execute("INSERT INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,duration_us) VALUES (?1,0,'unsupported','model','','remote',5000000)",[source])?;
+        Ok(())
+    }).unwrap();
+    assert_eq!(env.start(source).unwrap_err().code, "invalid_engine");
+    assert!(env.job_state("transcription").is_none());
 }
 
 #[test]
@@ -635,7 +659,7 @@ fn groq_timeout_preserves_partial_and_requires_confirmation_to_retry_after_reope
                 }
             }
             if index == 1 {
-                std::thread::sleep(Duration::from_millis(250));
+                std::thread::sleep(Duration::from_millis(1000));
             }
             let body = include_str!("fixtures/groq-words.json");
             let _ = write!(
@@ -654,7 +678,7 @@ fn groq_timeout_preserves_partial_and_requires_confirmation_to_retry_after_reope
         "fake".into(),
         endpoint,
         env.root.path().join(exe("fake-ffmpeg")),
-        Duration::from_millis(100),
+        Duration::from_millis(500),
     );
     let e = clipes_core::transcription::run_with(
         &mut engine,
@@ -696,4 +720,11 @@ fn groq_timeout_preserves_partial_and_requires_confirmation_to_retry_after_reope
     env.wait_transcribe("failed");
     assert_eq!(env.status(source)["transcript"]["engine"], "groq");
     assert_eq!(env.status(source)["transcript"]["resume_us"], 8_000_000);
+    // Encerrar o job não autoriza uma repetição paga pelo botão Retomar.
+    run("projects.local_only.set", json!({"enabled":false})).unwrap();
+    // Mesmo com chave real no cofre da máquina, esta regressão nunca enfileira rede.
+    run("components.settings.set",json!({"data_dir":env.root.path().join("data"),"cache_dir":env.root.path().join("cache"),"cache_limit_bytes":1_000_000,"ffmpeg_path":null})).unwrap();
+    let e = env.start(source).unwrap_err();
+    assert_eq!(e.code, "transcription_retry_confirmation");
+    assert_eq!(e.usage.unwrap()["estimate"]["kind"], "usd");
 }

@@ -315,7 +315,8 @@ try {
   await downloadedRow.getByRole('button', {name:'Trocar e transcrever'}).click();
   const engineReplace = page.getByRole('alertdialog', {name:'Apagar Transcrição parcial?'});
   await engineReplace.waitFor();
-  assert.match(await engineReplace.innerText(), /apaga 1 blocos/);
+  assert.match(await engineReplace.innerText(), /Blocos concluídos que serão apagados: 1/);
+  await page.screenshot({path:'shots/groq-engine-change.png',fullPage:true});
   await engineReplace.getByRole('button', {name:'Cancelar'}).click();
   await engineReplace.waitFor({state:'hidden'});
   await downloadedRow.getByRole('button', {name:'Trocar e transcrever'}).click();
@@ -327,6 +328,7 @@ try {
   assert.match(await audioConsent.innerText(), /api\.groq\.com/);
   assert.match(await audioConsent.innerText(), /cofre do sistema/);
   assert.match(await audioConsent.innerText(), /Custo estimado/);
+  await page.screenshot({path:'shots/groq-audio-consent.png',fullPage:true});
   await audioConsent.getByRole('button', {name:'Confirmar e transcrever'}).click();
   await audioConsent.waitFor({state:'hidden'});
   await downloadedRow.getByText('Transcrevendo: 40%').waitFor();
@@ -440,6 +442,19 @@ try {
   assert.ok(await timeline.locator('[data-timeline-row]').count() < 100);
   await timeline.evaluate(e => { e.scrollTop = e.scrollHeight; });
   await timeline.getByText('Frase 30000', { exact: true }).waitFor();
+  await page.goto(`${url}?source-test=1&groq-retry-test=1`);
+  const uncertainAudio = page.locator('li').filter({hasText:'/test/downloaded.mp4'}).first();
+  await uncertainAudio.getByRole('button',{name:'Retomar'}).click();
+  const retryAudio = page.getByRole('alertdialog',{name:'Repetir chamada incerta?'});
+  await retryAudio.waitFor();
+  assert.match(await retryAudio.innerText(),/nova cobrança/);
+  assert.match(await retryAudio.innerText(),/Custo estimado: US\$ 0.00012/);
+  await retryAudio.getByRole('button',{name:'Cancelar'}).click();
+  await retryAudio.waitFor({state:'hidden'});
+  await uncertainAudio.getByRole('button',{name:'Retomar'}).click();
+  await retryAudio.getByRole('button',{name:'Confirmar e transcrever'}).click();
+  await retryAudio.waitFor({state:'hidden'});
+  await uncertainAudio.getByText('Transcrevendo: 40%').waitFor();
   assert.deepEqual(errors, []);
   console.log('UI keyboard, preferences, about, drawer and screenshots: OK');
 } finally { await browser?.close(); server.kill(); }

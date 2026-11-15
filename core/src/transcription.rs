@@ -302,9 +302,11 @@ pub(crate) fn run(
     if engine == "groq" {
         let mut engine = groq::GroqEngine::start()?;
         run_with(&mut engine, id, source_id, project, stop)
-    } else {
+    } else if engine == "local" {
         let mut engine = LocalEngine::start()?;
         run_with(&mut engine, id, source_id, project, stop)
+    } else {
+        Err(error("invalid_engine", "Motor de transcrição inválido."))
     }
 }
 
@@ -552,6 +554,9 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         Some(Value::String(e)) if e == "local" || e == "groq" => e.as_str(),
         _ => return Err(error("invalid_engine", "Motor de transcrição inválido.")),
     };
+    if !matches!(engine, "local" | "groq") {
+        return Err(error("invalid_engine", "Motor de transcrição inválido."));
+    }
     let switching = existing.as_ref().is_some_and(|t| t.2 != engine);
     if switching && existing.as_ref().is_some_and(|t| t.1 == "complete") {
         return Err(error(
@@ -563,6 +568,9 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         return Ok(
             json!({"transcript_id":existing.as_ref().unwrap().0,"state":"complete","job_id":null}),
         );
+    }
+    if engine == "groq" && projects::project_local_only()? {
+        return Err(crate::provider::local_only_violation());
     }
     let active: Option<(i64, String)> = projects::with_reader(|c| {
         c.query_row(
@@ -587,6 +595,24 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         );
         e.usage = Some(loss(existing.as_ref().unwrap().0)?);
         return Err(e);
+    }
+    if let Some((transcript, _, _)) = existing
+        .as_ref()
+        .filter(|_| !switching && active.is_none() && v["retry_confirmed"] != true)
+    {
+        let duration = projects::with_reader(|c| {
+            c.query_row(
+                "SELECT end_us-start_us FROM transcription_calls WHERE transcript_id=?1 AND start_us=(SELECT resume_us FROM transcripts WHERE id=?1) AND state IN ('pending','uncertain') ORDER BY id DESC LIMIT 1",
+                [transcript], |r|r.get::<_,i64>(0)).optional()
+        })?;
+        if let Some(duration) = duration {
+            let mut e = error(
+                "transcription_retry_confirmation",
+                "O resultado da chamada é incerto. Repetir pode gerar nova cobrança.",
+            );
+            e.usage = Some(json!({"estimate":groq::estimate_cost(groq::MODEL,duration)}));
+            return Err(e);
+        }
     }
     if engine == "groq" {
         remote::guard()?;
@@ -642,7 +668,7 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 
 fn loss(transcript: i64) -> Result<Value, CoreError> {
     projects::with_reader(|c| {
-        c.query_row("SELECT MAX((SELECT COUNT(*) FROM transcription_blocks WHERE transcript_id=?1),CASE WHEN resume_us>0 THEN 1 ELSE 0 END),COALESCE((SELECT SUM(end_us-start_us) FROM transcription_calls WHERE transcript_id=?1 AND state IN ('pending','completed','uncertain')),0),COALESCE((SELECT SUM(estimated_usd) FROM transcription_calls WHERE transcript_id=?1 AND state IN ('pending','completed','uncertain')),0) FROM transcripts WHERE id=?1",[transcript],|r|Ok(json!({"blocks":r.get::<_,i64>(0)?,"paid_audio_us":r.get::<_,i64>(1)?,"paid_usd":r.get::<_,f64>(2)?})))
+        c.query_row("SELECT CASE WHEN resume_us>0 AND NOT EXISTS (SELECT 1 FROM transcription_blocks WHERE transcript_id=?1) THEN NULL ELSE (SELECT COUNT(*) FROM transcription_blocks WHERE transcript_id=?1) END,COALESCE((SELECT SUM(end_us-start_us) FROM transcription_calls WHERE transcript_id=?1 AND state IN ('pending','completed','uncertain')),0),COALESCE((SELECT SUM(estimated_usd) FROM transcription_calls WHERE transcript_id=?1 AND state IN ('pending','completed','uncertain')),0) FROM transcripts WHERE id=?1",[transcript],|r|Ok(json!({"blocks":r.get::<_,Option<i64>>(0)?,"paid_audio_us":r.get::<_,i64>(1)?,"paid_usd":r.get::<_,f64>(2)?})))
     })
 }
 
