@@ -2,7 +2,7 @@
 //!
 //! Um orçamento (`ai_budgets`) soma as linhas de `provider_costs` do escopo desde `since`.
 //! Antes de cada chamada, o executor confere `acumulado + estimativa da chamada` contra cada
-//! limite. Se a chamada não cabe, nada é enviado: o job volta à fila e só a fila daquele
+//! limite. Se a primeira chamada não cabe, nada é enviado: o job volta à fila e só a fila daquele
 //! escopo pausa (`ai_pauses`), com os resultados já gravados intactos. O usuário continua com
 //! `jobs.budget.continue`, que pode trazer um novo teto.
 //!
@@ -91,7 +91,7 @@ fn next_call(estimate: &Value) -> Next {
     }
 }
 
-/// Primeiro limite que `n` chamadas a mais violariam, ou `None` se couberem.
+/// Primeiro limite que a próxima chamada violaria, ou `None` se couber.
 fn violation(scope: &str, limits: &Limits, used: &Value, next: &Next) -> Option<&'static str> {
     let plan_quota = next.kind == "plan_quota";
     if next.kind == "unknown" && scope == "batch" && !limits.unknown_confirmed {

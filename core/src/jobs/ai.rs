@@ -61,28 +61,34 @@ pub fn set_ai_route(route: Option<(Target, String)>) {
 
 /// O alvo do job: o fixado, ou a rota configurada da Tarefa. Sem configuração, um Provedor pago
 /// fica sem preço (custo desconhecido, nunca zero) e um local custa zero.
-fn route_of(task: &str, paid: bool) -> (Target, String) {
+fn route_of(task: &str, paid: bool) -> Result<(Target, String), CoreError> {
     if let Some(route) = ROUTE.lock().ok().and_then(|slot| slot.clone()) {
-        return route;
+        return Ok(route);
     }
     match cost::route_for(task) {
-        Ok(route) => route,
-        Err(_) if paid => (
+        Ok(route) => Ok(route),
+        Err(e)
+            if e.code == "local_only_violation"
+                || !PROVIDER.lock().ok().is_some_and(|p| p.is_some()) =>
+        {
+            Err(e)
+        }
+        Err(_) if paid => Ok((
             Target::Api {
                 provider: "unknown".into(),
                 model: String::new(),
                 local: false,
             },
             String::new(),
-        ),
-        Err(_) => (
+        )),
+        Err(_) => Ok((
             Target::Api {
                 provider: "local".into(),
                 model: String::new(),
                 local: true,
             },
             String::new(),
-        ),
+        )),
     }
 }
 
@@ -122,7 +128,7 @@ impl Provider for Configured {
 struct Probe<'a> {
     inner: &'a dyn Provider,
     sent: &'a AtomicBool,
-    /// Teto de chamadas HTTP deste job (a chamada e o reparo), já descontado o orçamento do escopo.
+    /// Teto de chamadas HTTP deste job; o escopo é conferido de novo antes de cada envio.
     max_calls: u64,
     /// Uma entrada por chamada HTTP que o Provedor fez (a chamada e o reparo).
     log: &'a Mutex<Vec<Value>>,
@@ -409,6 +415,12 @@ fn job_limit(task: &AiTask, estimate: &Value) -> Option<(&'static str, &'static 
     if estimate["kind"] == "plan_quota" {
         return None;
     }
+    if b.max_wall_clock_secs == 0 {
+        return Some((
+            "budget_time",
+            "O limite de tempo da Tarefa foi atingido; nada foi enviado.",
+        ));
+    }
     if estimate["inputTokens"].as_u64().unwrap_or(0) > b.max_input_tokens {
         return Some((
             "budget_input_tokens",
@@ -553,7 +565,10 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
         return emit(id, task, "done", 0, "Tarefa de IA cancelada", None);
     }
     // Orçamento: a estimativa de antes de enviar é a do #40 (`cost::estimate`).
-    let route = route_of(task, unit.paid);
+    let route = match route_of(task, unit.paid) {
+        Ok(route) => route,
+        Err(e) => return fail_fixed(id, task, e),
+    };
     let estimate = request_of(&unit)
         .and_then(|request| cost::estimate(&route.0, &request).ok())
         .unwrap_or_else(|| json!({"kind":"unknown"}));
@@ -732,7 +747,9 @@ pub(super) fn estimate(id: i64) -> Value {
     if !unit.paid {
         return json!({"kind":"zero"});
     }
-    let route = route_of(unit.task.id, true);
+    let Ok(route) = route_of(unit.task.id, true) else {
+        return json!({"kind":"unknown"});
+    };
     let Some(request) = request_of(&unit) else {
         return json!({"kind":"unknown"});
     };

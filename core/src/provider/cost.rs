@@ -158,8 +158,8 @@ fn micro_usd(tokens: u64, per_million: f64) -> u64 {
 }
 
 /// The single point that turns tokens into micro-USD for a priced model. It receives the
-/// input tokens of the request so a long-context tier (requests above a size cost more, still
-/// undecided: research #115) can replace the flat rate here without touching the callers.
+/// input tokens of the request so context tiers (research #115, a separate ticket) can replace
+/// the flat rate here without touching the callers.
 /// Today the base price applies to every request.
 pub(crate) fn price_micro_usd(price: &Price, input_tokens: u64, output_tokens: u64) -> u64 {
     micro_usd(input_tokens, price.input_per_million)

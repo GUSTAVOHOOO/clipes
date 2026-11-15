@@ -6,7 +6,7 @@ use ai_fake::*;
 use clipes_core::{
     dispatch,
     jobs::{self, Safety},
-    provider::cost::{self, Cost, Target},
+    provider::cost::Target,
 };
 use serde_json::{json, Value};
 use std::{
@@ -69,7 +69,28 @@ fn per_call_cost_rows_and_budgets() {
     let root = std::env::temp_dir().join(format!("clipes-ai-budget-{}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();
     std::env::set_var("CLIPES_DATA_DIR", root.join("data"));
-    call("projects.create", json!({"parent": root, "name": "Canal"}));
+    // Banco anterior ao #124, com a linha agregada do #40 e todas as demais migrações.
+    let project = root.join("Canal.clipes");
+    std::fs::create_dir_all(&project).unwrap();
+    let conn = rusqlite::Connection::open(project.join("project.sqlite")).unwrap();
+    conn.execute_batch("CREATE TABLE schema_migrations(id TEXT PRIMARY KEY NOT NULL)")
+        .unwrap();
+    let mut migrations: Vec<_> = inventory::iter::<clipes_core::projects::Migration>
+        .into_iter()
+        .filter(|m| !m.id.starts_with("0124_"))
+        .collect();
+    migrations.sort_by_key(|m| m.id);
+    for migration in migrations {
+        conn.execute_batch(migration.sql).unwrap();
+        conn.execute("INSERT INTO schema_migrations VALUES (?1)", [migration.id])
+            .unwrap();
+    }
+    conn.execute("INSERT INTO project(name) VALUES ('Canal')", [])
+        .unwrap();
+    conn.execute("INSERT INTO provider_costs(task,provider,model,input_tokens,output_tokens,calls,cost_kind,cost_micro_usd,table_updated_at) VALUES ('legacy-task','local','q',1,1,1,'zero',0,'legacy')", []).unwrap();
+    drop(conn);
+    call("projects.open", json!({"path":project}));
+    assert!(project.join("project.pre-migration.sqlite").exists());
     let fake = Arc::new(Fake::default());
     jobs::set_ai_provider(Some(fake.clone()));
     // US$100 por milhão de entrada e US$200 por milhão de saída: 10 + 5 tokens custam 2000 µUS$.
@@ -83,19 +104,6 @@ fn per_call_cost_rows_and_budgets() {
     };
 
     // Uma tabela antiga continua legível: linha do #40 sem job, resultado nem tentativa.
-    cost::record(
-        &Target::Api {
-            provider: "local".into(),
-            model: "q".into(),
-            local: true,
-        },
-        "legacy-task",
-        None,
-        &json!({"inputTokens": 1, "outputTokens": 1}),
-        1,
-        &Cost::Zero,
-    )
-    .unwrap();
     let legacy = call("provider.cost.list", json!({}));
     assert_eq!(legacy[0]["task"], "legacy-task");
     assert!(legacy[0]["jobId"].is_null() && legacy[0]["outcome"].is_null());
@@ -139,6 +147,7 @@ fn per_call_cost_rows_and_budgets() {
         "nenhuma chamada começa acima do teto"
     );
     assert_eq!(job(blocked)["state"], "queued");
+    assert_eq!(job(blocked)["budgetPause"], "budget_cost");
     assert_eq!(job(blocked)["attempts"], 0);
     assert!(rows(blocked).is_empty());
     // Só aquela fila pausa: outro lote segue, e o resultado parcial do lote pausado fica.
@@ -153,6 +162,7 @@ fn per_call_cost_rows_and_budgets() {
         json!({"scope":"batch","key":"b1","maxCostMicroUsd":2000 + est}),
     );
     wait_state(blocked, "completed");
+    assert!(job(blocked)["budgetPause"].is_null());
     assert_eq!(fake.count("ok: 2"), 1);
     // O acumulado agora é 4000: o próximo job pausa de novo sem enviar.
     let again = enqueue("ok: 3", "b1");
@@ -301,12 +311,32 @@ fn per_call_cost_rows_and_budgets() {
     // Também exige confirmação se o lote não tem um teto monetário configurado.
     let no_cap = enqueue("ok: no cap", "unknown-no-cap");
     assert_eq!(wait_paused("batch", "unknown-no-cap"), "cost_unknown");
+    assert_eq!(job(no_cap)["budgetPause"], "cost_unknown");
     assert_eq!(fake.count("ok: no cap"), 0);
     call(
         "jobs.budget.continue",
         json!({"scope":"batch","key":"unknown-no-cap","confirmed":true}),
     );
     wait_state(no_cap, "completed");
+
+    // O orçamento da Tarefa pausa seus lotes e persiste ao reabrir o Projeto.
+    jobs::set_ai_route(Some((api("m"), "p1".into())));
+    call(
+        "jobs.budget.set",
+        json!({"scope":"task","key":"example","maxCalls":0,"maxCostMicroUsd":null,"resetUsage":true}),
+    );
+    let stopped = enqueue("ok: task cap", "task-cap");
+    assert_eq!(wait_paused("task", "example"), "budget_calls");
+    assert_eq!(fake.count("ok: task cap"), 0);
+    call("projects.close", json!({}));
+    call("projects.open", json!({"path":project}));
+    assert_eq!(budget("task", "example")["paused"], "budget_calls");
+    call(
+        "jobs.budget.continue",
+        json!({"scope":"task","key":"example","maxCalls":1}),
+    );
+    wait_state(stopped, "completed");
+    assert_eq!(fake.count("ok: task cap"), 1);
 
     jobs::set_ai_provider(None);
     jobs::set_ai_route(None);

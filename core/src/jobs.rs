@@ -195,7 +195,7 @@ fn list(_: Value, _: &mut EventSink<'_>) -> CommandResult {
         totals_by("batch")?,
     );
     projects::with_reader(|c| {
-        let mut s = c.prepare("SELECT id,kind,safety,state,attempts,checkpoint,progress,(SELECT id FROM queue_project_identity),json_extract(result,'$.outcome'),json_extract(result,'$.cost'),batch,(SELECT profile FROM provider_costs WHERE job_id=jobs.id ORDER BY id DESC LIMIT 1) FROM jobs ORDER BY id")?;
+        let mut s = c.prepare("SELECT id,kind,safety,state,attempts,checkpoint,progress,(SELECT id FROM queue_project_identity),json_extract(result,'$.outcome'),json_extract(result,'$.cost'),batch,(SELECT profile FROM provider_costs WHERE job_id=jobs.id ORDER BY id DESC LIMIT 1),(SELECT reason FROM ai_pauses p WHERE jobs.state='queued' AND ((p.scope='task' AND jobs.kind='ai:'||p.key) OR (p.scope='batch' AND jobs.batch=p.key)) ORDER BY p.scope DESC LIMIT 1) FROM jobs ORDER BY id")?;
         let rows = s.query_map([], |r| {
             let kind = r.get::<_, String>(1)?;
             let batch = r.get::<_, Option<String>>(10)?;
@@ -204,7 +204,7 @@ fn list(_: Value, _: &mut EventSink<'_>) -> CommandResult {
                 key.and_then(|k| map.get(k)).cloned().unwrap_or(Value::Null)
             };
             Ok(json!({"id":r.get::<_,i64>(0)?,"kind":kind,"safety":r.get::<_,String>(2)?,"state":r.get::<_,String>(3)?,"attempts":r.get::<_,i64>(4)?,"checkpoint":r.get::<_,Option<String>>(5)?,"progress":r.get::<_,i64>(6)?,"project":r.get::<_,String>(7)?,"outcome":r.get::<_,Option<String>>(8)?,"cost":r.get::<_,Option<String>>(9)?,
-                "batch":batch,"profile":profile,
+                "batch":batch,"profile":profile,"budgetPause":r.get::<_,Option<String>>(12)?,
                 "taskCost":pick(&by_task, kind.strip_prefix("ai:")),
                 "profileCost":pick(&by_profile, profile.as_deref()),
                 "batchCost":pick(&by_batch, batch.as_deref())}))

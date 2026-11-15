@@ -37,8 +37,8 @@ thread_local! {
 
 /// Runs `f` (a structured request on this thread) with a ceiling of HTTP calls and collects
 /// one entry per call it makes: `{attempt, calls, usage, code, durationMs}` (the AI job
-/// executor writes a cost row per entry, #124). The adapter skips the paid repair call once the
-/// calls made reach the ceiling. Outside a scope there is no ceiling and nothing is collected,
+/// executor writes a cost row per entry, #124). The adapter checks the guard and ceiling before
+/// each send, including retries and repairs. Outside a scope there is no ceiling or collection,
 /// so the public reply of a Provider does not change.
 pub(crate) fn with_call_scope<T>(
     limit: Option<u64>,
