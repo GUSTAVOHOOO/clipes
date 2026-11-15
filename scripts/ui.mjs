@@ -560,10 +560,24 @@ try {
     assert.match(await detail.innerText(), /30%/);
     assert.equal(await review.locator('[data-preview-slot]').isEnabled(), true, 'a revisão abre o preview do candidato (#58)');
     assert.match(await review.innerText(), new RegExp(L.hintKeys));
+    assert.equal(await review.getByRole('button', { name: L.export }).isDisabled(), true, 'só exporta candidato aprovado');
     await review.focus();
     await page.keyboard.press('a');
     await review.locator('[data-review-counts]').getByText(counts(1, 0, 2)).waitFor();
     assert.equal(await review.locator('[data-candidate="1"]').getAttribute('data-status'), 'approved');
+    await review.getByRole('button', { name: L.export }).click();
+    await review.getByText(L.exportRunning).waitFor();
+    await review.getByRole('button', { name: L.exportCancel }).click();
+    await review.getByText(L.exportCancelled).waitFor();
+    await review.getByRole('button', { name: L.export }).click();
+    await review.getByText(L.exportRunning).waitFor();
+    await review.getByText(L.exportCompleted).waitFor();
+    await page.screenshot({ path: `shots/export-${L.lang}.png`, fullPage: true });
+    await page.evaluate(() => { const u = new URL(location.href); u.searchParams.set('export-exists', '1'); history.replaceState(null, '', u); });
+    await review.getByRole('button', { name: L.export }).click();
+    await review.getByRole('alert').getByText(L.exportExists).waitFor();
+    await page.evaluate(() => { const u = new URL(location.href); u.searchParams.delete('export-exists'); history.replaceState(null, '', u); });
+    await review.focus();
     // ] e [ movem o começo e não abrem as gavetas globais dentro da revisão.
     await page.keyboard.press('[');
     await detail.getByText(L.start80).waitFor();
@@ -608,6 +622,8 @@ try {
   const PT = { lang: 'pt-BR', region: 'Seleção de Cortes', review: 'Revisão dos candidatos', counts: '{a} aprovados · {r} rejeitados · {p} pendentes', hintKeys: 'aprova', start80: '01:20', start100: '01:40', end150: '02:30', end130: '02:10', tooShort: 'O Corte ficaria abaixo da duração mínima.', endEarlier: 'Fim antes', undo: 'Desfazer decisão', closePreview: 'Fechar preview' };
   const EN = { lang: 'en', region: 'Clip selection', review: 'Candidate review', counts: '{a} approved · {r} rejected · {p} pending', hintKeys: 'approve', start80: '01:20', start100: '01:40', end150: '02:30', end130: '02:10', tooShort: 'The Clip would fall below the minimum duration.', endEarlier: 'End earlier', undo: 'Undo decision', closePreview: 'Close preview' };
   // Seleção de Cortes (#53): estimativa antes, progresso por Janela, Nota com pesos, filtro e refazer.
+  Object.assign(PT, { export: 'Exportar', exportRunning: 'Exportando Corte · 35%', exportCancel: 'Cancelar export', exportCancelled: 'Export cancelado.', exportCompleted: 'Corte exportado.', exportExists: 'Já existe um arquivo no destino. Escolha outro nome.' });
+  Object.assign(EN, { export: 'Export', exportRunning: 'Exporting Clip · 35%', exportCancel: 'Cancel export', exportCancelled: 'Export cancelled.', exportCompleted: 'Clip exported.', exportExists: 'A file already exists at this destination. Choose another name.' });
   const selection = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
   await selection.getByText('Estimativa: 4 janelas · sem custo (modelo local)').waitFor();
   await selection.getByRole('button', { name: 'Selecionar Cortes' }).click();

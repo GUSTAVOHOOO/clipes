@@ -38,3 +38,9 @@ name = "fake-worker"
 path = "tests/support/fake_worker.rs"
 test = false
 doctest = false
+
+[[bin]]
+name = "fake-export"
+path = "tests/fixtures/fake_export.rs"
+test = false
+doctest = false
