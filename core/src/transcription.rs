@@ -752,20 +752,6 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     Ok(json!({"transcript_id": transcript, "state": state, "job_id": job, "warnings": warnings}))
 }
 
-/// Custo máximo estimado (µUS$) do áudio que falta transcrever da Fonte no Groq; `None` se o
-/// preço é desconhecido. O lote de Fontes (#56) o confere contra o teto antes de começar.
-pub(crate) fn paid_audio_estimate_micro(source_id: i64) -> Option<i64> {
-    let remaining = projects::with_reader(|c| {
-        c.query_row(
-            "SELECT COALESCE((SELECT t.duration_us-t.resume_us FROM transcripts t WHERE t.source_id=s.id AND t.audio_track=s.audio_track),s.duration_us) FROM sources s WHERE s.id=?1",
-            [source_id],
-            |r| r.get::<_, i64>(0),
-        )
-    })
-    .ok()?;
-    groq::estimate_cost(groq::MODEL, remaining.max(0))["maxMicroUsd"].as_i64()
-}
-
 fn loss(transcript: i64) -> Result<Value, CoreError> {
     projects::with_reader(|c| {
         c.query_row("SELECT CASE WHEN resume_us>0 AND NOT EXISTS (SELECT 1 FROM transcription_blocks WHERE transcript_id=?1) THEN NULL ELSE (SELECT COUNT(*) FROM transcription_blocks WHERE transcript_id=?1) END,COALESCE((SELECT SUM(end_us-start_us) FROM transcription_calls WHERE transcript_id=?1 AND state IN ('pending','completed','uncertain')),0),COALESCE((SELECT SUM(estimated_usd) FROM transcription_calls WHERE transcript_id=?1 AND state IN ('pending','completed','uncertain')),0) FROM transcripts WHERE id=?1",[transcript],|r|Ok(json!({"blocks":r.get::<_,Option<i64>>(0)?,"paid_audio_us":r.get::<_,i64>(1)?,"paid_usd":r.get::<_,f64>(2)?})))

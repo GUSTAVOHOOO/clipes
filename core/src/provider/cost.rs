@@ -715,7 +715,7 @@ pub(crate) fn totals_since(column: &str, key: &str, since: i64) -> Result<Value,
 pub(crate) fn batch_audio_micro_usd(batch: &str, since: i64) -> Result<i64, CoreError> {
     projects::with_reader(|c| {
         c.query_row(
-            "SELECT COALESCE(SUM(CAST(c.estimated_usd*1000000.0+0.999999 AS INTEGER)),0) FROM transcription_calls c JOIN jobs j ON j.id=c.job_id WHERE j.batch=?1 AND c.created_at>=?2 AND c.state IN ('pending','completed','uncertain') AND c.estimated_usd IS NOT NULL",
+            "SELECT COALESCE(SUM(CAST(c.estimated_usd*1000000.0 AS INTEGER) + CASE WHEN c.estimated_usd*1000000.0 > CAST(c.estimated_usd*1000000.0 AS INTEGER) THEN 1 ELSE 0 END),0) FROM transcription_calls c JOIN jobs j ON j.id=c.job_id WHERE j.batch=?1 AND c.created_at>=?2 AND c.state IN ('pending','completed','uncertain') AND c.estimated_usd IS NOT NULL",
             rusqlite::params![batch, since],
             |r| r.get::<_, i64>(0),
         )

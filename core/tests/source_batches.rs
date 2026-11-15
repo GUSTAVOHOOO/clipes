@@ -120,7 +120,7 @@ fn batch_runs_sources_in_order_isolates_errors_and_respects_the_cap() {
     with_writer(|c| {
         c.execute("INSERT INTO jobs(kind,safety,state,source_id,batch) VALUES ('transcription','paid','completed',?1,?2)", (s5, &key))?;
         let job = c.last_insert_rowid();
-        c.execute("INSERT INTO transcription_calls(job_id,start_us,end_us,state,estimated_usd) VALUES (?1,0,1,'pending',0.0000011),(?1,1,2,'uncertain',0.0000021),(?1,2,3,'failed',5.0)", [job])?;
+        c.execute("INSERT INTO transcription_calls(job_id,start_us,end_us,state,estimated_usd,created_at) VALUES (?1,0,1,'pending',0.0000011,?2),(?1,1,2,'uncertain',0.0000021,?2),(?1,2,3,'pending',0.0000010000001,?2),(?1,3,4,'failed',5.0,?2)", (job, clipes_core::provider::cost::now_micros()))?;
         Ok(())
     })
     .unwrap();
@@ -128,7 +128,7 @@ fn batch_runs_sources_in_order_isolates_errors_and_respects_the_cap() {
     let b = batch(cid);
     assert_eq!(
         audio(&b),
-        2 + 3,
+        2 + 3 + 2,
         "1.1 and 2.1 µUS$ round up; failed calls are not counted"
     );
     assert!(b["budget"]["usage"]["microUsd"].as_i64().unwrap() >= 5);

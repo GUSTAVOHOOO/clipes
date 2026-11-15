@@ -401,16 +401,6 @@ fn start_item(batch: &Batch, item: &Item, user_confirmed: bool) -> Result<(), Co
         .optional()
     })?;
     let engine = existing_engine.unwrap_or_else(|| batch.engine.clone());
-    if engine == "groq" {
-        if let Some(micro) = crate::transcription::paid_audio_estimate_micro(item.source_id) {
-            if let Some(code) = jobs::audio_precheck(&batch.key, micro)? {
-                // Nada começa: o lote pausa pelo teto e a Fonte continua `pending`.
-                jobs::pause_scope("batch", &batch.key, code);
-                emit(batch.id, "paused", "Lote pausado pelo teto de custo", None);
-                return Ok(());
-            }
-        }
-    }
     let mut args = json!({"project": project, "source_id": item.source_id, "engine": engine, "batch": batch.key});
     if user_confirmed {
         args["retry_confirmed"] = json!(true);

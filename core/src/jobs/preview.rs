@@ -74,7 +74,10 @@ pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
                 } else {
                     generate(id, source, &project, &stop)
                 };
-                if result.as_ref().is_err_and(|e| e.code == "interrupted") {
+                if result
+                    .as_ref()
+                    .is_err_and(|e| matches!(e.code.as_str(), "interrupted" | "budget_cost"))
+                {
                     let _ = projects::with_writer(|c| {
                         c.execute(
                             "UPDATE jobs SET state='queued' WHERE id=?1 AND state='running'",
