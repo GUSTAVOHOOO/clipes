@@ -1,5 +1,6 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { version } from '../../package.json';
+import { exportMock } from '@/features/export/mock';
 
 const groqRetryTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('groq-retry-test');
 const sourceTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('source-test');
@@ -182,6 +183,7 @@ function selectionMockDispatch(name: string, args: object): unknown {
 
 export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   if (import.meta.env.VITE_CORE_MOCK === '1' && !isTauri()) {
+    if (name.startsWith('export.') || (name === 'jobs.cancel' && (args as {id: number}).id >= 5900)) return exportMock(name, args) as T;
     if (name === 'transcription.groq.info') return {endpoint:'https://api.groq.com/openai/v1/audio/transcriptions',configured:groqKeyConfigured,confirmed:groqConsent,local_only:projectVetoMock} as T;
     if (name === 'transcription.groq.estimate') return {kind:'usd',usd:0.00012,hourly_usd:0.04,checked:'2026-11-15',source:'https://console.groq.com/docs/speech-to-text'} as T;
     if (name === 'transcription.groq.confirm') { groqConsent = true; return {confirmed:true} as T; }
