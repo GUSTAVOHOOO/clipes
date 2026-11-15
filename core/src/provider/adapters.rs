@@ -260,11 +260,18 @@ impl Adapter {
             .resolve_to_addrs(&host, &addresses)
             .build()
             .map_err(|_| error("network", "Could not initialize HTTP client"))?;
+        // The exact bytes of the request body, hashed for the audit trail (#125); never the headers.
+        let payload = serde_json::to_vec(body)
+            .map_err(|_| error("invalid_request", "Invalid structured request"))?;
+        let input_sha256 = cost::sha256_hex(&payload);
         for attempt in 0..3 {
             if cancel.is_cancelled() {
                 return Err(cancelled());
             }
-            let mut call = client.post(url.clone()).json(body);
+            let mut call = client
+                .post(url.clone())
+                .header(reqwest::header::CONTENT_TYPE, "application/json")
+                .body(payload.clone());
             if let Some(key) = &self.key {
                 call = match self.kind {
                     Kind::OpenAi | Kind::Ollama => call.bearer_auth(key),
@@ -304,9 +311,12 @@ impl Adapter {
                 ),
                 Err(e) => (e.code.as_str(), Value::Null),
             };
-            log.push(json!({"attempt":repair,"calls":1,"usage":usage,"code":code,"estimate":estimate,"durationMs":started.elapsed().as_millis() as u64}));
+            log.push(json!({"attempt":repair,"calls":1,"usage":usage,"code":code,"estimate":estimate,"durationMs":started.elapsed().as_millis() as u64,"host":host,"inputSha256":input_sha256,"sentBytes":payload.len()}));
             if let Ok(Ok(reply)) = &sent {
                 log.last_mut().unwrap()["httpStatus"] = json!(reply.status);
+                if let Ok(bytes) = &reply.body {
+                    log.last_mut().unwrap()["responseSha256"] = json!(cost::sha256_hex(bytes));
+                }
             }
             match &sent {
                 Ok(Ok(reply)) if reply.status == 429 => {

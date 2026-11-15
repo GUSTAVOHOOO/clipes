@@ -132,6 +132,8 @@ struct Probe<'a> {
     max_calls: u64,
     /// Uma entrada por chamada HTTP que o Provedor fez (a chamada e o reparo).
     log: &'a Mutex<Vec<Value>>,
+    /// Transport facts of a subscription CLI call, which has no HTTP call log (#125).
+    transport: &'a Mutex<Option<Value>>,
     job: i64,
     task: &'static AiTask,
     batch: Option<String>,
@@ -219,10 +221,14 @@ impl Provider for Probe<'_> {
                 }
             }
         });
-        let (reply, log) =
+        let ((reply, transport), log) =
             crate::provider::control::with_call_scope(Some(self.max_calls), Some(guard), || {
-                self.inner.structured_with(request, cancel)
+                let reply = self.inner.structured_with(request, cancel);
+                (reply, crate::provider::control::take_transport())
             });
+        if let (Ok(mut slot), Some(transport)) = (self.transport.lock(), transport) {
+            *slot = Some(transport);
+        }
         if let Ok(mut all) = self.log.lock() {
             all.extend(log);
         }
@@ -526,12 +532,17 @@ fn record_calls(
     route: &(Target, String),
     estimate: &Value,
     entries: &[Value],
+    cli_transport: &Mutex<Option<Value>>,
     elapsed_ms: u64,
 ) {
     let each = estimate["maxMicroUsd"]
         .as_u64()
         .or_else(|| estimate["minMicroUsd"].as_u64());
-    for entry in entries {
+    let mut entries = entries.to_vec();
+    if let Ok(transport) = cli_transport.lock() {
+        crate::provider::control::merge_transport(&mut entries, &transport);
+    }
+    for entry in &entries {
         let _ = cost::observe_entry(&route.1, &route.0, entry);
         let usage = if route.0.is_cli()
             || matches!(
@@ -560,6 +571,7 @@ fn record_calls(
             code: entry["code"].as_str().unwrap_or("ok"),
             estimate_micro_usd: entry["estimate"]["maxMicroUsd"].as_u64().or(each),
             duration_ms: Some(entry["durationMs"].as_u64().unwrap_or(elapsed_ms)),
+            transport: entry,
         });
     }
 }
@@ -642,11 +654,13 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
         });
     let sent = AtomicBool::new(false);
     let call_log: Mutex<Vec<Value>> = Mutex::new(Vec::new());
+    let cli_transport: Mutex<Option<Value>> = Mutex::new(None);
     let probe = Probe {
         inner: provider.as_ref(),
         sent: &sent,
         max_calls,
         log: &call_log,
+        transport: &cli_transport,
         job: id,
         task: unit.task,
         batch: unit.batch.clone(),
@@ -699,7 +713,15 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
         Ok(out) => {
             let log = call_log.lock().map(|l| l.clone()).unwrap_or_default();
             let entries = entries_of(&log, &out.usage, out.calls, "ok");
-            record_calls(id, &unit, &route, &estimate, &entries, elapsed_ms);
+            record_calls(
+                id,
+                &unit,
+                &route,
+                &estimate,
+                &entries,
+                &cli_transport,
+                elapsed_ms,
+            );
             settle(
                 id,
                 "completed",
@@ -740,7 +762,15 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
                         last["code"] = json!(e.code);
                     }
                 }
-                record_calls(id, &unit, &route, &estimate, &entries, elapsed_ms);
+                record_calls(
+                    id,
+                    &unit,
+                    &route,
+                    &estimate,
+                    &entries,
+                    &cli_transport,
+                    elapsed_ms,
+                );
             }
             let unknown = how == Settle::Uncertain && unit.paid;
             let core: CoreError = e.clone().into();

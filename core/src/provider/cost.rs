@@ -477,6 +477,39 @@ inventory::submit! { projects::Migration { id: "0120_001_provider_costs_profile"
 // that stopped on one.
 inventory::submit! { projects::Migration { id: "0124_001_ai_call_costs_and_budgets", sql: "ALTER TABLE provider_costs ADD COLUMN job_id INTEGER; ALTER TABLE provider_costs ADD COLUMN task_version INTEGER; ALTER TABLE provider_costs ADD COLUMN attempt INTEGER CHECK(attempt IS NULL OR attempt IN (0,1)); ALTER TABLE provider_costs ADD COLUMN outcome TEXT CHECK(outcome IS NULL OR outcome IN ('ok','invalid_json','truncated','refused','timeout_uncertain','rate_limit','provider_http','cancelled')); ALTER TABLE provider_costs ADD COLUMN code TEXT; ALTER TABLE provider_costs ADD COLUMN estimate_micro_usd INTEGER; ALTER TABLE provider_costs ADD COLUMN duration_ms INTEGER; CREATE INDEX provider_costs_job ON provider_costs(job_id); ALTER TABLE jobs ADD COLUMN batch TEXT; CREATE TABLE ai_budgets (scope TEXT NOT NULL CHECK(scope IN ('task','batch')), key TEXT NOT NULL, max_calls INTEGER, max_tokens INTEGER, max_wall_ms INTEGER, max_cost_micro_usd INTEGER, unknown_confirmed INTEGER NOT NULL DEFAULT 0, since INTEGER NOT NULL, PRIMARY KEY(scope,key)); CREATE TABLE ai_pauses (scope TEXT NOT NULL CHECK(scope IN ('task','batch')), key TEXT NOT NULL, reason TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000000), PRIMARY KEY(scope,key));" } }
 
+// #125: the audit trail of the Project (ADR-0009, rules 7 to 10), one row per call, written in the
+// same transaction as its `provider_costs` row (or linked to its `transcription_calls` row).
+// Hashes and metadata only, never text. What `provider_costs` already holds (task, version,
+// profile, model, outcome, duration) is not repeated. Transport fields are nullable: a Provider
+// injected in tests exposes no body.
+inventory::submit! { projects::Migration { id: "0125_001_call_audit", sql: "CREATE TABLE call_audit (id INTEGER PRIMARY KEY, cost_id INTEGER REFERENCES provider_costs(id) ON DELETE CASCADE, transcription_call_id INTEGER REFERENCES transcription_calls(id) ON DELETE CASCADE, provider_kind TEXT NOT NULL, host TEXT, model TEXT, prompt_sha256 TEXT, input_sha256 TEXT, sent_bytes INTEGER, response_sha256 TEXT, CHECK((cost_id IS NULL) <> (transcription_call_id IS NULL)), CHECK(prompt_sha256 IS NULL OR length(prompt_sha256)=64), CHECK(input_sha256 IS NULL OR length(input_sha256)=64), CHECK(response_sha256 IS NULL OR length(response_sha256)=64)); CREATE UNIQUE INDEX call_audit_cost ON call_audit(cost_id) WHERE cost_id IS NOT NULL; CREATE UNIQUE INDEX call_audit_transcription ON call_audit(transcription_call_id) WHERE transcription_call_id IS NOT NULL;" } }
+
+/// Lowercase hex SHA-256 of `bytes`.
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(bytes))
+}
+
+type Transport = (Option<String>, Option<String>, Option<i64>, Option<String>);
+
+/// The transport facts of one call, as the adapters note them in the call log entry:
+/// `host`, `inputSha256`, `sentBytes` and `responseSha256`. A value that is not of the expected
+/// shape is dropped, so a malformed entry can never put free text in the audit row.
+fn transport_of(entry: &Value) -> Transport {
+    let hex = |k: &str| {
+        entry[k]
+            .as_str()
+            .filter(|h| h.len() == 64 && h.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')))
+            .map(str::to_owned)
+    };
+    (
+        entry["host"].as_str().map(str::to_owned),
+        hex("inputSha256"),
+        entry["sentBytes"].as_u64().map(|v| v as i64),
+        hex("responseSha256"),
+    )
+}
+
 /// Microseconds since the Unix epoch: the clock of `provider_costs.created_at` and of the
 /// `since` of a budget, so a budget reset never counts rows written before it.
 pub fn now_micros() -> i64 {
@@ -521,14 +554,24 @@ pub struct CallRow<'a> {
     pub code: &'a str,
     pub estimate_micro_usd: Option<u64>,
     pub duration_ms: Option<u64>,
+    /// The call log entry: where the audit row (#125) takes host, hashes and size from.
+    pub transport: &'a Value,
 }
 
 /// Records one call with its job, outcome and estimate (#124).
 pub fn record_call(row: &CallRow<'_>) -> Result<(), CoreError> {
     let (provider, model) = row.target.label();
     let table = embedded().updated_at;
+    let (host, input, sent, response) = transport_of(row.transport);
+    let prompt = crate::ai_task::find(row.task).map(|t| t.prompt_sha256);
+    let kind = if row.target.is_cli() {
+        "cli"
+    } else {
+        provider.as_str()
+    };
     projects::with_writer(|c| {
-        c.execute(
+        let tx = c.transaction()?;
+        tx.execute(
             "INSERT INTO provider_costs(task,batch,provider,model,input_tokens,output_tokens,calls,cost_kind,cost_micro_usd,price_source,table_updated_at,profile,job_id,task_version,attempt,outcome,code,estimate_micro_usd,duration_ms,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20)",
             rusqlite::params![
                 row.task,
@@ -553,7 +596,12 @@ pub fn record_call(row: &CallRow<'_>) -> Result<(), CoreError> {
                 now_micros()
             ],
         )?;
-        Ok(())
+        let cost_id = tx.last_insert_rowid();
+        tx.execute(
+            "INSERT INTO call_audit(cost_id,provider_kind,host,prompt_sha256,input_sha256,sent_bytes,response_sha256) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            rusqlite::params![cost_id, kind, host, prompt, input, sent, response],
+        )?;
+        tx.commit()
     })
 }
 
@@ -686,7 +734,10 @@ pub fn run_costed_for(
     let guard = Box::new(move |request: &StructuredRequest, _: &[Value]| {
         estimate_for(&priced_target, &priced_profile, request)
     });
-    let (reply, mut log) = super::control::with_call_scope(None, Some(guard), call);
+    let ((reply, transport), mut log) = super::control::with_call_scope(None, Some(guard), || {
+        let reply = call();
+        (reply, super::control::take_transport())
+    });
     if let Err(e) = &reply {
         if let Some(last) = log.last_mut() {
             if last["code"] == "ok" || last["code"] == "cancelled" {
@@ -715,7 +766,8 @@ pub fn run_costed_for(
         } else {
             costs[0].clone()
         };
-        let fallback = [json!({"usage":usage,"calls":calls,"code":code})];
+        let mut fallback = [json!({"usage":usage,"calls":calls,"code":code})];
+        super::control::merge_transport(&mut fallback, &transport);
         let entries = if log.is_empty() {
             &fallback[..]
         } else {
@@ -748,6 +800,7 @@ pub fn run_costed_for(
                 code: entry["code"].as_str().unwrap_or(code),
                 estimate_micro_usd: entry["estimate"]["maxMicroUsd"].as_u64(),
                 duration_ms: entry["durationMs"].as_u64(),
+                transport: entry,
             };
             recorded &= record_call(&row).is_ok();
         }
