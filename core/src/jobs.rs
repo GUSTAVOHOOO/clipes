@@ -177,6 +177,7 @@ inventory::submit! { CommandRegistration { name: "jobs.discard", execute: discar
 
 pub(crate) fn reconcile() -> Result<(), crate::CoreError> {
     projects::with_writer(|c| {
+        c.execute("UPDATE transcription_calls SET state='uncertain' WHERE state='pending' AND job_id IN (SELECT id FROM jobs WHERE state='running' AND safety='paid')", [])?;
         c.execute("UPDATE jobs SET result='{\"outcome\":\"uncertain\",\"code\":\"interrupted\",\"cost\":\"unknown\"}' WHERE state='running' AND safety='paid' AND kind LIKE 'ai:%'", [])?;
         c.execute("UPDATE jobs SET state=CASE safety WHEN 'local' THEN 'queued' ELSE 'uncertain' END WHERE state='running'", [])?;
         Ok(())

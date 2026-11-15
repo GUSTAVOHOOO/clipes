@@ -31,6 +31,10 @@ const EXAMPLES: &[(&str, &str)] = &[
         include_str!("../../../worker/protocol/examples/transcribe-block.jsonl"),
     ),
     (
+        "vad-block",
+        include_str!("../../../worker/protocol/examples/vad-block.jsonl"),
+    ),
+    (
         "model-swap",
         include_str!("../../../worker/protocol/examples/model-swap.jsonl"),
     ),
@@ -150,7 +154,8 @@ fn transcribe_worker() {
                     .and_then(|p| fs::read_to_string(p).ok())
                     .and_then(|t| t.trim().parse().ok())
                     .unwrap_or(-1.0);
-                if seconds < 0.0 || message["task"] != "transcribe" {
+                if seconds < 0.0 || !matches!(message["task"].as_str(), Some("transcribe" | "vad"))
+                {
                     send(
                         &mut out,
                         serde_json::json!({"v":1,"type":"error","id":id,"code":"internal","message":"Erro interno do worker."}),
@@ -162,6 +167,14 @@ fn transcribe_worker() {
                 } else {
                     (seconds - 2.0).max(1.0)
                 };
+                if message["task"] == "vad" {
+                    let covered_us = (covered * 1e6) as i64;
+                    send(
+                        &mut out,
+                        serde_json::json!({"v":1,"type":"result","id":id,"data":{"covered_us":covered_us,"spans":[{"start_us":0,"end_us":covered_us}],"silences":[]}}),
+                    );
+                    continue;
+                }
                 send(
                     &mut out,
                     serde_json::json!({"v":1,"type":"progress","id":id,"stage":"transcribing","percentage":50,"message":"Transcrevendo"}),

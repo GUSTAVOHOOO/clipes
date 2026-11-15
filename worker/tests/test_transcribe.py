@@ -24,6 +24,9 @@ class Ctx:
     def progress(self, stage, percentage, message):
         self.events.append(percentage)
 
+    def checkpoint(self):
+        pass
+
 
 def make(spans, words=((" a", 0.0, 0.2),)):
     return Transcriber(
@@ -178,3 +181,14 @@ def test_native_libraries_are_imported_before_the_stdin_reader_starts(monkeypatc
         server.importlib, "import_module", lambda name: (_ for _ in ()).throw(ImportError(name))
     )
     server.preload_native_libraries()  # ausente: segue, a tarefa responde o erro tipado
+
+
+def test_vad_task_shares_boundaries_and_silences_with_transcription():
+    from clipes_worker.transcribe import vad_task
+
+    spans = [{"start": 16000, "end": 48000}, {"start": 100000, "end": 160000}]
+    task = vad_task(spans=lambda audio: spans, reader=lambda path: [0.0] * 160000)
+    result = task.run(None, {"audio": "a.wav", "final": False}, Ctx())
+    transcript = make(spans).block([0.0] * 160000, False, 1, Ctx())
+    assert result == {"covered_us": transcript["covered_us"], "silences": transcript["silences"],
+                      "spans": [{"start_us": 1000000, "end_us": 3000000}]}

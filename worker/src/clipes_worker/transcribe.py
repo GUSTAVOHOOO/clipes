@@ -46,6 +46,49 @@ def _us(samples):
     return round(samples * 1_000_000 / SAMPLE_RATE)
 
 
+def speech_boundaries(audio, final, spans):
+    total = len(audio)
+    spans = [dict(span) for span in spans(audio)]
+    covered = total
+    if not final and spans and spans[-1]["end"] >= total - 1 and spans[-1]["start"] > 0:
+        covered = spans.pop()["start"]
+    return spans, covered
+
+
+def silences_for(spans, covered):
+    silences, cursor = [], 0
+    for span in spans:
+        if span["start"] > cursor:
+            silences.append({"start_us": _us(cursor), "end_us": _us(span["start"])})
+        cursor = max(cursor, span["end"])
+    if covered > cursor:
+        silences.append({"start_us": _us(cursor), "end_us": _us(covered)})
+    return silences
+
+
+def speech_spans(audio):
+    from faster_whisper.vad import VadOptions, get_speech_timestamps
+    options = VadOptions(threshold=VAD_THRESHOLD, min_silence_duration_ms=VAD_MIN_SILENCE_MS,
+                         max_speech_duration_s=VAD_MAX_SPEECH_S)
+    return get_speech_timestamps(audio, options)
+
+
+def vad_task(spans=speech_spans, reader=read_wav):
+    from .tasks import Task
+
+    def run(_, params, ctx):
+        audio, final = params.get("audio"), params.get("final")
+        if not isinstance(audio, str) or not isinstance(final, bool):
+            raise WorkerError("invalid_message")
+        ctx.checkpoint()
+        selected, covered = speech_boundaries(reader(audio), final, spans)
+        ctx.checkpoint()
+        return {"covered_us": _us(covered), "silences": silences_for(selected, covered),
+                "spans": [{"start_us": _us(s["start"]), "end_us": _us(s["end"])} for s in selected]}
+
+    return Task("silero-vad", lambda: None, run)
+
+
 class Transcriber:
     """Lógica do bloco, com as peças do faster-whisper injetáveis (testada com modelos falsos).
 
@@ -63,18 +106,10 @@ class Transcriber:
             self._close()
 
     def block(self, audio, final, batch_size, ctx):
-        total = len(audio)
-        spans = [dict(span) for span in self._spans(audio)]
-        covered = total
-        # Fala que encosta no fim do bloco pode estar cortada: fica para o próximo bloco,
-        # que começa onde ela começa. Sem progresso possível, transcreve assim mesmo.
-        if not final and spans and spans[-1]["end"] >= total - 1 and spans[-1]["start"] > 0:
-            covered = spans.pop()["start"]
-        words, silences, cursor = [], [], 0
+        spans, covered = speech_boundaries(audio, final, self._spans)
+        words, silences = [], silences_for(spans, covered)
         for index, span in enumerate(spans):
             ctx.progress("transcribing", 100 * index // max(1, len(spans)), "Transcrevendo")
-            if span["start"] > cursor:
-                silences.append({"start_us": _us(cursor), "end_us": _us(span["start"])})
             chunk = audio[span["start"] : span["end"]]
             language = self._language(chunk)
             offset = span["start"] / SAMPLE_RATE
@@ -89,9 +124,6 @@ class Transcriber:
                             "language": language,
                         }
                     )
-            cursor = max(cursor, span["end"])
-        if covered > cursor:
-            silences.append({"start_us": _us(cursor), "end_us": _us(covered)})
         ctx.progress("transcribing", 100, "Transcrevendo")
         return {"covered_us": _us(covered), "words": words, "silences": silences}
 
@@ -101,15 +133,8 @@ def load_faster_whisper(model_dir, device, compute_type):
     if not Path(model_dir).is_dir():
         raise WorkerError("model_missing")
     from faster_whisper import BatchedInferencePipeline, WhisperModel
-    from faster_whisper.vad import VadOptions, get_speech_timestamps
-
     model = WhisperModel(str(model_dir), device=device, compute_type=compute_type)
     pipeline = BatchedInferencePipeline(model=model)
-    options = VadOptions(
-        threshold=VAD_THRESHOLD,
-        min_silence_duration_ms=VAD_MIN_SILENCE_MS,
-        max_speech_duration_s=VAD_MAX_SPEECH_S,
-    )
 
     def transcribe(chunk, language, batch_size):
         segments, _ = pipeline.transcribe(
@@ -129,7 +154,7 @@ def load_faster_whisper(model_dir, device, compute_type):
         return model.detect_language(audio=chunk)[0]
 
     return Transcriber(
-        lambda audio: get_speech_timestamps(audio, options), detect_language, transcribe
+        speech_spans, detect_language, transcribe
     )
 
 
