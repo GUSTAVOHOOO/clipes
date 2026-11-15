@@ -7,6 +7,7 @@ import { Sources } from './Sources';
 import { Backups } from './Backups';
 import { Jobs } from './Jobs';
 import { ProjectPrivacy } from './ProjectPrivacy';
+import { TranscriptSearch } from './TranscriptSearch';
 
 type Project = { name: string; path: string; available: boolean; id: string };
 const texts = {
@@ -34,6 +35,7 @@ export function Projects() {
     {error && <p role="alert" className="mt-4 text-danger">{t.error} {error}</p>}
     {current && <p className="mt-6 text-sm">{t.current}: <strong>{current.name}</strong></p>}
     {current && <Sources project={current.path} />}
+    {current && <TranscriptSearch projectId={current.id} />}
     {current && <Jobs key={current.id} projectId={current.id} />}
     {current && <ProjectPrivacy projectId={current.id} />}
     {current && <Backups projectPath={current.path} onRestored={async () => setCurrent(await coreDispatch<Project | null>('projects.current', {}))} />}

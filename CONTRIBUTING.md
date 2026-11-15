@@ -101,6 +101,14 @@ O cache de onda usa o formato binário `CLPWAVE\0`, versão 1, com inteiros litt
 
 Documentos `clip`, `style`, `script` e `packaging` são objetos JSON com `schemaVersion` igual a 1 e `revision` inteira não negativa. Cada tipo registra seu validador e suas migrações próprias; campos de domínio serão definidos pelos tickets correspondentes. O comando `documents.validate` migra e valida o documento no núcleo; versões futuras são recusadas.
 
+## Correção e busca na Transcrição (#52)
+
+O texto que o Motor produziu fica em `transcript_words.text` e nunca é alterado; a correção do usuário fica em `transcript_words.corrected_text` (migração `0052_001_corrections_and_search`). Corrigir muda o texto, nunca os tempos nem a posição da palavra. **O texto efetivo de uma palavra é `corrections::EFFECTIVE_TEXT` (`COALESCE(corrected_text, text)`): tudo o que deriva da palavra (Frases, texto compacto do #140, busca e as legendas futuras) deve ler por essa função única, nunca `text` direto.** Blocos novos de uma Transcrição parcial só acrescentam posições; nunca regravam correções.
+
+As fronteiras e os IDs das Frases são função só do texto original e dos tempos (contrato do #49 e do #140). Uma correção atualiza o texto da Frase que contém a palavra, sem recalcular fronteiras nem renumerar IDs, mesmo que a palavra ganhe ou perca pontuação; `transcription.segment` também não recalcula por causa de correções. O texto digitado é normalizado em NFC, aparado, sem vazio nem caracteres de controle, com até `MAX_CORRECTION_CHARS` caracteres; espaço interno e pontuação valem, e a convenção de espaço inicial do Motor é preservada.
+
+Desfazer e refazer usam uma pilha por Projeto em `transcript_corrections` (texto antes e depois), persistida no SQLite do Projeto; uma correção nova limpa o refazer. A busca (`transcription.search`) usa a tabela FTS5 `sentence_search` (`unicode61 remove_diacritics 2`, então “acao” acha “ação”) sobre o texto efetivo das Frases de todas as Transcrições do Projeto. Gatilhos em `sentences` mantêm o índice na mesma transação de qualquer gravação de Frases e o limpam na exclusão em cascata. A entrada do usuário nunca vai crua ao `MATCH`: cada termo é citado e o último aceita prefixo.
+
 ## Perfis de Provedor
 
 `provider.json` tem a versão 2 com `profiles[]` ([ADR-0010](docs/adr/0010-perfis-multiplos-de-provedor-tarefa-para-perfil-e-somente-local.md)). Um arquivo antigo (só `endpoint`, `model`, `kind`, `nativeSchema`) é lido como o perfil `legacy` e **não é reescrito** até o usuário editar. A conta do cofre é o endpoint (o perfil `legacy` e os perfis sem `ownKey` a compartilham, junto do consentimento, que também é por endpoint); só `ownKey: true` usa a conta `profile:<id>`. A localidade é calculada por `is_local_endpoint`, nunca guardada; os CLIs `codex` e `claude` aparecem em `provider.profiles.list` como perfis não locais, mas continuam ativados por `provider.cli.*` com o aviso do #39.
