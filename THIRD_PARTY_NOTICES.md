@@ -6,6 +6,15 @@ Gerado por `node design-system/scripts/avisos.ts` a partir dos pacotes instalado
 
 Tears of Steel, © Blender Foundation, 2012. Filme original: [mango.blender.org](https://mango.blender.org/). Licença [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/). Os arquivos em `design-system/src/data/img/` são quadros reduzidos e recortados do filme, usados apenas na demonstração do editor; o áudio e as falas derivam do mesmo filme.
 
+## Clipe da sonda de hardware
+
+Os arquivos `worker/src/clipes_worker/data/probe-pt.wav` e `probe-en.wav` (9 s cada, WAV 16 kHz mono) são recortes usados pela sonda de hardware da Transcrição (#50):
+
+- **Português:** trecho de *O Alienista*, de Machado de Assis (obra em domínio público), na leitura do LibriVox, publicada em domínio público ([item no Internet Archive](https://archive.org/details/o_alienista_0904_librivox), capítulo 1, de 30 s a 39 s do arquivo `oalienista_1_machadodeassis_64kb.mp3`; licença declarada no item: <http://creativecommons.org/licenses/publicdomain/>).
+- **Inglês:** trecho de [Richard Rogers - voice - en.ogg](https://commons.wikimedia.org/wiki/File:Richard_Rogers_-_voice_-_en.ogg), de Vera de Kok, no Wikimedia Commons, licença CC0 (de 1 s a 10 s).
+
+Os dois foram convertidos para WAV PCM 16 bits, mono, 16 kHz.
+
 ## Componentes sob demanda
 
 O catálogo apresenta FFmpeg, Whisper e Kokoro como exemplos de interface. Nenhum executável ou peso desses projetos é distribuído neste repositório. As licenças e fontes de cada build/modelo devem acompanhar o download real no app desktop, conforme ADR-0003.

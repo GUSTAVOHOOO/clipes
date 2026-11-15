@@ -11,7 +11,7 @@ Núcleo → worker:
 | `type` | Campos | Efeito |
 | --- | --- | --- |
 | `hello` | `protocol` | Primeira mensagem. O worker responde `handshake`, ou `error` `protocol_mismatch` e encerra. |
-| `request` | `id`, `task`, `params` | Pede uma tarefa (`transcribe`, `reframe` ou `tts`). O `id` é texto único por pedido. |
+| `request` | `id`, `task`, `params` | Pede uma tarefa (`transcribe`, `vad`, `probe`, `reframe` ou `tts`). O `id` é texto único por pedido. |
 | `cancel` | `id` | Cancela o pedido `id`, em andamento ou ainda na fila. |
 | `shutdown` | — | O worker libera o modelo e encerra. |
 
@@ -44,6 +44,10 @@ Parâmetros do Motor, do benchmark #32: VAD Silero com limiar 0,75 e silêncio m
 ### Tarefa `vad`
 
 Recebe `audio` (WAV PCM 16 kHz mono) e `final`. Retorna `covered_us`, `spans` e `silences` com tempos relativos em microssegundos, seguindo o mesmo VAD e regra de borda da tarefa `transcribe`. O Silero é distribuído no pacote faster-whisper e não exige download do modelo Whisper.
+
+### Tarefa `probe`
+
+Sonda de hardware (#50). `params.mode`: `info` (sem modelo; devolve `ct2_version` e `cuda_compute_types`), `clip` (`model` como em `transcribe` e `batch_size` de 1 a 8; transcreve o clipe embutido PT/EN com `word_timestamps`; com lote maior que 1 envia 8 cópias do trecho em português com `clip_timestamps`) e `audio` (`audio` é um WAV 16 kHz mono; transcreve pelo mesmo caminho do Motor local). `result.data` dos dois últimos: `load_s`, `run_s`, `audio_s` e `words` (contagem por idioma no clipe; total no trecho). O núcleo roda cada tentativa num processo de worker próprio e o encerra se passar do tempo limite. Nada é gravado.
 
 ### Um modelo por vez
 

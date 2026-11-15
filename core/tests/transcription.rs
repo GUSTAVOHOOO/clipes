@@ -20,6 +20,7 @@ struct Env {
     _guard: std::sync::MutexGuard<'static, ()>,
     root: tempfile::TempDir,
     project: String,
+    _smi: Option<tempfile::TempDir>,
 }
 
 fn run(name: &str, args: Value) -> Result<Value, clipes_core::CoreError> {
@@ -46,7 +47,17 @@ impl Env {
     /// Projeto aberto, FFmpeg falso, uv/worker falsos instalados e os dois modelos marcados
     /// como instalados. `seconds` é a duração que o ffprobe falso informa.
     fn new(seconds: u32) -> Env {
+        Env::build(seconds, None)
+    }
+
+    /// Com o hardware simulado (`nvidia-smi` falso ou ausente) antes de instalar o worker.
+    fn with_gpu(seconds: u32, gpu: Option<&str>) -> Env {
+        Env::build(seconds, Some(gpu))
+    }
+
+    fn build(seconds: u32, gpu: Option<Option<&str>>) -> Env {
         let guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let smi = gpu.map(gpu_env);
         let root = tempfile::tempdir().unwrap();
         let data = root.path().join("data");
         let fake = root.path().join(exe("fake-ffmpeg"));
@@ -75,6 +86,7 @@ impl Env {
         std::env::set_var("CLIPES_FAKE_WORKER_MODE", "transcribe");
         std::env::remove_var("CLIPES_FAKE_WORKER_CRASH");
         std::env::remove_var("CLIPES_FAKE_WORKER_HOLD");
+        std::env::remove_var("CLIPES_FAKE_TRANSCRIBE_LOG");
         run("components.settings.set", json!({"data_dir":data,"cache_dir":root.path().join("cache"),"cache_limit_bytes":1_000_000,"ffmpeg_path":fake})).unwrap();
 
         // uv falso, como se o Componente já tivesse sido baixado, e worker falso instalado por ele.
@@ -103,6 +115,7 @@ impl Env {
             _guard: guard,
             root,
             project,
+            _smi: smi,
         }
     }
 
@@ -275,10 +288,15 @@ fn killing_the_worker_mid_transcription_resumes_from_the_last_block_without_dupl
     assert_eq!(status["transcript"]["words"], 8);
     assert!(!crash.exists());
     let job = run("jobs.list", json!({})).unwrap();
-    assert_eq!(
-        job[job.as_array().unwrap().len() - 1]["checkpoint"],
-        json!(json!({"resume_us": 8_000_000}).to_string())
-    );
+    // O checkpoint leva também o dispositivo e a precisão do bloco (#50).
+    let checkpoint: Value = serde_json::from_str(
+        job[job.as_array().unwrap().len() - 1]["checkpoint"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(checkpoint["resume_us"], 8_000_000);
+    assert!(checkpoint["device"].is_string() && checkpoint["compute_type"].is_string());
     // Retomar: um novo job continua do último bloco concluído.
     env.start(source).unwrap();
     wait("segundo job concluído", || {
@@ -768,6 +786,135 @@ fn assert_paid_uncertain(second_response: &'static str, second_delay: Duration) 
     let e = env.start(source).unwrap_err();
     assert_eq!(e.code, "transcription_retry_confirmation");
     assert_eq!(e.usage.unwrap()["estimate"]["kind"], "usd");
+}
+
+// ---- modelo fixo por Transcrição, precisão e dispositivo por bloco (#50) ----
+
+const FAKE_GPU: &str = "NVIDIA GeForce RTX 3050 Laptop GPU, 616.92, 4096, 3962";
+const GIB: u64 = 1024 * 1024 * 1024;
+
+/// Sem NVIDIA (padrão: `small` em CPU) ou com um `nvidia-smi` falso (turbo na GPU), antes de instalar o worker.
+fn gpu_env(gpu: Option<&str>) -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    let smi = dir.path().join(exe("nvidia-smi"));
+    fs::copy(FAKE_WORKER, &smi).unwrap();
+    std::env::set_var("CLIPES_NVIDIA_SMI", &smi);
+    match gpu {
+        Some(gpu) => std::env::set_var("CLIPES_FAKE_GPU", gpu),
+        None => std::env::remove_var("CLIPES_FAKE_GPU"),
+    }
+    std::env::set_var("CLIPES_FAKE_RAM", format!("{},{}", 16 * GIB, 12 * GIB));
+    dir
+}
+
+fn choose(model: &str, device: &str, compute_type: &str) {
+    run(
+        "transcription.hardware.choose",
+        json!({"model":model,"device":device,"compute_type":compute_type}),
+    )
+    .unwrap();
+}
+
+fn crash_after_first_block(env: &Env, source: i64) {
+    let crash = env.root.path().join("crash");
+    fs::write(&crash, b"1").unwrap();
+    std::env::set_var("CLIPES_FAKE_WORKER_CRASH", &crash);
+    env.start(source).unwrap();
+    env.wait_transcribe("failed");
+    assert_eq!(env.status(source)["transcript"]["resume_us"], 8_000_000);
+}
+
+fn transcribe_log(env: &Env) -> Vec<String> {
+    fs::read_to_string(env.root.path().join("transcribe.log"))
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn resuming_keeps_the_model_even_when_another_configuration_is_saved() {
+    let env = Env::with_gpu(25, None);
+    env.install_models();
+    std::env::set_var(
+        "CLIPES_FAKE_TRANSCRIBE_LOG",
+        env.root.path().join("transcribe.log"),
+    );
+    let source = env.import(0);
+    crash_after_first_block(&env, source);
+    assert_eq!(env.status(source)["transcript"]["model"], "whisper-small");
+    // Uma sonda posterior escolheu o turbo em CPU para este hardware: não vale para esta Transcrição.
+    fs::write(
+        env.root.path().join("data/transcription-hardware.json"),
+        json!({"probes":[{"key":{"gpu":"cpu","driver":"","ct2_version":"4.9.0","model":"whisper-turbo","app_version":env!("CARGO_PKG_VERSION")},"chosen":{"model":"whisper-turbo","device":"cpu","compute_type":"int8"},"verified":true,"attempts":[],"batch":null,"vram_free_mib":null,"measured_at":1}]}).to_string(),
+    )
+    .unwrap();
+    let status = run("transcription.hardware.status", json!({})).unwrap();
+    assert_eq!(status["effective"]["model"], "whisper-turbo");
+    env.start(source).unwrap();
+    wait("retomada concluída", || {
+        env.status(source)["transcript"]["state"] == "complete"
+    });
+    assert_eq!(env.status(source)["transcript"]["model"], "whisper-small");
+    let log = transcribe_log(&env);
+    assert!(
+        log.len() >= 3 && log.iter().all(|l| l.starts_with("whisper-small ")),
+        "{log:?}"
+    );
+    assert_complete_transcript(&env.rows(source));
+}
+
+#[test]
+fn precision_and_device_of_each_block_are_recorded_and_may_change_between_blocks() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_models();
+    let source = env.import(0);
+    choose("whisper-turbo", "cuda", "int8_float16");
+    crash_after_first_block(&env, source);
+    // Mesmo modelo, outra precisão (queda da cadeia ou nova sonda): sem confirmação, sem recomeçar.
+    choose("whisper-turbo", "cuda", "float16");
+    env.start(source).unwrap();
+    wait("retomada concluída", || {
+        env.status(source)["transcript"]["state"] == "complete"
+    });
+    let blocks = run("transcription.blocks", json!({"source_id":source})).unwrap();
+    let blocks = blocks.as_array().unwrap();
+    assert_eq!(blocks.len(), 3);
+    assert_eq!(blocks[0]["compute_type"], "int8_float16");
+    assert_eq!(blocks[0]["device"], "cuda");
+    assert!(blocks[1..].iter().all(|b| b["compute_type"] == "float16"));
+    assert_eq!(env.status(source)["transcript"]["model"], "whisper-turbo");
+    assert_complete_transcript(&env.rows(source));
+}
+
+#[test]
+fn manually_switching_the_model_of_a_partial_transcript_asks_before_discarding_it() {
+    let env = Env::with_gpu(25, None);
+    env.install_models();
+    let source = env.import(0);
+    crash_after_first_block(&env, source);
+    choose("whisper-turbo", "cpu", "int8");
+    let error = env.start(source).unwrap_err();
+    assert_eq!(error.code, "engine_change_confirmation");
+    assert_eq!(error.usage.unwrap()["blocks"], 1);
+    // Nada foi apagado e o modelo continua o mesmo até confirmar.
+    assert_eq!(env.status(source)["transcript"]["model"], "whisper-small");
+    assert_eq!(env.status(source)["transcript"]["words"], 8);
+    run(
+        "transcription.start",
+        json!({"project":env.project,"source_id":source,"replace_confirmed":true}),
+    )
+    .unwrap();
+    wait("transcrição nova concluída", || {
+        env.status(source)["transcript"]["state"] == "complete"
+    });
+    assert_eq!(env.status(source)["transcript"]["model"], "whisper-turbo");
+    assert_complete_transcript(&env.rows(source));
+    // Completa: trocar o modelo só vale para uma retranscrição futura e não mexe na atual.
+    choose("whisper-small", "cpu", "int8");
+    let kept = env.start(source).unwrap();
+    assert_eq!(kept["state"], "complete");
+    assert_eq!(env.status(source)["transcript"]["model"], "whisper-turbo");
 }
 
 #[test]

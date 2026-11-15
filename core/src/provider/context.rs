@@ -53,6 +53,16 @@ enum Source {
     Measured,
 }
 impl Source {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Source::User => "user",
+            Source::Loaded => "loaded",
+            Source::Server => "server",
+            Source::Catalog => "catalog",
+            Source::Fallback => "fallback",
+            Source::Measured => "measured",
+        }
+    }
     fn explanation(self) -> &'static str {
         match self {
             Source::User => "Value set by you for this profile.",
@@ -771,6 +781,46 @@ pub(super) fn probe(t: ContextTarget, cancel: &CancelToken) -> CommandResult {
         "truncated": verdict.truncated, "measured": verdict.measured,
         "value": resolved.value, "source": resolved.source,
     }))
+}
+
+/// What the window planner (#144) reads: the cached effective context of a profile or CLI.
+pub(crate) struct CachedContext {
+    pub profile_id: String,
+    pub kind: String,
+    pub model: String,
+    pub value: u64,
+    pub origin: &'static str,
+}
+
+/// Cache only, no probe and no network: the same resolution as `provider.context.get`.
+pub(crate) fn effective_cached(
+    task: Option<&str>,
+    explicit: Option<&str>,
+) -> Result<CachedContext, CoreError> {
+    Ok(match context_pick(task, explicit)? {
+        ContextPick::Cli(kind) => {
+            let r = resolve_value("cli", false, None, &Found::default(), (None, None));
+            CachedContext {
+                profile_id: kind.clone(),
+                kind,
+                model: String::new(),
+                value: r.value,
+                origin: r.source.as_str(),
+            }
+        }
+        ContextPick::Profile(t) => {
+            let local = is_loopback_endpoint(&t.endpoint);
+            let found = cache_get(&t).unwrap_or_default();
+            let r = resolve_value(&t.kind, local, t.user_context, &found, catalog_limits(&t));
+            CachedContext {
+                value: r.value,
+                origin: r.source.as_str(),
+                profile_id: t.id,
+                kind: t.kind,
+                model: t.model,
+            }
+        }
+    })
 }
 
 fn target_result(

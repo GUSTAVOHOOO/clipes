@@ -143,6 +143,7 @@ fn token_calibration_diagnostic() -> String {
     settings::calibration_status()
 }
 inventory::submit! { crate::diagnostic::DiagnosticField { kind: crate::diagnostic::DiagnosticKind::TokenCalibration, value: token_calibration_diagnostic } }
+pub(crate) use context::effective_cached;
 pub use settings::run_structured;
 pub(crate) use settings::{profile_infos, routed, Routed};
 

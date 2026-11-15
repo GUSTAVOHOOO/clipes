@@ -149,6 +149,27 @@ fn transcribe_worker() {
                     continue;
                 }
                 let params = &message["params"];
+                if let Some(log) = std::env::var_os("CLIPES_FAKE_TRANSCRIBE_LOG") {
+                    if message["task"] == "transcribe" {
+                        let mut file = fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(log)
+                            .unwrap();
+                        writeln!(
+                            file,
+                            "{} {} {}",
+                            params["model"]["id"].as_str().unwrap_or(""),
+                            params["model"]["device"].as_str().unwrap_or(""),
+                            params["model"]["compute_type"].as_str().unwrap_or("")
+                        )
+                        .unwrap();
+                    }
+                }
+                if message["task"] == "probe" {
+                    probe_reply(&mut out, &id, params);
+                    continue;
+                }
                 let seconds: f64 = params["audio"]
                     .as_str()
                     .and_then(|p| fs::read_to_string(p).ok())
@@ -245,6 +266,9 @@ fn main() {
     if exe.file_stem().is_some_and(|s| s == "uv") {
         return uv(&args);
     }
+    if exe.file_stem().is_some_and(|s| s == "nvidia-smi") {
+        return nvidia_smi(&args);
+    }
     if std::env::var("CLIPES_FAKE_WORKER_MODE").as_deref() == Ok("transcribe") {
         return transcribe_worker();
     }
@@ -254,4 +278,101 @@ fn main() {
         .map(|i| args[i + 1].as_str())
         .unwrap_or("handshake");
     worker(scenario);
+}
+
+/// Tarefa `probe` do Motor local (#50). `CLIPES_FAKE_PROBE_FAIL` é uma lista separada por vírgulas:
+/// `fail:<precisão>` (erro interno na GPU), `oom:<lote>` (falta de memória na GPU de lote >= n) e
+/// `hang:<precisão>` (nunca responde). `CLIPES_FAKE_PROBE_LOG` recebe uma linha por pedido, com o pid.
+fn probe_reply(out: &mut std::io::StdoutLock<'_>, id: &Value, params: &Value) {
+    let send = |out: &mut std::io::StdoutLock<'_>, value: Value| {
+        writeln!(out, "{value}").unwrap();
+        out.flush().unwrap();
+    };
+    let mode = params["mode"].as_str().unwrap_or("");
+    let device = params["model"]["device"].as_str().unwrap_or("");
+    let compute = params["model"]["compute_type"].as_str().unwrap_or("");
+    let batch = params["batch_size"].as_u64().unwrap_or(1);
+    if let Some(log) = std::env::var_os("CLIPES_FAKE_PROBE_LOG") {
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log)
+            .unwrap();
+        writeln!(
+            file,
+            "{} {mode} {device} {compute} {batch}",
+            std::process::id()
+        )
+        .unwrap();
+    }
+    let rules = std::env::var("CLIPES_FAKE_PROBE_FAIL").unwrap_or_default();
+    let has = |rule: String| rules.split(',').any(|r| r == rule);
+    let error = |out: &mut std::io::StdoutLock<'_>, code: &str| {
+        send(
+            out,
+            serde_json::json!({"v":1,"type":"error","id":id,"code":code,"message":"x"}),
+        )
+    };
+    if device == "cuda" && has(format!("hang:{compute}")) {
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+    }
+    if device == "cuda" && has(format!("fail:{compute}")) {
+        return error(out, "internal");
+    }
+    if device == "cuda" && (1..=8).any(|n| batch >= n && has(format!("oom:{n}"))) {
+        return error(out, "out_of_memory");
+    }
+    let data = match mode {
+        "info" => {
+            let types = std::env::var("CLIPES_FAKE_CUDA_TYPES")
+                .unwrap_or_else(|_| "float16,int8,int8_float16".into());
+            serde_json::json!({"ct2_version":"4.9.0","cuda_compute_types":types.split(',').collect::<Vec<_>>()})
+        }
+        "clip" => {
+            let words = if batch == 1 {
+                serde_json::json!({"pt":9,"en":9})
+            } else {
+                serde_json::json!({"pt":72})
+            };
+            serde_json::json!({"load_s":1.5,"run_s":2.0,"audio_s":18.0,"words":words})
+        }
+        _ => {
+            let seconds: f64 = params["audio"]
+                .as_str()
+                .and_then(|p| fs::read_to_string(p).ok())
+                .and_then(|t| t.trim().parse().ok())
+                .unwrap_or(-1.0);
+            if seconds < 0.0 {
+                return error(out, "internal");
+            }
+            send(
+                out,
+                serde_json::json!({"v":1,"type":"progress","id":id,"stage":"transcribing","percentage":50,"message":"Transcrevendo"}),
+            );
+            let rate: f64 = std::env::var("CLIPES_FAKE_PROBE_RATE")
+                .ok()
+                .and_then(|r| r.parse().ok())
+                .unwrap_or(0.5);
+            serde_json::json!({"load_s":10.0,"run_s":seconds*rate,"audio_s":seconds,"words":seconds as u64})
+        }
+    };
+    send(
+        out,
+        serde_json::json!({"v":1,"type":"result","id":id,"data":data}),
+    );
+}
+
+/// `nvidia-smi` falso: `-L` e a consulta de VRAM, a partir de CLIPES_FAKE_GPU
+/// ("nome, driver, total, livre"); sem a variável, falha como um PC sem NVIDIA.
+fn nvidia_smi(args: &[String]) {
+    let Ok(gpu) = std::env::var("CLIPES_FAKE_GPU") else {
+        std::process::exit(9);
+    };
+    if args.iter().any(|a| a == "-L") {
+        println!("GPU 0: {}", gpu.split(',').next().unwrap());
+    } else {
+        println!("{gpu}");
+    }
 }
