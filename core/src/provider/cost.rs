@@ -694,6 +694,41 @@ mod tests {
     use super::*;
 
     #[test]
+    fn estimate_keeps_base_tier_when_interval_ends_exactly_at_threshold() {
+        let request = StructuredRequest {
+            instruction: String::new(),
+            transcript: String::new(),
+            schema: json!({}),
+            native_schema: false,
+            max_output_tokens: Some(1000),
+        };
+        for price in embedded()
+            .prices
+            .into_iter()
+            .filter(|p| !p.tiers.is_empty())
+        {
+            let target = Target::Api {
+                provider: price.provider.clone(),
+                model: price.model.clone(),
+                local: false,
+            };
+            let threshold = price.tiers[0].above_input_tokens;
+            let input = threshold * 3 / 5;
+            for delta in [-1i64, 0, 1] {
+                let e =
+                    estimate_with_input(&target, &request, (input as i64 + delta) as u64).unwrap();
+                if delta <= 0 {
+                    assert!(e["tier"]["aboveInputTokens"].is_null(), "{}", price.model);
+                    assert_eq!(e["tier"]["crossesThreshold"], false);
+                } else {
+                    assert_eq!(e["tier"]["aboveInputTokens"], threshold);
+                    assert_eq!(e["tier"]["crossesThreshold"], true);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn repairs_are_priced_per_request_without_combining_their_tiers() {
         let target = Target::Api {
             provider: "anthropic".into(),
