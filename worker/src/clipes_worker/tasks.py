@@ -24,11 +24,12 @@ def _model_missing():
 
 
 def default_tasks():
-    from .transcribe import transcribe_task
+    from .transcribe import transcribe_task, vad_task
 
     tasks = {
         name: Task(model=model, load=_model_missing, run=lambda *_: {})
         for name, model in (("reframe", "yunet"), ("tts", "kokoro"))
     }
     tasks["transcribe"] = transcribe_task()
+    tasks["vad"] = vad_task()
     return tasks

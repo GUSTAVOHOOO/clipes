@@ -18,3 +18,5 @@ O [ADR-0004](../adr/0004-stack-tauri-react-nucleo-rust-worker-python.md) prevê 
 - **Desvio do benchmark:** o VAD usa também `max_speech_duration_s=30`. O benchmark não tinha teto, mas o pipeline com `vad_filter=False` levanta `RuntimeError` num trecho de 30 s ou mais, e uma live longa tem trechos assim; 30 s é o teto que o próprio faster-whisper aplica ao VAD embutido do pipeline.
 - **Modelos:** Componentes com revisão fixa, SHA-256 por arquivo, tamanho, consentimento, licença (MIT nos dois model cards) e `source_url` (ADR-0003, regra 2). O download só segue redirecionamentos para `huggingface.co` e seu CDN (`hf.co`).
 - **Testes:** `cargo test -p clipes-core --test transcription` (worker falso, com crash e retomada) e `uv run --project worker pytest worker/tests` (modelos falsos). Nenhum teste acessa a rede.
+
+A tarefa `vad` do worker expõe as mesmas fronteiras e silêncios da transcrição local sem carregar um modelo Whisper; o Silero está incluído no pacote faster-whisper. O Motor remoto requer o Componente worker instalado.
