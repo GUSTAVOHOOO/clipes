@@ -124,10 +124,10 @@ impl LocalEngine {
             model: json!({
                 "id": selection.spec.id,
                 "dir": selection.dir,
-                "device": selection.spec.device,
-                "compute_type": selection.spec.compute_type,
+                "device": selection.config.device,
+                "compute_type": selection.config.compute_type,
             }),
-            batch_size: selection.spec.batch_size,
+            batch_size: selection.config.batch_size(),
         })
     }
 }
@@ -208,6 +208,15 @@ fn extract(
     id: i64,
     stop: &AtomicBool,
 ) -> Result<(), CoreError> {
+    extract_checked(ffmpeg, slice, output, &|| preview::check(id, stop))
+}
+
+fn extract_checked(
+    ffmpeg: &Path,
+    slice: &Slice<'_>,
+    output: &Path,
+    check: &dyn Fn() -> Result<(), CoreError>,
+) -> Result<(), CoreError> {
     let Slice {
         source,
         track,
@@ -267,7 +276,7 @@ fn extract(
     })
     .collect();
     let result = loop {
-        if let Err(e) = preview::check(id, stop) {
+        if let Err(e) = check() {
             group.terminate();
             let _ = child.wait();
             break Err(e);
@@ -633,7 +642,7 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         (
             selection.spec.id,
             selection.spec.revision,
-            selection.spec.compute_type,
+            selection.config.compute_type.as_str(),
         )
     } else {
         (groq::MODEL, "", "remote")
@@ -663,7 +672,12 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         tx.commit()?;
         Ok((transcript, state, job))
     })?;
-    Ok(json!({"transcript_id": transcript, "state": state, "job_id": job}))
+    let warnings = if engine == "local" {
+        crate::components::hardware::current_start_warnings()
+    } else {
+        Vec::new()
+    };
+    Ok(json!({"transcript_id": transcript, "state": state, "job_id": job, "warnings": warnings}))
 }
 
 fn loss(transcript: i64) -> Result<Value, CoreError> {
@@ -721,6 +735,7 @@ inventory::submit! { CommandRegistration { name: "transcription.words", execute:
 #[cfg(test)]
 mod groq_tests;
 
+mod estimate;
 mod groq;
 pub use groq::GroqEngine;
 

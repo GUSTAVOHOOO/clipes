@@ -141,9 +141,13 @@ pub(super) fn cuda_installed(settings: &Settings) -> bool {
 
 /// Há GPU NVIDIA? Sem ela, o worker usa só a variante CPU (sem libs CUDA).
 fn has_nvidia_gpu() -> bool {
-    crate::process::spawn("nvidia-smi", ["-L"], None)
-        .and_then(|child| child.wait_with_output())
-        .is_ok_and(|o| o.status.success() && String::from_utf8_lossy(&o.stdout).contains("GPU "))
+    crate::process::spawn(
+        std::env::var_os("CLIPES_NVIDIA_SMI").unwrap_or_else(|| "nvidia-smi".into()),
+        ["-L"],
+        None,
+    )
+    .and_then(|child| child.wait_with_output())
+    .is_ok_and(|o| o.status.success() && String::from_utf8_lossy(&o.stdout).contains("GPU "))
 }
 
 /// Variáveis que mantêm o `uv` no ambiente do Clipes e fora do Python do sistema.

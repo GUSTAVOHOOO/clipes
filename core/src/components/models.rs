@@ -21,8 +21,6 @@ pub(crate) struct ModelSpec {
     pub revision: &'static str,
     pub license: &'static str,
     pub device: &'static str,
-    pub compute_type: &'static str,
-    pub batch_size: u32,
     /// Arquivos `(nome, bytes, sha256)` conferidos em cada download.
     pub files: &'static [(&'static str, u64, &'static str)],
 }
@@ -37,8 +35,6 @@ pub(crate) const TURBO: ModelSpec = ModelSpec {
     revision: "0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf",
     license: "MIT",
     device: "cuda",
-    compute_type: "int8_float16",
-    batch_size: 1,
     files: &[
         (
             "config.json",
@@ -77,8 +73,6 @@ pub(crate) const SMALL: ModelSpec = ModelSpec {
     revision: "536b0662742c02347bc0e980a01041f333bce120",
     license: "MIT",
     device: "cpu",
-    compute_type: "int8",
-    batch_size: 8,
     files: &[
         (
             "config.json",
@@ -132,24 +126,25 @@ impl ModelSpec {
     }
 }
 
-/// O modelo que o hardware pede: turbo com o worker CUDA, `small` em CPU.
+/// O modelo em uso: a escolha manual, a da sonda de hardware (#50) ou a de fábrica
+/// (turbo com o worker CUDA, `small` em CPU).
 pub(crate) fn recommended(settings: &Settings) -> &'static ModelSpec {
-    if super::worker::cuda_installed(settings) {
-        &TURBO
-    } else {
-        &SMALL
-    }
+    super::hardware::effective(settings)
+        .spec()
+        .unwrap_or(&SMALL)
 }
 
 pub(crate) struct Selection {
     pub spec: &'static ModelSpec,
     pub dir: PathBuf,
+    pub config: super::hardware::Config,
 }
 
-/// O modelo recomendado para o hardware, se já estiver instalado.
+/// A configuração em uso (modelo, dispositivo e precisão), se o modelo já estiver instalado.
 pub(crate) fn selection() -> Result<Selection, CoreError> {
     let settings = load_settings()?;
-    let spec = recommended(&settings);
+    let config = super::hardware::effective(&settings);
+    let spec = config.spec().unwrap_or(&SMALL);
     if !spec.installed(&settings) {
         return Err(error(
             "model_missing",
@@ -159,6 +154,7 @@ pub(crate) fn selection() -> Result<Selection, CoreError> {
     Ok(Selection {
         spec,
         dir: spec.dir(&settings),
+        config,
     })
 }
 
