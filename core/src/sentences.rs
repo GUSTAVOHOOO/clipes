@@ -260,7 +260,11 @@ fn timeline_command(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let limit = v["limit"].as_i64().unwrap_or(500).clamp(0, 2_000);
     const ITEMS: &str = "SELECT 'sentence' AS type, id, start_us, end_us, language, text, 1 AS ord FROM sentences WHERE transcript_id=?1 UNION ALL SELECT 'silence', NULL, w.start_us, w.end_us, NULL, '', 0 FROM transcript_words w WHERE w.transcript_id=?1 AND w.kind='silence' AND COALESCE((SELECT s.end_us FROM sentences s WHERE s.transcript_id=?1 AND s.start_us<=w.start_us ORDER BY s.start_us DESC LIMIT 1), -1) <= w.start_us";
     projects::with_reader(|c| {
-        let total: i64 = c.query_row(&format!("SELECT COUNT(*) FROM ({ITEMS})"), [transcript], |r| r.get(0))?;
+        let total: i64 = c.query_row(
+            &format!("SELECT COUNT(*) FROM ({ITEMS})"),
+            [transcript],
+            |r| r.get(0),
+        )?;
         let mut q = c.prepare(&format!(
             "SELECT type, id, start_us, end_us, language, text FROM ({ITEMS}) ORDER BY start_us, ord LIMIT ?2 OFFSET ?3"
         ))?;
