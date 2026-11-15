@@ -30,3 +30,4 @@ palavras com timestamps ordenados e dentro da duração do áudio. O teste ignor
 A documentação oficial do Groq informa US$ 0,04/h para `whisper-large-v3-turbo`,
 mínimo cobrado de 10 s por chamada e limite de upload de 25 MB:
 <https://console.groq.com/docs/speech-to-text> (consultada em 2026-11-14).
+A resposta do Groq será normalizada para ISO-639-1 usando a lista fixa de idiomas do tokenizer Whisper; valores desconhecidos ficam nulos.

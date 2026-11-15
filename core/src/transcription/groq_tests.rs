@@ -240,7 +240,10 @@ fn request(
                                 .into(),
                             start_us,
                             end_us,
-                            language: value["language"].as_str().map(str::to_owned),
+                            language: value["language"]
+                                .as_str()
+                                .and_then(language_code)
+                                .map(str::to_owned),
                         })
                     })
                     .collect();
@@ -295,4 +298,122 @@ fn groq_test_key_lists_models_without_audio() {
         super::groq::test_endpoint(&format!("http://{address}/openai/v1/models"), "dummy").is_ok()
     );
     worker.join().unwrap();
+}
+
+#[test]
+fn whisper_languages_are_normalized_to_iso_codes() {
+    assert_eq!(language_code("english"), Some("en"));
+    assert_eq!(language_code("PORTUGUESE"), Some("pt"));
+    assert_eq!(language_code("FR"), Some("fr"));
+    assert_eq!(language_code("made-up"), None);
+}
+
+// Whisper tokenizer LANGUAGES, excluding the three-letter `yue`, which is not ISO-639-1.
+// https://github.com/openai/whisper/blob/main/whisper/tokenizer.py
+const LANGUAGES: &[(&str, &str)] = &[
+    ("en", "english"),
+    ("zh", "chinese"),
+    ("de", "german"),
+    ("es", "spanish"),
+    ("ru", "russian"),
+    ("ko", "korean"),
+    ("fr", "french"),
+    ("ja", "japanese"),
+    ("pt", "portuguese"),
+    ("tr", "turkish"),
+    ("pl", "polish"),
+    ("ca", "catalan"),
+    ("nl", "dutch"),
+    ("ar", "arabic"),
+    ("sv", "swedish"),
+    ("it", "italian"),
+    ("id", "indonesian"),
+    ("hi", "hindi"),
+    ("fi", "finnish"),
+    ("vi", "vietnamese"),
+    ("he", "hebrew"),
+    ("uk", "ukrainian"),
+    ("el", "greek"),
+    ("ms", "malay"),
+    ("cs", "czech"),
+    ("ro", "romanian"),
+    ("da", "danish"),
+    ("hu", "hungarian"),
+    ("ta", "tamil"),
+    ("no", "norwegian"),
+    ("th", "thai"),
+    ("ur", "urdu"),
+    ("hr", "croatian"),
+    ("bg", "bulgarian"),
+    ("lt", "lithuanian"),
+    ("la", "latin"),
+    ("mi", "maori"),
+    ("ml", "malayalam"),
+    ("cy", "welsh"),
+    ("sk", "slovak"),
+    ("te", "telugu"),
+    ("fa", "persian"),
+    ("lv", "latvian"),
+    ("bn", "bengali"),
+    ("sr", "serbian"),
+    ("az", "azerbaijani"),
+    ("sl", "slovenian"),
+    ("kn", "kannada"),
+    ("et", "estonian"),
+    ("mk", "macedonian"),
+    ("br", "breton"),
+    ("eu", "basque"),
+    ("is", "icelandic"),
+    ("hy", "armenian"),
+    ("ne", "nepali"),
+    ("mn", "mongolian"),
+    ("bs", "bosnian"),
+    ("kk", "kazakh"),
+    ("sq", "albanian"),
+    ("sw", "swahili"),
+    ("gl", "galician"),
+    ("mr", "marathi"),
+    ("pa", "punjabi"),
+    ("si", "sinhala"),
+    ("km", "khmer"),
+    ("sn", "shona"),
+    ("yo", "yoruba"),
+    ("so", "somali"),
+    ("af", "afrikaans"),
+    ("oc", "occitan"),
+    ("ka", "georgian"),
+    ("be", "belarusian"),
+    ("tg", "tajik"),
+    ("sd", "sindhi"),
+    ("gu", "gujarati"),
+    ("am", "amharic"),
+    ("yi", "yiddish"),
+    ("lo", "lao"),
+    ("uz", "uzbek"),
+    ("fo", "faroese"),
+    ("ht", "haitian creole"),
+    ("ps", "pashto"),
+    ("tk", "turkmen"),
+    ("nn", "nynorsk"),
+    ("mt", "maltese"),
+    ("sa", "sanskrit"),
+    ("lb", "luxembourgish"),
+    ("my", "myanmar"),
+    ("bo", "tibetan"),
+    ("tl", "tagalog"),
+    ("mg", "malagasy"),
+    ("as", "assamese"),
+    ("tt", "tatar"),
+    ("ln", "lingala"),
+    ("ha", "hausa"),
+    ("ba", "bashkir"),
+    ("jw", "javanese"),
+    ("su", "sundanese"),
+];
+
+fn language_code(input: &str) -> Option<&'static str> {
+    LANGUAGES
+        .iter()
+        .find(|(code, name)| input.eq_ignore_ascii_case(code) || input.eq_ignore_ascii_case(name))
+        .map(|(code, _)| *code)
 }
