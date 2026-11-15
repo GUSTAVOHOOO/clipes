@@ -72,10 +72,20 @@ pub(super) fn begin(
 ) -> Result<i64, CoreError> {
     guard()?;
     let estimate = groq::estimate_cost(groq::MODEL, duration);
+    let batch: Option<String> = projects::with_reader(|c| {
+        c.query_row("SELECT batch FROM jobs WHERE id=?1", [job], |r| r.get(0))
+    })?;
+    if let Some(batch) = batch {
+        let next = estimate["maxMicroUsd"].as_i64().ok_or_else(bad_result)?;
+        if let Some(code) = jobs::audio_precheck(&batch, next)? {
+            jobs::pause_scope("batch", &batch, code);
+            return Err(error(code, "O teto de custo do lote foi atingido."));
+        }
+    }
     projects::with_writer(|c| {
         let tx = c.transaction()?;
-        tx.execute("INSERT INTO transcription_calls(transcript_id,job_id,start_us,end_us,state,estimated_usd) VALUES (?1,?2,?3,?4,'pending',?5)",
-            (transcript, job, start, start + duration, estimate["usd"].as_f64()))?;
+        tx.execute("INSERT INTO transcription_calls(transcript_id,job_id,start_us,end_us,state,estimated_usd,created_at) VALUES (?1,?2,?3,?4,'pending',?5,?6)",
+            (transcript, job, start, start + duration, estimate["usd"].as_f64(), crate::provider::cost::now_micros()))?;
         let call = tx.last_insert_rowid();
         // Trilha de auditoria (#125), na mesma transação da chamada: só hashes e metadados.
         tx.execute(

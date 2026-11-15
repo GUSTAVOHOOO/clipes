@@ -144,6 +144,10 @@ Um `profile:<id>` cujo perfil foi removido aparece em `assistant.status` como `"
 
 `assistant.local_only.set {task, enabled}` liga o veto por tarefa. `provider.structured`, `provider.cost.estimate` e `provider.cost.run` resolvem a rota por `provider::routed` e, antes do consentimento, do cofre e de qualquer rede, devolvem `local_only_violation` (mensagem fixa, sem `usage`, sem texto, endpoint ou nome de Projeto) se a rota é um CLI ou um endpoint que não é loopback. A checagem usa o host literal (`localhost` ou IP de loopback), sem DNS, na hora da chamada; um `profileId` explícito não a contorna. O veto por Projeto está na próxima seção.
 
+### Lote de Fontes (#56)
+
+Várias Fontes processadas em sequência (Transcrição e seleção), com teto de custo por lote e erros isolados por Fonte; o avanço é recalculado dos jobs, nunca só do que o lote guarda. Veja [Lote de Fontes](docs/contribuindo/lote-de-fontes.md).
+
 ### "Somente local" como veto por Projeto (#123)
 
 O sinalizador mora no `project.sqlite` (tabela `project_privacy`, linha única, migração `0123_001_project_local_only`, padrão desligado), viaja com o Projeto portátil e entra nos backups; restaurar um backup devolve o valor que estava nele (um backup anterior à migração é migrado e volta desligado). `projects.local_only.get` devolve `{open, enabled}` e `projects.local_only.set {enabled}` grava (`project_not_open` sem Projeto aberto). O Projeto não escolhe Provedor: só proíbe.

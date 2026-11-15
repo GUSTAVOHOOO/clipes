@@ -74,6 +74,7 @@ mod proxy;
 pub mod selection;
 pub mod selection_windows;
 pub mod sentences;
+mod source_batches;
 mod sources;
 pub mod transcription;
 mod url_import;
