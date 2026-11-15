@@ -207,7 +207,7 @@ pub(super) fn gate(
     })
 }
 
-pub(super) fn pause(scope: &str, key: &str, code: &str) {
+pub(crate) fn pause(scope: &str, key: &str, code: &str) {
     let _ = projects::with_writer(|c| {
         c.execute(
             "INSERT INTO ai_pauses(scope,key,reason,created_at) VALUES (?1,?2,?3,?4) ON CONFLICT(scope,key) DO UPDATE SET reason=excluded.reason",
@@ -342,3 +342,21 @@ fn cmd_continue(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 inventory::submit! { CommandRegistration { name: "jobs.budget.get", execute: cmd_get } }
 inventory::submit! { CommandRegistration { name: "jobs.budget.set", execute: cmd_set } }
 inventory::submit! { CommandRegistration { name: "jobs.budget.continue", execute: cmd_continue } }
+
+/// Antes de uma transcrição paga num lote (#56): `Some(código)` se o áudio estimado, somado ao
+/// que o lote já gastou (seleção e áudio), passa do teto de custo. O lote é o escopo que pausa.
+pub(crate) fn audio_precheck(
+    batch: &str,
+    estimate_micro_usd: i64,
+) -> Result<Option<&'static str>, CoreError> {
+    let Some(l) = limits("batch", batch)? else {
+        return Ok(None);
+    };
+    let Some(max) = l.cost else {
+        return Ok(None);
+    };
+    let used = cost::totals_since("batch", batch, l.since)?["microUsd"]
+        .as_i64()
+        .unwrap_or(0);
+    Ok((used.saturating_add(estimate_micro_usd) > max).then_some("budget_cost"))
+}
