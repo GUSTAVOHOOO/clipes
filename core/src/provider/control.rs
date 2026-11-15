@@ -21,6 +21,10 @@ impl CancelToken {
     pub fn is_cancelled(&self) -> bool {
         self.0.load(Ordering::SeqCst)
     }
+    /// Bridge to the worker protocol, sharing the same cancellation flag.
+    pub(crate) fn flag(&self) -> &AtomicBool {
+        &self.0
+    }
 }
 
 pub(crate) type CallGuard = Box<dyn Fn(&StructuredRequest, &[Value]) -> Result<Value, CoreError>>;

@@ -97,19 +97,63 @@ pub(crate) const SMALL: ModelSpec = ModelSpec {
     ],
 };
 
-pub(crate) const MODELS: [&ModelSpec; 2] = [&TURBO, &SMALL];
+/// Pesos e código MIT: licença no diretório oficial, fixada na mesma revisão.
+pub(crate) const YUNET: ModelSpec = ModelSpec {
+    id: "yunet",
+    label: "YuNet (reenquadramento)",
+    repo: "opencv/opencv_zoo",
+    former_repo: None,
+    revision: "48b10fa505aeb51fbd127fc60a5c660040e823b7",
+    license: "MIT",
+    device: "cpu",
+    files: &[(
+        "face_detection_yunet_2023mar.onnx",
+        232_589,
+        "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+    )],
+};
+
+pub(crate) const MODELS: [&ModelSpec; 3] = [&TURBO, &SMALL, &YUNET];
+
+pub(crate) fn reframe_model() -> Result<(PathBuf, &'static str), CoreError> {
+    let settings = load_settings()?;
+    let path = YUNET.dir(&settings).join(YUNET.files[0].0);
+    if !YUNET.installed(&settings) || !path.is_file() {
+        return Err(error(
+            "model_missing",
+            "Instale o modelo YuNet em Componentes.",
+        ));
+    }
+    Ok((
+        path,
+        if super::worker::cuda_installed(&settings) {
+            "cuda"
+        } else {
+            "cpu"
+        },
+    ))
+}
 
 impl ModelSpec {
     pub(crate) fn total_size(&self) -> u64 {
         self.files.iter().map(|f| f.1).sum()
     }
     fn source_url(&self) -> String {
+        if self.id == YUNET.id {
+            return format!(
+                "https://github.com/{}/tree/{}/models/face_detection_yunet",
+                self.repo, self.revision
+            );
+        }
         format!(
             "https://huggingface.co/{}/tree/{}",
             self.repo, self.revision
         )
     }
     fn file_url(&self, name: &str) -> String {
+        if self.id == YUNET.id {
+            return format!("https://media.githubusercontent.com/media/{}/{}/models/face_detection_yunet/{name}", self.repo, self.revision);
+        }
         format!(
             "https://huggingface.co/{}/resolve/{}/{name}",
             self.repo, self.revision
@@ -193,9 +237,10 @@ pub(crate) fn selection() -> Result<Selection, CoreError> {
 fn allowed_redirect(url: &reqwest::Url) -> bool {
     let host = url.host_str().unwrap_or("");
     url.scheme() == "https"
-        && ["huggingface.co", "hf.co"]
-            .iter()
-            .any(|root| host == *root || host.ends_with(&format!(".{root}")))
+        && (host == "media.githubusercontent.com"
+            || ["huggingface.co", "hf.co"]
+                .iter()
+                .any(|root| host == *root || host.ends_with(&format!(".{root}"))))
 }
 
 fn client() -> Result<reqwest::blocking::Client, CoreError> {
@@ -337,7 +382,10 @@ mod tests {
     fn model_files_are_pinned_by_revision_and_sha256() {
         for m in MODELS {
             assert_eq!(m.revision.len(), 40);
-            assert!(m.files.iter().any(|f| f.0 == "model.bin"));
+            assert!(m
+                .files
+                .iter()
+                .any(|f| f.0 == "model.bin" || f.0.ends_with(".onnx")));
             for (name, size, sha) in m.files {
                 assert!(*size > 0 && sha.len() == 64, "{name}");
                 assert!(sha.bytes().all(|b| b.is_ascii_hexdigit()));

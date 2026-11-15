@@ -368,7 +368,17 @@ fn turbo_on_cpu_is_manual_only_and_disabled_below_8_gib_total_ram() {
     // O padrão em CPU continua o small, sem acrescentar modelo ao catálogo.
     assert_eq!(status["effective"]["model"], "whisper-small");
     let manifest = run("components.models.manifest", json!({})).unwrap();
-    assert_eq!(manifest.as_array().unwrap().len(), 2);
+    assert_eq!(
+        manifest
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|m| m["id"]
+                .as_str()
+                .is_some_and(|id| id.starts_with("whisper-")))
+            .count(),
+        2
+    );
     std::env::set_var("CLIPES_FAKE_RAM", format!("{},{}", 16 * GIB, 12 * GIB));
     let status = run("transcription.hardware.choose", turbo_cpu).unwrap();
     assert_eq!(status["effective"]["model"], "whisper-turbo");

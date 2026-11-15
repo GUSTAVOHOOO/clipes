@@ -59,6 +59,14 @@ const FILES: &[(&str, &[u8])] = &[
         include_bytes!("../../../worker/src/clipes_worker/tasks.py"),
     ),
     (
+        "src/clipes_worker/reframe.py",
+        include_bytes!("../../../worker/src/clipes_worker/reframe.py"),
+    ),
+    (
+        "src/clipes_worker/reframe_camera.py",
+        include_bytes!("../../../worker/src/clipes_worker/reframe_camera.py"),
+    ),
+    (
         "src/clipes_worker/transcribe.py",
         include_bytes!("../../../worker/src/clipes_worker/transcribe.py"),
     ),
@@ -208,8 +216,12 @@ fn sync_args(project: &Path, cuda: bool) -> Vec<OsString> {
     .map(Into::into)
     .to_vec();
     args.push(project.into());
+    args.extend(["--extra", if cuda { "cuda" } else { "cpu" }].map(OsString::from));
+    // faster-whisper requires the CPU distribution by name. Both distributions
+    // own `onnxruntime/`; installing both makes the selected provider depend on
+    // extraction order. Keep it resolved in the lock, install only the GPU wheel.
     if cuda {
-        args.extend(["--extra", "cuda"].map(OsString::from));
+        args.extend(["--no-install-package", "onnxruntime"].map(OsString::from));
     }
     args
 }
@@ -525,7 +537,11 @@ mod tests {
             cpu.contains(&"--frozen".to_string()),
             "versões travadas pelo lockfile"
         );
-        assert_eq!(&gpu[..gpu.len() - 2], &cpu[..]);
+        assert!(cpu.windows(2).any(|w| w == ["--extra", "cpu"]));
+        assert!(gpu
+            .windows(2)
+            .any(|w| w == ["--no-install-package", "onnxruntime"]));
+        assert_eq!(&gpu[..gpu.len() - 4], &cpu[..cpu.len() - 2]);
     }
 
     #[test]
