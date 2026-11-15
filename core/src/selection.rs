@@ -17,6 +17,7 @@ use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
 pub mod cut;
+mod review;
 
 pub const TASK_ID: &str = "selection";
 /// Tipo do job de cada Janela na fila.
