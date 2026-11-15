@@ -59,3 +59,27 @@ fn remove(_: Value, _: &mut EventSink<'_>) -> CommandResult {
 inventory::submit! { CommandRegistration { name: "transcription.groq.key.status", execute: status } }
 inventory::submit! { CommandRegistration { name: "transcription.groq.key.set", execute: set } }
 inventory::submit! { CommandRegistration { name: "transcription.groq.key.remove", execute: remove } }
+
+pub(super) fn test_endpoint(url: &str, key: &str) -> Result<(), CoreError> {
+    let response = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .redirect(reqwest::redirect::Policy::none())
+        .no_proxy()
+        .build()
+        .map_err(|_| error("network", "Não foi possível iniciar a conexão."))?
+        .get(url)
+        .bearer_auth(key)
+        .send()
+        .map_err(|_| error("network", "Não foi possível acessar o Groq."))?;
+    match response.status().as_u16() {
+        200..=299 => Ok(()),
+        401 => Err(error("groq_key", "Chave do Groq inválida.")),
+        _ => Err(error("groq_http", "O Groq recusou a chamada.")),
+    }
+}
+fn test_key(_: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let key = get_key()?.ok_or_else(|| error("groq_key_missing", "Configure a chave do Groq."))?;
+    test_endpoint("https://api.groq.com/openai/v1/models", &key)?;
+    Ok(json!({"ok": true}))
+}
+inventory::submit! { CommandRegistration { name: "transcription.groq.key.test", execute: test_key } }

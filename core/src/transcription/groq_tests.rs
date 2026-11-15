@@ -268,3 +268,31 @@ fn groq_key_commands_never_return_the_secret() {
     let status = crate::dispatch("transcription.groq.key.status", json!({}), &mut |_| {}).unwrap();
     assert_eq!(status["configured"], false);
 }
+
+#[test]
+fn groq_test_key_lists_models_without_audio() {
+    let server = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = server.local_addr().unwrap();
+    let worker = std::thread::spawn(move || {
+        let (mut stream, _) = server.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let mut bytes = [0u8; 2048];
+        let n = stream.read(&mut bytes).unwrap();
+        let request = String::from_utf8_lossy(&bytes[..n]);
+        assert!(request.starts_with("GET /openai/v1/models "));
+        let body = r#"{"data":[{"id":"whisper-large-v3-turbo"}]}"#;
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .unwrap();
+    });
+    assert!(
+        super::groq::test_endpoint(&format!("http://{address}/openai/v1/models"), "dummy").is_ok()
+    );
+    worker.join().unwrap();
+}
