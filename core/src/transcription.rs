@@ -619,6 +619,11 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     if !matches!(engine, "local" | "groq") {
         return Err(error("invalid_engine", "Motor de transcrição inválido."));
     }
+    let batch = match v.get("batch") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(b)) if !b.is_empty() && b.len() <= 80 => Some(b.clone()),
+        _ => return Err(error("invalid_batch", "Lote inválido.")),
+    };
     let engine_switch = existing.as_ref().is_some_and(|t| t.2 != engine);
     // Escolha manual de outro modelo (#50): o modelo da Transcrição nunca muda sozinho; só a
     // troca manual de uma parcial, com confirmação, recomeça do zero. Numa completa a troca
@@ -727,8 +732,14 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         )?;
         let mut job = active.as_ref().map(|j| j.0);
         if job.is_none() {
-            tx.execute("INSERT INTO jobs(kind,safety,state,source_id) VALUES ('transcription',?1,'queued',?2)",(if engine == "groq" {"paid"} else {"local"},source))?;
+            tx.execute("INSERT INTO jobs(kind,safety,state,source_id,batch) VALUES ('transcription',?1,'queued',?2,?3)",(if engine == "groq" {"paid"} else {"local"},source,batch.as_deref()))?;
             job = Some(tx.last_insert_rowid());
+        } else if let Some(batch) = batch.as_deref() {
+            // Um lote de Fontes (#56) adota o job ativo: a pausa do lote vale para ele também.
+            tx.execute(
+                "UPDATE jobs SET batch=?2 WHERE id=?1 AND batch IS NULL",
+                (job, batch),
+            )?;
         }
         tx.commit()?;
         Ok((transcript, state, job))

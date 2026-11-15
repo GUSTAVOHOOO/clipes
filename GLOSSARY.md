@@ -78,6 +78,10 @@ _Evitar_: janela sozinha, Janela de contexto (é o limite do modelo, não o trec
 Avaliação explicável do potencial de um Corte, formada por eixos nomeados (como Gancho, Autossuficiência e Fechamento), cada um com uma justificativa. Não é previsão de views.
 _Evitar_: score viral, pontuação de viralidade
 
+**Lote de Fontes** (Source Batch)
+Conjunto de Fontes do Projeto que o app processa em sequência (Transcrição e seleção), com teto de custo opcional. Uma Fonte com erro do Provedor pausa sozinha; as outras seguem.
+_Evitar_: fila (a fila é o mecanismo de jobs), batch
+
 **Motor de transcrição** (Transcription Engine)
 O que produz a Transcrição. Pode ser local, rodando na máquina do usuário (o padrão), ou remoto, via API paga escolhida pelo usuário.
 _Evitar_: modelo de transcrição (o modelo é uma escolha dentro de um Motor)
