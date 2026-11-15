@@ -39,6 +39,20 @@ fn token_estimates_have_conservative_ranges_and_are_profile_specific() {
         cost::observe_tokens("p", "m", &r, chars / 2, "ok").unwrap();
     }
     let before = cost::token_range("p", "m", &r).unwrap();
+    let priced = cost::Target::Api {
+        provider: "anthropic".into(),
+        model: "claude-haiku-5-5".into(),
+        local: false,
+    };
+    for _ in 0..3 {
+        cost::observe_tokens("p", "claude-haiku-5-5", &r, chars / 2, "ok").unwrap();
+    }
+    let calibrated = cost::token_range("p", "claude-haiku-5-5", &r).unwrap();
+    let estimate = cost::estimate_for(&priced, "p", &r).unwrap();
+    assert_eq!(estimate["inputTokensRange"]["min"], calibrated.low);
+    assert_eq!(estimate["inputTokensRange"]["max"], calibrated.high);
+    assert_eq!(estimate["inputTokens"], calibrated.high);
+
     cost::observe_tokens("p", "m", &r, 1, "ok").unwrap();
     cost::observe_tokens("p", "m", &r, chars, "output_truncated").unwrap();
     assert_eq!(cost::token_range("p", "m", &r).unwrap(), before);

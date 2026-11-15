@@ -9,6 +9,8 @@ use std::{fs, path::PathBuf, sync::Mutex};
 const ANTHROPIC_DEFAULT_MAX_OUTPUT_TOKENS: u64 = 8192;
 const EMBEDDED: &str = include_str!("prices.json");
 static LOCK: Mutex<()> = Mutex::new(());
+mod catalog;
+pub use catalog::{Price, Tier};
 
 fn error(code: &str, message: &str) -> CoreError {
     CoreError {
@@ -18,17 +20,6 @@ fn error(code: &str, message: &str) -> CoreError {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Price {
-    pub provider: String,
-    pub model: String,
-    pub input_per_million: f64,
-    pub output_per_million: f64,
-    /// Official pricing page the embedded price was read from; absent in user overrides.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source: Option<String>,
-}
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Table {
@@ -58,8 +49,10 @@ fn overrides_path() -> Result<PathBuf, CoreError> {
 }
 fn read_overrides() -> Result<Overrides, CoreError> {
     match fs::read(overrides_path()?) {
-        Ok(b) => serde_json::from_slice(&b)
-            .map_err(|_| error("settings", "Could not read price overrides")),
+        Ok(b) => serde_json::from_slice::<Overrides>(&b)
+            .ok()
+            .filter(|o| o.prices.iter().all(valid_price))
+            .ok_or_else(|| error("settings", "Could not read price overrides")),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Overrides::default()),
         Err(_) => Err(error("settings", "Could not read price overrides")),
     }
@@ -150,7 +143,13 @@ pub fn price_for(provider: &str, model: &str) -> Result<Option<(Price, &'static 
         list.into_iter()
             .find(|p| p.provider == provider && p.model == model)
     };
-    if let Some(p) = find(read_overrides()?.prices) {
+    if let Some(mut p) = find(read_overrides()?.prices) {
+        // A flat override replaces all tariffs, but does not erase known model limits.
+        if let Some(base) = find(embedded().prices) {
+            p.context_window = p.context_window.or(base.context_window);
+            p.max_output = p.max_output.or(base.max_output);
+            p.limits_source = p.limits_source.or(base.limits_source).or(base.source);
+        }
         return Ok(Some((p, "override")));
     }
     Ok(find(embedded().prices).map(|p| (p, "table")))
@@ -162,12 +161,10 @@ fn micro_usd(tokens: u64, per_million: f64) -> u64 {
 }
 
 /// The single point that turns tokens into micro-USD for a priced model. It receives the
-/// input tokens of the request so context tiers (research #115, a separate ticket) can replace
-/// the flat rate here without touching the callers.
-/// Today the base price applies to every request.
+/// input tokens of the request so its context tier prices the entire request, including output.
 pub(crate) fn price_micro_usd(price: &Price, input_tokens: u64, output_tokens: u64) -> u64 {
-    micro_usd(input_tokens, price.input_per_million)
-        + micro_usd(output_tokens, price.output_per_million)
+    let (input, output) = price.rates(input_tokens);
+    micro_usd(input_tokens, input).saturating_add(micro_usd(output_tokens, output))
 }
 
 /// Number of valid calls retained per profile/model/format/language.
@@ -311,17 +308,7 @@ pub fn estimate_for(
         Target::Cli { name } => name.as_str(),
     };
     let range = token_range(profile, model, request)?;
-    let mut value = estimate_with_input(target, request, range.high)?;
-    if let Target::Api {
-        provider,
-        model,
-        local: false,
-    } = target
-    {
-        if let Some((price, _)) = price_for(provider, model)? {
-            value["minMicroUsd"] = json!(price_micro_usd(&price, range.low, 0));
-        }
-    }
+    let mut value = estimate_with_range(target, request, range)?;
     value["inputTokensLow"] = json!(range.low);
     value["inputCharacters"] = json!(input_characters(request));
     value["estimateHint"] = if request.estimate_hint.valid() {
@@ -365,11 +352,13 @@ pub fn observe_entry(profile: &str, target: &Target, entry: &Value) -> Result<()
 }
 
 /// Same estimator with input corrected by the usage of the preceding call.
-pub(crate) fn estimate_with_input(
+pub(crate) fn estimate_with_range(
     target: &Target,
     request: &StructuredRequest,
-    input: u64,
+    range: TokenRange,
 ) -> Result<Value, CoreError> {
+    let (low_input, high_input) = (range.low, range.high);
+    let mut tier = Value::Null;
     let (kind, ceiling, min, max, source) = match target {
         Target::Cli { .. } => ("plan_quota", None, None, None, None),
         Target::OpenCode { model } => {
@@ -393,12 +382,20 @@ pub(crate) fn estimate_with_input(
             match price_for(provider, model)? {
                 None => ("unknown", ceiling, None, None, None),
                 Some((p, source)) => {
-                    let low = price_micro_usd(&p, input, 0);
+                    if !p.tiers.is_empty() {
+                        let selected = p.tier(high_input);
+                        tier = json!({
+                            "aboveInputTokens": selected.map(|t| t.above_input_tokens),
+                            "upToInputTokens": p.tiers.iter().find(|t| t.above_input_tokens >= high_input).map(|t| t.above_input_tokens),
+                            "crossesThreshold": p.tiers.iter().any(|t| low_input <= t.above_input_tokens && high_input > t.above_input_tokens),
+                        });
+                    }
+                    let low = price_micro_usd(&p, low_input, 0);
                     (
                         "usd",
                         ceiling,
                         Some(low),
-                        ceiling.map(|c| price_micro_usd(&p, input, c)),
+                        ceiling.map(|c| price_micro_usd(&p, high_input, c)),
                         Some(source),
                     )
                 }
@@ -408,7 +405,9 @@ pub(crate) fn estimate_with_input(
     Ok(json!({
         "kind": kind,
         "callsOnly": target.is_cli(),
-        "inputTokens": input,
+        "inputTokens": high_input,
+        "inputTokensRange": {"min":low_input,"max":high_input},
+        "tier": tier,
         "maxOutputTokens": ceiling,
         "minMicroUsd": min,
         "maxMicroUsd": max,
@@ -682,17 +681,26 @@ pub fn run_costed_for(
         }
     }
     let settle = |usage: &Value, calls: u64, code: &str| -> Result<Value, CoreError> {
-        let total_usage = log
+        // Each request (including a repair) chooses its own tier. Adding usages first
+        // could incorrectly move two low-tier calls into the high tier.
+        let costs = log
             .iter()
-            .try_fold((0_u64, 0_u64), |(input, output), entry| {
-                Some((
-                    input.checked_add(entry["usage"]["inputTokens"].as_u64()?)?,
-                    output.checked_add(entry["usage"]["outputTokens"].as_u64()?)?,
-                ))
-            })
-            .map(|(i, o)| json!({"inputTokens":i,"outputTokens":o}))
-            .unwrap_or(Value::Null);
-        let cost = actual(target, if log.is_empty() { usage } else { &total_usage })?;
+            .map(|entry| actual(target, &entry["usage"]))
+            .collect::<Result<Vec<_>, _>>()?;
+        let cost = if costs.is_empty() {
+            actual(target, usage)?
+        } else if costs.contains(&Cost::Unknown) {
+            Cost::Unknown
+        } else if let Cost::Usd { source, .. } = costs[0] {
+            Cost::Usd {
+                micro_usd: costs
+                    .iter()
+                    .fold(0u64, |sum, c| sum.saturating_add(c.micro().unwrap_or(0))),
+                source,
+            }
+        } else {
+            costs[0].clone()
+        };
         let fallback = [json!({"usage":usage,"calls":calls,"code":code})];
         let entries = if log.is_empty() {
             &fallback[..]
@@ -821,12 +829,7 @@ fn cmd_prices(_: Value, _: &mut EventSink<'_>) -> CommandResult {
     price_view()
 }
 fn valid_price(p: &Price) -> bool {
-    !p.provider.trim().is_empty()
-        && !p.model.trim().is_empty()
-        && p.input_per_million.is_finite()
-        && p.output_per_million.is_finite()
-        && p.input_per_million >= 0.0
-        && p.output_per_million >= 0.0
+    p.valid()
 }
 fn cmd_price_set(args: Value, _: &mut EventSink<'_>) -> CommandResult {
     let price: Price = serde_json::from_value(args)
@@ -882,6 +885,61 @@ mod tests {
     use super::*;
 
     #[test]
+    fn estimate_keeps_base_tier_when_interval_ends_exactly_at_threshold() {
+        let request = StructuredRequest {
+            estimate_hint: Default::default(),
+            instruction: String::new(),
+            transcript: String::new(),
+            schema: json!({}),
+            native_schema: false,
+            max_output_tokens: Some(1000),
+        };
+        for price in embedded()
+            .prices
+            .into_iter()
+            .filter(|p| !p.tiers.is_empty())
+        {
+            let target = Target::Api {
+                provider: price.provider.clone(),
+                model: price.model.clone(),
+                local: false,
+            };
+            let threshold = price.tiers[0].above_input_tokens;
+            for delta in [-1i64, 0, 1] {
+                let range = TokenRange {
+                    low: threshold - 1,
+                    high: (threshold as i64 + delta) as u64,
+                };
+                let e = estimate_with_range(&target, &request, range).unwrap();
+                if delta <= 0 {
+                    assert!(e["tier"]["aboveInputTokens"].is_null(), "{}", price.model);
+                    assert_eq!(e["tier"]["crossesThreshold"], false);
+                } else {
+                    assert_eq!(e["tier"]["aboveInputTokens"], threshold);
+                    assert_eq!(e["tier"]["crossesThreshold"], true);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn repairs_are_priced_per_request_without_combining_their_tiers() {
+        let target = Target::Api {
+            provider: "anthropic".into(),
+            model: "claude-haiku-5-5".into(),
+            local: false,
+        };
+        let reply = run_costed(&target, "selection", None, || {
+            let mut log = super::super::control::CallLog::default();
+            for attempt in 0..2 {
+                log.0.push(json!({"attempt":attempt,"calls":1,"code":"ok","usage":{"inputTokens":60_000,"outputTokens":1000}}));
+            }
+            Ok(json!({"data":{},"usage":{"inputTokens":120_000,"outputTokens":2000},"calls":2}))
+        }).unwrap();
+        assert_eq!(reply["cost"]["microUsd"], 13_000);
+    }
+
+    #[test]
     fn embedded_table_is_dated_unique_and_sourced() {
         let table = embedded();
         assert_eq!(table.updated_at.len(), 10);
@@ -893,6 +951,7 @@ mod tests {
                 p.model
             );
             assert!(valid_price(p));
+            assert_eq!(p.updated_at.as_deref().map(str::len), Some(10));
             assert!(p
                 .source
                 .as_deref()

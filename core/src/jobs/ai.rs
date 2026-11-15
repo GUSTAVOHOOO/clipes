@@ -169,13 +169,23 @@ impl Provider for Probe<'_> {
                     )
             });
             if correction > 0 {
-                let corrected = cost::estimate_with_input(
+                let corrected = cost::estimate_with_range(
                     &route.0,
                     request,
-                    heuristic.saturating_add(correction),
+                    cost::TokenRange {
+                        low: estimate["inputTokensRange"]["min"].as_u64().unwrap_or(0),
+                        high: heuristic.saturating_add(correction),
+                    },
                 )?;
-                estimate["inputTokens"] = corrected["inputTokens"].clone();
-                estimate["maxMicroUsd"] = corrected["maxMicroUsd"].clone();
+                for field in [
+                    "inputTokens",
+                    "inputTokensRange",
+                    "tier",
+                    "minMicroUsd",
+                    "maxMicroUsd",
+                ] {
+                    estimate[field] = corrected[field].clone();
+                }
             }
             let pending = pending_usage(&route.0, entries)?;
             if let Some((code, message)) = job_limit(task, &estimate) {

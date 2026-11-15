@@ -50,6 +50,7 @@ fn estimate_actual_and_project_record() {
     let e = cost::estimate(&api("openai", "gpt-5", false), &r).unwrap();
     assert_eq!(e["kind"], "usd");
     assert!(e["inputTokensLow"].as_u64().unwrap() < high);
+    assert_eq!(e["inputTokensRange"]["max"], high);
     assert_eq!(
         e["maxMicroUsd"],
         (high as f64 * 1.25).round() as u64 + 10000
