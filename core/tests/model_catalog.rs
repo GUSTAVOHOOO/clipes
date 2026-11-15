@@ -27,6 +27,7 @@ fn target(provider: &str, model: &str) -> Target {
 }
 fn request() -> StructuredRequest {
     StructuredRequest {
+        estimate_hint: Default::default(),
         instruction: String::new(),
         transcript: "a".repeat(280_000),
         schema: json!({}),

@@ -81,6 +81,7 @@ fn serve(replies: Vec<Option<String>>) -> (String, Arc<AtomicBool>, thread::Join
 
 fn request() -> StructuredRequest {
     StructuredRequest {
+        estimate_hint: Default::default(),
         instruction: "Return data".into(),
         transcript: "text".into(),
         schema: json!({"type":"object","required":["schemaVersion"],"properties":{"schemaVersion":{"const":1}}}),

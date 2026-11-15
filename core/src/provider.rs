@@ -74,9 +74,36 @@ pub(crate) fn local_only_violation() -> CoreError {
     )
 }
 
+/// Internal token estimation metadata; adapters construct wire bodies explicitly.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EstimateHint {
+    pub format: String,
+    pub language: String,
+}
+impl EstimateHint {
+    pub(crate) fn valid(&self) -> bool {
+        matches!(self.format.as_str(), "generic" | "compact" | "full")
+            && (matches!(self.language.as_str(), "und" | "mul") || valid_language(&self.language))
+    }
+}
+pub(crate) fn valid_language(language: &str) -> bool {
+    language.len() == 2 && language.bytes().all(|c| c.is_ascii_lowercase())
+}
+impl Default for EstimateHint {
+    fn default() -> Self {
+        Self {
+            format: "generic".into(),
+            language: "und".into(),
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StructuredRequest {
+    #[serde(default)]
+    pub estimate_hint: EstimateHint,
     pub instruction: String,
     pub transcript: String,
     pub schema: Value,
@@ -107,6 +134,10 @@ pub(crate) mod control;
 pub use adapters::{AnthropicProvider, GeminiProvider, OllamaProvider, OpenAiProvider};
 pub use control::{CancelToken, Timeouts};
 pub mod cost;
+fn token_calibration_diagnostic() -> String {
+    settings::calibration_status()
+}
+inventory::submit! { crate::diagnostic::DiagnosticField { kind: crate::diagnostic::DiagnosticKind::TokenCalibration, value: token_calibration_diagnostic } }
 pub use settings::run_structured;
 pub(crate) use settings::{profile_infos, routed, Routed};
 
@@ -565,6 +596,108 @@ mod settings {
         }
         Ok(json!({"profileId": target}))
     }
+    #[derive(Default, Serialize, Deserialize)]
+    struct CalibrationFile {
+        version: u32,
+        entries: Vec<super::cost::Calibration>,
+    }
+    const CALIBRATION_VERSION: u32 = 1;
+    fn calibration_path() -> Result<PathBuf, CoreError> {
+        Ok(path()?.with_file_name("token-calibration.json"))
+    }
+    // None preserves an unreadable, malformed, or future-version file.
+    fn calibration_load() -> Option<CalibrationFile> {
+        let file = match fs::read(calibration_path().ok()?) {
+            Ok(bytes) => serde_json::from_slice::<CalibrationFile>(&bytes).ok()?,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Some(CalibrationFile {
+                    version: CALIBRATION_VERSION,
+                    entries: Vec::new(),
+                })
+            }
+            Err(_) => return None,
+        };
+        (file.version == CALIBRATION_VERSION
+            && file.entries.iter().all(|v| {
+                v.samples.len() <= super::cost::CALIBRATION_SAMPLES
+                    && v.samples.iter().all(|(chars, _)| *chars > 0)
+                    && v.samples
+                        .iter()
+                        .try_fold((0u64, 0u64), |(chars, tokens), (c, t)| {
+                            Some((chars.checked_add(*c)?, tokens.checked_add(*t)?))
+                        })
+                        .is_some()
+            }))
+        .then_some(file)
+    }
+    fn calibration_save(file: &CalibrationFile) -> Result<(), CoreError> {
+        use std::io::Write;
+        let target = calibration_path()?;
+        let parent = target
+            .parent()
+            .ok_or_else(|| error("settings", "Could not save token calibration"))?;
+        fs::create_dir_all(parent)
+            .map_err(|_| error("settings", "Could not save token calibration"))?;
+        let mut tmp = tempfile::NamedTempFile::new_in(parent)
+            .map_err(|_| error("settings", "Could not save token calibration"))?;
+        serde_json::to_writer(&mut tmp, file)
+            .map_err(|_| error("settings", "Could not save token calibration"))?;
+        tmp.flush()
+            .map_err(|_| error("settings", "Could not save token calibration"))?;
+        tmp.persist(&target)
+            .map_err(|_| error("settings", "Could not save token calibration"))?;
+        Ok(())
+    }
+    pub(crate) fn calibration_status() -> String {
+        let Ok(_guard) = locked() else {
+            return "indisponível".into();
+        };
+        match calibration_path() {
+            Ok(path) if !path.exists() => "sem calibração".into(),
+            _ if calibration_load().is_some() => "disponível".into(),
+            _ => "calibração indisponível ou inválida".into(),
+        }
+    }
+    pub(crate) fn calibration_read() -> Result<Vec<super::cost::Calibration>, CoreError> {
+        let Ok(_guard) = locked() else {
+            return Ok(Vec::new());
+        };
+        Ok(calibration_load().map_or_else(Vec::new, |f| f.entries))
+    }
+    pub(crate) fn calibration_add(
+        profile: &str,
+        model: &str,
+        hint: &EstimateHint,
+        chars: u64,
+        tokens: u64,
+    ) -> Result<(), CoreError> {
+        let _guard = locked()?;
+        let Some(mut file) = calibration_load() else {
+            return Ok(());
+        };
+        let entry = if let Some(i) = file.entries.iter().position(|v| {
+            v.profile == profile
+                && v.model == model
+                && v.format == hint.format
+                && v.language == hint.language
+        }) {
+            &mut file.entries[i]
+        } else {
+            file.entries.push(super::cost::Calibration {
+                profile: profile.into(),
+                model: model.into(),
+                format: hint.format.clone(),
+                language: hint.language.clone(),
+                samples: Vec::new(),
+            });
+            file.entries.last_mut().expect("just inserted")
+        };
+        entry.samples.push((chars, tokens));
+        if entry.samples.len() > super::cost::CALIBRATION_SAMPLES {
+            entry.samples.remove(0);
+        }
+        calibration_save(&file)
+    }
     fn profile_remove(args: Value, _: &mut EventSink<'_>) -> CommandResult {
         let id = args
             .get("profileId")
@@ -590,6 +723,10 @@ mod settings {
         }
         store(&mut settings, list);
         write(&settings)?;
+        if let Some(mut file) = calibration_load() {
+            file.entries.retain(|entry| entry.profile != id);
+            let _ = calibration_save(&file);
+        }
         Ok(json!({}))
     }
     fn key_set(args: Value, _: &mut EventSink<'_>) -> CommandResult {
@@ -1128,6 +1265,7 @@ mod security_tests {
 
     fn input() -> StructuredRequest {
         StructuredRequest {
+            estimate_hint: Default::default(),
             instruction: "Return JSON".into(),
             transcript: String::new(),
             schema: json!({"type":"object"}),

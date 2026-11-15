@@ -37,3 +37,44 @@ fn long_sentence_splits_at_largest_internal_pause() {
         vec!["um dois", "três"]
     );
 }
+
+#[test]
+fn compact_keeps_original_ids_and_marks_each_new_minute() {
+    let rows = vec![
+        word(0, "Olá.", 0, 100_000),
+        word(1, "Hi!", 61_000_000, 61_100_000),
+        word(2, "Fim.", 62_000_000, 62_100_000),
+    ];
+    let sentences = segment(&rows);
+    assert_eq!(
+        clipes_core::sentences::compact(&sentences[1..]),
+        "## 00:01\n2 Hi!\n3 Fim.\n"
+    );
+}
+
+#[test]
+fn compact_metadata_uses_character_weighted_language_and_mixed_bucket() {
+    let mut rows = segment(&[word(0, "abcd.", 0, 1), word(1, "Hi.", 2, 3)]);
+    rows[0].language = Some("pt".into());
+    rows[1].language = Some("en".into());
+    let output = clipes_core::sentences::compact_with_hint(&rows);
+    assert_eq!(output.hint.format, "compact");
+    assert_eq!(output.hint.language, "mul");
+    rows[1].language = Some("pt".into());
+    assert_eq!(
+        clipes_core::sentences::compact_with_hint(&rows)
+            .hint
+            .language,
+        "pt"
+    );
+}
+
+#[test]
+fn compact_treats_unsupported_and_malformed_whisper_codes_as_unknown() {
+    let mut rows = segment(&[word(0, "aloha.", 0, 1), word(1, "outro.", 2, 3)]);
+    rows[0].language = Some("haw".into());
+    rows[1].language = Some("private-invalid-value".into());
+    let result = clipes_core::sentences::compact_with_hint(&rows);
+    assert_eq!(result.hint.language, "und");
+    assert_eq!(result.hint.format, "compact");
+}

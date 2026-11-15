@@ -282,3 +282,59 @@ fn timeline_command(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 inventory::submit! { CommandRegistration { name: "transcription.segment", execute: segment_command } }
 inventory::submit! { CommandRegistration { name: "transcription.sentences", execute: sentences_command } }
 inventory::submit! { CommandRegistration { name: "transcription.timeline", execute: timeline_command } }
+
+/// Serialize a selection using the stable IDs of the full transcript. Minute markers are
+/// context only; timestamps for any returned IDs must be resolved by the core.
+pub fn compact(sentences: &[Sentence]) -> String {
+    use std::fmt::Write;
+    let mut result = String::new();
+    let mut previous = None;
+    for sentence in sentences {
+        let minute = sentence.start_us.max(0) / 60_000_000;
+        if previous != Some(minute) {
+            let _ = writeln!(result, "## {:02}:{:02}", minute / 60, minute % 60);
+            previous = Some(minute);
+        }
+        let _ = writeln!(result, "{} {}", sentence.id, sentence.text);
+    }
+    result
+}
+
+/// Character share needed to assign one language to a selection.
+pub const LANGUAGE_MAJORITY_PERCENT: usize = 80;
+
+/// Compact text and internal metadata for the token estimator.
+pub struct CompactTranscript {
+    pub text: String,
+    pub hint: crate::provider::EstimateHint,
+}
+
+pub fn compact_with_hint(sentences: &[Sentence]) -> CompactTranscript {
+    let mut counts = std::collections::BTreeMap::<&str, usize>::new();
+    for s in sentences {
+        *counts
+            .entry(
+                s.language
+                    .as_deref()
+                    .filter(|language| crate::provider::valid_language(language))
+                    .unwrap_or("und"),
+            )
+            .or_default() += s.text.chars().count();
+    }
+    let total: usize = counts.values().sum();
+    let language = if total == 0 {
+        "und"
+    } else {
+        counts
+            .into_iter()
+            .find(|(_, n)| n.saturating_mul(100) >= total.saturating_mul(LANGUAGE_MAJORITY_PERCENT))
+            .map_or("mul", |(language, _)| language)
+    };
+    CompactTranscript {
+        text: compact(sentences),
+        hint: crate::provider::EstimateHint {
+            format: "compact".into(),
+            language: language.into(),
+        },
+    }
+}
