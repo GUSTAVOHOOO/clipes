@@ -4,7 +4,7 @@
 //!
 //! The decision is a pure function of what the call reported (`suspect`). Rules, in order:
 //! 1. An explicit signal from the server (`truncated`, or `tokens_evaluated` below what was
-//!    sent) always counts, local or remote.
+//!    sent) always counts, local or remote; remote compares only with the server usage.
 //! 2. The usage heuristic runs only for a local (loopback, zero cost) server. A paid remote
 //!    answer is never dropped by it: those APIs answer an error instead of cutting.
 //! 3. "Pinned": the input tokens reach `PINNED_PERCENT` of the context sent. Before
@@ -48,9 +48,12 @@ pub(super) fn suspect(r: &Reading<'_>) -> bool {
     if r.explicit.truncated {
         return true;
     }
-    // "Sent": the estimate's low end (a prompt cache can make the evaluated count smaller
-    // than the usage without any cut), else the usage input.
-    if let (Some(evaluated), Some(sent)) = (r.explicit.evaluated, low.or(r.input)) {
+    // "Sent". Local (zero cost): the low end of the estimate, falling back to the usage input
+    // (a prompt cache can make the evaluated count smaller than the usage without any cut).
+    // Remote: only the input the server itself reported; the estimate is a heuristic and a paid
+    // answer is never dropped by it. Without that usage there is no suspicion.
+    let sent = if r.local { low.or(r.input) } else { r.input };
+    if let (Some(evaluated), Some(sent)) = (r.explicit.evaluated, sent) {
         if evaluated < sent {
             return true;
         }
@@ -222,6 +225,23 @@ mod tests {
         };
         assert_eq!(probe_verdict(5000, 1000, None, signal).measured, Some(640));
         assert!(!probe_verdict(5000, 1000, None, NONE).truncated);
+    }
+
+    #[test]
+    fn remote_evaluated_is_compared_only_with_the_server_usage() {
+        let est = json!({"inputTokensLow":800});
+        let eq = Explicit {
+            truncated: false,
+            evaluated: Some(500),
+        };
+        // Below the estimate, equal to the usage: accepted.
+        assert!(!run(false, Some(500), None, est.clone(), eq));
+        // Below the usage the server reported: a cut.
+        assert!(run(false, Some(900), None, est.clone(), eq));
+        // No usage: no suspicion, whatever the estimate says.
+        assert!(!run(false, None, None, est.clone(), eq));
+        // Local keeps the estimate.
+        assert!(run(true, Some(500), None, est, eq));
     }
 
     #[test]
