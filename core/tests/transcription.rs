@@ -621,6 +621,18 @@ fn groq_uses_vad_checkpoints_absolute_times_and_one_paid_call_per_block() {
 
 #[test]
 fn groq_timeout_preserves_partial_and_requires_confirmation_to_retry_after_reopening() {
+    assert_paid_uncertain(
+        include_str!("fixtures/groq-words.json"),
+        Duration::from_millis(1000),
+    );
+}
+
+#[test]
+fn groq_paid_invalid_response_preserves_charge_and_requires_confirmation() {
+    assert_paid_uncertain(r#"{"words":"invalid"}"#, Duration::ZERO);
+}
+
+fn assert_paid_uncertain(second_response: &'static str, second_delay: Duration) {
     use std::{
         io::{Read, Write},
         net::TcpListener,
@@ -659,9 +671,13 @@ fn groq_timeout_preserves_partial_and_requires_confirmation_to_retry_after_reope
                 }
             }
             if index == 1 {
-                std::thread::sleep(Duration::from_millis(1000));
+                std::thread::sleep(second_delay);
             }
-            let body = include_str!("fixtures/groq-words.json");
+            let body = if index == 1 {
+                second_response
+            } else {
+                include_str!("fixtures/groq-words.json")
+            };
             let _ = write!(
                 socket,
                 "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -689,6 +705,9 @@ fn groq_timeout_preserves_partial_and_requires_confirmation_to_retry_after_reope
     )
     .unwrap_err();
     assert_eq!(e.code, "timeout_uncertain");
+    let (call_state,cost)=clipes_core::projects::with_reader(|c|c.query_row("SELECT state,estimated_usd FROM transcription_calls WHERE job_id=?1 ORDER BY id DESC LIMIT 1",[job],|r|Ok((r.get::<_,String>(0)?,r.get::<_,f64>(1)?)))).unwrap();
+    assert_eq!(call_state, "uncertain");
+    assert!(cost > 0.0);
     clipes_core::jobs::finish(job, Err(e)).unwrap();
     server.join().unwrap();
     assert_eq!(env.status(source)["transcript"]["resume_us"], 8_000_000);

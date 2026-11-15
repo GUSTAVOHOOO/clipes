@@ -66,7 +66,8 @@ não são gravados.
 
 Antes do envio, `transcription_calls` registra o intervalo e a estimativa e o
 checkpoint do job identifica a chamada. Timeout ou cancelamento durante a chamada
-paga vira `timeout_uncertain`/job `uncertain`; nem iniciar novamente nem reabrir o
+paga, assim como uma resposta HTTP 2xx inválida, vira `timeout_uncertain`/job
+`uncertain`; nem iniciar novamente nem reabrir o
 Projeto repete o envio automaticamente. **Repetir**, na fila, exige confirmação e
 mostra o custo estimado, via `jobs.estimate`. `Retry-After` de 429 aceita segundos
 ou data HTTP e espera com `CancelToken`; há no máximo três tentativas, só para

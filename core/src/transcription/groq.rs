@@ -149,8 +149,18 @@ impl TranscriptionEngine for GroqEngine {
                 Ok(block)
             }
             Err(e) => {
-                remote::failed(call, e.code == "timeout_uncertain")?;
-                Err(e)
+                // Uma resposta 2xx inválida já pode ter sido cobrada: preservar a
+                // chamada e exigir a mesma confirmação de uma resposta perdida.
+                let uncertain = matches!(e.code.as_str(), "timeout_uncertain" | "invalid_response");
+                remote::failed(call, uncertain)?;
+                if e.code == "invalid_response" {
+                    Err(error(
+                        "timeout_uncertain",
+                        "O resultado da chamada ao Groq é incerto.",
+                    ))
+                } else {
+                    Err(e)
+                }
             }
         }
     }
