@@ -140,6 +140,37 @@ pub(crate) struct Selection {
     pub config: super::hardware::Config,
 }
 
+/// A configuração do modelo já fixado numa Transcrição (#50): o modelo não muda na retomada.
+pub(crate) fn selection_for(model_id: &str) -> Result<Selection, CoreError> {
+    let settings = load_settings()?;
+    let spec = MODELS
+        .into_iter()
+        .find(|m| m.id == model_id)
+        .ok_or_else(|| {
+            error(
+                "model_missing",
+                "O modelo de transcrição não está instalado; baixe-o em Componentes.",
+            )
+        })?;
+    let config = super::hardware::config_for_model(&settings, model_id).ok_or_else(|| {
+        error(
+            "model_missing",
+            "O modelo de transcrição não está disponível neste hardware.",
+        )
+    })?;
+    if !spec.installed(&settings) {
+        return Err(error(
+            "model_missing",
+            "O modelo de transcrição não está instalado; baixe-o em Componentes.",
+        ));
+    }
+    Ok(Selection {
+        spec,
+        dir: spec.dir(&settings),
+        config,
+    })
+}
+
 /// A configuração em uso (modelo, dispositivo e precisão), se o modelo já estiver instalado.
 pub(crate) fn selection() -> Result<Selection, CoreError> {
     let settings = load_settings()?;

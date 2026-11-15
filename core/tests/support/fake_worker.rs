@@ -149,6 +149,23 @@ fn transcribe_worker() {
                     continue;
                 }
                 let params = &message["params"];
+                if let Some(log) = std::env::var_os("CLIPES_FAKE_TRANSCRIBE_LOG") {
+                    if message["task"] == "transcribe" {
+                        let mut file = fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(log)
+                            .unwrap();
+                        writeln!(
+                            file,
+                            "{} {} {}",
+                            params["model"]["id"].as_str().unwrap_or(""),
+                            params["model"]["device"].as_str().unwrap_or(""),
+                            params["model"]["compute_type"].as_str().unwrap_or("")
+                        )
+                        .unwrap();
+                    }
+                }
                 if message["task"] == "probe" {
                     probe_reply(&mut out, &id, params);
                     continue;
