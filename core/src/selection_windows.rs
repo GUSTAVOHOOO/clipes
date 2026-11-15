@@ -21,7 +21,8 @@
 //!   estimador erra) menos a saída e o raciocínio reservados, e nunca mais que
 //!   [`PRICE_THRESHOLD_PERCENT`] % do menor limiar de preço do modelo. Os tokens fixos
 //!   (envelope, instrução e schema) saem desse orçamento antes da Transcrição.
-//! - Os tokens de uma janela usam a ponta **alta** da estimativa.
+//! - Os tokens de uma janela usam [`cost::planning_range`] (#173): ponto ×1,2 sem calibração,
+//!   ponta alta calibrada com ela. A parte fixa usa [`cost::planning_fixed_tokens`] (ponto ×1,0).
 //!
 //! # Estados
 //! - cheia: nenhuma janela foi encurtada por tokens; todas têm até 15 min por duração;
@@ -436,17 +437,17 @@ pub fn plan_for_profile(
     // (tokens fixos).
     let full = structured(compact.text);
     let full_chars = cost::input_characters(&full).max(1);
-    let range = cost::token_range(&profile.profile_id, &profile.model, &full)?;
+    let range = cost::planning_range(&profile.profile_id, &profile.model, &full)?;
     let ratio = TokenRatio {
         low: (range.low as f64 / full_chars as f64).max(f64::MIN_POSITIVE),
         high: (range.high as f64 / full_chars as f64).max(f64::MIN_POSITIVE),
     };
-    let fixed_tokens = cost::token_range(
+    // A parte fixa é o mesmo texto em toda janela e conhecida por inteiro: ponto ×1,0 (#173).
+    let fixed_tokens = cost::planning_fixed_tokens(
         &profile.profile_id,
         &profile.model,
         &structured(String::new()),
-    )?
-    .high;
+    )?;
 
     let header_chars = escaped_chars(&sentences::compact(&[Sentence {
         id: 0,
