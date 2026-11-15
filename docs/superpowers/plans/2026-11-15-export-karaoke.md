@@ -5,7 +5,8 @@ Desenho aprovado pelo coordenador em `msg_5ea7f4161de8`.
 **Objetivo:** exportar a Fonte original, com bordas em Frase e texto efetivo da
 Transcrição, em MP4 x264 Fit 1080×1920 com ASS/libass e áudio selecionado.
 
-**Contrato:** `ExportRequest {source_id, start_id, end_id, candidate_id?, output}`.
+**Contrato:** `ExportRequest {source_id, start_id, end_id, candidate_id?}`;
+`export.start` recebe também `output`, separado do Corte (contrato com #61).
 Se houver candidato, a revisão precisa estar aprovada e as bordas atuais precisam
 coincidir. Nenhum Provedor participa: a tarefa é local e respeita o veto local.
 Tempos impossíveis são agrupados, preservando texto; tempos válidos não recebem

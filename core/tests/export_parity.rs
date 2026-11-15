@@ -76,8 +76,10 @@ fn differences(actual: &[u8], reference: &[u8]) -> (f64, usize, usize) {
     let mut yellow = 0;
     let mut white = 0;
     for (i, (a, b)) in actual
-        .chunks_exact(3)
-        .zip(reference.chunks_exact(3))
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .zip(reference.as_chunks::<3>().0.iter())
         .enumerate()
     {
         let x = i % 270;
@@ -282,7 +284,9 @@ fn real_ffmpeg_preserves_fit_geometry_timing_vfr_sar_rotation_and_bundled_font()
         ])
         .stdout;
         let samples: Vec<i16> = audio
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|b| i16::from_le_bytes([b[0], b[1]]))
             .collect();
         let crossings = samples.windows(2).filter(|s| s[0] < 0 && s[1] >= 0).count();
@@ -350,8 +354,10 @@ fn real_ffmpeg_preserves_fit_geometry_timing_vfr_sar_rotation_and_bundled_font()
         "controle negativo não detectou troca de fonte"
     );
     let changed = good
-        .chunks_exact(3)
-        .zip(fallback.stdout.chunks_exact(3))
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .zip(fallback.stdout.as_chunks::<3>().0.iter())
         .filter(|(a, b)| {
             a.iter()
                 .zip(*b)

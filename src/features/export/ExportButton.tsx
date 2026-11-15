@@ -3,7 +3,7 @@ import { save } from '@tauri-apps/plugin-dialog';
 import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { Button } from '@/components/ui/Button';
-import { coreDispatch } from '@/lib/core';
+import { coreDispatch, type ExportRequest } from '@/lib/core';
 import { useText } from '@/lib/i18n';
 
 type Status = { job: number; state: 'queued' | 'running' | 'completed' | 'cancelled' | 'failed'; progress: number; error?: { code: string } | null };
@@ -44,6 +44,7 @@ export function ExportButton({ sourceId, candidateId, title, startId, endId, app
   }, [status?.job, active, t.errors.default]);
 
   async function start() {
+    if (!approved || !startId || !endId) return;
     setBusy(true); setError('');
     try {
       const settings = await coreDispatch<{ last_directory: string | null }>('export.settings', {});
@@ -54,7 +55,8 @@ export function ExportButton({ sourceId, candidateId, title, startId, endId, app
       if (!chosen || !alive.current) return;
       const output = /\.mp4$/i.test(chosen) ? chosen : `${chosen}.mp4`;
       setStatus(null);
-      const answer = await coreDispatch<{ job: number }>('export.start', { source_id: sourceId, candidate_id: candidateId, start_id: startId, end_id: endId, output });
+      const request: ExportRequest = { source_id: sourceId, candidate_id: candidateId, start_id: startId, end_id: endId };
+      const answer = await coreDispatch<{ job: number }>('export.start', { ...request, output });
       if (alive.current) setStatus({ job: answer.job, state: 'queued', progress: 0 });
     } catch (e) {
       const code = typeof e === 'object' && e !== null && 'code' in e ? String(e.code) : '';

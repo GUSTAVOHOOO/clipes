@@ -25,8 +25,14 @@ pub struct ExportRequest {
     pub end_id: i64,
     #[serde(default)]
     pub candidate_id: Option<i64>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct StartRequest {
+    #[serde(flatten)]
+    cut: ExportRequest,
     #[serde(default)]
-    pub output: PathBuf,
+    output: PathBuf,
 }
 
 inventory::submit! { projects::Migration { id:"0059_001_exports", sql:"
@@ -128,11 +134,11 @@ fn cmd_captions(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 
 fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let _guard = projects::start_job()?;
-    let request = parse(v)?;
-    let _ = target(&request)?;
+    let request: StartRequest = serde_json::from_value(v).map_err(|_| bounds())?;
+    let _ = target(&request.cut)?;
     render::validate_output(&request.output)?;
     let project = current_path()?;
-    let _ = crate::jobs::preview::source(request.source_id, &project)?;
+    let _ = crate::jobs::preview::source(request.cut.source_id, &project)?;
     if crate::components::cache_settings()?.2.is_none() {
         return Err(error("component_missing", "Instale o Componente FFmpeg."));
     }
@@ -141,7 +147,7 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         let tx = c.transaction()?;
         tx.execute(
             "INSERT INTO jobs(kind,safety,state,source_id) VALUES ('export','local','queued',?1)",
-            [request.source_id],
+            [request.cut.source_id],
         )?;
         let id = tx.last_insert_rowid();
         tx.execute(
@@ -207,9 +213,10 @@ pub(crate) fn run(
                 r.get(0)
             })
         })?;
-        let request: ExportRequest = serde_json::from_str(&request).map_err(|_| failed())?;
-        let target = target(&request)?;
-        let (source, _, audio, _, _) = crate::jobs::preview::source(request.source_id, project)?;
+        let request: StartRequest = serde_json::from_str(&request).map_err(|_| failed())?;
+        let target = target(&request.cut)?;
+        let (source, _, audio, _, _) =
+            crate::jobs::preview::source(request.cut.source_id, project)?;
         let ffmpeg = crate::components::cache_settings()?
             .2
             .ok_or_else(|| error("component_missing", "Instale o Componente FFmpeg."))?;

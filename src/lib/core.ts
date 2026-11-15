@@ -2,6 +2,11 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { version } from '../../package.json';
 import { exportMock } from '@/features/export/mock';
 
+/** Contrato do Corte para export, compartilhado pela revisão e pelo editor (#61).
+ * `export.start` recebe estes campos mais `output` (caminho MP4 escolhido no diálogo).
+ */
+export type ExportRequest = { source_id: number; start_id: number; end_id: number; candidate_id?: number };
+
 const groqRetryTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('groq-retry-test');
 const sourceTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('source-test');
 const budgetTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('budget-test');

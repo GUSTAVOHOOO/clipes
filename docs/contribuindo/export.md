@@ -8,7 +8,10 @@ Nenhum proxy do preview participa do render (ADR-0002 e resolução do #15).
 
 ## Contrato do núcleo
 
-`export::ExportRequest` é a fronteira para o futuro documento Corte:
+`export::ExportRequest {source_id,start_id,end_id,candidate_id?}` é a fronteira
+para o futuro documento Corte. O tipo TypeScript correspondente é exportado de
+`src/lib/core.ts`. `export.start` recebe esses campos mais `output`, separado da
+descrição do Corte:
 
 ```json
 {"source_id":1,"start_id":10,"end_id":14,"candidate_id":3,"output":"D:/exports/corte.mp4"}
@@ -146,6 +149,7 @@ cargo run -p clipes-core --example review_exports -- 'D:/Canal.clipes' 2 'D:/con
 Os IDs são os de `sources.list`. O exemplo isola automaticamente seu índice e
 preferências com `CLIPES_DATA_DIR` temporário, usa o Projeto informado e a mesma
 fila/dispatch do app. Não baixa nem transcreve nada, não pede chave e recusa
-sobrescrita. Não deixe o mesmo Projeto aberto no app ao rodar o exemplo. Se a
+sobrescrita. Use um Projeto sem outras tarefas enfileiradas e não o deixe aberto
+no app ao rodar o exemplo. Se a
 sincronia reprovar, abrir issue de alinhamento com o relatório
 `docs/research/2026-11-14-bordas-mfa.md` e o kit do #102.

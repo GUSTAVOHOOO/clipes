@@ -9,6 +9,21 @@ fn word(text: &str, start_us: i64, end_us: i64) -> CaptionWord {
 }
 
 #[test]
+fn the_editor_can_build_the_shared_request_without_knowing_the_destination() {
+    let request = clipes_core::export::ExportRequest {
+        source_id: 1,
+        start_id: 2,
+        end_id: 3,
+        candidate_id: None,
+    };
+    let json = serde_json::to_value(request).unwrap();
+    assert_eq!(
+        json,
+        serde_json::json!({"source_id":1,"start_id":2,"end_id":3,"candidate_id":null})
+    );
+}
+
+#[test]
 fn native_times_stay_native_and_impossible_words_merge_without_losing_text() {
     let valid = vec![
         word("Olá", 100_000, 300_000),
