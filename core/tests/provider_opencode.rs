@@ -1,7 +1,19 @@
 use clipes_core::{
+    ai_task::{AiTask, Budget, TaskInput},
     dispatch,
+    jobs::{self, Safety},
     provider::{run_structured, CancelToken},
 };
+
+inventory::submit! { AiTask {
+    id: "selection", version: 1,
+    prompt: include_str!("../src/ai_task/example_prompt.md"),
+    prompt_sha256: "9b4e7b18b09bbdc1aa0e17f38f2af8e045c679b6c7e6f86068201ab399e8b1ae",
+    wire_schema: r#"{"type":"object","properties":{"schemaVersion":{"type":"integer","enum":[1]}},"required":["schemaVersion"],"additionalProperties":false}"#,
+    full_schema: r#"{"type":"object","properties":{"schemaVersion":{"const":1}},"required":["schemaVersion"],"additionalProperties":false}"#,
+    verifiers: &[],
+    budget: Budget { max_calls: 1, max_input_tokens: 4000, max_output_tokens: 256, max_wall_clock_secs: 60, max_cost_micro_cents: None },
+} }
 use serde_json::{json, Value};
 use std::{
     env, fs,
@@ -187,6 +199,27 @@ fn headless_opencode_isolation_routing_validation_and_cancellation() {
     }
     assert!(!root.path().join("prompt").exists());
     run("projects.local_only.set", json!({"enabled":false})).unwrap();
+    let local_job = jobs::enqueue_ai(
+        "selection",
+        &TaskInput {
+            transcript: "Synthetic text".into(),
+            context: Value::Null,
+            native_schema: false,
+        },
+        Safety::Local,
+    )
+    .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let local_result = loop {
+        let result = run("jobs.result", json!({"id":local_job})).unwrap();
+        if !result.is_null() {
+            break result;
+        }
+        assert!(Instant::now() < deadline, "local job did not settle");
+        thread::sleep(Duration::from_millis(25));
+    };
+    assert_eq!(local_result["code"], "not_local");
+    assert!(!root.path().join("prompt").exists());
     assert_eq!(
         run("provider.cost.run", req.clone()).unwrap()["cost"]["kind"],
         "zero"

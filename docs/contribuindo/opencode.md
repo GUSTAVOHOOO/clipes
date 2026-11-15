@@ -50,6 +50,11 @@ enviar texto; não usa outro modelo. Revalidar fonte e isolamento ao atualizar a
 lista ou a versão. Os modelos continuam remotos e podem ter políticas diferentes
 de retenção/treinamento, descritas na página oficial.
 
+Na fila, o OpenCode segue a regra de CLI do ADR-0009: só conta chamadas nos
+orçamentos, mesmo quando o preço confirmado é zero (`callsOnly` na estimativa).
+Tokens ficam nulos. Custo zero não indica loopback: um job `local` também recusa
+o OpenCode com `not_local` antes de iniciar o processo.
+
 ## Verificação
 
 Testes automáticos usam um executável falso e `CLIPES_DATA_DIR` temporário,

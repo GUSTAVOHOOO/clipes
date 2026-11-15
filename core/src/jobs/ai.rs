@@ -112,8 +112,8 @@ impl Provider for Configured {
             .map_err(|_| error("invalid_request", "Invalid structured request"))?;
         args["task"] = json!(self.task);
         if self.local {
-            let estimate = crate::dispatch("provider.cost.estimate", args.clone(), &mut |_| {})?;
-            if estimate["kind"] != "zero" {
+            let route = crate::provider::routed(Some(&self.task), None)?;
+            if !matches!(route, crate::provider::Routed::Api { local: true, .. }) {
                 return Err(error(
                     "not_local",
                     "A tarefa local não pode usar um Provedor fora do computador.",
@@ -412,7 +412,7 @@ fn job_limit(task: &AiTask, estimate: &Value) -> Option<(&'static str, &'static 
     if b.max_calls == 0 {
         return Some(("budget_calls", "A Tarefa não permite nenhuma chamada."));
     }
-    if estimate["kind"] == "plan_quota" {
+    if estimate["callsOnly"] == true || estimate["kind"] == "plan_quota" {
         return None;
     }
     if b.max_wall_clock_secs == 0 {
@@ -508,7 +508,7 @@ fn record_calls(
         .as_u64()
         .or_else(|| estimate["minMicroUsd"].as_u64());
     for entry in entries {
-        let usage = if matches!(route.0, Target::Cli { .. })
+        let usage = if route.0.is_cli()
             || matches!(
                 entry["code"].as_str(),
                 Some("cancelled" | "timeout_uncertain")
@@ -632,7 +632,7 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
     let shutdown = AtomicBool::new(false);
     let timed_out = AtomicBool::new(false);
     let started = std::time::Instant::now();
-    let wall = if matches!(route.0, Target::Cli { .. }) {
+    let wall = if route.0.is_cli() {
         Duration::MAX
     } else {
         let own = Duration::from_secs(unit.task.budget.max_wall_clock_secs);

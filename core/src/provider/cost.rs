@@ -92,6 +92,9 @@ pub enum Target {
     },
 }
 impl Target {
+    pub(crate) fn is_cli(&self) -> bool {
+        matches!(self, Self::Cli { .. } | Self::OpenCode { .. })
+    }
     fn label(&self) -> (String, String) {
         match self {
             Target::Cli { name } => (format!("cli:{name}"), String::new()),
@@ -228,6 +231,7 @@ pub(crate) fn estimate_with_input(
     };
     Ok(json!({
         "kind": kind,
+        "callsOnly": target.is_cli(),
         "inputTokens": input,
         "maxOutputTokens": ceiling,
         "minMicroUsd": min,
@@ -519,7 +523,7 @@ pub fn run_costed_for(
         };
         let mut recorded = true;
         for entry in entries {
-            let usage = if matches!(target, Target::Cli { .. })
+            let usage = if target.is_cli()
                 || matches!(
                     entry["code"].as_str(),
                     Some("cancelled" | "timeout_uncertain")

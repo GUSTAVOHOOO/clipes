@@ -74,6 +74,7 @@ pub(super) fn pause_message(code: &str) -> &'static str {
 /// O que uma chamada deve custar, lido da estimativa do #40 (`cost::estimate`).
 struct Next {
     kind: String,
+    calls_only: bool,
     tokens: i64,
     /// Teto da estimativa de custo (saída cheia); a mínima se o Provedor não limita a saída.
     micro_usd: Option<i64>,
@@ -84,6 +85,7 @@ fn next_call(estimate: &Value) -> Next {
     let output = estimate["maxOutputTokens"].as_i64().unwrap_or(0);
     Next {
         kind: estimate["kind"].as_str().unwrap_or("unknown").into(),
+        calls_only: estimate["callsOnly"] == true || estimate["kind"] == "plan_quota",
         tokens: input + output,
         micro_usd: estimate["maxMicroUsd"]
             .as_i64()
@@ -93,7 +95,6 @@ fn next_call(estimate: &Value) -> Next {
 
 /// Primeiro limite que a próxima chamada violaria, ou `None` se couber.
 fn violation(scope: &str, limits: &Limits, used: &Value, next: &Next) -> Option<&'static str> {
-    let plan_quota = next.kind == "plan_quota";
     if next.kind == "unknown" && scope == "batch" && !limits.unknown_confirmed {
         return Some("cost_unknown");
     }
@@ -103,7 +104,7 @@ fn violation(scope: &str, limits: &Limits, used: &Value, next: &Next) -> Option<
     {
         return Some("budget_calls");
     }
-    if !plan_quota
+    if !next.calls_only
         && limits.tokens.is_some_and(|max| {
             used["inputTokens"]
                 .as_i64()
@@ -115,7 +116,7 @@ fn violation(scope: &str, limits: &Limits, used: &Value, next: &Next) -> Option<
     {
         return Some("budget_tokens");
     }
-    if !plan_quota
+    if !next.calls_only
         && limits
             .wall_ms
             .is_some_and(|max| used["durationMs"].as_i64().unwrap_or(0) >= max)
