@@ -168,7 +168,14 @@ impl Adapter {
         }
         e
     }
-    fn send(&self, body: &Value, cancel: &CancelToken) -> Result<(Value, u64), CoreError> {
+    fn send(
+        &self,
+        body: &Value,
+        request: &StructuredRequest,
+        repair: u8,
+        log: &mut Vec<Value>,
+        cancel: &CancelToken,
+    ) -> Result<(Value, u64), CoreError> {
         let (mut url, addresses) = resolve(&self.endpoint)?;
         let local = addresses.iter().all(|address| address.ip().is_loopback());
         if !self.remote_confirmed && !local {
@@ -225,7 +232,37 @@ impl Adapter {
             if matches!(self.kind, Kind::Anthropic) {
                 call = call.header("anthropic-version", "2023-06-01");
             }
-            let reply = match send_cancellable(call, cancel)? {
+            let estimate = control::before_call(request, log)?;
+            let started = std::time::Instant::now();
+            let sent = send_cancellable(call, cancel);
+            let (code, usage) = match &sent {
+                Ok(Ok(reply)) => {
+                    let code = match reply.status {
+                        429 => "rate_limit",
+                        200..=299 => "ok",
+                        _ => "provider_http",
+                    };
+                    let usage = reply
+                        .body
+                        .as_ref()
+                        .ok()
+                        .and_then(|b| serde_json::from_slice::<Value>(b).ok())
+                        .map(|v| usage_of(self.kind, &v))
+                        .map_or(Value::Null, |(i, o)| usage_value(i, o));
+                    (code, usage)
+                }
+                Ok(Err(e)) => (
+                    if e.is_timeout() {
+                        "timeout_uncertain"
+                    } else {
+                        "network"
+                    },
+                    Value::Null,
+                ),
+                Err(e) => (e.code.as_str(), Value::Null),
+            };
+            log.push(json!({"attempt":repair,"calls":1,"usage":usage,"code":code,"estimate":estimate,"durationMs":started.elapsed().as_millis() as u64}));
+            let reply = match sent? {
                 Ok(reply) => reply,
                 Err(ref e) if e.is_timeout() => {
                     return Err(error(
@@ -289,7 +326,7 @@ impl Adapter {
                     calls,
                 ));
             }
-            return match reply.body {
+            let result = match reply.body {
                 Ok(bytes) => serde_json::from_slice(&bytes)
                     .map(|value| (value, calls))
                     .map_err(|_| {
@@ -304,6 +341,10 @@ impl Adapter {
                     "Provider returned an invalid response",
                 )),
             };
+            if let Err(e) = &result {
+                log.last_mut().unwrap()["code"] = json!(e.code);
+            }
+            return result;
         }
         unreachable!()
     }
@@ -325,7 +366,6 @@ impl Adapter {
         let mut flush = control::CallLog::default();
         let log = &mut flush.0;
         for repair in 0..2 {
-            let started = std::time::Instant::now();
             let mut body = match self.kind {
                 Kind::OpenAi => {
                     let mut m = vec![json!({"role":"system","content":system})];
@@ -361,42 +401,48 @@ impl Adapter {
                     }
                 }
             }
-            let (response, attempts) = match self.send(&body, cancel) {
-                Ok(sent) => sent,
-                Err(mut e) => {
-                    // A failure whose body reported usage was billed: add it to what the
-                    // earlier calls of this request already cost.
-                    let info = e.usage.take();
-                    let mut entry_calls = 1;
-                    let mut entry_usage = Value::Null;
-                    if let Some(info) = &info {
-                        entry_calls = info["calls"].as_u64().unwrap_or(1);
-                        entry_usage = info["usage"].clone();
-                        calls += entry_calls;
-                        add(
-                            &mut input,
-                            info["usage"]["inputTokens"].as_u64(),
-                            repair == 0,
-                        );
-                        add(
-                            &mut output,
-                            info["usage"]["outputTokens"].as_u64(),
-                            repair == 0,
-                        );
+            // Repairs carry the preceding response and instruction in addition to the input.
+            // They use the same estimator, with those extra characters included.
+            let mut estimate_request = request.clone();
+            if repair > 0 {
+                for message in messages.iter().skip(1) {
+                    if let Some(text) = message["content"].as_str() {
+                        estimate_request.transcript.push_str(text);
                     }
-                    log.push(json!({"attempt":repair,"calls":entry_calls,"usage":entry_usage,"code":e.code,"durationMs":started.elapsed().as_millis() as u64}));
-                    if info.is_some() {
-                        e.usage = Some(json!({"usage":usage_value(input, output),"calls":calls}));
-                    }
-                    return Err(e);
                 }
-            };
+            }
+            let (response, attempts) =
+                match self.send(&body, &estimate_request, repair, log, cancel) {
+                    Ok(sent) => sent,
+                    Err(mut e) => {
+                        // A failure whose body reported usage was billed: add it to what the
+                        // earlier calls of this request already cost.
+                        let info = e.usage.take();
+                        if let Some(info) = &info {
+                            calls += info["calls"].as_u64().unwrap_or(1);
+                            add(
+                                &mut input,
+                                info["usage"]["inputTokens"].as_u64(),
+                                repair == 0,
+                            );
+                            add(
+                                &mut output,
+                                info["usage"]["outputTokens"].as_u64(),
+                                repair == 0,
+                            );
+                        }
+                        if info.is_some() {
+                            e.usage =
+                                Some(json!({"usage":usage_value(input, output),"calls":calls}));
+                        }
+                        return Err(e);
+                    }
+                };
             calls += attempts;
             let (i, o) = usage_of(self.kind, &response);
             add(&mut input, i, repair == 0);
             add(&mut output, o, repair == 0);
             let usage = usage_value(input, output);
-            log.push(json!({"attempt":repair,"calls":attempts,"usage":usage_value(i, o),"code":"ok","durationMs":started.elapsed().as_millis() as u64}));
             let truncated = match self.kind {
                 Kind::OpenAi => response.pointer("/choices/0/finish_reason"),
                 Kind::Anthropic => response.get("stop_reason"),
@@ -470,14 +516,6 @@ impl Adapter {
             }
             if let Some(last) = log.last_mut() {
                 last["code"] = json!("invalid_json");
-            }
-            // The repair is a second paid call: the job's call budget can forbid it (#124).
-            if control::call_limit().is_some_and(|max| calls >= max) {
-                return Err(billed(
-                    "budget_calls",
-                    "Call budget reached before the repair",
-                    &mut *log,
-                ));
             }
             messages.push(json!({"role":"assistant","content":text}));
             messages.push(json!({"role":"user","content":"Repair the previous response to match the schema. Return only JSON."}));

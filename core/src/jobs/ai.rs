@@ -127,6 +127,9 @@ struct Probe<'a> {
     /// Uma entrada por chamada HTTP que o Provedor fez (a chamada e o reparo).
     log: &'a Mutex<Vec<Value>>,
     job: i64,
+    task: &'static AiTask,
+    batch: Option<String>,
+    route: (Target, String),
 }
 
 impl Provider for Probe<'_> {
@@ -142,9 +145,60 @@ impl Provider for Probe<'_> {
             self.sent.store(true, Ordering::SeqCst);
             let _ = checkpoint(self.job, "sent");
         }
-        let (reply, log) = crate::provider::control::with_call_scope(Some(self.max_calls), || {
-            self.inner.structured_with(request, cancel)
+        let task = self.task;
+        let batch = self.batch.clone();
+        let route = self.route.clone();
+        let guard = Box::new(move |request: &StructuredRequest, entries: &[Value]| {
+            let heuristic = cost::estimate_input_tokens(request);
+            // Actual usage corrects an underestimate before the next send, including repairs.
+            let correction = entries.last().map_or(0, |last| {
+                last["usage"]["inputTokens"]
+                    .as_u64()
+                    .unwrap_or(0)
+                    .saturating_sub(
+                        last["estimate"]["inputTokens"]
+                            .as_u64()
+                            .unwrap_or(heuristic),
+                    )
+            });
+            let estimate =
+                cost::estimate_with_input(&route.0, request, heuristic.saturating_add(correction))?;
+            let pending = pending_usage(&route.0, entries)?;
+            if let Some((code, message)) = job_limit(task, &estimate) {
+                return Err(error(code, message));
+            }
+            if task.budget.max_cost_micro_cents.is_some_and(|cap| {
+                estimate["maxMicroUsd"].as_u64().is_some_and(|next| {
+                    pending["microUsd"]
+                        .as_u64()
+                        .unwrap_or(0)
+                        .saturating_add(next)
+                        > cap.saturating_mul(10)
+                })
+            }) {
+                return Err(error(
+                    "budget_cost",
+                    "O teto de custo da Tarefa foi atingido.",
+                ));
+            }
+            match budget::gate(
+                task.id,
+                batch.as_deref(),
+                &estimate,
+                task.budget.max_calls as u64,
+                &pending,
+            )? {
+                budget::Gate::Go { .. } => Ok(estimate),
+                budget::Gate::Pause { scope, key, code } => {
+                    budget::pause(scope, &key, code);
+                    Err(error(code, budget::pause_message(code)))
+                }
+            }
         });
+        let (reply, log) =
+            crate::provider::control::with_call_scope(Some(self.max_calls), Some(guard), || {
+                self.inner.structured_with(request, cancel)
+            });
         if let Ok(mut all) = self.log.lock() {
             all.extend(log);
         }
@@ -185,6 +239,9 @@ pub fn enqueue_ai_in_batch(
         Safety::Paid => "paid",
     };
     projects::with_writer(|c| {
+        if let Some(batch) = batch {
+            c.execute("INSERT INTO ai_budgets(scope,key,since) VALUES ('batch',?1,0) ON CONFLICT(scope,key) DO NOTHING", [batch])?;
+        }
         c.execute(
             "INSERT INTO jobs(kind,safety,state,payload,batch) VALUES (?1,?2,'queued',?3,?4)",
             (format!("{KIND_PREFIX}{task}"), safety, payload, batch),
@@ -344,10 +401,13 @@ fn request_of(unit: &Unit) -> Option<StructuredRequest> {
 
 /// Limites do `AiTask.budget` que valem por job e que a estimativa já decide antes de enviar
 /// (ADR-0009, regra 3). Estourar falha o job com `budget_*`; não pausa a fila.
-fn job_limit(unit: &Unit, estimate: &Value) -> Option<(&'static str, &'static str)> {
-    let b = unit.task.budget;
+fn job_limit(task: &AiTask, estimate: &Value) -> Option<(&'static str, &'static str)> {
+    let b = task.budget;
     if b.max_calls == 0 {
         return Some(("budget_calls", "A Tarefa não permite nenhuma chamada."));
+    }
+    if estimate["kind"] == "plan_quota" {
+        return None;
     }
     if estimate["inputTokens"].as_u64().unwrap_or(0) > b.max_input_tokens {
         return Some((
@@ -369,6 +429,27 @@ fn job_limit(unit: &Unit, estimate: &Value) -> Option<(&'static str, &'static st
     None
 }
 
+/// Metadata of the calls already completed in this request, not written again until it settles.
+fn pending_usage(target: &Target, entries: &[Value]) -> Result<Value, CoreError> {
+    let mut calls = 0_u64;
+    let mut input = 0_u64;
+    let mut output = 0_u64;
+    let mut micro = 0_u64;
+    let mut duration = 0_u64;
+    for entry in entries {
+        calls = calls.saturating_add(entry["calls"].as_u64().unwrap_or(1));
+        input = input.saturating_add(entry["usage"]["inputTokens"].as_u64().unwrap_or(0));
+        output = output.saturating_add(entry["usage"]["outputTokens"].as_u64().unwrap_or(0));
+        duration = duration.saturating_add(entry["durationMs"].as_u64().unwrap_or(0));
+        if let cost::Cost::Usd { micro_usd, .. } = cost::actual(target, &entry["usage"])? {
+            micro = micro.saturating_add(micro_usd);
+        }
+    }
+    Ok(
+        json!({"calls":calls,"inputTokens":input,"outputTokens":output,"microUsd":micro,"durationMs":duration}),
+    )
+}
+
 /// O log de chamadas do Provedor (`{attempt, calls, usage, code, durationMs}`); sem log, uma
 /// entrada só com o total.
 fn entries_of(log: &[Value], usage: &Option<Value>, calls: u64, code: &str) -> Vec<Value> {
@@ -387,6 +468,8 @@ fn reached_provider(code: &str) -> bool {
             | "cancelled"
             | "budget_time"
             | "budget_calls"
+            | "budget_cost"
+            | "budget_tokens"
             | "rate_limit"
             | "provider_http"
             | "network"
@@ -413,7 +496,15 @@ fn record_calls(
         .as_u64()
         .or_else(|| estimate["minMicroUsd"].as_u64());
     for entry in entries {
-        let usage = entry["usage"].clone();
+        let usage = if matches!(route.0, Target::Cli { .. })
+            || matches!(
+                entry["code"].as_str(),
+                Some("cancelled" | "timeout_uncertain")
+            ) {
+            Value::Null
+        } else {
+            entry["usage"].clone()
+        };
         let Ok(cost) = cost::actual(&route.0, &usage) else {
             continue;
         };
@@ -430,7 +521,7 @@ fn record_calls(
             calls: entry["calls"].as_u64().unwrap_or(1),
             cost: &cost,
             code: entry["code"].as_str().unwrap_or("ok"),
-            estimate_micro_usd: each,
+            estimate_micro_usd: entry["estimate"]["maxMicroUsd"].as_u64().or(each),
             duration_ms: Some(entry["durationMs"].as_u64().unwrap_or(elapsed_ms)),
         });
     }
@@ -466,11 +557,17 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
     let estimate = request_of(&unit)
         .and_then(|request| cost::estimate(&route.0, &request).ok())
         .unwrap_or_else(|| json!({"kind":"unknown"}));
-    if let Some((code, message)) = job_limit(&unit, &estimate) {
+    if let Some((code, message)) = job_limit(unit.task, &estimate) {
         return fail_fixed(id, task, error(code, message));
     }
     let job_calls = unit.task.budget.max_calls as u64;
-    let max_calls = match budget::gate(task, unit.batch.as_deref(), &estimate, job_calls) {
+    let max_calls = match budget::gate(
+        task,
+        unit.batch.as_deref(),
+        &estimate,
+        job_calls,
+        &Value::Null,
+    ) {
         Ok(budget::Gate::Go { max_calls }) => max_calls,
         Ok(budget::Gate::Pause { scope, key, code }) => {
             budget::pause(scope, &key, code);
@@ -511,13 +608,25 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
         max_calls,
         log: &call_log,
         job: id,
+        task: unit.task,
+        batch: unit.batch.clone(),
+        route: route.clone(),
     };
     let token = CancelToken::new();
     let finished = AtomicBool::new(false);
     let shutdown = AtomicBool::new(false);
     let timed_out = AtomicBool::new(false);
     let started = std::time::Instant::now();
-    let wall = Duration::from_secs(unit.task.budget.max_wall_clock_secs);
+    let wall = if matches!(route.0, Target::Cli { .. }) {
+        Duration::MAX
+    } else {
+        let own = Duration::from_secs(unit.task.budget.max_wall_clock_secs);
+        match budget::remaining_wall(task, unit.batch.as_deref()) {
+            Ok(Some(remaining)) => own.min(remaining),
+            Ok(None) => own,
+            Err(e) => return fail_fixed(id, task, e),
+        }
+    };
     stage(id, task, "call", 10, "Chamando o Provedor");
     let run = std::thread::scope(|scope| {
         scope.spawn(|| {

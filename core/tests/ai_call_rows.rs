@@ -7,7 +7,10 @@ use ai_fake::*;
 use clipes_core::{
     dispatch,
     jobs::{self, Safety},
-    provider::{cost::Target, OpenAiProvider},
+    provider::{
+        cost::{self, Target},
+        OpenAiProvider, Provider, StructuredRequest,
+    },
 };
 use serde_json::{json, Value};
 use std::{
@@ -66,7 +69,8 @@ fn serve(replies: Vec<&'static str>) -> String {
             .to_string();
             let _ = stream.write_all(
                 format!(
-                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    "HTTP/1.1 {}\r\nRetry-After: 0\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    if content == "429" { "429 Too Many Requests" } else { "200 OK" },
                     body.len()
                 )
                 .as_bytes(),
@@ -113,12 +117,7 @@ fn a_repair_is_its_own_cost_row_and_the_call_budget_can_forbid_it() {
 
     // Resposta inválida e reparo: duas linhas, tentativa 0 (invalid_json) e tentativa 1 (ok).
     let repaired = enqueue("x", "r1");
-    let st = std::time::Instant::now();
-    while job_state(repaired) == "running" || job_state(repaired) == "queued" {
-        thread::sleep(Duration::from_millis(20));
-        assert!(st.elapsed().as_secs() < 20);
-    }
-    assert_eq!(job_state(repaired), "completed", "{}", result(repaired));
+    wait_state(repaired, "completed");
     let r = rows(repaired);
     assert_eq!(r.len(), 2);
     assert_eq!(
@@ -149,23 +148,77 @@ fn a_repair_is_its_own_cost_row_and_the_call_budget_can_forbid_it() {
     assert_eq!(r[0]["outcome"], "invalid_json");
     assert_eq!(r[0]["microUsd"], 2000);
     assert_eq!(
-        call("jobs.budget.get", json!({}))["budgets"][0]["usage"]["calls"],
+        call("jobs.budget.get", json!({}))["budgets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|b| b["key"] == "r2")
+            .unwrap()["usage"]["calls"],
         1
     );
+
+    // A retentativa após 429 também é uma chamada: o teto não permite escondê-la.
+    let endpoint = serve(vec!["429", good]);
+    jobs::set_ai_provider(Some(std::sync::Arc::new(
+        OpenAiProvider::new(endpoint, "m".into(), None).unwrap(),
+    )));
+    call(
+        "jobs.budget.set",
+        json!({"scope":"batch","key":"retry","maxCalls":1}),
+    );
+    let retry = enqueue("retry", "retry");
+    wait_state(retry, "failed");
+    assert_eq!(result(retry)["code"], "budget_calls");
+    let r = rows(retry);
+    assert_eq!(r.len(), 1);
+    assert_eq!(r[0]["outcome"], "rate_limit");
+    assert_eq!(r[0]["calls"], 1);
+
+    // O reparo envia a resposta anterior: seu custo precisa de estimativa própria.
+    let long_bad: &'static str = Box::leak("x".repeat(4000).into_boxed_str());
+    let endpoint = serve(vec![long_bad, good]);
+    jobs::set_ai_provider(Some(std::sync::Arc::new(
+        OpenAiProvider::new(endpoint, "m".into(), None).unwrap(),
+    )));
+    let estimate = rows(repaired)[0]["estimateMicroUsd"].as_i64().unwrap();
+    call(
+        "jobs.budget.set",
+        json!({"scope":"batch","key":"repair-cost","maxCostMicroUsd": estimate + 2000}),
+    );
+    let expensive = enqueue("z", "repair-cost");
+    wait_state(expensive, "failed");
+    assert_eq!(result(expensive)["code"], "budget_cost");
+    assert_eq!(rows(expensive).len(), 1);
+    assert_eq!(rows(expensive)[0]["outcome"], "invalid_json");
+
+    // O caminho síncrono do #40 usa o mesmo registro por chamada, incluindo o reparo.
+    let direct = OpenAiProvider::new(serve(vec![bad, good]), "m".into(), None).unwrap();
+    let definition = clipes_core::ai_task::find("example").unwrap();
+    let request = StructuredRequest {
+        instruction: clipes_core::ai_task::normalized_prompt(definition.prompt),
+        transcript: "direct".into(),
+        schema: serde_json::from_str(definition.wire_schema).unwrap(),
+        native_schema: false,
+        max_output_tokens: Some(256),
+    };
+    cost::run_costed_for(
+        Some("p1"),
+        &Target::Api {
+            provider: "openai".into(),
+            model: "m".into(),
+            local: false,
+        },
+        "example",
+        Some("direct"),
+        || direct.structured(&request),
+    )
+    .unwrap();
+    let direct_rows = call("provider.cost.list", json!({"batch":"direct"}));
+    assert_eq!(direct_rows.as_array().unwrap().len(), 2);
+    assert_eq!(direct_rows[0]["outcome"], "invalid_json");
+    assert_eq!(direct_rows[1]["outcome"], "ok");
 
     jobs::set_ai_route(None);
     dispatch("projects.close", json!({}), &mut |_| {}).unwrap();
     let _ = std::fs::remove_dir_all(root);
-}
-
-fn job_state(id: i64) -> String {
-    call("jobs.list", json!({}))
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|j| j["id"] == id)
-        .unwrap()["state"]
-        .as_str()
-        .unwrap()
-        .into()
 }

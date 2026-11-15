@@ -179,9 +179,20 @@ pub fn estimate_input_tokens(request: &StructuredRequest) -> u64 {
 /// `maxOutputTokens`. Min is input only; max adds the full output ceiling.
 pub fn estimate(target: &Target, request: &StructuredRequest) -> Result<Value, CoreError> {
     let input = estimate_input_tokens(request);
+    estimate_with_input(target, request, input)
+}
+
+/// Same estimator with input corrected by the usage of the preceding call.
+pub(crate) fn estimate_with_input(
+    target: &Target,
+    request: &StructuredRequest,
+    input: u64,
+) -> Result<Value, CoreError> {
     let (kind, ceiling, min, max, source) = match target {
         Target::Cli { .. } => ("plan_quota", None, None, None, None),
-        Target::Api { local: true, .. } => ("zero", None, Some(0), Some(0), None),
+        Target::Api { local: true, .. } => {
+            ("zero", request.max_output_tokens, Some(0), Some(0), None)
+        }
         Target::Api {
             provider, model, ..
         } => {
@@ -460,29 +471,69 @@ pub fn run_costed_for(
     if task.trim().is_empty() {
         return Err(error("invalid_request", "Task is required"));
     }
+    let priced_target = target.clone();
+    let guard =
+        Box::new(move |request: &StructuredRequest, _: &[Value]| estimate(&priced_target, request));
+    let (reply, mut log) = super::control::with_call_scope(None, Some(guard), call);
+    if let Err(e) = &reply {
+        if let Some(last) = log.last_mut() {
+            if last["code"] == "ok" || last["code"] == "cancelled" {
+                last["code"] = json!(e.code);
+            }
+        }
+    }
     let settle = |usage: &Value, calls: u64, code: &str| -> Result<Value, CoreError> {
-        let cost = actual(target, usage)?;
-        let row = CallRow {
-            profile,
-            target,
-            task,
-            task_version: None,
-            batch,
-            job: None,
-            attempt: None,
-            usage,
-            calls,
-            cost: &cost,
-            code,
-            estimate_micro_usd: None,
-            duration_ms: None,
+        let total_usage = log
+            .iter()
+            .try_fold((0_u64, 0_u64), |(input, output), entry| {
+                Some((
+                    input.checked_add(entry["usage"]["inputTokens"].as_u64()?)?,
+                    output.checked_add(entry["usage"]["outputTokens"].as_u64()?)?,
+                ))
+            })
+            .map(|(i, o)| json!({"inputTokens":i,"outputTokens":o}))
+            .unwrap_or(Value::Null);
+        let cost = actual(target, if log.is_empty() { usage } else { &total_usage })?;
+        let fallback = [json!({"usage":usage,"calls":calls,"code":code})];
+        let entries = if log.is_empty() {
+            &fallback[..]
+        } else {
+            &log[..]
         };
-        let recorded = record_call(&row).is_ok();
+        let mut recorded = true;
+        for entry in entries {
+            let usage = if matches!(target, Target::Cli { .. })
+                || matches!(
+                    entry["code"].as_str(),
+                    Some("cancelled" | "timeout_uncertain")
+                ) {
+                Value::Null
+            } else {
+                entry["usage"].clone()
+            };
+            let each_cost = actual(target, &usage)?;
+            let row = CallRow {
+                profile,
+                target,
+                task,
+                task_version: None,
+                batch,
+                job: None,
+                attempt: entry["attempt"].as_u64().map(|a| u8::from(a == 1)),
+                usage: &usage,
+                calls: entry["calls"].as_u64().unwrap_or(1),
+                cost: &each_cost,
+                code: entry["code"].as_str().unwrap_or(code),
+                estimate_micro_usd: entry["estimate"]["maxMicroUsd"].as_u64(),
+                duration_ms: entry["durationMs"].as_u64(),
+            };
+            recorded &= record_call(&row).is_ok();
+        }
         let mut v = cost_json(&cost);
         v["recorded"] = json!(recorded);
         Ok(v)
     };
-    match call() {
+    match reply {
         Ok(mut value) => {
             let calls = value["calls"].as_u64().unwrap_or(1);
             value["cost"] = settle(&value["usage"].clone(), calls, "ok")?;
@@ -495,7 +546,9 @@ pub fn run_costed_for(
                 let calls = info["calls"].as_u64().unwrap_or(1);
                 let cost = settle(&info["usage"], calls, &e.code)?;
                 e.usage = Some(json!({"usage":info["usage"],"calls":calls,"cost":cost}));
-            } else if e.code == "timeout_uncertain" {
+            } else if !log.is_empty()
+                || matches!(e.code.as_str(), "timeout_uncertain" | "cancelled")
+            {
                 settle(&Value::Null, 1, &e.code)?;
             }
             Err(e)

@@ -216,6 +216,28 @@ fn per_call_cost_rows_and_budgets() {
     assert_eq!(fake.count("ok: palavra"), 0);
     assert!(rows(huge).is_empty());
 
+    // O teto de tokens e o de tempo são acumulados; a chamada em voo respeita o tempo restante.
+    call(
+        "jobs.budget.set",
+        json!({"scope":"batch","key":"tokens","maxTokens":0}),
+    );
+    let tokens = enqueue("ok: tokens", "tokens");
+    assert_eq!(wait_paused("batch", "tokens"), "budget_tokens");
+    assert_eq!(fake.count("ok: tokens"), 0);
+    call("jobs.cancel", json!({"id":tokens}));
+    call(
+        "jobs.budget.set",
+        json!({"scope":"batch","key":"time","maxWallMs":50}),
+    );
+    let timed = enqueue("block: time", "time");
+    wait_state(timed, "uncertain");
+    assert_eq!(result(timed)["code"], "timeout_uncertain");
+    assert_eq!(rows(timed)[0]["costKind"], "unknown");
+    let after_time = enqueue("ok: after time", "time");
+    assert_eq!(wait_paused("batch", "time"), "budget_time");
+    assert_eq!(fake.count("ok: after time"), 0);
+    call("jobs.cancel", json!({"id":after_time}));
+
     // CLI: conta só por chamadas ("consome a cota do plano"); o teto de custo não vale.
     jobs::set_ai_route(Some((
         Target::Cli {
@@ -225,14 +247,18 @@ fn per_call_cost_rows_and_budgets() {
     )));
     call(
         "jobs.budget.set",
-        json!({"scope":"batch","key":"cli","maxCalls":2,"maxCostMicroUsd":1}),
+        json!({"scope":"batch","key":"cli","maxCalls":2,"maxCostMicroUsd":1,"maxTokens":0,"maxWallMs":0}),
     );
-    let (c1, c2) = (enqueue("ok: c1", "cli"), enqueue("ok: c2", "cli"));
+    let (c1, c2) = (
+        enqueue(&format!("ok: c1 {}", "x".repeat(20000)), "cli"),
+        enqueue("ok: c2", "cli"),
+    );
     wait_state(c1, "completed");
     wait_state(c2, "completed");
     let r = &rows(c1)[0];
     assert_eq!(r["costKind"], "plan_quota");
     assert!(r["microUsd"].is_null());
+    assert!(r["inputTokens"].is_null() && r["outputTokens"].is_null());
     assert_eq!(job(c2)["batchCost"]["costLabel"], "consome a cota do plano");
     let c3 = enqueue("ok: c3", "cli");
     assert_eq!(wait_paused("batch", "cli"), "budget_calls");
@@ -271,6 +297,16 @@ fn per_call_cost_rows_and_budgets() {
     );
     let u2 = enqueue("ok: u2", "free");
     wait_state(u2, "completed");
+
+    // Também exige confirmação se o lote não tem um teto monetário configurado.
+    let no_cap = enqueue("ok: no cap", "unknown-no-cap");
+    assert_eq!(wait_paused("batch", "unknown-no-cap"), "cost_unknown");
+    assert_eq!(fake.count("ok: no cap"), 0);
+    call(
+        "jobs.budget.continue",
+        json!({"scope":"batch","key":"unknown-no-cap","confirmed":true}),
+    );
+    wait_state(no_cap, "completed");
 
     jobs::set_ai_provider(None);
     jobs::set_ai_route(None);

@@ -19,9 +19,6 @@ fn error(code: &str, message: &str) -> CoreError {
     }
 }
 
-/// Máximo de chamadas HTTP de um pedido estruturado (a chamada e o reparo).
-const MAX_CALLS_PER_REQUEST: u64 = 2;
-
 struct Limits {
     calls: Option<i64>,
     tokens: Option<i64>,
@@ -95,52 +92,66 @@ fn next_call(estimate: &Value) -> Next {
 }
 
 /// Primeiro limite que `n` chamadas a mais violariam, ou `None` se couberem.
-fn violation(
-    scope: &str,
-    limits: &Limits,
-    used: &Value,
-    next: &Next,
-    n: i64,
-) -> Option<&'static str> {
+fn violation(scope: &str, limits: &Limits, used: &Value, next: &Next) -> Option<&'static str> {
     let plan_quota = next.kind == "plan_quota";
+    if next.kind == "unknown" && scope == "batch" && !limits.unknown_confirmed {
+        return Some("cost_unknown");
+    }
     if limits
         .calls
-        .is_some_and(|max| used["calls"].as_i64().unwrap_or(0) + n > max)
+        .is_some_and(|max| used["calls"].as_i64().unwrap_or(0).saturating_add(1) > max)
     {
         return Some("budget_calls");
     }
     if !plan_quota
         && limits.tokens.is_some_and(|max| {
-            used["inputTokens"].as_i64().unwrap_or(0)
-                + used["outputTokens"].as_i64().unwrap_or(0)
-                + n * next.tokens
+            used["inputTokens"]
+                .as_i64()
+                .unwrap_or(0)
+                .saturating_add(used["outputTokens"].as_i64().unwrap_or(0))
+                .saturating_add(next.tokens)
                 > max
         })
     {
         return Some("budget_tokens");
     }
-    if limits
-        .wall_ms
-        .is_some_and(|max| used["durationMs"].as_i64().unwrap_or(0) >= max)
+    if !plan_quota
+        && limits
+            .wall_ms
+            .is_some_and(|max| used["durationMs"].as_i64().unwrap_or(0) >= max)
     {
         return Some("budget_time");
     }
     if let Some(max) = limits.cost {
-        match next.kind.as_str() {
-            "usd" => {
-                let each = next.micro_usd.unwrap_or(0);
-                if used["microUsd"].as_i64().unwrap_or(0) + n * each > max {
-                    return Some("budget_cost");
-                }
+        if next.kind == "usd" {
+            let each = next.micro_usd.unwrap_or(0);
+            if used["microUsd"].as_i64().unwrap_or(0).saturating_add(each) > max {
+                return Some("budget_cost");
             }
-            // Sem preço, o lote não tem como medir o teto: só segue com confirmação.
-            "unknown" if scope == "batch" && !limits.unknown_confirmed => {
-                return Some("cost_unknown");
-            }
-            _ => {}
         }
     }
     None
+}
+
+/// Remaining accumulated wall time; the job watchdog cancels an in-flight call at this limit.
+pub(super) fn remaining_wall(
+    task: &str,
+    batch: Option<&str>,
+) -> Result<Option<std::time::Duration>, CoreError> {
+    let mut remaining = None;
+    for (scope, key) in [("task", Some(task)), ("batch", batch)] {
+        let Some(key) = key else { continue };
+        let Some(limits) = limits(scope, key)? else {
+            continue;
+        };
+        let Some(max) = limits.wall_ms else { continue };
+        let used = cost::totals_since(scope, key, limits.since)?["durationMs"]
+            .as_i64()
+            .unwrap_or(0);
+        let left = std::time::Duration::from_millis(max.saturating_sub(used).max(0) as u64);
+        remaining = Some(remaining.map_or(left, |old: std::time::Duration| old.min(left)));
+    }
+    Ok(remaining)
 }
 
 /// Decide se a próxima chamada pode sair. `estimate` é o de `cost::estimate` da rota do job;
@@ -150,6 +161,7 @@ pub(super) fn gate(
     batch: Option<&str>,
     estimate: &Value,
     job_max_calls: u64,
+    pending: &Value,
 ) -> Result<Gate, CoreError> {
     let next = next_call(estimate);
     let mut scopes: Vec<(&'static str, String, Limits)> = Vec::new();
@@ -163,22 +175,25 @@ pub(super) fn gate(
     }
     let mut used = Vec::new();
     for (scope, key, l) in &scopes {
-        used.push(cost::totals_since(scope, key, l.since)?);
-    }
-    let ceiling = job_max_calls.min(MAX_CALLS_PER_REQUEST);
-    for n in (1..=ceiling).rev() {
-        let blocked = scopes
-            .iter()
-            .zip(&used)
-            .any(|((scope, _, l), u)| violation(scope, l, u, &next, n as i64).is_some());
-        if !blocked {
-            return Ok(Gate::Go { max_calls: n });
+        let mut total = cost::totals_since(scope, key, l.since)?;
+        for field in [
+            "calls",
+            "inputTokens",
+            "outputTokens",
+            "microUsd",
+            "durationMs",
+        ] {
+            total[field] = json!(total[field]
+                .as_i64()
+                .unwrap_or(0)
+                .saturating_add(pending[field].as_i64().unwrap_or(0)));
         }
+        used.push(total);
     }
     // Nem uma chamada cabe: pausa o primeiro escopo que a recusa (ou só segue, sem teto algum,
     // se a Tarefa não permite nenhuma chamada: quem trata é o limite por job).
     for ((scope, key, l), u) in scopes.iter().zip(&used) {
-        if let Some(code) = violation(scope, l, u, &next, 1) {
+        if let Some(code) = violation(scope, l, u, &next) {
             return Ok(Gate::Pause {
                 scope,
                 key: key.clone(),
@@ -186,7 +201,9 @@ pub(super) fn gate(
             });
         }
     }
-    Ok(Gate::Go { max_calls: 0 })
+    Ok(Gate::Go {
+        max_calls: job_max_calls,
+    })
 }
 
 pub(super) fn pause(scope: &str, key: &str, code: &str) {
@@ -276,21 +293,21 @@ fn save(v: &Value, resume: bool) -> CommandResult {
 }
 
 fn view(only: Option<(&str, String)>) -> CommandResult {
-    let rows: Vec<(String, String, [Option<i64>; 4], bool, i64, Option<String>)> =
-        projects::with_reader(|c| {
-            let mut s = c.prepare("SELECT b.scope,b.key,b.max_calls,b.max_tokens,b.max_wall_ms,b.max_cost_micro_usd,b.unknown_confirmed,b.since,(SELECT reason FROM ai_pauses p WHERE p.scope=b.scope AND p.key=b.key) FROM ai_budgets b ORDER BY b.scope,b.key")?;
-            let rows = s.query_map([], |r| {
-                Ok((
-                    r.get(0)?,
-                    r.get(1)?,
-                    [r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?],
-                    r.get::<_, i64>(6)? != 0,
-                    r.get(7)?,
-                    r.get(8)?,
-                ))
-            })?;
-            rows.collect::<rusqlite::Result<Vec<_>>>()
+    type BudgetRow = (String, String, [Option<i64>; 4], bool, i64, Option<String>);
+    let rows: Vec<BudgetRow> = projects::with_reader(|c| {
+        let mut s = c.prepare("SELECT b.scope,b.key,b.max_calls,b.max_tokens,b.max_wall_ms,b.max_cost_micro_usd,b.unknown_confirmed,b.since,(SELECT reason FROM ai_pauses p WHERE p.scope=b.scope AND p.key=b.key) FROM ai_budgets b ORDER BY b.scope,b.key")?;
+        let rows = s.query_map([], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                [r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?],
+                r.get::<_, i64>(6)? != 0,
+                r.get(7)?,
+                r.get(8)?,
+            ))
         })?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+    })?;
     let mut out = Vec::new();
     for (scope, key, [calls, tokens, wall, cost_cap], confirmed, since, paused) in rows {
         if only.as_ref().is_some_and(|(s, k)| *s != scope || *k != key) {
