@@ -19,8 +19,32 @@ async fn core_dispatch(
     })?
 }
 
+/// Protocolo `clipes-media`: o núcleo decide o que servir (`clipes_core::media::serve`); aqui só
+/// se traduz a requisição HTTP. O recurso é um id opaco, nunca um caminho (#58).
+fn media_response(request: &tauri::http::Request<Vec<u8>>) -> tauri::http::Response<Vec<u8>> {
+    let range = request
+        .headers()
+        .get("range")
+        .and_then(|value| value.to_str().ok());
+    let served = clipes_core::media::serve(request.uri().path(), range);
+    let mut response = tauri::http::Response::builder().status(served.status);
+    for (name, value) in &served.headers {
+        response = response.header(*name, value);
+    }
+    let head = request.method() == tauri::http::Method::HEAD;
+    response
+        .body(if head { Vec::new() } else { served.body })
+        .unwrap_or_else(|_| tauri::http::Response::new(Vec::new()))
+}
+
 fn main() {
     tauri::Builder::default()
+        .register_asynchronous_uri_scheme_protocol("clipes-media", |_ctx, request, responder| {
+            // Leitura de disco fora da thread principal.
+            tauri::async_runtime::spawn_blocking(move || {
+                responder.respond(media_response(&request))
+            });
+        })
         .setup(|app| {
             let handle = app.handle().clone();
             let _ = clipes_core::set_event_emitter(std::sync::Arc::new(move |event| {

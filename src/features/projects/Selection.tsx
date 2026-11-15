@@ -5,6 +5,7 @@ import { coreDispatch } from '@/lib/core';
 import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { openCutPreview } from './CutPreview';
 import { CandidateReview } from './CandidateReview';
 import { clock, fill, message } from './selectionFormat';
 
@@ -149,7 +150,7 @@ export function Selection({ sourceId }: { sourceId: number }) {
       <label className="flex items-center gap-2">{t.minScore}<input type="number" min={0} max={10} step={0.5} value={minScore} onChange={e => setMinScore(Math.min(10, Math.max(0, Number(e.target.value) || 0)))} className="h-8 w-20 rounded-md border border-line-strong bg-field px-2" /></label>
       {!running && detail.candidates.length === 0 && head.state === 'completed' && <p>{t.none}</p>}
       {detail.candidates.length > 0 && shown.length === 0 && <p>{t.noneFilter}</p>}
-      {current !== null && shown.length > 0 && <CandidateReview run={current} candidates={shown} weights={weights} />}
+      {current !== null && shown.length > 0 && <CandidateReview run={current} candidates={shown} weights={weights} onOpenPreview={(_, startUs, endUs) => openCutPreview({ sourceId, startUs, endUs })} />}
     </div>}
     {error && <p role="alert" className="text-danger">{error}</p>}
     <ConfirmDialog open={pending !== null} onOpenChange={open => { if (!open) setPending(null); }} title={t.confirmTitle}
