@@ -202,6 +202,7 @@ fn headless_opencode_isolation_routing_validation_and_cancellation() {
     let local_job = jobs::enqueue_ai(
         "selection",
         &TaskInput {
+            estimate_hint: Default::default(),
             transcript: "Synthetic text".into(),
             context: Value::Null,
             native_schema: false,
@@ -243,6 +244,7 @@ fn headless_opencode_isolation_routing_validation_and_cancellation() {
     let quota_job = jobs::enqueue_ai(
         "selection",
         &TaskInput {
+            estimate_hint: Default::default(),
             transcript: "Synthetic text".into(),
             context: Value::Null,
             native_schema: false,
