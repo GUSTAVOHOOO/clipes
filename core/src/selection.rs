@@ -273,7 +273,7 @@ fn window_input(frases: &[Sentence], range: &Range) -> TaskInput {
     }
 }
 
-fn slice_by_ids<'a>(all: &'a [Sentence], first: i64, last: i64) -> &'a [Sentence] {
+fn slice_by_ids(all: &[Sentence], first: i64, last: i64) -> &[Sentence] {
     let from = all.partition_point(|s| s.id < first);
     let to = all.partition_point(|s| s.id <= last);
     &all[from..to]

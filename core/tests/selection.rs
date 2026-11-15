@@ -300,8 +300,8 @@ fn selection_runs_windows_adjusts_borders_and_resumes_without_repeating() {
             Behavior::Candidates(vec![cand(lasts[n - 1], lasts[n - 1], [6; 5])]),
         ),
     ];
-    for i in 3..n - 1 {
-        plan.push((firsts[i], Behavior::Candidates(vec![])));
+    for first in &firsts[3..n - 1] {
+        plan.push((*first, Behavior::Candidates(vec![])));
     }
     fake.set(plan);
     let started = call("selection.start", json!({"source_id": source}));
