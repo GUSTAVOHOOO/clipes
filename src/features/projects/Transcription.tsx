@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { EngineChoice } from './EngineChoice';
 import { TranscriptTimeline } from './TranscriptTimeline';
 import { Selection } from './Selection';
+import { CutPreviewPanel } from './CutPreview';
 
 type Job = { id: number; state: 'queued' | 'running' | 'uncertain' | 'completed' | 'cancelled' | 'failed'; progress: number };
 export type Transcript = { engine: 'local' | 'groq'; id: number; state: 'running' | 'complete'; resume_us: number; duration_us: number; words: number };
@@ -50,6 +51,7 @@ export function Transcription({ project, sourceId, available }: { project: strin
       <EngineChoice project={project} sourceId={sourceId} transcript={transcript} available={available} onStarted={refresh} />
     </>}
     {transcript?.state === 'complete' && <Selection sourceId={sourceId} />}
+    {transcript?.state === 'complete' && <CutPreviewPanel sourceId={sourceId} />}
     {transcript?.state === 'complete' && <TranscriptTimeline sourceId={sourceId} />}
     {error && <span role="alert" className="text-danger">{error}</span>}
   </div>;

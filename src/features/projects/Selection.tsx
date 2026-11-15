@@ -5,6 +5,7 @@ import { coreDispatch } from '@/lib/core';
 import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { openCutPreview } from './CutPreview';
 
 type Estimate = { kind: string; windows: number; inputTokens: number; minMicroUsd: number | null; maxMicroUsd: number | null };
 type Weight = { key: string; weight: number };
@@ -18,7 +19,7 @@ type Pending = { kind: 'start' } | { kind: 'redo'; windows?: number[] };
 
 const texts = {
   'pt-BR': {
-    title: 'Seleção de Cortes', start: 'Selecionar Cortes', cancel: 'Cancelar seleção', resume: 'Retomar janelas', redo: 'Refazer janela',
+    title: 'Seleção de Cortes', preview: 'Pré-visualizar', start: 'Selecionar Cortes', cancel: 'Cancelar seleção', resume: 'Retomar janelas', redo: 'Refazer janela',
     estimate: 'Estimativa: {windows} janelas', free: 'sem custo (modelo local)', unknown: 'custo desconhecido', quota: 'consome a cota do plano', range: 'entre US$ {min} e US$ {max}', reduced: 'janelas reduzidas pelo contexto do modelo',
     confirmTitle: 'Usar o Provedor pago?', confirmBody: 'A seleção envia a Transcrição, em janelas, ao Provedor escolhido. Custo estimado: {cost}.', confirmRedo: 'Refazer envia de novo só as janelas escolhidas. Custo estimado: {cost}.', confirm: 'Confirmar e selecionar', confirmRedoLabel: 'Confirmar e refazer', dismiss: 'Cancelar',
     progress: 'Progresso da seleção', windowsDone: '{done} de {total} janelas', window: 'Janela {n}', paused: 'Pausada pelo orçamento do lote. Aumente o teto e continue na fila.',
@@ -31,7 +32,7 @@ const texts = {
     axis: { hook: 'Gancho', selfContained: 'Autossuficiência', energy: 'Emoção/energia', value: 'Valor', closing: 'Fechamento' } as Record<string, string>,
   },
   en: {
-    title: 'Clip selection', start: 'Select Clips', cancel: 'Cancel selection', resume: 'Resume windows', redo: 'Redo window',
+    title: 'Clip selection', preview: 'Preview', start: 'Select Clips', cancel: 'Cancel selection', resume: 'Resume windows', redo: 'Redo window',
     estimate: 'Estimate: {windows} windows', free: 'free (local model)', unknown: 'cost unknown', quota: 'uses your plan quota', range: 'between US$ {min} and US$ {max}', reduced: 'windows shortened by the model context',
     confirmTitle: 'Use the paid Provider?', confirmBody: 'The selection sends the Transcript, in windows, to the chosen Provider. Estimated cost: {cost}.', confirmRedo: 'Redo sends only the chosen windows again. Estimated cost: {cost}.', confirm: 'Confirm and select', confirmRedoLabel: 'Confirm and redo', dismiss: 'Cancel',
     progress: 'Selection progress', windowsDone: '{done} of {total} windows', window: 'Window {n}', paused: 'Paused by the batch budget. Raise the cap and continue in the queue.',
@@ -157,6 +158,7 @@ export function Selection({ sourceId }: { sourceId: number }) {
             {c.title && <span className="text-fg-2">{c.title}</span>}
             {c.adjusted && <span className="text-fg-2">{t.adjusted}: {[c.adjust?.extendedBefore ? t.extendedBefore : '', c.adjust?.extendedAfter ? t.extendedAfter : '', c.adjust?.trimmedEnd ? t.trimmedEnd : ''].filter(Boolean).join(', ')}</span>}
             <span className="text-fg-2">{t.origin}: {c.windows.map(n => n + 1).join(', ')}</span>
+            <Button tamanho="sm" aria-label={`${t.preview} ${clock(c.startUs)}`} onClick={() => openCutPreview({ sourceId, startUs: c.startUs, endUs: c.endUs })}>{t.preview}</Button>
           </div>
           <dl className="mt-2 grid gap-x-3 gap-y-1 sm:grid-cols-[max-content_max-content_1fr]">
             {weights.map(w => <div key={w.key} className="contents">

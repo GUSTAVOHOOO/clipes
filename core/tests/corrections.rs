@@ -399,4 +399,8 @@ fn search_reports_the_timeline_row_after_silences() {
         ),
         (Some(6), Some("jogo!"), Some(true))
     );
+    // `start_us` na Fonte, para o preview (#58) posicionar o vídeo ao clicar na palavra.
+    let starts: Vec<i64> = words.iter().map(|w| w["start_us"].as_i64().unwrap()).collect();
+    assert!(starts.windows(2).all(|w| w[0] <= w[1]), "{starts:?}");
+    assert!(starts[0] >= page["items"][2]["start_us"].as_i64().unwrap());
 }

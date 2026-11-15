@@ -300,7 +300,7 @@ fn timeline_command(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 }
 
 /// Acrescenta a cada Frase da página `first_position`, `last_position` e `words`
-/// (`position`, `text` efetivo, `corrected`), para a UI focar e corrigir palavra a palavra.
+/// (`position`, `text` efetivo, `corrected`, `start_us` na Fonte, que o preview usa ao clicar), para a UI focar e corrigir palavra a palavra.
 fn attach_words(
     c: &rusqlite::Connection,
     transcript: i64,
@@ -325,7 +325,7 @@ fn attach_words(
     let low = ranges.iter().map(|r| r.1).min().unwrap_or(0);
     let high = ranges.iter().map(|r| r.2).max().unwrap_or(-1);
     let mut q = c.prepare(&format!(
-        "SELECT position, {}, corrected_text IS NOT NULL FROM transcript_words WHERE transcript_id=?1 AND kind='word' AND position BETWEEN ?2 AND ?3 ORDER BY position",
+        "SELECT position, {}, corrected_text IS NOT NULL, start_us FROM transcript_words WHERE transcript_id=?1 AND kind='word' AND position BETWEEN ?2 AND ?3 ORDER BY position",
         crate::corrections::EFFECTIVE_TEXT
     ))?;
     let words = q
@@ -334,6 +334,7 @@ fn attach_words(
                 r.get::<_, i64>(0)?,
                 r.get::<_, String>(1)?,
                 r.get::<_, bool>(2)?,
+                r.get::<_, i64>(3)?,
             ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -350,7 +351,7 @@ fn attach_words(
         item["last_position"] = json!(last);
         item["words"] = words[from..to]
             .iter()
-            .map(|(p, t, c)| json!({"position": p, "text": t.trim(), "corrected": c}))
+            .map(|(p, t, c, start)| json!({"position": p, "text": t.trim(), "corrected": c, "start_us": start}))
             .collect();
     }
     Ok(())

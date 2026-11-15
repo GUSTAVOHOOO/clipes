@@ -3,8 +3,9 @@ import { coreDispatch } from '@/lib/core';
 import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { Kbd } from '@/components/ui/Kbd';
+import { previewSeekEvent, type PreviewSeekEvent } from './CutPreview';
 
-type Word = { position: number; text: string; corrected: boolean };
+type Word = { position: number; text: string; corrected: boolean; start_us: number };
 type Item = { type: 'sentence' | 'silence'; id?: number; start_us: number; end_us: number; language?: string | null; text?: string; words?: Word[] };
 type Page = { total: number; items: Item[] };
 /** Mudança de uma palavra, devolvida pelo núcleo e repassada a todas as telas abertas. */
@@ -182,6 +183,7 @@ export function TranscriptTimeline({ sourceId }: { sourceId: number }) {
             }} />
           : <button type="button" data-word={w.position} tabIndex={(focus ?? item.words?.[0]?.position) === w.position ? 0 : -1} title={w.corrected ? t.corrected : undefined}
             onFocus={() => setFocus(w.position)}
+            onClick={() => window.dispatchEvent(new CustomEvent<PreviewSeekEvent>(previewSeekEvent, { detail: { source_id: sourceId, us: w.start_us } }))}
             className={`foco rounded-sm px-0.5 ${w.corrected ? 'underline decoration-dotted underline-offset-4' : ''}`}>{w.text}</button>}{' '}</span>)
         : item.text}</p>}
     </div>);
