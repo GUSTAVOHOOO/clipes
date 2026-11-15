@@ -2,9 +2,42 @@
 //! junção de duplicatas. Sem I/O, sem relógio e sem Provedor: o modelo só aponta IDs de Frase e
 //! dá notas; tudo o que muda tempo ou ordem é código.
 
-/// Um eixo da Nota e o peso dele, em pontos percentuais. A tabela [`AXES`] é a **única** fonte
-/// dos pesos: a Nota total, o schema de saída, os verificadores e a UI leem dela. Um eixo novo
-/// (o 6º, "Espaço para comentário", do Vídeo transformado) entra aqui; os pesos têm de somar 100.
+/// Tipo de vídeo da execução (ADR-0001, #67). Escolhido antes de produzir; decide a tabela de
+/// pesos, o prompt e o schema da seleção. Execuções antigas valem como Corte direto.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum VideoKind {
+    #[default]
+    Direct,
+    Transformed,
+}
+
+impl VideoKind {
+    /// Valor no comando, no banco e na saída (`direct` | `transformed`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            VideoKind::Direct => "direct",
+            VideoKind::Transformed => "transformed",
+        }
+    }
+    pub fn parse(value: &str) -> Option<VideoKind> {
+        match value {
+            "direct" => Some(VideoKind::Direct),
+            "transformed" => Some(VideoKind::Transformed),
+            _ => None,
+        }
+    }
+    /// A tabela de eixos e pesos deste tipo.
+    pub fn axes(self) -> &'static [Axis] {
+        match self {
+            VideoKind::Direct => &AXES,
+            VideoKind::Transformed => &AXES_TRANSFORMED,
+        }
+    }
+}
+
+/// Um eixo da Nota e o peso dele, em pontos percentuais. As tabelas [`AXES`] (Corte direto) e
+/// [`AXES_TRANSFORMED`] (Vídeo transformado) são a **única** fonte dos pesos: a Nota total, o
+/// schema de saída, os verificadores e a UI leem delas. Os pesos de cada tabela somam 100.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Axis {
     /// Chave no schema fio e na saída do comando.
@@ -12,7 +45,7 @@ pub struct Axis {
     pub weight_percent: u32,
 }
 
-/// Pesos da v1 (decisão do dev, 15/11/2026). Sem curva.
+/// Pesos do Corte direto, 5 eixos (decisão do dev, 15/11/2026). Sem curva.
 pub const AXES: [Axis; 5] = [
     Axis {
         key: "hook",
@@ -36,13 +69,43 @@ pub const AXES: [Axis; 5] = [
     },
 ];
 
-pub const AXIS_COUNT: usize = AXES.len();
+/// Pesos do Vídeo transformado, 6 eixos (decisão do dev, 15/11/2026): Espaço para comentário
+/// 30, Gancho 20, Emoção/energia 15, Valor 15, Autossuficiência 10, Fechamento 10.
+pub const AXES_TRANSFORMED: [Axis; 6] = [
+    Axis {
+        key: "commentary",
+        weight_percent: 30,
+    },
+    Axis {
+        key: "hook",
+        weight_percent: 20,
+    },
+    Axis {
+        key: "energy",
+        weight_percent: 15,
+    },
+    Axis {
+        key: "value",
+        weight_percent: 15,
+    },
+    Axis {
+        key: "selfContained",
+        weight_percent: 10,
+    },
+    Axis {
+        key: "closing",
+        weight_percent: 10,
+    },
+];
+
 pub const SCORE_MAX: u8 = 10;
 
-/// Soma ponderada em centésimos de ponto: `Σ peso% × nota`, de 0 a 1000. A Nota total é
-/// esse número ÷ 100 (duas casas exatas, sem ponto flutuante na comparação).
-pub fn total_centi(scores: &[u8; AXIS_COUNT]) -> u32 {
-    AXES.iter()
+/// Soma ponderada em centésimos de ponto: `Σ peso% × nota`, de 0 a 1000, com as notas na
+/// ordem da tabela do tipo. A Nota total é esse número ÷ 100 (duas casas exatas, sem ponto
+/// flutuante na comparação).
+pub fn total_centi(kind: VideoKind, scores: &[u8]) -> u32 {
+    kind.axes()
+        .iter()
         .zip(scores)
         .map(|(axis, score)| axis.weight_percent * u32::from(*score))
         .sum()
@@ -187,15 +250,54 @@ mod tests {
 
     #[test]
     fn weights_sum_to_one_hundred_percent() {
-        assert_eq!(AXES.iter().map(|a| a.weight_percent).sum::<u32>(), 100);
-        assert_eq!(total_centi(&[10; AXIS_COUNT]), 1000);
-        assert_eq!(total_centi(&[0; AXIS_COUNT]), 0);
+        for kind in [VideoKind::Direct, VideoKind::Transformed] {
+            let axes = kind.axes();
+            assert_eq!(axes.iter().map(|a| a.weight_percent).sum::<u32>(), 100);
+            assert_eq!(total_centi(kind, &vec![10; axes.len()]), 1000);
+            assert_eq!(total_centi(kind, &vec![0; axes.len()]), 0);
+        }
+    }
+
+    #[test]
+    fn transformed_table_has_the_commentary_axis_with_the_biggest_weight() {
+        let weights: Vec<(&str, u32)> = AXES_TRANSFORMED
+            .iter()
+            .map(|a| (a.key, a.weight_percent))
+            .collect();
+        assert_eq!(
+            weights,
+            [
+                ("commentary", 30),
+                ("hook", 20),
+                ("energy", 15),
+                ("value", 15),
+                ("selfContained", 10),
+                ("closing", 10)
+            ]
+        );
+        assert!(!AXES.iter().any(|a| a.key == "commentary"));
+    }
+
+    #[test]
+    fn video_kind_round_trips_and_defaults_to_direct() {
+        assert_eq!(VideoKind::default(), VideoKind::Direct);
+        for kind in [VideoKind::Direct, VideoKind::Transformed] {
+            assert_eq!(VideoKind::parse(kind.as_str()), Some(kind));
+        }
+        assert_eq!(VideoKind::parse("outro"), None);
     }
 
     #[test]
     fn total_matches_a_hand_calculation() {
         // 0,30×8 + 0,20×6 + 0,20×7 + 0,15×9 + 0,15×5 = 2,4 + 1,2 + 1,4 + 1,35 + 0,75 = 7,10
-        assert_eq!(total_centi(&[8, 6, 7, 9, 5]), 710);
+        assert_eq!(total_centi(VideoKind::Direct, &[8, 6, 7, 9, 5]), 710);
+        // Transformado, na ordem da tabela (comentário, gancho, energia, valor, autossuf.,
+        // fechamento): 0,30×9 + 0,20×8 + 0,15×7 + 0,15×6 + 0,10×5 + 0,10×4
+        // = 2,70 + 1,60 + 1,05 + 0,90 + 0,50 + 0,40 = 7,15
+        assert_eq!(
+            total_centi(VideoKind::Transformed, &[9, 8, 7, 6, 5, 4]),
+            715
+        );
     }
 
     #[test]

@@ -4,6 +4,7 @@ import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { Kbd } from '@/components/ui/Kbd';
 import { clock, fill } from './selectionFormat';
+import { VideoKindBadge, type VideoKind } from './videoKind';
 import { Packaging } from './Packaging';
 import { ExportButton } from '@/features/export/ExportButton';
 
@@ -27,7 +28,7 @@ const texts = {
     shortcuts: 'Atalhos', hint: 'Atalhos (com a revisão em foco)', nav: 'navega', keyApprove: 'aprova', keyReject: 'rejeita', keyStart: 'começo antes/depois', keyEnd: 'fim antes/depois', keyUndo: 'desfaz a última decisão',
     note: 'As bordas movem por Frase inteira, dentro da faixa de duração. As decisões ficam só neste Projeto.',
     errors: { adjust_out_of_transcript: 'A borda não pode sair da Transcrição.', adjust_empty: 'O Corte precisa manter ao menos uma Frase.', adjust_too_short: 'O Corte ficaria abaixo da duração mínima.', adjust_too_long: 'O Corte ficaria acima da duração máxima.', nothing_to_undo: 'Não há decisão para desfazer.', default: 'Não foi possível atualizar a revisão.' } as Record<string, string>,
-    axis: { hook: 'Gancho', selfContained: 'Autossuficiência', energy: 'Emoção/energia', value: 'Valor', closing: 'Fechamento' } as Record<string, string>,
+    axis: { commentary: 'Espaço para comentário', hook: 'Gancho', selfContained: 'Autossuficiência', energy: 'Emoção/energia', value: 'Valor', closing: 'Fechamento' } as Record<string, string>,
   },
   en: {
     candidates: 'Clip candidates', review: 'Candidate review', detail: 'Candidate detail',
@@ -40,14 +41,14 @@ const texts = {
     shortcuts: 'Shortcuts', hint: 'Shortcuts (with the review focused)', nav: 'navigate', keyApprove: 'approve', keyReject: 'reject', keyStart: 'start earlier/later', keyEnd: 'end earlier/later', keyUndo: 'undo the last decision',
     note: 'Borders move by whole Sentences, inside the duration range. Decisions stay in this Project only.',
     errors: { adjust_out_of_transcript: 'The border cannot leave the Transcript.', adjust_empty: 'The Clip must keep at least one Sentence.', adjust_too_short: 'The Clip would fall below the minimum duration.', adjust_too_long: 'The Clip would exceed the maximum duration.', nothing_to_undo: 'There is no decision to undo.', default: 'Could not update the review.' } as Record<string, string>,
-    axis: { hook: 'Hook', selfContained: 'Self-contained', energy: 'Emotion/energy', value: 'Value', closing: 'Closing' } as Record<string, string>,
+    axis: { commentary: 'Room for commentary', hook: 'Hook', selfContained: 'Self-contained', energy: 'Emotion/energy', value: 'Value', closing: 'Closing' } as Record<string, string>,
   },
 };
 
 const emptyMoves: Moves = { startEarlier: false, startLater: false, endEarlier: false, endLater: false };
 
 /** Tela de revisão dos candidatos (#55): lista pela Nota, detalhe, aprovar, rejeitar e ajustar as bordas. */
-export function CandidateReview({ sourceId, run, candidates, weights, onOpenPreview }: { sourceId: number; run: number; candidates: ReviewCandidate[]; weights: Weight[]; onOpenPreview?: (candidate: number, startUs: number, endUs: number) => void }) {
+export function CandidateReview({ sourceId, run, videoKind = 'direct', candidates, weights, onOpenPreview }: { sourceId: number; run: number; videoKind?: VideoKind; candidates: ReviewCandidate[]; weights: Weight[]; onOpenPreview?: (candidate: number, startUs: number, endUs: number) => void }) {
   const t = useText(texts);
   const [items, setItems] = useState<Record<number, Review>>({});
   const [canUndo, setCanUndo] = useState(false);
@@ -114,6 +115,7 @@ export function CandidateReview({ sourceId, run, candidates, weights, onOpenPrev
 
   return <div ref={root} role="group" aria-label={t.review} tabIndex={0} onKeyDown={onKeyDown} className="foco flex flex-col gap-2 rounded-md">
     <div className="flex flex-wrap items-center gap-3">
+      <VideoKindBadge kind={videoKind} />
       <span aria-live="polite" data-review-counts>{fill(t.counts, counts)}</span>
       <Button tamanho="sm" disabled={!canUndo} onClick={undo} atalho="Ctrl+Z">{t.undo}</Button>
       <Button tamanho="sm" disabled={!current || !onOpenPreview} onClick={() => current && onOpenPreview?.(current.id, startUs, endUs)} data-preview-slot>{t.preview}</Button>
