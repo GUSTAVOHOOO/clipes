@@ -42,7 +42,9 @@ pub(crate) fn parse_resource(raw: &str) -> Option<Resource> {
         "proxy" if id.len() == 64 && id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) => {
             Some(Resource::Proxy(id.to_owned()))
         }
-        "thumbs" if id.len() == 64 && id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) => {
+        "thumbs"
+            if id.len() == 64 && id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) =>
+        {
             Some(Resource::Thumbs(id.to_owned()))
         }
         "source" if !id.is_empty() && id.len() <= 18 && id.bytes().all(|b| b.is_ascii_digit()) => {
@@ -146,7 +148,11 @@ pub(crate) fn proxy_path(key: &str) -> Option<PathBuf> {
 pub(crate) fn thumbs_path(key: &str) -> Option<PathBuf> {
     let (cache, _, _) = crate::components::cache_settings().ok()?;
     let root = cache.join("proxies").canonicalize().ok()?;
-    let file = root.join(key).join(crate::editor::assets::THUMBS_FILE).canonicalize().ok()?;
+    let file = root
+        .join(key)
+        .join(crate::editor::assets::THUMBS_FILE)
+        .canonicalize()
+        .ok()?;
     (file.starts_with(&root) && file.is_file()).then_some(file)
 }
 

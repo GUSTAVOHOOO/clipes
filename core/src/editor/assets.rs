@@ -59,7 +59,9 @@ fn folder(cache: &Path, key: &str) -> PathBuf {
 }
 
 fn thumb_count(window_us: i64) -> u32 {
-    (window_us.max(1) as u64).div_ceil(THUMB_INTERVAL_US as u64).max(1) as u32
+    (window_us.max(1) as u64)
+        .div_ceil(THUMB_INTERVAL_US as u64)
+        .max(1) as u32
 }
 
 /// Byte da onda para a energia média (amostra²) de um bloco.
@@ -99,7 +101,9 @@ fn status_json(cache: &Path, key: &str, window_us: i64) -> Result<Value, CoreErr
         .optional()
     })?;
     Ok(match row {
-        None => json!({"state":"missing","key":key,"job":null,"progress":0,"error":null,"thumbs":null}),
+        None => {
+            json!({"state":"missing","key":key,"job":null,"progress":0,"error":null,"thumbs":null})
+        }
         Some((job, state, progress, err)) => {
             let state = match state.as_str() {
                 "queued" => "queued",
@@ -160,7 +164,8 @@ fn request(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             tx.commit()?;
             Ok(id)
         })?;
-        status = json!({"state":"queued","key":key,"job":job,"progress":0,"error":null,"thumbs":null});
+        status =
+            json!({"state":"queued","key":key,"job":job,"progress":0,"error":null,"thumbs":null});
     }
     status["windowStartUs"] = json!(win_start);
     status["windowEndUs"] = json!(win_end);
@@ -210,7 +215,16 @@ pub(crate) fn thumbs_args(proxy_file: &Path, window_us: i64, output: &Path) -> V
         &["-v", "error", "-nostdin"],
         proxy_file,
         &[
-            "-an", "-vf", &filter, "-frames:v", "1", "-q:v", "6", "-f", "image2", "-y",
+            "-an",
+            "-vf",
+            &filter,
+            "-frames:v",
+            "1",
+            "-q:v",
+            "6",
+            "-f",
+            "image2",
+            "-y",
         ],
         Some(output),
     )
@@ -289,14 +303,10 @@ fn generate(id: i64, source_id: i64, project: &Path, stop: &AtomicBool) -> Resul
     jobs::progress(id, "timeline", 2, "Gerando a timeline do Corte")?;
     // Onda: o áudio do proxy passa pelo BlockMeter do #54, sem tocar na Fonte.
     let mut meter = BlockMeter::default();
-    let outcome = jobs::preview::run_process_as(
-        &ffmpeg,
-        wave_args(&proxy_file),
-        id,
-        stop,
-        failed,
-        |bytes| meter.push(bytes),
-    );
+    let outcome =
+        jobs::preview::run_process_as(&ffmpeg, wave_args(&proxy_file), id, stop, failed, |bytes| {
+            meter.push(bytes)
+        });
     if let Err(e) = outcome {
         cleanup();
         return Err(e);
@@ -317,7 +327,10 @@ fn generate(id: i64, source_id: i64, project: &Path, stop: &AtomicBool) -> Resul
         failed,
         |_| {},
     );
-    let produced = fs::metadata(work(THUMBS_FILE)).map(|m| m.len()).unwrap_or(0) > 0;
+    let produced = fs::metadata(work(THUMBS_FILE))
+        .map(|m| m.len())
+        .unwrap_or(0)
+        > 0;
     if let Err(e) = outcome {
         cleanup();
         return Err(e);

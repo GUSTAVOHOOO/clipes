@@ -38,7 +38,8 @@ export function toProxySeconds(sourceUs: number, windowStartUs: number, windowEn
 const mediaUrl = (key: string) => (isTauri() ? convertFileSrc(`proxy/${key}`, 'clipes-media') : `/__clipes-media__/proxy/${key}`);
 
 /** Preview 9:16 em Fit (barras, sem corte) de um Corte, sobre o proxy de GOP curto gerado pelo núcleo. */
-export function CutPreview({ sourceId, startUs, endUs }: { sourceId: number; startUs: number; endUs: number }) {
+/** `rate` (editor, #61): 0 pausa, >0 toca nessa velocidade, <0 volta por passos. `onSourceTime` informa o tempo da Fonte a cada atualização. */
+export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime }: { sourceId: number; startUs: number; endUs: number; rate?: number; onSourceTime?: (sourceUs: number) => void }) {
   const t = useText(texts);
   const video = useRef<HTMLVideoElement>(null);
   const pending = useRef<number | null>(null);
@@ -82,6 +83,17 @@ export function CutPreview({ sourceId, startUs, endUs }: { sourceId: number; sta
     const timer = window.setInterval(sync, 700);
     return () => { alive = false; unlisten?.(); window.clearInterval(timer); };
   }, [working, proxy?.key, request]);
+
+  // Velocidade pedida pelo editor. Para trás o `<video>` não toca: volta em passos de 100 ms.
+  useEffect(() => {
+    const el = video.current;
+    if (rate === undefined || !el || proxy?.state !== 'ready') return;
+    if (rate > 0) { el.playbackRate = rate; el.play().catch(() => {}); return; }
+    el.pause();
+    if (rate === 0) return;
+    const timer = window.setInterval(() => { el.currentTime = Math.max(0, el.currentTime + rate * 0.1); if (el.currentTime <= 0) window.clearInterval(timer); }, 100);
+    return () => window.clearInterval(timer);
+  }, [rate, proxy?.state]);
 
   const windowSeconds = proxy ? (proxy.windowEndUs - proxy.windowStartUs) / 1_000_000 : 0;
   function seekProxy(seconds: number) {
@@ -134,7 +146,7 @@ export function CutPreview({ sourceId, startUs, endUs }: { sourceId: number; sta
     {proxy?.state === 'ready' && <>
       <div className="aspect-[9/16] w-full overflow-hidden rounded-md border border-line bg-black">
         <video ref={video} src={mediaUrl(proxy.key)} aria-label={t.video} className="h-full w-full object-contain" playsInline preload="auto"
-          onLoadedMetadata={onLoaded} onTimeUpdate={e => setTime(e.currentTarget.currentTime)} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
+          onLoadedMetadata={onLoaded} onTimeUpdate={e => { setTime(e.currentTarget.currentTime); if (proxy) onSourceTime?.(proxy.windowStartUs + e.currentTarget.currentTime * 1_000_000); }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
           onError={() => { if (isTauri()) setNotice(t.playError); }} />
       </div>
       <div className="flex items-center gap-2">
