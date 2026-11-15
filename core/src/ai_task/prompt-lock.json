@@ -15,6 +15,11 @@
     "sha256": "8be769b3c853e1dcbbc9650d51c81670b52d901e8c217ac31606b35822878304"
   },
   {
+    "id": "selection_transformed",
+    "version": 1,
+    "sha256": "fb6ef24096c53ac75a22fb97cbe1dc3252e9c4dca5ad55bd2bd6f70fbdc3eaa6"
+  },
+  {
     "id": "packaging",
     "version": 1,
     "sha256": "6a0ccbcd85b760aab2b3232d61445b413f0edc50c92108625dd8d903d20aaaf9"

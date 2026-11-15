@@ -18,8 +18,16 @@ fn candidate(start: i64, end: i64) -> Value {
     })
 }
 
+fn task() -> &'static AiTask {
+    task_for(VideoKind::Direct)
+}
+
 fn all(input: &TaskInput, output: &Value) -> Vec<&'static str> {
-    task()
+    all_for(VideoKind::Direct, input, output)
+}
+
+fn all_for(kind: VideoKind, input: &TaskInput, output: &Value) -> Vec<&'static str> {
+    task_for(kind)
         .verifiers
         .iter()
         .flat_map(|v| v(input, output))
@@ -92,4 +100,98 @@ fn full_schema_rejects_a_score_that_the_wire_schema_lets_through() {
     bad["hook"]["score"] = json!(11);
     assert!(!validator.is_valid(&json!({"schemaVersion": 1, "candidates": [bad]})));
     assert!(validator.is_valid(&json!({"schemaVersion": 1, "candidates": []})));
+}
+
+fn transformed(start: i64, end: i64) -> Value {
+    let mut c = candidate(start, end);
+    c["commentary"] = axis(7);
+    c
+}
+
+#[test]
+fn transformed_definition_is_valid_and_its_schema_follows_the_six_axis_table() {
+    let task = task_for(VideoKind::Transformed);
+    assert_eq!(task.id, TASK_ID_TRANSFORMED);
+    ai_task::check_definition(task).unwrap();
+    for schema in [WIRE_TRANSFORMED, FULL_TRANSFORMED] {
+        let schema: Value = serde_json::from_str(schema).unwrap();
+        let item = &schema["properties"]["candidates"]["items"];
+        for axis in AXES_TRANSFORMED {
+            assert!(item["properties"][axis.key].is_object(), "{}", axis.key);
+            assert!(item["required"]
+                .as_array()
+                .unwrap()
+                .contains(&json!(axis.key)));
+        }
+        assert_eq!(
+            item["properties"].as_object().unwrap().len(),
+            3 + AXES_TRANSFORMED.len()
+        );
+    }
+}
+
+#[test]
+fn direct_task_keeps_its_prompt_version_and_schema_without_the_sixth_axis() {
+    let direct = task_for(VideoKind::Direct);
+    assert_eq!((direct.id, direct.version), ("selection", 2));
+    assert_eq!(
+        direct.prompt_sha256,
+        "8be769b3c853e1dcbbc9650d51c81670b52d901e8c217ac31606b35822878304"
+    );
+    assert!(!WIRE.contains("commentary") && !FULL.contains("commentary"));
+    assert!(!PROMPT.contains("commentary"));
+    assert!(PROMPT_TRANSFORMED.contains("commentary"));
+}
+
+#[test]
+fn only_the_transformed_verifier_requires_the_commentary_axis() {
+    let i = input(&[1, 2, 3, 4], 3);
+    let direct_output = json!({"schemaVersion": 1, "candidates": [candidate(1, 3)]});
+    let transformed_output = json!({"schemaVersion": 1, "candidates": [transformed(1, 3)]});
+    assert!(all_for(VideoKind::Direct, &i, &direct_output).is_empty());
+    assert!(all_for(VideoKind::Transformed, &i, &transformed_output).is_empty());
+    // Sem o 6º eixo, o transformado recusa; com ele, o Corte direto o ignora.
+    let missing = all_for(VideoKind::Transformed, &i, &direct_output);
+    assert!(missing.contains(&"score_out_of_range"), "{missing:?}");
+    assert!(missing.contains(&"empty_reason"), "{missing:?}");
+    assert!(all_for(VideoKind::Direct, &i, &transformed_output).is_empty());
+    let mut bad = transformed(1, 3);
+    bad["commentary"] = json!({"score": 11, "why": " "});
+    let codes = all_for(VideoKind::Transformed, &i, &json!({"candidates": [bad]}));
+    assert!(codes.contains(&"score_out_of_range") && codes.contains(&"empty_reason"));
+}
+
+#[test]
+fn transformed_full_schema_requires_the_commentary_axis_and_bounds_its_score() {
+    let (_, full) = ai_task::check_definition(task_for(VideoKind::Transformed)).unwrap();
+    let validator = jsonschema::validator_for(&full).unwrap();
+    let ok = json!({"schemaVersion": 1, "candidates": [transformed(1, 2)]});
+    assert!(validator.is_valid(&ok));
+    assert!(!validator.is_valid(&json!({"schemaVersion": 1, "candidates": [candidate(1, 2)]})));
+    let mut bad = transformed(1, 2);
+    bad["commentary"]["score"] = json!(11);
+    assert!(!validator.is_valid(&json!({"schemaVersion": 1, "candidates": [bad]})));
+}
+
+#[test]
+fn the_video_kind_of_a_request_defaults_to_direct_and_rejects_unknown_values() {
+    assert_eq!(parse_kind(&json!({})).unwrap(), VideoKind::Direct);
+    assert_eq!(
+        parse_kind(&json!({"videoKind": "transformed"})).unwrap(),
+        VideoKind::Transformed
+    );
+    for bad in [json!("dark"), json!(3), json!("")] {
+        assert_eq!(
+            parse_kind(&json!({"videoKind": bad})).unwrap_err().code,
+            "invalid_video_kind"
+        );
+    }
+}
+
+#[test]
+fn the_transformed_task_routes_as_the_selection_task() {
+    assert_eq!(ai_task::routing_id(TASK_ID_TRANSFORMED), TASK_ID);
+    assert_eq!(ai_task::routing_id(TASK_ID), TASK_ID);
+    assert!(is_job_kind(JOB_KIND) && is_job_kind(JOB_KIND_TRANSFORMED));
+    assert!(!is_job_kind("ai:packaging"));
 }

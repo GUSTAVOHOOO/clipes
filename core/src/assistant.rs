@@ -121,7 +121,7 @@ fn valid_choice(choice: &str) -> bool {
 }
 
 fn valid_task(task: &str) -> bool {
-    TASKS.contains(&task)
+    TASKS.contains(&crate::ai_task::routing_id(task))
 }
 
 fn profile_exists(id: &str) -> Result<bool, CoreError> {
@@ -141,7 +141,7 @@ pub(crate) fn route(task: Option<&str>) -> Result<Route, CoreError> {
         read()?
     };
     let choice = task
-        .and_then(|task| settings.tasks.get(task))
+        .and_then(|task| settings.tasks.get(crate::ai_task::routing_id(task)))
         .filter(|choice| !choice.is_empty())
         .unwrap_or(&settings.default);
     match choice.as_str() {
@@ -171,7 +171,11 @@ pub(crate) fn route(task: Option<&str>) -> Result<Route, CoreError> {
 /// Se a tarefa só aceita Provedor local. Vale só para a tarefa; o veto por Projeto é outro.
 pub(crate) fn local_only(task: &str) -> Result<bool, CoreError> {
     let _lock = locked()?;
-    Ok(read()?.local_only.get(task).copied().unwrap_or(false))
+    Ok(read()?
+        .local_only
+        .get(crate::ai_task::routing_id(task))
+        .copied()
+        .unwrap_or(false))
 }
 
 /// Esquece as escolhas que apontam para um CLI desativado.
