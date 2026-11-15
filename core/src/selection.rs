@@ -7,6 +7,7 @@
 //! `docs/contribuindo/selecao-de-cortes.md`.
 use crate::{
     ai_task::{self, AiTask, Budget, TaskInput, Violation},
+    energy::{self, EnergyLevel, EnergyMarks},
     jobs::{self, Safety},
     projects, provider, selection_windows,
     sentences::{self, Sentence},
@@ -252,8 +253,8 @@ fn weights_json() -> Value {
 
 /// O pedido de uma Janela: linha `#JANELA` (escrita pelo núcleo, antes da Transcrição) e as
 /// Frases no formato compacto sobre o texto corrigido (#52, #140).
-fn window_input(frases: &[Sentence], range: &Range) -> TaskInput {
-    let compact = sentences::compact_with_hint(frases);
+fn window_input(frases: &[Sentence], range: &Range, marks: &EnergyMarks) -> TaskInput {
+    let compact = sentences::compact_with_hint_marked(frases, marks);
     let length = frases.last().map_or(0, |s| s.end_us) - frases.first().map_or(0, |s| s.start_us);
     let target = target_candidates(length);
     let header = format!(
@@ -300,6 +301,9 @@ struct Setup {
     safety: Safety,
     profile: String,
     plan: selection_windows::Plan,
+    /// Marcas de energia do áudio (#54): `None` se a energia não foi medida; a execução roda
+    /// sem marcas e o resumo diz isso. Decidido uma vez, em `selection.start`.
+    marks: Option<EnergyMarks>,
 }
 
 /// Rota da seleção, com os dois vetos "somente local" (por tarefa e por Projeto) aplicados
@@ -311,6 +315,12 @@ fn route_safety() -> Result<(String, Safety), CoreError> {
             (profile.id, if local { Safety::Local } else { Safety::Paid })
         }
     })
+}
+
+impl Setup {
+    fn marks(&self) -> EnergyMarks {
+        self.marks.clone().unwrap_or_default()
+    }
 }
 
 fn setup(v: &Value) -> Result<Setup, CoreError> {
@@ -330,7 +340,8 @@ fn prepare(transcript: i64, range: Range) -> Result<Setup, CoreError> {
     let (profile, safety) = route_safety()?;
     let (wire, _) = ai_task::check_definition(task()).map_err(CoreError::from)?;
     let instruction = ai_task::normalized_prompt(PROMPT);
-    let plan = selection_windows::plan_for_profile(
+    let marks = energy::load_marks(transcript)?;
+    let plan = selection_windows::plan_for_profile_marked(
         &selection_windows::ProfileRequest {
             profile_id: None,
             task: Some(TASK_ID),
@@ -342,6 +353,7 @@ fn prepare(transcript: i64, range: Range) -> Result<Setup, CoreError> {
             max_cut_us: range.max_us,
         },
         &frases,
+        &marks.clone().unwrap_or_default(),
     )?;
     Ok(Setup {
         transcript,
@@ -350,6 +362,7 @@ fn prepare(transcript: i64, range: Range) -> Result<Setup, CoreError> {
         safety,
         profile,
         plan,
+        marks,
     })
 }
 
@@ -402,6 +415,17 @@ fn estimate_inputs(inputs: &[TaskInput], safety: Safety) -> Value {
     })
 }
 
+/// Estado da energia do áudio numa execução: se foi medida e quantas Frases têm cada marca.
+fn energy_json(marks: Option<&EnergyMarks>) -> Value {
+    match marks {
+        None => json!({"measured": false}),
+        Some(m) => {
+            let count = |l| m.values().filter(|x| **x == l).count();
+            json!({"measured": true, "high": count(EnergyLevel::High), "peak": count(EnergyLevel::Peak)})
+        }
+    }
+}
+
 fn confirmation_required(estimate: Value) -> CoreError {
     CoreError {
         code: "confirmation_required".into(),
@@ -441,7 +465,13 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .plan
         .windows
         .iter()
-        .map(|w| window_input(&s.frases[w.first_index..=w.last_index], &s.range))
+        .map(|w| {
+            window_input(
+                &s.frases[w.first_index..=w.last_index],
+                &s.range,
+                &s.marks(),
+            )
+        })
         .collect();
     Ok(json!({
         "paid": matches!(s.safety, Safety::Paid),
@@ -452,6 +482,7 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             "contextTokens": s.plan.context.tokens,
         },
         "weights": weights_json(),
+        "energy": energy_json(s.marks.as_ref()),
         "estimate": estimate_inputs(&inputs, s.safety),
     }))
 }
@@ -470,7 +501,13 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .plan
         .windows
         .iter()
-        .map(|w| window_input(&s.frases[w.first_index..=w.last_index], &s.range))
+        .map(|w| {
+            window_input(
+                &s.frases[w.first_index..=w.last_index],
+                &s.range,
+                &s.marks(),
+            )
+        })
         .collect();
     if matches!(s.safety, Safety::Paid) && v["confirmed"] != true {
         return Err(confirmation_required(estimate_inputs(&inputs, s.safety)));
@@ -479,7 +516,7 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let run = projects::with_writer(|c| {
         let tx = c.transaction()?;
         tx.execute(
-            "INSERT INTO selection_runs(transcript_id,task_version,prompt_sha256,profile,state,min_us,max_us,weights,plan_state,windows_total) VALUES (?1,?2,?3,?4,'running',?5,?6,?7,?8,?9)",
+            "INSERT INTO selection_runs(transcript_id,task_version,prompt_sha256,profile,state,min_us,max_us,weights,plan_state,windows_total,energy_marks) VALUES (?1,?2,?3,?4,'running',?5,?6,?7,?8,?9,?10)",
             (
                 s.transcript,
                 definition.version,
@@ -490,6 +527,7 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                 weights_json().to_string(),
                 state_label(s.plan.state),
                 s.plan.windows.len() as i64,
+                s.marks.is_some(),
             ),
         )?;
         let run = tx.last_insert_rowid();
@@ -620,12 +658,13 @@ struct RunRow {
     max_us: i64,
     completed: i64,
     failed: i64,
+    energy_marks: bool,
 }
 
 fn read_run(run: i64) -> Result<RunRow, CoreError> {
     projects::with_reader(|c| {
         c.query_row(
-            "SELECT transcript_id,state,min_us,max_us,windows_completed,windows_failed FROM selection_runs WHERE id=?1",
+            "SELECT transcript_id,state,min_us,max_us,windows_completed,windows_failed,energy_marks FROM selection_runs WHERE id=?1",
             [run],
             |r| {
                 Ok(RunRow {
@@ -635,6 +674,7 @@ fn read_run(run: i64) -> Result<RunRow, CoreError> {
                     max_us: r.get(3)?,
                     completed: r.get(4)?,
                     failed: r.get(5)?,
+                    energy_marks: r.get(6)?,
                 })
             },
         )
@@ -821,6 +861,7 @@ fn advance(run: i64) -> Result<(), CoreError> {
         })
         .collect();
     let summary = json!({
+        "energy": energy_json(run_marks(&row)?.as_ref()),
         "windows": {"total": total, "completed": completed, "failed": failures},
         "candidates": {
             "proposed": tally.proposed,
@@ -890,6 +931,17 @@ fn advance(run: i64) -> Result<(), CoreError> {
     Ok(())
 }
 
+/// As marcas que esta execução usou: decididas no início e guardadas como sinalizador; um
+/// refazer ou o resumo nunca consultam se a energia foi medida depois.
+fn run_marks(row: &RunRow) -> Result<Option<EnergyMarks>, CoreError> {
+    if !row.energy_marks {
+        return Ok(None);
+    }
+    Ok(Some(
+        energy::load_marks(row.transcript)?.unwrap_or_default(),
+    ))
+}
+
 // ---------------------------------------------------------------- retomar e refazer
 
 /// Janelas que um refazer atinge: as pedidas (ou todas as não concluídas) que não estão na
@@ -905,6 +957,7 @@ fn redo_inputs(run: i64, v: &Value) -> Result<Vec<(i64, TaskInput)>, CoreError> 
         min_us: row.min_us,
         max_us: row.max_us,
     };
+    let marks = run_marks(&row)?.unwrap_or_default();
     let mut out = Vec::new();
     for w in &windows {
         let selected = wanted.as_ref().is_none_or(|ids| ids.contains(&w.idx));
@@ -914,7 +967,7 @@ fn redo_inputs(run: i64, v: &Value) -> Result<Vec<(i64, TaskInput)>, CoreError> 
         match w.outcome() {
             Outcome::Failed(_) => out.push((
                 w.idx,
-                window_input(slice_by_ids(&frases, w.first_id, w.last_id), &range),
+                window_input(slice_by_ids(&frases, w.first_id, w.last_id), &range, &marks),
             )),
             Outcome::Done(_) | Outcome::Pending if wanted.is_some() => {
                 return Err(error(

@@ -50,7 +50,7 @@ pub(crate) fn check(id: i64, stop: &AtomicBool) -> Result<(), crate::CoreError> 
 
 pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
     while !stop.load(Ordering::SeqCst) {
-        let next = projects::with_reader(|c| c.query_row("SELECT id,COALESCE(source_id,0),kind FROM jobs WHERE ((kind='preview' AND safety='local') OR kind='transcription' OR kind LIKE 'ai:%') AND state='queued' AND NOT EXISTS (SELECT 1 FROM ai_pauses p WHERE (p.scope='task' AND jobs.kind='ai:'||p.key) OR (p.scope='batch' AND jobs.batch=p.key)) ORDER BY id LIMIT 1", [], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?))).optional()).ok().flatten();
+        let next = projects::with_reader(|c| c.query_row("SELECT id,COALESCE(source_id,0),kind FROM jobs WHERE ((kind='preview' AND safety='local') OR kind='transcription' OR kind='energy' OR kind LIKE 'ai:%') AND state='queued' AND NOT EXISTS (SELECT 1 FROM ai_pauses p WHERE (p.scope='task' AND jobs.kind='ai:'||p.key) OR (p.scope='batch' AND jobs.batch=p.key)) ORDER BY id LIMIT 1", [], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?))).optional()).ok().flatten();
         if let Some((id, source, kind)) = next {
             let Ok(_guard) = projects::start_job() else {
                 break;
@@ -68,6 +68,8 @@ pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
                 }
                 let result = if kind == "transcription" {
                     crate::transcription::run(id, source, &project, &stop)
+                } else if kind == crate::energy::JOB_KIND {
+                    crate::energy::run(id, source, &project, &stop)
                 } else {
                     generate(id, source, &project, &stop)
                 };
@@ -108,6 +110,8 @@ fn progress_event(
         message: match (kind, err.is_some()) {
             ("transcription", true) => "Transcrição interrompida",
             ("transcription", false) => "Transcrição pronta",
+            ("energy", true) => "Medição de energia interrompida",
+            ("energy", false) => "Energia do áudio medida",
             (_, true) => "Prévia interrompida",
             (_, false) => "Prévia pronta",
         }
@@ -288,6 +292,18 @@ fn run_process(
     args: Vec<std::ffi::OsString>,
     id: i64,
     stop: &AtomicBool,
+    consume: impl FnMut(&[u8]),
+) -> Result<(), crate::CoreError> {
+    run_process_as(ffmpeg, args, id, stop, failed, consume)
+}
+
+/// Como [`run_process`], com o erro tipado do job que chama (energia do áudio, #54).
+pub(crate) fn run_process_as(
+    ffmpeg: &Path,
+    args: Vec<std::ffi::OsString>,
+    id: i64,
+    stop: &AtomicBool,
+    failed: fn() -> crate::CoreError,
     mut consume: impl FnMut(&[u8]),
 ) -> Result<(), crate::CoreError> {
     let (mut child, group) = crate::process::spawn_managed(ffmpeg, args).map_err(|_| failed())?;
