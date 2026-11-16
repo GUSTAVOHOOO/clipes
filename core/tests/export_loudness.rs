@@ -188,14 +188,20 @@ fn spliced_audio_is_measured_and_normalized_after_silence_removal() {
         }],
         crop: vec![],
     };
+    let mut progress = Vec::new();
     render_spliced(
         Path::new(&program),
         &input,
         &splice.segments,
         &CancelToken::new(),
-        &mut |_| {},
+        &mut |p| progress.push(p),
     )
     .unwrap();
+    assert_eq!(progress.last(), Some(&100));
+    assert!(
+        progress.windows(2).all(|w| w[0] <= w[1]),
+        "progresso emendado não recua: {progress:?}"
+    );
     let (integrated, peak) = measure(&output);
     assert!(
         (integrated - -14.0).abs() <= TOLERANCE_LU,

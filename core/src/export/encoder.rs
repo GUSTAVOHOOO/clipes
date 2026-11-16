@@ -414,14 +414,21 @@ fn with_fallback(
     mut run: impl FnMut(&str, &mut dyn FnMut(u8)) -> Result<(), CoreError>,
     progress: &mut dyn FnMut(u8),
 ) -> Result<Outcome, CoreError> {
-    match run(preferred, progress) {
+    let mut last = 0_u8;
+    let mut monotonic = |p: u8| {
+        if p > last {
+            last = p;
+            progress(p);
+        }
+    };
+    match run(preferred, &mut monotonic) {
         Ok(()) => Ok(Outcome {
             encoder: preferred.into(),
             fallback: None,
         }),
         Err(e) if preferred != X264 && e.code == "export_failed" => {
             forget(preferred);
-            run(X264, progress)?;
+            run(X264, &mut monotonic)?;
             Ok(Outcome {
                 encoder: X264.into(),
                 fallback: Some(Fallback {

@@ -54,6 +54,62 @@ fn cancelled() -> CoreError {
     error("cancelled", "Export cancelado.")
 }
 
+/// Extrai `out_time_us` de uma linha `-progress` do FFmpeg, ignorando `N/A` ou outros campos.
+pub fn parse_out_time_us(line: &str) -> Option<i64> {
+    line.trim()
+        .strip_prefix("out_time_us=")
+        .and_then(|s| s.parse::<i64>().ok())
+}
+
+/// Converte relatórios `-progress` em porcentagens monótonas entre as passagens do export.
+/// O FFmpeg 9 pode emitir `out_time_us` fora de ordem quando vídeo e áudio com `loudnorm`
+/// avançam em ritmos diferentes; o normalizador retém o maior percentual já emitido.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ProgressNormalizer {
+    last_percent: u8,
+}
+
+impl ProgressNormalizer {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn push_line(&mut self, line: &str, duration_us: i64, range: (u64, u64)) -> Option<u8> {
+        let time_us = parse_out_time_us(line)?;
+        self.push_time_us(time_us, duration_us, range)
+    }
+
+    pub fn push_time_us(
+        &mut self,
+        out_time_us: i64,
+        duration_us: i64,
+        range: (u64, u64),
+    ) -> Option<u8> {
+        let (low, high) = range;
+        if high == 0 || high < low {
+            return None;
+        }
+        let part =
+            (out_time_us.max(0) as u64).saturating_mul(high - low) / duration_us.max(1) as u64;
+        let pct = (low + part).clamp(low.max(1), high) as u8;
+        if pct > self.last_percent {
+            self.last_percent = pct;
+            Some(pct)
+        } else {
+            None
+        }
+    }
+
+    pub fn finish(&mut self) -> Option<u8> {
+        if self.last_percent < 100 {
+            self.last_percent = 100;
+            Some(100)
+        } else {
+            None
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn execute(
     program: &Path,
@@ -63,6 +119,7 @@ fn execute(
     duration_us: i64,
     font_file: Option<&'static str>,
     range: (u64, u64),
+    tracker: &mut ProgressNormalizer,
     progress: &mut dyn FnMut(u8),
 ) -> Result<Report, CoreError> {
     let probe = font_file.is_none();
@@ -87,10 +144,7 @@ fn execute(
                 help.push_str(&line);
                 help.push('\n');
             }
-            if let Some(value) = line
-                .strip_prefix("out_time_us=")
-                .and_then(|s| s.parse::<i64>().ok())
-            {
+            if let Some(value) = parse_out_time_us(&line) {
                 let _ = tx.send(value);
             }
         }
@@ -144,9 +198,9 @@ fn execute(
             });
         }
         for value in rx.try_iter() {
-            let (low, high) = range;
-            let part = (value.max(0) as u64).saturating_mul(high - low) / duration_us.max(1) as u64;
-            progress((low + part).clamp(low.max(1), high.max(1)) as u8);
+            if let Some(pct) = tracker.push_time_us(value, duration_us, range) {
+                progress(pct);
+            }
         }
         match child.try_wait() {
             Ok(Some(status)) => {
@@ -168,6 +222,11 @@ fn execute(
     let (font_selected, font_fallback, font_loaded, measured) =
         errors.join().map_err(|_| failed())?;
     status?;
+    for value in rx.try_iter() {
+        if let Some(pct) = tracker.push_time_us(value, duration_us, range) {
+            progress(pct);
+        }
+    }
     Ok(Report {
         measured,
         help,
@@ -179,6 +238,7 @@ fn execute(
 
 /// `-h filter=ass` pode sair com código zero mesmo quando o filtro não existe.
 pub fn check_ass(ffmpeg: &Path, cancel: &CancelToken) -> Result<(), CoreError> {
+    let mut tracker = ProgressNormalizer::new();
     let report = execute(
         ffmpeg,
         &["-hide_banner".into(), "-h".into(), "filter=ass".into()],
@@ -187,6 +247,7 @@ pub fn check_ass(ffmpeg: &Path, cancel: &CancelToken) -> Result<(), CoreError> {
         1,
         None,
         (0, 0),
+        &mut tracker,
         &mut |_| {},
     )?;
     if !report.help.lines().any(|s| s.trim() == "Filter ass") || !report.help.contains("fontsdir") {
@@ -387,6 +448,7 @@ fn render_ass_spliced(
             "A Fonte está indisponível ou foi alterada.",
         )
     })?;
+    let mut tracker = ProgressNormalizer::new();
     let measured = measure_loudness(
         ffmpeg,
         &source,
@@ -395,6 +457,7 @@ fn render_ass_spliced(
         output_duration,
         work.path(),
         cancel,
+        &mut tracker,
         progress,
     )?;
     let crop = (!input.crop.is_empty()).then_some(pipeline::Crop {
@@ -481,7 +544,8 @@ fn render_ass_spliced(
         cancel,
         output_duration,
         Some(doc.font_file),
-        (if measured.is_some() { MEASURE_END } else { 0 }, RENDER_END),
+        (MEASURE_END, RENDER_END),
+        &mut tracker,
         progress,
     )?;
     if cancel.is_cancelled() {
@@ -505,7 +569,9 @@ fn render_ass_spliced(
             failed()
         }
     })?;
-    progress(100);
+    if let Some(pct) = tracker.finish() {
+        progress(pct);
+    }
     Ok(())
 }
 pub fn seconds(us: i64) -> String {
@@ -524,6 +590,7 @@ fn measure_loudness(
     output_duration: i64,
     work: &Path,
     cancel: &CancelToken,
+    tracker: &mut ProgressNormalizer,
     progress: &mut dyn FnMut(u8),
 ) -> Result<Option<pipeline::Measured>, CoreError> {
     let duration = input.end_us - input.start_us;
@@ -572,6 +639,7 @@ fn measure_loudness(
         output_duration,
         Some("NotoSans-Bold.ttf"),
         (0, MEASURE_END),
+        tracker,
         progress,
     )?;
     // O FFmpeg sempre imprime o JSON; a falta dele é falha. `-inf` (áudio mudo) não é.
@@ -590,4 +658,77 @@ fn measure_loudness(
         input_thresh,
         target_offset,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn progress_normalizer_stays_monotonic_when_ffmpeg_reports_regress_within_a_pass() {
+        let mut norm = ProgressNormalizer::new();
+        let mut emitted = Vec::new();
+        let duration_us = 5_000_000;
+
+        // Passagem 1 (loudnorm measure): termina rápido em 5s -> 10%.
+        for line in ["out_time_us=N/A", "out_time_us=5000000", "progress=end"] {
+            if let Some(p) = norm.push_line(line, duration_us, (0, MEASURE_END)) {
+                emitted.push(p);
+            }
+        }
+        // Passagem 2 (FFmpeg 9 com loudnorm/x264): out_time_us recua de 4.7s -> 2.2s -> 1.3s.
+        for line in [
+            "out_time_us=N/A",
+            "out_time_us=3750000", // 73%
+            "out_time_us=4750000", // 90%
+            "out_time_us=2200000", // 47% (recuo ignorado)
+            "out_time_us=1300000", // 32% (recuo ignorado)
+            "out_time_us=5000000", // 95%
+            "progress=end",
+        ] {
+            if let Some(p) = norm.push_line(line, duration_us, (MEASURE_END, RENDER_END)) {
+                emitted.push(p);
+            }
+        }
+        if let Some(p) = norm.finish() {
+            emitted.push(p);
+        }
+
+        assert_eq!(emitted, vec![10, 73, 90, 95, 100]);
+        assert!(emitted.windows(2).all(|w| w[0] < w[1]));
+    }
+
+    #[test]
+    fn progress_normalizer_handles_spliced_duration_muted_audio_and_overshoot() {
+        let mut norm = ProgressNormalizer::new();
+        let mut emitted = Vec::new();
+        let spliced_duration_us = 6_000_000;
+
+        for line in [
+            "out_time_us=-23220",
+            "out_time_us=3000000",
+            "out_time_us=6500000",
+        ] {
+            if let Some(p) = norm.push_line(line, spliced_duration_us, (0, MEASURE_END)) {
+                emitted.push(p);
+            }
+        }
+        // Mesmo após áudio mudo (measured = None), a 2ª passagem começa após MEASURE_END.
+        for line in [
+            "out_time_us=0",
+            "out_time_us=3000000",
+            "out_time_us=1500000",
+            "out_time_us=6200000",
+        ] {
+            if let Some(p) = norm.push_line(line, spliced_duration_us, (MEASURE_END, RENDER_END)) {
+                emitted.push(p);
+            }
+        }
+        if let Some(p) = norm.finish() {
+            emitted.push(p);
+        }
+
+        assert_eq!(emitted, vec![1, 5, 10, 52, 95, 100]);
+        assert!(emitted.windows(2).all(|w| w[0] < w[1]));
+    }
 }
