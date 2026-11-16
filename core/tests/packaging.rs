@@ -284,7 +284,10 @@ fn packaging_flow_credit_edits_regeneration_and_failures() {
         let seen = fake.seen.lock().unwrap();
         let request = &seen[0];
         assert!(request.transcript.starts_with("#CORTE idioma=pt-BR\n"));
-        assert!(!request.transcript.contains("#ANGULO"), "Corte direto mantém a entrada sem ângulo");
+        assert!(
+            !request.transcript.contains("#ANGULO"),
+            "Corte direto mantém a entrada sem ângulo"
+        );
         for text in [&request.transcript, &request.instruction] {
             for secret in [WHERE, SCOPE, "Canal Exemplo", "example.com"] {
                 assert!(!text.contains(secret), "{secret} leaked to the provider");
