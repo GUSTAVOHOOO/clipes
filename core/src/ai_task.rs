@@ -86,6 +86,8 @@ pub fn all() -> Vec<&'static AiTask> {
 pub fn routing_id(id: &str) -> &str {
     match id {
         "selection_transformed" => "selection",
+        // A sugestão de capa (#74) usa a rota e o veto "somente local" do empacotamento.
+        "thumbnail" => "packaging",
         other => other,
     }
 }

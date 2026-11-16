@@ -171,7 +171,7 @@ pub(crate) fn evict(root: &Path, limit: u64, keep: &str) -> usize {
     removed
 }
 
-fn project_path() -> Result<PathBuf, CoreError> {
+pub(crate) fn project_path() -> Result<PathBuf, CoreError> {
     let current = crate::dispatch("projects.current", json!({}), &mut |_| {})?;
     current["path"]
         .as_str()
@@ -193,7 +193,10 @@ fn changed() -> CoreError {
 }
 
 /// Valida a Fonte sem gerar nada: arquivo presente e identidade parcial igual à registrada.
-fn checked_source(id: i64, project: &Path) -> Result<(PathBuf, String, i64, i64), CoreError> {
+pub(crate) fn checked_source(
+    id: i64,
+    project: &Path,
+) -> Result<(PathBuf, String, i64, i64), CoreError> {
     let stored: String = projects::with_reader(|c| {
         c.query_row("SELECT path FROM sources WHERE id=?1", [id], |r| r.get(0))
     })
