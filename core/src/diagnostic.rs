@@ -110,6 +110,7 @@ fn valid_ytdlp_pattern(pattern: &str) -> bool {
     matches!(
         pattern,
         "yt_dlp.sign_in_age"
+            | "yt_dlp.age_limit_needs_auth"
             | "yt_dlp.age_restricted"
             | "yt_dlp.login_required"
             | "yt_dlp.no_js_runtime"

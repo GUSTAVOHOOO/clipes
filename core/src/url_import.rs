@@ -132,6 +132,7 @@ fn download(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     }
     let _guard = JobFlag(job.to_string());
     let exe = crate::components::ytdlp_executable()?;
+    precheck_age(&exe, url, &flag)?;
     let path = run_download(&exe, &settings.download_dir, url, job, &flag, events)?;
     Ok(json!({"path":path, "url":url}))
 }
@@ -246,6 +247,112 @@ fn classified_error(flags: u8) -> CoreError {
         )
     } else {
         error("download_failed", "Não foi possível baixar a Fonte")
+    }
+}
+
+/// Detecção prévia (#201): só os campos que decidem o bloqueio.
+#[derive(Debug, PartialEq)]
+struct Probe {
+    age_limit: Option<u32>,
+    availability: String,
+}
+// Saída inesperada nunca bloqueia: devolve None e o download segue como antes.
+fn parse_probe(stdout: &str) -> Option<Probe> {
+    let line = stdout.lines().find(|l| !l.trim().is_empty())?;
+    let fields: Vec<&str> = line.trim().split('|').collect();
+    if fields.len() != 5 || fields[0].is_empty() {
+        return None;
+    }
+    let age_limit = match fields[1] {
+        "NA" | "" => None,
+        n => Some(n.parse::<u32>().ok()?),
+    };
+    Some(Probe {
+        age_limit,
+        availability: fields[2].to_string(),
+    })
+}
+fn is_age_restricted(probe: &Probe) -> bool {
+    probe.age_limit.is_some_and(|a| a >= 18) && probe.availability == "needs_auth"
+}
+fn probe_args(url: &str) -> Vec<OsString> {
+    [
+        "--ignore-config",
+        "--no-playlist",
+        "--skip-download",
+        "--ignore-no-formats-error",
+        "--color",
+        "never",
+        "--print",
+        "%(id)s|%(age_limit)s|%(availability)s|%(live_status)s|%(duration)s",
+        "--",
+    ]
+    .iter()
+    .map(OsString::from)
+    .chain([OsString::from(url)])
+    .collect()
+}
+const PROBE_TIMEOUT: Duration = Duration::from_secs(60);
+fn probe(exe: &Path, url: &str, flag: &AtomicBool) -> Result<Option<Probe>, CoreError> {
+    // Qualquer falha aqui vira None: a detecção nunca bloqueia o download.
+    let Ok((mut child, group)) = crate::process::spawn_managed(exe, probe_args(url)) else {
+        return Ok(None);
+    };
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    let out = thread::spawn(move || {
+        let mut text = String::new();
+        if let Some(s) = stdout {
+            let _ = s.take(4096).read_to_string(&mut text);
+        }
+        text
+    });
+    let err = thread::spawn(move || {
+        if let Some(mut s) = stderr {
+            let _ = std::io::copy(&mut s, &mut std::io::sink());
+        }
+    });
+    let started = std::time::Instant::now();
+    let status = loop {
+        if flag.load(Ordering::Relaxed) {
+            group.terminate();
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error("cancelled", "Download cancelado"));
+        }
+        match child.try_wait() {
+            Ok(Some(status)) => break Some(status),
+            Ok(None) if started.elapsed() < PROBE_TIMEOUT => {
+                thread::sleep(Duration::from_millis(50))
+            }
+            _ => {
+                group.terminate();
+                let _ = child.kill();
+                let _ = child.wait();
+                break None;
+            }
+        }
+    };
+    drop(group);
+    let text = out.join().unwrap_or_default();
+    let _ = err.join();
+    Ok(status
+        .filter(|s| s.success())
+        .and_then(|_| parse_probe(&text)))
+}
+fn precheck_age(exe: &Path, url: &str, flag: &AtomicBool) -> Result<(), CoreError> {
+    match probe(exe, url, flag)? {
+        Some(p) if is_age_restricted(&p) => {
+            let result = classified_error(1);
+            crate::diagnostic::record_ytdlp(
+                &result.code,
+                &["yt_dlp.age_limit_needs_auth"],
+                None,
+                &crate::components::ytdlp_version(exe),
+            );
+            Err(result)
+        }
+        _ => Ok(()),
     }
 }
 
@@ -445,6 +552,18 @@ inventory::submit! { CommandRegistration { name: "sources.url.cancel", execute: 
 mod download_tests {
     use super::*;
     use std::process::Command;
+    #[test]
+    fn probe_parsing_blocks_only_age_limit_with_needs_auth() {
+        let p = |s| parse_probe(s).unwrap();
+        assert!(is_age_restricted(&p("abc|18|needs_auth|not_live|120")));
+        assert!(!is_age_restricted(&p("abc|0|public|not_live|120")));
+        assert!(!is_age_restricted(&p("abc|18|public|not_live|120")));
+        assert!(!is_age_restricted(&p("abc|NA|needs_auth|NA|NA")));
+        assert!(parse_probe("").is_none());
+        assert!(parse_probe("lixo sem campos").is_none());
+        assert!(parse_probe("a|x|needs_auth|b|c").is_none());
+        assert!(parse_probe("a|18|needs_auth|b").is_none());
+    }
     #[test]
     fn stderr_is_bounded_and_classification_survives_history_truncation() {
         let stderr = format!(
