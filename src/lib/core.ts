@@ -12,6 +12,7 @@ import { batchMockDispatch } from './batchMock';
 import { packagingMockDispatch } from './packagingMock';
 import { thumbnailMockDispatch } from './thumbnailMock';
 import { scriptMockDispatch } from './scriptMock';
+import { translationMockDispatch } from './translationMock';
 
 const groqRetryTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('groq-retry-test');
 const denoMock = { installed: false };
@@ -372,6 +373,8 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (sourceTest && new URLSearchParams(location.search).has('transcript-test') && name === 'transcription.segment') return {} as T;
     // Preview do Corte simulado (#58): a Fonte 2 está offline; a primeira consulta de um Corte gera (40%), a seguinte já está pronta.
     if (editorTest && (name.startsWith('editor.') || name.startsWith('captions.') || name === 'export.captions')) return editorMock(name, args as Record<string, number>) as T;
+    const translated = translationMockDispatch(name, args);
+    if (translated !== undefined) return translated as T;
     if (transcriptTest && name === 'proxy.request') { const a = args as {source_id:number; start_us:number; end_us:number}; if (a.source_id === 2) throw {code:'source_offline', message:'A Fonte está offline: reconecte ou relocalize a Fonte para ver o preview.'}; const key = 'ab'.repeat(32); mockProxyPolls = 0; return {state:'running', key, job:7, progress:40, error:null, windowStartUs:Math.max(0, a.start_us - 120_000_000), windowEndUs:a.end_us + 120_000_000} as T; }
     if (transcriptTest && name === 'proxy.status') { mockProxyPolls += 1; return {state:mockProxyPolls > 1 ? 'ready' : 'running', key:(args as {key:string}).key, job:7, progress:mockProxyPolls > 1 ? 100 : 60, error:null} as T; }
     if (transcriptTest && (name.startsWith('selection.') || name.startsWith('chat.'))) return selectionMockDispatch(name, args) as T;

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { Captions, PanelLeft, PanelRight, Scissors, X } from 'lucide-react';
+import { Captions, Languages, PanelLeft, PanelRight, Scissors, X } from 'lucide-react';
 import { coreDispatch, type ExportRequest } from '@/lib/core';
 import { useText } from '@/lib/i18n';
 import { useComandos } from '@/lib/comandos';
@@ -16,6 +16,7 @@ import { CaptionPanel } from '@/features/captions/CaptionPanel';
 import { useCaptions } from '@/features/captions/useCaptions';
 import { BorderHandles, type Adjustment, type Edge } from './BorderHandles';
 import { SilencesPanel } from './SilencesPanel';
+import { TranslationPanel } from '@/features/translation/TranslationPanel';
 import type { ClipCrop, CropSegment } from './cropMath';
 
 export const editorOpenEvent = 'clipes-editor-open';
@@ -29,7 +30,7 @@ type Timeline = { state: 'queued' | 'running' | 'ready' | 'failed' | 'cancelled'
 
 const texts = {
   'pt-BR': {
-    title: 'Editor do Corte', close: 'Fechar editor', timeline: 'Timeline do Corte', transcript: 'Transcrição do editor', borders: 'Bordas do Corte', captions: 'Legenda', silences: 'Silêncios',
+    title: 'Editor do Corte', close: 'Fechar editor', timeline: 'Timeline do Corte', transcript: 'Transcrição do editor', borders: 'Bordas do Corte', captions: 'Legenda', silences: 'Silêncios', translation: 'Tradução',
     markIn: 'Marcar entrada', markOut: 'Marcar saída', back: 'Voltar', pause: 'Pausar', forward: 'Avançar', rate: 'Velocidade', export: 'Exportar', exportNeedsCandidate: 'Abra um candidato aprovado para exportar.',
     shortcuts: 'Atalhos', hintPlay: 'voltar · pausar · avançar', hintMark: 'entrada · saída (Frase inteira)', hintFrame: 'quadro', hintSentence: 'Frase anterior/próxima', hintDrawers: 'gavetas',
     duration: 'Duração {value}', start: 'Entrada', end: 'Saída', startEarlier: 'Estender início', startLater: 'Encurtar início', endEarlier: 'Encurtar fim', endLater: 'Estender fim',
@@ -40,7 +41,7 @@ const texts = {
     errors: { adjust_empty: 'O Corte precisa manter ao menos uma Frase.', adjust_too_short: 'O Corte ficaria abaixo da duração mínima.', adjust_too_long: 'O Corte ficaria acima da duração máxima.', unknown_sentence_id: 'Frase desconhecida.', invalid_range: 'Intervalo do Corte inválido.', invalid_silence_threshold: 'O limite de silêncio deve ficar entre 300 ms e 2000 ms.', invalid_silence_interval: 'Trecho de silêncio inválido.', candidate_not_found: 'Candidato não encontrado.', transcript_missing: 'Transcrição não encontrada.', source_not_found: 'Fonte não encontrada.', default: 'Não foi possível abrir o editor.' } as Record<string, string>,
   },
   en: {
-    title: 'Clip editor', close: 'Close editor', timeline: 'Clip timeline', transcript: 'Editor Transcript', borders: 'Clip borders', captions: 'Captions', silences: 'Silences',
+    title: 'Clip editor', close: 'Close editor', timeline: 'Clip timeline', transcript: 'Editor Transcript', borders: 'Clip borders', captions: 'Captions', silences: 'Silences', translation: 'Translation',
     markIn: 'Mark in', markOut: 'Mark out', back: 'Reverse', pause: 'Pause', forward: 'Forward', rate: 'Speed', export: 'Export', exportNeedsCandidate: 'Open an approved candidate to export.',
     shortcuts: 'Shortcuts', hintPlay: 'reverse · pause · forward', hintMark: 'in · out (whole Sentence)', hintFrame: 'frame', hintSentence: 'previous/next Sentence', hintDrawers: 'drawers',
     duration: 'Duration {value}', start: 'In', end: 'Out', startEarlier: 'Extend start', startLater: 'Shorten start', endEarlier: 'Shorten end', endLater: 'Extend end',
@@ -93,8 +94,8 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
   const operations = useRef<Promise<void>>(Promise.resolve());
   const left = useGaveta();
   const right = useGaveta();
-  const [view, setView] = useState<'borders' | 'captions' | 'silences'>('borders');
-  const openRight = useCallback((next: 'borders' | 'captions' | 'silences') => { if (right.aberta && view !== next) setView(next); else { setView(next); right.alternar(); } }, [right, view]);
+  const [view, setView] = useState<'borders' | 'captions' | 'silences' | 'translation'>('borders');
+  const openRight = useCallback((next: 'borders' | 'captions' | 'silences' | 'translation') => { if (right.aberta && view !== next) setView(next); else { setView(next); right.alternar(); } }, [right, view]);
   const captionRequest = useMemo(() => opened && range ? { source_id: request.source_id, start_id: startId, end_id: endId, candidate_id: request.candidate_id, clip_id: opened.clipId, start_us: range.startUs, end_us: range.endUs } : null, [opened, range, request.source_id, request.candidate_id, startId, endId]);
   const captions = useCaptions(captionRequest, captionRevision);
   const scroller = useRef<HTMLDivElement>(null);
@@ -262,6 +263,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
       if (key === ']' && !inLayer?.closest('aside[data-lado="esq"]')) { take(); left.fechar(); openRight('borders'); return; }
       if ((key === 'c' || key === 'C') && !inLayer) { take(); left.fechar(); openRight('captions'); return; }
       if ((key === 's' || key === 'S') && !inLayer) { take(); left.fechar(); openRight('silences'); return; }
+      if ((key === 't' || key === 'T') && !inLayer) { take(); left.fechar(); openRight('translation'); return; }
       if (key === 'Escape') {
         if (left.aberta || right.aberta) { take(); left.fechar(); right.fechar(); } else if (!inLayer) { take(); close(); }
         return;
@@ -363,7 +365,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
     <div className="relative flex min-h-0 flex-1 flex-col">
       <ZonaBorda lado="esq" g={left} /><ZonaBorda lado="dir" g={right} />
       <Puxador lado="esq" g={left} itens={[{ id: 'transcript', rotulo: t.transcript, atalho: '[', icone: <PanelLeft size={16} />, onClick: () => { right.fechar(); left.alternar(); } }]} />
-      <Puxador lado="dir" g={right} itens={[{ id: 'borders', rotulo: t.borders, atalho: ']', icone: <PanelRight size={16} />, onClick: () => { left.fechar(); openRight('borders'); } }, { id: 'captions', rotulo: t.captions, atalho: 'C', icone: <Captions size={16} />, onClick: () => { left.fechar(); openRight('captions'); } }, { id: 'silences', rotulo: t.silences, atalho: 'S', icone: <Scissors size={16} />, onClick: () => { left.fechar(); openRight('silences'); } }]} />
+      <Puxador lado="dir" g={right} itens={[{ id: 'borders', rotulo: t.borders, atalho: ']', icone: <PanelRight size={16} />, onClick: () => { left.fechar(); openRight('borders'); } }, { id: 'captions', rotulo: t.captions, atalho: 'C', icone: <Captions size={16} />, onClick: () => { left.fechar(); openRight('captions'); } }, { id: 'silences', rotulo: t.silences, atalho: 'S', icone: <Scissors size={16} />, onClick: () => { left.fechar(); openRight('silences'); } }, { id: 'translation', rotulo: t.translation, atalho: 'T', icone: <Languages size={16} />, onClick: () => { left.fechar(); openRight('translation'); } }]} />
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4"><div className="m-auto flex flex-col items-center gap-3">
         {!opened && !error && <p aria-live="polite" className="text-fg-2">{t.loading}</p>}
         {opened && <div style={{ width: 'min(18rem, 22vh)' }}><CutPreview sourceId={request.source_id} startUs={opened.startUs} endUs={opened.endUs} rate={rate} onSourceTime={us => setSourceUs(us)} captions={captions.data} skipIntervals={activeSilences} crop={crop} /></div>}
@@ -438,7 +440,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
             <span className="mr-2 font-mono text-xs text-fg-3">{clock(s.startUs)}</span>{s.text}</button></li>)}
         </ol>
       </GavetaBorda>
-      <GavetaBorda lado="dir" g={right} rotulo={view === 'captions' ? t.captions : view === 'silences' ? t.silences : t.borders}>
+      <GavetaBorda lado="dir" g={right} rotulo={view === 'captions' ? t.captions : view === 'silences' ? t.silences : view === 'translation' ? t.translation : t.borders}>
         {view === 'captions' ? <><CabecalhoGaveta acoes={<Button tamanho="sm" onClick={right.fechar}>{t.close.replace(/ .*/, '')}</Button>}><h3 className="font-semibold">{t.captions}</h3></CabecalhoGaveta>
           {opened && <CaptionPanel data={captions.data} clipId={opened.clipId} sourceId={request.source_id} refresh={captions.refresh} loadError={captions.error} />}</> : view === 'silences' ? <>
           <CabecalhoGaveta acoes={<Button tamanho="sm" onClick={right.fechar}>{t.close.replace(/ .*/, '')}</Button>}><h3 className="font-semibold">{t.silences}</h3></CabecalhoGaveta>
@@ -450,7 +452,9 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
             onRevertAll={() => edit('editor.silences.revert_all', {})}
             onApplyAll={() => edit('editor.silences.apply_all', {})}
             onSeek={us => { setRate(0); seek(us); }}
-          /></> : <>
+          /></> : view === 'translation' ? <>
+          <CabecalhoGaveta acoes={<Button tamanho="sm" onClick={right.fechar}>{t.close.replace(/ .*/, '')}</Button>}><h3 className="font-semibold">{t.translation}</h3></CabecalhoGaveta>
+          {opened && <TranslationPanel clipId={opened.clipId} clipRevision={opened.revision} onChanged={() => setCaptionRevision(r => r + 1)} onSeek={us => { setRate(0); seek(us); }} />}</> : <>
         <CabecalhoGaveta acoes={<Button tamanho="sm" onClick={right.fechar}>{t.close.replace(/ .*/, '')}</Button>}><h3 className="font-semibold">{t.borders}</h3></CabecalhoGaveta>
         <div className="flex flex-col gap-3 overflow-y-auto p-3 text-sm">
           <section aria-label={t.start}><h4 className="text-xs text-fg-2">{t.start} · #{startId}</h4><p>{startSentence?.text}</p>

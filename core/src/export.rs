@@ -34,6 +34,15 @@ pub struct ExportRequest {
     pub clip_id: Option<i64>,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+struct FrozenCaptionWord {
+    text: String,
+    start_us: i64,
+    end_us: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sentence_id: Option<i64>,
+}
+
 #[derive(Serialize, Deserialize)]
 struct StartRequest {
     #[serde(flatten)]
@@ -47,6 +56,8 @@ struct StartRequest {
     resolved_silences: Option<Vec<(i64, i64)>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     resolved_crop: Option<Vec<CropSegment>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    resolved_captions: Option<Vec<FrozenCaptionWord>>,
 }
 
 inventory::submit! { projects::Migration { id:"0059_001_exports", sql:"
@@ -75,14 +86,35 @@ struct Target {
     words: Vec<CaptionWord>,
     styled: Vec<StyledWord>,
     source_starts: Vec<i64>,
+    source_ends: Vec<i64>,
     sentence_ids: Vec<Option<i64>>,
     segments: Vec<KeptSegment>,
     active_cuts: Vec<(i64, i64)>,
     transcript: i64,
     crop: Vec<CropSegment>,
+    caption_track: &'static str,
+    target_language: Option<String>,
 }
 
 impl Target {
+    fn frozen_captions(&self) -> Vec<FrozenCaptionWord> {
+        self.styled
+            .iter()
+            .zip(
+                self.source_starts
+                    .iter()
+                    .zip(self.source_ends.iter().zip(&self.sentence_ids)),
+            )
+            .map(
+                |(w, (&start_us, (&end_us, &sentence_id)))| FrozenCaptionWord {
+                    text: w.word.text.clone(),
+                    start_us,
+                    end_us,
+                    sentence_id,
+                },
+            )
+            .collect()
+    }
     fn missing_glyphs(&self, style: &Style) -> Vec<captions::MissingGlyph> {
         let font_bytes = style.font_bytes();
         captions::check_words_glyphs(
@@ -121,7 +153,11 @@ fn parse(v: Value) -> Result<ExportRequest, CoreError> {
 
 type FrozenTarget = ((i64, i64), Vec<(i64, i64)>);
 
-fn target(request: &ExportRequest, frozen: Option<FrozenTarget>) -> Result<Target, CoreError> {
+fn target(
+    request: &ExportRequest,
+    frozen: Option<FrozenTarget>,
+    frozen_captions: Option<&[FrozenCaptionWord]>,
+) -> Result<Target, CoreError> {
     let edited = request
         .clip_id
         .map(crate::editor::edits::document)
@@ -164,6 +200,19 @@ fn target(request: &ExportRequest, frozen: Option<FrozenTarget>) -> Result<Targe
             return Err(candidate_error());
         }
     }
+    let active_lang = if frozen_captions.is_none() {
+        request
+            .clip_id
+            .map(crate::translation::active_translated_language)
+            .transpose()?
+            .flatten()
+    } else {
+        None
+    };
+    let translated_sentences = match (request.clip_id, active_lang.as_deref()) {
+        (Some(clip_id), Some(lang)) => Some(crate::translation::translated_map(clip_id, lang)?),
+        _ => None,
+    };
     projects::with_reader(|c| {
         let border:Option<(i64,i64,i64,i64)>=c.query_row("SELECT a.start_us,b.end_us,a.first_position,b.last_position FROM sentences a JOIN sentences b ON a.transcript_id=b.transcript_id JOIN transcripts t ON t.id=a.transcript_id WHERE a.transcript_id=?1 AND a.id=?2 AND b.id=?3 AND b.end_us<=t.duration_us",(transcript,request.start_id,request.end_id),|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).optional()?;
         let Some((start_us, end_us, first, last)) = border else {
@@ -195,45 +244,192 @@ fn target(request: &ExportRequest, frozen: Option<FrozenTarget>) -> Result<Targe
         if splice.output_duration_us <= 0 {
             return Ok(Err(bounds()));
         }
-        // Bordas congeladas podem anteceder a edição atual; busque pelo tempo na Transcrição.
-        let mut q=c.prepare(&format!("SELECT {},w.start_us,w.end_us,w.position,o.document,(SELECT s.id FROM sentences s WHERE s.transcript_id=w.transcript_id AND w.position BETWEEN s.first_position AND s.last_position LIMIT 1) FROM transcript_words w LEFT JOIN caption_word_overrides o ON o.transcript_id=w.transcript_id AND o.position=w.position WHERE w.transcript_id=?1 AND w.kind='word' AND ((?6=1 AND w.end_us>?4 AND w.start_us<?5) OR (?6=0 AND w.position BETWEEN ?2 AND ?3)) ORDER BY w.position",crate::corrections::EFFECTIVE_TEXT))?;
         let clamp = edited.is_some();
-        let rows = q
-            .query_map((transcript, first, last, start_us, end_us, clamp), |r| {
-                Ok((
-                    r.get::<_, String>(0)?,
-                    r.get::<_, i64>(1)?,
-                    r.get::<_, i64>(2)?,
-                    r.get::<_, i64>(3)?,
-                    r.get::<_, Option<String>>(4)?
-                        .map(|doc| serde_json::from_str::<WordOverride>(&doc))
-                        .transpose()
-                        .map_err(|_| rusqlite::Error::InvalidQuery)?
-                        .unwrap_or_default(),
-                    r.get::<_, Option<i64>>(5)?,
-                ))
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        let mut styled = Vec::with_capacity(rows.len());
-        let mut source_starts = Vec::with_capacity(rows.len());
-        let mut sentence_ids = Vec::with_capacity(rows.len());
-        for (text, start, end, position, overrides, sentence_id) in rows {
-            let cs = if clamp { start.max(start_us) } else { start };
-            let ce = if clamp { end.min(end_us) } else { end };
-            let Some((mapped_start, mapped_end)) = splice.remap_word(cs, ce) else {
-                continue;
-            };
-            source_starts.push(cs);
-            sentence_ids.push(sentence_id);
-            styled.push(StyledWord {
-                word: CaptionWord {
-                    text,
-                    start_us: mapped_start,
-                    end_us: mapped_end,
-                },
-                position,
-                overrides,
-            });
+        let mut styled = Vec::new();
+        let mut source_starts = Vec::new();
+        let mut source_ends = Vec::new();
+        let mut sentence_ids = Vec::new();
+        let caption_track = if frozen_captions.is_some() || translated_sentences.is_some() {
+            "translated"
+        } else {
+            "original"
+        };
+        if let Some(frozen_words) = frozen_captions {
+            for (idx, w) in frozen_words.iter().enumerate() {
+                let cs = if clamp {
+                    w.start_us.max(start_us)
+                } else {
+                    w.start_us
+                };
+                let ce = if clamp {
+                    w.end_us.min(end_us)
+                } else {
+                    w.end_us
+                };
+                let Some((mapped_start, mapped_end)) = splice.remap_word(cs, ce) else {
+                    continue;
+                };
+                source_starts.push(cs);
+                source_ends.push(ce);
+                sentence_ids.push(w.sentence_id);
+                styled.push(StyledWord {
+                    word: CaptionWord {
+                        text: w.text.clone(),
+                        start_us: mapped_start,
+                        end_us: mapped_end,
+                    },
+                    position: -(idx as i64 + 1),
+                    overrides: WordOverride::default(),
+                });
+            }
+        } else if let Some(ref translated) = translated_sentences {
+            let mut sq = c.prepare("SELECT id,first_position,last_position,start_us,end_us FROM sentences WHERE transcript_id=?1 AND ((?6=1 AND end_us>?4 AND start_us<?5) OR (?6=0 AND id BETWEEN ?2 AND ?3)) ORDER BY id")?;
+            let sentence_rows = sq
+                .query_map(
+                    (
+                        transcript,
+                        request.start_id,
+                        request.end_id,
+                        start_us,
+                        end_us,
+                        clamp,
+                    ),
+                    |r| {
+                        Ok((
+                            r.get::<_, i64>(0)?,
+                            r.get::<_, i64>(1)?,
+                            r.get::<_, i64>(2)?,
+                            r.get::<_, i64>(3)?,
+                            r.get::<_, i64>(4)?,
+                        ))
+                    },
+                )?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            let mut wq = c.prepare(&format!("SELECT {},w.start_us,w.end_us,w.position,o.document FROM transcript_words w LEFT JOIN caption_word_overrides o ON o.transcript_id=w.transcript_id AND o.position=w.position WHERE w.transcript_id=?1 AND w.kind='word' AND w.position BETWEEN ?2 AND ?3 ORDER BY w.position",crate::corrections::EFFECTIVE_TEXT))?;
+            let mut synthetic_idx = 0_i64;
+            for (sentence_id, s_first, s_last, s_start_us, s_end_us) in sentence_rows {
+                if let Some(translated_text) = translated.get(&sentence_id) {
+                    let clamp_start = if clamp {
+                        s_start_us.max(start_us)
+                    } else {
+                        s_start_us
+                    };
+                    let clamp_end = if clamp {
+                        s_end_us.min(end_us)
+                    } else {
+                        s_end_us
+                    };
+                    let intervals: Vec<(i64, i64)> = splice
+                        .segments
+                        .iter()
+                        .filter_map(|seg| {
+                            let a = seg.source_start_us.max(clamp_start);
+                            let b = seg.source_end_us.min(clamp_end);
+                            (b > a).then_some((a, b))
+                        })
+                        .collect();
+                    for w in crate::translation::interpolate_words_in_intervals(
+                        translated_text,
+                        &intervals,
+                    ) {
+                        let Some((mapped_start, mapped_end)) =
+                            splice.remap_word(w.start_us, w.end_us)
+                        else {
+                            continue;
+                        };
+                        synthetic_idx += 1;
+                        source_starts.push(w.start_us);
+                        source_ends.push(w.end_us);
+                        sentence_ids.push(Some(sentence_id));
+                        styled.push(StyledWord {
+                            word: CaptionWord {
+                                text: format!(" {}", w.text),
+                                start_us: mapped_start,
+                                end_us: mapped_end,
+                            },
+                            position: -synthetic_idx,
+                            overrides: WordOverride::default(),
+                        });
+                    }
+                } else {
+                    let rows = wq
+                        .query_map((transcript, s_first, s_last), |r| {
+                            Ok((
+                                r.get::<_, String>(0)?,
+                                r.get::<_, i64>(1)?,
+                                r.get::<_, i64>(2)?,
+                                r.get::<_, i64>(3)?,
+                                r.get::<_, Option<String>>(4)?
+                                    .map(|doc| serde_json::from_str::<WordOverride>(&doc))
+                                    .transpose()
+                                    .map_err(|_| rusqlite::Error::InvalidQuery)?
+                                    .unwrap_or_default(),
+                            ))
+                        })?
+                        .collect::<rusqlite::Result<Vec<_>>>()?;
+                    for (text, start, end, position, overrides) in rows {
+                        let cs = if clamp { start.max(start_us) } else { start };
+                        let ce = if clamp { end.min(end_us) } else { end };
+                        let Some((mapped_start, mapped_end)) = splice.remap_word(cs, ce) else {
+                            continue;
+                        };
+                        source_starts.push(cs);
+                        source_ends.push(ce);
+                        sentence_ids.push(Some(sentence_id));
+                        styled.push(StyledWord {
+                            word: CaptionWord {
+                                text,
+                                start_us: mapped_start,
+                                end_us: mapped_end,
+                            },
+                            position,
+                            overrides,
+                        });
+                    }
+                }
+            }
+        } else {
+            // Bordas congeladas podem anteceder a edição atual; busque pelo tempo na Transcrição.
+            let mut q=c.prepare(&format!("SELECT {},w.start_us,w.end_us,w.position,o.document,(SELECT s.id FROM sentences s WHERE s.transcript_id=w.transcript_id AND w.position BETWEEN s.first_position AND s.last_position LIMIT 1) FROM transcript_words w LEFT JOIN caption_word_overrides o ON o.transcript_id=w.transcript_id AND o.position=w.position WHERE w.transcript_id=?1 AND w.kind='word' AND ((?6=1 AND w.end_us>?4 AND w.start_us<?5) OR (?6=0 AND w.position BETWEEN ?2 AND ?3)) ORDER BY w.position",crate::corrections::EFFECTIVE_TEXT))?;
+            let rows = q
+                .query_map((transcript, first, last, start_us, end_us, clamp), |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, i64>(1)?,
+                        r.get::<_, i64>(2)?,
+                        r.get::<_, i64>(3)?,
+                        r.get::<_, Option<String>>(4)?
+                            .map(|doc| serde_json::from_str::<WordOverride>(&doc))
+                            .transpose()
+                            .map_err(|_| rusqlite::Error::InvalidQuery)?
+                            .unwrap_or_default(),
+                        r.get::<_, Option<i64>>(5)?,
+                    ))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            styled.reserve(rows.len());
+            source_starts.reserve(rows.len());
+            source_ends.reserve(rows.len());
+            sentence_ids.reserve(rows.len());
+            for (text, start, end, position, overrides, sentence_id) in rows {
+                let cs = if clamp { start.max(start_us) } else { start };
+                let ce = if clamp { end.min(end_us) } else { end };
+                let Some((mapped_start, mapped_end)) = splice.remap_word(cs, ce) else {
+                    continue;
+                };
+                source_starts.push(cs);
+                source_ends.push(ce);
+                sentence_ids.push(sentence_id);
+                styled.push(StyledWord {
+                    word: CaptionWord {
+                        text,
+                        start_us: mapped_start,
+                        end_us: mapped_end,
+                    },
+                    position,
+                    overrides,
+                });
+            }
         }
         let crop = edited
             .as_ref()
@@ -247,11 +443,14 @@ fn target(request: &ExportRequest, frozen: Option<FrozenTarget>) -> Result<Targe
             words,
             styled,
             source_starts,
+            source_ends,
             sentence_ids,
             segments: splice.segments,
             active_cuts,
             transcript,
             crop,
+            caption_track,
+            target_language: active_lang,
         }))
     })?
 }
@@ -268,7 +467,7 @@ fn cmd_captions(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let _project = projects::start_job()?;
     let style = request_style(&v)?;
     let request = parse(v)?;
-    let target = target(&request, None)?;
+    let target = target(&request, None, None)?;
     let words = captions::sanitize(&target.words)?;
     let prepared = caption_style::prepare(&target.styled, &style, target.output_duration_us)?;
     let missing = target.missing_glyphs(&style);
@@ -290,7 +489,7 @@ fn cmd_captions(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         })
         .collect();
     Ok(
-        json!({"ass":prepared.ass,"lines":captions::layout(&words),"start_us":target.start_us,"end_us":target.end_us,"durationUs":target.output_duration_us,"segments":target.segments,"cues":prepared.cues,"style":prepared.style,"emojiRemoved":prepared.emoji_removed,"words":editable,"transcriptId":target.transcript,"missingGlyphs":missing}),
+        json!({"ass":prepared.ass,"lines":captions::layout(&words),"start_us":target.start_us,"end_us":target.end_us,"durationUs":target.output_duration_us,"segments":target.segments,"cues":prepared.cues,"style":prepared.style,"emojiRemoved":prepared.emoji_removed,"words":editable,"transcriptId":target.transcript,"missingGlyphs":missing,"track":target.caption_track,"targetLanguage":target.target_language}),
     )
 }
 
@@ -318,7 +517,7 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let _guard = projects::start_job()?;
     let mut request: StartRequest = serde_json::from_value(v).map_err(|_| bounds())?;
     // Ignora qualquer snapshot enviado pela UI; o núcleo resolve o documento atual.
-    let resolved = target(&request.cut, None)?;
+    let resolved = target(&request.cut, None, None)?;
     let style = style_for_clip(request.cut.clip_id)?;
     request.resolved_bounds = request
         .cut
@@ -326,6 +525,8 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .map(|_| (resolved.start_us, resolved.end_us));
     request.resolved_silences = request.cut.clip_id.map(|_| resolved.active_cuts.clone());
     request.resolved_crop = request.cut.clip_id.map(|_| resolved.crop.clone());
+    request.resolved_captions =
+        (resolved.caption_track == "translated").then(|| resolved.frozen_captions());
     render::validate_output(&request.output)?;
     let project = current_path()?;
     let _ = crate::jobs::preview::source(request.cut.source_id, &project)?;
@@ -419,7 +620,7 @@ pub(crate) fn run(
         let frozen = request
             .resolved_bounds
             .map(|b| (b, request.resolved_silences.clone().unwrap_or_default()));
-        let target = target(&request.cut, frozen)?;
+        let target = target(&request.cut, frozen, request.resolved_captions.as_deref())?;
         check_target_glyphs(&target, &style)?;
         let prepared = caption_style::prepare(&target.styled, &style, target.output_duration_us)?;
         let (source, _, audio, _, _) =

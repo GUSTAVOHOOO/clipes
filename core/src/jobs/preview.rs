@@ -64,6 +64,8 @@ pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
                     ai::execute(id, &stop);
                     if crate::selection::is_job_kind(&kind) {
                         crate::selection::on_job_settled(id);
+                    } else if kind == crate::translation::JOB_KIND {
+                        crate::translation::on_job_settled(id);
                     }
                     continue;
                 }

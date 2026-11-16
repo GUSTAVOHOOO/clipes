@@ -73,5 +73,10 @@
     "id": "thumbnail",
     "version": 2,
     "sha256": "37ed6bd58eccb8d830b294505b829acfcdb2b4d5c102834e0900cf36d902c634"
+  },
+  {
+    "id": "translation",
+    "version": 1,
+    "sha256": "6a1964dcb96897bf51587676535bab2608d26a3440f527c3e5f1a4abfa231e1d"
   }
 ]

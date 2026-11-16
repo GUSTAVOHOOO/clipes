@@ -85,6 +85,7 @@ mod source_batches;
 mod sources;
 pub mod thumbnail;
 pub mod transcription;
+pub mod translation;
 mod url_import;
 mod version;
 pub mod worker;

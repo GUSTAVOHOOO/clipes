@@ -1,5 +1,6 @@
 // Fixture determinística do contrato #65/#77 (VITE_CORE_MOCK + editor-test). O núcleo real está em core/src/caption_style.
 import { getMockClipSplice } from './editorEditsMock';
+import { getMockActiveTranslation } from './translationMock';
 import { sourceToSplicedUs } from '@/features/editor/timelineMath';
 
 type Style = { schemaVersion: 1; revision: number; preset: string; font: string; fontSize: number; color: string; activeColor: string; dimColor: string; outlineColor: string; outline: number; shadow: number; x: number; y: number; highlight: boolean };
@@ -29,18 +30,47 @@ export function captionsMock(name: string, a: Record<string, any>, textOf: (posi
   const startBase = a.start_us ?? 0;
   const endBase = a.end_us ?? startBase + 4_500_000;
   const splice = getMockClipSplice(a.clip_id, startBase, endBase);
-  const rawWords = Array.from({ length: 9 }, (_, p) => {
-    const absStart = startBase + p * 500_000;
-    const absEnd = absStart + 450_000;
-    return {
-      position: p,
-      text: ' ' + textOf(p),
-      startUs: sourceToSplicedUs(absStart, splice.segments, startBase),
-      endUs: sourceToSplicedUs(absEnd, splice.segments, startBase),
-      sourceStartUs: absStart,
-      overrides: overrides.get(p) ?? {},
-    };
-  });
+  const translated = getMockActiveTranslation(a.clip_id);
+  const rawWords = translated
+    ? (() => {
+        const out: { position: number; text: string; startUs: number; endUs: number; sourceStartUs: number; overrides: Override }[] = [];
+        let idx = 0;
+        const step = Math.max(1, Math.floor((endBase - startBase) / translated.lines.length));
+        translated.lines.forEach((line, li) => {
+          const tokens = line.text.trim().split(/\s+/).filter(Boolean);
+          const sStart = startBase + li * step;
+          const sEnd = li + 1 === translated.lines.length ? endBase : startBase + (li + 1) * step;
+          const total = tokens.reduce((acc, tok) => acc + Math.max(1, [...tok].length), 0) || 1;
+          let cum = 0;
+          tokens.forEach((tok, ti) => {
+            const wStart = sStart + Math.floor(((sEnd - sStart) * cum) / total);
+            cum += Math.max(1, [...tok].length);
+            const wEnd = ti + 1 === tokens.length ? sEnd : sStart + Math.floor(((sEnd - sStart) * cum) / total);
+            idx += 1;
+            out.push({
+              position: -idx,
+              text: ' ' + tok,
+              startUs: sourceToSplicedUs(wStart, splice.segments, startBase),
+              endUs: sourceToSplicedUs(Math.max(wStart + 10_000, wEnd), splice.segments, startBase),
+              sourceStartUs: wStart,
+              overrides: {},
+            });
+          });
+        });
+        return out;
+      })()
+    : Array.from({ length: 9 }, (_, p) => {
+        const absStart = startBase + p * 500_000;
+        const absEnd = absStart + 450_000;
+        return {
+          position: p,
+          text: ' ' + textOf(p),
+          startUs: sourceToSplicedUs(absStart, splice.segments, startBase),
+          endUs: sourceToSplicedUs(absEnd, splice.segments, startBase),
+          sourceStartUs: absStart,
+          overrides: overrides.get(p) ?? {},
+        };
+      });
   const missingGlyphs = rawWords.flatMap(w => {
     const visible = w.text.replace(/\p{Extended_Pictographic}/gu, '').trim();
     const match = unsupportedGlyph.exec(visible);
