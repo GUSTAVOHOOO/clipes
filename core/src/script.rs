@@ -941,10 +941,32 @@ fn latest_with_blocks(gens: &[Generation]) -> Option<&Generation> {
     gens.iter().rev().find(|g| !g.blocks.is_empty())
 }
 
+/// Algum job terminou entre a materialização e a leitura: o resultado ainda não foi gravado.
+fn stale(gens: &[Generation]) -> bool {
+    gens.iter().any(|g| {
+        (g.outline.is_none() && g.job_state.as_deref() == Some("completed"))
+            || g.blocks.iter().any(|b| {
+                b.versions
+                    .iter()
+                    .any(|x| !x.written() && x.job_state.as_deref() == Some("completed"))
+            })
+    })
+}
+
 fn refresh(cut: &Cut) -> Result<Vec<Generation>, CoreError> {
-    materialize(cut.cut.run, cut.cut.identity)?;
+    let (run, identity) = (cut.cut.run, cut.cut.identity);
+    materialize(run, identity)?;
     advance(cut)?;
-    read_generations(cut.cut.run, cut.cut.identity)
+    let mut gens = read_generations(run, identity)?;
+    for _ in 0..3 {
+        if !stale(&gens) {
+            break;
+        }
+        materialize(run, identity)?;
+        advance(cut)?;
+        gens = read_generations(run, identity)?;
+    }
+    Ok(gens)
 }
 
 fn limits_json() -> Value {
