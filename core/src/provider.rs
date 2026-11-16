@@ -394,7 +394,9 @@ mod settings {
     /// call time, never stored. Only the app settings choose; the Project never does.
     fn pick_target(task: Option<&str>, explicit: Option<&str>) -> Result<Picked, CoreError> {
         let mut profile_id = explicit.map(str::to_owned);
-        let mut cli = explicit.filter(|id| *id == "opencode").map(str::to_owned);
+        let mut cli = explicit
+            .filter(|id| CLI_IDS.contains(id))
+            .map(str::to_owned);
         if explicit.is_none() {
             match crate::assistant::route(task)? {
                 crate::assistant::Route::Cli(kind) => cli = Some(kind),
@@ -1108,10 +1110,10 @@ mod settings {
             net::TcpListener,
             thread,
         };
-        static GUARD: Mutex<()> = Mutex::new(());
-        /// Serializes the tests that share the settings file and the fake vault, and resets both.
+        /// Serializes the tests that share the settings file, the fake vault and `CLIPES_DATA_DIR`
+        /// (#188), and resets the first two.
         fn fresh() -> std::sync::MutexGuard<'static, ()> {
-            let guard = GUARD.lock().unwrap_or_else(|e| e.into_inner());
+            let guard = crate::test_env::lock();
             let _ = fs::remove_file(path().unwrap());
             FAKE_VAULT.lock().unwrap().clear();
             guard

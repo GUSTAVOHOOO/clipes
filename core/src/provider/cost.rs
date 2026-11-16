@@ -651,6 +651,12 @@ pub fn route_for(task: &str) -> Result<(Target, String), CoreError> {
     target_now(Some(task), None)
 }
 
+/// Like [`route_for`], for one run that names its Profile (`profile`, #126). The "local only"
+/// vetoes (task and Project) still apply, before any call, and the task's own route is untouched.
+pub fn route_with_profile(task: &str, profile: &str) -> Result<(Target, String), CoreError> {
+    target_now(Some(task), Some(profile))
+}
+
 /// Totals of `provider_costs` grouped by `column` (`task`, `profile` or `batch`), keyed by the
 /// column value; rows with a null key are left out. Unknown cost is counted apart, never as zero.
 pub fn totals_by(column: &str) -> Result<std::collections::HashMap<String, Value>, CoreError> {

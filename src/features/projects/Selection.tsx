@@ -15,7 +15,7 @@ type Estimate = { kind: string; windows: number; inputTokens: number; minMicroUs
 type Weight = { key: string; weight: number };
 type Preview = { paid: boolean; videoKind?: VideoKind; profile?: string; plan?: { state: 'full' | 'reduced'; windows: unknown[] }; weights?: Weight[]; estimate: Estimate };
 type Axis = { score: number; why: string };
-type Candidate = { id: number; rank: number; startId: number; endId: number; startUs: number; endUs: number; axes: Record<string, Axis>; total: number; title: string; windows: number[]; adjusted: boolean; adjust: { extendedBefore?: number; extendedAfter?: number; trimmedEnd?: number } | null };
+type Candidate = { id: number; rank: number; startId: number; endId: number; startUs: number; endUs: number; axes: Record<string, Axis>; total: number; title: string; windows: number[]; adjusted: boolean; adjust: { extendedBefore?: number; extendedAfter?: number; trimmedEnd?: number } | null; profile?: string; revision?: number };
 type Win = { index: number; startUs: number; endUs: number; state: string; code: string | null };
 type Run = { videoKind?: VideoKind; summary?: { energy?: { measured: boolean; high?: number; peak?: number } } | null; id: number; state: 'running' | 'completed' | 'partial'; weights: Weight[]; budgetPause: string | null; counts: { windows: number; completed: number; failed: number; kept: number; discarded: number; merged: number }; createdAt: string };
 type Detail = { run: Run; windows: Win[]; candidates: Candidate[] };
@@ -161,7 +161,8 @@ export function Selection({ sourceId }: { sourceId: number }) {
       <label className="flex items-center gap-2">{t.minScore}<input type="number" min={0} max={10} step={0.5} value={minScore} onChange={e => setMinScore(Math.min(10, Math.max(0, Number(e.target.value) || 0)))} className="h-8 w-20 rounded-md border border-line-strong bg-field px-2" /></label>
       {!running && detail.candidates.length === 0 && head.state === 'completed' && <p>{t.none}</p>}
       {detail.candidates.length > 0 && shown.length === 0 && <p>{t.noneFilter}</p>}
-      {current !== null && shown.length > 0 && <CandidateReview sourceId={sourceId} run={current} videoKind={runKind} candidates={shown} weights={weights} onOpenPreview={(_, startUs, endUs) => openCutPreview({ sourceId, startUs, endUs })} onOpenEditor={(candidate, startId, endId) => openEditor({ source_id: sourceId, start_id: startId, end_id: endId, candidate_id: candidate })} />}
+      {current !== null && shown.length > 0 && <CandidateReview sourceId={sourceId} run={current} videoKind={runKind} candidates={shown} weights={weights} onOpenPreview={(_, startUs, endUs) => openCutPreview({ sourceId, startUs, endUs })} onOpenEditor={(candidate, startId, endId) => openEditor({ source_id: sourceId, start_id: startId, end_id: endId, candidate_id: candidate })}
+        windowStates={Object.fromEntries(detail.windows.map(w => [w.index, w.state]))} onRedoStarted={() => void loadDetail(current).catch(() => setError(t.error))} />}
     </div>}
     {error && <p role="alert" className="text-danger">{error}</p>}
     <ConfirmDialog open={pending !== null} onOpenChange={open => { if (!open) setPending(null); }} title={t.confirmTitle}

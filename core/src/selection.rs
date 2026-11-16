@@ -279,6 +279,21 @@ CREATE TABLE selection_candidates (
 CREATE INDEX selection_candidates_run ON selection_candidates(run_id, rank);
 " } }
 
+// Refazer com outro Perfil (#126): cada Janela guarda o perfil que gerou o seu resultado, e
+// cada candidato o perfil da Janela de onde veio. Os candidatos novos de um refazer entram
+// como uma nova `revision` da execução; as revisões anteriores e as decisões do #55 ficam.
+inventory::submit! { projects::Migration { id: "0126_001_selection_redo_profile", sql: "
+ALTER TABLE selection_runs ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE selection_windows ADD COLUMN profile TEXT NOT NULL DEFAULT '';
+ALTER TABLE selection_windows ADD COLUMN redo INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE selection_windows ADD COLUMN prev_job_id INTEGER;
+ALTER TABLE selection_windows ADD COLUMN prev_profile TEXT NOT NULL DEFAULT '';
+ALTER TABLE selection_candidates ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE selection_candidates ADD COLUMN profile TEXT NOT NULL DEFAULT '';
+UPDATE selection_windows SET profile=COALESCE((SELECT r.profile FROM selection_runs r WHERE r.id=run_id),'');
+UPDATE selection_candidates SET profile=COALESCE((SELECT r.profile FROM selection_runs r WHERE r.id=run_id),'');
+" } }
+
 // Tipo de vídeo (#67): uma execução e um lote de Fontes têm um tipo, escolhido antes de produzir.
 // Execuções e lotes anteriores valem como Corte direto (o DEFAULT).
 inventory::submit! { projects::Migration { id: "0067_001_video_kind", sql: "
@@ -356,21 +371,6 @@ fn slice_by_ids(all: &[Sentence], first: i64, last: i64) -> &[Sentence] {
     let from = all.partition_point(|s| s.id < first);
     let to = all.partition_point(|s| s.id <= last);
     &all[from..to]
-}
-
-fn structured_request(
-    kind: VideoKind,
-    input: &TaskInput,
-) -> Result<provider::StructuredRequest, CoreError> {
-    let (wire, _) = ai_task::check_definition(task_for(kind)).map_err(CoreError::from)?;
-    Ok(provider::StructuredRequest {
-        estimate_hint: input.estimate_hint.clone(),
-        instruction: ai_task::normalized_prompt(prompt_for(kind)),
-        transcript: input.transcript.clone(),
-        schema: wire,
-        native_schema: false,
-        max_output_tokens: Some(task_for(kind).budget.max_output_tokens),
-    })
 }
 
 // ---------------------------------------------------------------- planejamento e custo
@@ -458,44 +458,10 @@ fn state_label(state: selection_windows::PlanState) -> &'static str {
 }
 
 /// Soma a estimativa do #40 das Janelas informadas; `kind` e valores como em
-/// `provider.cost.estimate`. Custo desconhecido nunca vira zero.
+/// `provider.cost.estimate`. Custo desconhecido nunca vira zero. É a mesma soma de "refazer
+/// com outro perfil" (`jobs::redo`), com a rota da Tarefa do tipo de vídeo.
 fn estimate_inputs(video: VideoKind, inputs: &[TaskInput], safety: Safety) -> Value {
-    let paid = matches!(safety, Safety::Paid);
-    let route = jobs::route_of(TASK_ID, paid);
-    let mut kind = String::from("unknown");
-    let (mut input_tokens, mut min, mut max) = (0_u64, Some(0_u64), Some(0_u64));
-    if let Ok((target, profile)) = route {
-        for (i, input) in inputs.iter().enumerate() {
-            let estimate = structured_request(video, input)
-                .and_then(|request| provider::cost::estimate_for(&target, &profile, &request));
-            let Ok(estimate) = estimate else {
-                kind = "unknown".into();
-                min = None;
-                max = None;
-                break;
-            };
-            let this = estimate["kind"].as_str().unwrap_or("unknown").to_owned();
-            if i == 0 {
-                kind = this;
-            } else if kind != this {
-                kind = "unknown".into();
-            }
-            input_tokens += estimate["inputTokens"].as_u64().unwrap_or(0);
-            min = min
-                .zip(estimate["minMicroUsd"].as_u64())
-                .map(|(a, b)| a + b);
-            max = max
-                .zip(estimate["maxMicroUsd"].as_u64())
-                .map(|(a, b)| a + b);
-        }
-    }
-    json!({
-        "kind": kind,
-        "windows": inputs.len(),
-        "inputTokens": input_tokens,
-        "minMicroUsd": min,
-        "maxMicroUsd": max,
-    })
+    jobs::redo::estimate_inputs(task_for(video).id, inputs, safety, None)
 }
 
 /// Estado da energia do áudio numa execução: se foi medida e quantas Frases têm cada marca.
@@ -535,6 +501,9 @@ fn windows_json(setup: &Setup) -> Vec<Value> {
 /// devolve o erro tipado do planejador (#144).
 fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     if let Some(run) = v["run"].as_i64() {
+        if let Some(profile) = explicit_profile(&v)? {
+            return profile_redo_preview(run, &profile, &v);
+        }
         let (_, safety) = route_safety()?;
         let kind = read_run(run)?.kind;
         let inputs = redo_inputs(run, &v)?;
@@ -658,8 +627,8 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         )?;
         for (i, w) in s.plan.windows.iter().enumerate() {
             tx.execute(
-                "INSERT INTO selection_windows(run_id,idx,first_id,last_id,start_us,end_us) VALUES (?1,?2,?3,?4,?5,?6)",
-                (run, i as i64, w.first_id, w.last_id, w.start_us, w.end_us),
+                "INSERT INTO selection_windows(run_id,idx,first_id,last_id,start_us,end_us,profile) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+                (run, i as i64, w.first_id, w.last_id, w.start_us, w.end_us, &s.profile),
             )?;
         }
         tx.commit()?;
@@ -670,25 +639,50 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .enumerate()
         .map(|(i, t)| (i as i64, t))
         .collect();
-    enqueue_windows(run, &pending, s.safety)?;
+    enqueue_windows(
+        run,
+        &pending,
+        &Dest {
+            safety: s.safety,
+            profile: &s.profile,
+            explicit: false,
+        },
+    )?;
     Ok(
         json!({"run": run, "batch": batch_for(run), "videoKind": s.kind.as_str(), "windows": s.plan.windows.len(), "planState": state_label(s.plan.state), "weights": weights_json(s.kind)}),
     )
 }
 
+/// Para onde vão as Janelas enfileiradas: o perfil que gera o resultado (gravado na Janela) e,
+/// só no "refazer com outro perfil" (#126), o perfil explícito do job. Sem `explicit`, o job
+/// segue a rota da Tarefa e o padrão nunca muda.
+struct Dest<'a> {
+    safety: Safety,
+    profile: &'a str,
+    explicit: bool,
+}
+
 fn enqueue_windows(
     run: i64,
     windows: &[(i64, TaskInput)],
-    safety: Safety,
+    dest: &Dest<'_>,
 ) -> Result<(), CoreError> {
     let batch = batch_for(run);
     let task = task_for(read_run(run)?.kind).id;
     for (idx, input) in windows {
-        let job = jobs::enqueue_ai_in_batch(task, input, safety, Some(&batch))?;
+        let job = jobs::enqueue_ai_with_profile(
+            task,
+            input,
+            dest.safety,
+            Some(&batch),
+            dest.explicit.then_some(dest.profile),
+        )?;
         projects::with_writer(|c| {
+            // Refazer com perfil sobre uma Janela concluída guarda o resultado dela: se o novo
+            // job falhar, os candidatos dela não somem.
             c.execute(
-                "UPDATE selection_windows SET job_id=?3, attempts=attempts+1 WHERE run_id=?1 AND idx=?2",
-                (run, idx, job),
+                "UPDATE selection_windows SET prev_job_id=CASE WHEN ?5=1 AND (SELECT state FROM jobs WHERE id=job_id)='completed' THEN job_id ELSE prev_job_id END, prev_profile=CASE WHEN ?5=1 AND (SELECT state FROM jobs WHERE id=job_id)='completed' THEN profile ELSE prev_profile END, job_id=?3, profile=?4, redo=?5, attempts=attempts+1 WHERE run_id=?1 AND idx=?2",
+                (run, idx, job, dest.profile, i64::from(dest.explicit)),
             )?;
             c.execute(
                 "UPDATE selection_runs SET state='running' WHERE id=?1",
@@ -716,9 +710,45 @@ struct WindowRow {
     job_id: Option<i64>,
     job_state: Option<String>,
     result: Option<Value>,
+    /// Perfil que gerou o resultado do job atual (#126).
+    profile: String,
+    /// O job atual é um refazer com perfil explícito que ainda não virou uma revisão.
+    redo: bool,
+    prev_profile: String,
+    prev_state: Option<String>,
+    prev_result: Option<Value>,
+}
+
+/// O que vale para uma Janela: o resultado do job atual ou, quando um refazer com perfil
+/// falhou ou foi cancelado, o resultado anterior (com o código do erro do refazer).
+struct Effective {
+    outcome: Outcome,
+    profile: String,
+    redo_failed: Option<String>,
 }
 
 impl WindowRow {
+    fn effective(&self) -> Effective {
+        let current = self.outcome();
+        if let Outcome::Failed(code) = &current {
+            let previous = (self.prev_state.as_deref() == Some("completed"))
+                .then_some(self.prev_result.as_ref())
+                .flatten()
+                .filter(|r| r["data"].is_object());
+            if let Some(previous) = previous {
+                return Effective {
+                    outcome: Outcome::Done(previous["data"].clone()),
+                    profile: self.prev_profile.clone(),
+                    redo_failed: Some(code.clone()),
+                };
+            }
+        }
+        Effective {
+            outcome: current,
+            profile: self.profile.clone(),
+            redo_failed: None,
+        }
+    }
     fn state(&self) -> &str {
         self.job_state.as_deref().unwrap_or("unscheduled")
     }
@@ -754,10 +784,11 @@ impl WindowRow {
 fn read_windows(run: i64) -> Result<Vec<WindowRow>, CoreError> {
     projects::with_reader(|c| {
         let mut q = c.prepare(
-            "SELECT w.idx,w.first_id,w.last_id,w.start_us,w.end_us,w.job_id,j.state,j.result FROM selection_windows w LEFT JOIN jobs j ON j.id=w.job_id WHERE w.run_id=?1 ORDER BY w.idx",
+            "SELECT w.idx,w.first_id,w.last_id,w.start_us,w.end_us,w.job_id,j.state,j.result,w.profile,w.redo,w.prev_profile,p.state,p.result FROM selection_windows w LEFT JOIN jobs j ON j.id=w.job_id LEFT JOIN jobs p ON p.id=w.prev_job_id WHERE w.run_id=?1 ORDER BY w.idx",
         )?;
         let rows = q.query_map([run], |r| {
             let result: Option<String> = r.get(7)?;
+            let prev_result: Option<String> = r.get(12)?;
             Ok(WindowRow {
                 idx: r.get(0)?,
                 first_id: r.get(1)?,
@@ -767,6 +798,11 @@ fn read_windows(run: i64) -> Result<Vec<WindowRow>, CoreError> {
                 job_id: r.get(5)?,
                 job_state: r.get(6)?,
                 result: result.and_then(|t| serde_json::from_str(&t).ok()),
+                profile: r.get(8)?,
+                redo: r.get(9)?,
+                prev_profile: r.get(10)?,
+                prev_state: r.get(11)?,
+                prev_result: prev_result.and_then(|t| serde_json::from_str(&t).ok()),
             })
         })?;
         rows.collect::<rusqlite::Result<Vec<_>>>()
@@ -781,13 +817,14 @@ struct RunRow {
     completed: i64,
     failed: i64,
     energy_marks: bool,
+    revision: i64,
     kind: VideoKind,
 }
 
 fn read_run(run: i64) -> Result<RunRow, CoreError> {
     projects::with_reader(|c| {
         c.query_row(
-            "SELECT transcript_id,state,min_us,max_us,windows_completed,windows_failed,energy_marks,video_kind FROM selection_runs WHERE id=?1",
+            "SELECT transcript_id,state,min_us,max_us,windows_completed,windows_failed,energy_marks,video_kind,revision FROM selection_runs WHERE id=?1",
             [run],
             |r| {
                 Ok(RunRow {
@@ -803,6 +840,7 @@ fn read_run(run: i64) -> Result<RunRow, CoreError> {
                         .ok()
                         .and_then(|k| VideoKind::parse(&k))
                         .unwrap_or_default(),
+                    revision: r.get(8)?,
                 })
             },
         )
@@ -946,7 +984,8 @@ fn advance(run: i64) -> Result<(), CoreError> {
     }
     let windows = read_windows(run)?;
     let total = windows.len();
-    let outcomes: Vec<Outcome> = windows.iter().map(WindowRow::outcome).collect();
+    let effective: Vec<Effective> = windows.iter().map(WindowRow::effective).collect();
+    let outcomes: Vec<Outcome> = effective.iter().map(|e| e.outcome.clone()).collect();
     let completed = outcomes
         .iter()
         .filter(|o| matches!(o, Outcome::Done(_)))
@@ -955,7 +994,7 @@ fn advance(run: i64) -> Result<(), CoreError> {
         .iter()
         .filter(|o| matches!(o, Outcome::Failed(_)))
         .count() as i64;
-    if outcomes.contains(&Outcome::Pending) {
+    if windows.iter().any(|w| w.outcome() == Outcome::Pending) {
         if (completed, failed) != (row.completed, row.failed) {
             projects::with_writer(|c| {
                 c.execute(
@@ -983,6 +1022,22 @@ fn advance(run: i64) -> Result<(), CoreError> {
         })
         .collect();
     let (kept, tally) = build_candidates(row.kind, &frases, &range, &done);
+    // Um refazer com perfil que concluiu abre uma nova revisão; o resto fecha na atual (#126).
+    let redone = windows
+        .iter()
+        .zip(&effective)
+        .any(|(w, e)| w.redo && e.redo_failed.is_none());
+    let revision = row.revision + i64::from(redone);
+    let profiles: Vec<&str> = effective.iter().map(|e| e.profile.as_str()).collect();
+    let redo_failed: Vec<Value> = effective
+        .iter()
+        .enumerate()
+        .filter_map(|(i, e)| {
+            e.redo_failed
+                .as_ref()
+                .map(|code| json!({"window": i, "code": code}))
+        })
+        .collect();
     let failures: Vec<Value> = outcomes
         .iter()
         .enumerate()
@@ -994,6 +1049,8 @@ fn advance(run: i64) -> Result<(), CoreError> {
     let summary = json!({
         "videoKind": row.kind.as_str(),
         "energy": energy_json(run_marks(&row)?.as_ref()),
+        "revision": revision,
+        "redoFailed": redo_failed,
         "windows": {"total": total, "completed": completed, "failed": failures},
         "candidates": {
             "proposed": tally.proposed,
@@ -1007,7 +1064,7 @@ fn advance(run: i64) -> Result<(), CoreError> {
     let closed = projects::with_writer(|c| {
         let tx = c.transaction()?;
         let changed = tx.execute(
-            "UPDATE selection_runs SET state=?2,windows_completed=?3,windows_failed=?4,candidates_kept=?5,discarded=?6,merged=?7,summary=?8 WHERE id=?1 AND state='running'",
+            "UPDATE selection_runs SET state=?2,windows_completed=?3,windows_failed=?4,candidates_kept=?5,discarded=?6,merged=?7,summary=?8,revision=?9 WHERE id=?1 AND state='running'",
             (
                 run,
                 state,
@@ -1017,10 +1074,16 @@ fn advance(run: i64) -> Result<(), CoreError> {
                 (tally.too_short + tally.too_long + tally.unknown_id) as i64,
                 tally.merged as i64,
                 summary.to_string(),
+                revision,
             ),
         )?;
         if changed == 1 {
-            tx.execute("DELETE FROM selection_candidates WHERE run_id=?1", [run])?;
+            // Só a revisão em fechamento é regravada: as anteriores (e as decisões do #55) ficam.
+            tx.execute(
+                "DELETE FROM selection_candidates WHERE run_id=?1 AND revision=?2",
+                (run, revision),
+            )?;
+            tx.execute("UPDATE selection_windows SET redo=0 WHERE run_id=?1", [run])?;
             for (rank, (m, p)) in kept.iter().enumerate() {
                 let axes: BTreeMap<&str, Value> = row
                     .kind
@@ -1033,7 +1096,7 @@ fn advance(run: i64) -> Result<(), CoreError> {
                     json!({"extendedBefore": p.adjust.extended_before, "extendedAfter": p.adjust.extended_after, "trimmedEnd": p.adjust.trimmed_end}).to_string()
                 });
                 tx.execute(
-                    "INSERT INTO selection_candidates(run_id,rank,start_id,end_id,start_us,end_us,axes,total_centi,title,windows,adjust) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+                    "INSERT INTO selection_candidates(run_id,rank,start_id,end_id,start_us,end_us,axes,total_centi,title,windows,adjust,revision,profile) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
                     (
                         run,
                         rank as i64,
@@ -1046,6 +1109,13 @@ fn advance(run: i64) -> Result<(), CoreError> {
                         &p.title,
                         json!(m.windows).to_string(),
                         adjust,
+                        revision,
+                        m.windows
+                            .iter()
+                            .min()
+                            .and_then(|w| profiles.get(*w))
+                            .copied()
+                            .unwrap_or(""),
                     ),
                 )?;
             }
@@ -1098,7 +1168,7 @@ fn redo_inputs(run: i64, v: &Value) -> Result<Vec<(i64, TaskInput)>, CoreError> 
         if !selected {
             continue;
         }
-        match w.outcome() {
+        match w.effective().outcome {
             Outcome::Failed(_) => out.push((
                 w.idx,
                 window_input(slice_by_ids(&frases, w.first_id, w.last_id), &range, &marks),
@@ -1131,19 +1201,131 @@ fn redo_inputs(run: i64, v: &Value) -> Result<Vec<(i64, TaskInput)>, CoreError> 
 
 /// `selection.redo {run, windows?, confirmed?}` (e `selection.resume`, sem `windows`): refaz
 /// só as Janelas que falharam ou foram canceladas, no mesmo lote, contando no orçamento.
+///
+/// Com `profileId` (#126, "refazer com o forte"): refaz as `windows` pedidas, mesmo concluídas,
+/// com esse Perfil de Provedor só desta vez. Veja [`redo_with_profile`].
 fn cmd_redo(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let run = v["run"]
         .as_i64()
         .ok_or_else(|| error("run_not_found", "Execução de seleção não encontrada."))?;
-    let (_, safety) = route_safety()?;
+    if let Some(profile) = explicit_profile(&v)? {
+        return redo_with_profile(run, &profile, &v);
+    }
+    let (profile, safety) = route_safety()?;
     let inputs = redo_inputs(run, &v)?;
     if matches!(safety, Safety::Paid) && v["confirmed"] != true {
         let list: Vec<TaskInput> = inputs.iter().map(|i| i.1.clone()).collect();
         let kind = read_run(run)?.kind;
         return Err(confirmation_required(estimate_inputs(kind, &list, safety)));
     }
-    enqueue_windows(run, &inputs, safety)?;
+    enqueue_windows(
+        run,
+        &inputs,
+        &Dest {
+            safety,
+            profile: &profile,
+            explicit: false,
+        },
+    )?;
     Ok(json!({"run": run, "windows": inputs.iter().map(|i| i.0).collect::<Vec<_>>()}))
+}
+
+/// O `profileId` pedido, se houver: um id curto, escolhido pelo usuário. Nunca vem do padrão.
+fn explicit_profile(v: &Value) -> Result<Option<String>, CoreError> {
+    match v.get("profileId") {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(id)) if !id.is_empty() && id.len() <= 64 => Ok(Some(id.clone())),
+        _ => Err(error("invalid_profile", "Escolha um Perfil de Provedor.")),
+    }
+}
+
+/// Janelas e entradas de um refazer com perfil, depois de todas as recusas que não precisam de
+/// rede: Janela inexistente, ocupada ou com job `uncertain` (indisponível, ADR-0010 regra 4) e o
+/// veto "somente local" da rota (por tarefa e por Projeto). A entrada é a do próprio job da
+/// Janela, então o outro perfil responde à mesma pergunta.
+fn profile_redo_plan(
+    run: i64,
+    profile: &str,
+    v: &Value,
+) -> Result<(jobs::redo::Route, Vec<(i64, TaskInput)>), CoreError> {
+    read_run(run)?;
+    let wanted: Vec<i64> = v["windows"]
+        .as_array()
+        .map(|a| a.iter().filter_map(Value::as_i64).collect())
+        .unwrap_or_default();
+    if wanted.is_empty() {
+        return Err(error(
+            "windows_required",
+            "Escolha a(s) Janela(s) da seleção a refazer.",
+        ));
+    }
+    let windows = read_windows(run)?;
+    let mut inputs = Vec::new();
+    for idx in &wanted {
+        let w = windows
+            .iter()
+            .find(|w| w.idx == *idx)
+            .ok_or_else(|| error("window_not_found", "Janela da seleção não encontrada."))?;
+        let job = w.job_id.ok_or_else(|| {
+            error(
+                "window_not_redoable",
+                "Esta Janela ainda não foi enviada a nenhum Provedor.",
+            )
+        })?;
+        let source = jobs::redo::source(job).map_err(|e| match e.code.as_str() {
+            "job_uncertain" => error(
+                "window_uncertain",
+                "A chamada desta Janela tem resultado incerto: resolva a incerteza antes de refazer com outro perfil.",
+            ),
+            "job_not_redoable" => error(
+                "window_not_redoable",
+                "Só uma Janela concluída, que falhou ou foi cancelada pode ser refeita.",
+            ),
+            _ => e,
+        })?;
+        inputs.push((*idx, source.input));
+    }
+    let route = jobs::redo::route(TASK_ID, profile)?;
+    Ok((route, inputs))
+}
+
+/// O que a confirmação mostra: perfil, custo estimado e se o texto sai da máquina.
+fn profile_redo_preview(run: i64, profile: &str, v: &Value) -> CommandResult {
+    let (route, inputs) = profile_redo_plan(run, profile, v)?;
+    let list: Vec<TaskInput> = inputs.iter().map(|i| i.1.clone()).collect();
+    let estimate = jobs::redo::estimate_inputs(TASK_ID, &list, route.safety, Some(profile));
+    let mut preview = jobs::redo::preview(&route, estimate);
+    preview["windows"] = json!(inputs.iter().map(|i| i.0).collect::<Vec<_>>());
+    Ok(preview)
+}
+
+/// Refaz as Janelas com o perfil `profile`: enfileira cada uma de novo, no mesmo lote (o teto
+/// do lote vale e pausa), grava o perfil na Janela e deixa o resultado entrar como uma nova
+/// revisão da execução. Perfil pago pede confirmação antes de qualquer envio.
+fn redo_with_profile(run: i64, profile: &str, v: &Value) -> CommandResult {
+    let (route, inputs) = profile_redo_plan(run, profile, v)?;
+    if route.paid() && v["confirmed"] != true {
+        let list: Vec<TaskInput> = inputs.iter().map(|i| i.1.clone()).collect();
+        let estimate = jobs::redo::estimate_inputs(TASK_ID, &list, route.safety, Some(profile));
+        return Err(jobs::redo::confirmation_required(jobs::redo::preview(
+            &route, estimate,
+        )));
+    }
+    let id = route.profile["id"].as_str().unwrap_or(profile).to_owned();
+    enqueue_windows(
+        run,
+        &inputs,
+        &Dest {
+            safety: route.safety,
+            profile: &id,
+            explicit: true,
+        },
+    )?;
+    Ok(json!({
+        "run": run,
+        "windows": inputs.iter().map(|i| i.0).collect::<Vec<_>>(),
+        "profile": route.profile,
+    }))
 }
 
 /// `selection.cancel {run}`: cancela as Janelas na fila e a em andamento (como `jobs.cancel`).
@@ -1165,10 +1347,10 @@ fn cmd_cancel(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 
 // ---------------------------------------------------------------- leitura
 
-fn run_json(run: i64) -> Result<Value, CoreError> {
+fn run_json(run: i64, revision: Option<i64>) -> Result<Value, CoreError> {
     let (head, batch) = projects::with_reader(|c| {
         c.query_row(
-            "SELECT id,transcript_id,task_version,prompt_sha256,profile,state,min_us,max_us,weights,plan_state,windows_total,windows_completed,windows_failed,candidates_kept,discarded,merged,summary,created_at,batch,video_kind FROM selection_runs WHERE id=?1",
+            "SELECT id,transcript_id,task_version,prompt_sha256,profile,state,min_us,max_us,weights,plan_state,windows_total,windows_completed,windows_failed,candidates_kept,discarded,merged,summary,created_at,batch,video_kind,revision FROM selection_runs WHERE id=?1",
             [run],
             |r| {
                 let weights: String = r.get(8)?;
@@ -1185,6 +1367,7 @@ fn run_json(run: i64) -> Result<Value, CoreError> {
                         "summary": summary.and_then(|t| serde_json::from_str::<Value>(&t).ok()).unwrap_or(Value::Null),
                         "createdAt": r.get::<_, String>(17)?,
                         "videoKind": r.get::<_, String>(19)?,
+                        "revision": r.get::<_, i64>(20)?,
                     }),
                     r.get::<_, String>(18)?,
                 ))
@@ -1211,14 +1394,14 @@ fn run_json(run: i64) -> Result<Value, CoreError> {
                 Outcome::Failed(code) => Value::String(code),
                 _ => Value::Null,
             };
-            json!({"index": w.idx, "firstId": w.first_id, "lastId": w.last_id, "startUs": w.start_us, "endUs": w.end_us, "jobId": w.job_id, "state": w.state(), "code": code})
+            json!({"index": w.idx, "firstId": w.first_id, "lastId": w.last_id, "startUs": w.start_us, "endUs": w.end_us, "jobId": w.job_id, "state": w.state(), "code": code, "profile": w.effective().profile, "redoFailed": w.effective().redo_failed})
         })
         .collect();
     let candidates = projects::with_reader(|c| {
         let mut q = c.prepare(
-            "SELECT id,rank,start_id,end_id,start_us,end_us,axes,total_centi,title,windows,adjust FROM selection_candidates WHERE run_id=?1 ORDER BY rank",
+            "SELECT id,rank,start_id,end_id,start_us,end_us,axes,total_centi,title,windows,adjust,revision,profile FROM selection_candidates WHERE run_id=?1 AND revision=COALESCE(?2,(SELECT revision FROM selection_runs WHERE id=?1)) ORDER BY rank",
         )?;
-        let rows = q.query_map([run], |r| {
+        let rows = q.query_map((run, revision), |r| {
             let axes: String = r.get(6)?;
             let origin: String = r.get(9)?;
             let adjust: Option<String> = r.get(10)?;
@@ -1231,6 +1414,7 @@ fn run_json(run: i64) -> Result<Value, CoreError> {
                 "total": centi as f64 / 100.0, "totalCenti": centi,
                 "title": r.get::<_, String>(8)?,
                 "windows": serde_json::from_str::<Value>(&origin).unwrap_or(Value::Null),
+                "revision": r.get::<_, i64>(11)?, "profile": r.get::<_, String>(12)?,
                 "adjusted": adjust.is_some(),
                 "adjust": adjust.and_then(|t| serde_json::from_str::<Value>(&t).ok()).unwrap_or(Value::Null),
             }))
@@ -1239,6 +1423,15 @@ fn run_json(run: i64) -> Result<Value, CoreError> {
     })?;
     let mut head = head;
     head["budgetPause"] = json!(pause);
+    // RevisÃµes com candidatos guardados: a atual e as anteriores (cada refazer com perfil abre uma).
+    let revisions: Vec<i64> = projects::with_reader(|c| {
+        let mut q = c.prepare(
+            "SELECT revision FROM selection_candidates WHERE run_id=?1 UNION SELECT revision FROM selection_runs WHERE id=?1 ORDER BY 1",
+        )?;
+        let rows = q.query_map([run], |r| r.get(0))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+    })?;
+    head["revisions"] = json!(revisions);
     Ok(json!({"run": head, "windows": windows, "candidates": candidates}))
 }
 
@@ -1250,7 +1443,7 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .ok_or_else(|| error("run_not_found", "Execução de seleção não encontrada."))?;
     read_run(run)?;
     advance(run)?;
-    run_json(run)
+    run_json(run, v["revision"].as_i64())
 }
 
 /// `selection.list {source_id}`: execuções da Transcrição da Fonte, da mais recente à mais antiga.
@@ -1267,7 +1460,7 @@ fn cmd_list(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     }
     Ok(Value::Array(
         ids.into_iter()
-            .map(|id| run_json(id).map(|v| v["run"].clone()))
+            .map(|id| run_json(id, None).map(|v| v["run"].clone()))
             .collect::<Result<Vec<_>, _>>()?,
     ))
 }
