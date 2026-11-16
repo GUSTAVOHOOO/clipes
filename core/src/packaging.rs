@@ -166,7 +166,7 @@ pub fn tags_chars(tags: &[String]) -> usize {
     items + tags.len().saturating_sub(1)
 }
 
-fn has_url(text: &str) -> bool {
+pub(crate) fn has_url(text: &str) -> bool {
     let lower = text.to_lowercase();
     ["http://", "https://", "://", "www."]
         .iter()
@@ -666,7 +666,7 @@ fn read_generations(run: i64, identity: (i64, i64)) -> Result<Vec<Generation>, C
 }
 
 /// Código de erro do job: só o formato fixo esperado, nunca texto do modelo.
-fn job_code(result: &Option<Value>) -> Option<String> {
+pub(crate) fn job_code(result: &Option<Value>) -> Option<String> {
     result.as_ref()?["code"]
         .as_str()
         .filter(|c| {
@@ -678,7 +678,7 @@ fn job_code(result: &Option<Value>) -> Option<String> {
         .map(str::to_owned)
 }
 
-fn violation_codes(result: &Option<Value>) -> Vec<String> {
+pub(crate) fn violation_codes(result: &Option<Value>) -> Vec<String> {
     result
         .as_ref()
         .and_then(|r| r["violations"].as_array())

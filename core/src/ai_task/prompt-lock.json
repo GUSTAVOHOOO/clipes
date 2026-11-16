@@ -23,5 +23,15 @@
     "id": "packaging",
     "version": 1,
     "sha256": "6a0ccbcd85b760aab2b3232d61445b413f0edc50c92108625dd8d903d20aaaf9"
+  },
+  {
+    "id": "script",
+    "version": 1,
+    "sha256": "77b47723dcc5d9a88dbfaf80c2578db9777baab357073d880f6161cd4a90874f"
+  },
+  {
+    "id": "script_block",
+    "version": 1,
+    "sha256": "27233fa1bb44933c0ed00700259d8a03a9190db28a407ce848cc2d667da82fc7"
   }
 ]
