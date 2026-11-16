@@ -9,13 +9,13 @@ Convenção: **[fato]** = verificado em fonte ou teste, com link ou comando. **[
 
 1. **[fato]** Pocket TTS (Kyutai): código **MIT**, pesos **CC-BY-4.0**. Os dois passam na política de modelos do ADR-0003, com atribuição na tela "Sobre" e no `THIRD_PARTY_NOTICES.md`.
 2. **[fato]** Existe um **mirror sem gate**, `kyutai/pocket-tts-without-voice-cloning`, publicado pela própria Kyutai (CC-BY-4.0, `gated: false`). O pacote Python cai nele **sozinho e em silêncio** quando o download do repo gated falha. Os pesos de PT baixaram **sem login**. O mirror é o repo oficial com os tensores `mimi.encoder.*` **zerados**: gera voz com as vozes prontas, mas **não clona** (`has_voice_cloning == False`).
-3. **[fato]** Clonagem exige o repo gated `kyutai/pocket-tts` (login + aceite do termo de uso proibido). Com o token de leitura do dev (conta com o termo aceito) a clonagem **funciona**: `has_voice_cloning == True`, 6,5–11 s para processar a referência e RTF 0,8–1,25 na geração (mais lento que com a voz pronta, ver abaixo). O binário Rust também clona com os mesmos pesos (3,5× tempo real num trecho curto).
+3. **[fato]** Clonagem exige o repo gated `kyutai/pocket-tts` (login + aceite do termo de uso proibido). Fica fora da v1. Com o token de leitura do dev (conta com o termo aceito) a clonagem **funciona**: `has_voice_cloning == True`, 6,5–11 s para processar a referência e RTF 0,8–1,25 na geração (mais lento que com a voz pronta, ver abaixo). O binário Rust também clona com os mesmos pesos (3,5× tempo real num trecho curto).
 4. **[fato]** Qualidade em PT-BR: o dev ouviu os trechos e disse que o Pocket soa **melhor que o Kokoro** em PT-BR e que a voz `rafael` soa **brasileira**. Ele não deu nota por arquivo.
 5. **[fato]** Velocidade nesta máquina (Ryzen 5 5600H, RTX 3050 4 GB): o Pocket PT de 6 camadas roda a **~2× tempo real em CPU** (RTF 0,44–0,52, ~1 GB de RAM), igual ao Kokoro ONNX (RTF 0,42–0,52). **CUDA não acelera** (RTF 0,45–0,53). O binário Rust oficial chega a **~4× com `--quantize`** e usa ~520 MiB.
 6. **[fato]** A variante `portuguese_24l` ("preview", mais camadas) roda **mais lenta que o tempo real** (RTF 1,6–1,8) e usa 2,3–2,8 GiB. Não serve como padrão.
 7. **[fato]** A única voz pronta em PT é `rafael`, e **a licença do áudio de origem não está documentada** (a página `kyutai/tts-voices` documenta as demais; `cosette` e `jean` vêm de datasets **não comerciais** e não podem entrar, ADR-0003). É o maior risco para entregar `rafael` como voz padrão.
 8. **[fato]** Integração: o **binário Rust oficial** (MIT, 7,9 MB, Windows x86, sem Python nem PyTorch) encaixa no molde de Componente (`core/src/components.rs`) e o mirror encaixa no `ModelSpec` de `core/src/components/models.rs` (repo + revisão + SHA-256, sem token). O Python+PyTorch pesa ~740 MiB no venv só para o TTS.
-9. **[inferência]** Recomendação: **adotar o Pocket TTS no #79 como TTS padrão, em duas fases.** Fase 1: voz pronta, binário Rust como Componente, pesos do mirror, sem clonagem. Fase 2: clonagem opt-in com token do Hugging Face e confirmação de consentimento. O Kokoro fica só como fallback de pesquisa, não como dependência.
+9. **Decisão do dev (16/11/2026) e recomendação:** **adotar o Pocket TTS com as vozes prontas (`rafael` para PT-BR) no lugar do Kokoro.** Binário Rust como Componente, pesos do mirror sem gate, **sem clonagem na v1**. Na escuta, a clonagem só copiou bem a voz de piada do WhatsApp; com a voz normal do dev (48 kHz) o resultado "não parece nada" e ele preferiu a `rafael`. Clonagem vira, no máximo, um ticket "depois", experimental, com consentimento e requisito de qualidade da referência.
 10. Perguntas para o dev no fim.
 
 ## O que existe hoje no Clipes
@@ -93,7 +93,8 @@ Os WAVs ficam em `C:\Users\Windows 11\Videos\Clipes\pocket-tts-escuta\` (a pasta
 | Pocket (`pocket-pt-01..03`, `rafael`) × Kokoro (`kokoro-ptbr-01..03`, `pf_dora`) em PT-BR | **O Pocket soa melhor.** |
 | `rafael` soa PT-BR ou português de Portugal? | **Soa brasileira.** |
 | Pocket 24 camadas (`pocket-pt24l-01-gtarp`) | não comentado |
-| Clone da voz do dev (`pocket-clone-*`) | reproduziu muito bem a voz caricata da referência; ver a seção seguinte |
+| Clone da voz de piada (WhatsApp, `pocket-clone-*`) | reproduziu muito bem ("ficou massa, muito bom") |
+| Clone da voz normal, 48 kHz (`pocket-clone-v3-*`) | **"não parece nada"** (semelhança 1–2 de 5, nota aproximada do relato do dev); ele prefere a `rafael`, "bem melhor" |
 | Kokoro masculina (`kokoro-ptbr-masc-01-gtarp`) | não comentado |
 | Inglês (`pocket-en-04` × `kokoro-en-04`) | não comentado |
 
@@ -113,15 +114,28 @@ Referência: áudio de WhatsApp do dev (`.ogg`, Opus mono 48 kHz, **43 s, já co
 - **[fato]** O dev ouviu: na gravação do WhatsApp ele **fez de propósito uma voz caricata**, e o clone **reproduziu essa voz muito bem** ("ficou massa, muito bom"). Conclusão: a clonagem copia bem o **timbre e o jeito de falar** da referência, inclusive o exagero. Para narrar um canal ele quer uma referência melhor (a voz normal, no microfone, sem WhatsApp). Uma gravação nova virá depois; os resultados dela entram numa atualização deste documento.
 - **[fato]** O README manda "limpar" a amostra, porque a qualidade do áudio de referência é reproduzida. A referência comprimida (Opus do WhatsApp) **pode** ter piorado o resultado, mas não separei esse efeito do da voz caricata.
 
-**Segunda referência (voz normal do dev, `minha-voz-v2.m4a`, AAC 8 kHz mono, ~16 kbps, 53 s, "qualidade de ligação", sem nada acima de 4 kHz).** Recortei 14 s de fala, reamostrei para 24 kHz e gerei `pocket-clone-v2-01..04`. **[fato]** Mesmo com essa referência pobre, os quatro trechos saíram **inteligíveis e completos** (Whisper `small` transcreveu o texto quase inteiro, com 1–2 palavras trocadas por trecho), sem a quebra da referência de 28 s. RTF 0,84–1,17 em CPU. **[inferência]** A taxa de 8 kHz limita o timbre que o modelo captura (o README avisa que a qualidade da amostra é reproduzida), então a semelhança deve ser menor do que com microfone. A escuta do dev desses arquivos **ainda não foi feita**; o dev vai regravar com qualidade melhor e os resultados entram numa atualização.
+**Segunda referência (voz normal, `minha-voz-v2.m4a`, AAC 8 kHz mono, ~16 kbps, 53 s).** Recortei 14 s, 24 kHz, e gerei `pocket-clone-v2-01..04`. **[fato]** Saída inteligível e completa. O dev pediu para ignorar esse arquivo.
 
-**Qualidade mínima de referência que o app deve pedir [inferência, a validar com a gravação nova]:** fala corrida de **10 a 15 s** (o app corta o resto), **mono, 24 kHz ou mais** (o modelo trabalha em 24 kHz; abaixo de 16 kHz o app avisa "qualidade baixa"), sem música, eco ou ventilador, sem compressão forte (preferir WAV ou M4A/MP3 ≥ 128 kbps; evitar áudio de WhatsApp ou de ligação), uma só pessoa falando, microfone a um palmo da boca.
+**Terceira referência (voz normal, `minha-voz-v3.m4a`, AAC 48 kHz mono, 68 kbps, 53 s).** Recortei 14 s, 24 kHz, e gerei `pocket-clone-v3-01..04`. **[fato]** Saída inteligível e completa nos quatro trechos (Whisper `small`, 1–3 palavras trocadas), RTF 0,80–1,57 em CPU. **[fato]** Escuta do dev: **"não parece nada"**; ele prefere a `rafael`.
+
+Comparação das três referências (mesmo modelo, mesmos textos):
+
+| Referência | Qualidade | Inteligível? | Semelhança (dev) |
+|---|---|---|---|
+| WhatsApp, voz de piada (Opus 48 kHz, 28 s, recorte de 15 s) | comprimida, voz caricata | 28 s: **não**; 10 e 15 s: sim | **boa**: copiou bem a voz de piada |
+| v2, voz normal (AAC 8 kHz, 16 kbps, 14 s) | "ligação", nada acima de 4 kHz | sim | não ouvida (o dev pediu para ignorar) |
+| v3, voz normal (AAC 48 kHz, 68 kbps, 14 s) | boa | sim | **"não parece nada"** (1–2 de 5) |
+
+- **[fato]** A qualidade da referência (8 kHz × 48 kHz) **não** decidiu a inteligibilidade: as duas saíram inteligíveis. O que separou "copiou bem" de "não parece nada" foi o **tipo de voz**.
+- **[inferência]** O modelo captura bem timbre e maneirismo **marcantes** (voz caricata) e mal uma voz neutra. Com uma só pessoa e sem comparação cega, isso é hipótese, não regra. Não há evidência de que uma referência melhor resolveria.
+- **Qualidade mínima de referência, se a clonagem voltar [inferência]:** 10–15 s de fala corrida, mono, 24 kHz ou mais (abaixo de 16 kHz, avisar), sem música, eco ou ventilador, sem compressão forte (evitar WhatsApp e ligação), uma só pessoa, prévia obrigatória antes de aceitar. Referências longas (28 s) quebraram.
 
 | Arquivo (pasta de escuta) | Conteúdo |
 |---|---|
 | `pocket-clone-01-gtarp`, `-02-reacao`, `-03-explicativo`, `-04-en` | voz do dev (ref. de 15 s) |
 | `pocket-clone10s-01-gtarp` | voz do dev (ref. de 10 s) |
 | `pocket-clone-v2-01..04` | voz normal do dev, referência de 14 s em 8 kHz |
+| `pocket-clone-v3-01..04` | voz normal do dev, referência de 14 s em 48 kHz |
 
 ## Integração: Python+PyTorch × port Rust × ONNX
 
@@ -139,7 +153,7 @@ Referência: áudio de WhatsApp do dev (`.ogg`, Opus mono 48 kHz, **43 s, já co
 
 
 
-**Recomendação de integração [inferência]:** **B (binário Rust)** para a fase 1. Mantém o worker Python sem PyTorch (a razão do ADR-0004 para o Kokoro continua valendo para o ONNX Runtime do reenquadramento), reaproveita o fluxo de Componentes e é só um exe para atualizar. A fase 2 (clonagem) usa o mesmo exe com os pesos gated. A opção A fica como plano B se o exe falhar numa CPU sem AVX2 ou se aparecer um recurso que só o Python expõe (hoje: `--checkpoint`). Isso exige uma **emenda ao ADR-0004**: o TTS deixa de rodar no worker de ML e passa a ser um Componente executável chamado pelo núcleo.
+**Recomendação de integração [inferência]:** **B (binário Rust)** para a v1. Mantém o worker Python sem PyTorch (a razão do ADR-0004 para o Kokoro continua valendo para o ONNX Runtime do reenquadramento), reaproveita o fluxo de Componentes e é só um exe para atualizar. Uma clonagem futura usaria o mesmo exe com os pesos gated. A opção A fica como plano B se o exe falhar numa CPU sem AVX2 ou se aparecer um recurso que só o Python expõe (hoje: `--checkpoint`). Isso exige uma **emenda ao ADR-0004**: o TTS deixa de rodar no worker de ML e passa a ser um Componente executável chamado pelo núcleo.
 
 ## Download sem login e o termo de uso proibido
 
@@ -148,7 +162,7 @@ Referência: áudio de WhatsApp do dev (`.ogg`, Opus mono 48 kHz, **43 s, já co
 - **[fato]** O download sem login foi testado: sem `HF_TOKEN`, sem `hf auth login`, `HF_HOME` em `%TEMP%`, `TTSModel.load_model("portuguese")` baixou `languages/portuguese/model.safetensors` (219 029 196 bytes, SHA-256 `28e20f32515ba8bd0eaec69671f11f8921414fcdc375aa072fa09f46cc1057c5`) do mirror e **seguiu sem erro**. O pacote só avisa `You are sending unauthenticated requests to the HF Hub`.
 - **[fato]** O pacote cai para o mirror **sem avisar**: `tts_model.py` captura a exceção do download do repo gated e liga `has_voice_cloning = False`. Quem chamar `get_state_for_audio_prompt("meu.wav")` recebe `ValueError(VOICE_CLONING_UNSUPPORTED)`. O Clipes não deve depender desse fallback implícito: o `ModelSpec` deve apontar **direto** para o repo que quer.
 - **[fato]** O CC-BY-4.0 permite copiar e redistribuir os pesos, com atribuição, link da licença e indicação de mudanças. A Kyutai já publica a cópia sem gate. **[inferência]** Hospedar uma cópia nas releases do Clipes é permitido pela licença, mas **desnecessário** para o mirror (o Hugging Face serve sem login, com revisão fixa e SHA-256, como o Whisper) e **desaconselhável** para os pesos com clonagem: seria contornar o gate que a Kyutai escolheu, e isso não está claro na licença. Se o dev quiser hospedar, vale perguntar à Kyutai primeiro.
-- **[fato]** Arquivos de PT que a fase 1 baixaria do mirror (revisão do pacote 4.0.1):
+- **[fato]** Arquivos de PT que a v1 baixaria do mirror (revisão do pacote 4.0.1):
 
   | Arquivo | Revisão | Tamanho (bytes) | SHA-256 |
   |---|---|---|---|
@@ -221,30 +235,29 @@ O **áudio de referência** fica na pasta do Projeto (portátil, ADR-0005) e **n
 
 ## Recomendação
 
-**[inferência]** Adotar o Pocket TTS como TTS padrão da Narração no #79, em duas fases, **com uma condição**: resolver a licença da voz `rafael` (ou aceitar só vozes de licença clara) antes de embarcar uma voz padrão.
+**Adotar o Pocket TTS no lugar do Kokoro** (decisão do dev em 16/11/2026, com base na escuta): vozes prontas, `rafael` para PT-BR, **sem clonagem na v1**. Condição **[inferência]**: esclarecer a licença da voz `rafael` com a Kyutai antes de embarcá-la como voz padrão.
 
-- **Fase 1 (#79):** binário Rust oficial como Componente; pesos de PT do mirror sem gate (revisão fixa, SHA-256); voz `rafael` (ou outra de licença clara); RTF e RAM medidos; sem clonagem. Kokoro fora da v1.
-- **Fase 2 (ticket novo):** clonagem opt-in, com os pesos gated, token do Hugging Face no cofre de chaves, termo exibido, confirmação de consentimento por arquivo e registro no Projeto.
+- **v1 (#79):** binário Rust oficial como Componente; pesos de PT do mirror sem gate (revisão fixa, SHA-256, sem token); Kokoro fora.
+- **Depois (ticket novo, opcional, experimental):** clonagem com os pesos gated, token do Hugging Face no cofre, termo exibido, confirmação de consentimento por arquivo e requisito de qualidade da referência. A evidência deste spike para priorizá-la é fraca: só a voz de piada foi bem copiada.
 - **Não adotar:** o Phonon 40m (CC-BY-NC), o `_24l` como padrão e o export ONNX não oficial como caminho principal.
 
 ## Critérios de aceite novos propostos para o #79
 
 Substituem o primeiro critério ("Kokoro-82M no worker, de preferência via ONNX Runtime sem PyTorch") e ajustam os demais.
 
-- [ ] Pocket TTS (PT) como TTS padrão: binário Rust oficial como Componente (versão e SHA-256 fixos) e pesos do mirror `kyutai/pocket-tts-without-voice-cloning` como `ModelSpec` (revisão fixa, SHA-256, **sem token**), baixados só depois do consentimento do usuário.
-- [ ] Emenda ao ADR-0004: o TTS roda como Componente executável chamado pelo núcleo, fora do worker Python, e justifica deixar o Kokoro/ONNX de lado.
-- [ ] Voz padrão com **licença documentada**. Nenhuma voz CC-BY-NC na lista. Se `rafael` não tiver licença esclarecida pela Kyutai, ela não entra.
+- [ ] Pocket TTS (vozes prontas) como TTS padrão: binário Rust oficial como Componente (versão e SHA-256 fixos) e pesos do mirror `kyutai/pocket-tts-without-voice-cloning` como `ModelSpec` (revisão fixa, SHA-256, **sem token e sem login**), baixados só depois do consentimento do usuário.
+- [ ] Emenda ao ADR-0004: o TTS roda como Componente executável chamado pelo núcleo, fora do worker Python, e deixa o Kokoro/ONNX de lado.
+- [ ] Voz PT-BR padrão `rafael`, **só se a licença do áudio de origem for esclarecida pela Kyutai**. Nenhuma voz CC-BY-NC na lista (`cosette` e `jean` ficam de fora).
 - [ ] Tela de Componentes mostra a licença (MIT código, CC-BY-4.0 pesos), a fonte e o **texto de uso proibido da Kyutai**, com aceite registrado. Atribuição em "Sobre" e no `THIRD_PARTY_NOTICES.md`.
 - [ ] Só lê Roteiro aprovado (trava no núcleo, #73).
 - [ ] Vozes PT-BR e EN, com a voz padrão no Perfil de canal (#18).
-- [ ] Narração gerada **por bloco** do Roteiro, para a regeneração de um bloco não custar a Narração inteira.
-- [ ] RTF e RAM em CPU e na RTX 3050 medidos e registrados no PR, e um teste de escuta em PT-BR e EN. Referência desta pesquisa: RTF ~0,5 em CPU, ~1 GB de RAM, CUDA sem ganho.
-- [ ] Teste de **fala longa** (≥3 min) escutado pelo dev antes de fechar o ticket.
-- [ ] **Não** inclui clonagem. Ela vira o ticket da fase 2, com: pesos gated via token do Hugging Face no cofre; confirmação de consentimento por arquivo; tabela `voice_consent` no Projeto; marca na lista de vozes; lembrete do rótulo de conteúdo sintético na exportação; nada disso no relato de problemas; referência cortada para ~10–15 s com **prévia obrigatória** antes de aceitar (28 s quebrou a geração neste spike).
+- [ ] Narração gerada **por bloco** do Roteiro, para regenerar um bloco sem refazer tudo.
+- [ ] RTF e RAM em CPU e na RTX 3050 medidos e registrados no PR, e teste de escuta em PT-BR e EN. Referência: RTF ~0,5 em CPU, ~1 GB de RAM, CUDA sem ganho.
+- [ ] Teste de **fala longa** (3 min ou mais) escutado pelo dev antes de fechar o ticket.
+- [ ] **Sem clonagem na v1.** Nenhum campo para importar áudio de referência. Se o dev quiser, vira ticket separado, experimental, com: pesos gated via token no cofre; confirmação de consentimento por arquivo e tabela `voice_consent` (proposta acima); referência de 10–15 s, mono, 24 kHz ou mais, com prévia; marca na lista de vozes; lembrete do rótulo de conteúdo sintético na exportação; nada disso no relato de problemas.
 
 ## Perguntas para o dev
 
-1. A clonagem fica para a fase 2 (outro ticket) ou entra no #79? A recomendação é fase 2: o gate e o token pedem mais UI e o termo da Kyutai é o ponto mais sensível.
-2. Se a Kyutai não esclarecer a licença da `rafael`, aceitamos lançar sem voz PT-BR pronta (só clonagem) ou escolhemos outra voz de licença clara?
-3. Aceita a emenda ao ADR-0004 (TTS como Componente executável fora do worker)?
-4. Quer pedir à Kyutai a licença da `rafael` (issue pública em `kyutai-labs/pocket-tts`)? Posso redigir o texto.
+1. Se a Kyutai não esclarecer a licença da `rafael`, lançamos com outra voz de licença clara ou esperamos a resposta? Posso redigir a issue pública em `kyutai-labs/pocket-tts` perguntando a licença e o autor.
+2. Aceita a emenda ao ADR-0004 (TTS como Componente executável fora do worker)?
+3. Abrimos o ticket "depois" da clonagem experimental, ou descartamos?
