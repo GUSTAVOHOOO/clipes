@@ -4,10 +4,12 @@ import { LanguageContext, useText, type Language } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { fill } from './selectionFormat';
+import { Angles, type Angle } from './Angles';
 
 type Job = { id: number; state: string | null; code: string | null; violations: string[] };
-type Block = { id: number; position: number; title: string; narration: string | null; status: 'pendente' | 'aprovado'; edited: boolean; job: Job | null };
+type Block = { id: number; position: number; title: string; narration: string | null; status: 'pendente' | 'aprovado'; stale: boolean; edited: boolean; job: Job | null };
 type Doc = {
+  angle: Angle | null;
   languageRequired: boolean; busy: boolean; narrationAllowed: boolean; job: Job | null;
   current: { generation: number; blocks: Block[]; totalChars: number; pending: number; approved: number; complete: boolean } | null;
   limits: { narrationChars: number; scriptChars: number };
@@ -21,7 +23,7 @@ const texts = {
     title: 'Roteiro da Narração', generate: 'Sugerir Roteiro', regenerateAll: 'Sugerir de novo', generating: 'Gerando…',
     language: 'Idioma do Roteiro', languageHint: 'O idioma deste Corte não é claro. Escolha PT-BR ou EN.',
     remaining: 'Faltam {n} de {total} blocos para aprovar.', allApproved: 'Todos os blocos aprovados: a Narração está liberada.', locked: 'A Narração só é liberada com todos os blocos aprovados.',
-    block: 'Bloco {n}', pending: 'Pendente', approved: 'Aprovado', edit: 'Salvar edição', approve: 'Aprovar bloco', regenerate: 'Gerar bloco de novo', text: 'Texto do bloco {n}',
+    block: 'Bloco {n}', pending: 'Pendente', approved: 'Aprovado', stale: 'desatualizado (ângulo mudou)', edit: 'Salvar edição', approve: 'Aprovar bloco', regenerate: 'Gerar bloco de novo', text: 'Texto do bloco {n}',
     counter: '{used}/{max} caracteres', total: 'Total do Roteiro: {used}/{max} caracteres', edited: 'com sua edição', saved: 'Edição salva.', noText: 'Este bloco ainda não tem texto.',
     free: 'sem custo (modelo local)', unknown: 'custo desconhecido', quota: 'consome a cota do plano', range: 'entre US$ {min} e US$ {max}',
     confirmTitle: 'Usar o Provedor pago?', confirmBody: 'O texto do Corte vai ao Provedor escolhido. Custo estimado: {cost}.', cancel: 'Cancelar', confirm: 'Confirmar e gerar',
@@ -33,7 +35,7 @@ const texts = {
     title: 'Narration script', generate: 'Suggest script', regenerateAll: 'Suggest again', generating: 'Generating…',
     language: 'Script language', languageHint: 'This Clip’s language is unclear. Pick PT-BR or EN.',
     remaining: '{n} of {total} blocks left to approve.', allApproved: 'All blocks approved: the Narration is unlocked.', locked: 'The Narration unlocks only when every block is approved.',
-    block: 'Block {n}', pending: 'Pending', approved: 'Approved', edit: 'Save edit', approve: 'Approve block', regenerate: 'Regenerate block', text: 'Text of block {n}',
+    block: 'Block {n}', pending: 'Pending', approved: 'Approved', stale: 'outdated (angle changed)', edit: 'Save edit', approve: 'Approve block', regenerate: 'Regenerate block', text: 'Text of block {n}',
     counter: '{used}/{max} characters', total: 'Script total: {used}/{max} characters', edited: 'with your edit', saved: 'Edit saved.', noText: 'This block has no text yet.',
     free: 'free (local model)', unknown: 'unknown cost', quota: 'uses the plan quota', range: 'between US$ {min} and US$ {max}',
     confirmTitle: 'Use the paid Provider?', confirmBody: 'The Clip text is sent to the chosen Provider. Estimated cost: {cost}.', cancel: 'Cancel', confirm: 'Confirm and generate',
@@ -106,8 +108,9 @@ export function Script({ candidate }: { candidate: number }) {
       </select>
       <span className="text-xs text-fg-2">{t.languageHint}</span>
     </label>}
+    <Angles key={candidate} candidate={candidate} language={language} selected={doc.angle} disabled={busy} onChanged={async () => { setDoc(await coreDispatch<Doc>('script.get', { candidate })); }} />
     <div className="flex flex-wrap items-center gap-2">
-      <Button variante={cur ? 'secundario' : 'primario'} tamanho="sm" disabled={busy} carregando={busy} onClick={() => void start(null)}>{busy ? t.generating : cur ? t.regenerateAll : t.generate}</Button>
+      <Button variante={cur ? 'secundario' : 'primario'} tamanho="sm" disabled={busy || !doc.angle} carregando={busy} onClick={() => void start(null)}>{busy ? t.generating : cur ? t.regenerateAll : t.generate}</Button>
       {cur && <span role="status" data-script-remaining data-pending={cur.pending} className="text-sm text-fg-2">{cur.pending === 0 ? t.allApproved : fill(t.remaining, { n: cur.pending, total: cur.blocks.length })}</span>}
     </div>
     {cur && cur.pending > 0 && <p className="text-xs text-fg-2">{t.locked}</p>}
@@ -137,6 +140,7 @@ function BlockRow({ block, t, max, disabled, onSave, onApprove, onRegenerate }: 
     <div className="flex flex-wrap items-center gap-2 text-sm">
       <span className="font-medium">{fill(t.block, { n: block.position })} · {block.title}</span>
       <span data-script-status className={approved ? 'text-fg' : 'text-fg-2'}>{approved ? t.approved : t.pending}</span>
+      {block.stale && <span className="text-xs text-fg-2">{t.stale}</span>}
       {block.edited && <span className="text-xs text-fg-2">{t.edited}</span>}
     </div>
     {block.narration === null ? <p className="text-sm text-fg-2">{t.noText}</p> : <div className="flex flex-col gap-1 text-sm">

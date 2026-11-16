@@ -821,6 +821,13 @@ try {
   await kindReview.focus();
   await page.keyboard.press('a');
   const script = kindReview.locator('[data-script]');
+  await script.getByRole('button', { name: 'Sugerir Roteiro', exact: true }).waitFor();
+  assert.equal(await script.getByRole('button', { name: 'Sugerir Roteiro', exact: true }).isEnabled(), false, 'o Roteiro exige um ângulo');
+  const angles = script.locator('[data-angles]');
+  await angles.getByRole('button', { name: 'Sugerir ângulos', exact: true }).click();
+  await angles.getByText('Custo da escolha', { exact: true }).waitFor();
+  await angles.screenshot({ path: 'shots/angles-pt-BR.png' });
+  await angles.getByRole('button', { name: 'Escolher Custo da escolha', exact: true }).click();
   await script.getByRole('button', { name: 'Sugerir Roteiro' }).click();
   await script.locator('[data-script-block]').first().waitFor();
   assert.equal(await script.locator('[data-script-block]').count(), 3);
@@ -845,6 +852,22 @@ try {
   await second.getByText('Nova fala do bloco').or(second.locator('textarea')).first().waitFor();
   await page.waitForFunction(() => document.querySelector('[data-script-block]:nth-child(2) textarea')?.value.startsWith('Nova fala'));
   await page.screenshot({ path: 'shots/script-pt-BR.png', fullPage: true });
+  await angles.locator('summary').click();
+  await angles.getByLabel('Nome do ângulo').fill('Meu ponto de vista');
+  await angles.getByLabel('Promessa em uma frase').fill('Entenda o efeito de uma escolha.');
+  await angles.getByRole('button', { name: 'Usar meu ângulo' }).click();
+  const changeAngle = page.getByRole('alertdialog', { name: 'Trocar o ângulo?' });
+  await changeAngle.waitFor();
+  await changeAngle.getByRole('button', { name: 'Cancelar', exact: true }).click();
+  await changeAngle.waitFor({ state: 'hidden' });
+  assert.equal(await script.getByText('desatualizado (ângulo mudou)', { exact: true }).count(), 0);
+  await angles.getByRole('button', { name: 'Usar meu ângulo' }).click();
+  await changeAngle.getByRole('button', { name: 'Trocar ângulo', exact: true }).click();
+  await changeAngle.waitFor({ state: 'hidden' });
+  await script.getByText('desatualizado (ângulo mudou)', { exact: true }).first().waitFor();
+  assert.equal(await script.getByText('desatualizado (ângulo mudou)', { exact: true }).count(), 3);
+  await script.locator('[data-script-block]').first().getByRole('button', { name: 'Aprovar bloco' }).click();
+  assert.equal(await script.getByText('desatualizado (ângulo mudou)', { exact: true }).count(), 2);
   // Lote de Fontes (#56): montar, confirmar custo, pausar, retomar Fonte e teto.
   await page.goto(`${url}?source-test=1&batch-test=1&batch-paid=1`);
   const batches = page.getByRole('region', { name: 'Lote de Fontes' });
