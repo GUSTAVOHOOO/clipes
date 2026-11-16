@@ -340,6 +340,7 @@ try {
   await page.getByLabel('URL do vídeo').fill('https://example.com/age-test');
   await page.getByRole('button', {name:'Baixar por URL'}).click();
   await page.getByText(/Este vídeo tem restrição de idade/).waitFor();
+  await page.getByRole('button', {name:'Importar arquivo local'}).waitFor();
   await page.getByLabel('URL do vídeo').fill('https://example.com/video');
   await page.getByLabel('Permissão').selectOption('none');
   await page.getByRole('button', {name:'Importar Fonte'}).click();

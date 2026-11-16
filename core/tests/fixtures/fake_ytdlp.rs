@@ -14,6 +14,22 @@ fn main() {
         return;
     }
 
+    if args.iter().any(|a| a == "--skip-download") && !args.iter().any(|a| a == "--write-subs") {
+        // Detecção prévia (#201): só metadados, sem cookies, sem baixar nada.
+        assert!(args.iter().any(|a| a == "--ignore-config"));
+        assert!(args.iter().any(|a| a == "--ignore-no-formats-error"));
+        assert!(args.iter().any(|a| a == "--no-playlist"));
+        assert!(!args.iter().any(|a| a.contains("cookies")));
+        assert!(!args.iter().any(|a| a == "--no-simulate"));
+        assert!(args.windows(2).any(|w| w == ["--print", "%(id)s|%(age_limit)s|%(availability)s|%(live_status)s|%(duration)s"]));
+        let end = args.iter().position(|a| a == "--").unwrap();
+        let url = &args[end + 1];
+        if url.ends_with("probe-age") { println!("age123|18|needs_auth|not_live|120"); }
+        else if url.ends_with("probe-net") { eprintln!("ERROR: Unable to download webpage: <urlopen error> C:/Users/Alice/secret"); std::process::exit(1); }
+        else if url.ends_with("probe-junk") { println!("saida inesperada sem campos"); }
+        else { println!("video123|0|public|not_live|120"); }
+        return;
+    }
     if args.iter().any(|a| a == "--skip-download") {
         // Modo do chat da live (#151): só o replay, nunca a mídia.
         assert!(args.iter().any(|a| a == "--write-subs"));
