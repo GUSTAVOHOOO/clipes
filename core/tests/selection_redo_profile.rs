@@ -163,6 +163,8 @@ fn redo_with_another_profile_confirms_vetoes_records_and_never_switches_by_itsel
         "projects.create",
         json!({"parent": root.path(), "name": "Canal"}),
     );
+    // Este teste exercita quatro janelas em 40 min (sobreposição de 3 min).
+    call("channel_profile.set", json!({"maxUs": 180_000_000}));
     let source = seed();
     call("transcription.segment", json!({"source_id": source}));
 
