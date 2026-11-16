@@ -643,6 +643,22 @@ try {
     await review.getByRole('button', { name: L.export }).click();
     await review.getByRole('alert').getByText(L.exportExists).waitFor();
     await page.evaluate(() => { const u = new URL(location.href); u.searchParams.delete('export-exists'); history.replaceState(null, '', u); });
+    // Glifo ausente (#196): exibe palavra, codepoint, Frase e instante, com atalho para transcription.correct.
+    if (L.lang === 'pt-BR') {
+      await page.evaluate(() => { const u = new URL(location.href); u.searchParams.set('export-glyph-missing', '1'); history.replaceState(null, '', u); });
+      await review.getByRole('button', { name: L.export }).click();
+      await review.getByRole('alert').getByText(/Sem glifo na fonte para “来” \(来 · U\+6765 · Frase 1 · 01:30\)/).waitFor();
+      await review.getByRole('button', { name: 'Corrigir palavra' }).click();
+      const fixDialog = page.getByRole('alertdialog', { name: 'Corrigir palavra na Transcrição' });
+      await fixDialog.waitFor();
+      await fixDialog.getByLabel('Texto da palavra').fill('corrigido');
+      await fixDialog.getByRole('button', { name: 'Salvar correção' }).click();
+      await fixDialog.waitFor({ state: 'hidden' });
+      await review.locator('[data-export-glyph-fixed]').waitFor();
+      await review.getByRole('button', { name: L.export }).click();
+      await review.getByText(L.exportCompleted).waitFor();
+      await page.evaluate(() => { const u = new URL(location.href); u.searchParams.delete('export-glyph-missing'); history.replaceState(null, '', u); });
+    }
     await review.focus();
     // ] e [ movem o começo e não abrem as gavetas globais dentro da revisão.
     await page.keyboard.press('[');

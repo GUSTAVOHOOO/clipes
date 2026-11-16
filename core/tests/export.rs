@@ -8,6 +8,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+static TEST_LOCK: Mutex<()> = Mutex::new(());
+
 fn call(name: &str, args: Value) -> Value {
     dispatch(name, args, &mut |_| {}).unwrap()
 }
@@ -33,6 +35,7 @@ fn settled(id: i64) -> Value {
 
 #[test]
 fn export_validates_sentences_uses_effective_text_and_is_a_local_queue_job() {
+    let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let root = tempfile::tempdir().unwrap();
     let data = root.path().join("data");
     std::env::set_var("CLIPES_DATA_DIR", &data);
@@ -187,5 +190,146 @@ fn export_validates_sentences_uses_effective_text_and_is_a_local_queue_job() {
     // O caminho da Fonte original é verificado a cada execução; o proxy não participa.
     fs::write(&media, b"changed!").unwrap();
     fail("export.start", request, "source_changed");
+    call("projects.close", json!({}));
+}
+
+#[test]
+fn export_blocks_missing_glyphs_before_ffmpeg_and_recovers_after_correction() {
+    let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let root = tempfile::tempdir().unwrap();
+    let data = root.path().join("data");
+    fs::create_dir_all(&data).unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", &data);
+    call(
+        "projects.create",
+        json!({"parent":root.path(),"name":"CanalGlifo"}),
+    );
+    let media = root.path().join("original.mp4");
+    fs::write(&media, b"original").unwrap();
+    let mut hash = Sha256::new();
+    for _ in 0..3 {
+        hash.update(b"original");
+    }
+    let source = with_writer(|c| {
+        c.execute("INSERT INTO sources(path,size,duration_us,partial_hash,metadata,permission,audio_track) VALUES (?1,8,3000000,?2,'{}','{}',1)", (media.to_str().unwrap(), format!("{:x}",hash.finalize())))?;
+        let source = c.last_insert_rowid();
+        c.execute("INSERT INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,state,duration_us) VALUES (?1,1,'local','m','r','c','complete',3000000)", [source])?;
+        let transcript = c.last_insert_rowid();
+        for (position, text, start, end) in [
+            (0, " olá.", 0, 400_000),
+            (1, " 来", 500_000, 900_000),
+            (2, " fim.", 1_000_000, 1_900_000),
+        ] {
+            c.execute("INSERT INTO transcript_words(transcript_id,position,kind,text,start_us,end_us,language) VALUES (?1,?2,'word',?3,?4,?5,'pt')", (transcript,position,text,start,end))?;
+        }
+        Ok(source)
+    }).unwrap();
+    call("transcription.segment", json!({"source_id":source}));
+
+    fs::write(
+        data.join("component-settings.json"),
+        json!({"data_dir":data,"cache_dir":data.join("cache"),"cache_limit_bytes":1_000_000,"ffmpeg_path":env!("CARGO_BIN_EXE_fake-export")}).to_string(),
+    )
+    .unwrap();
+
+    // Aviso por palavra em export.captions
+    let captions = call(
+        "export.captions",
+        json!({"source_id":source,"start_id":1,"end_id":2}),
+    );
+    let cap_missing = captions["missingGlyphs"].as_array().unwrap();
+    assert_eq!(cap_missing.len(), 1);
+    assert_eq!(cap_missing[0]["position"], 1);
+    assert_eq!(cap_missing[0]["sentence_id"], 2);
+    assert_eq!(cap_missing[0]["word"], "来");
+    assert_eq!(cap_missing[0]["char"], "来");
+    assert_eq!(cap_missing[0]["codepoint"], "U+6765");
+    assert_eq!(cap_missing[0]["start_us"], 500_000);
+    assert_eq!(captions["words"][1]["missingGlyph"]["codepoint"], "U+6765");
+
+    // Bloqueio imediato em export.start antes de enfileirar ou chamar o FFmpeg (mesmo com CLIPES_FAKE_NO_ASS=1).
+    std::env::set_var("CLIPES_FAKE_NO_ASS", "1");
+    let output = root.path().join("corte.mp4");
+    let err = dispatch(
+        "export.start",
+        json!({"source_id":source,"start_id":1,"end_id":2,"output":output}),
+        &mut |_| {},
+    )
+    .unwrap_err();
+    assert_eq!(err.code, "export_glyph_missing");
+    assert!(err.message.contains("来"), "{}", err.message);
+    assert!(err.message.contains("Frase 2"), "{}", err.message);
+    let usage = err.usage.expect("usage details");
+    assert_eq!(usage["missing_glyphs"][0]["position"], 1);
+    assert_eq!(usage["missing_glyphs"][0]["sentence_id"], 2);
+    assert_eq!(usage["missing_glyphs"][0]["word"], "来");
+    assert_eq!(usage["missing_glyphs"][0]["char"], "来");
+    assert_eq!(usage["missing_glyphs"][0]["codepoint"], "U+6765");
+    assert_eq!(usage["missing_glyphs"][0]["start_us"], 500_000);
+    assert_eq!(call("jobs.list", json!({})), json!([]));
+    std::env::remove_var("CLIPES_FAKE_NO_ASS");
+
+    // Se a palavra inválida entrar após o enfileiramento, export::run também falha antes do FFmpeg e grava em export.status.
+    call(
+        "transcription.correct",
+        json!({"source_id":source,"position":1,"text":"certo"}),
+    );
+    let blocker_out = root.path().join("blocker.mp4");
+    let state_dir = root.path().join("fake-state");
+    fs::create_dir_all(&state_dir).unwrap();
+    std::env::set_var("CLIPES_FAKE_EXPORT_STATE", &state_dir);
+    let blocker = call(
+        "export.start",
+        json!({"source_id":source,"start_id":1,"end_id":1,"output":blocker_out}),
+    )["job"]
+        .as_i64()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !state_dir.join("started").exists() {
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let queued_job = call(
+        "export.start",
+        json!({"source_id":source,"start_id":1,"end_id":2,"output":output}),
+    )["job"]
+        .as_i64()
+        .unwrap();
+    call(
+        "transcription.correct",
+        json!({"source_id":source,"position":1,"text":"来"}),
+    );
+    std::env::set_var("CLIPES_FAKE_NO_ASS", "1");
+    fs::write(state_dir.join("continue"), b"go").unwrap();
+    let blocker_status = settled(blocker);
+    assert_eq!(blocker_status["state"], "completed", "{blocker_status}");
+    let failed_status = settled(queued_job);
+    assert_eq!(failed_status["state"], "failed");
+    assert_eq!(failed_status["error"]["code"], "export_glyph_missing");
+    assert_eq!(
+        failed_status["error"]["usage"]["missing_glyphs"][0]["codepoint"],
+        "U+6765"
+    );
+    assert_eq!(
+        failed_status["error"]["usage"]["missing_glyphs"][0]["sentence_id"],
+        2
+    );
+    assert!(!output.exists());
+    std::env::remove_var("CLIPES_FAKE_NO_ASS");
+    std::env::remove_var("CLIPES_FAKE_EXPORT_STATE");
+
+    // Após corrigir a palavra com transcription.correct, o export conclui com sucesso.
+    call(
+        "transcription.correct",
+        json!({"source_id":source,"position":1,"text":"mundo"}),
+    );
+    let ok_job = call(
+        "export.start",
+        json!({"source_id":source,"start_id":1,"end_id":2,"output":output}),
+    )["job"]
+        .as_i64()
+        .unwrap();
+    assert_eq!(settled(ok_job)["state"], "completed");
+    assert!(output.exists());
     call("projects.close", json!({}));
 }

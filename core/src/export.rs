@@ -1,6 +1,7 @@
 //! Export local de Cortes (#59), independente do Tauri e de Provedores.
 pub mod captions;
 pub mod encoder;
+mod font_cmap;
 pub mod pipeline;
 pub mod render;
 
@@ -63,6 +64,10 @@ ALTER TABLE exports ADD COLUMN fallback_from TEXT;
 ALTER TABLE exports ADD COLUMN fallback_reason TEXT;
 " } }
 
+inventory::submit! { projects::Migration { id:"0196_001_export_error_details", sql:"
+ALTER TABLE exports ADD COLUMN error_details TEXT;
+" } }
+
 struct Target {
     start_us: i64,
     end_us: i64,
@@ -70,10 +75,32 @@ struct Target {
     words: Vec<CaptionWord>,
     styled: Vec<StyledWord>,
     source_starts: Vec<i64>,
+    sentence_ids: Vec<Option<i64>>,
     segments: Vec<KeptSegment>,
     active_cuts: Vec<(i64, i64)>,
     transcript: i64,
     crop: Vec<CropSegment>,
+}
+
+impl Target {
+    fn missing_glyphs(&self, style: &Style) -> Vec<captions::MissingGlyph> {
+        let font_bytes = style.font_bytes();
+        captions::check_words_glyphs(
+            self.styled
+                .iter()
+                .zip(self.source_starts.iter().zip(&self.sentence_ids))
+                .filter(|(w, _)| w.word.start_us < self.output_duration_us)
+                .map(
+                    |(w, (&source_start_us, &sentence_id))| captions::GlyphWord {
+                        position: w.position,
+                        sentence_id,
+                        text: &w.word.text,
+                        start_us: source_start_us,
+                    },
+                ),
+            font_bytes,
+        )
+    }
 }
 fn bounds() -> CoreError {
     error(
@@ -169,7 +196,7 @@ fn target(request: &ExportRequest, frozen: Option<FrozenTarget>) -> Result<Targe
             return Ok(Err(bounds()));
         }
         // Bordas congeladas podem anteceder a edição atual; busque pelo tempo na Transcrição.
-        let mut q=c.prepare(&format!("SELECT {},w.start_us,w.end_us,w.position,o.document FROM transcript_words w LEFT JOIN caption_word_overrides o ON o.transcript_id=w.transcript_id AND o.position=w.position WHERE w.transcript_id=?1 AND w.kind='word' AND ((?6=1 AND w.end_us>?4 AND w.start_us<?5) OR (?6=0 AND w.position BETWEEN ?2 AND ?3)) ORDER BY w.position",crate::corrections::EFFECTIVE_TEXT))?;
+        let mut q=c.prepare(&format!("SELECT {},w.start_us,w.end_us,w.position,o.document,(SELECT s.id FROM sentences s WHERE s.transcript_id=w.transcript_id AND w.position BETWEEN s.first_position AND s.last_position LIMIT 1) FROM transcript_words w LEFT JOIN caption_word_overrides o ON o.transcript_id=w.transcript_id AND o.position=w.position WHERE w.transcript_id=?1 AND w.kind='word' AND ((?6=1 AND w.end_us>?4 AND w.start_us<?5) OR (?6=0 AND w.position BETWEEN ?2 AND ?3)) ORDER BY w.position",crate::corrections::EFFECTIVE_TEXT))?;
         let clamp = edited.is_some();
         let rows = q
             .query_map((transcript, first, last, start_us, end_us, clamp), |r| {
@@ -183,18 +210,21 @@ fn target(request: &ExportRequest, frozen: Option<FrozenTarget>) -> Result<Targe
                         .transpose()
                         .map_err(|_| rusqlite::Error::InvalidQuery)?
                         .unwrap_or_default(),
+                    r.get::<_, Option<i64>>(5)?,
                 ))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         let mut styled = Vec::with_capacity(rows.len());
         let mut source_starts = Vec::with_capacity(rows.len());
-        for (text, start, end, position, overrides) in rows {
+        let mut sentence_ids = Vec::with_capacity(rows.len());
+        for (text, start, end, position, overrides, sentence_id) in rows {
             let cs = if clamp { start.max(start_us) } else { start };
             let ce = if clamp { end.min(end_us) } else { end };
             let Some((mapped_start, mapped_end)) = splice.remap_word(cs, ce) else {
                 continue;
             };
             source_starts.push(cs);
+            sentence_ids.push(sentence_id);
             styled.push(StyledWord {
                 word: CaptionWord {
                     text,
@@ -217,6 +247,7 @@ fn target(request: &ExportRequest, frozen: Option<FrozenTarget>) -> Result<Targe
             words,
             styled,
             source_starts,
+            sentence_ids,
             segments: splice.segments,
             active_cuts,
             transcript,
@@ -240,11 +271,13 @@ fn cmd_captions(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let target = target(&request, None)?;
     let words = captions::sanitize(&target.words)?;
     let prepared = caption_style::prepare(&target.styled, &style, target.output_duration_us)?;
+    let missing = target.missing_glyphs(&style);
     let editable: Vec<_> = target
         .styled
         .iter()
         .zip(target.source_starts.iter())
         .map(|(w, source_start_us)| {
+            let missing_glyph = missing.iter().find(|m| m.position == w.position);
             json!({
                 "position": w.position,
                 "text": w.word.text,
@@ -252,18 +285,32 @@ fn cmd_captions(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                 "endUs": w.word.end_us,
                 "sourceStartUs": source_start_us,
                 "overrides": w.overrides,
+                "missingGlyph": missing_glyph,
             })
         })
         .collect();
     Ok(
-        json!({"ass":prepared.ass,"lines":captions::layout(&words),"start_us":target.start_us,"end_us":target.end_us,"durationUs":target.output_duration_us,"segments":target.segments,"cues":prepared.cues,"style":prepared.style,"emojiRemoved":prepared.emoji_removed,"words":editable,"transcriptId":target.transcript}),
+        json!({"ass":prepared.ass,"lines":captions::layout(&words),"start_us":target.start_us,"end_us":target.end_us,"durationUs":target.output_duration_us,"segments":target.segments,"cues":prepared.cues,"style":prepared.style,"emojiRemoved":prepared.emoji_removed,"words":editable,"transcriptId":target.transcript,"missingGlyphs":missing}),
     )
 }
 
-fn request_style(v: &Value) -> Result<Style, CoreError> {
-    match v["clip_id"].as_i64() {
+fn style_for_clip(clip_id: Option<i64>) -> Result<Style, CoreError> {
+    match clip_id {
         Some(id) => caption_style::store::style(ClipId(id)),
         None => Ok(Style::preset(Preset::Vertical)),
+    }
+}
+
+fn request_style(v: &Value) -> Result<Style, CoreError> {
+    style_for_clip(v["clip_id"].as_i64())
+}
+
+fn check_target_glyphs(target: &Target, style: &Style) -> Result<(), CoreError> {
+    let missing = target.missing_glyphs(style);
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(glyph_missing_error(&style.font, missing))
     }
 }
 
@@ -272,15 +319,17 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let mut request: StartRequest = serde_json::from_value(v).map_err(|_| bounds())?;
     // Ignora qualquer snapshot enviado pela UI; o núcleo resolve o documento atual.
     let resolved = target(&request.cut, None)?;
+    let style = style_for_clip(request.cut.clip_id)?;
     request.resolved_bounds = request
         .cut
         .clip_id
         .map(|_| (resolved.start_us, resolved.end_us));
-    request.resolved_silences = request.cut.clip_id.map(|_| resolved.active_cuts);
-    request.resolved_crop = request.cut.clip_id.map(|_| resolved.crop);
+    request.resolved_silences = request.cut.clip_id.map(|_| resolved.active_cuts.clone());
+    request.resolved_crop = request.cut.clip_id.map(|_| resolved.crop.clone());
     render::validate_output(&request.output)?;
     let project = current_path()?;
     let _ = crate::jobs::preview::source(request.cut.source_id, &project)?;
+    check_target_glyphs(&resolved, &style)?;
     if crate::components::cache_settings()?.2.is_none() {
         return Err(error("component_missing", "Instale o Componente FFmpeg."));
     }
@@ -309,12 +358,20 @@ fn cmd_status(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .as_i64()
         .ok_or_else(|| error("invalid_job", "Tarefa inválida."))?;
     projects::with_reader(|c| {
-        c.query_row("SELECT j.state,j.progress,e.request,e.error_code,e.error_message,e.encoder,e.fallback_from,e.fallback_reason FROM exports e JOIN jobs j ON j.id=e.job_id WHERE j.id=?1",[id],|r| {
+        c.query_row("SELECT j.state,j.progress,e.request,e.error_code,e.error_message,e.error_details,e.encoder,e.fallback_from,e.fallback_reason FROM exports e JOIN jobs j ON j.id=e.job_id WHERE j.id=?1",[id],|r| {
         let request:String=r.get(2)?;
         let request:Value=serde_json::from_str(&request).unwrap_or(Value::Null);
         let code:Option<String>=r.get(3)?;
         let message:Option<String>=r.get(4)?;
-        Ok(json!({"job":id,"state":r.get::<_,String>(0)?,"progress":r.get::<_,i64>(1)?,"output":request["output"],"error":code.map(|code|json!({"code":code,"message":message}))}))
+        let details:Option<String>=r.get(5)?;
+        let error=code.map(|code| {
+            let mut obj=json!({"code":code,"message":message});
+            if let Some(usage)=details.and_then(|raw| serde_json::from_str::<Value>(&raw).ok()) {
+                obj["usage"]=usage;
+            }
+            obj
+        });
+        Ok(json!({"job":id,"state":r.get::<_,String>(0)?,"progress":r.get::<_,i64>(1)?,"output":request["output"],"error":error}))
     })
     })
 }
@@ -363,6 +420,7 @@ pub(crate) fn run(
             .resolved_bounds
             .map(|b| (b, request.resolved_silences.clone().unwrap_or_default()));
         let target = target(&request.cut, frozen)?;
+        check_target_glyphs(&target, &style)?;
         let prepared = caption_style::prepare(&target.styled, &style, target.output_duration_us)?;
         let (source, _, audio, _, _) =
             crate::jobs::preview::source(request.cut.source_id, project)?;
@@ -417,13 +475,19 @@ pub(crate) fn run(
         }
         result.map(|outcome| used = Some(outcome))
     })();
+    let details = result
+        .as_ref()
+        .err()
+        .and_then(|e| e.usage.as_ref())
+        .and_then(|u| serde_json::to_string(u).ok());
     projects::with_writer(|c| {
         c.execute(
-            "UPDATE exports SET error_code=?2,error_message=?3,encoder=?4,fallback_from=?5,fallback_reason=?6 WHERE job_id=?1",
+            "UPDATE exports SET error_code=?2,error_message=?3,error_details=?4,encoder=?5,fallback_from=?6,fallback_reason=?7 WHERE job_id=?1",
             (
                 id,
                 result.as_ref().err().map(|e| &e.code),
                 result.as_ref().err().map(|e| &e.message),
+                details.as_deref(),
                 used.as_ref().map(|o| &o.encoder),
                 used.as_ref().and_then(|o| o.fallback.as_ref()).map(|f| &f.from),
                 used.as_ref().and_then(|o| o.fallback.as_ref()).map(|f| f.reason),
@@ -448,4 +512,28 @@ pub(crate) fn error(code: &str, message: &str) -> crate::CoreError {
 }
 pub(crate) fn failed() -> crate::CoreError {
     error("export_failed", "Não foi possível exportar o Corte.")
+}
+pub(crate) fn glyph_missing_error(
+    font: &str,
+    missing: Vec<captions::MissingGlyph>,
+) -> crate::CoreError {
+    let first = &missing[0];
+    let message = match first.sentence_id {
+        Some(sentence_id) => format!(
+            "A fonte da legenda ({font}) não tem glifo para “{}” ({}, Frase {sentence_id}) em “{}”. Corrija a palavra na Transcrição.",
+            first.char, first.codepoint, first.word
+        ),
+        None => format!(
+            "A fonte da legenda ({font}) não tem glifo para “{}” ({}) em “{}”. Corrija a palavra na Transcrição.",
+            first.char, first.codepoint, first.word
+        ),
+    };
+    crate::CoreError {
+        code: "export_glyph_missing".into(),
+        message,
+        usage: Some(json!({
+            "font": font,
+            "missing_glyphs": missing,
+        })),
+    }
 }
