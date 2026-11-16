@@ -59,9 +59,18 @@ pub fn set_ai_route(route: Option<(Target, String)>) {
     }
 }
 
-/// O alvo do job: o fixado, ou a rota configurada da Tarefa. Sem configuração, um Provedor pago
-/// fica sem preço (custo desconhecido, nunca zero) e um local custa zero.
-pub(crate) fn route_of(task: &str, paid: bool) -> Result<(Target, String), CoreError> {
+/// O alvo do job: o Perfil explícito (#126), ou o fixado, ou a rota configurada da Tarefa. O Perfil
+/// explícito vale no lugar dos outros dois e passa pelo veto "somente local" (por tarefa e por
+/// Projeto) antes de qualquer envio. Sem configuração, um Provedor pago fica sem preço (custo
+/// desconhecido, nunca zero) e um local custa zero.
+pub(crate) fn route_of_profile(
+    task: &str,
+    paid: bool,
+    profile: Option<&str>,
+) -> Result<(Target, String), CoreError> {
+    if let Some(profile) = profile {
+        return cost::route_with_profile(task, profile);
+    }
     if let Some(route) = ROUTE.lock().ok().and_then(|slot| slot.clone()) {
         return Ok(route);
     }
@@ -97,6 +106,7 @@ pub(crate) fn route_of(task: &str, paid: bool) -> Result<(Target, String), CoreE
 struct Configured {
     task: String,
     local: bool,
+    profile: Option<String>,
 }
 
 impl Provider for Configured {
@@ -111,8 +121,11 @@ impl Provider for Configured {
         let mut args = serde_json::to_value(request)
             .map_err(|_| error("invalid_request", "Invalid structured request"))?;
         args["task"] = json!(self.task);
+        if let Some(profile) = &self.profile {
+            args["profileId"] = json!(profile);
+        }
         if self.local {
-            let route = crate::provider::routed(Some(&self.task), None)?;
+            let route = crate::provider::routed(Some(&self.task), self.profile.as_deref())?;
             if !matches!(route, crate::provider::Routed::Api { local: true, .. }) {
                 return Err(error(
                     "not_local",
@@ -254,6 +267,19 @@ pub fn enqueue_ai_in_batch(
     safety: Safety,
     batch: Option<&str>,
 ) -> Result<i64, CoreError> {
+    enqueue_ai_with_profile(task, input, safety, batch, None)
+}
+
+/// Como `enqueue_ai_in_batch`, mas o job usa o Perfil de Provedor `profile` só nesta execução
+/// (#126): o padrão do app e da Tarefa não muda e o veto "somente local" vale antes de qualquer
+/// envio. É o ponto de entrada genérico de "refazer com o perfil X" para uma unidade de IA.
+pub fn enqueue_ai_with_profile(
+    task: &str,
+    input: &TaskInput,
+    safety: Safety,
+    batch: Option<&str>,
+    profile: Option<&str>,
+) -> Result<i64, CoreError> {
     let definition =
         ai_task::find(task).ok_or_else(|| error("unknown_task", "Tarefa de IA desconhecida."))?;
     ai_task::check_definition(definition).map_err(CoreError::from)?;
@@ -266,6 +292,7 @@ pub fn enqueue_ai_in_batch(
             "nativeSchema": input.native_schema,
             "estimateHint": input.estimate_hint,
         },
+        "profileId": profile,
     })
     .to_string();
     let safety = match safety {
@@ -284,14 +311,16 @@ pub fn enqueue_ai_in_batch(
     })
 }
 
-struct Unit {
-    task: &'static AiTask,
-    input: TaskInput,
-    paid: bool,
-    batch: Option<String>,
+pub(super) struct Unit {
+    pub(super) task: &'static AiTask,
+    pub(super) input: TaskInput,
+    pub(super) paid: bool,
+    pub(super) batch: Option<String>,
+    /// Perfil explícito desta execução (#126); `None` segue a rota da Tarefa.
+    pub(super) profile: Option<String>,
 }
 
-fn load(id: i64) -> Result<Unit, CoreError> {
+pub(super) fn load(id: i64) -> Result<Unit, CoreError> {
     let (safety, payload, batch): (String, Option<String>, Option<String>) =
         projects::with_reader(|c| {
             c.query_row(
@@ -323,6 +352,7 @@ fn load(id: i64) -> Result<Unit, CoreError> {
         },
         paid: safety != "local",
         batch,
+        profile: payload["profileId"].as_str().map(str::to_owned),
     })
 }
 
@@ -424,15 +454,20 @@ fn fail_fixed(id: i64, task: &str, e: CoreError) {
 }
 
 /// O pedido que o executor envia (o mesmo de `ai_task::run`), para estimar antes de enviar.
-fn request_of(unit: &Unit) -> Option<StructuredRequest> {
-    let (wire, _) = ai_task::check_definition(unit.task).ok()?;
+pub(super) fn request_of(unit: &Unit) -> Option<StructuredRequest> {
+    request_for(unit.task, &unit.input)
+}
+
+/// O pedido de `input` para a Tarefa `task` (usado também por "refazer com outro perfil").
+pub(super) fn request_for(task: &AiTask, input: &TaskInput) -> Option<StructuredRequest> {
+    let (wire, _) = ai_task::check_definition(task).ok()?;
     Some(StructuredRequest {
-        estimate_hint: unit.input.estimate_hint.clone(),
-        instruction: ai_task::normalized_prompt(unit.task.prompt),
-        transcript: unit.input.transcript.clone(),
+        estimate_hint: input.estimate_hint.clone(),
+        instruction: ai_task::normalized_prompt(task.prompt),
+        transcript: input.transcript.clone(),
         schema: wire,
-        native_schema: unit.input.native_schema,
-        max_output_tokens: Some(unit.task.budget.max_output_tokens),
+        native_schema: input.native_schema,
+        max_output_tokens: Some(task.budget.max_output_tokens),
     })
 }
 
@@ -605,7 +640,7 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
         return emit(id, task, "done", 0, "Tarefa de IA cancelada", None);
     }
     // Orçamento: a estimativa de antes de enviar é a do #40 (`cost::estimate`).
-    let route = match route_of(task, unit.paid) {
+    let route = match route_of_profile(task, unit.paid, unit.profile.as_deref()) {
         Ok(route) => route,
         Err(e) => return fail_fixed(id, task, e),
     };
@@ -653,6 +688,7 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
             Arc::new(Configured {
                 task: task.into(),
                 local: !unit.paid,
+                profile: unit.profile.clone(),
             })
         });
     let started = std::time::Instant::now();
@@ -809,7 +845,7 @@ pub(super) fn estimate(id: i64) -> Value {
     if !unit.paid {
         return json!({"kind":"zero"});
     }
-    let Ok(route) = route_of(unit.task.id, true) else {
+    let Ok(route) = route_of_profile(unit.task.id, true, unit.profile.as_deref()) else {
         return json!({"kind":"unknown"});
     };
     let Some(request) = request_of(&unit) else {
