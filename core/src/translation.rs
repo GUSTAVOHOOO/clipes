@@ -268,13 +268,8 @@ fn extract_urls(text: &str) -> Vec<String> {
     text.split_whitespace()
         .filter_map(|tok| {
             let trimmed = tok
-                .trim_start_matches(|c: char| matches!(c, '(' | '[' | '<' | '"' | '\'' | '«'))
-                .trim_end_matches(|c: char| {
-                    matches!(
-                        c,
-                        '.' | ',' | '!' | '?' | ';' | ':' | ')' | ']' | '>' | '"' | '\'' | '»'
-                    )
-                });
+                .trim_start_matches(['(', '[', '<', '"', '\'', '«'])
+                .trim_end_matches(['.', ',', '!', '?', ';', ':', ')', ']', '>', '"', '\'', '»']);
             let lower = trimmed.to_lowercase();
             if lower.starts_with("http://")
                 || lower.starts_with("https://")
@@ -304,11 +299,10 @@ fn extract_numbers(text: &str) -> Vec<String> {
             let start = i;
             i += 1;
             while i < bytes.len() {
-                if bytes[i].is_ascii_digit() {
-                    i += 1;
-                } else if (bytes[i] == b'.' || bytes[i] == b',')
-                    && i + 1 < bytes.len()
-                    && bytes[i + 1].is_ascii_digit()
+                if bytes[i].is_ascii_digit()
+                    || ((bytes[i] == b'.' || bytes[i] == b',')
+                        && i + 1 < bytes.len()
+                        && bytes[i + 1].is_ascii_digit())
                 {
                     i += 1;
                 } else {
@@ -1011,29 +1005,51 @@ fn document(ctx: &ClipContext) -> Result<Value, CoreError> {
     let default_target = detected.map(|l| opposite(l).code());
     let (active_track, mut target_language) = active_track_and_language(ctx.clip_id)?;
 
+    struct RunRow {
+        id: i64,
+        state: String,
+        source_language: String,
+        target_language: String,
+        task_version: i64,
+        prompt_sha256: String,
+        profile: String,
+        batches_total: i64,
+        created_at: String,
+    }
     let run = projects::with_reader(|c| {
-        let row: Option<(i64, String, String, String, i64, String, String, i64, String)> = c
+        let row: Option<RunRow> = c
             .query_row(
                 "SELECT id,state,source_language,target_language,task_version,prompt_sha256,profile,batches_total,created_at FROM translation_runs WHERE clip_id=?1 ORDER BY id DESC LIMIT 1",
                 [ctx.clip_id],
                 |r| {
-                    Ok((
-                        r.get(0)?,
-                        r.get(1)?,
-                        r.get(2)?,
-                        r.get(3)?,
-                        r.get(4)?,
-                        r.get(5)?,
-                        r.get(6)?,
-                        r.get(7)?,
-                        r.get(8)?,
-                    ))
+                    Ok(RunRow {
+                        id: r.get(0)?,
+                        state: r.get(1)?,
+                        source_language: r.get(2)?,
+                        target_language: r.get(3)?,
+                        task_version: r.get(4)?,
+                        prompt_sha256: r.get(5)?,
+                        profile: r.get(6)?,
+                        batches_total: r.get(7)?,
+                        created_at: r.get(8)?,
+                    })
                 },
             )
             .optional()?;
-        let Some((id, state, src, dst, ver, sha, prof, total, created)) = row else {
+        let Some(row) = row else {
             return Ok(None);
         };
+        let (id, state, src, dst, ver, sha, prof, total, created) = (
+            row.id,
+            row.state,
+            row.source_language,
+            row.target_language,
+            row.task_version,
+            row.prompt_sha256,
+            row.profile,
+            row.batches_total,
+            row.created_at,
+        );
         let mut q = c.prepare(
             "SELECT rj.job_id,rj.batch_index,j.state,j.result FROM translation_run_jobs rj JOIN jobs j ON j.id=rj.job_id WHERE rj.run_id=?1 ORDER BY rj.batch_index",
         )?;
