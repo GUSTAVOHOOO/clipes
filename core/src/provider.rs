@@ -1108,10 +1108,10 @@ mod settings {
             net::TcpListener,
             thread,
         };
-        static GUARD: Mutex<()> = Mutex::new(());
-        /// Serializes the tests that share the settings file and the fake vault, and resets both.
+        /// Serializes the tests that share the settings file, the fake vault and `CLIPES_DATA_DIR`
+        /// (#188), and resets the first two.
         fn fresh() -> std::sync::MutexGuard<'static, ()> {
-            let guard = GUARD.lock().unwrap_or_else(|e| e.into_inner());
+            let guard = crate::test_env::lock();
             let _ = fs::remove_file(path().unwrap());
             FAKE_VAULT.lock().unwrap().clear();
             guard
