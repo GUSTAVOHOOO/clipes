@@ -17,7 +17,6 @@ const batches = new Map<number, BatchMock>();
 // Encoder do #62: o mock imita o cache do núcleo (lista que passou no teste e troca manual).
 const encoder = { detected: false, passed: ['h264_nvenc', 'libx264'], manual: null as string | null };
 const encoderView = () => ({ ffmpeg: true, detected: encoder.detected, stale: false, passed: encoder.detected ? encoder.passed : [], selected: 'h264_nvenc', manual: encoder.manual, effective: encoder.detected ? encoder.manual ?? 'h264_nvenc' : 'libx264' });
-
 function batchView(b: BatchMock) {
   if (b.state === 'running') {
     const elapsed = Date.now() - b.started;
@@ -72,7 +71,11 @@ function batchView(b: BatchMock) {
   return { id: b.id, scope: b.scope, sourceId: b.sourceId, outputDir: b.outputDir, state: b.state, status, progress, counts, items: b.items };
 }
 
-export function exportMock(name: string, args: object): unknown {
+export function exportMock(
+  name: string,
+  args: object,
+  corrected?: (sourceId: number, position: number) => boolean,
+): unknown {
   const a = args as { job?: number; id?: number; output?: string; start_id?: number; end_id?: number; source_id?: number; output_dir?: string; confirmed?: boolean };
   if (name === 'export.encoder.status') return encoderView();
   if (name === 'export.encoder.detect') { encoder.detected = true; return encoderView(); }
@@ -117,6 +120,16 @@ export function exportMock(name: string, args: object): unknown {
   if (name === 'export.start') {
     if (!a.start_id || !a.end_id) throw { code: 'export_bounds' };
     if (new URLSearchParams(location.search).has('export-exists')) throw { code: 'export_exists' };
+    if (new URLSearchParams(location.search).has('export-glyph-missing') && !corrected?.(a.source_id ?? 1, 10)) {
+      throw {
+        code: 'export_glyph_missing',
+        message: 'A fonte da legenda (Noto Sans) não tem glifo para “来” (U+6765, Frase 1) em “来”. Corrija a palavra na Transcrição.',
+        usage: {
+          font: 'Noto Sans',
+          missing_glyphs: [{ position: 10, sentence_id: 1, word: '来', char: '来', codepoint: 'U+6765', start_us: 90_000_000 }],
+        },
+      };
+    }
     const job = ++serial;
     jobs.set(job, { job, state: 'running', progress: 35, started: Date.now(), error: null });
     return { job, state: 'queued' };
