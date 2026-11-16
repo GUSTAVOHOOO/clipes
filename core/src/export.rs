@@ -5,6 +5,7 @@ pub mod pipeline;
 pub mod render;
 
 use crate::caption_style::{self, store::ClipId, Preset, Style, StyledWord, WordOverride};
+use crate::editor::crop::{self, CropSegment};
 use crate::editor::silences::{KeptSegment, SpliceMap};
 use crate::{projects, CommandRegistration, CommandResult, CoreError, EventSink};
 use captions::CaptionWord;
@@ -38,11 +39,13 @@ struct StartRequest {
     cut: ExportRequest,
     #[serde(default)]
     output: PathBuf,
-    // Congela as bordas e os silêncios no enfileiramento, para edições posteriores não mudarem o job.
+    // Congela as bordas, os silêncios e o crop no enfileiramento, para edições posteriores não mudarem o job.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     resolved_bounds: Option<(i64, i64)>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     resolved_silences: Option<Vec<(i64, i64)>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    resolved_crop: Option<Vec<CropSegment>>,
 }
 
 inventory::submit! { projects::Migration { id:"0059_001_exports", sql:"
@@ -70,6 +73,7 @@ struct Target {
     segments: Vec<KeptSegment>,
     active_cuts: Vec<(i64, i64)>,
     transcript: i64,
+    crop: Vec<CropSegment>,
 }
 fn bounds() -> CoreError {
     error(
@@ -201,6 +205,10 @@ fn target(request: &ExportRequest, frozen: Option<FrozenTarget>) -> Result<Targe
                 overrides,
             });
         }
+        let crop = edited
+            .as_ref()
+            .map(|doc| crop::resolve(&doc.crop))
+            .unwrap_or_default();
         let words = styled.iter().map(|w| w.word.clone()).collect();
         Ok(Ok(Target {
             start_us,
@@ -212,6 +220,7 @@ fn target(request: &ExportRequest, frozen: Option<FrozenTarget>) -> Result<Targe
             segments: splice.segments,
             active_cuts,
             transcript,
+            crop,
         }))
     })?
 }
@@ -268,6 +277,7 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .clip_id
         .map(|_| (resolved.start_us, resolved.end_us));
     request.resolved_silences = request.cut.clip_id.map(|_| resolved.active_cuts);
+    request.resolved_crop = request.cut.clip_id.map(|_| resolved.crop);
     render::validate_output(&request.output)?;
     let project = current_path()?;
     let _ = crate::jobs::preview::source(request.cut.source_id, &project)?;
@@ -359,6 +369,7 @@ pub(crate) fn run(
         let ffmpeg = crate::components::cache_settings()?
             .2
             .ok_or_else(|| error("component_missing", "Instale o Componente FFmpeg."))?;
+        let crop = request.resolved_crop.unwrap_or(target.crop);
         let input = render::RenderInput {
             source,
             output: request.output,
@@ -366,6 +377,7 @@ pub(crate) fn run(
             end_us: target.end_us,
             audio_track: audio,
             words: target.words,
+            crop,
         };
         let cancel = crate::provider::CancelToken::new();
         // Etapa de encoder (#62): detecta na primeira vez, usa o do cache e cai para x264.

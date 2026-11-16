@@ -5,6 +5,7 @@ use rusqlite::OptionalExtension;
 use serde_json::{json, Value};
 
 pub mod assets;
+pub mod crop;
 pub(crate) mod edits;
 pub mod silences;
 

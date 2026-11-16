@@ -1,6 +1,7 @@
 //! Paridade real, inteiramente sintética. FFmpeg/libass é instalado pelo CI;
 //! nenhum teste baixa mídia, fonte, modelo nem acessa a rede.
 use clipes_core::{
+    editor::crop::{interpolate, CropKeyframe, CropSegment},
     export::{
         captions::{self, CaptionWord},
         render::{render, RenderInput, FONT_BYTES, FONT_SHA256},
@@ -251,6 +252,7 @@ fn real_ffmpeg_preserves_fit_geometry_timing_vfr_sar_rotation_and_bundled_font()
             end_us: 2_500_000,
             audio_track: 2,
             words: words.clone(),
+            crop: Vec::new(),
         };
         let mut progress = Vec::new();
         render(Path::new(&program), &input, &CancelToken::new(), &mut |p| {
@@ -399,6 +401,8 @@ fn real_ffmpeg_silence_splicing_keeps_av_duration_parity_and_remaps_captions() {
         "libx264",
         "-preset",
         "ultrafast",
+        "-threads",
+        "2",
         "-pix_fmt",
         "yuv420p",
         "-c:a",
@@ -450,6 +454,7 @@ fn real_ffmpeg_silence_splicing_keeps_av_duration_parity_and_remaps_captions() {
         end_us: 24_000_000,
         audio_track: 1,
         words: words.clone(),
+        crop: vec![],
     };
     let mut progress = Vec::new();
     render_spliced(
@@ -513,5 +518,323 @@ fn real_ffmpeg_silence_splicing_keeps_av_duration_parity_and_remaps_captions() {
     assert!(
         best.1 + best.2 > 20,
         "legenda remapeada ausente no quadro esperado: {best:?}"
+    );
+}
+
+fn mean_rgb_diff(a: &[u8], b: &[u8]) -> f64 {
+    assert_eq!(a.len(), b.len());
+    let total: u64 = a
+        .iter()
+        .zip(b)
+        .map(|(x, y)| u64::from(x.abs_diff(*y)))
+        .sum();
+    total as f64 / a.len() as f64
+}
+
+fn kf(time_us: i64, x: f64, y: f64, width: f64, height: f64) -> CropKeyframe {
+    CropKeyframe {
+        time_us,
+        x,
+        y,
+        width,
+        height,
+        confidence: None,
+        cut: false,
+    }
+}
+
+#[test]
+fn real_ffmpeg_crop_keyframes_match_preview_interpolation_and_hard_cuts() {
+    let root = tempfile::tempdir().unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", root.path().join("data"));
+    let program = std::env::var("CLIPES_TEST_FFMPEG").unwrap_or("ffmpeg".into());
+    let source = root.path().join("src169.mp4");
+    ffmpeg(&[
+        "-v",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc2=size=640x360:rate=30:duration=4",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=440:duration=4",
+        "-c:v",
+        "libx264",
+        "-threads",
+        "2",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-y",
+        source.to_str().unwrap(),
+    ]);
+    let w_full = 9.0 / 16.0 / (16.0 / 9.0);
+    let w_zoom = w_full * 0.5;
+    let segments = vec![
+        CropSegment {
+            start_us: 500_000,
+            end_us: 1_500_000,
+            reason: "start".into(),
+            keyframes: vec![
+                kf(500_000, 0.05, 0.0, w_full, 1.0),
+                kf(1_300_000, 0.55, 0.0, w_full, 1.0),
+            ],
+        },
+        CropSegment {
+            start_us: 1_500_000,
+            end_us: 2_500_000,
+            reason: "scene".into(),
+            keyframes: vec![
+                kf(1_500_000, 0.0, 0.0, w_full, 1.0),
+                kf(2_300_000, 0.25, 0.25, w_zoom, 0.5),
+            ],
+        },
+        CropSegment {
+            start_us: 2_500_000,
+            end_us: 3_500_000,
+            reason: "face_switch".into(),
+            keyframes: vec![kf(2_500_000, 0.60, 0.0, w_full, 1.0)],
+        },
+    ];
+    let output = root.path().join("crop-animated.mp4");
+    let input = RenderInput {
+        source: source.clone(),
+        output: output.clone(),
+        start_us: 500_000,
+        end_us: 3_500_000,
+        audio_track: 1,
+        words: vec![],
+        crop: segments.clone(),
+    };
+    render(
+        Path::new(&program),
+        &input,
+        &CancelToken::new(),
+        &mut |_| {},
+    )
+    .unwrap();
+    let info = probe(&output);
+    assert_eq!(
+        (
+            info["streams"][0]["width"].as_i64(),
+            info["streams"][0]["height"].as_i64()
+        ),
+        (Some(1080), Some(1920))
+    );
+    assert_eq!(info["streams"][0]["sample_aspect_ratio"], "1:1");
+
+    // Confere cada instante contra a função de interpolação do preview (incluindo pan, zoom e cortes secos).
+    let mut diffs = Vec::new();
+    for clip_t in [0.1_f64, 0.5, 0.9, 1.1, 1.5, 1.9, 2.1, 2.6] {
+        let source_t = 0.5 + clip_t;
+        let rect = interpolate(&segments, (source_t * 1_000_000.0).round() as i64).unwrap();
+        let actual = frame(&output, clip_t, "scale=270:480");
+        let ref_filter = format!(
+            "scale=w='2*ceil(1080/{:.9}/2)':h='2*ceil(1920/{:.9}/2)':flags=lanczos,setsar=1,crop=1080:1920:x='min(iw-1080,max(0,{:.9}*iw))':y='min(ih-1920,max(0,{:.9}*ih))':exact=1,scale=270:480",
+            rect.width, rect.height, rect.x, rect.y
+        );
+        let expected = frame(&source, source_t, &ref_filter);
+        let diff = mean_rgb_diff(&actual, &expected);
+        eprintln!("crop clip_t={clip_t:.1} diff={diff:.2}");
+        diffs.push((clip_t, diff));
+    }
+    for (clip_t, diff) in diffs {
+        assert!(
+            diff < 5.0,
+            "divergência preview vs export em clip_t={clip_t}: diff={diff:.2}"
+        );
+    }
+
+    // Prova negativa do corte seco: t=0.9s (seg 1) não pode parecer com seg 2, e t=1.1s (seg 2) não pode parecer com seg 1.
+    let before_cut = frame(&output, 0.9, "scale=270:480");
+    let after_cut = frame(&output, 1.1, "scale=270:480");
+    assert!(
+        mean_rgb_diff(&before_cut, &after_cut) > 15.0,
+        "corte seco na troca de cena não mudou o enquadramento"
+    );
+
+    // Corte estático com SAR 2:1 deve manter geometria sem `sendcmd`.
+    let sar = root.path().join("sar2.mp4");
+    ffmpeg(&[
+        "-v",
+        "error",
+        "-i",
+        source.to_str().unwrap(),
+        "-vf",
+        "scale=320:180,setsar=2/1",
+        "-c:v",
+        "libx264",
+        "-threads",
+        "2",
+        "-c:a",
+        "copy",
+        "-y",
+        sar.to_str().unwrap(),
+    ]);
+    let static_seg = vec![CropSegment {
+        start_us: 0,
+        end_us: 2_000_000,
+        reason: "start".into(),
+        keyframes: vec![kf(0, 0.25, 0.0, 9.0 / 16.0 / (32.0 / 9.0), 1.0)],
+    }];
+    let static_out = root.path().join("crop-static-sar.mp4");
+    let static_in = RenderInput {
+        source: sar.clone(),
+        output: static_out.clone(),
+        start_us: 0,
+        end_us: 2_000_000,
+        audio_track: 1,
+        words: vec![],
+        crop: static_seg,
+    };
+    render(
+        Path::new(&program),
+        &static_in,
+        &CancelToken::new(),
+        &mut |_| {},
+    )
+    .unwrap();
+    let static_info = probe(&static_out);
+    assert_eq!(
+        (
+            static_info["streams"][0]["width"].as_i64(),
+            static_info["streams"][0]["height"].as_i64()
+        ),
+        (Some(1080), Some(1920))
+    );
+    assert_eq!(static_info["streams"][0]["sample_aspect_ratio"], "1:1");
+}
+
+#[test]
+fn real_ffmpeg_slow_pan_matches_preview_smoothly_without_even_pixel_steps() {
+    let root = tempfile::tempdir().unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", root.path().join("data"));
+    let program = std::env::var("CLIPES_TEST_FFMPEG").unwrap_or("ffmpeg".into());
+    let source = root.path().join("slow-pan-src.mp4");
+    // Barra branca de 40 px em x=600..640 sobre fundo preto 1920x1080 @ 30 fps (2 s = 60 quadros).
+    ffmpeg(&[
+        "-v",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=black:size=1920x1080:rate=30:duration=2,drawbox=x=600:y=0:w=40:h=1080:color=white:t=fill",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=440:duration=2",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-threads",
+        "2",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-y",
+        source.to_str().unwrap(),
+    ]);
+
+    // Pan lento < 1 px/quadro na Fonte: 0.3 px/quadro * 60 quadros = 18 px em 2 s.
+    let crop_w = 608.0 / 1920.0;
+    let x0 = 100.0 / 1920.0;
+    let x1 = 118.0 / 1920.0;
+    let segments = vec![CropSegment {
+        start_us: 0,
+        end_us: 2_000_000,
+        reason: "start".into(),
+        keyframes: vec![
+            kf(0, x0, 0.0, crop_w, 1.0),
+            kf(2_000_000, x1, 0.0, crop_w, 1.0),
+        ],
+    }];
+    let output = root.path().join("slow-pan-out.mp4");
+    let input = RenderInput {
+        source,
+        output: output.clone(),
+        start_us: 0,
+        end_us: 2_000_000,
+        audio_track: 1,
+        words: vec![],
+        crop: segments.clone(),
+    };
+    render(
+        Path::new(&program),
+        &input,
+        &CancelToken::new(),
+        &mut |_| {},
+    )
+    .unwrap();
+
+    // Extrai a linha central (y=540) de todos os quadros do export em rgb24.
+    let raw = ffmpeg(&[
+        "-v",
+        "error",
+        "-i",
+        output.to_str().unwrap(),
+        "-vf",
+        "crop=1080:1:0:540:exact=1",
+        "-pix_fmt",
+        "rgb24",
+        "-f",
+        "rawvideo",
+        "pipe:1",
+    ])
+    .stdout;
+    let stride = 1080 * 3;
+    let frames = raw.len() / stride;
+    assert_eq!(frames, 60);
+
+    let bar_center_norm = 620.0 / 1920.0;
+    let mut actual_centers = Vec::with_capacity(frames);
+    let mut max_preview_err = 0.0_f64;
+    for f in 0..frames {
+        let row = &raw[f * stride..(f + 1) * stride];
+        let mut weighted = 0.0_f64;
+        let mut total = 0.0_f64;
+        for x in 0..1080 {
+            let luma = f64::from(row[x * 3]);
+            weighted += (x as f64) * luma;
+            total += luma;
+        }
+        assert!(total > 1000.0, "barra branca ausente no quadro {f}");
+        let actual_x = weighted / total;
+        let time_us = ((f as f64 / 30.0) * 1_000_000.0).round() as i64;
+        let rect = interpolate(&segments, time_us).unwrap();
+        let expected_x = ((bar_center_norm - rect.x) / rect.width) * 1080.0;
+        max_preview_err = max_preview_err.max((actual_x - expected_x).abs());
+        actual_centers.push(actual_x);
+    }
+
+    let expected_step = 0.3 * (1080.0 / 608.0);
+    let deltas: Vec<f64> = actual_centers.windows(2).map(|w| w[0] - w[1]).collect();
+    let max_jump = deltas.iter().copied().fold(0.0_f64, f64::max);
+    let rms_step_err = (deltas
+        .iter()
+        .map(|d| (d - expected_step).powi(2))
+        .sum::<f64>()
+        / deltas.len() as f64)
+        .sqrt();
+    eprintln!(
+        "slow-pan paridade: max_preview_err={max_preview_err:.3}px max_jump={max_jump:.3}px rms_step_err={rms_step_err:.3}px expected_step={expected_step:.3}px"
+    );
+    // Com crop_then_scale exact=0 os degraus seriam ~3.55 px; com crop_then_scale exact=1 seriam ~1.85 px.
+    // Com scale lanczos antes de crop exact=1, cada salto fica <= 1.1 px e acompanha o preview subpixel.
+    assert!(
+        max_preview_err < 1.2,
+        "desvio do preview subpixel alto demais: {max_preview_err:.3}"
+    );
+    assert!(
+        max_jump <= 1.15,
+        "degrau quadro a quadro alto demais (tremor): {max_jump:.3}"
+    );
+    assert!(
+        rms_step_err < 0.6,
+        "erro RMS de suavidade alto demais: {rms_step_err:.3}"
     );
 }
