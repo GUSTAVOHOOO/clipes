@@ -16,6 +16,97 @@ pub struct CaptionWord {
     pub end_us: i64,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MissingGlyph {
+    pub position: i64,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub sentence_id: Option<i64>,
+    pub word: String,
+    pub char: String,
+    pub codepoint: String,
+    pub start_us: i64,
+}
+
+pub struct GlyphWord<'a> {
+    pub position: i64,
+    pub sentence_id: Option<i64>,
+    pub text: &'a str,
+    pub start_us: i64,
+}
+
+/// Confere no `cmap` da fonte se um caractere tem glifo.
+pub fn font_has_glyph(font_bytes: &[u8], ch: char) -> bool {
+    super::font_cmap::coverage_for(font_bytes).is_some_and(|cov| cov.contains(ch))
+}
+
+/// Valida cada palavra visível contra o `cmap` de `font_bytes` usando o mesmo escape ASS.
+pub fn check_words_glyphs<'a>(
+    words: impl IntoIterator<Item = GlyphWord<'a>>,
+    font_bytes: &[u8],
+) -> Vec<MissingGlyph> {
+    let Some(coverage) = super::font_cmap::coverage_for(font_bytes) else {
+        return Vec::new();
+    };
+    let mut missing = Vec::new();
+    for word in words {
+        let visible = escape_text(word.text);
+        if visible.is_empty() {
+            continue;
+        }
+        if let Some(ch) = visible.chars().find(|&c| !coverage.contains(c)) {
+            let trimmed: String = word
+                .text
+                .trim()
+                .chars()
+                .filter(|c| !c.is_control())
+                .collect();
+            missing.push(MissingGlyph {
+                position: word.position,
+                sentence_id: word.sentence_id,
+                word: if trimmed.is_empty() { visible } else { trimmed },
+                char: ch.to_string(),
+                codepoint: format!("U+{:04X}", ch as u32),
+                start_us: word.start_us,
+            });
+        }
+    }
+    missing
+}
+
+/// Checa todas as palavras dadas contra o `cmap` da fonte (para testes e validação direta).
+pub fn missing_glyphs(words: &[CaptionWord], font_bytes: &[u8]) -> Vec<MissingGlyph> {
+    check_words_glyphs(
+        words.iter().enumerate().map(|(i, w)| GlyphWord {
+            position: i as i64,
+            sentence_id: None,
+            text: &w.text,
+            start_us: w.start_us,
+        }),
+        font_bytes,
+    )
+}
+
+/// Checa apenas palavras visíveis dentro de `0..duration_us`.
+pub fn missing_glyphs_in_duration(
+    words: &[CaptionWord],
+    font_bytes: &[u8],
+    duration_us: i64,
+) -> Vec<MissingGlyph> {
+    check_words_glyphs(
+        words
+            .iter()
+            .enumerate()
+            .filter(|(_, w)| w.start_us < duration_us)
+            .map(|(i, w)| GlyphWord {
+                position: i as i64,
+                sentence_id: None,
+                text: &w.text,
+                start_us: w.start_us,
+            }),
+        font_bytes,
+    )
+}
+
 fn invalid() -> CoreError {
     CoreError {
         code: "export_timestamps".into(),
@@ -49,15 +140,15 @@ pub fn sanitize(words: &[CaptionWord]) -> Result<Vec<CaptionWord>, CoreError> {
     Ok(result)
 }
 
-/// O texto nunca pode formar tags nem escapes ASS. Os três delimitadores recebem
-/// equivalentes visuais Unicode: libass não tem um escape literal portátil de `\`.
+/// O texto nunca pode formar tags nem escapes ASS. Os três delimitadores são trocados
+/// por caracteres ASCII seguros presentes nas fontes empacotadas.
 /// Emoji e seletores de apresentação são removidos antes da quebra.
 pub fn escape_text(text: &str) -> String {
     text.chars()
         .filter_map(|c| match c {
-            '{' => Some('｛'),
-            '}' => Some('｝'),
-            '\\' => Some('＼'),
+            '{' => Some('('),
+            '}' => Some(')'),
+            '\\' => Some('/'),
             '\r' | '\n' | '\t' => Some(' '),
             '\u{200d}' | '\u{fe0e}' | '\u{fe0f}' | '\u{20e3}' | '\u{00a9}' | '\u{00ae}' => None,
             '\u{2300}'..='\u{23ff}'

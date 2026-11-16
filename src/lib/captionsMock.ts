@@ -9,6 +9,7 @@ let projectDefault: Style | null = null;
 const styles = new Map<number, Style>();
 const overrides = new Map<number, Override>();
 const emoji = /[\u200d\ufe0e\ufe0f\u20e3\u00a9\u00ae\u2300-\u23ff\u2600-\u27ff\u{1f000}-\u{1faff}]/u;
+const unsupportedGlyph = /[\u3000-\u9fff\uac00-\ud7af\uf900-\ufaff]/u;
 
 export function captionsMock(name: string, a: Record<string, any>, textOf: (position: number) => string): unknown {
   if (name === 'captions.remap_status') return { discarded: 0 };
@@ -28,7 +29,7 @@ export function captionsMock(name: string, a: Record<string, any>, textOf: (posi
   const startBase = a.start_us ?? 0;
   const endBase = a.end_us ?? startBase + 4_500_000;
   const splice = getMockClipSplice(a.clip_id, startBase, endBase);
-  const words = Array.from({ length: 9 }, (_, p) => {
+  const rawWords = Array.from({ length: 9 }, (_, p) => {
     const absStart = startBase + p * 500_000;
     const absEnd = absStart + 450_000;
     return {
@@ -40,7 +41,15 @@ export function captionsMock(name: string, a: Record<string, any>, textOf: (posi
       overrides: overrides.get(p) ?? {},
     };
   });
+  const missingGlyphs = rawWords.flatMap(w => {
+    const visible = w.text.replace(/\p{Extended_Pictographic}/gu, '').trim();
+    const match = unsupportedGlyph.exec(visible);
+    if (!match) return [];
+    const ch = match[0];
+    return [{ position: w.position, sentence_id: 1, word: visible, char: ch, codepoint: `U+${ch.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`, start_us: w.sourceStartUs }];
+  });
+  const words = rawWords.map(w => ({ ...w, missingGlyph: missingGlyphs.find(m => m.position === w.position) ?? null }));
   const visible = words.map(w => ({ ...w, text: w.text.replace(/\p{Extended_Pictographic}/gu, '').trim(), color: w.overrides.color ?? style.color, activeColor: w.overrides.activeColor ?? style.activeColor, highlight: style.highlight && (w.overrides.highlight ?? true) }));
   const cues = [0, 3, 6].map(i => ({ startUs: visible[i].startUs, endUs: visible[i + 2].endUs, lines: [visible.slice(i, i + 3)] }));
-  return { ass: '', style, cues, emojiRemoved: words.filter(w => emoji.test(w.text)).length, words, transcriptId: 1, start_us: startBase, end_us: endBase, durationUs: splice.effectiveDurationUs, segments: splice.segments, lines: [] };
+  return { ass: '', style, cues, emojiRemoved: words.filter(w => emoji.test(w.text)).length, words, transcriptId: 1, start_us: startBase, end_us: endBase, durationUs: splice.effectiveDurationUs, segments: splice.segments, lines: [], missingGlyphs };
 }

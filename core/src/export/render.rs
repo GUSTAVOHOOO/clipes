@@ -14,6 +14,7 @@ use std::{
 };
 
 pub const FONT_BYTES: &[u8] = include_bytes!("../../assets/fonts/NotoSans-Bold.ttf");
+pub const SERIF_FONT_BYTES: &[u8] = include_bytes!("../../assets/fonts/NotoSerif-Bold.ttf");
 pub const FONT_SHA256: &str = "c976e4b1b99edc88775377fcc21692ca4bfa46b6d6ca6522bfda505b28ff9d6a";
 pub const PROCESS_POLL: Duration = Duration::from_millis(25);
 /// Campos do JSON do `loudnorm` (ordem de `Measured`).
@@ -350,7 +351,6 @@ fn render_ass_spliced(
     if input.start_us < 0 || input.end_us <= input.start_us || input.audio_track < 0 {
         return Err(error("export_bounds", "As bordas do Corte são inválidas."));
     }
-    check_ass(ffmpeg, cancel)?;
     let duration = input.end_us - input.start_us;
     let spliced = segments.len() > 1;
     let output_duration = if spliced {
@@ -358,6 +358,15 @@ fn render_ass_spliced(
     } else {
         duration
     };
+    let missing =
+        captions::missing_glyphs_in_duration(&input.words, doc.font_bytes, output_duration);
+    if !missing.is_empty() {
+        return Err(super::glyph_missing_error(
+            doc.font_file.trim_end_matches(".ttf"),
+            missing,
+        ));
+    }
+    check_ass(ffmpeg, cancel)?;
     let parent = input.output.parent().unwrap();
     let work = tempfile::Builder::new()
         .prefix(".clipes-export-")
