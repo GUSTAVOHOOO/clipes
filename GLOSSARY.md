@@ -78,6 +78,9 @@ _Evitar_: janela sozinha, Janela de contexto (é o limite do modelo, não o trec
 Avaliação explicável do potencial de um Corte, formada por eixos nomeados (como Gancho, Autossuficiência e Fechamento), cada um com uma justificativa. Não é previsão de views.
 _Evitar_: score viral, pontuação de viralidade
 
+**Espaço para comentário** (Room for commentary)
+Eixo da Nota usado só no Vídeo transformado: o quanto o trecho abre algo (uma opinião, um fato, uma polêmica) que uma pessoa pode comentar, analisar ou contextualizar. Tem o maior peso nesse tipo; o Corte direto não usa esse eixo.
+
 **Lote de Fontes** (Source Batch)
 Conjunto de Fontes do Projeto que o app processa em sequência (Transcrição e seleção), com teto de custo opcional. Uma Fonte com erro do Provedor pausa sozinha; as outras seguem.
 _Evitar_: fila (a fila é o mecanismo de jobs), batch

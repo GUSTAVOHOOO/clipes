@@ -22,8 +22,18 @@ mod review;
 pub(crate) use review::{approved_cut, ApprovedCut};
 
 pub const TASK_ID: &str = "selection";
-/// Tipo do job de cada Janela na fila.
+/// Tarefa de IA do Vídeo transformado (#67): prompt e schema próprios, com o 6º eixo. Roteia
+/// (Provedor, veto "somente local") como `selection`: veja `ai_task::routing_id`.
+pub const TASK_ID_TRANSFORMED: &str = "selection_transformed";
+/// Tipo do job de cada Janela na fila (Corte direto).
 pub const JOB_KIND: &str = "ai:selection";
+/// Tipo do job de cada Janela do Vídeo transformado.
+pub const JOB_KIND_TRANSFORMED: &str = "ai:selection_transformed";
+
+/// O job é uma Janela de seleção, de qualquer tipo de vídeo.
+pub fn is_job_kind(kind: &str) -> bool {
+    kind == JOB_KIND || kind == JOB_KIND_TRANSFORMED
+}
 /// Tamanho máximo de uma justificativa (caracteres) e de um título.
 pub const MAX_WHY_CHARS: usize = 300;
 pub const MAX_TITLE_CHARS: usize = 80;
@@ -31,6 +41,9 @@ pub const MAX_TITLE_CHARS: usize = 80;
 const PROMPT: &str = include_str!("selection/prompt.md");
 const WIRE: &str = include_str!("selection/wire.json");
 const FULL: &str = include_str!("selection/full.json");
+const PROMPT_TRANSFORMED: &str = include_str!("selection/prompt_transformed.md");
+const WIRE_TRANSFORMED: &str = include_str!("selection/wire_transformed.json");
+const FULL_TRANSFORMED: &str = include_str!("selection/full_transformed.json");
 
 fn error(code: &str, message: &str) -> CoreError {
     CoreError {
@@ -88,11 +101,12 @@ fn start_not_after_end(_: &TaskInput, output: &Value) -> Vec<Violation> {
         .collect()
 }
 
-/// Notas de 0 a 10, justificativas não vazias e de tamanho limitado, título limitado.
-fn scores_and_reasons(_: &TaskInput, output: &Value) -> Vec<Violation> {
+/// Notas de 0 a 10, justificativas não vazias e de tamanho limitado, título limitado. Cada tipo
+/// de vídeo exige os eixos da própria tabela: o 6º (`commentary`) só existe no transformado.
+fn scores_and_reasons(axes: &[Axis], output: &Value) -> Vec<Violation> {
     let mut found = Vec::new();
     for (i, c) in candidates_of(output).iter().enumerate() {
-        for axis in AXES {
+        for axis in axes {
             let node = &c[axis.key];
             let path = format!("{}/score", axis.key);
             if !node["score"]
@@ -119,6 +133,14 @@ fn scores_and_reasons(_: &TaskInput, output: &Value) -> Vec<Violation> {
         }
     }
     found
+}
+
+fn scores_direct(_: &TaskInput, output: &Value) -> Vec<Violation> {
+    scores_and_reasons(&AXES, output)
+}
+
+fn scores_transformed(_: &TaskInput, output: &Value) -> Vec<Violation> {
+    scores_and_reasons(&AXES_TRANSFORMED, output)
 }
 
 /// Sem candidatos repetidos na mesma Janela e sem passar da meta (com folga).
@@ -159,21 +181,50 @@ inventory::submit! {
         verifiers: &[
             ids_belong_to_window,
             start_not_after_end,
-            scores_and_reasons,
+            scores_direct,
             no_repeats_and_limit,
         ],
-        budget: Budget {
-            max_calls: 2,
-            max_input_tokens: 60_000,
-            max_output_tokens: 2_000,
-            max_wall_clock_secs: 600,
-            max_cost_micro_cents: None,
-        },
+        budget: SELECTION_BUDGET,
     }
 }
 
-fn task() -> &'static AiTask {
-    ai_task::find(TASK_ID).expect("selection task is registered")
+const SELECTION_BUDGET: Budget = Budget {
+    max_calls: 2,
+    max_input_tokens: 60_000,
+    max_output_tokens: 2_000,
+    max_wall_clock_secs: 600,
+    max_cost_micro_cents: None,
+};
+
+inventory::submit! {
+    AiTask {
+        id: TASK_ID_TRANSFORMED,
+        version: 1,
+        prompt: PROMPT_TRANSFORMED,
+        prompt_sha256: "fb6ef24096c53ac75a22fb97cbe1dc3252e9c4dca5ad55bd2bd6f70fbdc3eaa6",
+        wire_schema: WIRE_TRANSFORMED,
+        full_schema: FULL_TRANSFORMED,
+        verifiers: &[
+            ids_belong_to_window,
+            start_not_after_end,
+            scores_transformed,
+            no_repeats_and_limit,
+        ],
+        budget: SELECTION_BUDGET,
+    }
+}
+
+/// A Tarefa de IA do tipo de vídeo: prompt, schema e verificadores próprios.
+fn task_for(kind: VideoKind) -> &'static AiTask {
+    let id = match kind {
+        VideoKind::Direct => TASK_ID,
+        VideoKind::Transformed => TASK_ID_TRANSFORMED,
+    };
+    ai_task::find(id).expect("selection task is registered")
+}
+
+fn prompt_for(kind: VideoKind) -> &'static str {
+    task_for(kind).prompt
 }
 
 // ---------------------------------------------------------------- persistência
@@ -243,6 +294,13 @@ UPDATE selection_windows SET profile=COALESCE((SELECT r.profile FROM selection_r
 UPDATE selection_candidates SET profile=COALESCE((SELECT r.profile FROM selection_runs r WHERE r.id=run_id),'');
 " } }
 
+// Tipo de vídeo (#67): uma execução e um lote de Fontes têm um tipo, escolhido antes de produzir.
+// Execuções e lotes anteriores valem como Corte direto (o DEFAULT).
+inventory::submit! { projects::Migration { id: "0067_001_video_kind", sql: "
+ALTER TABLE selection_runs ADD COLUMN video_kind TEXT NOT NULL DEFAULT 'direct' CHECK(video_kind IN ('direct','transformed'));
+ALTER TABLE source_batches ADD COLUMN video_kind TEXT NOT NULL DEFAULT 'direct' CHECK(video_kind IN ('direct','transformed'));
+" } }
+
 // ---------------------------------------------------------------- entrada de cada Janela
 
 struct Range {
@@ -262,8 +320,26 @@ fn parse_range(v: &Value) -> Result<Range, CoreError> {
     Ok(Range { min_us, max_us })
 }
 
-fn weights_json() -> Value {
-    AXES.iter()
+/// `videoKind` do pedido: ausente vale Corte direto; qualquer outro valor é recusado.
+pub(crate) fn parse_kind(v: &Value) -> Result<VideoKind, CoreError> {
+    match v.get("videoKind") {
+        None | Some(Value::Null) => Ok(VideoKind::Direct),
+        Some(Value::String(k)) => VideoKind::parse(k).ok_or_else(invalid_kind),
+        _ => Err(invalid_kind()),
+    }
+}
+
+fn invalid_kind() -> CoreError {
+    error(
+        "invalid_video_kind",
+        "Tipo de vídeo inválido: use direct (Corte direto) ou transformed (Vídeo transformado).",
+    )
+}
+
+/// Pesos do tipo, na ordem da tabela, como a UI os mostra.
+fn weights_json(kind: VideoKind) -> Value {
+    kind.axes()
+        .iter()
         .map(|a| json!({"key": a.key, "weight": f64::from(a.weight_percent) / 100.0}))
         .collect()
 }
@@ -303,6 +379,7 @@ struct Setup {
     transcript: i64,
     frases: Vec<Sentence>,
     range: Range,
+    kind: VideoKind,
     safety: Safety,
     profile: String,
     plan: selection_windows::Plan,
@@ -330,10 +407,10 @@ impl Setup {
 
 fn setup(v: &Value) -> Result<Setup, CoreError> {
     let transcript = sentences::source_transcript(v)?;
-    prepare(transcript, parse_range(v)?)
+    prepare(transcript, parse_range(v)?, parse_kind(v)?)
 }
 
-fn prepare(transcript: i64, range: Range) -> Result<Setup, CoreError> {
+fn prepare(transcript: i64, range: Range, kind: VideoKind) -> Result<Setup, CoreError> {
     sentences::segment_transcript(transcript)?;
     let frases = sentences::load_for(transcript)?;
     if frases.is_empty() {
@@ -343,8 +420,8 @@ fn prepare(transcript: i64, range: Range) -> Result<Setup, CoreError> {
         ));
     }
     let (profile, safety) = route_safety()?;
-    let (wire, _) = ai_task::check_definition(task()).map_err(CoreError::from)?;
-    let instruction = ai_task::normalized_prompt(PROMPT);
+    let (wire, _) = ai_task::check_definition(task_for(kind)).map_err(CoreError::from)?;
+    let instruction = ai_task::normalized_prompt(prompt_for(kind));
     let marks = energy::load_marks(transcript)?;
     let plan = selection_windows::plan_for_profile_marked(
         &selection_windows::ProfileRequest {
@@ -353,7 +430,7 @@ fn prepare(transcript: i64, range: Range) -> Result<Setup, CoreError> {
             instruction: &instruction,
             schema: &wire,
             native_schema: false,
-            output_reserve: task().budget.max_output_tokens,
+            output_reserve: task_for(kind).budget.max_output_tokens,
             reasoning_reserve: selection_windows::DEFAULT_REASONING_RESERVE,
             max_cut_us: range.max_us,
         },
@@ -364,6 +441,7 @@ fn prepare(transcript: i64, range: Range) -> Result<Setup, CoreError> {
         transcript,
         frases,
         range,
+        kind,
         safety,
         profile,
         plan,
@@ -381,9 +459,9 @@ fn state_label(state: selection_windows::PlanState) -> &'static str {
 
 /// Soma a estimativa do #40 das Janelas informadas; `kind` e valores como em
 /// `provider.cost.estimate`. Custo desconhecido nunca vira zero. É a mesma soma de "refazer
-/// com outro perfil" (`jobs::redo`), com a rota da Tarefa.
-fn estimate_inputs(inputs: &[TaskInput], safety: Safety) -> Value {
-    jobs::redo::estimate_inputs(TASK_ID, inputs, safety, None)
+/// com outro perfil" (`jobs::redo`), com a rota da Tarefa do tipo de vídeo.
+fn estimate_inputs(video: VideoKind, inputs: &[TaskInput], safety: Safety) -> Value {
+    jobs::redo::estimate_inputs(task_for(video).id, inputs, safety, None)
 }
 
 /// Estado da energia do áudio numa execução: se foi medida e quantas Frases têm cada marca.
@@ -427,12 +505,16 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             return profile_redo_preview(run, &profile, &v);
         }
         let (_, safety) = route_safety()?;
+        let kind = read_run(run)?.kind;
         let inputs = redo_inputs(run, &v)?;
         let estimate = estimate_inputs(
+            kind,
             &inputs.iter().map(|i| i.1.clone()).collect::<Vec<_>>(),
             safety,
         );
-        return Ok(json!({"paid": matches!(safety, Safety::Paid), "estimate": estimate}));
+        return Ok(
+            json!({"paid": matches!(safety, Safety::Paid), "videoKind": kind.as_str(), "estimate": estimate}),
+        );
     }
     let s = setup(&v)?;
     let inputs: Vec<TaskInput> = s
@@ -455,9 +537,10 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             "windows": windows_json(&s),
             "contextTokens": s.plan.context.tokens,
         },
-        "weights": weights_json(),
+        "videoKind": s.kind.as_str(),
+        "weights": weights_json(s.kind),
         "energy": energy_json(s.marks.as_ref()),
-        "estimate": estimate_inputs(&inputs, s.safety),
+        "estimate": estimate_inputs(s.kind, &inputs, s.safety),
     }))
 }
 
@@ -514,13 +597,15 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         })
         .collect();
     if matches!(s.safety, Safety::Paid) && v["confirmed"] != true {
-        return Err(confirmation_required(estimate_inputs(&inputs, s.safety)));
+        return Err(confirmation_required(estimate_inputs(
+            s.kind, &inputs, s.safety,
+        )));
     }
-    let definition = task();
+    let definition = task_for(s.kind);
     let run = projects::with_writer(|c| {
         let tx = c.transaction()?;
         tx.execute(
-            "INSERT INTO selection_runs(transcript_id,task_version,prompt_sha256,profile,state,min_us,max_us,weights,plan_state,windows_total,energy_marks) VALUES (?1,?2,?3,?4,'running',?5,?6,?7,?8,?9,?10)",
+            "INSERT INTO selection_runs(transcript_id,task_version,prompt_sha256,profile,state,min_us,max_us,weights,plan_state,windows_total,energy_marks,video_kind) VALUES (?1,?2,?3,?4,'running',?5,?6,?7,?8,?9,?10,?11)",
             (
                 s.transcript,
                 definition.version,
@@ -528,10 +613,11 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                 &s.profile,
                 s.range.min_us,
                 s.range.max_us,
-                weights_json().to_string(),
+                weights_json(s.kind).to_string(),
                 state_label(s.plan.state),
                 s.plan.windows.len() as i64,
                 s.marks.is_some(),
+                s.kind.as_str(),
             ),
         )?;
         let run = tx.last_insert_rowid();
@@ -563,7 +649,7 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         },
     )?;
     Ok(
-        json!({"run": run, "batch": batch_for(run), "windows": s.plan.windows.len(), "planState": state_label(s.plan.state), "weights": weights_json()}),
+        json!({"run": run, "batch": batch_for(run), "videoKind": s.kind.as_str(), "windows": s.plan.windows.len(), "planState": state_label(s.plan.state), "weights": weights_json(s.kind)}),
     )
 }
 
@@ -582,9 +668,10 @@ fn enqueue_windows(
     dest: &Dest<'_>,
 ) -> Result<(), CoreError> {
     let batch = batch_for(run);
+    let task = task_for(read_run(run)?.kind).id;
     for (idx, input) in windows {
         let job = jobs::enqueue_ai_with_profile(
-            TASK_ID,
+            task,
             input,
             dest.safety,
             Some(&batch),
@@ -731,12 +818,13 @@ struct RunRow {
     failed: i64,
     energy_marks: bool,
     revision: i64,
+    kind: VideoKind,
 }
 
 fn read_run(run: i64) -> Result<RunRow, CoreError> {
     projects::with_reader(|c| {
         c.query_row(
-            "SELECT transcript_id,state,min_us,max_us,windows_completed,windows_failed,energy_marks,revision FROM selection_runs WHERE id=?1",
+            "SELECT transcript_id,state,min_us,max_us,windows_completed,windows_failed,energy_marks,video_kind,revision FROM selection_runs WHERE id=?1",
             [run],
             |r| {
                 Ok(RunRow {
@@ -747,7 +835,12 @@ fn read_run(run: i64) -> Result<RunRow, CoreError> {
                     completed: r.get(4)?,
                     failed: r.get(5)?,
                     energy_marks: r.get(6)?,
-                    revision: r.get(7)?,
+                    kind: r
+                        .get::<_, String>(7)
+                        .ok()
+                        .and_then(|k| VideoKind::parse(&k))
+                        .unwrap_or_default(),
+                    revision: r.get(8)?,
                 })
             },
         )
@@ -799,7 +892,7 @@ struct Tally {
 struct Pick {
     start: usize,
     end: usize,
-    scores: [u8; AXIS_COUNT],
+    scores: Vec<u8>,
     why: Vec<String>,
     title: String,
     adjust: Adjust,
@@ -807,6 +900,7 @@ struct Pick {
 
 /// Transforma as saídas validadas das Janelas concluídas nos candidatos finais.
 fn build_candidates(
+    kind: VideoKind,
     frases: &[Sentence],
     range: &Range,
     done: &[(usize, Value)],
@@ -832,13 +926,15 @@ fn build_candidates(
                 tally.unknown_id += 1;
                 continue;
             };
-            let mut scores = [0_u8; AXIS_COUNT];
+            let mut scores = Vec::new();
             let mut why = Vec::new();
-            for (i, axis) in AXES.iter().enumerate() {
-                scores[i] = c[axis.key]["score"]
-                    .as_u64()
-                    .unwrap_or(0)
-                    .min(u64::from(SCORE_MAX)) as u8;
+            for axis in kind.axes() {
+                scores.push(
+                    c[axis.key]["score"]
+                        .as_u64()
+                        .unwrap_or(0)
+                        .min(u64::from(SCORE_MAX)) as u8,
+                );
                 why.push(c[axis.key]["why"].as_str().unwrap_or("").trim().to_owned());
             }
             match fit(&spans, a.min(b), b.max(a), range.min_us, range.max_us) {
@@ -851,7 +947,7 @@ fn build_candidates(
                             start_us: spans[start].start_us,
                             end_us: spans[end].end_us,
                         },
-                        total_centi: total_centi(&scores),
+                        total_centi: total_centi(kind, &scores),
                         windows: vec![*window],
                         tag: picks.len(),
                     });
@@ -925,7 +1021,7 @@ fn advance(run: i64) -> Result<(), CoreError> {
             _ => None,
         })
         .collect();
-    let (kept, tally) = build_candidates(&frases, &range, &done);
+    let (kept, tally) = build_candidates(row.kind, &frases, &range, &done);
     // Um refazer com perfil que concluiu abre uma nova revisão; o resto fecha na atual (#126).
     let redone = windows
         .iter()
@@ -951,6 +1047,7 @@ fn advance(run: i64) -> Result<(), CoreError> {
         })
         .collect();
     let summary = json!({
+        "videoKind": row.kind.as_str(),
         "energy": energy_json(run_marks(&row)?.as_ref()),
         "revision": revision,
         "redoFailed": redo_failed,
@@ -988,7 +1085,9 @@ fn advance(run: i64) -> Result<(), CoreError> {
             )?;
             tx.execute("UPDATE selection_windows SET redo=0 WHERE run_id=?1", [run])?;
             for (rank, (m, p)) in kept.iter().enumerate() {
-                let axes: BTreeMap<&str, Value> = AXES
+                let axes: BTreeMap<&str, Value> = row
+                    .kind
+                    .axes()
                     .iter()
                     .enumerate()
                     .map(|(i, a)| (a.key, json!({"score": p.scores[i], "why": p.why[i]})))
@@ -1116,7 +1215,8 @@ fn cmd_redo(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let inputs = redo_inputs(run, &v)?;
     if matches!(safety, Safety::Paid) && v["confirmed"] != true {
         let list: Vec<TaskInput> = inputs.iter().map(|i| i.1.clone()).collect();
-        return Err(confirmation_required(estimate_inputs(&list, safety)));
+        let kind = read_run(run)?.kind;
+        return Err(confirmation_required(estimate_inputs(kind, &list, safety)));
     }
     enqueue_windows(
         run,
@@ -1250,7 +1350,7 @@ fn cmd_cancel(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 fn run_json(run: i64, revision: Option<i64>) -> Result<Value, CoreError> {
     let (head, batch) = projects::with_reader(|c| {
         c.query_row(
-            "SELECT id,transcript_id,task_version,prompt_sha256,profile,state,min_us,max_us,weights,plan_state,windows_total,windows_completed,windows_failed,candidates_kept,discarded,merged,summary,created_at,batch,revision FROM selection_runs WHERE id=?1",
+            "SELECT id,transcript_id,task_version,prompt_sha256,profile,state,min_us,max_us,weights,plan_state,windows_total,windows_completed,windows_failed,candidates_kept,discarded,merged,summary,created_at,batch,video_kind,revision FROM selection_runs WHERE id=?1",
             [run],
             |r| {
                 let weights: String = r.get(8)?;
@@ -1266,7 +1366,8 @@ fn run_json(run: i64, revision: Option<i64>) -> Result<Value, CoreError> {
                         "counts": {"windows": r.get::<_, i64>(10)?, "completed": r.get::<_, i64>(11)?, "failed": r.get::<_, i64>(12)?, "kept": r.get::<_, i64>(13)?, "discarded": r.get::<_, i64>(14)?, "merged": r.get::<_, i64>(15)?},
                         "summary": summary.and_then(|t| serde_json::from_str::<Value>(&t).ok()).unwrap_or(Value::Null),
                         "createdAt": r.get::<_, String>(17)?,
-                        "revision": r.get::<_, i64>(19)?,
+                        "videoKind": r.get::<_, String>(19)?,
+                        "revision": r.get::<_, i64>(20)?,
                     }),
                     r.get::<_, String>(18)?,
                 ))

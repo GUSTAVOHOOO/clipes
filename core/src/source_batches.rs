@@ -66,6 +66,8 @@ struct Batch {
     engine: String,
     min_us: Option<i64>,
     max_us: Option<i64>,
+    /// Tipo de vídeo escolhido na criação (#67); cada Fonte do lote herda.
+    video_kind: String,
 }
 
 #[derive(Clone)]
@@ -81,7 +83,7 @@ struct Item {
 fn read_batch(id: i64) -> Result<Batch, CoreError> {
     projects::with_reader(|c| {
         c.query_row(
-            "SELECT id,key,state,engine,min_us,max_us FROM source_batches WHERE id=?1",
+            "SELECT id,key,state,engine,min_us,max_us,video_kind FROM source_batches WHERE id=?1",
             [id],
             |r| {
                 Ok(Batch {
@@ -91,6 +93,7 @@ fn read_batch(id: i64) -> Result<Batch, CoreError> {
                     engine: r.get(3)?,
                     min_us: r.get(4)?,
                     max_us: r.get(5)?,
+                    video_kind: r.get(6)?,
                 })
             },
         )
@@ -362,8 +365,7 @@ fn start_item(batch: &Batch, item: &Item, user_confirmed: bool) -> Result<(), Co
         let run = match existing_run(&batch.key, item.source_id) {
             Some(run) => run,
             None => {
-                let mut args =
-                    json!({"source_id": item.source_id, "confirmed": true, "batch": batch.key});
+                let mut args = json!({"source_id": item.source_id, "confirmed": true, "batch": batch.key, "videoKind": batch.video_kind});
                 if let Some(min) = batch.min_us {
                     args["minUs"] = json!(min);
                 }
@@ -611,14 +613,14 @@ fn view(id: i64) -> Result<Value, CoreError> {
     };
     Ok(json!({
         "id": batch.id, "key": batch.key, "state": batch.state, "status": status,
-        "engine": batch.engine, "minUs": batch.min_us, "maxUs": batch.max_us,
+        "engine": batch.engine, "minUs": batch.min_us, "maxUs": batch.max_us, "videoKind": batch.video_kind,
         "pause": pause, "budget": budget,
         "counts": {"total": items.len(), "completed": done, "paused": paused, "active": active, "pending": pending, "cancelled": cancelled},
         "items": items.iter().map(|i| item_json(&batch, i)).collect::<Vec<_>>(),
     }))
 }
 
-/// `batches.create {sourceIds, engine?, minUs?, maxUs?, maxCostMicroUsd?, confirmed?}`.
+/// `batches.create {sourceIds, engine?, videoKind?, minUs?, maxUs?, maxCostMicroUsd?, confirmed?}`.
 ///
 /// Recusa antes de criar qualquer coisa se o veto "somente local" ou a rota da seleção barram o
 /// lote. Com seleção paga (ou áudio pago no Groq) exige `confirmed: true`: a confirmação vale
@@ -674,6 +676,7 @@ fn cmd_create(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         }
     };
     let (min_us, max_us) = (range("minUs")?, range("maxUs")?);
+    let kind = crate::selection::parse_kind(&v)?;
     let (profile, safety) = crate::selection::route_safety()?;
     if engine == "groq" && projects::project_local_only()? {
         return Err(crate::provider::local_only_violation());
@@ -711,8 +714,8 @@ fn cmd_create(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let id = projects::with_writer(|c| {
         let tx = c.transaction()?;
         tx.execute(
-            "INSERT INTO source_batches(key,engine,min_us,max_us) VALUES ('',?1,?2,?3)",
-            (engine, min_us, max_us),
+            "INSERT INTO source_batches(key,engine,min_us,max_us,video_kind) VALUES ('',?1,?2,?3,?4)",
+            (engine, min_us, max_us, kind.as_str()),
         )?;
         let id = tx.last_insert_rowid();
         tx.execute(
