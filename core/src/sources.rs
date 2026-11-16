@@ -228,10 +228,10 @@ fn parse_language(value: &Value) -> Result<&'static str, CoreError> {
         .ok_or_else(|| err("invalid_language", "Selecione um idioma válido"))
 }
 
-fn parse_optional_language(value: Option<&Value>) -> Result<&'static str, CoreError> {
+fn parse_optional_language(value: Option<&Value>) -> Result<String, CoreError> {
     match value {
-        None | Some(Value::Null) => Ok("pt"),
-        Some(other) => parse_language(other),
+        None | Some(Value::Null) => crate::channel_profile::default_language(),
+        Some(other) => parse_language(other).map(str::to_owned),
     }
 }
 

@@ -9,6 +9,7 @@ import { openCutPreview } from './CutPreview';
 import { openEditor } from '@/features/editor/Editor';
 import { CandidateReview } from './CandidateReview';
 import { clock, fill, message } from './selectionFormat';
+import { CHANNEL_PROFILE_UPDATED_EVENT, type ChannelProfileData } from './ChannelProfile';
 import { VideoKindBadge, VideoKindPicker, WeightsLine, kindOf, type VideoKind } from './videoKind';
 
 type Estimate = { kind: string; windows: number; inputTokens: number; minMicroUsd: number | null; maxMicroUsd: number | null };
@@ -68,12 +69,26 @@ export function Selection({ sourceId }: { sourceId: number }) {
   const [busy, setBusy] = useState(false);
   const [minScore, setMinScore] = useState(0);
   const [videoKind, setVideoKind] = useState<VideoKind>('direct');
+  const [profileVersion, setProfileVersion] = useState(0);
   const [pending, setPending] = useState<Pending | null>(null);
   const [redoPaid, setRedoPaid] = useState<Preview | null>(null);
   const focus = useRef<HTMLButtonElement>(null);
   const [chat, setChat] = useState<ChatStatus | null>(null);
   const loadChat = useCallback(async () => { setChat(await coreDispatch<ChatStatus>('chat.status', { source_id: sourceId })); }, [sourceId]);
   useEffect(() => { loadChat().catch(() => setChat(null)); }, [loadChat]);
+  useEffect(() => {
+    let active = true;
+    coreDispatch<ChannelProfileData>('channel_profile.get', {})
+      .then(p => { if (active) setVideoKind(kindOf(p.videoKind)); })
+      .catch(() => {});
+    const onUpdated = (e: Event) => {
+      const next = (e as CustomEvent<ChannelProfileData>).detail;
+      if (next?.videoKind) setVideoKind(kindOf(next.videoKind));
+      setProfileVersion(v => v + 1);
+    };
+    window.addEventListener(CHANNEL_PROFILE_UPDATED_EVENT, onUpdated);
+    return () => { active = false; window.removeEventListener(CHANNEL_PROFILE_UPDATED_EVENT, onUpdated); };
+  }, [sourceId]);
   const fetching = chat?.job?.state === 'queued' || chat?.job?.state === 'running';
   useEffect(() => {
     if (!fetching) return;
@@ -93,7 +108,7 @@ export function Selection({ sourceId }: { sourceId: number }) {
     setBlocked(''); setPreview(null);
     coreDispatch<Preview>('selection.estimate', { source_id: sourceId, videoKind }).then(p => { if (active) setPreview(p); }).catch(e => { if (active) setBlocked(message(e)); });
     return () => { active = false; };
-  }, [sourceId, videoKind]);
+  }, [sourceId, videoKind, profileVersion]);
   useEffect(() => {
     let active = true;
     loadRuns().catch(() => { if (active) setError(t.error); });

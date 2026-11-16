@@ -81,6 +81,15 @@ fn local_source_lifecycle() {
     )
     .unwrap();
     assert_eq!(updated["language"], "en");
+    // Padrão herdado do Perfil de canal (#72 + #195) quando `language` é omitido.
+    run("channel_profile.set", json!({"language": "fr"})).unwrap();
+    let inherited = run(
+        "sources.import",
+        json!({"project":project,"path":media,"permission":{"status":"none"},"audio_track":2}),
+    )
+    .unwrap();
+    assert_eq!(inherited["language"], "fr");
+    run("channel_profile.set", json!({"language": "pt"})).unwrap();
     assert_eq!(
         source["metadata"]["streams"]
             .as_array()

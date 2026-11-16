@@ -4,6 +4,7 @@ import { coreDispatch } from '@/lib/core';
 import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { CHANNEL_PROFILE_UPDATED_EVENT, type ChannelProfileData } from './ChannelProfile';
 import { VideoKindBadge, VideoKindPicker, kindOf, type VideoKind } from './videoKind';
 
 type SourceRow = { id: number; path: string; status: string };
@@ -83,10 +84,16 @@ export function SourceBatches({ project, projectId }: { project: string; project
     let unlisten: (() => void) | undefined;
     const sync = () => { if (active) void refresh().catch(() => { if (active) setError(t.error); }); };
     coreDispatch<SourceRow[]>('sources.list', { project }).then(rows => { if (active) setSources(rows); }).catch(() => {});
+    coreDispatch<ChannelProfileData>('channel_profile.get', {}).then(p => { if (active) setVideoKind(kindOf(p.videoKind)); }).catch(() => {});
+    const onUpdated = (e: Event) => {
+      const next = (e as CustomEvent<ChannelProfileData>).detail;
+      if (next?.videoKind) setVideoKind(kindOf(next.videoKind));
+    };
+    window.addEventListener(CHANNEL_PROFILE_UPDATED_EVENT, onUpdated);
     sync();
     listen<{ project?: string }>('core-progress', event => { if (event.payload.project === projectId) sync(); }).then(fn => { if (active) unlisten = fn; else fn(); }).catch(() => {});
     const timer = window.setInterval(sync, 3000);
-    return () => { active = false; unlisten?.(); window.clearInterval(timer); };
+    return () => { active = false; window.removeEventListener(CHANNEL_PROFILE_UPDATED_EVENT, onUpdated); unlisten?.(); window.clearInterval(timer); };
   }, [project, projectId, t.error]);
 
   const name = (path: string) => path.split(/[\\/]/).pop() ?? path;

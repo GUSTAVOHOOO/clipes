@@ -1,6 +1,6 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { editorEditsMock } from './editorEditsMock';
-import { captionsMock } from './captionsMock';
+import { captionsMock, getDefaultCaptionStyleMock, setDefaultCaptionStyleMock } from './captionsMock';
 import { version } from '../../package.json';
 import { exportMock } from '@/features/export/mock';
 
@@ -53,6 +53,19 @@ let priceOverrides: { provider: string; model: string; inputPerMillion: number; 
 const assistantTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('assistant-test');
 let assistantMock = { completed: !assistantTest, skipped: false, needsSetup: assistantTest, default: '', tasks: { selection: '', packaging: '', script: '', translation: '' } as Record<string, string>, localOnly: { selection: false, packaging: false, script: false, translation: false } as Record<string, boolean> };
 let projectVetoMock = false;
+let channelProfileMock = {
+  videoKind: 'direct',
+  language: 'pt',
+  minUs: 20_000_000,
+  maxUs: 60_000_000,
+  allowedSources: [] as { label: string; url?: string | null; note?: string | null }[],
+  narrationVoice: null as string | null,
+};
+const channelProfileView = () => ({
+  ...channelProfileMock,
+  captionStyle: getDefaultCaptionStyleMock(),
+  limits: { defaultMinUs: 20_000_000, defaultMaxUs: 60_000_000, maxUs: 180_000_000, technicalMaxUs: 300_000_000 },
+});
 const knownProfile = (id: string) => (id === 'legacy' ? !!providerMock.endpoint : profileMocks.some(p => p.id === id));
 const staleProfile = (choice: string) => choice.startsWith('profile:') && !knownProfile(choice.slice(8));
 const assistantView = () => {
@@ -233,6 +246,24 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'projects.current') return (sourceTest ? { name:'Teste', path:'/test/Teste.clipes', id:'test-project' } : null) as T;
     if (name === 'projects.local_only.get') return { open: sourceTest, enabled: sourceTest && projectVetoMock } as T;
     if (name === 'projects.local_only.set') { projectVetoMock = (args as { enabled: boolean }).enabled; return { open: true, enabled: projectVetoMock } as T; }
+    if (name === 'channel_profile.languages') return [{ code: 'pt', name: 'portuguese' }, { code: 'en', name: 'english' }, { code: 'es', name: 'spanish' }] as T;
+    if (name === 'channel_profile.get') return channelProfileView() as T;
+    if (name === 'channel_profile.set') {
+      const a = args as Partial<typeof channelProfileMock> & { captionStyle?: ReturnType<typeof getDefaultCaptionStyleMock> };
+      const minUs = a.minUs ?? channelProfileMock.minUs;
+      const maxUs = a.maxUs ?? channelProfileMock.maxUs;
+      if (minUs <= 0 || minUs >= maxUs || maxUs > 180_000_000) throw { code: 'invalid_cut_range', message: 'A faixa de duração dos Cortes é inválida.' };
+      channelProfileMock = {
+        videoKind: a.videoKind ?? channelProfileMock.videoKind,
+        language: a.language ?? channelProfileMock.language,
+        minUs,
+        maxUs,
+        allowedSources: a.allowedSources ?? channelProfileMock.allowedSources,
+        narrationVoice: null,
+      };
+      if (a.captionStyle) setDefaultCaptionStyleMock(a.captionStyle);
+      return channelProfileView() as T;
+    }
     if (sourceTest && new URLSearchParams(location.search).has('batch-test')) { const handled = batchMockDispatch(name, args); if (handled !== undefined) return handled as T; }
     if (name.startsWith('thumbnail.')) { const handled = thumbnailMockDispatch(name, args); if (handled !== undefined) return handled as T; }
     if (name.startsWith('script.') || name.startsWith('angles.')) { const handled = scriptMockDispatch(name, args); if (handled !== undefined) return handled as T; }
@@ -253,7 +284,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (sourceTest && name === 'sources.list') return sourceItems as T;
     if (sourceTest && name === 'sources.url.download') { const url=(args as {url:string}).url; if(url.endsWith('/age-test')) throw {code:'age_restricted',message:'test'}; if(url.endsWith('/js-test') && !denoMock.installed) throw {code:'js_runtime_missing',message:'test'}; return {path:'/test/downloaded.mp4',url} as T; }
     if (sourceTest && name === 'sources.inspect') return {format:{duration:'12'},streams:[{index:0,codec_type:'audio',codec_name:'aac'}]} as T;
-    if (sourceTest && name === 'sources.import') { const a=args as {path:string;permission:{status:string};origin_url?:string;language?:string}; const item={id:4,path:a.path,status:'available',available:true,verified:true,language:a.language??'pt',permission:a.permission}; sourceItems.push(item); return {...item,origin_url:a.origin_url} as T; }
+    if (sourceTest && name === 'sources.import') { const a=args as {path:string;permission:{status:string};origin_url?:string;language?:string}; const item={id:4,path:a.path,status:'available',available:true,verified:true,language:a.language??channelProfileMock.language,permission:a.permission}; sourceItems.push(item); return {...item,origin_url:a.origin_url} as T; }
     if (sourceTest && name === 'sources.language.set') { const { id, language } = args as { id: number; language: string }; sourceItems = sourceItems.map(item => item.id === id ? { ...item, language } : item); return sourceItems.find(item => item.id === id) as T; }
 
     if (sourceTest && (name === 'sources.hash' || name === 'sources.relocate')) {
