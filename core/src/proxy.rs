@@ -185,7 +185,7 @@ pub(crate) fn evict_after_timeline(root: &Path, user_limit: u64, keep: &str) {
     evict(root, limit_for(user_limit), keep);
 }
 
-fn project_path() -> Result<PathBuf, CoreError> {
+pub(crate) fn project_path() -> Result<PathBuf, CoreError> {
     let current = crate::dispatch("projects.current", json!({}), &mut |_| {})?;
     current["path"]
         .as_str()

@@ -6,6 +6,7 @@ import { Kbd } from '@/components/ui/Kbd';
 import { clock, fill } from './selectionFormat';
 import { VideoKindBadge, type VideoKind } from './videoKind';
 import { Packaging } from './Packaging';
+import { Thumbnail } from './Thumbnail';
 import { Script } from './Script';
 import { ExportButton } from '@/features/export/ExportButton';
 import { RedoWithProfile, useProfiles, type Blocked } from './RedoWithProfile';
@@ -196,6 +197,7 @@ export function CandidateReview({ sourceId, run, videoKind = 'direct', candidate
         {onRedoStarted && <RedoWithProfile key={`redo-${current.id}`} run={run} windows={current.windows} currentProfile={current.profile ?? ''} profiles={profiles} onStarted={onRedoStarted}
           blocked={blockedOf(current.windows, windowStates)} />}
         {review?.status === 'approved' && <Packaging key={current.id} candidate={current.id} />}
+        {review?.status === 'approved' && <Thumbnail key={`thumbnail-${current.id}`} candidate={current.id} />}
       </section>}
     </div>
     {error && <p role="alert" className="text-danger">{error}</p>}

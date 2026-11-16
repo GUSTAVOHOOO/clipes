@@ -8,6 +8,7 @@ import { exportMock } from '@/features/export/mock';
 export type ExportRequest = { source_id: number; start_id: number; end_id: number; candidate_id?: number };
 import { batchMockDispatch } from './batchMock';
 import { packagingMockDispatch } from './packagingMock';
+import { thumbnailMockDispatch } from './thumbnailMock';
 import { scriptMockDispatch } from './scriptMock';
 
 const groqRetryTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('groq-retry-test');
@@ -230,6 +231,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'projects.local_only.get') return { open: sourceTest, enabled: sourceTest && projectVetoMock } as T;
     if (name === 'projects.local_only.set') { projectVetoMock = (args as { enabled: boolean }).enabled; return { open: true, enabled: projectVetoMock } as T; }
     if (sourceTest && new URLSearchParams(location.search).has('batch-test')) { const handled = batchMockDispatch(name, args); if (handled !== undefined) return handled as T; }
+    if (name.startsWith('thumbnail.')) { const handled = thumbnailMockDispatch(name, args); if (handled !== undefined) return handled as T; }
     if (name.startsWith('script.')) { const handled = scriptMockDispatch(name, args); if (handled !== undefined) return handled as T; }
     if (name.startsWith('packaging.')) { const handled = packagingMockDispatch(name, args); if (handled !== undefined) return handled as T; }
     if (name === 'jobs.list') return (sourceTest ? jobItems : []) as T;

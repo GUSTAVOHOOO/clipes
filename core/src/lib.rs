@@ -81,6 +81,7 @@ pub mod selection_windows;
 pub mod sentences;
 mod source_batches;
 mod sources;
+pub mod thumbnail;
 pub mod transcription;
 mod url_import;
 mod version;

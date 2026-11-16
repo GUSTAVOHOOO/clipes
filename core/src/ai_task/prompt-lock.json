@@ -43,5 +43,10 @@
     "id": "script_block",
     "version": 1,
     "sha256": "27233fa1bb44933c0ed00700259d8a03a9190db28a407ce848cc2d667da82fc7"
+  },
+  {
+    "id": "thumbnail",
+    "version": 1,
+    "sha256": "f7c54202c96bf601c6b0bd3bbbcb7913638aa3219b2428e8980bcb6f33ae0766"
   }
 ]

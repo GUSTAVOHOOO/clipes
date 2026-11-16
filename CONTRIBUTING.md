@@ -7,7 +7,7 @@ Obrigado por contribuir! Consulte o [glossário](GLOSSARY.md) e os [ADRs](docs/a
 - Para erros, ideias e propostas de Provedor ou modelo, escolha o formulário em [Issues](https://github.com/GUSTAVOHOOO/clipes/issues/new/choose). Confira se já existe uma issue parecida. Descreva o contexto e revise o texto antes de publicá-lo: issues são públicas.
 - Para dúvidas de uso, use [Discussions](https://github.com/GUSTAVOHOOO/clipes/discussions). Para vulnerabilidades, siga [SECURITY.md](SECURITY.md), sem abrir issue pública.
 - Para contribuir com código, procure uma issue existente ou abra uma para discutir o trabalho. Crie um fork e uma branch a partir de `master`, faça alterações focadas e abra um pull request para `master` explicando o que mudou, a issue relacionada e como testou. Responda à revisão e atualize o PR quando necessário.
-- Consulte os guias de [Provedor](docs/contribuindo/provedor.md), [Motor de transcrição](docs/contribuindo/motor-de-transcricao.md), [Tarefa de IA](docs/contribuindo/tarefa-de-ia.md) e [Janelas de seleção](docs/contribuindo/janelas-de-selecao.md) e [Seleção de Cortes](docs/contribuindo/selecao-de-cortes.md) e [Empacotamento](docs/contribuindo/empacotamento.md) e [Roteiro](docs/contribuindo/roteiro.md) para contribuições nessas áreas.
+- Consulte os guias de [Provedor](docs/contribuindo/provedor.md), [Motor de transcrição](docs/contribuindo/motor-de-transcricao.md), [Tarefa de IA](docs/contribuindo/tarefa-de-ia.md) e [Janelas de seleção](docs/contribuindo/janelas-de-selecao.md) e [Seleção de Cortes](docs/contribuindo/selecao-de-cortes.md) e [Empacotamento](docs/contribuindo/empacotamento.md) [Capa](docs/contribuindo/capa.md) e [Roteiro](docs/contribuindo/roteiro.md) para contribuições nessas áreas.
 
 ## DCO e licença
 

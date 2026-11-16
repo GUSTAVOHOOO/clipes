@@ -1,0 +1,1 @@
+{"type":"object","properties":{"schemaVersion":{"const":1},"sentenceId":{"type":"integer"},"why":{"type":"string"}},"required":["schemaVersion","sentenceId","why"],"additionalProperties":false}
