@@ -131,3 +131,7 @@ formato documentado, sem dados reais. O harness cobre fronteiras do VAD, tempos
 absolutos, checkpoint antes da rede, timeout/queda e retomada, consentimento,
 veto, custos e troca de Motor. O teste real ignorado acima já foi executado uma
 vez; não faz parte do CI nem deve ser usado como teste automático.
+
+## Agrupar trechos de VAD (#162)
+
+Opção **desligada por padrão**: `transcription.grouping {enabled}` (sem argumentos só consulta e devolve `{enabled, size}`), guardada em `transcription-hardware.json`. Ligada, o worker recebe `group_size` na tarefa `transcribe` e manda até N trechos consecutivos do mesmo idioma numa só chamada ao `BatchedInferencePipeline` com `clip_timestamps`; os tempos de palavra continuam absolutos no bloco e o formato dos blocos e checkpoints do #48 não muda. N é o lote seguro medido pela sonda (#50) na GPU (1 sem medição) e 8 em CPU. Com `out_of_memory` e N maior que 1, o núcleo reduz N pela metade, refaz só o bloco atual e grava a nova medição (`origin: "oom"`). Medição e recomendação: [agrupar trechos de VAD](../research/2026-11-16-agrupar-trechos-vad.md). Testes: `cargo test -p clipes-core --test transcription` (worker falso, `CLIPES_FAKE_GROUP_OOM`) e `pytest worker/tests/test_transcribe.py`.

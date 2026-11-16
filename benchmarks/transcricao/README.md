@@ -73,3 +73,7 @@ py benchmarks/transcricao/gerar_kit_bordas.py --corpus "$env:TEMP\clipes-mfa-cor
 ```
 
 O gerador do kit sobrescreve os rótulos: não o execute sobre um kit já revisado. Importe os rótulos ajustados com `py benchmarks/transcricao/kit_bordas.py "$env:TEMP\clipes-bordas-kit" "$env:TEMP\clipes-bordas-revisadas.json"`. O JSON é evidência local, não modifica a referência nem substitui a comparação humana pendente.
+
+## Agrupar trechos de VAD (#162)
+
+`baixar_librivox.py` baixa áudio de domínio público (LibriVox, com SHA-256) para uma pasta em `%TEMP%`; `agrupar.py run` compara um trecho por chamada com grupos de N trechos usando o código do worker, e `agrupar.py compare` resume velocidade, VRAM, divergência de WER e de tempos por palavra. Relatório: [docs/research/2026-11-16-agrupar-trechos-vad.md](../../docs/research/2026-11-16-agrupar-trechos-vad.md).
