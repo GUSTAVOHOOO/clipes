@@ -3,6 +3,7 @@ pub mod captions;
 pub mod pipeline;
 pub mod render;
 
+use crate::caption_style::{self, store::ClipId, Preset, Style, StyledWord, WordOverride};
 use crate::{projects, CommandRegistration, CommandResult, CoreError, EventSink};
 use captions::CaptionWord;
 use rusqlite::OptionalExtension;
@@ -48,6 +49,8 @@ struct Target {
     start_us: i64,
     end_us: i64,
     words: Vec<CaptionWord>,
+    styled: Vec<StyledWord>,
+    transcript: i64,
 }
 fn bounds() -> CoreError {
     error(
@@ -97,20 +100,32 @@ fn target(request: &ExportRequest) -> Result<Target, CoreError> {
         if start_us < 0 || end_us <= start_us || last < first {
             return Ok(Err(bounds()));
         }
-        let mut q=c.prepare(&format!("SELECT {},start_us,end_us FROM transcript_words WHERE transcript_id=?1 AND kind='word' AND position BETWEEN ?2 AND ?3 ORDER BY position",crate::corrections::EFFECTIVE_TEXT))?;
-        let words = q
+        let mut q=c.prepare(&format!("SELECT {},w.start_us,w.end_us,w.position,o.document FROM transcript_words w LEFT JOIN caption_word_overrides o ON o.transcript_id=w.transcript_id AND o.position=w.position WHERE w.transcript_id=?1 AND w.kind='word' AND w.position BETWEEN ?2 AND ?3 ORDER BY w.position",crate::corrections::EFFECTIVE_TEXT))?;
+        let styled = q
             .query_map((transcript, first, last), |r| {
-                Ok(CaptionWord {
-                    text: r.get(0)?,
-                    start_us: r.get::<_, i64>(1)? - start_us,
-                    end_us: r.get::<_, i64>(2)? - start_us,
+                Ok(StyledWord {
+                    word: CaptionWord {
+                        text: r.get(0)?,
+                        start_us: r.get::<_, i64>(1)? - start_us,
+                        end_us: r.get::<_, i64>(2)? - start_us,
+                    },
+                    position: r.get(3)?,
+                    overrides: r
+                        .get::<_, Option<String>>(4)?
+                        .map(|doc| serde_json::from_str::<WordOverride>(&doc))
+                        .transpose()
+                        .map_err(|_| rusqlite::Error::InvalidQuery)?
+                        .unwrap_or_default(),
                 })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
+        let words = styled.iter().map(|w| w.word.clone()).collect();
         Ok(Ok(Target {
             start_us,
             end_us,
             words,
+            styled,
+            transcript,
         }))
     })?
 }
@@ -124,12 +139,22 @@ fn current_path() -> Result<PathBuf, CoreError> {
 }
 
 fn cmd_captions(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let style = request_style(&v)?;
     let request = parse(v)?;
     let target = target(&request)?;
     let words = captions::sanitize(&target.words)?;
+    let prepared = caption_style::prepare(&target.styled, &style, target.end_us - target.start_us)?;
+    let editable:Vec<_>=target.styled.iter().map(|w| json!({"position":w.position,"text":w.word.text,"startUs":w.word.start_us,"endUs":w.word.end_us,"overrides":w.overrides})).collect();
     Ok(
-        json!({"ass":captions::ass(&words,target.end_us-target.start_us)?,"lines":captions::layout(&words),"start_us":target.start_us,"end_us":target.end_us}),
+        json!({"ass":prepared.ass,"lines":captions::layout(&words),"start_us":target.start_us,"end_us":target.end_us,"cues":prepared.cues,"style":prepared.style,"emojiRemoved":prepared.emoji_removed,"words":editable,"transcriptId":target.transcript}),
     )
+}
+
+fn request_style(v: &Value) -> Result<Style, CoreError> {
+    match v["clip_id"].as_i64() {
+        Some(id) => caption_style::store::style(ClipId(id)),
+        None => Ok(Style::preset(Preset::Vertical)),
+    }
 }
 
 fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
@@ -213,8 +238,12 @@ pub(crate) fn run(
                 r.get(0)
             })
         })?;
-        let request: StartRequest = serde_json::from_str(&request).map_err(|_| failed())?;
+        let encoded: Value = serde_json::from_str(&request).map_err(|_| failed())?;
+        let style = request_style(&encoded)?;
+        let request: StartRequest = serde_json::from_value(encoded).map_err(|_| failed())?;
         let target = target(&request.cut)?;
+        let prepared =
+            caption_style::prepare(&target.styled, &style, target.end_us - target.start_us)?;
         let (source, _, audio, _, _) =
             crate::jobs::preview::source(request.cut.source_id, project)?;
         let ffmpeg = crate::components::cache_settings()?
@@ -242,12 +271,13 @@ pub(crate) fn run(
                 }
             });
             let mut last = 0;
-            let result = render::render(&ffmpeg, &input, &cancel, &mut |percentage| {
-                if percentage > last {
-                    let _ = crate::jobs::progress(id, "export", percentage, "Exportando Corte");
-                    last = percentage;
-                }
-            });
+            let result =
+                render::render_styled(&ffmpeg, &input, &prepared, &cancel, &mut |percentage| {
+                    if percentage > last {
+                        let _ = crate::jobs::progress(id, "export", percentage, "Exportando Corte");
+                        last = percentage;
+                    }
+                });
             finished.store(true, Ordering::SeqCst);
             result
         });

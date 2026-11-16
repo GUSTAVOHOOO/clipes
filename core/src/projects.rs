@@ -240,7 +240,7 @@ fn validate_envelope(doc: &Value) -> Result<(), CoreError> {
     Ok(())
 }
 inventory::submit! { DocumentType { name:"clip", current_version:1, validate:validate_envelope } }
-inventory::submit! { DocumentType { name:"style", current_version:1, validate:validate_envelope } }
+inventory::submit! { DocumentType { name:"style", current_version:1, validate:crate::caption_style::validate_document } }
 inventory::submit! { DocumentType { name:"script", current_version:1, validate:validate_envelope } }
 inventory::submit! { DocumentType { name:"packaging", current_version:1, validate:validate_envelope } }
 fn document(v: Value, _: &mut EventSink<'_>) -> CommandResult {

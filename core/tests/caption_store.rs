@@ -1,0 +1,62 @@
+//! Mesma fronteira de dispatch da UI, sem rede e com Projeto isolado.
+use clipes_core::{dispatch, projects::with_writer};
+use serde_json::{json, Value};
+fn call(name: &str, args: Value) -> Value {
+    dispatch(name, args, &mut |_| {}).unwrap()
+}
+
+#[test]
+fn overrides_are_persistent_independent_of_presets_and_remap_only_unique_near_words() {
+    let root = tempfile::tempdir().unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", root.path().join("data"));
+    let project = call(
+        "projects.create",
+        json!({"parent":root.path(),"name":"Legendas"}),
+    );
+    let transcript=with_writer(|c| {
+        c.execute("INSERT INTO sources(path,size,duration_us,partial_hash,metadata,permission,audio_track) VALUES ('missing',1,9000000,'h','{}','{}',0)",[])?;
+        c.execute("INSERT INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,state,duration_us) VALUES (1,0,'local','m','r','c','complete',9000000)",[])?;
+        let t=c.last_insert_rowid();
+        for (p,text,start) in [(0," Olá",0),(1," mundo",1_000_000),(2," ambígua",2_000_000),(3," distante",4_000_000)] {
+            c.execute("INSERT INTO transcript_words(transcript_id,position,kind,text,start_us,end_us) VALUES (?1,?2,'word',?3,?4,?4+200000)",(t,p,text,start))?;
+        }
+        Ok(t)
+    }).unwrap();
+    for position in 0..4 {
+        call(
+            "captions.override",
+            json!({"transcript_id":transcript,"position":position,"overrides":{"color":"#FF0000","highlight":false}}),
+        );
+    }
+    call("projects.close", json!({}));
+    call("projects.open", json!({"path":project["path"]}));
+    let overrides = call("captions.overrides", json!({"transcript_id":transcript}));
+    assert_eq!(overrides.as_array().unwrap().len(), 4);
+    let err = dispatch(
+        "captions.override",
+        json!({"transcript_id":transcript,"position":99,"overrides":{"color":"#FF0000"}}),
+        &mut |_| {},
+    )
+    .unwrap_err();
+    assert_eq!(err.code, "word_missing");
+    with_writer(|c| {
+        let tx=c.transaction()?;
+        clipes_core::caption_style::store::stage_remap(&tx,transcript)?;
+        tx.execute("DELETE FROM transcripts WHERE id=?1",[transcript])?;
+        tx.execute("INSERT INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,state,duration_us) VALUES (1,0,'local','m','r','c','complete',9000000)",[])?;
+        let t=tx.last_insert_rowid();
+        for (p,text,start) in [(0," OLÁ ",300_000),(1,"mundo",900_000),(2,"ambígua",1_900_000),(3,"ambígua",2_100_000),(4,"distante",4_310_000)] {
+            tx.execute("INSERT INTO transcript_words(transcript_id,position,kind,text,start_us,end_us) VALUES (?1,?2,'word',?3,?4,?4+100000)",(t,p,text,start))?;
+        }
+        assert_eq!(clipes_core::caption_style::store::finish_remap(&tx,t)?,2);
+        tx.commit()
+    }).unwrap();
+    let overrides = call("captions.overrides", json!({"transcript_id":transcript}));
+    assert_eq!(overrides.as_array().unwrap().len(), 2);
+    assert_eq!(overrides[0]["overrides"]["color"], "#FF0000");
+    assert_eq!(
+        call("captions.remap_status", json!({"source_id":1}))["discarded"],
+        2
+    );
+    call("projects.close", json!({}));
+}

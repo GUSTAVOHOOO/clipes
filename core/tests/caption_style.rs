@@ -1,11 +1,22 @@
-use clipes_core::{caption_style::{prepare, Preset, Style, StyledWord, WordOverride}, export::captions::CaptionWord};
+use clipes_core::{
+    caption_style::{prepare, Preset, Style, StyledWord, WordOverride},
+    export::captions::CaptionWord,
+};
 
 fn words() -> Vec<StyledWord> {
     ["Uma", "fala", "curta", "com", "legenda", "bem", "legível."]
-        .iter().enumerate().map(|(i, text)| StyledWord {
-            word: CaptionWord { text: (*text).into(), start_us: i as i64 * 400_000, end_us: i as i64 * 400_000 + 300_000 },
-            position: i as i64, overrides: WordOverride::default(),
-        }).collect()
+        .iter()
+        .enumerate()
+        .map(|(i, text)| StyledWord {
+            word: CaptionWord {
+                text: (*text).into(),
+                start_us: i as i64 * 400_000,
+                end_us: i as i64 * 400_000 + 300_000,
+            },
+            position: i as i64,
+            overrides: WordOverride::default(),
+        })
+        .collect()
 }
 
 #[test]
@@ -19,11 +30,29 @@ fn presets_share_explicit_breaks_and_keep_word_overrides() {
         assert!(prepared.ass.contains("WrapStyle: 2"));
         assert!(prepared.ass.contains("&H0000FF&"));
         assert!(prepared.cues.iter().all(|cue| cue.lines.len() <= 2));
-        assert_eq!(prepared.cues.iter().flat_map(|c| &c.lines).flatten().map(|w| w.text.as_str()).collect::<Vec<_>>(), words().iter().map(|w| w.word.text.as_str()).collect::<Vec<_>>());
+        assert_eq!(
+            prepared
+                .cues
+                .iter()
+                .flat_map(|c| &c.lines)
+                .flatten()
+                .map(|w| w.text.as_str())
+                .collect::<Vec<_>>(),
+            words()
+                .iter()
+                .map(|w| w.word.text.as_str())
+                .collect::<Vec<_>>()
+        );
         if preset == Preset::Vertical {
-            assert!(prepared.cues.iter().all(|c| c.lines.len() == 1 && c.lines[0].len() <= 3));
+            assert!(prepared
+                .cues
+                .iter()
+                .all(|c| c.lines.len() == 1 && c.lines[0].len() <= 3));
         }
-        assert_eq!(prepared.ass.contains(r"\fad(120,120)"), preset == Preset::Cinema);
+        assert_eq!(
+            prepared.ass.contains(r"\fad(120,120)"),
+            preset == Preset::Cinema
+        );
         assert_eq!(prepared.ass.contains(r"\kf"), preset != Preset::Simple);
     }
 }
@@ -50,7 +79,11 @@ fn cinema_balances_lines_and_emoji_never_reaches_either_renderer() {
     assert_eq!(prepared.emoji_removed, 1);
     assert!(!prepared.ass.contains('😀'));
     assert_eq!(prepared.cues[0].lines.len(), 2);
-    let lengths: Vec<_> = prepared.cues[0].lines.iter().map(|l| l.iter().map(|w| w.text.chars().count() + 1).sum::<usize>()).collect();
+    let lengths: Vec<_> = prepared.cues[0]
+        .lines
+        .iter()
+        .map(|l| l.iter().map(|w| w.text.chars().count() + 1).sum::<usize>())
+        .collect();
     assert!(lengths[0].abs_diff(lengths[1]) <= 10);
     assert!(prepared.ass.contains(r"\N"));
 }

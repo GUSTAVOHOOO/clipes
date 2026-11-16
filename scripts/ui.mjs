@@ -1,6 +1,7 @@
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
+import { testCaptions } from './captions-ui.mjs';
 import { createServer } from 'node:net';
 import { mkdir } from 'node:fs/promises';
 const socket = createServer();
@@ -1067,6 +1068,7 @@ try {
     await page.screenshot({ path: `shots/editor-${L.lang}.png` });
     await page.keyboard.press('Escape');
     await bordersDrawer.waitFor({ state: 'hidden' });
+    await testCaptions(page, editor, L.lang);
     assert.match(await editor.innerText(), new RegExp(L.hint), 'atalhos visíveis junto dos controles');
     for (const key of ['J', 'K', 'L', 'I', 'O']) assert.ok((await editor.locator('kbd', { hasText: new RegExp(`^${key}$`) }).count()) > 0, `tecla ${key} visível`);
     await editor.getByRole('button', { name: L.close, exact: true }).click();
