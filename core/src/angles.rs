@@ -366,18 +366,14 @@ fn cmd_choose(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     if selected(&cut)?.1 == angle {
         return document(&cut);
     }
-    let script = crate::dispatch(
-        "script.get",
-        json!({"candidate":candidate_arg(&v)?}),
-        &mut |_| {},
-    )?;
-    if script["busy"] == true {
+    let (busy, exists) = crate::script::angle_change_state(&cut)?;
+    if busy {
         return Err(error(
             "generation_in_progress",
             "Aguarde a geração do Roteiro antes de trocar o ângulo.",
         ));
     }
-    if script["current"].is_object() && v["confirmed"] != true {
+    if exists && v["confirmed"] != true {
         return Err(error(
             "angle_change_confirmation",
             "Confirme a troca do ângulo: os blocos do Roteiro ficarão desatualizados.",

@@ -1103,7 +1103,7 @@ fn document(cut: &Cut) -> Result<Value, CoreError> {
         "detectedLanguage": detected.map(Lang::code),
         "languageRequired": detected.is_none(),
         "current": current,
-        "narrationAllowed": !angle.is_null() && gate(&gens).is_ok(),
+        "narrationAllowed": gate(&gens).is_ok(),
         "job": latest.map(|g| job_json(&g.job_state, &g.job_result, g.job_id)),
         "busy": gens.iter().any(Generation::busy),
         "limits": limits_json(),
@@ -1115,6 +1115,19 @@ fn document(cut: &Cut) -> Result<Value, CoreError> {
 /// aprovação, último job e se a Narração está liberada).
 fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     document(&context(candidate_arg(&v)?)?)
+}
+
+/// Consulta para a escolha de ângulo: materializa respostas já recebidas, mas nunca
+/// continua a cadeia nem enfileira chamadas ao Provedor no caminho da escrita manual.
+pub(crate) fn angle_change_state(
+    cut: &crate::selection::ApprovedCut,
+) -> Result<(bool, bool), CoreError> {
+    materialize(cut.run, cut.identity)?;
+    let generations = read_generations(cut.run, cut.identity)?;
+    Ok((
+        generations.iter().any(Generation::busy),
+        latest_with_blocks(&generations).is_some(),
+    ))
 }
 
 fn gate_error(reason: &str, pending: usize) -> CoreError {
@@ -1148,7 +1161,6 @@ fn gate(gens: &[Generation]) -> Result<(), CoreError> {
 /// `script_not_approved` (ou `script_requires_transformed` para o Corte direto).
 pub fn narration_allowed(candidate: i64) -> Result<(), CoreError> {
     let cut = context(candidate)?;
-    crate::angles::required(&cut.cut)?;
     gate(&refresh(&cut)?)
 }
 
@@ -1354,6 +1366,7 @@ fn cmd_regenerate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let cut = context(candidate_arg(&v)?)?;
     let gens = refresh(&cut)?;
     let (gen, block) = shown_block(&gens, block_arg(&v)?)?;
+    crate::angles::required(&cut.cut)?;
     let lang = Lang::parse(&gen.language).unwrap_or(Lang::Pt);
     let chosen = profile_arg(&v);
     let (profile, safety) = route_safety(BLOCK_TASK_ID, chosen.as_deref())?;

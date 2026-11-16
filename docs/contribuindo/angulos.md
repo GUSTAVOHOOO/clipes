@@ -26,17 +26,41 @@ O ângulo escolhido entra nos dados do esboço e de cada bloco, inclusive ao
 regenerar, e na sugestão de título e de thumbnail do Vídeo transformado.
 O Corte direto mantém seus dados e comportamento.
 
-## Plano de implementação e verificação
+## Comandos e persistência
 
-- [ ] Testar pelo dispatch headless com Provedor falso: lista válida, repetidos,
-  escrita manual e trava sem ângulo; executar o teste e observar a falha.
-- [ ] Registrar a tarefa e seus schemas/prompt/trava de hash, reutilizar a fila,
-  estimativa de custo, confirmação paga, orçamento, cancelamento e auditoria.
-- [ ] Persistir escolhas e revisões; aplicar a trava no núcleo e os estados dos
-  blocos; testar troca, reaprovação e propagação em geração/regeneração.
-- [ ] Acrescentar a seleção/escrita manual na UI do Roteiro com tokens Foco,
-  confirmação de troca e custo; exercitar pelo harness UI.
-- [ ] Executar fmt, testes do workspace, typecheck, build, contraste, UI e clippy;
-  abrir PR draft cedo, manter a base atualizada, aguardar CI verde e marcar ready.
+- `angles.estimate {candidate, language?}`: custo e indicação de Provedor pago.
+- `angles.generate {candidate, language?, confirmed?}`: novo job `ai:angles`;
+  a confirmação paga é verificada antes do envio. A lista anterior permanece
+  disponível se a nova resposta falhar. Gerar uma lista nunca troca a escolha.
+- `angles.get {candidate}`: lista válida mais recente, geração, escolha, último
+  job (com erro tipado e violações), estado de execução e histórico de gerações.
+- `angles.choose {candidate, generation, index, confirmed?}`: escolhe um item
+  validado de uma geração desse Corte; `index` começa em zero.
+- `angles.choose {candidate, angle, confirmed?}`: escreve o próprio ângulo,
+  sem Provedor. A confirmação de troca é exigida no núcleo, e a escolha idêntica
+  é idempotente. A troca espera a geração do Roteiro terminar.
+
+`script.get` inclui `angle`; cada geração conserva seu ângulo original e cada
+bloco informa `stale`. Uma revisão de ângulo nova invalida as aprovações da
+anterior, preservando-as no histórico. Roteiros anteriores ao #153 continuam
+legíveis e exigem a escolha de um ângulo para novas gerações ou regenerações.
+Um Roteiro legado já aprovado mantém a Narração liberada até a escolha do primeiro
+ângulo; essa escolha pede confirmação e marca os blocos como desatualizados
+(decisão do mantenedor em 16/11/2026).
+
+## Verificação
+
+`cargo test -p clipes-core --test angles --test script --test packaging --test thumbnail`
+cobre lista válida, Jaccard no limiar, acentos/pontuação, IDs fora do Corte,
+limites de campos, escrita manual, trava sem ângulo, confirmação paga, vetos,
+escolha de sugestão, troca confirmada, reaprovação, edição, regeneração,
+proveniência, reabertura e propagação. Os testes de Empacotamento e capa também
+garantem que o Corte direto não recebe `#ANGULO`.
+
+`bun run test:ui` exercita a escolha antes do Roteiro, cancelamento e confirmação
+da troca e o selo dos blocos. A captura da lista fica em `shots/angles-pt-BR.png`.
+
+`cargo test -p clipes-core --test angles_migration` migra um Projeto com Roteiro
+legado aprovado, verifica o backup e preserva sua aprovação até a primeira escolha.
 
 Os testes automáticos não acessam rede e usam `CLIPES_DATA_DIR` temporário.
