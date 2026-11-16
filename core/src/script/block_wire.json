@@ -1,0 +1,1 @@
+{"type":"object","properties":{"schemaVersion":{"type":"integer","enum":[1]},"narration":{"type":"string"}},"required":["schemaVersion","narration"],"additionalProperties":false}
