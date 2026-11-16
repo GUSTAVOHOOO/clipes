@@ -15,12 +15,13 @@ import { PX_PER_SEC, neighborStart, nextRate, pxToUs, sentenceAt, usToPx, visibl
 import { CaptionPanel } from '@/features/captions/CaptionPanel';
 import { useCaptions } from '@/features/captions/useCaptions';
 import { BorderHandles, type Adjustment, type Edge } from './BorderHandles';
+import type { ClipCrop, CropSegment } from './cropMath';
 
 export const editorOpenEvent = 'clipes-editor-open';
 /** Abre o editor num Corte: candidato aprovado ou par de Frases da Fonte. O núcleo valida as bordas. */
 export function openEditor(request: ExportRequest) { window.dispatchEvent(new CustomEvent<ExportRequest>(editorOpenEvent, { detail: request })); }
 
-type Edited = { clipId: number; request: ExportRequest; startUs: number; endUs: number; undoCount: number; redoCount: number; revision: number };
+type Edited = { clipId: number; request: ExportRequest; startUs: number; endUs: number; undoCount: number; redoCount: number; revision: number; crop?: ClipCrop };
 type Opened = Edited & { windowStartUs: number; windowEndUs: number; fps: number };
 type Thumbs = { id: string; count: number; intervalUs: number; width: number; height: number; columns: number };
 type Timeline = { state: 'queued' | 'running' | 'ready' | 'failed' | 'cancelled' | 'missing'; key: string; job: number | null; progress: number; error: string | null; thumbs: Thumbs | null };
@@ -72,6 +73,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
   const [startId, setStartId] = useState(request.start_id);
   const [endId, setEndId] = useState(request.end_id);
   const [range, setRange] = useState<{ startUs: number; endUs: number } | null>(null);
+  const [crop, setCrop] = useState<CropSegment[] | null>(null);
   const [sentences, setSentences] = useState<TimelineSentence[]>([]);
   const [error, setError] = useState('');
   const [sourceUs, setSourceUs] = useState(0);
@@ -120,7 +122,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
       }
       committed.current = info; setHistory(info);
       setStartId(info.request.start_id); setEndId(info.request.end_id);
-      setOpened(info); setSentences(all); setRange({ startUs: info.startUs, endUs: info.endUs }); setSourceUs(info.startUs);
+      setOpened(info); setSentences(all); setRange({ startUs: info.startUs, endUs: info.endUs }); setCrop(info.crop?.resolved?.length ? info.crop.resolved : null); setSourceUs(info.startUs);
       requestAnimationFrame(() => { if (scroller.current) scroller.current.scrollLeft = Math.max(0, usToPx(info.startUs, info.windowStartUs) - 80); });
     }).catch(e => { if (alive) setError(errorCode(e)); });
     return () => { alive = false; };
@@ -178,6 +180,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
   const display = useCallback((answer: Edited) => {
     setStartId(answer.request.start_id); setEndId(answer.request.end_id);
     setRange({ startUs: answer.startUs, endUs: answer.endUs }); setHistory(answer);
+    if (answer.crop) setCrop(answer.crop.resolved.length ? answer.crop.resolved : null);
   }, []);
   // Serializa as mutações e descarta respostas de prévias ultrapassadas pelo mouseup.
   const edit = useCallback((name: string, args: Record<string, unknown>, preview = false, edge?: Edge) => {
@@ -344,7 +347,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
       <Puxador lado="dir" g={right} itens={[{ id: 'borders', rotulo: t.borders, atalho: ']', icone: <PanelRight size={16} />, onClick: () => { left.fechar(); openRight('borders'); } }, { id: 'captions', rotulo: t.captions, atalho: 'C', icone: <Captions size={16} />, onClick: () => { left.fechar(); openRight('captions'); } }]} />
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4"><div className="m-auto flex flex-col items-center gap-3">
         {!opened && !error && <p aria-live="polite" className="text-fg-2">{t.loading}</p>}
-        {opened && <div style={{ width: 'min(18rem, 22vh)' }}><CutPreview sourceId={request.source_id} startUs={opened.startUs} endUs={opened.endUs} rate={rate} onSourceTime={us => setSourceUs(us)} captions={captions.data} /></div>}
+        {opened && <div style={{ width: 'min(18rem, 22vh)' }}><CutPreview sourceId={request.source_id} startUs={opened.startUs} endUs={opened.endUs} rate={rate} onSourceTime={us => setSourceUs(us)} captions={captions.data} crop={crop} /></div>}
         {opened && <div className="flex flex-wrap items-center justify-center gap-2" role="group" aria-label={t.shortcuts}>
           <Button tamanho="sm" onClick={() => setRate(nextRate(rate, 'j'))} atalho="J">{t.back.replace(/ \(.\)$/, '')}</Button>
           <Button tamanho="sm" onClick={() => setRate(0)} atalho="K">{t.pause.replace(/ \(.\)$/, '')}</Button>

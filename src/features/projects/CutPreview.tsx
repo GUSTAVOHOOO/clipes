@@ -6,6 +6,7 @@ import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { CaptionOverlay } from '@/features/captions/CaptionOverlay';
 import type { CaptionData } from '@/features/captions/types';
+import { cropVideoTransform, interpolateCrop, type CropSegment } from '@/features/editor/cropMath';
 
 /** Corte (ou candidato da seleção) a pré-visualizar: tempos em µs da Fonte. */
 export type CutRange = { sourceId: number; startUs: number; endUs: number };
@@ -44,8 +45,9 @@ const mediaUrl = (key: string) => (isTauri() ? convertFileSrc(`proxy/${key}`, 'c
 
 /** Preview 9:16 em Fit (barras, sem corte) de um Corte, sobre o proxy de GOP curto gerado pelo núcleo. */
 /** `rate` (editor, #61): 0 pausa, >0 toca nessa velocidade, <0 volta por passos. `onSourceTime` informa o tempo da Fonte a cada atualização. */
-export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, captions }: { sourceId: number; startUs: number; endUs: number; rate?: number; onSourceTime?: (sourceUs: number) => void; captions?: CaptionData | null }) {
+export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, captions, crop }: { sourceId: number; startUs: number; endUs: number; rate?: number; onSourceTime?: (sourceUs: number) => void; captions?: CaptionData | null; crop?: CropSegment[] | null }) {
   const t = useText(texts);
+  const frame = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
   const pending = useRef<number | null>(null);
   const [proxy, setProxy] = useState<Proxy | null>(null);
@@ -128,6 +130,53 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, capti
     pending.current = null;
     el.currentTime = start; setTime(start);
   }
+  const hasCrop = !!(crop && crop.length > 0);
+  useEffect(() => {
+    const el = video.current;
+    const box = frame.current;
+    if (!el || !box || proxy?.state !== 'ready' || !hasCrop || !crop) {
+      if (el) {
+        el.style.position = ''; el.style.left = ''; el.style.top = '';
+        el.style.width = ''; el.style.height = ''; el.style.maxWidth = ''; el.style.maxHeight = '';
+        el.style.objectFit = ''; el.style.transformOrigin = ''; el.style.transform = '';
+        delete el.dataset.cropRect;
+      }
+      return;
+    }
+    let alive = true, raf = 0, lastKey = '';
+    const renderCrop = (force = false) => {
+      if (!alive || !box.clientWidth || !box.clientHeight || !el.videoWidth || !el.videoHeight) return;
+      const sourceAt = proxy.windowStartUs + el.currentTime * 1_000_000;
+      const rect = interpolateCrop(crop, sourceAt);
+      if (!rect) return;
+      const key = `${Math.round(sourceAt)}:${box.clientWidth}x${box.clientHeight}:${el.videoWidth}x${el.videoHeight}`;
+      if (!force && key === lastKey) return;
+      lastKey = key;
+      const { offsetX, offsetY, scaleX, scaleY } = cropVideoTransform(rect, box.clientWidth, box.clientHeight, el.videoWidth, el.videoHeight);
+      el.style.position = 'absolute'; el.style.left = '0px'; el.style.top = '0px';
+      el.style.width = `${box.clientWidth}px`; el.style.height = `${box.clientHeight}px`;
+      el.style.maxWidth = 'none'; el.style.maxHeight = 'none';
+      el.style.objectFit = 'fill'; el.style.transformOrigin = 'top left';
+      el.style.transform = `translate3d(${offsetX}px, ${offsetY}px, 0) scale(${scaleX}, ${scaleY})`;
+      el.dataset.cropRect = `${rect.x.toFixed(6)},${rect.y.toFixed(6)},${rect.width.toFixed(6)},${rect.height.toFixed(6)}`;
+    };
+    const tick = () => {
+      if (!alive) return;
+      renderCrop();
+      raf = requestAnimationFrame(tick);
+    };
+    const onEvent = () => renderCrop(true);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => renderCrop(true));
+    observer?.observe(box);
+    el.addEventListener('loadedmetadata', onEvent);
+    el.addEventListener('seeked', onEvent);
+    tick();
+    return () => {
+      alive = false; cancelAnimationFrame(raf); observer?.disconnect();
+      el.removeEventListener('loadedmetadata', onEvent);
+      el.removeEventListener('seeked', onEvent);
+    };
+  }, [crop, hasCrop, proxy?.state, proxy?.windowStartUs]);
   function toggle() {
     const el = video.current;
     if (!el) return;
@@ -136,7 +185,7 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, capti
   async function cancel() { if (proxy?.job != null) { try { await coreDispatch('jobs.cancel', { id: proxy.job }); } catch { setError({ code: '', message: '' }); } } }
 
   const sourceUs = proxy ? proxy.windowStartUs + time * 1_000_000 : startUs;
-  return <section aria-label={t.title} data-preview-state={proxy?.state ?? (error ? 'error' : 'loading')} data-seek-us={lastSeekUs ?? undefined} className="flex w-full max-w-[18rem] flex-col gap-2 text-sm">
+  return <section aria-label={t.title} data-preview-state={proxy?.state ?? (error ? 'error' : 'loading')} data-seek-us={lastSeekUs ?? undefined} data-crop-active={hasCrop ? 'true' : undefined} className="flex w-full max-w-[18rem] flex-col gap-2 text-sm">
     {!proxy && !error && <p aria-live="polite" className="text-fg-2">{t.preparing}</p>}
     {error && <p role="alert" className="rounded-md border border-line bg-warning-subtle p-3 text-fg">{t.code[error.code] ?? t.error}</p>}
     {working && proxy && <div className="flex flex-col gap-2" aria-live="polite">
@@ -149,8 +198,8 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, capti
       <div><Button tamanho="sm" onClick={() => void request(() => true)}>{t.retry}</Button></div>
     </div>}
     {proxy?.state === 'ready' && <>
-      <div className="relative aspect-[9/16] w-full overflow-hidden rounded-md border border-line bg-black">
-        <video ref={video} src={mediaUrl(proxy.key)} aria-label={t.video} className="h-full w-full object-contain" playsInline preload="auto"
+      <div ref={frame} className="relative aspect-[9/16] w-full overflow-hidden rounded-md border border-line bg-black">
+        <video ref={video} src={mediaUrl(proxy.key)} aria-label={t.video} className={hasCrop ? undefined : 'h-full w-full object-contain'} playsInline preload="auto"
           onLoadedMetadata={onLoaded} onTimeUpdate={e => { setTime(e.currentTarget.currentTime); if (proxy) onSourceTime?.(proxy.windowStartUs + e.currentTarget.currentTime * 1_000_000); }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
           onError={() => { if (isTauri()) setNotice(t.playError); }} />
         {captions && <CaptionOverlay data={captions} video={video} windowStartUs={proxy.windowStartUs} />}
