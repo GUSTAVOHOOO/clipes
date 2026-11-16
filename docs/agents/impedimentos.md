@@ -149,3 +149,10 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Sintoma:** a avaliação do `scdet`/PySceneDetect/TransNet V2 em gameplay do #28 ficou sem rodar.
 - **Causa:** `yt-dlp --download-sections` trava; só 2 downloads nativos (≤480p, sem cookies, fora do repo, timeout de 15 min) foram autorizados, e o TransNet V2 exige TensorFlow.
 - **Ação:** o #60 entregou `scdet` conservador com comparação sintética em `docs/research/2026-11-15-reenquadramento-deteccao.md`. Rode `benchmarks/reenquadramento/compare.py` localmente para fechar a pendência; só agregados vão ao repo.
+
+## Disco
+
+### Disco C: cheio com vários worktrees compilando
+- **Sintoma:** `No space left on device`, ou build e download de modelo falhando com poucos GB livres.
+- **Causa:** cada worktree tem o próprio `target/`. No Windows, cada binário de teste gera um `.pdb` de ~177 MB em `target/debug/build/clipes-core/<hash>/out/`, e o cargo não apaga as versões antigas; um worktree passou de 18 GB. Os testes em `core/tests/` criam pastas `%TEMP%\clipes-*` com o PID e não as apagam, e os ambientes Python de tickets fechados ficam no `%TEMP%`.
+- **Ação:** apague o `target/` de worktree sem `cargo` rodando (confira a última escrita), as pastas `%TEMP%\clipes-*` de teste com mais de 1 h e as de tickets fechados, depois rode `uv cache prune` (os venvs do uv usam hardlinks para o cache, então o espaço só volta depois disso). Mantenha `%TEMP%\clipes-dataset` enquanto o #57 estiver aberto. Em 15/11/2026 isso levou o C: de 4,9 GB para 58,6 GB livres.
