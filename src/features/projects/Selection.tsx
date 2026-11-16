@@ -6,6 +6,7 @@ import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { openCutPreview } from './CutPreview';
+import { openEditor } from '@/features/editor/Editor';
 import { CandidateReview } from './CandidateReview';
 import { clock, fill, message } from './selectionFormat';
 import { VideoKindBadge, VideoKindPicker, WeightsLine, kindOf, type VideoKind } from './videoKind';
@@ -180,7 +181,7 @@ export function Selection({ sourceId }: { sourceId: number }) {
       <label className="flex items-center gap-2">{t.minScore}<input type="number" min={0} max={10} step={0.5} value={minScore} onChange={e => setMinScore(Math.min(10, Math.max(0, Number(e.target.value) || 0)))} className="h-8 w-20 rounded-md border border-line-strong bg-field px-2" /></label>
       {!running && detail.candidates.length === 0 && head.state === 'completed' && <p>{t.none}</p>}
       {detail.candidates.length > 0 && shown.length === 0 && <p>{t.noneFilter}</p>}
-      {current !== null && shown.length > 0 && <CandidateReview sourceId={sourceId} run={current} videoKind={runKind} candidates={shown} weights={weights} onOpenPreview={(_, startUs, endUs) => openCutPreview({ sourceId, startUs, endUs })}
+      {current !== null && shown.length > 0 && <CandidateReview sourceId={sourceId} run={current} videoKind={runKind} candidates={shown} weights={weights} onOpenPreview={(_, startUs, endUs) => openCutPreview({ sourceId, startUs, endUs })} onOpenEditor={(candidate, startId, endId) => openEditor({ source_id: sourceId, start_id: startId, end_id: endId, candidate_id: candidate })}
         windowStates={Object.fromEntries(detail.windows.map(w => [w.index, w.state]))} onRedoStarted={() => void loadDetail(current).catch(() => setError(t.error))} />}
     </div>}
     {error && <p role="alert" className="text-danger">{error}</p>}

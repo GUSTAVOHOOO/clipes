@@ -27,6 +27,8 @@ pub struct MediaResponse {
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Resource {
     Proxy(String),
+    /// Sprite de miniaturas da timeline (#61), na pasta do proxy.
+    Thumbs(String),
     Source(i64),
 }
 
@@ -39,6 +41,11 @@ pub(crate) fn parse_resource(raw: &str) -> Option<Resource> {
     match kind {
         "proxy" if id.len() == 64 && id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) => {
             Some(Resource::Proxy(id.to_owned()))
+        }
+        "thumbs"
+            if id.len() == 64 && id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) =>
+        {
+            Some(Resource::Thumbs(id.to_owned()))
         }
         "source" if !id.is_empty() && id.len() <= 18 && id.bytes().all(|b| b.is_ascii_digit()) => {
             id.parse().ok().map(Resource::Source)
@@ -117,6 +124,7 @@ fn content_type(path: &Path) -> &'static str {
     {
         Some("mp4" | "m4v") => "video/mp4",
         Some("webm") => "video/webm",
+        Some("jpg") => "image/jpeg",
         Some("mkv") => "video/x-matroska",
         Some("mov") => "video/quicktime",
         _ => "application/octet-stream",
@@ -131,6 +139,18 @@ pub(crate) fn proxy_path(key: &str) -> Option<PathBuf> {
     let file = root
         .join(key)
         .join(crate::proxy::FILE_NAME)
+        .canonicalize()
+        .ok()?;
+    (file.starts_with(&root) && file.is_file()).then_some(file)
+}
+
+/// Sprite de miniaturas pronto de um proxy, dentro do cache.
+pub(crate) fn thumbs_path(key: &str) -> Option<PathBuf> {
+    let (cache, _, _) = crate::components::cache_settings().ok()?;
+    let root = cache.join("proxies").canonicalize().ok()?;
+    let file = root
+        .join(key)
+        .join(crate::editor::assets::THUMBS_FILE)
         .canonicalize()
         .ok()?;
     (file.starts_with(&root) && file.is_file()).then_some(file)
@@ -162,6 +182,7 @@ pub(crate) fn touch(path: &Path) {
 pub fn serve(resource: &str, range: Option<&str>) -> MediaResponse {
     let (path, cached) = match parse_resource(resource) {
         Some(Resource::Proxy(key)) => (proxy_path(&key), true),
+        Some(Resource::Thumbs(key)) => (thumbs_path(&key), true),
         Some(Resource::Source(id)) => (source_path(id), false),
         None => (None, false),
     };

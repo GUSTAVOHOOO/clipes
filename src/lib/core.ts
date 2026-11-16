@@ -361,6 +361,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'components.models.download') return { id: (args as { id: string }).id } as T;
     if (sourceTest && new URLSearchParams(location.search).has('transcript-test') && name === 'transcription.segment') return {} as T;
     // Preview do Corte simulado (#58): a Fonte 2 está offline; a primeira consulta de um Corte gera (40%), a seguinte já está pronta.
+    if (editorTest && name.startsWith('editor.')) return editorMock(name, args as Record<string, number>) as T;
     if (transcriptTest && name === 'proxy.request') { const a = args as {source_id:number; start_us:number; end_us:number}; if (a.source_id === 2) throw {code:'source_offline', message:'A Fonte está offline: reconecte ou relocalize a Fonte para ver o preview.'}; const key = 'ab'.repeat(32); mockProxyPolls = 0; return {state:'running', key, job:7, progress:40, error:null, windowStartUs:Math.max(0, a.start_us - 120_000_000), windowEndUs:a.end_us + 120_000_000} as T; }
     if (transcriptTest && name === 'proxy.status') { mockProxyPolls += 1; return {state:mockProxyPolls > 1 ? 'ready' : 'running', key:(args as {key:string}).key, job:7, progress:mockProxyPolls > 1 ? 100 : 60, error:null} as T; }
     if (transcriptTest && (name.startsWith('selection.') || name.startsWith('chat.'))) return selectionMockDispatch(name, args) as T;
@@ -386,3 +387,27 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   return invoke<T>('core_dispatch', { name, arguments: args });
 }
 
+
+// Editor simulado (#61): a Frase n ocupa [(n-1)*10 s, n*10 s]; o Corte vale de 20 a 180 s; a janela do proxy é o Corte ±2 min.
+const editorTest = transcriptTest && typeof location !== 'undefined' && new URLSearchParams(location.search).has('editor-test');
+const editorKey = 'ab'.repeat(32);
+function editorMock(name: string, a: Record<string, number>) {
+  const fail = (code: string, message: string) => { throw { code, message }; };
+  const range = () => {
+    if (!(a.start_id >= 1 && a.start_id <= 720 && a.end_id >= 1 && a.end_id <= 720)) fail('unknown_sentence_id', 'Frase desconhecida.');
+    if (a.end_id < a.start_id) fail('adjust_empty', 'O Corte precisa manter ao menos uma Frase.');
+    const startUs = (a.start_id - 1) * 10_000_000, endUs = a.end_id * 10_000_000;
+    if (endUs - startUs < 20_000_000) fail('adjust_too_short', 'O Corte ficaria abaixo da duração mínima.');
+    if (endUs - startUs > 180_000_000) fail('adjust_too_long', 'O Corte ficaria acima da duração máxima.');
+    return { startUs, endUs };
+  };
+  if (name === 'editor.range') return { request: a, ...range() };
+  if (name === 'editor.open') { const r = range(); return { request: a, ...r, windowStartUs: Math.max(0, r.startUs - 120_000_000), windowEndUs: r.endUs + 120_000_000, fps: 24 }; }
+  if (name === 'editor.sentences') {
+    const first = Math.max(a.after_id + 1, Math.ceil(a.start_us / 10_000_000) + 1), last = Math.min(Math.floor(a.end_us / 10_000_000), 720);
+    return Array.from({ length: Math.max(0, Math.min(a.limit, last - first + 1)) }, (_, n) => { const id = first + n; return { id, startUs: (id - 1) * 10_000_000, endUs: id * 10_000_000, text: `Frase ${id}` }; });
+  }
+  if (name === 'editor.timeline' || name === 'editor.timeline_status') return { state: 'ready', key: editorKey, job: null, progress: 100, error: null, thumbs: { id: `thumbs/${editorKey}`, count: 150, intervalUs: 2_000_000, width: 96, height: 54, columns: 20 } };
+  if (name === 'editor.wave') return { blockUs: 100_000, values: Array.from({ length: 3000 }, (_, i) => 40 + Math.round(120 * Math.abs(Math.sin(i / 7)))) };
+  throw new Error(`Unknown core command: ${name}`);
+}
