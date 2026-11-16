@@ -98,6 +98,9 @@ pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
                 } else {
                     let err = result.as_ref().err().cloned();
                     let _ = finish(id, result);
+                    if kind == crate::export::JOB_KIND {
+                        crate::export::batch::on_job_settled(id);
+                    }
                     let _ = progress_event(id, err, &kind);
                 }
             }

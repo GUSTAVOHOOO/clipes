@@ -8,6 +8,7 @@ import { Backups } from './Backups';
 import { ChannelProfile } from './ChannelProfile';
 import { Jobs } from './Jobs';
 import { SourceBatches } from './SourceBatches';
+import { BatchExport } from '@/features/export/BatchExport';
 import { ProjectPrivacy } from './ProjectPrivacy';
 import { TranscriptSearch } from './TranscriptSearch';
 
@@ -39,6 +40,7 @@ export function Projects() {
     {current && <ChannelProfile key={`profile-${current.id}`} projectId={current.id} />}
     {current && <Sources project={current.path} />}
     {current && <SourceBatches key={`batches-${current.id}`} project={current.path} projectId={current.id} />}
+    {current && <BatchExport key={`export-batch-${current.id}`} scope="project" project={current.path} projectId={current.id} />}
     {current && <TranscriptSearch projectId={current.id} />}
     {current && <Jobs key={current.id} projectId={current.id} />}
     {current && <ProjectPrivacy projectId={current.id} />}
