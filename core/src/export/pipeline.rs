@@ -13,6 +13,8 @@ pub struct Video;
 pub struct Subtitle;
 pub struct Audio;
 pub struct Encoder;
+/// Encoder escolhido pela detecção (#62); `Encoder` continua sendo o x264 do #59.
+pub struct SelectedEncoder<'a>(pub &'a str);
 impl Stage for Video {
     fn apply(&self, plan: &mut ExportPlan) {
         // `dar` inclui SAR; o decoder já aplica a rotação por display matrix.
@@ -37,15 +39,27 @@ impl Stage for Audio {
 }
 impl Stage for Encoder {
     fn apply(&self, plan: &mut ExportPlan) {
-        plan.encoder = "libx264".into();
-        plan.encoder_args = ["-preset", "fast", "-crf", "20", "-pix_fmt", "yuv420p"]
-            .map(str::to_owned)
-            .to_vec();
+        SelectedEncoder(super::encoder::X264).apply(plan);
+    }
+}
+impl Stage for SelectedEncoder<'_> {
+    fn apply(&self, plan: &mut ExportPlan) {
+        // Nome desconhecido nunca chega ao FFmpeg: cai no x264.
+        let (name, args) = match super::encoder::args(self.0) {
+            Some(args) => (self.0, args),
+            None => (super::encoder::X264, super::encoder::X264_ARGS),
+        };
+        plan.encoder = name.into();
+        plan.encoder_args = args.iter().map(|a| a.to_string()).collect();
     }
 }
 pub fn standard() -> ExportPlan {
+    with_encoder(super::encoder::X264)
+}
+pub fn with_encoder(encoder: &str) -> ExportPlan {
     let mut plan = ExportPlan::default();
-    for stage in [&Video as &dyn Stage, &Subtitle, &Audio, &Encoder] {
+    let selected = SelectedEncoder(encoder);
+    for stage in [&Video as &dyn Stage, &Subtitle, &Audio, &selected] {
         stage.apply(&mut plan);
     }
     plan

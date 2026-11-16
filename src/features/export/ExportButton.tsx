@@ -6,14 +6,14 @@ import { Button } from '@/components/ui/Button';
 import { coreDispatch, type ExportRequest } from '@/lib/core';
 import { useText } from '@/lib/i18n';
 
-type Status = { job: number; state: 'queued' | 'running' | 'completed' | 'cancelled' | 'failed'; progress: number; error?: { code: string } | null };
+type Status = { job: number; state: 'queued' | 'running' | 'completed' | 'cancelled' | 'failed'; progress: number; error?: { code: string } | null; encoder_fallback?: { from: string; reason: string } | null };
 const texts = {
   'pt-BR': {
-    export: 'Exportar', save: 'Salvar Corte', pending: 'Aprove este candidato para exportar.', queued: 'Export na fila.', running: 'Exportando Corte', cancel: 'Cancelar export', completed: 'Corte exportado.', cancelled: 'Export cancelado.',
+    export: 'Exportar', save: 'Salvar Corte', pending: 'Aprove este candidato para exportar.', queued: 'Export na fila.', running: 'Exportando Corte', cancel: 'Cancelar export', completed: 'Corte exportado.', cancelled: 'Export cancelado.', fallback: 'O encoder de hardware falhou; este Corte foi exportado com x264, mais lento. Veja Preferências.',
     errors: { export_exists: 'Já existe um arquivo no destino. Escolha outro nome.', export_destination: 'Escolha uma pasta existente e um nome MP4 válido.', export_candidate: 'Aprove o candidato e use as bordas atuais da revisão.', export_bounds: 'As bordas do Corte devem coincidir com Frases da Transcrição completa.', source_changed: 'A Fonte está indisponível ou foi alterada.', component_missing: 'Instale o Componente FFmpeg em Componentes.', export_ass_missing: 'O FFmpeg instalado não tem suporte a legendas. Escolha uma versão com libass em Componentes.', export_font_missing: 'A fonte da legenda não foi carregada. Verifique o Componente FFmpeg.', default: 'Não foi possível exportar o Corte.' } as Record<string, string>,
   },
   en: {
-    export: 'Export', save: 'Save Clip', pending: 'Approve this candidate to export.', queued: 'Export queued.', running: 'Exporting Clip', cancel: 'Cancel export', completed: 'Clip exported.', cancelled: 'Export cancelled.',
+    export: 'Export', save: 'Save Clip', pending: 'Approve this candidate to export.', queued: 'Export queued.', running: 'Exporting Clip', cancel: 'Cancel export', completed: 'Clip exported.', cancelled: 'Export cancelled.', fallback: 'The hardware encoder failed; this Clip was exported with x264, which is slower. See Preferences.',
     errors: { export_exists: 'A file already exists at this destination. Choose another name.', export_destination: 'Choose an existing folder and a valid MP4 name.', export_candidate: 'Approve the candidate and use its current review borders.', export_bounds: 'Clip borders must match Sentences in the complete Transcript.', source_changed: 'The Source is unavailable or has changed.', component_missing: 'Install the FFmpeg Component in Components.', export_ass_missing: 'The installed FFmpeg does not support subtitles. Choose a build with libass in Components.', export_font_missing: 'The subtitle font could not be loaded. Check the FFmpeg Component.', default: 'Could not export the Clip.' } as Record<string, string>,
   },
 };
@@ -79,6 +79,7 @@ export function ExportButton({ sourceId, candidateId, clipId, title, startId, en
     {active && <Button tamanho="sm" disabled={busy} onClick={() => void cancel()}>{t.cancel}</Button>}
     {status && <span role="status" className="text-sm text-fg-2">{status.state === 'running' ? `${t.running} · ${status.progress}%` : status.state === 'failed' ? '' : t[status.state]}</span>}
     {active && <progress value={status?.progress ?? 0} max={100} aria-label={t.running} className="w-28 max-w-full" />}
+    {status?.state === 'completed' && status.encoder_fallback && <p role="status" className="text-sm text-fg-2" data-export-fallback>{t.fallback}</p>}
     {(error || failed) && <p role="alert" className="text-sm text-danger">{error || failed}</p>}
   </div>;
 }
