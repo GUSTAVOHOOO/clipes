@@ -100,7 +100,11 @@ fn slice_crop_segments(segments: &[CropSegment], start_us: i64, end_us: i64) -> 
         if seg.end_us <= start_us || seg.start_us >= end_us {
             continue;
         }
-        let s_start = seg.start_us.max(start_us);
+        let s_start = if out.is_empty() {
+            start_us
+        } else {
+            seg.start_us.max(start_us)
+        };
         let s_end = seg.end_us.min(end_us);
         let Some(start_rect) = interpolate_in_segment(seg, s_start) else {
             continue;

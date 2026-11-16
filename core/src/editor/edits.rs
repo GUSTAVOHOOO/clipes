@@ -27,7 +27,7 @@ pub(crate) struct Borders {
     pub start_us: i64,
     pub end_us: i64,
 }
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct EditSnapshot {
     pub start_id: i64,
@@ -36,6 +36,8 @@ pub(crate) struct EditSnapshot {
     pub end_us: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub silences: Option<SilenceConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crop_edits: Option<Vec<crop::CropKeyframe>>,
 }
 impl EditSnapshot {
     fn from_doc(doc: &Document) -> Self {
@@ -45,6 +47,7 @@ impl EditSnapshot {
             start_us: doc.range.start_us,
             end_us: doc.range.end_us,
             silences: doc.silences.clone(),
+            crop_edits: (!doc.crop.edits.is_empty()).then(|| doc.crop.edits.clone()),
         }
     }
     fn borders(&self) -> Borders {
@@ -130,6 +133,7 @@ fn decode(encoded: &str) -> Result<Document, CoreError> {
                 start_us: b.start_us,
                 end_us: b.end_us,
                 silences: None,
+                crop_edits: None,
             };
             Document {
                 schema_version: SCHEMA_VERSION,
@@ -541,8 +545,10 @@ fn history(v: Value, redo: bool) -> CommandResult {
     };
     if let Some(next) = next.cloned() {
         let next_range = next.borders();
+        let next_crop_edits = next.crop_edits.unwrap_or_default();
         validate(&entry.doc, &next_range)?;
         validate_silences(&next_range, next.silences.as_ref())?;
+        crop::validate_edits(&next_crop_edits)?;
         if redo {
             entry.doc.redo.pop();
             entry.doc.undo.push(EditSnapshot::from_doc(&entry.doc));
@@ -552,6 +558,7 @@ fn history(v: Value, redo: bool) -> CommandResult {
         }
         entry.doc.range = next_range;
         entry.doc.silences = next.silences;
+        entry.doc.crop.edits = next_crop_edits;
         entry.doc.revision += 1;
         entry.dirty = Some(Instant::now());
     }
@@ -721,6 +728,8 @@ fn crop_answer(id: i64, doc: &Document) -> Value {
     out["clipId"] = json!(id);
     out["schemaVersion"] = json!(doc.schema_version);
     out["revision"] = json!(doc.revision);
+    out["undoCount"] = json!(doc.undo.len());
+    out["redoCount"] = json!(doc.redo.len());
     out
 }
 fn crop_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
@@ -767,10 +776,14 @@ fn crop_set_edits(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     crop::validate_edits(&edits)?;
     let mut s = lock()?;
     let entry = load(&mut s, id)?;
+    if v["preview"].as_bool().unwrap_or(false) {
+        let mut doc = entry.doc.clone();
+        doc.crop.edits = edits;
+        return Ok(crop_answer(id, &doc));
+    }
     if entry.doc.crop.edits != edits {
+        push_history(entry);
         entry.doc.crop.edits = edits;
-        entry.doc.revision += 1;
-        entry.dirty = Some(Instant::now());
     }
     Ok(crop_answer(id, &entry.doc))
 }
