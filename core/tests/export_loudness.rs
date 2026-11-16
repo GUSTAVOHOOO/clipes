@@ -145,8 +145,8 @@ fn spliced_audio_is_measured_and_normalized_after_silence_removal() {
     let source = root.path().join("spliced_loudness.mp4");
     // Fala baixa nos trechos mantidos e ruído alto apenas nos silêncios removidos: o loudnorm
     // deve medir só o áudio já emendado, não os trechos descartados.
-    let audio = "sine=frequency=440:sample_rate=44100:duration=8,volume='if(between(t,2.0,4.0),1.0,0.2)':eval=frame[s];\
-                 anoisesrc=color=pink:sample_rate=44100:duration=8:amplitude=0.4:seed=1,volume='if(between(t,2.0,4.0),1.0,0.15)':eval=frame[n];\
+    let audio = "sine=frequency=440:sample_rate=44100:duration=8,volume='if(between(t,2.1,3.9),1.0,0.2)':eval=frame[s];\
+                 anoisesrc=color=pink:sample_rate=44100:duration=8:amplitude=0.4:seed=1,volume='if(between(t,2.1,3.9),1.0,0.15)':eval=frame[n];\
                  [s][n]amix=inputs=2:normalize=0[a]";
     ffmpeg(&[
         "-v",
