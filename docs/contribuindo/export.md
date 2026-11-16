@@ -48,7 +48,9 @@ FFmpeg/libass; falha, cancelamento e encerramento normal removem os temporários
 Erros usam códigos/mensagens fixos, sem stderr, Transcrição ou caminhos pessoais
 (ADR-0006): `export_bounds`, `export_candidate`, `export_destination`,
 `export_exists`, `export_timestamps`, `export_ass_missing`, `export_font_missing`,
-`export_failed`, `source_changed`, `component_missing` e `cancelled`.
+`export_glyph_missing` (informa a palavra sem glifo da legenda, o codepoint e a
+Frase, validado no `cmap` antes de chamar o FFmpeg), `export_failed`,
+`source_changed`, `component_missing` e `cancelled`.
 
 ## Etapas e pontos de extensão
 
@@ -151,9 +153,11 @@ Pausas usam sílabas invisíveis `\k` e não alongam artificialmente o destaque.
 `PlayResX/Y` são 1080/1920, `ScaledBorderAndShadow: yes`, `WrapStyle: 2`;
 as quebras explícitas `\N` vêm exclusivamente de `layout`.
 
-Texto de Transcrição é não confiável. `{`, `}` e `\` recebem equivalentes visuais
-Unicode sem semântica ASS (`｛`, `｝`, `＼`); controles, quebras e escapes de entrada
-não viram tags. Emoji e seletores de apresentação são removidos antes da quebra.
+Texto de Transcrição é não confiável. `{`, `}` e `\` recebem equivalentes ASCII
+seguros presentes nas fontes empacotadas (`(`, `)` e `/`); controles, quebras e
+escapes de entrada não viram tags. Emoji e seletores de apresentação são removidos
+antes da quebra. A cobertura de glifos das palavras visíveis é validada contra o
+`cmap` das fontes empacotadas antes de chamar o FFmpeg.
 A fonte Noto Sans Bold está empacotada com licença OFL 1.1 e hash fixado em
 `THIRD_PARTY_NOTICES.md`. O núcleo entrega os bytes por `fontsdir` e verifica o
 carregamento/seleção da família pelo libass. Fallback vira erro tipado. Antes do

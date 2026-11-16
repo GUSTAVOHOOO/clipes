@@ -19,6 +19,14 @@ fn main() {
         );
         return;
     }
+    if args.iter().any(|a| a == "-encoders") {
+        return;
+    }
+    if args.iter().any(|a| a.starts_with("testsrc2")) {
+        let output = args.last().unwrap();
+        fs::write(output, b"probe mp4").unwrap();
+        return;
+    }
     if args.iter().any(|a| a == "filter=ass") {
         if env::var_os("CLIPES_FAKE_NO_ASS").is_none() {
             println!("Filter ass\nfontsdir filename");
