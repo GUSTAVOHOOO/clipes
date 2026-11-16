@@ -25,7 +25,7 @@ const texts = {
     adjusted: 'Bordas ajustadas', extendedBefore: 'começo estendido', extendedAfter: 'fim estendido', trimmedEnd: 'fim encurtado', byYou: 'ajustado por você',
     status: { pending: 'Pendente', approved: 'Aprovado', rejected: 'Rejeitado' },
     counts: '{approved} aprovados · {rejected} rejeitados · {pending} pendentes',
-    approve: 'Aprovar', reject: 'Rejeitar', undo: 'Desfazer decisão', preview: 'Abrir preview',
+    approve: 'Aprovar', reject: 'Rejeitar', undo: 'Desfazer decisão', preview: 'Abrir preview', openEditor: 'Abrir no editor',
     borders: 'Bordas do Corte', duration: 'Duração {value}', startEarlier: 'Começo antes', startLater: 'Começo depois', endEarlier: 'Fim antes', endLater: 'Fim depois', start: 'Começo', end: 'Fim',
     shortcuts: 'Atalhos', hint: 'Atalhos (com a revisão em foco)', nav: 'navega', keyApprove: 'aprova', keyReject: 'rejeita', keyStart: 'começo antes/depois', keyEnd: 'fim antes/depois', keyUndo: 'desfaz a última decisão',
     note: 'As bordas movem por Frase inteira, dentro da faixa de duração. As decisões ficam só neste Projeto.',
@@ -38,7 +38,7 @@ const texts = {
     adjusted: 'Borders adjusted', extendedBefore: 'start extended', extendedAfter: 'end extended', trimmedEnd: 'end shortened', byYou: 'adjusted by you',
     status: { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' },
     counts: '{approved} approved · {rejected} rejected · {pending} pending',
-    approve: 'Approve', reject: 'Reject', undo: 'Undo decision', preview: 'Open preview',
+    approve: 'Approve', reject: 'Reject', undo: 'Undo decision', preview: 'Open preview', openEditor: 'Open in editor',
     borders: 'Clip borders', duration: 'Duration {value}', startEarlier: 'Start earlier', startLater: 'Start later', endEarlier: 'End earlier', endLater: 'End later', start: 'Start', end: 'End',
     shortcuts: 'Shortcuts', hint: 'Shortcuts (with the review focused)', nav: 'navigate', keyApprove: 'approve', keyReject: 'reject', keyStart: 'start earlier/later', keyEnd: 'end earlier/later', keyUndo: 'undo the last decision',
     note: 'Borders move by whole Sentences, inside the duration range. Decisions stay in this Project only.',
@@ -57,7 +57,7 @@ function blockedOf(windows: number[], states?: Record<number, string>): Blocked 
 const emptyMoves: Moves = { startEarlier: false, startLater: false, endEarlier: false, endLater: false };
 
 /** Tela de revisão dos candidatos (#55): lista pela Nota, detalhe, aprovar, rejeitar e ajustar as bordas. */
-export function CandidateReview({ sourceId, run, videoKind = 'direct', candidates, weights, onOpenPreview, windowStates, onRedoStarted }: { sourceId: number; run: number; videoKind?: VideoKind; candidates: ReviewCandidate[]; weights: Weight[]; onOpenPreview?: (candidate: number, startUs: number, endUs: number) => void; windowStates?: Record<number, string>; onRedoStarted?: () => void }) {
+export function CandidateReview({ sourceId, run, videoKind = 'direct', candidates, weights, onOpenPreview, onOpenEditor, windowStates, onRedoStarted }: { sourceId: number; run: number; videoKind?: VideoKind; candidates: ReviewCandidate[]; weights: Weight[]; onOpenPreview?: (candidate: number, startUs: number, endUs: number) => void; onOpenEditor?: (candidate: number, startId: number, endId: number) => void; windowStates?: Record<number, string>; onRedoStarted?: () => void }) {
   const t = useText(texts);
   const profiles = useProfiles();
   const [items, setItems] = useState<Record<number, Review>>({});
@@ -129,6 +129,7 @@ export function CandidateReview({ sourceId, run, videoKind = 'direct', candidate
       <span aria-live="polite" data-review-counts>{fill(t.counts, counts)}</span>
       <Button tamanho="sm" disabled={!canUndo} onClick={undo} atalho="Ctrl+Z">{t.undo}</Button>
       <Button tamanho="sm" disabled={!current || !onOpenPreview} onClick={() => current && onOpenPreview?.(current.id, startUs, endUs)} data-preview-slot>{t.preview}</Button>
+      <Button tamanho="sm" disabled={review?.status !== 'approved' || review.startId === undefined || review.endId === undefined || !onOpenEditor} onClick={() => current && review?.startId !== undefined && review.endId !== undefined && onOpenEditor?.(current.id, review.startId, review.endId)} data-editor-slot>{t.openEditor}</Button>
     </div>
     <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-2" aria-label={t.shortcuts}>
       <span>{t.hint}:</span>
