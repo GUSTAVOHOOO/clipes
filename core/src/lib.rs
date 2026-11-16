@@ -57,6 +57,7 @@ pub fn dispatch(name: &str, arguments: Value, events: &mut EventSink<'_>) -> Com
 }
 
 pub mod ai_task;
+pub mod angles;
 mod assistant;
 mod audit;
 pub mod chat;

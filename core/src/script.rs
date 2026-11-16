@@ -238,9 +238,9 @@ fn block_language(input: &TaskInput, output: &Value) -> Vec<Violation> {
 inventory::submit! {
     AiTask {
         id: TASK_ID,
-        version: 1,
+        version: 2,
         prompt: OUTLINE_PROMPT,
-        prompt_sha256: "77b47723dcc5d9a88dbfaf80c2578db9777baab357073d880f6161cd4a90874f",
+        prompt_sha256: "99926b7d91298a925692925c2c8274feba2d4a51bca4161667faae9bbb91946b",
         wire_schema: OUTLINE_WIRE,
         full_schema: OUTLINE_FULL,
         verifiers: &[outline_language, outline_count, outline_fields, outline_refs],
@@ -257,9 +257,9 @@ inventory::submit! {
 inventory::submit! {
     AiTask {
         id: BLOCK_TASK_ID,
-        version: 1,
+        version: 2,
         prompt: BLOCK_PROMPT,
-        prompt_sha256: "27233fa1bb44933c0ed00700259d8a03a9190db28a407ce848cc2d667da82fc7",
+        prompt_sha256: "2f21d62aa3f3d2cd4ec85b8de540e8c3d6e18aca729c3ccec3bcc5740b26e2d0",
         wire_schema: BLOCK_WIRE,
         full_schema: BLOCK_FULL,
         verifiers: &[block_language, narration_limits],
@@ -379,6 +379,7 @@ struct Version {
     created_at: String,
     job_state: Option<String>,
     job_result: Option<Value>,
+    angle_revision: i64,
 }
 
 impl Version {
@@ -398,7 +399,8 @@ struct Block {
     refs: Vec<i64>,
     versions: Vec<Version>,
     /// `version_id` de cada aprovação, em ordem.
-    approvals: Vec<(i64, String)>,
+    approvals: Vec<(i64, String, i64)>,
+    angle_revision: i64,
 }
 
 impl Block {
@@ -424,7 +426,14 @@ impl Block {
     fn approved(&self) -> bool {
         self.current()
             .zip(self.approvals.last())
-            .is_some_and(|(v, (approved, _))| v.id == *approved)
+            .is_some_and(|(v, (approved, _, angle))| {
+                v.id == *approved && *angle == self.angle_revision
+            })
+    }
+    fn stale(&self) -> bool {
+        self.current()
+            .is_some_and(|v| v.angle_revision != self.angle_revision)
+            && !self.approved()
     }
 }
 
@@ -441,6 +450,7 @@ struct Generation {
     job_state: Option<String>,
     job_result: Option<Value>,
     blocks: Vec<Block>,
+    angle: Value,
 }
 
 impl Generation {
@@ -456,8 +466,9 @@ fn parse_ids(text: Option<String>) -> Option<Vec<i64>> {
 
 fn read_generations(run: i64, identity: (i64, i64)) -> Result<Vec<Generation>, CoreError> {
     projects::with_reader(|c| {
+        let angle_revision: i64 = c.query_row("SELECT COALESCE(MAX(id),0) FROM script_angles WHERE run_id=?1 AND cand_start_id=?2 AND cand_end_id=?3", (run,identity.0,identity.1), |r|r.get(0))?;
         let mut q = c.prepare(
-            "SELECT g.id,g.job_id,g.language,g.task_version,g.prompt_sha256,g.profile,g.safety,g.created_at,g.outline,j.state,j.result FROM script_generations g LEFT JOIN jobs j ON j.id=g.job_id WHERE g.run_id=?1 AND g.cand_start_id=?2 AND g.cand_end_id=?3 ORDER BY g.id",
+            "SELECT g.id,g.job_id,g.language,g.task_version,g.prompt_sha256,g.profile,g.safety,g.created_at,g.outline,j.state,j.result,g.angle FROM script_generations g LEFT JOIN jobs j ON j.id=g.job_id WHERE g.run_id=?1 AND g.cand_start_id=?2 AND g.cand_end_id=?3 ORDER BY g.id",
         )?;
         let mut gens: Vec<Generation> = q
             .query_map((run, identity.0, identity.1), |r| {
@@ -476,6 +487,7 @@ fn read_generations(run: i64, identity: (i64, i64)) -> Result<Vec<Generation>, C
                     job_state: r.get(9)?,
                     job_result: result.and_then(|t| serde_json::from_str(&t).ok()),
                     blocks: Vec::new(),
+                    angle: serde_json::from_str(&r.get::<_, String>(11)?).unwrap_or(Value::Null),
                 })
             })?
             .collect::<rusqlite::Result<_>>()?;
@@ -483,10 +495,10 @@ fn read_generations(run: i64, identity: (i64, i64)) -> Result<Vec<Generation>, C
             "SELECT id,position,title,intent,refs FROM script_blocks WHERE generation_id=?1 ORDER BY position",
         )?;
         let mut versions = c.prepare(
-            "SELECT v.id,v.kind,v.job_id,v.task_version,v.prompt_sha256,v.profile,v.title,v.narration,v.refs,v.created_at,j.state,j.result FROM script_block_versions v LEFT JOIN jobs j ON j.id=v.job_id WHERE v.block_id=?1 ORDER BY v.id",
+            "SELECT v.id,v.kind,v.job_id,v.task_version,v.prompt_sha256,v.profile,v.title,v.narration,v.refs,v.created_at,j.state,j.result,v.angle_revision FROM script_block_versions v LEFT JOIN jobs j ON j.id=v.job_id WHERE v.block_id=?1 ORDER BY v.id",
         )?;
         let mut approvals = c.prepare(
-            "SELECT version_id,created_at FROM script_approvals WHERE block_id=?1 ORDER BY id",
+            "SELECT version_id,created_at,angle_revision FROM script_approvals WHERE block_id=?1 ORDER BY id",
         )?;
         for g in &mut gens {
             g.blocks = blocks
@@ -499,6 +511,7 @@ fn read_generations(run: i64, identity: (i64, i64)) -> Result<Vec<Generation>, C
                         refs: parse_ids(r.get(4)?).unwrap_or_default(),
                         versions: Vec::new(),
                         approvals: Vec::new(),
+                        angle_revision,
                     })
                 })?
                 .collect::<rusqlite::Result<_>>()?;
@@ -519,11 +532,12 @@ fn read_generations(run: i64, identity: (i64, i64)) -> Result<Vec<Generation>, C
                             created_at: r.get(9)?,
                             job_state: r.get(10)?,
                             job_result: result.and_then(|t| serde_json::from_str(&t).ok()),
+                            angle_revision: r.get(12)?,
                         })
                     })?
                     .collect::<rusqlite::Result<_>>()?;
                 b.approvals = approvals
-                    .query_map([b.id], |r| Ok((r.get(0)?, r.get(1)?)))?
+                    .query_map([b.id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
                     .collect::<rusqlite::Result<_>>()?;
             }
         }
@@ -773,6 +787,7 @@ fn confirmation_required(estimate: Value) -> CoreError {
 /// regenerar esse bloco; sem ele, o da cadeia inteira (esboço e textos).
 fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let cut = context(candidate_arg(&v)?)?;
+    crate::angles::required(&cut.cut)?;
     let lang = pick_language(&cut, &v)?;
     let chosen = profile_arg(&v);
     let (profile, safety) = route_safety(
@@ -783,19 +798,13 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         },
         chosen.as_deref(),
     )?;
-    let block = estimate_of(
-        BLOCK_TASK_ID,
-        &worst_block_input(&cut.cut.sentences, lang),
-        safety,
-        chosen.as_deref(),
-    );
+    let mut worst = worst_block_input(&cut.cut.sentences, lang);
+    crate::angles::add_to_input(&mut worst, &cut.cut, true)?;
+    let block = estimate_of(BLOCK_TASK_ID, &worst, safety, chosen.as_deref());
     let estimate = if v["block"].is_null() {
-        let outline = estimate_of(
-            TASK_ID,
-            &outline_input(&cut.cut.sentences, lang),
-            safety,
-            None,
-        );
+        let mut input = outline_input(&cut.cut.sentences, lang);
+        crate::angles::add_to_input(&mut input, &cut.cut, true)?;
+        let outline = estimate_of(TASK_ID, &input, safety, None);
         chain_estimate(&outline, &block)
     } else {
         block
@@ -820,16 +829,15 @@ fn batch_of(cut: &Cut) -> String {
 /// `confirmed`, que vale para a cadeia inteira.
 fn cmd_generate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let cut = context(candidate_arg(&v)?)?;
+    let (_, angle) = crate::angles::required(&cut.cut)?;
     let lang = pick_language(&cut, &v)?;
     let (profile, safety) = route_safety(TASK_ID, None)?;
-    let input = outline_input(&cut.cut.sentences, lang);
+    let mut input = outline_input(&cut.cut.sentences, lang);
+    crate::angles::add_to_input(&mut input, &cut.cut, true)?;
     if matches!(safety, Safety::Paid) && v["confirmed"] != true {
-        let block = estimate_of(
-            BLOCK_TASK_ID,
-            &worst_block_input(&cut.cut.sentences, lang),
-            safety,
-            None,
-        );
+        let mut worst = worst_block_input(&cut.cut.sentences, lang);
+        crate::angles::add_to_input(&mut worst, &cut.cut, true)?;
+        let block = estimate_of(BLOCK_TASK_ID, &worst, safety, None);
         return Err(confirmation_required(chain_estimate(
             &estimate_of(TASK_ID, &input, safety, None),
             &block,
@@ -855,8 +863,8 @@ fn cmd_generate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     };
     projects::with_writer(|c| {
         c.execute(
-            "INSERT INTO script_generations(job_id,run_id,cand_start_id,cand_end_id,language,task_version,prompt_sha256,profile,safety) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
-            (job, run, start, end, lang.code(), definition.version, definition.prompt_sha256, &profile, safety_text),
+            "INSERT INTO script_generations(job_id,run_id,cand_start_id,cand_end_id,language,task_version,prompt_sha256,profile,safety,angle) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            (job, run, start, end, lang.code(), definition.version, definition.prompt_sha256, &profile, safety_text, angle.to_string()),
         )?;
         Ok(())
     })?;
@@ -883,6 +891,7 @@ fn enqueue_version(
     profile_id: Option<&str>,
 ) -> Result<i64, CoreError> {
     let definition = task(BLOCK_TASK_ID);
+    let (angle_revision, _) = crate::angles::required(&cut.cut)?;
     let job = jobs::enqueue_ai_with_profile(
         BLOCK_TASK_ID,
         input,
@@ -892,8 +901,8 @@ fn enqueue_version(
     )?;
     projects::with_writer(|c| {
         c.execute(
-            "INSERT INTO script_block_versions(block_id,kind,job_id,task_version,prompt_sha256,profile) VALUES (?1,?2,?3,?4,?5,?6)",
-            (block.id, kind, job, definition.version, definition.prompt_sha256, profile),
+            "INSERT INTO script_block_versions(block_id,kind,job_id,task_version,prompt_sha256,profile,angle_revision) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            (block.id, kind, job, definition.version, definition.prompt_sha256, profile, angle_revision),
         )?;
         Ok(job)
     })
@@ -911,6 +920,10 @@ fn advance(cut: &Cut) -> Result<(), CoreError> {
         )
     })?;
     let (run, identity) = (cut.cut.run, cut.cut.identity);
+    // Um Roteiro legado continua legível; só avança depois da escolha humana do ângulo.
+    if crate::angles::selected(&cut.cut)?.1.is_null() {
+        return Ok(());
+    }
     let gens = read_generations(run, identity)?;
     for gen in &gens {
         let Some(lang) = Lang::parse(&gen.language) else {
@@ -930,7 +943,8 @@ fn advance(cut: &Cut) -> Result<(), CoreError> {
             if !block.versions.is_empty() {
                 continue;
             }
-            let input = block_input(&cut.cut.sentences, lang, &outline, i, (None, None), max);
+            let mut input = block_input(&cut.cut.sentences, lang, &outline, i, (None, None), max);
+            crate::angles::add_to_input(&mut input, &cut.cut, true)?;
             enqueue_version(cut, block, "generated", &input, safety, &gen.profile, None)?;
         }
     }
@@ -1010,6 +1024,7 @@ fn block_json(b: &Block) -> Value {
         "refs": b.refs(),
         "narration": b.narration(),
         "status": if b.approved() { "aprovado" } else { "pendente" },
+        "stale": b.stale(),
         "version": b.versions.iter().filter(|x| x.written()).count(),
         "edited": b.current().is_some_and(|x| x.kind == "edit"),
         "job": job,
@@ -1022,16 +1037,18 @@ fn document(cut: &Cut) -> Result<Value, CoreError> {
     let latest = gens.last();
     let shown = latest_with_blocks(&gens);
     let detected = packaging::detect_language(&cut.cut.sentences);
-    let revision: usize = gens
-        .iter()
-        .map(|g| {
-            1 + g
-                .blocks
-                .iter()
-                .map(|b| b.versions.iter().filter(|x| x.written()).count() + b.approvals.len())
-                .sum::<usize>()
-        })
-        .sum();
+    let (angle_revision, angle) = crate::angles::selected(&cut.cut)?;
+    let revision: usize = angle_revision as usize
+        + gens
+            .iter()
+            .map(|g| {
+                1 + g
+                    .blocks
+                    .iter()
+                    .map(|b| b.versions.iter().filter(|x| x.written()).count() + b.approvals.len())
+                    .sum::<usize>()
+            })
+            .sum::<usize>();
     let current = shown.map(|g| {
         let pending = g.blocks.iter().filter(|b| !b.approved()).count();
         json!({
@@ -1057,6 +1074,7 @@ fn document(cut: &Cut) -> Result<Value, CoreError> {
                 "profile": g.profile,
                 "createdAt": g.created_at,
                 "outline": g.outline,
+                "angle": g.angle,
                 "blocks": g.blocks.iter().map(|b| json!({
                     "id": b.id,
                     "position": b.position,
@@ -1071,7 +1089,7 @@ fn document(cut: &Cut) -> Result<Value, CoreError> {
                         "title": x.title,
                         "narration": x.narration,
                         "refs": x.refs,
-                        "approved": b.approvals.iter().any(|(id, _)| *id == x.id),
+                        "approved": b.approvals.iter().any(|(id, _, _)| *id == x.id),
                     })).collect::<Vec<_>>(),
                 })).collect::<Vec<_>>(),
             })
@@ -1080,11 +1098,12 @@ fn document(cut: &Cut) -> Result<Value, CoreError> {
     Ok(json!({
         "schemaVersion": 1,
         "revision": revision,
+        "angle": angle,
         "candidate": {"run": run, "startId": identity.0, "endId": identity.1},
         "detectedLanguage": detected.map(Lang::code),
         "languageRequired": detected.is_none(),
         "current": current,
-        "narrationAllowed": gate(&gens).is_ok(),
+        "narrationAllowed": !angle.is_null() && gate(&gens).is_ok(),
         "job": latest.map(|g| job_json(&g.job_state, &g.job_result, g.job_id)),
         "busy": gens.iter().any(Generation::busy),
         "limits": limits_json(),
@@ -1129,6 +1148,7 @@ fn gate(gens: &[Generation]) -> Result<(), CoreError> {
 /// `script_not_approved` (ou `script_requires_transformed` para o Corte direto).
 pub fn narration_allowed(candidate: i64) -> Result<(), CoreError> {
     let cut = context(candidate)?;
+    crate::angles::required(&cut.cut)?;
     gate(&refresh(&cut)?)
 }
 
@@ -1291,11 +1311,12 @@ fn cmd_edit(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     if title != block.title()
         || Some(narration.as_str()) != current.narration.as_deref()
         || refs != block.refs()
+        || block.stale()
     {
         projects::with_writer(|c| {
             c.execute(
-                "INSERT INTO script_block_versions(block_id,kind,title,narration,refs) VALUES (?1,'edit',?2,?3,?4)",
-                (block.id, &title, &narration, json!(refs).to_string()),
+                "INSERT INTO script_block_versions(block_id,kind,title,narration,refs,angle_revision) VALUES (?1,'edit',?2,?3,?4,?5)",
+                (block.id, &title, &narration, json!(refs).to_string(), block.angle_revision),
             )?;
             Ok(())
         })?;
@@ -1317,8 +1338,8 @@ fn cmd_approve(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     if !block.approved() {
         projects::with_writer(|c| {
             c.execute(
-                "INSERT INTO script_approvals(block_id,version_id) VALUES (?1,?2)",
-                (block.id, current.id),
+                "INSERT INTO script_approvals(block_id,version_id,angle_revision) VALUES (?1,?2,?3)",
+                (block.id, current.id, block.angle_revision),
             )?;
             Ok(())
         })?;
@@ -1346,7 +1367,7 @@ fn cmd_regenerate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let room = MAX_SCRIPT_CHARS
         .saturating_sub(others_chars(gen, block))
         .max(1);
-    let input = block_input(
+    let mut input = block_input(
         &cut.cut.sentences,
         lang,
         &outline,
@@ -1354,6 +1375,7 @@ fn cmd_regenerate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         (neighbor(index.checked_sub(1)), neighbor(Some(index + 1))),
         room.min(MAX_NARRATION_CHARS),
     );
+    crate::angles::add_to_input(&mut input, &cut.cut, true)?;
     if matches!(safety, Safety::Paid) && v["confirmed"] != true {
         return Err(confirmation_required(estimate_of(
             BLOCK_TASK_ID,

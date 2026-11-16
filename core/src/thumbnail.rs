@@ -94,9 +94,9 @@ fn why_valid(_: &TaskInput, output: &Value) -> Vec<Violation> {
 inventory::submit! {
     AiTask {
         id: TASK_ID,
-        version: 1,
+        version: 2,
         prompt: PROMPT,
-        prompt_sha256: "f7c54202c96bf601c6b0bd3bbbcb7913638aa3219b2428e8980bcb6f33ae0766",
+        prompt_sha256: "37ed6bd58eccb8d830b294505b829acfcdb2b4d5c102834e0900cf36d902c634",
         wire_schema: WIRE,
         full_schema: FULL,
         verifiers: &[sentence_in_cut, why_valid],
@@ -230,7 +230,8 @@ fn estimate_of(input: &TaskInput, safety: Safety) -> Value {
 fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let ctx = context(candidate_arg(&v)?)?;
     let (profile, safety) = route_safety()?;
-    let input = build_input(&ctx.cut.sentences);
+    let mut input = build_input(&ctx.cut.sentences);
+    crate::angles::add_to_input(&mut input, &ctx.cut, false)?;
     Ok(json!({
         "paid": matches!(safety, Safety::Paid),
         "profile": profile,
@@ -243,7 +244,8 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 fn cmd_suggest(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let ctx = context(candidate_arg(&v)?)?;
     let (profile, safety) = route_safety()?;
-    let input = build_input(&ctx.cut.sentences);
+    let mut input = build_input(&ctx.cut.sentences);
+    crate::angles::add_to_input(&mut input, &ctx.cut, false)?;
     if matches!(safety, Safety::Paid) && v["confirmed"] != true {
         return Err(CoreError {
             code: "confirmation_required".into(),

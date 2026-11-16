@@ -46,6 +46,10 @@ bun run build
 
 ## Contrato do núcleo
 
+O [ângulo antes do Roteiro](docs/contribuindo/angulos.md) descreve a tarefa `angles`,
+que herda a rota de `script`, os comandos de escolha e os blocos desatualizados ao
+trocar a promessa do Vídeo transformado.
+
 Export local, contrato de entrada do Corte, ASS compartilhado com preview, harness
 de paridade e pontos de extensão do pipeline: [Export](docs/contribuindo/export.md).
 
