@@ -45,9 +45,11 @@ fn execute(
     cwd: Option<&Path>,
     cancel: &CancelToken,
     duration_us: i64,
-    probe: bool,
+    font_file: Option<&'static str>,
     progress: &mut dyn FnMut(u8),
 ) -> Result<Report, CoreError> {
+    let probe = font_file.is_none();
+    let font_file = font_file.unwrap_or("NotoSans-Bold.ttf");
     if cancel.is_cancelled() {
         return Err(cancelled());
     }
@@ -82,12 +84,12 @@ fn execute(
         let mut fallback = false;
         let mut loaded = false;
         for line in BufReader::new(stderr).lines().map_while(Result::ok) {
-            loaded |= line.contains("Loading font file") && line.contains("NotoSans-Bold.ttf");
+            loaded |= line.contains("Loading font file") && line.contains(font_file);
             if line.contains("fontselect:") && line.contains(" -> ") {
                 if line
                     .split(" -> ")
                     .nth(1)
-                    .is_some_and(|s| s.contains("NotoSans-Bold"))
+                    .is_some_and(|s| s.contains(font_file.trim_end_matches(".ttf")))
                 {
                     selected = true;
                 } else {
@@ -146,7 +148,7 @@ pub fn check_ass(ffmpeg: &Path, cancel: &CancelToken) -> Result<(), CoreError> {
         None,
         cancel,
         1,
-        true,
+        None,
         &mut |_| {},
     )?;
     if !report.help.lines().any(|s| s.trim() == "Filter ass") || !report.help.contains("fontsdir") {
@@ -198,13 +200,71 @@ pub fn render_with(
     cancel: &CancelToken,
     progress: &mut dyn FnMut(u8),
 ) -> Result<(), CoreError> {
+    let ass = captions::ass(&input.words, input.end_us - input.start_us)?;
+    let doc = AssDoc {
+        ass: &ass,
+        font_file: "NotoSans-Bold.ttf",
+        font_bytes: FONT_BYTES,
+    };
+    render_ass(ffmpeg, input, &doc, encoder, cancel, progress)
+}
+
+/// O job usa exatamente o documento/cues entregue ao preview no início do render.
+pub fn render_styled(
+    ffmpeg: &Path,
+    input: &RenderInput,
+    prepared: &crate::caption_style::Prepared,
+    cancel: &CancelToken,
+    progress: &mut dyn FnMut(u8),
+) -> Result<(), CoreError> {
+    render_styled_with(
+        ffmpeg,
+        input,
+        prepared,
+        super::encoder::X264,
+        cancel,
+        progress,
+    )
+}
+
+/// `render_styled` com o encoder escolhido (#62).
+pub fn render_styled_with(
+    ffmpeg: &Path,
+    input: &RenderInput,
+    prepared: &crate::caption_style::Prepared,
+    encoder: &str,
+    cancel: &CancelToken,
+    progress: &mut dyn FnMut(u8),
+) -> Result<(), CoreError> {
+    prepared.style.validate()?;
+    let doc = AssDoc {
+        ass: &prepared.ass,
+        font_file: prepared.style.font_file(),
+        font_bytes: prepared.style.font_bytes(),
+    };
+    render_ass(ffmpeg, input, &doc, encoder, cancel, progress)
+}
+
+struct AssDoc<'a> {
+    ass: &'a str,
+    font_file: &'static str,
+    font_bytes: &'a [u8],
+}
+
+fn render_ass(
+    ffmpeg: &Path,
+    input: &RenderInput,
+    doc: &AssDoc<'_>,
+    encoder: &str,
+    cancel: &CancelToken,
+    progress: &mut dyn FnMut(u8),
+) -> Result<(), CoreError> {
     validate_output(&input.output)?;
     if input.start_us < 0 || input.end_us <= input.start_us || input.audio_track < 0 {
         return Err(error("export_bounds", "As bordas do Corte são inválidas."));
     }
     check_ass(ffmpeg, cancel)?;
     let duration = input.end_us - input.start_us;
-    let ass = captions::ass(&input.words, duration)?;
     let parent = input.output.parent().unwrap();
     let work = tempfile::Builder::new()
         .prefix(".clipes-export-")
@@ -212,8 +272,8 @@ pub fn render_with(
         .map_err(|_| failed())?;
     let fonts = work.path().join("fonts");
     fs::create_dir(&fonts).map_err(|_| failed())?;
-    fs::write(fonts.join("NotoSans-Bold.ttf"), FONT_BYTES).map_err(|_| failed())?;
-    fs::write(work.path().join("captions.ass"), ass).map_err(|_| failed())?;
+    fs::write(fonts.join(doc.font_file), doc.font_bytes).map_err(|_| failed())?;
+    fs::write(work.path().join("captions.ass"), doc.ass).map_err(|_| failed())?;
     let partial = tempfile::Builder::new()
         .prefix(".clipes-export-")
         .suffix(".part")
@@ -279,7 +339,7 @@ pub fn render_with(
         Some(work.path()),
         cancel,
         duration,
-        false,
+        Some(doc.font_file),
         progress,
     )?;
     if cancel.is_cancelled() {

@@ -60,6 +60,7 @@ pub mod ai_task;
 pub mod angles;
 mod assistant;
 mod audit;
+pub mod caption_style;
 pub mod chat;
 mod components;
 mod context_notice;

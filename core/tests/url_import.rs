@@ -110,6 +110,34 @@ fn url_settings_persist_terms_and_download_directory_per_installation() {
         assert!(diagnostic.matches(pattern).count() <= 50);
     }
 
+    // #201: +18 detectado antes de baixar qualquer byte, sem depender do texto do erro.
+    let before = fs::read_dir(&destination).unwrap().count();
+    let err = run(
+        "sources.url.download",
+        json!({"project":project,"url":"https://example.com/probe-age","job":"probe-age"}),
+    )
+    .unwrap_err();
+    assert_eq!(err.code, "age_restricted");
+    assert_eq!(fs::read_dir(&destination).unwrap().count(), before);
+    let diagnostic = run("diagnostic.get", json!({})).unwrap()["text"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        diagnostic.contains("yt_dlp.age_limit_needs_auth"),
+        "{diagnostic}"
+    );
+    // Falha de rede ou saída inesperada na detecção não bloqueia: o download segue.
+    for suffix in ["probe-net", "probe-junk"] {
+        let ok = run(
+            "sources.url.download",
+            json!({"project":project,"url":format!("https://example.com/{suffix}"),"job":suffix}),
+        )
+        .unwrap();
+        assert!(std::path::Path::new(ok["path"].as_str().unwrap()).exists());
+        fs::remove_file(ok["path"].as_str().unwrap()).unwrap();
+    }
+
     let err = dispatch(
         "sources.url.download",
         json!({"project":project,"url":"https://example.com/hang","job":"cancel-me"}),
