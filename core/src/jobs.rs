@@ -2,9 +2,12 @@ use crate::{projects, CommandRegistration, CommandResult, EventSink};
 use serde_json::{json, Value};
 mod ai;
 mod budget;
+pub(crate) use ai::route_of_profile;
 pub(crate) mod preview;
-pub(crate) use ai::route_of;
-pub use ai::{enqueue_ai, enqueue_ai_in_batch, set_ai_provider, set_ai_route};
+pub mod redo;
+pub use ai::{
+    enqueue_ai, enqueue_ai_in_batch, enqueue_ai_with_profile, set_ai_provider, set_ai_route,
+};
 pub(crate) use budget::{audio_precheck, pause as pause_scope};
 
 #[derive(Clone, Copy)]
