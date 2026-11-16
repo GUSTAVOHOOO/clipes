@@ -507,6 +507,63 @@ fn script_blocks_gate_the_narration_until_every_block_is_approved() {
     );
     assert!(script::narration_allowed(cand).is_ok());
 
+    // Regenerar com outro Perfil de Provedor (#126): o mesmo caminho do refazer, só nesta chamada.
+    call(
+        "provider.configure",
+        json!({"profileId": "weak", "label": "Fraco local", "kind": "openai", "endpoint": "http://127.0.0.1:10/v1", "model": "weak-model"}),
+    );
+    call(
+        "provider.configure",
+        json!({"profileId": "strong", "label": "Forte remoto", "kind": "openai", "endpoint": "https://192.0.2.10/v1", "model": "strong-model"}),
+    );
+    let regen = |profile: &str, confirmed: bool| json!({"candidate": cand, "block": ids[2], "profileId": profile, "confirmed": confirmed});
+    assert_eq!(
+        fail("script.regenerate", regen("strong", false)).code,
+        "confirmation_required"
+    );
+    assert_eq!(
+        call(
+            "script.estimate",
+            json!({"candidate": cand, "block": ids[2], "profileId": "strong"})
+        )["paid"],
+        true
+    );
+    assert_eq!(
+        fail("script.regenerate", regen("ghost", true)).code,
+        "invalid_settings"
+    );
+    call(
+        "assistant.local_only.set",
+        json!({"task": "script", "enabled": true}),
+    );
+    assert_eq!(
+        fail("script.regenerate", regen("strong", true)).code,
+        "local_only_violation"
+    );
+    call(
+        "assistant.local_only.set",
+        json!({"task": "script", "enabled": false}),
+    );
+    assert!(
+        script::narration_allowed(cand).is_ok(),
+        "recusas não mexem no Roteiro"
+    );
+    call("script.regenerate", regen("weak", false));
+    let weak = settled(cand);
+    assert_eq!(statuses(&weak), ["aprovado", "aprovado", "pendente"]);
+    let last = weak["generations"][0]["blocks"][2]["versions"]
+        .as_array()
+        .unwrap()
+        .last()
+        .unwrap()
+        .clone();
+    assert_eq!(last["kind"], "regenerated");
+    call(
+        "script.approve",
+        json!({"candidate": cand, "block": ids[2]}),
+    );
+    assert!(script::narration_allowed(cand).is_ok());
+
     // 5. Novo Roteiro inteiro: outra geração, a anterior fica; os blocos novos são pendentes.
     *fake.outline.lock().unwrap() = outline(4, json!([10]));
     call("script.generate", json!({"candidate": cand}));

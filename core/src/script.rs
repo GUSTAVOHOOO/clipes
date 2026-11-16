@@ -350,6 +350,15 @@ fn context(candidate: i64) -> Result<Cut, CoreError> {
     Ok(Cut { cut })
 }
 
+/// Perfil de Provedor escolhido só para esta chamada ("refazer com o perfil X", #126): o mesmo
+/// caminho de `jobs.redo`, com o veto "somente local" antes de qualquer envio.
+fn profile_arg(v: &Value) -> Option<String> {
+    v["profileId"]
+        .as_str()
+        .filter(|id| !id.is_empty() && id.len() <= 64)
+        .map(str::to_owned)
+}
+
 fn candidate_arg(v: &Value) -> Result<i64, CoreError> {
     v["candidate"]
         .as_i64()
@@ -669,8 +678,8 @@ fn block_input(
     }
 }
 
-fn route_safety(task: &str) -> Result<(String, Safety), CoreError> {
-    Ok(match provider::routed(Some(task), None)? {
+fn route_safety(task: &str, profile: Option<&str>) -> Result<(String, Safety), CoreError> {
+    Ok(match provider::routed(Some(task), profile)? {
         provider::Routed::Cli(name) => (name, Safety::Paid),
         provider::Routed::Api { profile, local } => {
             (profile.id, if local { Safety::Local } else { Safety::Paid })
@@ -678,11 +687,16 @@ fn route_safety(task: &str) -> Result<(String, Safety), CoreError> {
     })
 }
 
-fn estimate_of(task_id: &str, input: &TaskInput, safety: Safety) -> Value {
+fn estimate_of(
+    task_id: &str,
+    input: &TaskInput,
+    safety: Safety,
+    profile_id: Option<&str>,
+) -> Value {
     let paid = matches!(safety, Safety::Paid);
     let unknown = json!({"kind": "unknown", "minMicroUsd": null, "maxMicroUsd": null});
     let definition = task(task_id);
-    let Ok((target, profile)) = jobs::route_of(task_id, paid) else {
+    let Ok((target, profile)) = jobs::route_of_profile(task_id, paid, profile_id) else {
         return unknown;
     };
     let Ok((wire, _)) = ai_task::check_definition(definition) else {
@@ -760,14 +774,28 @@ fn confirmation_required(estimate: Value) -> CoreError {
 fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let cut = context(candidate_arg(&v)?)?;
     let lang = pick_language(&cut, &v)?;
-    let (profile, safety) = route_safety(TASK_ID)?;
+    let chosen = profile_arg(&v);
+    let (profile, safety) = route_safety(
+        if v["block"].is_null() {
+            TASK_ID
+        } else {
+            BLOCK_TASK_ID
+        },
+        chosen.as_deref(),
+    )?;
     let block = estimate_of(
         BLOCK_TASK_ID,
         &worst_block_input(&cut.cut.sentences, lang),
         safety,
+        chosen.as_deref(),
     );
     let estimate = if v["block"].is_null() {
-        let outline = estimate_of(TASK_ID, &outline_input(&cut.cut.sentences, lang), safety);
+        let outline = estimate_of(
+            TASK_ID,
+            &outline_input(&cut.cut.sentences, lang),
+            safety,
+            None,
+        );
         chain_estimate(&outline, &block)
     } else {
         block
@@ -793,16 +821,17 @@ fn batch_of(cut: &Cut) -> String {
 fn cmd_generate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let cut = context(candidate_arg(&v)?)?;
     let lang = pick_language(&cut, &v)?;
-    let (profile, safety) = route_safety(TASK_ID)?;
+    let (profile, safety) = route_safety(TASK_ID, None)?;
     let input = outline_input(&cut.cut.sentences, lang);
     if matches!(safety, Safety::Paid) && v["confirmed"] != true {
         let block = estimate_of(
             BLOCK_TASK_ID,
             &worst_block_input(&cut.cut.sentences, lang),
             safety,
+            None,
         );
         return Err(confirmation_required(chain_estimate(
-            &estimate_of(TASK_ID, &input, safety),
+            &estimate_of(TASK_ID, &input, safety, None),
             &block,
         )));
     }
@@ -851,9 +880,16 @@ fn enqueue_version(
     input: &TaskInput,
     safety: Safety,
     profile: &str,
+    profile_id: Option<&str>,
 ) -> Result<i64, CoreError> {
     let definition = task(BLOCK_TASK_ID);
-    let job = jobs::enqueue_ai_in_batch(BLOCK_TASK_ID, input, safety, Some(&batch_of(cut)))?;
+    let job = jobs::enqueue_ai_with_profile(
+        BLOCK_TASK_ID,
+        input,
+        safety,
+        Some(&batch_of(cut)),
+        profile_id,
+    )?;
     projects::with_writer(|c| {
         c.execute(
             "INSERT INTO script_block_versions(block_id,kind,job_id,task_version,prompt_sha256,profile) VALUES (?1,?2,?3,?4,?5,?6)",
@@ -895,7 +931,7 @@ fn advance(cut: &Cut) -> Result<(), CoreError> {
                 continue;
             }
             let input = block_input(&cut.cut.sentences, lang, &outline, i, (None, None), max);
-            enqueue_version(cut, block, "generated", &input, safety, &gen.profile)?;
+            enqueue_version(cut, block, "generated", &input, safety, &gen.profile, None)?;
         }
     }
     Ok(())
@@ -1276,7 +1312,8 @@ fn cmd_regenerate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let gens = refresh(&cut)?;
     let (gen, block) = shown_block(&gens, block_arg(&v)?)?;
     let lang = Lang::parse(&gen.language).unwrap_or(Lang::Pt);
-    let (profile, safety) = route_safety(BLOCK_TASK_ID)?;
+    let chosen = profile_arg(&v);
+    let (profile, safety) = route_safety(BLOCK_TASK_ID, chosen.as_deref())?;
     let index = gen
         .blocks
         .iter()
@@ -1300,9 +1337,18 @@ fn cmd_regenerate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             BLOCK_TASK_ID,
             &input,
             safety,
+            chosen.as_deref(),
         )));
     }
-    let job = enqueue_version(&cut, block, "regenerated", &input, safety, &profile)?;
+    let job = enqueue_version(
+        &cut,
+        block,
+        "regenerated",
+        &input,
+        safety,
+        &profile,
+        chosen.as_deref(),
+    )?;
     Ok(json!({"job": job, "block": block.id}))
 }
 

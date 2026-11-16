@@ -97,6 +97,10 @@ _Evitar_: IA, modelo, conta
 Conjunto salvo de um Provedor já configurado: nome livre, tipo, endpoint, modelo, preço e chave no cofre. Pode haver vários ao mesmo tempo, e cada Tarefa de IA aponta para um por regra fixa que o usuário escolhe. Não existe perfil padrão de fábrica, e nem o Projeto nem o Perfil de canal escolhem um.
 _Evitar_: perfil sozinho (confunde com Perfil de canal), conta, preset
 
+**Revisão da execução** (Run revision)
+Versão dos candidatos de uma execução de seleção. Refazer Janelas com outro Perfil de Provedor gera uma revisão nova; as anteriores e as decisões já tomadas na revisão dos candidatos continuam no Projeto.
+_Evitar_: versão, rodada
+
 **Tarefa de IA** (AI Task)
 Cada trabalho que o Provedor faz no app: seleção de Cortes, Empacotamento, Roteiro e tradução. É um workflow fixo no núcleo, com prompt versionado, schema de saída, verificadores e orçamento, e nunca um agente com ferramentas.
 _Evitar_: agente, prompt, chamada (a chamada é só um passo da tarefa)

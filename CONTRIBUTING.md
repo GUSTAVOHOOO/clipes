@@ -156,6 +156,10 @@ O sinalizador mora no `project.sqlite` (tabela `project_privacy`, linha única, 
 
 O custo estimado de uma tarefa usa o perfil escolhido: `provider.prices.*` por (tipo, modelo) do perfil, sem campo de preço no perfil. `provider.cost.run` devolve `route` (`profileId`, `kind`, `model`) e grava o id do perfil em `provider_costs.profile` (migração `0120_001_provider_costs_profile`). `assistant.tasks` alimenta a tabela "Tarefas" das Preferências. Testes: `core/tests/task_profiles.rs`.
 
+### Refazer com outro perfil (#126)
+
+`selection.redo` aceita `profileId` e `jobs.redo` refaz qualquer unidade de Tarefa de IA com um Perfil escolhido pelo usuário, só desta vez, depois de mostrar perfil, custo e se o texto sai da máquina. Respeita "somente local", o teto do lote e job `uncertain`; nunca troca perfil sozinho nem muda o padrão. Os candidatos novos entram como uma nova revisão da execução (migração `0126_001_selection_redo_profile`). Veja [Refazer com outro perfil](docs/contribuindo/refazer-com-outro-perfil.md); o "regenerar bloco" do Roteiro (#73) reusa `jobs.redo`.
+
 ## Worker de ML
 
 O worker Python (`worker/`) roda a transcrição e os demais modelos; o núcleo o instala sob demanda pelo Componente `uv` e fala com ele por JSON lines versionado, conforme o [ADR-0004](docs/adr/0004-stack-tauri-react-nucleo-rust-worker-python.md). O protocolo, as mensagens de exemplo compartilhadas e a instalação estão em [worker/protocol/README.md](worker/protocol/README.md). A instalação é um Componente global (`components.worker.install`, com `components.cancel` e id `worker` para cancelar), não um job da fila de Projetos. Para testar, sem Python no sistema, instale o `uv` na versão fixada em `core/src/components.rs` e rode `uv run --project worker pytest worker/tests`; o núcleo é testado contra um worker falso com `cargo test -p clipes-core --test worker`.

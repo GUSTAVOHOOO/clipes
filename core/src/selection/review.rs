@@ -240,7 +240,7 @@ fn snapshot(run: i64) -> Result<Snapshot, CoreError> {
     let frases = sentences::load_for(row.transcript)?;
     let (candidates, decisions) = projects::with_reader(|c| {
         let mut q = c.prepare(
-            "SELECT id,start_id,end_id FROM selection_candidates WHERE run_id=?1 ORDER BY rank",
+            "SELECT id,start_id,end_id FROM selection_candidates WHERE run_id=?1 AND revision=(SELECT revision FROM selection_runs WHERE id=?1) ORDER BY rank",
         )?;
         let rows = q.query_map([run], |r| {
             Ok(Candidate {

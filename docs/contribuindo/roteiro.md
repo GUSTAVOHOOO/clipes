@@ -33,6 +33,6 @@ Migração `0073_001_script`. `script_generations` guarda uma linha por esboço 
 - `script.get {candidate}`: documento com o Roteiro atual (`current.blocks` com `status` `pendente` ou `aprovado`, `pending`, `approved`, `totalChars`), `narrationAllowed`, o job do esboço, `busy`, os limites e o histórico em `generations`.
 - `script.edit {candidate, block, title?, narration?, refs?}`: nova versão do bloco (`edit_invalid` com os códigos das violações).
 - `script.approve {candidate, block}`: aprova a versão atual de um bloco. Não existe comando para aprovar todos.
-- `script.regenerate {candidate, block, confirmed?}`: nova chamada com o bloco anterior e o seguinte.
+- `script.regenerate {candidate, block, profileId?, confirmed?}`: nova chamada com o bloco anterior e o seguinte. `profileId` refaz o bloco com outro Perfil de Provedor só nesta chamada (#126), pelo mesmo caminho do `jobs.redo` (`enqueue_ai_with_profile`, veto "somente local" antes da rede, confirmação para perfil pago); `script.estimate` aceita o mesmo campo.
 
 Testes: `core/tests/script.rs` (headless, Provedor falso, sem rede) e a seção do Roteiro em `scripts/ui.mjs`. A UI fica em `src/features/projects/Script.tsx`.
