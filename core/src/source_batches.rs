@@ -665,17 +665,23 @@ fn cmd_create(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                 .ok_or_else(|| error("invalid_budget", "Orçamento inválido."))?,
         ),
     };
-    let range = |name: &str| -> Result<Option<i64>, CoreError> {
+    let defaults = crate::channel_profile::selection_defaults()?;
+    let range = |name: &str, fallback: i64| -> Result<i64, CoreError> {
         match v.get(name) {
-            None | Some(Value::Null) => Ok(None),
+            None | Some(Value::Null) => Ok(fallback),
             Some(n) => n
                 .as_i64()
                 .filter(|n| *n > 0)
-                .map(Some)
                 .ok_or_else(|| error("invalid_batch", "Faixa de Corte inválida.")),
         }
     };
-    let (min_us, max_us) = (range("minUs")?, range("maxUs")?);
+    let (min_us, max_us) = (
+        range("minUs", defaults.min_us)?,
+        range("maxUs", defaults.max_us)?,
+    );
+    if min_us >= max_us {
+        return Err(error("invalid_batch", "Faixa de Corte inválida."));
+    }
     let kind = crate::selection::parse_kind(&v)?;
     let (profile, safety) = crate::selection::route_safety()?;
     if engine == "groq" && projects::project_local_only()? {
