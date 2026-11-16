@@ -189,16 +189,24 @@ pub fn render(
     cancel: &CancelToken,
     progress: &mut dyn FnMut(u8),
 ) -> Result<(), CoreError> {
+    render_with(ffmpeg, input, super::encoder::X264, cancel, progress)
+}
+
+/// Igual a `render`, com o encoder da etapa `SelectedEncoder` (#62).
+pub fn render_with(
+    ffmpeg: &Path,
+    input: &RenderInput,
+    encoder: &str,
+    cancel: &CancelToken,
+    progress: &mut dyn FnMut(u8),
+) -> Result<(), CoreError> {
     let ass = captions::ass(&input.words, input.end_us - input.start_us)?;
-    render_ass(
-        ffmpeg,
-        input,
-        &ass,
-        "NotoSans-Bold.ttf",
-        FONT_BYTES,
-        cancel,
-        progress,
-    )
+    let doc = AssDoc {
+        ass: &ass,
+        font_file: "NotoSans-Bold.ttf",
+        font_bytes: FONT_BYTES,
+    };
+    render_ass(ffmpeg, input, &doc, encoder, cancel, progress)
 }
 
 /// O job usa exatamente o documento/cues entregue ao preview no início do render.
@@ -209,24 +217,45 @@ pub fn render_styled(
     cancel: &CancelToken,
     progress: &mut dyn FnMut(u8),
 ) -> Result<(), CoreError> {
-    prepared.style.validate()?;
-    render_ass(
+    render_styled_with(
         ffmpeg,
         input,
-        &prepared.ass,
-        prepared.style.font_file(),
-        prepared.style.font_bytes(),
+        prepared,
+        super::encoder::X264,
         cancel,
         progress,
     )
 }
 
+/// `render_styled` com o encoder escolhido (#62).
+pub fn render_styled_with(
+    ffmpeg: &Path,
+    input: &RenderInput,
+    prepared: &crate::caption_style::Prepared,
+    encoder: &str,
+    cancel: &CancelToken,
+    progress: &mut dyn FnMut(u8),
+) -> Result<(), CoreError> {
+    prepared.style.validate()?;
+    let doc = AssDoc {
+        ass: &prepared.ass,
+        font_file: prepared.style.font_file(),
+        font_bytes: prepared.style.font_bytes(),
+    };
+    render_ass(ffmpeg, input, &doc, encoder, cancel, progress)
+}
+
+struct AssDoc<'a> {
+    ass: &'a str,
+    font_file: &'static str,
+    font_bytes: &'a [u8],
+}
+
 fn render_ass(
     ffmpeg: &Path,
     input: &RenderInput,
-    ass: &str,
-    font_file: &'static str,
-    font_bytes: &[u8],
+    doc: &AssDoc<'_>,
+    encoder: &str,
     cancel: &CancelToken,
     progress: &mut dyn FnMut(u8),
 ) -> Result<(), CoreError> {
@@ -243,8 +272,8 @@ fn render_ass(
         .map_err(|_| failed())?;
     let fonts = work.path().join("fonts");
     fs::create_dir(&fonts).map_err(|_| failed())?;
-    fs::write(fonts.join(font_file), font_bytes).map_err(|_| failed())?;
-    fs::write(work.path().join("captions.ass"), ass).map_err(|_| failed())?;
+    fs::write(fonts.join(doc.font_file), doc.font_bytes).map_err(|_| failed())?;
+    fs::write(work.path().join("captions.ass"), doc.ass).map_err(|_| failed())?;
     let partial = tempfile::Builder::new()
         .prefix(".clipes-export-")
         .suffix(".part")
@@ -256,7 +285,7 @@ fn render_ass(
             "A Fonte está indisponível ou foi alterada.",
         )
     })?;
-    let plan = pipeline::standard();
+    let plan = pipeline::with_encoder(encoder);
     let mut args: Vec<OsString> = vec![
         "-hide_banner".into(),
         "-nostdin".into(),
@@ -310,7 +339,7 @@ fn render_ass(
         Some(work.path()),
         cancel,
         duration,
-        Some(font_file),
+        Some(doc.font_file),
         progress,
     )?;
     if cancel.is_cancelled() {

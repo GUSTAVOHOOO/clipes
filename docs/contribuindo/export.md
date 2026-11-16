@@ -62,7 +62,7 @@ cancelamento ficam em `export/render.rs`. A ordem padrão é:
    `captions.ass` e `fonts` num diretório privado, sem interpolar caminhos de
    usuário em filtergraphs.
 3. `Audio`: passagem da faixa selecionada; AAC no contêiner MP4.
-4. `Encoder`: `libx264`, preset `fast`, CRF 20, yuv420p, sem marca d'água.
+4. `Encoder` / `SelectedEncoder`: `libx264`, preset `fast`, CRF 20, yuv420p, sem marca d'água, ou o encoder de hardware escolhido (seção abaixo).
 
 Para adicionar uma etapa, implemente `Stage` e insira-a na composição de
 `standard()`. `export_pipeline` prova que uma etapa adicional entra entre vídeo
@@ -70,7 +70,7 @@ e legenda sem alterar nenhuma das etapas existentes.
 
 | Trabalho futuro | Encaixe |
 | --- | --- |
-| Encoder de hardware | Outra etapa de encoder substitui `Encoder`, mantendo o plano/runner. |
+| Encoder de hardware | Feito no #62: `SelectedEncoder` substitui `Encoder`, mantendo o plano/runner. |
 | Crop/reenquadramento (#61) | Etapa de vídeo antes de `Subtitle`, produzindo o canvas final 1080×1920. |
 | Loudness (#63) | Etapa que acrescenta filtros de áudio antes do encode. |
 | Silêncios (#82) | Etapa de montagem anterior ao plano audiovisual; deve fornecer **um mapa de tempos compartilhado por vídeo, legenda e áudio**. Não basta acrescentar um filtro só de áudio. |
@@ -79,6 +79,39 @@ e legenda sem alterar nenhuma das etapas existentes.
 Essas funcionalidades não são implementadas neste ticket. Uma extensão que
 precise de grafo com várias entradas amplia o plano tipado; texto da Transcrição
 jamais vira filtro, argumento de processo ou caminho.
+
+## Encoder do export (#62)
+
+`export/encoder.rs` detecta, guarda e troca o encoder H.264 (ADR-0004). A ordem é
+`h264_nvenc`, `h264_qsv`, `h264_amf`, `h264_videotoolbox` e, por fim, `libx264`, o fallback garantido.
+
+- **Detecção:** `ffmpeg -hide_banner -encoders` lista os candidatos presentes; cada um faz um
+  export real de 1 s (`testsrc2` 1080×1920 a 30 fps, com os mesmos argumentos de qualidade do
+  export) num diretório temporário e o ffprobe confere `h264,1080,1920`. Quem passa entra na lista;
+  o x264 também é testado e sempre fecha a lista. O primeiro da lista é o escolhido. Cada processo
+  tem limite de tempo e respeita o `CancelToken`.
+- **Cache:** `export-encoder.json` na pasta de dados do app (`CLIPES_DATA_DIR`), nunca no Projeto:
+  versão do FFmpeg, nome e driver da GPU (só NVIDIA tem driver legível; AMD e Intel só mudam o
+  cache pela versão do FFmpeg), lista aprovada, encoder escolhido, troca manual e data. Uma versão
+  de FFmpeg ou driver diferente invalida o cache; o próximo export (ou "detectar de novo") refaz o teste.
+- **Quando roda:** na primeira execução de um export (dentro do job, que já é cancelável) e quando
+  o cache invalida. Sem conseguir detectar, o export usa o x264 sem erro.
+- **Qualidade:** os argumentos de cada encoder são constantes nomeadas e comentadas em
+  `encoder.rs`, mirando o ponto do x264 (CRF 20, preset `fast`), que fica exatamente como no #59.
+- **Fallback:** se o encoder escolhido falhar no export (`export_failed`), o job repete a etapa
+  com x264, tira o encoder da lista (o próximo export não repete a falha nem avisa de novo) e grava
+  em `exports` (migração `0062_001_export_encoder`) `encoder`, `fallback_from` e
+  `fallback_reason = "encoder_failed"`. Nunca se guarda stderr nem caminhos (ADR-0006).
+  `export.status` devolve `encoder` e `encoder_fallback {from,reason}`; a UI avisa uma vez.
+  Cancelamento e erros de entrada não disparam fallback.
+- **Comandos:** `export.encoder.status` (cache, sem testar nada), `export.encoder.detect`
+  (detectar de novo, mantém a troca manual se o encoder ainda passa) e
+  `export.encoder.set {encoder}` (`null` volta ao automático; fora da lista: `encoder_invalid`).
+  Preferências tem o seletor e o botão "Detectar de novo".
+- **Testes:** `core/tests/export_encoder.rs` usa o FFmpeg falso `fake-encoders` (lista de encoders e
+  falhas por variável de ambiente); `core/tests/export_encoder_real.rs` usa o FFmpeg do sistema e
+  pula sem encoder de hardware (`cargo test --test export_encoder_real -- --nocapture` mostra o
+  encoder escolhido e os tempos de um export de 30 s).
 
 ## ASS e fonte
 
