@@ -116,6 +116,11 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
   de `-i`, com `-c copy`, e confirme `side_data_list.rotation` via `ffprobe`.
   O harness `export_parity` faz essa confirmação antes de comparar os quadros.
 
+### `-filter_complex_script` removido no FFmpeg 9 (CI Windows)
+- **Sintoma:** `export_loudness` e `export_parity` passam no Ubuntu (FFmpeg 6.x) e localmente no FFmpeg 8.1, mas falham com `export_failed` no CI Windows (`choco install ffmpeg` v9.0.2).
+- **Causa:** o FFmpeg 9.0 removeu `-filter_complex_script` em favor de `-/filter_complex`, enquanto o FFmpeg 6.1 do Ubuntu ainda não tem `-/filter_complex`.
+- **Ação:** passe o grafo diretamente via `-filter_complex <grafo>` (funciona do FFmpeg 6 ao 9 sem depender de sintaxe específica de versão).
+
 ### OpenCode isolado: cota gratuita esgotada
 - **Sintoma:** teste real pendente: cota gratuita do OpenCode esgotada (HTTP 429 `provider.free-limit`, ~22 h), isolamento confirmado com `debug agents` e 3 tentativas fora do adaptador que chegaram ao serviço.
 - **Causa:** o serviço recusou `opencode/big-pickle`, `opencode/glm-5.3-flash-free` (DB em memória) e `opencode/beam-free` (SQLite temporário). Trocar o banco não resolveu; não é falha das migrações/locks do modo `:memory:`.

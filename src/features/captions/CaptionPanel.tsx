@@ -50,7 +50,7 @@ export function CaptionPanel({ data, clipId, sourceId, refresh, loadError }: { d
   const selectMissing = (g: MissingGlyph) => {
     setPosition(g.position);
     const w = data?.words.find(x => x.position === g.position);
-    if (data) window.dispatchEvent(new CustomEvent(previewSeekEvent, { detail: { source_id: sourceId, us: data.start_us + (w?.startUs ?? 0) } }));
+    if (data) window.dispatchEvent(new CustomEvent(previewSeekEvent, { detail: { source_id: sourceId, us: w?.sourceStartUs ?? (data.start_us + (w?.startUs ?? 0)) } }));
     window.requestAnimationFrame(() => wordInput.current?.focus());
   };
   if (!data || !draft) return <div className="p-3 text-sm"><p role={loadError ? 'alert' : 'status'}>{loadError ? t.loadError : t.loading}</p>{loadError && <Button tamanho="sm" onClick={() => void refresh().catch(() => {})}>{t.retry}</Button>}</div>;
@@ -78,7 +78,7 @@ export function CaptionPanel({ data, clipId, sourceId, refresh, loadError }: { d
       <Button tamanho="sm" onClick={() => void save(() => coreDispatch('captions.style.default', { clip_id: clipId }), true)}>{t.default}</Button>
     </fieldset>
     <section aria-label={t.words} className="flex flex-col gap-2"><h4 className="font-semibold">{t.words}</h4><p className="text-xs text-fg-2">{t.hint}</p>
-      <div className="flex max-h-40 flex-wrap gap-1 overflow-y-auto">{data.words.map(w => <button type="button" key={w.position} aria-pressed={w.position === position} className={`foco rounded-md border px-2 py-1 ${w.position === position ? 'border-accent-line bg-accent-subtle' : w.missingGlyph ? 'border-danger text-danger bg-field' : 'border-line bg-field'}`} onClick={() => { setPosition(w.position); window.dispatchEvent(new CustomEvent(previewSeekEvent, { detail: { source_id: sourceId, us: data.start_us + w.startUs } })); }}>{w.text.trim()}</button>)}</div>
+      <div className="flex max-h-40 flex-wrap gap-1 overflow-y-auto">{data.words.map(w => <button type="button" key={w.position} aria-pressed={w.position === position} className={`foco rounded-md border px-2 py-1 ${w.position === position ? 'border-accent-line bg-accent-subtle' : w.missingGlyph ? 'border-danger text-danger bg-field' : 'border-line bg-field'}`} onClick={() => { setPosition(w.position); window.dispatchEvent(new CustomEvent(previewSeekEvent, { detail: { source_id: sourceId, us: w.sourceStartUs ?? (data.start_us + w.startUs) } })); }}>{w.text.trim()}</button>)}</div>
     </section>
     {word && <fieldset disabled={busy} className="flex flex-col gap-2"><legend className="mb-2 font-semibold">{t.word}</legend>
       <form onSubmit={e => { e.preventDefault(); correct(); }} className="flex flex-col gap-2"><label className="flex flex-col gap-1">{t.text}<input ref={wordInput} className={field} maxLength={200} value={text} onChange={e => setText(e.target.value)} /></label><Button tamanho="sm" type="submit">{t.saveText}</Button></form>

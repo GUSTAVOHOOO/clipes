@@ -3,7 +3,7 @@ use super::{
     captions::{self, CaptionWord},
     error, failed, pipeline,
 };
-use crate::{provider::CancelToken, CoreError};
+use crate::{editor::silences::KeptSegment, provider::CancelToken, CoreError};
 use std::{
     ffi::OsString,
     fs,
@@ -238,13 +238,49 @@ pub fn render_with(
     cancel: &CancelToken,
     progress: &mut dyn FnMut(u8),
 ) -> Result<(), CoreError> {
-    let ass = captions::ass(&input.words, input.end_us - input.start_us)?;
+    render_spliced_with(ffmpeg, input, &[], encoder, cancel, progress)
+}
+
+/// Igual a `render`, aplicando os trechos mantidos do corte de silêncios (#77).
+pub fn render_spliced(
+    ffmpeg: &Path,
+    input: &RenderInput,
+    segments: &[KeptSegment],
+    cancel: &CancelToken,
+    progress: &mut dyn FnMut(u8),
+) -> Result<(), CoreError> {
+    render_spliced_with(
+        ffmpeg,
+        input,
+        segments,
+        super::encoder::X264,
+        cancel,
+        progress,
+    )
+}
+
+pub fn render_spliced_with(
+    ffmpeg: &Path,
+    input: &RenderInput,
+    segments: &[KeptSegment],
+    encoder: &str,
+    cancel: &CancelToken,
+    progress: &mut dyn FnMut(u8),
+) -> Result<(), CoreError> {
+    let duration = if segments.len() > 1 {
+        segments
+            .last()
+            .map_or(input.end_us - input.start_us, |s| s.output_end_us)
+    } else {
+        input.end_us - input.start_us
+    };
+    let ass = captions::ass(&input.words, duration)?;
     let doc = AssDoc {
         ass: &ass,
         font_file: "NotoSans-Bold.ttf",
         font_bytes: FONT_BYTES,
     };
-    render_ass(ffmpeg, input, &doc, encoder, cancel, progress)
+    render_ass_spliced(ffmpeg, input, segments, &doc, encoder, cancel, progress)
 }
 
 /// O job usa exatamente o documento/cues entregue ao preview no início do render.
@@ -274,13 +310,26 @@ pub fn render_styled_with(
     cancel: &CancelToken,
     progress: &mut dyn FnMut(u8),
 ) -> Result<(), CoreError> {
+    render_styled_spliced_with(ffmpeg, input, &[], prepared, encoder, cancel, progress)
+}
+
+/// `render_styled_with` aplicando os trechos mantidos do corte de silêncios (#77).
+pub fn render_styled_spliced_with(
+    ffmpeg: &Path,
+    input: &RenderInput,
+    segments: &[KeptSegment],
+    prepared: &crate::caption_style::Prepared,
+    encoder: &str,
+    cancel: &CancelToken,
+    progress: &mut dyn FnMut(u8),
+) -> Result<(), CoreError> {
     prepared.style.validate()?;
     let doc = AssDoc {
         ass: &prepared.ass,
         font_file: prepared.style.font_file(),
         font_bytes: prepared.style.font_bytes(),
     };
-    render_ass(ffmpeg, input, &doc, encoder, cancel, progress)
+    render_ass_spliced(ffmpeg, input, segments, &doc, encoder, cancel, progress)
 }
 
 struct AssDoc<'a> {
@@ -289,9 +338,10 @@ struct AssDoc<'a> {
     font_bytes: &'a [u8],
 }
 
-fn render_ass(
+fn render_ass_spliced(
     ffmpeg: &Path,
     input: &RenderInput,
+    segments: &[KeptSegment],
     doc: &AssDoc<'_>,
     encoder: &str,
     cancel: &CancelToken,
@@ -302,7 +352,14 @@ fn render_ass(
         return Err(error("export_bounds", "As bordas do Corte são inválidas."));
     }
     let duration = input.end_us - input.start_us;
-    let missing = captions::missing_glyphs_in_duration(&input.words, doc.font_bytes, duration);
+    let spliced = segments.len() > 1;
+    let output_duration = if spliced {
+        segments.last().map_or(duration, |s| s.output_end_us)
+    } else {
+        duration
+    };
+    let missing =
+        captions::missing_glyphs_in_duration(&input.words, doc.font_bytes, output_duration);
     if !missing.is_empty() {
         return Err(super::glyph_missing_error(
             doc.font_file.trim_end_matches(".ttf"),
@@ -330,7 +387,16 @@ fn render_ass(
             "A Fonte está indisponível ou foi alterada.",
         )
     })?;
-    let measured = measure_loudness(ffmpeg, &source, input, work.path(), cancel, progress)?;
+    let measured = measure_loudness(
+        ffmpeg,
+        &source,
+        input,
+        segments,
+        output_duration,
+        work.path(),
+        cancel,
+        progress,
+    )?;
     let crop = (!input.crop.is_empty()).then_some(pipeline::Crop {
         segments: &input.crop,
         start_us: input.start_us,
@@ -353,19 +419,40 @@ fn render_ass(
         source.into_os_string(),
         "-t".into(),
         seconds(duration).into(),
-        "-map".into(),
-        "0:v:0".into(),
-        "-map".into(),
-        format!("0:{}", input.audio_track).into(),
-        "-vf".into(),
-        plan.video_filters.join(",").into(),
-        "-af".into(),
-        plan.audio_filters.join(",").into(),
+    ];
+    if spliced {
+        let graph = pipeline::build_spliced_filter_complex(
+            input.audio_track,
+            input.start_us,
+            segments,
+            &plan,
+        );
+        args.extend([
+            "-filter_complex".into(),
+            graph.into(),
+            "-map".into(),
+            "[vout]".into(),
+            "-map".into(),
+            "[aout]".into(),
+        ]);
+    } else {
+        args.extend([
+            "-map".into(),
+            "0:v:0".into(),
+            "-map".into(),
+            format!("0:{}", input.audio_track).into(),
+            "-vf".into(),
+            plan.video_filters.join(",").into(),
+            "-af".into(),
+            plan.audio_filters.join(",").into(),
+        ]);
+    }
+    args.extend([
         "-c:v".into(),
         plan.encoder.into(),
         "-threads".into(),
         "2".into(),
-    ];
+    ]);
     args.extend(plan.encoder_args.iter().map(OsString::from));
     args.extend([
         "-c:a".into(),
@@ -392,7 +479,7 @@ fn render_ass(
         &args,
         Some(work.path()),
         cancel,
-        duration,
+        output_duration,
         Some(doc.font_file),
         (if measured.is_some() { MEASURE_END } else { 0 }, RENDER_END),
         progress,
@@ -425,18 +512,22 @@ pub fn seconds(us: i64) -> String {
     format!("{}.{:06}", us / 1_000_000, us % 1_000_000)
 }
 
-/// Primeira passagem do `loudnorm` (#63): mede só o trecho do Corte, sem gravar nada.
+/// Primeira passagem do `loudnorm` (#63): mede só o trecho do Corte (já emendado quando há
+/// silêncios removidos, #77), sem gravar nada.
 /// `None` quando o áudio é silencioso (medição infinita): então não há o que normalizar.
+#[allow(clippy::too_many_arguments)]
 fn measure_loudness(
     ffmpeg: &Path,
     source: &Path,
     input: &RenderInput,
+    segments: &[KeptSegment],
+    output_duration: i64,
     work: &Path,
     cancel: &CancelToken,
     progress: &mut dyn FnMut(u8),
 ) -> Result<Option<pipeline::Measured>, CoreError> {
     let duration = input.end_us - input.start_us;
-    let args: Vec<OsString> = vec![
+    let mut args: Vec<OsString> = vec![
         "-hide_banner".into(),
         "-nostdin".into(),
         "-loglevel".into(),
@@ -447,23 +538,38 @@ fn measure_loudness(
         seconds(duration).into(),
         "-i".into(),
         source.as_os_str().to_owned(),
-        "-map".into(),
-        format!("0:{}", input.audio_track).into(),
         "-vn".into(),
-        "-af".into(),
-        pipeline::loudnorm_measure_filter().into(),
+    ];
+    if segments.len() > 1 {
+        let graph =
+            pipeline::build_measure_filter_complex(input.audio_track, input.start_us, segments);
+        args.extend([
+            "-filter_complex".into(),
+            graph.into(),
+            "-map".into(),
+            "[aout]".into(),
+        ]);
+    } else {
+        args.extend([
+            "-map".into(),
+            format!("0:{}", input.audio_track).into(),
+            "-af".into(),
+            pipeline::loudnorm_measure_filter().into(),
+        ]);
+    }
+    args.extend([
         "-progress".into(),
         "pipe:1".into(),
         "-f".into(),
         "null".into(),
         "-".into(),
-    ];
+    ]);
     let report = execute(
         ffmpeg,
         &args,
         Some(work),
         cancel,
-        duration,
+        output_duration,
         Some("NotoSans-Bold.ttf"),
         (0, MEASURE_END),
         progress,

@@ -1,10 +1,12 @@
 //! Documento do Corte e histórico limitado. Prévias são puras; só o pointerup edita.
 //! Ordem de locks: editor -> sessão do Projeto. Troca/fechamento passam por
 //! `project_change`, que impede autosave tardio em outro Projeto.
+use super::silences::{self, SilenceConfig, SilenceStatus, SpliceMap, DEFAULT_MIN_SILENCE_US};
 use super::*;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
+    path::PathBuf,
     sync::{Mutex, OnceLock},
     time::{Duration, Instant},
 };
@@ -25,6 +27,35 @@ pub(crate) struct Borders {
     pub start_us: i64,
     pub end_us: i64,
 }
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct EditSnapshot {
+    pub start_id: i64,
+    pub end_id: i64,
+    pub start_us: i64,
+    pub end_us: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub silences: Option<SilenceConfig>,
+}
+impl EditSnapshot {
+    fn from_doc(doc: &Document) -> Self {
+        Self {
+            start_id: doc.range.start_id,
+            end_id: doc.range.end_id,
+            start_us: doc.range.start_us,
+            end_us: doc.range.end_us,
+            silences: doc.silences.clone(),
+        }
+    }
+    fn borders(&self) -> Borders {
+        Borders {
+            start_id: self.start_id,
+            end_id: self.end_id,
+            start_us: self.start_us,
+            end_us: self.end_us,
+        }
+    }
+}
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct DocumentV1 {
@@ -42,9 +73,26 @@ pub(crate) struct Document {
     revision: u64,
     pub original: crate::export::ExportRequest,
     pub range: Borders,
-    undo: Vec<Borders>,
-    redo: Vec<Borders>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub silences: Option<SilenceConfig>,
+    undo: Vec<EditSnapshot>,
+    redo: Vec<EditSnapshot>,
+    #[serde(default)]
     pub crop: crop::CropTimeline,
+}
+impl Document {
+    pub(crate) fn active_silences(&self) -> Vec<(i64, i64)> {
+        self.silences
+            .as_ref()
+            .map(|cfg| {
+                cfg.intervals
+                    .iter()
+                    .filter(|i| i.status == SilenceStatus::Active)
+                    .map(|i| (i.start_us, i.end_us))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
 }
 struct Entry {
     doc: Document,
@@ -76,13 +124,21 @@ fn decode(encoded: &str) -> Result<Document, CoreError> {
             if v1.schema_version != 1 {
                 return Err(invalid());
             }
+            let to_snapshot = |b: Borders| EditSnapshot {
+                start_id: b.start_id,
+                end_id: b.end_id,
+                start_us: b.start_us,
+                end_us: b.end_us,
+                silences: None,
+            };
             Document {
                 schema_version: SCHEMA_VERSION,
                 revision: v1.revision,
                 original: v1.original,
                 range: v1.range,
-                undo: v1.undo,
-                redo: v1.redo,
+                silences: None,
+                undo: v1.undo.into_iter().map(to_snapshot).collect(),
+                redo: v1.redo.into_iter().map(to_snapshot).collect(),
                 crop: crop::CropTimeline::default(),
             }
         }
@@ -109,6 +165,7 @@ fn load(s: &mut State, id: i64) -> Result<&mut Entry, CoreError> {
         })?;
         let doc = decode(&encoded.ok_or_else(invalid)?)?;
         validate(&doc, &doc.range)?;
+        validate_silences(&doc.range, doc.silences.as_ref())?;
         entry.insert(Entry { doc, dirty: None });
     }
     s.entries.get_mut(&id).ok_or_else(invalid)
@@ -124,9 +181,21 @@ fn crop_view(crop: &crop::CropTimeline) -> Value {
 }
 fn answer(id: i64, doc: &Document) -> Value {
     let r = &doc.range;
+    let active = doc.active_silences();
+    let splice = SpliceMap::new(r.start_us, r.end_us, &active);
+    let threshold_us = doc
+        .silences
+        .as_ref()
+        .map_or(DEFAULT_MIN_SILENCE_US, |s| s.threshold_us);
+    let intervals = doc
+        .silences
+        .as_ref()
+        .map(|s| s.intervals.as_slice())
+        .unwrap_or(&[]);
     json!({"clipId":id,"schemaVersion":doc.schema_version,"revision":doc.revision,
         "request":{"source_id":doc.original.source_id,"candidate_id":doc.original.candidate_id,"start_id":r.start_id,"end_id":r.end_id},
         "startUs":r.start_us,"endUs":r.end_us,"undoCount":doc.undo.len(),"redoCount":doc.redo.len(),
+        "silences":{"enabled":doc.silences.is_some(),"thresholdUs":threshold_us,"intervals":intervals,"segments":splice.segments,"removedUs":splice.removed_us,"effectiveDurationUs":splice.output_duration_us},
         "crop":crop_view(&doc.crop)})
 }
 fn save(s: &mut State, due_only: bool) -> Result<(), CoreError> {
@@ -206,6 +275,7 @@ pub(crate) fn project_change<T>(
     save(&mut s, false)?;
     let result = change();
     s.entries.clear();
+    silences::clear_pcm_cache();
     result
 }
 pub(super) fn open(request: &Request, start: i64, end: i64) -> Result<Value, CoreError> {
@@ -246,6 +316,7 @@ pub(super) fn open(request: &Request, start: i64, end: i64) -> Result<Value, Cor
                 start_us: start,
                 end_us: end,
             },
+            silences: None,
             undo: vec![],
             redo: vec![],
             crop: crop::CropTimeline::default(),
@@ -309,6 +380,42 @@ fn validate(doc: &Document, range: &Borders) -> Result<(), CoreError> {
         ));
     }
     Ok(())
+}
+fn validate_silences(range: &Borders, silences: Option<&SilenceConfig>) -> Result<(), CoreError> {
+    let Some(cfg) = silences else {
+        return Ok(());
+    };
+    silences::validate_threshold(cfg.threshold_us)?;
+    for item in &cfg.intervals {
+        if item.gap_start_us < range.start_us
+            || item.gap_end_us > range.end_us
+            || item.start_us < item.gap_start_us
+            || item.end_us > item.gap_end_us
+            || item.end_us <= item.start_us
+        {
+            return Err(invalid());
+        }
+    }
+    Ok(())
+}
+fn clip_silences_to_range(
+    silences: &Option<SilenceConfig>,
+    range: &Borders,
+) -> Option<SilenceConfig> {
+    silences.as_ref().map(|cfg| SilenceConfig {
+        threshold_us: cfg.threshold_us,
+        intervals: cfg
+            .intervals
+            .iter()
+            .filter(|i| {
+                i.gap_start_us >= range.start_us
+                    && i.gap_end_us <= range.end_us
+                    && i.start_us >= range.start_us
+                    && i.end_us <= range.end_us
+            })
+            .cloned()
+            .collect(),
+    })
 }
 fn adjusted(doc: &Document, v: &Value) -> Result<Borders, CoreError> {
     let start = match v["edge"].as_str() {
@@ -395,25 +502,31 @@ fn adjusted(doc: &Document, v: &Value) -> Result<Borders, CoreError> {
 fn id(v: &Value) -> Result<i64, CoreError> {
     v["clip_id"].as_i64().ok_or_else(invalid)
 }
+fn push_history(entry: &mut Entry) {
+    entry.doc.undo.push(EditSnapshot::from_doc(&entry.doc));
+    if entry.doc.undo.len() > 100 {
+        entry.doc.undo.remove(0);
+    }
+    entry.doc.redo.clear();
+    entry.doc.revision += 1;
+    entry.dirty = Some(Instant::now());
+}
 fn adjust(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let mut s = lock()?;
     let id = id(&v)?;
     let entry = load(&mut s, id)?;
     let next = adjusted(&entry.doc, &v)?;
+    let next_silences = clip_silences_to_range(&entry.doc.silences, &next);
     if v["preview"].as_bool().unwrap_or(false) {
         let mut doc = entry.doc.clone();
         doc.range = next;
+        doc.silences = next_silences;
         return Ok(answer(id, &doc));
     }
-    if next != entry.doc.range {
-        entry.doc.undo.push(entry.doc.range.clone());
-        if entry.doc.undo.len() > 100 {
-            entry.doc.undo.remove(0);
-        }
-        entry.doc.redo.clear();
+    if next != entry.doc.range || next_silences != entry.doc.silences {
+        push_history(entry);
         entry.doc.range = next;
-        entry.doc.revision += 1;
-        entry.dirty = Some(Instant::now());
+        entry.doc.silences = next_silences;
     }
     Ok(answer(id, &entry.doc))
 }
@@ -427,15 +540,18 @@ fn history(v: Value, redo: bool) -> CommandResult {
         entry.doc.undo.last()
     };
     if let Some(next) = next.cloned() {
-        validate(&entry.doc, &next)?;
+        let next_range = next.borders();
+        validate(&entry.doc, &next_range)?;
+        validate_silences(&next_range, next.silences.as_ref())?;
         if redo {
             entry.doc.redo.pop();
-            entry.doc.undo.push(entry.doc.range.clone());
+            entry.doc.undo.push(EditSnapshot::from_doc(&entry.doc));
         } else {
             entry.doc.undo.pop();
-            entry.doc.redo.push(entry.doc.range.clone());
+            entry.doc.redo.push(EditSnapshot::from_doc(&entry.doc));
         }
-        entry.doc.range = next;
+        entry.doc.range = next_range;
+        entry.doc.silences = next.silences;
         entry.doc.revision += 1;
         entry.dirty = Some(Instant::now());
     }
@@ -470,6 +586,136 @@ fn snapshots(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     .collect::<Result<Vec<_>, _>>()
     .map(Value::from)
 }
+fn clip_words(source_id: i64, start_us: i64, end_us: i64) -> Result<Vec<(i64, i64)>, CoreError> {
+    let transcript = sentences::source_transcript(&json!({"source_id": source_id}))?;
+    projects::with_reader(|c| {
+        let mut q = c.prepare(
+            "SELECT start_us, end_us FROM transcript_words WHERE transcript_id=?1 AND kind='word' AND end_us>?2 AND start_us<?3 ORDER BY position",
+        )?;
+        let rows = q
+            .query_map((transcript, start_us, end_us), |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    })
+}
+fn current_project_path() -> Option<PathBuf> {
+    let current = crate::dispatch("projects.current", json!({}), &mut |_| {}).ok()?;
+    current["path"].as_str().map(PathBuf::from)
+}
+fn silences_detect(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let mut s = lock()?;
+    let id = id(&v)?;
+    let entry = load(&mut s, id)?;
+    let threshold_us = v["threshold_us"].as_i64().unwrap_or_else(|| {
+        entry
+            .doc
+            .silences
+            .as_ref()
+            .map_or(DEFAULT_MIN_SILENCE_US, |c| c.threshold_us)
+    });
+    let words = clip_words(
+        entry.doc.original.source_id,
+        entry.doc.range.start_us,
+        entry.doc.range.end_us,
+    )?;
+    let mut intervals = silences::detect_from_words(
+        &words,
+        entry.doc.range.start_us,
+        entry.doc.range.end_us,
+        threshold_us,
+    )?;
+    if let Some(project) = current_project_path() {
+        silences::refine_for_source(
+            entry.doc.original.source_id,
+            &project,
+            entry.doc.range.start_us,
+            entry.doc.range.end_us,
+            &mut intervals,
+        );
+    }
+    let next = Some(SilenceConfig {
+        threshold_us,
+        intervals,
+    });
+    if v["preview"].as_bool().unwrap_or(false) {
+        let mut doc = entry.doc.clone();
+        doc.silences = next;
+        return Ok(answer(id, &doc));
+    }
+    if entry.doc.silences != next {
+        push_history(entry);
+        entry.doc.silences = next;
+    }
+    Ok(answer(id, &entry.doc))
+}
+fn silences_toggle(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let mut s = lock()?;
+    let id = id(&v)?;
+    let entry = load(&mut s, id)?;
+    let interval_id = v["id"]
+        .as_u64()
+        .ok_or_else(|| error("invalid_silence_interval", "Trecho de silêncio inválido."))?;
+    let explicit = match v.get("status").and_then(Value::as_str) {
+        Some("active") => Some(SilenceStatus::Active),
+        Some("reverted") => Some(SilenceStatus::Reverted),
+        Some(_) => {
+            return Err(error(
+                "invalid_silence_status",
+                "Estado de silêncio inválido.",
+            ))
+        }
+        None => None,
+    };
+    let mut next = entry
+        .doc
+        .silences
+        .clone()
+        .ok_or_else(|| error("invalid_silence_interval", "Trecho de silêncio inválido."))?;
+    let Some(item) = next.intervals.iter_mut().find(|i| i.id == interval_id) else {
+        return Err(error(
+            "invalid_silence_interval",
+            "Trecho de silêncio inválido.",
+        ));
+    };
+    let target_status = explicit.unwrap_or(match item.status {
+        SilenceStatus::Active => SilenceStatus::Reverted,
+        SilenceStatus::Reverted => SilenceStatus::Active,
+    });
+    if item.status != target_status {
+        item.status = target_status;
+        push_history(entry);
+        entry.doc.silences = Some(next);
+    }
+    Ok(answer(id, &entry.doc))
+}
+fn silences_set_all(v: Value, status: SilenceStatus) -> CommandResult {
+    let mut s = lock()?;
+    let id = id(&v)?;
+    let entry = load(&mut s, id)?;
+    if let Some(mut next) = entry.doc.silences.clone() {
+        let mut changed = false;
+        for item in &mut next.intervals {
+            if item.status != status {
+                item.status = status;
+                changed = true;
+            }
+        }
+        if changed {
+            push_history(entry);
+            entry.doc.silences = Some(next);
+        }
+    }
+    Ok(answer(id, &entry.doc))
+}
+fn silences_revert_all(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    silences_set_all(v, SilenceStatus::Reverted)
+}
+fn silences_apply_all(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    silences_set_all(v, SilenceStatus::Active)
+}
+
 fn crop_answer(id: i64, doc: &Document) -> Value {
     let mut out = crop_view(&doc.crop);
     out["clipId"] = json!(id);
@@ -557,8 +803,43 @@ inventory::submit! {CommandRegistration {name:"editor.undo",execute:undo}}
 inventory::submit! {CommandRegistration {name:"editor.redo",execute:redo}}
 inventory::submit! {CommandRegistration {name:"editor.flush",execute:flush}}
 inventory::submit! {CommandRegistration {name:"editor.snapshots",execute:snapshots}}
+inventory::submit! {CommandRegistration {name:"editor.silences.detect",execute:silences_detect}}
+inventory::submit! {CommandRegistration {name:"editor.silences.toggle",execute:silences_toggle}}
+inventory::submit! {CommandRegistration {name:"editor.silences.revert_all",execute:silences_revert_all}}
+inventory::submit! {CommandRegistration {name:"editor.silences.apply_all",execute:silences_apply_all}}
 inventory::submit! {CommandRegistration {name:"editor.crop.get",execute:crop_get}}
 inventory::submit! {CommandRegistration {name:"editor.crop.set_suggested",execute:crop_set_suggested}}
 inventory::submit! {CommandRegistration {name:"editor.crop.set_edits",execute:crop_set_edits}}
 inventory::submit! {CommandRegistration {name:"editor.crop.evaluate",execute:crop_evaluate}}
 inventory::submit! {CommandRegistration {name:"editor.crop.example",execute:crop_example}}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn v1_document_without_silences_loads_as_none_and_serializes_without_field() {
+        let v1_json = r#"{"schemaVersion":1,"revision":2,"original":{"source_id":1,"start_id":1,"end_id":4,"candidate_id":null},"range":{"startId":1,"endId":4,"startUs":0,"endUs":40000000},"undo":[{"startId":1,"endId":3,"startUs":0,"endUs":30000000}],"redo":[]}"#;
+        let doc = decode(v1_json).unwrap();
+        assert_eq!(doc.schema_version, SCHEMA_VERSION);
+        assert!(doc.silences.is_none());
+        assert_eq!(doc.undo.len(), 1);
+        assert!(doc.undo[0].silences.is_none());
+        let encoded = serde_json::to_string(&doc).unwrap();
+        assert!(!encoded.contains("silences"));
+    }
+
+    #[test]
+    fn document_with_silences_round_trips_cleanly() {
+        let v2_with_silences = r#"{"schemaVersion":2,"revision":3,"original":{"source_id":1,"start_id":1,"end_id":4,"candidate_id":null},"range":{"startId":1,"endId":4,"startUs":0,"endUs":40000000},"silences":{"thresholdUs":500000,"intervals":[{"id":1,"startUs":1120000,"endUs":2920000,"gapStartUs":1000000,"gapEndUs":3000000,"status":"active"}]},"undo":[{"startId":1,"endId":4,"startUs":0,"endUs":40000000}],"redo":[]}"#;
+        let doc = decode(v2_with_silences).unwrap();
+        let cfg = doc.silences.as_ref().unwrap();
+        assert_eq!(cfg.threshold_us, 500_000);
+        assert_eq!(cfg.intervals.len(), 1);
+        assert_eq!(cfg.intervals[0].status, SilenceStatus::Active);
+        assert_eq!(doc.active_silences(), vec![(1_120_000, 2_920_000)]);
+        let encoded = serde_json::to_string(&doc).unwrap();
+        let reloaded = decode(&encoded).unwrap();
+        assert_eq!(reloaded.silences, doc.silences);
+    }
+}
