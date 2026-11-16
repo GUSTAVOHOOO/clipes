@@ -373,3 +373,72 @@ fn hidden_word_override_removes_word_from_cues_and_rendered_frames_and_survives_
 
     call("projects.close", json!({}));
 }
+
+#[test]
+fn braces_backslash_and_cyrillic_export_without_font_fallback_in_both_fonts() {
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let root = tempfile::tempdir().unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", root.path().join("data"));
+    let source = root.path().join("base.mp4");
+    ffmpeg(&[
+        "-v",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=black:size=1080x1920:rate=12:duration=3",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=440:duration=3",
+        "-c:v",
+        "libx264",
+        "-threads",
+        "2",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-y",
+        source.to_str().unwrap(),
+    ]);
+    let styled: Vec<StyledWord> = [r"{a}\b", "Привет", "Т"]
+        .iter()
+        .enumerate()
+        .map(|(i, t)| StyledWord {
+            word: CaptionWord {
+                text: (*t).into(),
+                start_us: i as i64 * 700_000,
+                end_us: i as i64 * 700_000 + 600_000,
+            },
+            position: i as i64,
+            overrides: WordOverride::default(),
+        })
+        .collect();
+    for preset in [Preset::Vertical, Preset::Cinema] {
+        let style = Style::preset(preset);
+        let prepared = prepare(&styled, &style, 2_500_000).unwrap();
+        let output = root.path().join(format!("cyrillic-{preset:?}.mp4"));
+        let input = RenderInput {
+            source: source.clone(),
+            output: output.clone(),
+            start_us: 0,
+            end_us: 2_500_000,
+            audio_track: 1,
+            words: styled.iter().map(|w| w.word.clone()).collect(),
+            crop: Vec::new(),
+        };
+        render_styled(
+            Path::new(&ffmpeg_path()),
+            &input,
+            &prepared,
+            &CancelToken::new(),
+            &mut |_| {},
+        )
+        .unwrap_or_else(|e| panic!("{preset:?}: {e:?}"));
+        let f = frame(&output, 0.35);
+        let (bbox, active, light) = ink(&f, [0xFA, 0xCC, 0x15]);
+        assert!(bbox.is_some(), "{preset:?}: esperado texto visível");
+        assert!(active + light > 100);
+    }
+}

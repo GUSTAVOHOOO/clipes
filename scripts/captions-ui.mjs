@@ -20,8 +20,13 @@ export async function testCaptions(page, editor, language) {
   await editor.locator('video').evaluate((v, t) => { v.currentTime = t; v.dispatchEvent(new Event('timeupdate')); }, (startUs - winStartUs) / 1e6 + 0.1);
   await editor.locator('[data-caption-word="0"]').waitFor();
   const text = panel.getByLabel(en ? 'Word text' : 'Texto da palavra');
+  await text.fill('来');
+  await text.press('Enter');
+  await panel.locator('[data-captions-missing-glyphs]').getByText(/来 · U\+6765/).waitFor();
+  await panel.locator('[data-captions-missing-glyphs]').getByRole('button', { name: en ? 'Correct' : 'Corrigir' }).click();
   await text.fill('Corrigida😀');
   await text.press('Enter');
+  await panel.locator('[data-captions-missing-glyphs]').waitFor({ state: 'detached' });
   await panel.getByText(en ? /Color emoji/ : /Emoji colorido/).waitFor();
   await panel.getByLabel(en ? 'Highlight this word' : 'Destacar esta palavra', { exact: true }).uncheck();
   await panel.getByText(en ? 'Saved' : 'Salvo', { exact: true }).waitFor();

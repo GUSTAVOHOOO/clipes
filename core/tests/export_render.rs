@@ -91,3 +91,22 @@ fn missing_ass_failures_cancellation_and_existing_destinations_never_leave_parti
     );
     assert_eq!(fs::read(output).unwrap(), b"keep");
 }
+
+#[test]
+fn missing_glyph_fails_before_invoking_ffmpeg() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("original.mp4");
+    fs::write(&source, b"source").unwrap();
+    let output = root.path().join("corte.mp4");
+    let ffmpeg = Path::new(env!("CARGO_BIN_EXE_fake-export"));
+    let mut bad = input(&source, &output);
+    bad.words[0].text = "来".into();
+    std::env::set_var("CLIPES_FAKE_NO_ASS", "1");
+    let error = render(ffmpeg, &bad, &CancelToken::new(), &mut |_| {}).unwrap_err();
+    std::env::remove_var("CLIPES_FAKE_NO_ASS");
+    assert_eq!(error.code, "export_glyph_missing");
+    let usage = error.usage.expect("usage details");
+    assert_eq!(usage["missing_glyphs"][0]["word"], "来");
+    assert_eq!(usage["missing_glyphs"][0]["codepoint"], "U+6765");
+    assert_eq!(files(root.path()), vec![source]);
+}
