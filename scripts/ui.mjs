@@ -1198,6 +1198,32 @@ try {
   await testEditorBorders(page, url);
   await testEditorSilencesPreview(page, url);
   await testEditorCrop(page, url);
+  // Export em lote (#64): por Fonte na Seleção e por Projeto, progresso ponderado, cancelamento, sobrescrita e falha isolada.
+  await page.goto(`${url}?source-test=1&transcript-test=1`);
+  const batchSel = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
+  await batchSel.getByRole('button', { name: 'Selecionar Cortes' }).click();
+  await batchSel.getByText(/Seleção com janelas pendentes/).waitFor({ timeout: 15000 });
+  const sourceBatch = batchSel.locator('[data-export-batch="source"]');
+  await sourceBatch.getByRole('button', { name: 'Exportar aprovados' }).click();
+  await sourceBatch.getByRole('button', { name: 'Cancelar lote' }).waitFor();
+  await sourceBatch.getByRole('button', { name: 'Cancelar lote' }).click();
+  await sourceBatch.locator('[data-export-batch-status="cancelled"]').waitFor();
+  const projectBatch = page.getByRole('region', { name: 'Export em lote' });
+  await projectBatch.getByRole('button', { name: 'Exportar aprovados' }).click();
+  await projectBatch.getByText(/Concluído · 100%/).waitFor({ timeout: 10000 });
+  assert.match(await projectBatch.locator('[data-export-batch-summary]').innerText(), /2 de 2 Cortes exportados/);
+  await page.goto(`${url}?source-test=1&export-batch-conflict=1&export-batch-fail=1`);
+  const conflictBatch = page.getByRole('region', { name: 'Export em lote' });
+  await conflictBatch.getByRole('button', { name: 'Exportar aprovados' }).click();
+  const overwriteDialog = page.getByRole('alertdialog', { name: 'Sobrescrever arquivos existentes?' });
+  await overwriteDialog.waitFor();
+  assert.match(await overwriteDialog.innerText(), /changed-01-01m30s\.mp4/);
+  assert.match(await overwriteDialog.innerText(), /changed-02-06m30s\.mp4/);
+  await overwriteDialog.getByRole('button', { name: 'Confirmar e sobrescrever' }).click();
+  await overwriteDialog.waitFor({ state: 'hidden' });
+  await conflictBatch.getByText(/Concluído com falhas · 100%/).waitFor({ timeout: 10000 });
+  assert.match(await conflictBatch.innerText(), /1 de 2 Cortes exportados · 1 com falha/);
+  assert.match(await conflictBatch.innerText(), /Não foi possível exportar o Corte\./);
   assert.deepEqual(errors, []);
   console.log('UI keyboard, preferences, about, drawer and screenshots: OK');
 } finally { await browser?.close(); server.kill(); }
