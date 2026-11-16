@@ -1,11 +1,12 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import { editorEditsMock } from './editorEditsMock';
 import { version } from '../../package.json';
 import { exportMock } from '@/features/export/mock';
 
 /** Contrato do Corte para export, compartilhado pela revisão e pelo editor (#61).
  * `export.start` recebe estes campos mais `output` (caminho MP4 escolhido no diálogo).
  */
-export type ExportRequest = { source_id: number; start_id: number; end_id: number; candidate_id?: number };
+export type ExportRequest = { source_id: number; start_id: number; end_id: number; candidate_id?: number; clip_id?: number };
 import { batchMockDispatch } from './batchMock';
 import { packagingMockDispatch } from './packagingMock';
 import { thumbnailMockDispatch } from './thumbnailMock';
@@ -396,6 +397,8 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
 const editorTest = transcriptTest && typeof location !== 'undefined' && new URLSearchParams(location.search).has('editor-test');
 const editorKey = 'ab'.repeat(32);
 function editorMock(name: string, a: Record<string, number>) {
+  const edited = editorEditsMock(name, a);
+  if (edited !== undefined) return edited;
   const fail = (code: string, message: string) => { throw { code, message }; };
   const range = () => {
     if (!(a.start_id >= 1 && a.start_id <= 720 && a.end_id >= 1 && a.end_id <= 720)) fail('unknown_sentence_id', 'Frase desconhecida.');
@@ -406,7 +409,6 @@ function editorMock(name: string, a: Record<string, number>) {
     return { startUs, endUs };
   };
   if (name === 'editor.range') return { request: a, ...range() };
-  if (name === 'editor.open') { const r = range(); return { request: a, ...r, windowStartUs: Math.max(0, r.startUs - 120_000_000), windowEndUs: r.endUs + 120_000_000, fps: 24 }; }
   if (name === 'editor.sentences') {
     const first = Math.max(a.after_id + 1, Math.ceil(a.start_us / 10_000_000) + 1), last = Math.min(Math.floor(a.end_us / 10_000_000), 720);
     return Array.from({ length: Math.max(0, Math.min(a.limit, last - first + 1)) }, (_, n) => { const id = first + n; return { id, startUs: (id - 1) * 10_000_000, endUs: id * 10_000_000, text: `Frase ${id}` }; });

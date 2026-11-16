@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { PanelLeft, PanelRight, X } from 'lucide-react';
 import { coreDispatch, type ExportRequest } from '@/lib/core';
 import { useText } from '@/lib/i18n';
+import { useComandos } from '@/lib/comandos';
 import { Button } from '@/components/ui/Button';
 import { Kbd } from '@/components/ui/Kbd';
 import { ExportButton } from '@/features/export/ExportButton';
@@ -10,12 +12,14 @@ import { CabecalhoGaveta, GavetaBorda, Puxador, ZonaBorda, useGaveta } from '@/c
 import { CutPreview, previewSeekEvent, type PreviewSeekEvent } from '@/features/projects/CutPreview';
 import { clock, fill } from '@/features/projects/selectionFormat';
 import { PX_PER_SEC, neighborStart, nextRate, pxToUs, sentenceAt, usToPx, visiblePx, visibleSentences, visibleThumbs, type TimelineSentence } from './timelineMath';
+import { BorderHandles, type Adjustment, type Edge } from './BorderHandles';
 
 export const editorOpenEvent = 'clipes-editor-open';
 /** Abre o editor num Corte: candidato aprovado ou par de Frases da Fonte. O núcleo valida as bordas. */
 export function openEditor(request: ExportRequest) { window.dispatchEvent(new CustomEvent<ExportRequest>(editorOpenEvent, { detail: request })); }
 
-type Opened = { request: ExportRequest; startUs: number; endUs: number; windowStartUs: number; windowEndUs: number; fps: number };
+type Edited = { clipId: number; request: ExportRequest; startUs: number; endUs: number; undoCount: number; redoCount: number; revision: number };
+type Opened = Edited & { windowStartUs: number; windowEndUs: number; fps: number };
 type Thumbs = { id: string; count: number; intervalUs: number; width: number; height: number; columns: number };
 type Timeline = { state: 'queued' | 'running' | 'ready' | 'failed' | 'cancelled' | 'missing'; key: string; job: number | null; progress: number; error: string | null; thumbs: Thumbs | null };
 
@@ -24,18 +28,20 @@ const texts = {
     title: 'Editor do Corte', close: 'Fechar editor', timeline: 'Timeline do Corte', transcript: 'Transcrição do editor', borders: 'Bordas do Corte',
     markIn: 'Marcar entrada', markOut: 'Marcar saída', back: 'Voltar', pause: 'Pausar', forward: 'Avançar', rate: 'Velocidade', export: 'Exportar', exportNeedsCandidate: 'Abra um candidato aprovado para exportar.',
     shortcuts: 'Atalhos', hintPlay: 'voltar · pausar · avançar', hintMark: 'entrada · saída (Frase inteira)', hintFrame: 'quadro', hintSentence: 'Frase anterior/próxima', hintDrawers: 'gavetas',
-    duration: 'Duração {value}', start: 'Entrada', end: 'Saída', startEarlier: 'Entrada antes', startLater: 'Entrada depois', endEarlier: 'Saída antes', endLater: 'Saída depois',
+    duration: 'Duração {value}', start: 'Entrada', end: 'Saída', startEarlier: 'Estender início', startLater: 'Encurtar início', endEarlier: 'Encurtar fim', endLater: 'Estender fim',
     loading: 'Abrindo o editor…', timelinePreparing: 'Preparando miniaturas e onda…', timelineFailed: 'Não foi possível gerar as miniaturas e a onda.', cancel: 'Cancelar', retry: 'Gerar de novo',
-    note: 'As bordas movem por Frase inteira, dentro da faixa de duração. O ajuste fino com Alt vem em outro ticket.',
+    undo: 'Desfazer', redo: 'Refazer', sentence: '1 Frase', saveFailed: 'Não foi possível salvar o Corte. Tente fechar o editor de novo.',
+    note: 'Arraste as alças para encaixar em Frase. Segure Alt para ajustar por quadro. As edições são salvas automaticamente.',
     errors: { adjust_empty: 'O Corte precisa manter ao menos uma Frase.', adjust_too_short: 'O Corte ficaria abaixo da duração mínima.', adjust_too_long: 'O Corte ficaria acima da duração máxima.', unknown_sentence_id: 'Frase desconhecida.', invalid_range: 'Intervalo do Corte inválido.', candidate_not_found: 'Candidato não encontrado.', transcript_missing: 'Transcrição não encontrada.', source_not_found: 'Fonte não encontrada.', default: 'Não foi possível abrir o editor.' } as Record<string, string>,
   },
   en: {
     title: 'Clip editor', close: 'Close editor', timeline: 'Clip timeline', transcript: 'Editor Transcript', borders: 'Clip borders',
     markIn: 'Mark in', markOut: 'Mark out', back: 'Reverse', pause: 'Pause', forward: 'Forward', rate: 'Speed', export: 'Export', exportNeedsCandidate: 'Open an approved candidate to export.',
     shortcuts: 'Shortcuts', hintPlay: 'reverse · pause · forward', hintMark: 'in · out (whole Sentence)', hintFrame: 'frame', hintSentence: 'previous/next Sentence', hintDrawers: 'drawers',
-    duration: 'Duration {value}', start: 'In', end: 'Out', startEarlier: 'In earlier', startLater: 'In later', endEarlier: 'Out earlier', endLater: 'Out later',
+    duration: 'Duration {value}', start: 'In', end: 'Out', startEarlier: 'Extend start', startLater: 'Shorten start', endEarlier: 'Shorten end', endLater: 'Extend end',
     loading: 'Opening the editor…', timelinePreparing: 'Preparing thumbnails and waveform…', timelineFailed: 'Could not generate thumbnails and waveform.', cancel: 'Cancel', retry: 'Generate again',
-    note: 'Borders move by whole Sentences, inside the duration range. Fine adjustment with Alt comes in a later ticket.',
+    undo: 'Undo', redo: 'Redo', sentence: '1 Sentence', saveFailed: 'Could not save the Clip. Try closing the editor again.',
+    note: 'Drag handles to snap to Sentences. Hold Alt to adjust by frame. Edits are saved automatically.',
     errors: { adjust_empty: 'The Clip must keep at least one Sentence.', adjust_too_short: 'The Clip would fall below the minimum duration.', adjust_too_long: 'The Clip would exceed the maximum duration.', unknown_sentence_id: 'Unknown Sentence.', invalid_range: 'Invalid Clip range.', candidate_not_found: 'Candidate not found.', transcript_missing: 'Transcript not found.', source_not_found: 'Source not found.', default: 'Could not open the editor.' } as Record<string, string>,
   },
 };
@@ -69,12 +75,26 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [wave, setWave] = useState<number[] | null>(null);
   const [scroll, setScroll] = useState({ left: 0, width: 1200 });
+  const [history, setHistory] = useState({ undoCount: 0, redoCount: 0 });
+  const [closing, setClosing] = useState(false);
+  const committed = useRef<Edited | null>(null);
+  const sequence = useRef(0);
+  const operations = useRef<Promise<void>>(Promise.resolve());
   const left = useGaveta();
   const right = useGaveta();
   const scroller = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const state = useRef({ sourceUs: 0, rate: 0, startId, endId, sentences, opened, fps: 30 });
   state.current = { sourceUs, rate, startId, endId, sentences, opened, fps: opened?.fps ?? 30 };
+  useEffect(() => {
+    if (!isTauri()) return;
+    let alive = true;
+    let unlisten: (() => void) | undefined;
+    void listen<{ stage: string }>('core-progress', event => {
+      if (event.payload.stage === 'editor_save_failed') setError('save_failed');
+    }).then(fn => { if (alive) unlisten = fn; else fn(); });
+    return () => { alive = false; unlisten?.(); };
+  }, []);
 
   // Abre: o núcleo valida o par de Frases e devolve a janela do proxy (Corte ±2 min).
   useEffect(() => {
@@ -87,6 +107,8 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
         if (page.length < 200) break;
       }
       if (!alive) return;
+      committed.current = info; setHistory(info);
+      setStartId(info.request.start_id); setEndId(info.request.end_id);
       setOpened(info); setSentences(all); setRange({ startUs: info.startUs, endUs: info.endUs }); setSourceUs(info.startUs);
       requestAnimationFrame(() => { if (scroller.current) scroller.current.scrollLeft = Math.max(0, usToPx(info.startUs, info.windowStartUs) - 80); });
     }).catch(e => { if (alive) setError(errorCode(e)); });
@@ -142,42 +164,77 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
     window.dispatchEvent(new CustomEvent<PreviewSeekEvent>(previewSeekEvent, { detail: { source_id: request.source_id, us: next } }));
   }, [request.source_id]);
 
-  /** Troca uma borda por Frase inteira; o núcleo recusa o que sair da faixa e a UI mantém a borda anterior. */
-  const mark = useCallback(async (edge: 'start' | 'end', id: number) => {
-    const { startId: s, endId: e } = state.current;
-    const next = edge === 'start' ? { start_id: id, end_id: e } : { start_id: s, end_id: id };
-    try {
-      const answer = await coreDispatch<{ startUs: number; endUs: number }>('editor.range', { ...request, ...next });
-      setStartId(next.start_id); setEndId(next.end_id); setRange({ startUs: answer.startUs, endUs: answer.endUs }); setError('');
-    } catch (err) { setError(errorCode(err) || 'default'); }
-  }, [request]);
+  const display = useCallback((answer: Edited) => {
+    setStartId(answer.request.start_id); setEndId(answer.request.end_id);
+    setRange({ startUs: answer.startUs, endUs: answer.endUs }); setHistory(answer);
+  }, []);
+  // Serializa as mutações e descarta respostas de prévias ultrapassadas pelo mouseup.
+  const edit = useCallback((name: string, args: Record<string, unknown>, preview = false, edge?: Edge) => {
+    const seq = ++sequence.current;
+    operations.current = operations.current.then(async () => {
+      if (!committed.current || (preview && seq !== sequence.current)) return;
+      const answer = await coreDispatch<Edited>(name, { clip_id: committed.current.clipId, ...args, preview });
+      if (!preview) committed.current = answer;
+      if (seq === sequence.current) {
+        display(answer); setError('');
+        if (edge) seek(edge === 'start' ? answer.startUs : answer.endUs);
+      }
+    }).catch(err => {
+      if (seq === sequence.current) {
+        if (committed.current) display(committed.current);
+        setError(errorCode(err) || 'default');
+      }
+    });
+  }, [display, seek]);
+  const adjust = useCallback((edge: Edge, args: Adjustment, preview = false) => edit('editor.adjust', { edge, ...args }, preview, edge), [edit]);
+  const cancelPreview = useCallback(() => { ++sequence.current; if (committed.current) display(committed.current); }, [display]);
+  const close = useCallback(() => {
+    if (closing) return;
+    cancelPreview(); setClosing(true);
+    void operations.current.then(() => coreDispatch('editor.flush', {})).then(onClose).catch(() => { setError('save_failed'); setClosing(false); });
+  }, [cancelPreview, closing, onClose]);
+  const mark = useCallback((edge: Edge, id: number) => adjust(edge, { sentence_id: id }), [adjust]);
   const markAtPlayhead = useCallback((edge: 'start' | 'end') => {
     const found = sentenceAt(state.current.sentences, state.current.sourceUs);
     if (found) void mark(edge, found.id);
   }, [mark]);
-  const moveEdge = (edge: 'start' | 'end', delta: number) => {
-    const list = state.current.sentences;
-    const index = list.findIndex(s => s.id === (edge === 'start' ? state.current.startId : state.current.endId));
-    const target = list[index + delta];
-    if (index < 0 || !target) { setError('unknown_sentence_id'); return; }
-    void mark(edge, target.id);
-  };
+  const moveEdge = useCallback((edge: Edge, delta: number) => adjust(edge, { sentence_delta: delta }), [adjust]);
+  useComandos([
+    { id: 'editor-undo', titulo: t.undo, grupo: t.title, dica: 'Ctrl+Z', executar: () => edit('editor.undo', {}), desabilitado: !history.undoCount },
+    { id: 'editor-redo', titulo: t.redo, grupo: t.title, dica: 'Ctrl+Shift+Z / Ctrl+Y', executar: () => edit('editor.redo', {}), desabilitado: !history.redoCount },
+    { id: 'editor-extend-start', titulo: `${t.startEarlier} · ${t.sentence}`, grupo: t.title, dica: 'Alt+Shift+←', executar: () => moveEdge('start', -1) },
+    { id: 'editor-shorten-start', titulo: `${t.startLater} · ${t.sentence}`, grupo: t.title, dica: 'Alt+Shift+→', executar: () => moveEdge('start', 1) },
+    { id: 'editor-shorten-end', titulo: `${t.endEarlier} · ${t.sentence}`, grupo: t.title, dica: 'Alt+Shift+↑', executar: () => moveEdge('end', -1) },
+    { id: 'editor-extend-end', titulo: `${t.endLater} · ${t.sentence}`, grupo: t.title, dica: 'Alt+Shift+↓', executar: () => moveEdge('end', 1) },
+  ]);
 
-  // Atalhos do editor (J/K/L, I/O, setas, colchetes). Não pegam o que acontece em campos, nem com Ctrl/Alt:
-  // o ajuste fino com Alt é de ticket futuro e Ctrl+Z/F2 são da Transcrição.
+  // Atalhos do editor não capturam campos de texto nem camadas abertas.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.defaultPrevented || e.isComposing) return;
       const target = e.target as Element | null;
       const key = e.key;
       const inField = target?.closest('input,textarea,select,[contenteditable="true"],[role="textbox"]');
       if (inField) return;
       const inLayer = target?.closest('[role="dialog"],[role="alertdialog"],[role="menu"],[role="listbox"]');
       const take = () => { e.preventDefault(); e.stopPropagation(); };
+      if (!inLayer && (e.ctrlKey || e.metaKey) && !e.altKey) {
+        const key = e.key.toLowerCase();
+        if (key === 'z' || (key === 'y' && !e.shiftKey)) { take(); edit(e.shiftKey || key === 'y' ? 'editor.redo' : 'editor.undo', {}); }
+        return;
+      }
+      if (!inLayer && e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(key)) {
+          take(); moveEdge(key === 'ArrowLeft' || key === 'ArrowRight' ? 'start' : 'end', key === 'ArrowLeft' || key === 'ArrowUp' ? -1 : 1);
+        }
+        return;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (target?.closest('[data-edge]') && key.startsWith('Arrow')) return;
       if (key === '[' && !inLayer?.closest('aside[data-lado="dir"]')) { take(); right.fechar(); left.alternar(); return; }
       if (key === ']' && !inLayer?.closest('aside[data-lado="esq"]')) { take(); left.fechar(); right.alternar(); return; }
       if (key === 'Escape') {
-        if (left.aberta || right.aberta) { take(); left.fechar(); right.fechar(); } else if (!inLayer) { take(); onClose(); }
+        if (left.aberta || right.aberta) { take(); left.fechar(); right.fechar(); } else if (!inLayer) { take(); close(); }
         return;
       }
       if (inLayer) return;
@@ -197,7 +254,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [left, right, onClose, seek, markAtPlayhead]);
+  }, [left, right, close, seek, markAtPlayhead, edit, moveEdge]);
 
   // Tamanho da área rolável e rolagem; só o que cabe nela (mais uma folga) é montado.
   useEffect(() => {
@@ -247,18 +304,20 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
   const inClip = (s: TimelineSentence) => s.id >= startId && s.id <= endId;
   const startSentence = sentences.find(s => s.id === startId);
   const endSentence = sentences.find(s => s.id === endId);
-  const failedText = error ? (t.errors[error] ?? t.errors.default) : '';
+  const failedText = error === 'save_failed' ? t.saveFailed : error ? (t.errors[error] ?? t.errors.default) : '';
 
   const dispatchTimeline = async (id: number | null) => { if (id !== null) { try { await coreDispatch('jobs.cancel', { id }); } catch { /* a tarefa já terminou */ } } };
 
-  return <section role="region" aria-label={t.title} data-start-id={startId} data-end-id={endId} data-source-us={Math.round(sourceUs)} data-rate={rate}
+  return <section role="region" aria-label={t.title} data-start-id={startId} data-end-id={endId} data-start-us={range?.startUs} data-end-us={range?.endUs} data-undo-count={history.undoCount} data-source-us={Math.round(sourceUs)} data-rate={rate}
     className="fixed inset-0 flex flex-col overflow-hidden bg-canvas text-fg" style={{ zIndex: 'var(--z-scrim)' }}>
     <header className="flex h-12 shrink-0 items-center gap-3 border-b border-line px-4">
       <h2 className="text-base font-semibold">{t.title}</h2>
       {range && <span className="font-mono text-xs text-fg-2">{clock(range.startUs)} – {clock(range.endUs)} · {fill(t.duration, { value: clock(range.endUs - range.startUs) })}</span>}
       <div className="flex-1" />
-      {request.candidate_id !== undefined ? <ExportButton sourceId={request.source_id} candidateId={request.candidate_id} title={`Corte ${request.candidate_id}`} startId={startId} endId={endId} approved /> : <Button tamanho="sm" disabled title={t.exportNeedsCandidate}>{t.export}</Button>}
-      <Button tamanho="sm" variante="fantasma" icone={<X size={14} />} onClick={onClose} aria-label={t.close} atalho="Escape" />
+      <Button tamanho="sm" disabled={!history.undoCount || closing} onClick={() => edit('editor.undo', {})} atalho="Ctrl+Z">{t.undo}</Button>
+      <Button tamanho="sm" disabled={!history.redoCount || closing} onClick={() => edit('editor.redo', {})} atalho="Ctrl+Shift+Z">{t.redo}</Button>
+      {request.candidate_id !== undefined ? <ExportButton sourceId={request.source_id} candidateId={request.candidate_id} clipId={opened?.clipId} title={`Corte ${request.candidate_id}`} startId={startId} endId={endId} approved /> : <Button tamanho="sm" disabled title={t.exportNeedsCandidate}>{t.export}</Button>}
+      <Button tamanho="sm" variante="fantasma" icone={<X size={14} />} onClick={close} disabled={closing} aria-label={t.close} atalho="Escape" />
     </header>
     {error && <p role="alert" className="border-b border-line bg-warning-subtle px-4 py-2 text-sm text-fg">{failedText}</p>}
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -314,10 +373,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
                 <span className="mr-1 font-mono text-[10px] text-fg-3">{s.id}</span>{s.text}
               </button>)}
             </div>
-            {range && <>
-              <div aria-hidden className="pointer-events-none absolute inset-y-0 w-0.5 bg-accent" style={{ left: usToPx(range.startUs, windowStartUs) }} />
-              <div aria-hidden className="pointer-events-none absolute inset-y-0 w-0.5 bg-accent" style={{ left: usToPx(range.endUs, windowStartUs) }} />
-            </>}
+            {range && opened && <BorderHandles startUs={range.startUs} endUs={range.endUs} windowStartUs={windowStartUs} fps={opened.fps} labels={{ start: t.start, end: t.end }} adjust={adjust} cancel={cancelPreview} pause={() => setRate(0)} />}
             <div aria-hidden data-playhead className="pointer-events-none absolute inset-y-0 w-0.5 bg-fg" style={{ left: usToPx(sourceUs, windowStartUs) }} />
           </div>
         </div>
@@ -335,9 +391,9 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
         <CabecalhoGaveta acoes={<Button tamanho="sm" onClick={right.fechar}>{t.close.replace(/ .*/, '')}</Button>}><h3 className="font-semibold">{t.borders}</h3></CabecalhoGaveta>
         <div className="flex flex-col gap-3 overflow-y-auto p-3 text-sm">
           <section aria-label={t.start}><h4 className="text-xs text-fg-2">{t.start} · #{startId}</h4><p>{startSentence?.text}</p>
-            <div className="mt-1 flex gap-2"><Button tamanho="sm" data-foco-inicial onClick={() => moveEdge('start', -1)}>{t.startEarlier}</Button><Button tamanho="sm" onClick={() => moveEdge('start', 1)}>{t.startLater}</Button></div></section>
+            <div className="mt-1 flex flex-wrap gap-2"><Button tamanho="sm" data-foco-inicial onClick={() => moveEdge('start', -1)} atalho="Alt+Shift+ArrowLeft">{t.startEarlier}</Button><Button tamanho="sm" onClick={() => moveEdge('start', 1)} atalho="Alt+Shift+ArrowRight">{t.startLater}</Button></div></section>
           <section aria-label={t.end}><h4 className="text-xs text-fg-2">{t.end} · #{endId}</h4><p>{endSentence?.text}</p>
-            <div className="mt-1 flex gap-2"><Button tamanho="sm" onClick={() => moveEdge('end', -1)}>{t.endEarlier}</Button><Button tamanho="sm" onClick={() => moveEdge('end', 1)}>{t.endLater}</Button></div></section>
+            <div className="mt-1 flex flex-wrap gap-2"><Button tamanho="sm" onClick={() => moveEdge('end', -1)} atalho="Alt+Shift+ArrowUp">{t.endEarlier}</Button><Button tamanho="sm" onClick={() => moveEdge('end', 1)} atalho="Alt+Shift+ArrowDown">{t.endLater}</Button></div></section>
           {range && <p className="font-mono text-xs text-fg-2">{fill(t.duration, { value: clock(range.endUs - range.startUs) })}</p>}
           <p className="text-fg-2">{t.note}</p>
         </div>
