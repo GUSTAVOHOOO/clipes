@@ -6,7 +6,7 @@ let fonts: Promise<void> | undefined;
 export function loadCaptionFonts() {
   return fonts ??= Promise.all([['Noto Sans', sans], ['Noto Serif', serif]].map(async ([name, url]) => {
     const face = new FontFace(`Clipes ${name}`, `url("${url}")`, { weight: '700' });
-    document.fonts.add(await face.load());
+    (document.fonts as unknown as { add(face: FontFace): void }).add(await face.load());
   })).then(() => undefined);
 }
 
