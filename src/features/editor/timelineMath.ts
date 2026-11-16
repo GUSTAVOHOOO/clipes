@@ -5,6 +5,28 @@ export const PX_PER_SEC = 48;
 export const BUFFER_PX = 480;
 
 export type TimelineSentence = { id: number; startUs: number; endUs: number; text: string };
+export type KeptSegment = { sourceStartUs: number; sourceEndUs: number; outputStartUs: number; outputEndUs: number };
+export type SilenceInterval = { id: number; startUs: number; endUs: number; gapStartUs: number; gapEndUs: number; status: 'active' | 'reverted' };
+export type SilencesState = {
+  enabled: boolean;
+  thresholdUs: number;
+  intervals: SilenceInterval[];
+  segments: KeptSegment[];
+  removedUs: number;
+  effectiveDurationUs: number;
+};
+
+/** Mapeia um tempo absoluto da Fonte (µs) para o tempo relativo no Corte emendado (µs),
+ * espelhando `SpliceMap::source_to_output` do núcleo (#77). */
+export function sourceToSplicedUs(sourceUs: number, segments: KeptSegment[] | undefined, fallbackStartUs: number): number {
+  if (!segments || segments.length === 0) return sourceUs - fallbackStartUs;
+  if (sourceUs <= segments[0].sourceStartUs) return 0;
+  for (const seg of segments) {
+    if (sourceUs < seg.sourceStartUs) return seg.outputStartUs;
+    if (sourceUs <= seg.sourceEndUs) return seg.outputStartUs + (sourceUs - seg.sourceStartUs);
+  }
+  return segments[segments.length - 1].outputEndUs;
+}
 
 export const usToPx = (us: number, windowStartUs: number) => ((us - windowStartUs) / 1_000_000) * PX_PER_SEC;
 export const pxToUs = (px: number, windowStartUs: number) => Math.round(windowStartUs + (px / PX_PER_SEC) * 1_000_000);
