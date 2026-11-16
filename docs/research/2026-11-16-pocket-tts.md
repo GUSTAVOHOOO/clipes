@@ -113,10 +113,15 @@ Referência: áudio de WhatsApp do dev (`.ogg`, Opus mono 48 kHz, **43 s, já co
 - **[fato]** O dev ouviu: na gravação do WhatsApp ele **fez de propósito uma voz caricata**, e o clone **reproduziu essa voz muito bem** ("ficou massa, muito bom"). Conclusão: a clonagem copia bem o **timbre e o jeito de falar** da referência, inclusive o exagero. Para narrar um canal ele quer uma referência melhor (a voz normal, no microfone, sem WhatsApp). Uma gravação nova virá depois; os resultados dela entram numa atualização deste documento.
 - **[fato]** O README manda "limpar" a amostra, porque a qualidade do áudio de referência é reproduzida. A referência comprimida (Opus do WhatsApp) **pode** ter piorado o resultado, mas não separei esse efeito do da voz caricata.
 
+**Segunda referência (voz normal do dev, `minha-voz-v2.m4a`, AAC 8 kHz mono, ~16 kbps, 53 s, "qualidade de ligação", sem nada acima de 4 kHz).** Recortei 14 s de fala, reamostrei para 24 kHz e gerei `pocket-clone-v2-01..04`. **[fato]** Mesmo com essa referência pobre, os quatro trechos saíram **inteligíveis e completos** (Whisper `small` transcreveu o texto quase inteiro, com 1–2 palavras trocadas por trecho), sem a quebra da referência de 28 s. RTF 0,84–1,17 em CPU. **[inferência]** A taxa de 8 kHz limita o timbre que o modelo captura (o README avisa que a qualidade da amostra é reproduzida), então a semelhança deve ser menor do que com microfone. A escuta do dev desses arquivos **ainda não foi feita**; o dev vai regravar com qualidade melhor e os resultados entram numa atualização.
+
+**Qualidade mínima de referência que o app deve pedir [inferência, a validar com a gravação nova]:** fala corrida de **10 a 15 s** (o app corta o resto), **mono, 24 kHz ou mais** (o modelo trabalha em 24 kHz; abaixo de 16 kHz o app avisa "qualidade baixa"), sem música, eco ou ventilador, sem compressão forte (preferir WAV ou M4A/MP3 ≥ 128 kbps; evitar áudio de WhatsApp ou de ligação), uma só pessoa falando, microfone a um palmo da boca.
+
 | Arquivo (pasta de escuta) | Conteúdo |
 |---|---|
 | `pocket-clone-01-gtarp`, `-02-reacao`, `-03-explicativo`, `-04-en` | voz do dev (ref. de 15 s) |
 | `pocket-clone10s-01-gtarp` | voz do dev (ref. de 10 s) |
+| `pocket-clone-v2-01..04` | voz normal do dev, referência de 14 s em 8 kHz |
 
 ## Integração: Python+PyTorch × port Rust × ONNX
 
