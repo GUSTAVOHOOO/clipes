@@ -14,6 +14,19 @@ fn main() {
         return;
     }
 
+    // #203: o deno só chega ao yt-dlp quando a URL pede (`deno`/`probe-deno`) e nunca sem o Componente.
+    if let Some(end) = args.iter().position(|a| a == "--") {
+        let url = &args[end + 1];
+        let js = args.iter().position(|a| a == "--js-runtimes");
+        if url.ends_with("deno") && !url.ends_with("no-deno") {
+            let i = js.expect("--js-runtimes ausente");
+            let path = args[i + 1].strip_prefix("deno:").expect("formato deno:<caminho>");
+            assert!(std::path::Path::new(path).is_absolute() && std::path::Path::new(path).is_file());
+            assert!(i < end);
+        } else {
+            assert!(js.is_none(), "--js-runtimes sem o Componente");
+        }
+    }
     if args.iter().any(|a| a == "--skip-download") && !args.iter().any(|a| a == "--write-subs") {
         // Detecção prévia (#201): só metadados, sem cookies, sem baixar nada.
         assert!(args.iter().any(|a| a == "--ignore-config"));
