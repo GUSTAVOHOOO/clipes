@@ -8,7 +8,7 @@ export type Adjustment = { time_us?: number; sentence_id?: number; sentence_delt
 export function BorderHandles({ startUs, endUs, windowStartUs, fps, labels, adjust, cancel, pause }: {
   startUs: number; endUs: number; windowStartUs: number; fps: number;
   labels: { start: string; end: string }; adjust: (edge: Edge, args: Adjustment, preview?: boolean) => void;
-  cancel: () => void; pause: () => void;
+  cancel: (edge: Edge) => void; pause: () => void;
 }) {
   const drag = useRef<{ edge: Edge; x: number; time: number; pointer: number } | null>(null);
   const args = (e: PointerEvent) => ({ time_us: Math.round(drag.current!.time + (e.clientX - drag.current!.x) * 1_000_000 / PX_PER_SEC), free: e.altKey });
@@ -31,8 +31,8 @@ export function BorderHandles({ startUs, endUs, windowStartUs, fps, labels, adju
         e.stopPropagation(); const next = args(e); drag.current = null;
         e.currentTarget.releasePointerCapture(e.pointerId); adjust(edge, next);
       }}
-      onPointerCancel={() => { drag.current = null; cancel(); }}
-      onLostPointerCapture={() => { if (drag.current) { drag.current = null; cancel(); } }}
+      onPointerCancel={() => { drag.current = null; cancel(edge); }}
+      onLostPointerCapture={() => { if (drag.current) { drag.current = null; cancel(edge); } }}
       onKeyDown={e => {
         if (!['ArrowLeft', 'ArrowRight'].includes(e.key) || e.ctrlKey || e.metaKey || e.shiftKey) return;
         e.preventDefault(); e.stopPropagation(); pause();

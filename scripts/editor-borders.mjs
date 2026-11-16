@@ -65,16 +65,42 @@ async function exerciseEditorBorders(page, url) {
   await page.waitForFunction(() => document.querySelector('[data-start-us="3610000000"]'));
   // Os quatro atalhos não acionam navegação J/K/L, I/O, gavetas ou playhead.
   for (const [key, attr, expected] of [
-    ['Alt+Shift+ArrowLeft', 'data-start-us', '3600000000'],
-    ['Alt+Shift+ArrowRight', 'data-start-us', '3610000000'],
-    ['Alt+Shift+ArrowUp', 'data-end-us', '3650000000'],
-    ['Alt+Shift+ArrowDown', 'data-end-us', '3660000000'],
+    ['Control+Shift+ArrowLeft', 'data-start-us', '3600000000'],
+    ['Control+Shift+ArrowRight', 'data-start-us', '3610000000'],
+    ['Control+Shift+ArrowUp', 'data-end-us', '3650000000'],
+    ['Control+Shift+ArrowDown', 'data-end-us', '3660000000'],
   ]) {
     await page.keyboard.press(key);
     await page.waitForFunction(([attr, expected]) => document.querySelector(`[${attr}="${expected}"]`), [attr, expected]);
     assert.equal(await editor.getAttribute('data-rate'), '0');
     assert.equal(await editor.locator('aside[data-aberta="true"]').count(), 0);
   }
+  // A gaveta de bordas pertence ao mesmo Corte: desfazer funciona com foco nela.
+  await page.keyboard.press(']');
+  const borders = editor.getByRole('dialog', { name: 'Bordas do Corte' });
+  await borders.waitFor();
+  for (const [name, attr, expected, restored] of [
+    ['Estender início', 'data-start-us', '3600000000', '3610000000'],
+    ['Encurtar início', 'data-start-us', '3620000000', '3610000000'],
+    ['Encurtar fim', 'data-end-us', '3650000000', '3660000000'],
+    ['Estender fim', 'data-end-us', '3670000000', '3660000000'],
+  ]) {
+    await borders.getByRole('button', { name: new RegExp(name) }).click();
+    await page.waitForFunction(([attr, value]) => document.querySelector(`[${attr}="${value}"]`), [attr, expected]);
+    await page.keyboard.press('Control+z');
+    await page.waitForFunction(([attr, value]) => document.querySelector(`[${attr}="${value}"]`), [attr, restored]);
+  }
+  const undoBeforeField = await editor.getAttribute('data-undo-count');
+  await borders.evaluate(node => { const field = document.createElement('textarea'); field.setAttribute('aria-label', 'Campo de teste'); node.append(field); });
+  const field = borders.getByRole('textbox', { name: 'Campo de teste' });
+  await field.fill('texto de teste');
+  await page.keyboard.press('Control+Shift+ArrowLeft');
+  await page.keyboard.press('Control+z');
+  assert.equal(await editor.getAttribute('data-start-us'), '3610000000', 'campos conservam os atalhos nativos');
+  assert.equal(await editor.getAttribute('data-undo-count'), undoBeforeField);
+  await field.evaluate(node => node.remove());
+  await page.keyboard.press('Escape');
+  await borders.waitFor({ state: 'hidden' });
   await start.scrollIntoViewIfNeeded();
   const fineBox = await start.boundingBox();
   await page.keyboard.down('Alt');
@@ -94,6 +120,15 @@ async function exerciseEditorBorders(page, url) {
   await open();
   await start.waitFor();
   assert.equal(Number(await editor.getAttribute('data-start-us')), fine, 'reabrir restaura o Corte');
+  // Deslocar o Corte além da janela inicial carrega uma nova janela do proxy.
+  const windowBefore = Number(await editor.getAttribute('data-window-start-us'));
+  for (let n = 0; n < 15; n++) {
+    await page.keyboard.press('Control+Shift+ArrowRight');
+    const endBefore = Number(await editor.getAttribute('data-end-us'));
+    await page.keyboard.press('Control+Shift+ArrowDown');
+    await page.waitForFunction(end => Number(document.querySelector('[data-end-us]')?.getAttribute('data-end-us')) > end, endBefore);
+  }
+  await page.waitForFunction(before => Number(document.querySelector('[data-window-start-us]')?.getAttribute('data-window-start-us')) > before, windowBefore);
   await editor.getByRole('button', { name: 'Fechar editor', exact: true }).click();
 }
 

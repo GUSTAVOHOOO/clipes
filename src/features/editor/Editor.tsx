@@ -48,6 +48,7 @@ const texts = {
 
 const errorCode = (e: unknown) => (typeof e === 'object' && e !== null && 'code' in e ? String(e.code) : '');
 const mediaUrl = (id: string) => (isTauri() ? convertFileSrc(id, 'clipes-media') : `/__clipes-media__/${id}`);
+const borderClock = (us: number) => `${clock(us)}.${String(Math.floor((us % 1_000_000) / 1000)).padStart(3, '0')}`;
 const ROW = { thumbs: 54, wave: 40, sentences: 56 } as const;
 
 /** Escuta o pedido de abertura e monta o editor em sobreposição. Um por aplicativo. */
@@ -65,6 +66,7 @@ export function EditorHost() {
 export function Editor({ request, onClose }: { request: ExportRequest; onClose: () => void }) {
   const t = useText(texts);
   const [opened, setOpened] = useState<Opened | null>(null);
+  const [windowRevision, setWindowRevision] = useState(0);
   const [startId, setStartId] = useState(request.start_id);
   const [endId, setEndId] = useState(request.end_id);
   const [range, setRange] = useState<{ startUs: number; endUs: number } | null>(null);
@@ -107,13 +109,16 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
         if (page.length < 200) break;
       }
       if (!alive) return;
+      if (committed.current?.clipId === info.clipId && committed.current.revision > info.revision) {
+        setWindowRevision(n => n + 1); return;
+      }
       committed.current = info; setHistory(info);
       setStartId(info.request.start_id); setEndId(info.request.end_id);
       setOpened(info); setSentences(all); setRange({ startUs: info.startUs, endUs: info.endUs }); setSourceUs(info.startUs);
       requestAnimationFrame(() => { if (scroller.current) scroller.current.scrollLeft = Math.max(0, usToPx(info.startUs, info.windowStartUs) - 80); });
     }).catch(e => { if (alive) setError(errorCode(e)); });
     return () => { alive = false; };
-  }, [request]);
+  }, [request, windowRevision]);
 
   // Miniaturas e onda: nascem do proxy pronto. Espera o proxy e acompanha a tarefa local.
   useEffect(() => {
@@ -174,7 +179,11 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
     operations.current = operations.current.then(async () => {
       if (!committed.current || (preview && seq !== sequence.current)) return;
       const answer = await coreDispatch<Edited>(name, { clip_id: committed.current.clipId, ...args, preview });
-      if (!preview) committed.current = answer;
+      if (!preview) {
+        committed.current = answer;
+        const info = state.current.opened;
+        if (info && (answer.startUs < info.windowStartUs || answer.endUs > info.windowEndUs)) setWindowRevision(n => n + 1);
+      }
       if (seq === sequence.current) {
         display(answer); setError('');
         if (edge) seek(edge === 'start' ? answer.startUs : answer.endUs);
@@ -187,7 +196,10 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
     });
   }, [display, seek]);
   const adjust = useCallback((edge: Edge, args: Adjustment, preview = false) => edit('editor.adjust', { edge, ...args }, preview, edge), [edit]);
-  const cancelPreview = useCallback(() => { ++sequence.current; if (committed.current) display(committed.current); }, [display]);
+  const cancelPreview = useCallback((edge?: Edge) => {
+    ++sequence.current;
+    if (committed.current) { display(committed.current); if (edge) seek(edge === 'start' ? committed.current.startUs : committed.current.endUs); }
+  }, [display, seek]);
   const close = useCallback(() => {
     if (closing) return;
     cancelPreview(); setClosing(true);
@@ -202,10 +214,10 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
   useComandos([
     { id: 'editor-undo', titulo: t.undo, grupo: t.title, dica: 'Ctrl+Z', executar: () => edit('editor.undo', {}), desabilitado: !history.undoCount },
     { id: 'editor-redo', titulo: t.redo, grupo: t.title, dica: 'Ctrl+Shift+Z / Ctrl+Y', executar: () => edit('editor.redo', {}), desabilitado: !history.redoCount },
-    { id: 'editor-extend-start', titulo: `${t.startEarlier} · ${t.sentence}`, grupo: t.title, dica: 'Alt+Shift+←', executar: () => moveEdge('start', -1) },
-    { id: 'editor-shorten-start', titulo: `${t.startLater} · ${t.sentence}`, grupo: t.title, dica: 'Alt+Shift+→', executar: () => moveEdge('start', 1) },
-    { id: 'editor-shorten-end', titulo: `${t.endEarlier} · ${t.sentence}`, grupo: t.title, dica: 'Alt+Shift+↑', executar: () => moveEdge('end', -1) },
-    { id: 'editor-extend-end', titulo: `${t.endLater} · ${t.sentence}`, grupo: t.title, dica: 'Alt+Shift+↓', executar: () => moveEdge('end', 1) },
+    { id: 'editor-extend-start', titulo: `${t.startEarlier} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+←', executar: () => moveEdge('start', -1) },
+    { id: 'editor-shorten-start', titulo: `${t.startLater} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+→', executar: () => moveEdge('start', 1) },
+    { id: 'editor-shorten-end', titulo: `${t.endEarlier} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+↑', executar: () => moveEdge('end', -1) },
+    { id: 'editor-extend-end', titulo: `${t.endLater} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+↓', executar: () => moveEdge('end', 1) },
   ]);
 
   // Atalhos do editor não capturam campos de texto nem camadas abertas.
@@ -217,16 +229,15 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
       const inField = target?.closest('input,textarea,select,[contenteditable="true"],[role="textbox"]');
       if (inField) return;
       const inLayer = target?.closest('[role="dialog"],[role="alertdialog"],[role="menu"],[role="listbox"]');
+      const inEditorLayer = !inLayer || inLayer.matches('aside[data-lado]');
       const take = () => { e.preventDefault(); e.stopPropagation(); };
-      if (!inLayer && (e.ctrlKey || e.metaKey) && !e.altKey) {
-        const key = e.key.toLowerCase();
-        if (key === 'z' || (key === 'y' && !e.shiftKey)) { take(); edit(e.shiftKey || key === 'y' ? 'editor.redo' : 'editor.undo', {}); }
+      if (inEditorLayer && (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(key)) {
+        take(); moveEdge(key === 'ArrowLeft' || key === 'ArrowRight' ? 'start' : 'end', key === 'ArrowLeft' || key === 'ArrowUp' ? -1 : 1);
         return;
       }
-      if (!inLayer && e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey) {
-        if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(key)) {
-          take(); moveEdge(key === 'ArrowLeft' || key === 'ArrowRight' ? 'start' : 'end', key === 'ArrowLeft' || key === 'ArrowUp' ? -1 : 1);
-        }
+      if (inEditorLayer && (e.ctrlKey || e.metaKey) && !e.altKey) {
+        const key = e.key.toLowerCase();
+        if (key === 'z' || (key === 'y' && !e.shiftKey)) { take(); edit(e.shiftKey || key === 'y' ? 'editor.redo' : 'editor.undo', {}); }
         return;
       }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -308,11 +319,11 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
 
   const dispatchTimeline = async (id: number | null) => { if (id !== null) { try { await coreDispatch('jobs.cancel', { id }); } catch { /* a tarefa já terminou */ } } };
 
-  return <section role="region" aria-label={t.title} data-start-id={startId} data-end-id={endId} data-start-us={range?.startUs} data-end-us={range?.endUs} data-undo-count={history.undoCount} data-source-us={Math.round(sourceUs)} data-rate={rate}
+  return <section role="region" aria-label={t.title} data-start-id={startId} data-end-id={endId} data-start-us={range?.startUs} data-end-us={range?.endUs} data-window-start-us={opened?.windowStartUs} data-undo-count={history.undoCount} data-source-us={Math.round(sourceUs)} data-rate={rate}
     className="fixed inset-0 flex flex-col overflow-hidden bg-canvas text-fg" style={{ zIndex: 'var(--z-scrim)' }}>
     <header className="flex h-12 shrink-0 items-center gap-3 border-b border-line px-4">
       <h2 className="text-base font-semibold">{t.title}</h2>
-      {range && <span className="font-mono text-xs text-fg-2">{clock(range.startUs)} – {clock(range.endUs)} · {fill(t.duration, { value: clock(range.endUs - range.startUs) })}</span>}
+      {range && <span className="font-mono text-xs text-fg-2">{borderClock(range.startUs)} – {borderClock(range.endUs)} · {fill(t.duration, { value: clock(range.endUs - range.startUs) })}</span>}
       <div className="flex-1" />
       <Button tamanho="sm" disabled={!history.undoCount || closing} onClick={() => edit('editor.undo', {})} atalho="Ctrl+Z">{t.undo}</Button>
       <Button tamanho="sm" disabled={!history.redoCount || closing} onClick={() => edit('editor.redo', {})} atalho="Ctrl+Shift+Z">{t.redo}</Button>
@@ -391,9 +402,9 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
         <CabecalhoGaveta acoes={<Button tamanho="sm" onClick={right.fechar}>{t.close.replace(/ .*/, '')}</Button>}><h3 className="font-semibold">{t.borders}</h3></CabecalhoGaveta>
         <div className="flex flex-col gap-3 overflow-y-auto p-3 text-sm">
           <section aria-label={t.start}><h4 className="text-xs text-fg-2">{t.start} · #{startId}</h4><p>{startSentence?.text}</p>
-            <div className="mt-1 flex flex-wrap gap-2"><Button tamanho="sm" data-foco-inicial onClick={() => moveEdge('start', -1)} atalho="Alt+Shift+ArrowLeft">{t.startEarlier}</Button><Button tamanho="sm" onClick={() => moveEdge('start', 1)} atalho="Alt+Shift+ArrowRight">{t.startLater}</Button></div></section>
+            <div className="mt-1 flex flex-wrap gap-2"><Button tamanho="sm" data-foco-inicial onClick={() => moveEdge('start', -1)} atalho="Ctrl+Shift+ArrowLeft">{t.startEarlier}</Button><Button tamanho="sm" onClick={() => moveEdge('start', 1)} atalho="Ctrl+Shift+ArrowRight">{t.startLater}</Button></div></section>
           <section aria-label={t.end}><h4 className="text-xs text-fg-2">{t.end} · #{endId}</h4><p>{endSentence?.text}</p>
-            <div className="mt-1 flex flex-wrap gap-2"><Button tamanho="sm" onClick={() => moveEdge('end', -1)} atalho="Alt+Shift+ArrowUp">{t.endEarlier}</Button><Button tamanho="sm" onClick={() => moveEdge('end', 1)} atalho="Alt+Shift+ArrowDown">{t.endLater}</Button></div></section>
+            <div className="mt-1 flex flex-wrap gap-2"><Button tamanho="sm" onClick={() => moveEdge('end', -1)} atalho="Ctrl+Shift+ArrowUp">{t.endEarlier}</Button><Button tamanho="sm" onClick={() => moveEdge('end', 1)} atalho="Ctrl+Shift+ArrowDown">{t.endLater}</Button></div></section>
           {range && <p className="font-mono text-xs text-fg-2">{fill(t.duration, { value: clock(range.endUs - range.startUs) })}</p>}
           <p className="text-fg-2">{t.note}</p>
         </div>
