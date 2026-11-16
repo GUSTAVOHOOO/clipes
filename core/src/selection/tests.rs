@@ -131,12 +131,12 @@ fn transformed_definition_is_valid_and_its_schema_follows_the_six_axis_table() {
 }
 
 #[test]
-fn direct_task_keeps_its_prompt_version_and_schema_without_the_sixth_axis() {
+fn direct_task_keeps_its_schema_without_the_sixth_axis() {
     let direct = task_for(VideoKind::Direct);
-    assert_eq!((direct.id, direct.version), ("selection", 2));
+    assert_eq!((direct.id, direct.version), ("selection", 3));
     assert_eq!(
         direct.prompt_sha256,
-        "8be769b3c853e1dcbbc9650d51c81670b52d901e8c217ac31606b35822878304"
+        "e00332d06248cff669ccb8922aae9d50190a7e30715630e566c4943941469b8a"
     );
     assert!(!WIRE.contains("commentary") && !FULL.contains("commentary"));
     assert!(!PROMPT.contains("commentary"));
