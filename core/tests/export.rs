@@ -109,6 +109,14 @@ fn export_validates_sentences_uses_effective_text_and_is_a_local_queue_job() {
     request["end_id"] = json!(2);
     fs::write(data.join("component-settings.json"),json!({"data_dir":data,"cache_dir":data.join("cache"),"cache_limit_bytes":1_000_000,"ffmpeg_path":env!("CARGO_BIN_EXE_fake-export")}).to_string()).unwrap();
     call("projects.local_only.set", json!({"enabled":true}));
+    let clip = call("editor.open", request.clone())["clipId"].clone();
+    call(
+        "editor.adjust",
+        json!({"clip_id":clip,"edge":"end","time_us":1_800_000,"free":true}),
+    );
+    request["clip_id"] = clip.clone();
+    // Um snapshot vindo da UI é ignorado no enfileiramento.
+    request["resolved_bounds"] = json!([0, 1]);
     let events = Arc::new(Mutex::new(Vec::new()));
     let captured = events.clone();
     assert!(clipes_core::set_event_emitter(Arc::new(move |event| {
@@ -137,6 +145,25 @@ fn export_validates_sentences_uses_effective_text_and_is_a_local_queue_job() {
         assert!(Instant::now() < deadline);
         std::thread::sleep(Duration::from_millis(10));
     }
+    let frozen = clipes_core::projects::with_reader(|c| {
+        c.query_row("SELECT request FROM exports WHERE job_id=?1", [job], |r| {
+            r.get::<_, String>(0)
+        })
+    })
+    .unwrap();
+    assert_eq!(
+        serde_json::from_str::<Value>(&frozen).unwrap()["resolved_bounds"],
+        json!([0, 1_800_000])
+    );
+    call(
+        "editor.adjust",
+        json!({"clip_id":clip,"edge":"end","time_us":1_700_000,"free":true}),
+    );
+    assert_eq!(
+        serde_json::from_str::<Value>(&frozen).unwrap()["resolved_bounds"],
+        json!([0, 1_800_000]),
+        "edição posterior não altera o job"
+    );
     call("jobs.cancel", json!({"id":job}));
     assert_eq!(settled(job)["state"], "cancelled");
     std::env::remove_var("CLIPES_FAKE_EXPORT_STATE");

@@ -56,6 +56,7 @@ Gravação de uma live depois de encerrada. É o único tipo de live que vira Fo
 
 **Corte** (Clip)
 Trecho curto gerado a partir de uma Fonte, com legenda e enquadramento próprios, pronto para exportar.
+No editor, Alt permite ajustar as bordas por quadro da Fonte, como exceção ao encaixe padrão em Frase.
 _Evitar_: clipe, short, highlight
 
 **Transcrição** (Transcript)

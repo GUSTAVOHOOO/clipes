@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:net';
 import { mkdir } from 'node:fs/promises';
+import { testEditorBorders } from './editor-borders.mjs';
 const socket = createServer();
 await new Promise(resolve => socket.listen(0, '127.0.0.1', resolve));
 const port = socket.address().port;
@@ -1096,6 +1097,7 @@ try {
     await editor.waitFor({ state: 'detached' });
   }
   await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
+  await testEditorBorders(page, url);
   assert.deepEqual(errors, []);
   console.log('UI keyboard, preferences, about, drawer and screenshots: OK');
 } finally { await browser?.close(); server.kill(); }

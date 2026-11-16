@@ -39,6 +39,27 @@ fn media_response(request: &tauri::http::Request<Vec<u8>>) -> tauri::http::Respo
 
 fn main() {
     tauri::Builder::default()
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                match clipes_core::dispatch("editor.flush", serde_json::json!({}), &mut |_| {}) {
+                    Ok(_) => (),
+                    Err(error) => {
+                        api.prevent_close();
+                        let _ = window.emit(
+                            "core-progress",
+                            clipes_core::ProgressEvent {
+                                job: "editor".into(),
+                                project: None,
+                                stage: "editor_save_failed".into(),
+                                percentage: 0,
+                                message: "Não foi possível salvar o Corte.".into(),
+                                error: Some(error),
+                            },
+                        );
+                    }
+                }
+            }
+        })
         .register_asynchronous_uri_scheme_protocol("clipes-media", |_ctx, request, responder| {
             // Leitura de disco fora da thread principal.
             tauri::async_runtime::spawn_blocking(move || {

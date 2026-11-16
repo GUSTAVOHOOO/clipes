@@ -1,12 +1,11 @@
-//! Editor do Corte (#61): estado transitório `ExportRequest { source_id, start_id, end_id,
-//! candidate_id? }` validado no núcleo, Frases da janela do proxy e (em `assets`) as miniaturas
-//! e a onda da timeline. Não há documento Corte persistido: o mesmo par Fonte + Frase inicial/final
-//! que a exportação (#59) usa. A UI manda IDs de Frase; os tempos sempre saem daqui.
+//! Editor do Corte (#61/#70): bordas validadas no núcleo, documento persistente
+//! com histórico/autosave (`edits`) e miniaturas/onda da janela do proxy (`assets`).
 use crate::{projects, proxy, sentences, CommandRegistration, CommandResult, CoreError, EventSink};
 use rusqlite::OptionalExtension;
 use serde_json::{json, Value};
 
 pub mod assets;
+pub(crate) mod edits;
 
 /// Faixa de duração quando o Corte não vem de um candidato (a mesma da seleção, #53).
 pub const MIN_CLIP_US: i64 = 20_000_000;
@@ -161,14 +160,26 @@ fn range(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 
 /// `editor.open`: valida o Corte e devolve a janela do proxy (Corte ±2 min) e a taxa de quadros.
 fn open(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let _project = projects::start_job()?;
     let request = parse(&v)?;
     let (start, end) = validated(&request)?;
+    let mut result = edits::open(&request, start, end)?;
+    let (start, end) = (
+        result["startUs"].as_i64().unwrap(),
+        result["endUs"].as_i64().unwrap(),
+    );
     let (duration, fps) = source_row(request.source)?;
     let (window_start, window_end) = proxy::window(start, end, duration)?;
-    Ok(json!({
-        "request": echo(&request), "startUs": start, "endUs": end,
-        "windowStartUs": window_start, "windowEndUs": window_end, "fps": fps,
-    }))
+    result["windowStartUs"] = json!(window_start);
+    result["windowEndUs"] = json!(window_end);
+    result["fps"] = json!(fps);
+    if request.candidate.is_none() {
+        result["request"]
+            .as_object_mut()
+            .unwrap()
+            .remove("candidate_id");
+    }
+    Ok(result)
 }
 
 /// `editor.sentences {source_id, start_us, end_us, after_id, limit}`: Frases inteiras dentro da

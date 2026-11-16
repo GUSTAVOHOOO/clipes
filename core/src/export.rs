@@ -17,7 +17,7 @@ use std::{
 
 pub const JOB_KIND: &str = "export";
 
-/// O futuro documento Corte só precisa produzir este contrato; o pipeline não lê UI.
+/// Contrato compartilhado pela revisão e editor. `clip_id` resolve o documento #70.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExportRequest {
     pub source_id: i64,
@@ -25,6 +25,8 @@ pub struct ExportRequest {
     pub end_id: i64,
     #[serde(default)]
     pub candidate_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clip_id: Option<i64>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -33,6 +35,9 @@ struct StartRequest {
     cut: ExportRequest,
     #[serde(default)]
     output: PathBuf,
+    // Congela as bordas no enfileiramento, para edições posteriores não mudarem o job.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    resolved_bounds: Option<(i64, i64)>,
 }
 
 inventory::submit! { projects::Migration { id:"0059_001_exports", sql:"
@@ -66,7 +71,27 @@ fn parse(v: Value) -> Result<ExportRequest, CoreError> {
     serde_json::from_value(v).map_err(|_| bounds())
 }
 
-fn target(request: &ExportRequest) -> Result<Target, CoreError> {
+fn target(request: &ExportRequest, frozen: Option<(i64, i64)>) -> Result<Target, CoreError> {
+    let edited = request
+        .clip_id
+        .map(crate::editor::edits::document)
+        .transpose()?;
+    if let Some(doc) = &edited {
+        if doc.original.source_id != request.source_id
+            || doc.original.candidate_id.is_none()
+            || doc.original.candidate_id != request.candidate_id
+        {
+            return Err(candidate_error());
+        }
+    }
+    let effective = edited.as_ref().map(|doc| ExportRequest {
+        source_id: doc.original.source_id,
+        candidate_id: doc.original.candidate_id,
+        start_id: doc.range.start_id,
+        end_id: doc.range.end_id,
+        clip_id: request.clip_id,
+    });
+    let request = effective.as_ref().unwrap_or(request);
     if request.start_id <= 0 || request.end_id < request.start_id {
         return Err(bounds());
     }
@@ -81,8 +106,8 @@ fn target(request: &ExportRequest) -> Result<Target, CoreError> {
             items.iter().any(|item| {
                 item["candidate"] == candidate
                     && item["status"] == "approved"
-                    && item["startId"] == request.start_id
-                    && item["endId"] == request.end_id
+                    && (edited.is_some()
+                        || (item["startId"] == request.start_id && item["endId"] == request.end_id))
             })
         });
         if !valid {
@@ -94,18 +119,44 @@ fn target(request: &ExportRequest) -> Result<Target, CoreError> {
         let Some((start_us, end_us, first, last)) = border else {
             return Ok(Err(bounds()));
         };
+        let (start_us, end_us) = edited
+            .as_ref()
+            .map(|doc| frozen.unwrap_or((doc.range.start_us, doc.range.end_us)))
+            .unwrap_or((start_us, end_us));
+        let duration: i64 = c.query_row(
+            "SELECT duration_us FROM sources WHERE id=?1",
+            [request.source_id],
+            |r| r.get(0),
+        )?;
+        if end_us > duration {
+            return Ok(Err(bounds()));
+        }
         if start_us < 0 || end_us <= start_us || last < first {
             return Ok(Err(bounds()));
         }
-        let mut q=c.prepare(&format!("SELECT {},start_us,end_us FROM transcript_words WHERE transcript_id=?1 AND kind='word' AND position BETWEEN ?2 AND ?3 ORDER BY position",crate::corrections::EFFECTIVE_TEXT))?;
+        // Bordas congeladas podem anteceder a edição atual; busque pelo tempo na Transcrição.
+        let mut q=c.prepare(&format!("SELECT {},start_us,end_us FROM transcript_words WHERE transcript_id=?1 AND kind='word' AND ((?6=1 AND end_us>?4 AND start_us<?5) OR (?6=0 AND position BETWEEN ?2 AND ?3)) ORDER BY position",crate::corrections::EFFECTIVE_TEXT))?;
         let words = q
-            .query_map((transcript, first, last), |r| {
-                Ok(CaptionWord {
-                    text: r.get(0)?,
-                    start_us: r.get::<_, i64>(1)? - start_us,
-                    end_us: r.get::<_, i64>(2)? - start_us,
-                })
-            })?
+            .query_map(
+                (transcript, first, last, start_us, end_us, edited.is_some()),
+                |r| {
+                    let start = r.get::<_, i64>(1)?;
+                    let end = r.get::<_, i64>(2)?;
+                    Ok(CaptionWord {
+                        text: r.get(0)?,
+                        start_us: if edited.is_some() {
+                            start.max(start_us)
+                        } else {
+                            start
+                        } - start_us,
+                        end_us: if edited.is_some() {
+                            end.min(end_us)
+                        } else {
+                            end
+                        } - start_us,
+                    })
+                },
+            )?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(Ok(Target {
             start_us,
@@ -124,8 +175,9 @@ fn current_path() -> Result<PathBuf, CoreError> {
 }
 
 fn cmd_captions(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let _project = projects::start_job()?;
     let request = parse(v)?;
-    let target = target(&request)?;
+    let target = target(&request, None)?;
     let words = captions::sanitize(&target.words)?;
     Ok(
         json!({"ass":captions::ass(&words,target.end_us-target.start_us)?,"lines":captions::layout(&words),"start_us":target.start_us,"end_us":target.end_us}),
@@ -134,8 +186,13 @@ fn cmd_captions(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 
 fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let _guard = projects::start_job()?;
-    let request: StartRequest = serde_json::from_value(v).map_err(|_| bounds())?;
-    let _ = target(&request.cut)?;
+    let mut request: StartRequest = serde_json::from_value(v).map_err(|_| bounds())?;
+    // Ignora qualquer snapshot enviado pela UI; o núcleo resolve o documento atual.
+    let resolved = target(&request.cut, None)?;
+    request.resolved_bounds = request
+        .cut
+        .clip_id
+        .map(|_| (resolved.start_us, resolved.end_us));
     render::validate_output(&request.output)?;
     let project = current_path()?;
     let _ = crate::jobs::preview::source(request.cut.source_id, &project)?;
@@ -214,7 +271,7 @@ pub(crate) fn run(
             })
         })?;
         let request: StartRequest = serde_json::from_str(&request).map_err(|_| failed())?;
-        let target = target(&request.cut)?;
+        let target = target(&request.cut, request.resolved_bounds)?;
         let (source, _, audio, _, _) =
             crate::jobs::preview::source(request.cut.source_id, project)?;
         let ffmpeg = crate::components::cache_settings()?
