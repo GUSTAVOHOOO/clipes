@@ -5,6 +5,7 @@ import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { LocalEstimate, RamWarnings } from './LocalEstimate';
+import { SourceLanguageSelect } from './SourceLanguage';
 import type { Transcript } from './Transcription';
 
 type Engine = 'local' | 'groq';
@@ -13,13 +14,14 @@ type Estimate = { kind: string; usd?: number; hourly_usd?: number; checked?: str
 type Loss = { blocks: number | null; paid_audio_us: number; paid_usd: number };
 type Pending = { kind: 'replace'; loss: Loss } | { kind: 'remote'; replace: boolean } | { kind: 'retry'; estimate: Estimate };
 const texts = {
-  'pt-BR': { engine: 'Motor de transcrição', local: 'Local · nesta máquina', remote: 'Groq · envia áudio', start: 'Transcrever', resume: 'Retomar', change: 'Trocar e transcrever', configure: 'Configurar chave', unknown: 'Custo estimado: desconhecido.', cost: 'Custo estimado: US$ {value}.', rate: 'US$ {value}/hora · fonte oficial consultada em {date}. Mínimo de 10 s por chamada; a cobrança pode variar nas fronteiras dos blocos.', retryTitle: 'Repetir chamada incerta?', retry: 'O resultado da chamada anterior é incerto. Repetir pode gerar nova cobrança.', privacyTitle: 'Enviar áudio ao Groq?', privacy: 'O áudio da faixa escolhida da Fonte sai desta máquina e é enviado para {endpoint}. A chave fica no cofre do sistema. O consentimento vale para este endpoint.', unknownBlocks: 'quantidade indisponível (Transcrição de versão anterior)', replaceTitle: 'Apagar Transcrição parcial?', replace: 'Blocos concluídos que serão apagados: {blocks}. Áudio Groq já enviado e possivelmente cobrado: {seconds} s (estimativa US$ {cost}); esse valor não é reembolsado. A nova Transcrição começa do zero e usa só o Motor escolhido.', cancel: 'Cancelar', confirm: 'Confirmar e transcrever', failed: 'Não foi possível iniciar a Transcrição.', localOnly: 'Este Projeto permite somente processamento local.' },
-  en: { engine: 'Transcription engine', local: 'Local · on this machine', remote: 'Groq · sends audio', start: 'Transcribe', resume: 'Resume', change: 'Switch and transcribe', configure: 'Configure key', unknown: 'Estimated cost: unknown.', cost: 'Estimated cost: US$ {value}.', rate: 'US$ {value}/hour · official source checked on {date}. Minimum 10 s per call; billing may vary at block boundaries.', retryTitle: 'Repeat uncertain call?', retry: 'The previous call has an uncertain result. Repeating it may incur another charge.', privacyTitle: 'Send audio to Groq?', privacy: 'Audio from the selected Source track leaves this machine and is sent to {endpoint}. The key stays in the system vault. Consent applies to this endpoint.', unknownBlocks: 'count unavailable (Transcript from an earlier version)', replaceTitle: 'Delete partial Transcript?', replace: 'Completed blocks that will be deleted: {blocks}. Groq audio already sent and possibly charged: {seconds} s (estimated US$ {cost}); this amount is not refunded. The new Transcript starts over and uses only the chosen engine.', cancel: 'Cancel', confirm: 'Confirm and transcribe', failed: 'Could not start the Transcript.', localOnly: 'This Project only allows local processing.' },
+  'pt-BR': { engine: 'Motor de transcrição', language: 'Idioma da Fonte', local: 'Local · nesta máquina', remote: 'Groq · envia áudio', start: 'Transcrever', resume: 'Retomar', change: 'Trocar e transcrever', configure: 'Configurar chave', unknown: 'Custo estimado: desconhecido.', cost: 'Custo estimado: US$ {value}.', rate: 'US$ {value}/hora · fonte oficial consultada em {date}. Mínimo de 10 s por chamada; a cobrança pode variar nas fronteiras dos blocos.', retryTitle: 'Repetir chamada incerta?', retry: 'O resultado da chamada anterior é incerto. Repetir pode gerar nova cobrança.', privacyTitle: 'Enviar áudio ao Groq?', privacy: 'O áudio da faixa escolhida da Fonte sai desta máquina e é enviado para {endpoint}. A chave fica no cofre do sistema. O consentimento vale para este endpoint.', unknownBlocks: 'quantidade indisponível (Transcrição de versão anterior)', replaceTitle: 'Apagar Transcrição parcial?', replace: 'Blocos concluídos que serão apagados: {blocks}. Áudio Groq já enviado e possivelmente cobrado: {seconds} s (estimativa US$ {cost}); esse valor não é reembolsado. A nova Transcrição começa do zero e usa só o Motor escolhido.', cancel: 'Cancelar', confirm: 'Confirmar e transcrever', failed: 'Não foi possível iniciar a Transcrição.', localOnly: 'Este Projeto permite somente processamento local.' },
+  en: { engine: 'Transcription engine', language: 'Source language', local: 'Local · on this machine', remote: 'Groq · sends audio', start: 'Transcribe', resume: 'Resume', change: 'Switch and transcribe', configure: 'Configure key', unknown: 'Estimated cost: unknown.', cost: 'Estimated cost: US$ {value}.', rate: 'US$ {value}/hour · official source checked on {date}. Minimum 10 s per call; billing may vary at block boundaries.', retryTitle: 'Repeat uncertain call?', retry: 'The previous call has an uncertain result. Repeating it may incur another charge.', privacyTitle: 'Send audio to Groq?', privacy: 'Audio from the selected Source track leaves this machine and is sent to {endpoint}. The key stays in the system vault. Consent applies to this endpoint.', unknownBlocks: 'count unavailable (Transcript from an earlier version)', replaceTitle: 'Delete partial Transcript?', replace: 'Completed blocks that will be deleted: {blocks}. Groq audio already sent and possibly charged: {seconds} s (estimated US$ {cost}); this amount is not refunded. The new Transcript starts over and uses only the chosen engine.', cancel: 'Cancel', confirm: 'Confirm and transcribe', failed: 'Could not start the Transcript.', localOnly: 'This Project only allows local processing.' },
 };
 
-export function EngineChoice({ project, sourceId, transcript, available, onStarted }: { project: string; sourceId: number; transcript: Transcript | null; available: boolean; onStarted: () => Promise<void> }) {
+export function EngineChoice({ project, sourceId, transcript, available, language, onStarted, onLanguageChange }: { project: string; sourceId: number; transcript: Transcript | null; available: boolean; language: string; onStarted: () => Promise<void>; onLanguageChange: () => Promise<void> }) {
   const t = useText(texts);
   const id = useId();
+  const langId = useId();
   const commands = useComandosCtx();
   const focus = useRef<HTMLButtonElement>(null);
   const [engine, setEngine] = useState<Engine>(transcript?.engine ?? 'local');
@@ -39,6 +41,20 @@ export function EngineChoice({ project, sourceId, transcript, available, onStart
     return () => { active = false; };
   }, [engine, sourceId, transcript?.resume_us, t.failed]);
   const cost = estimate?.kind === 'usd' && typeof estimate.usd === 'number' ? t.cost.replace('{value}', estimate.usd.toFixed(5)) : t.unknown;
+
+  const canEditLanguage = !transcript || (transcript.state !== 'complete' && transcript.resume_us === 0);
+
+  async function changeLanguage(next: string) {
+    setBusy(true); setError('');
+    try {
+      await coreDispatch('sources.language.set', { project, id: sourceId, language: next });
+      await onLanguageChange();
+    } catch (e) {
+      setError((e as { message?: string }).message ?? t.failed);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function start(replace = false, consent = false, retry = false) {
     setBusy(true); setError('');
@@ -60,6 +76,8 @@ export function EngineChoice({ project, sourceId, transcript, available, onStart
     : pending?.kind === 'retry' ? `${t.retry} ${pending.estimate.usd !== undefined ? t.cost.replace('{value}', pending.estimate.usd.toFixed(5)) : t.unknown}`
     : `${t.privacy.replace('{endpoint}', info?.endpoint ?? 'https://api.groq.com/openai/v1/audio/transcriptions')} ${cost}`;
   return <div className="flex w-full flex-wrap items-center gap-3">
+    <label htmlFor={langId} className="text-fg-2">{t.language}</label>
+    <SourceLanguageSelect id={langId} className="foco min-h-8 max-w-full rounded-md border border-line-strong bg-field px-2 text-fg" value={language} disabled={busy || pending !== null || !canEditLanguage} onChange={v => void changeLanguage(v)} />
     <label htmlFor={id} className="text-fg-2">{t.engine}</label>
     <select id={id} className="foco min-h-8 max-w-full rounded-md border border-line-strong bg-field px-2 text-fg" value={engine} disabled={busy || pending !== null} onChange={e => { setEngine(e.target.value as Engine); setError(''); }}>
       <option value="local">{t.local}</option><option value="groq">{t.remote}</option>
