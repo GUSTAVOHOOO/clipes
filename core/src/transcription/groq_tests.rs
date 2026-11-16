@@ -274,7 +274,8 @@ fn oversized_or_cancelled_audio_never_connects() {
 #[test]
 fn batch_budget_checks_each_audio_call_and_counts_it_after_reset() {
     let root = tempfile::tempdir().unwrap();
-    std::env::set_var("CLIPES_DATA_DIR", root.path().join("data"));
+    // Declared after `root`, so the variable is restored before the temporary directory is removed.
+    let _data_dir = crate::test_env::set_data_dir(&root.path().join("data"));
     let call = |name, value| crate::dispatch(name, value, &mut |_| {}).unwrap();
     call(
         "projects.create",

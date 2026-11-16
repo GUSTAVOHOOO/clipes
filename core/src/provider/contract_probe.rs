@@ -138,7 +138,8 @@ fn real_provider_contract() {
     let service = env("CLIPES_CONTRACT_SERVICE");
     let ledger = PathBuf::from(env("CLIPES_CONTRACT_LEDGER"));
     let data = tempfile::tempdir().expect("Could not isolate manual probe data");
-    std::env::set_var("CLIPES_DATA_DIR", data.path());
+    // Declared after `data`, so the variable is restored before the temporary directory is removed.
+    let _data_dir = crate::test_env::set_data_dir(data.path());
     let gate = Arc::new(Mutex::new(Instant::now() - Duration::from_secs(60)));
     let (endpoint, ceiling, key) = match service.as_str() {
         "openrouter" => (
