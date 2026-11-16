@@ -87,6 +87,7 @@ impl Env {
         std::env::remove_var("CLIPES_FAKE_WORKER_CRASH");
         std::env::remove_var("CLIPES_FAKE_WORKER_HOLD");
         std::env::remove_var("CLIPES_FAKE_TRANSCRIBE_LOG");
+        std::env::remove_var("CLIPES_FAKE_GROUP_OOM");
         run("components.settings.set", json!({"data_dir":data,"cache_dir":root.path().join("cache"),"cache_limit_bytes":1_000_000,"ffmpeg_path":fake})).unwrap();
 
         // uv falso, como se o Componente já tivesse sido baixado, e worker falso instalado por ele.
@@ -961,4 +962,118 @@ fn resuming_a_partial_transcript_never_overwrites_corrections() {
     assert!(sentences[0]["text"].as_str().unwrap().contains("CORRIGIDA"));
     let hits = run("transcription.search", json!({"query":"corrigida"})).unwrap();
     assert_eq!(hits.as_array().unwrap().len(), 1);
+}
+
+// ---- Agrupar trechos de VAD (#162) ----
+
+/// Grava uma sonda com lote seguro medido `safe` para a GPU falsa e escolhe o turbo em `int8_float16`.
+fn gpu_with_measured_batch(env: &Env, safe: u32) {
+    choose("whisper-turbo", "cuda", "int8_float16");
+    let store = env.root.path().join("data/transcription-hardware.json");
+    let mut value: Value = serde_json::from_slice(&fs::read(&store).unwrap()).unwrap();
+    value["probes"] = json!([{
+        "key": {"gpu":"NVIDIA GeForce RTX 3050 Laptop GPU","driver":"616.92","ct2_version":"4.9.0","model":"whisper-turbo","app_version":env!("CARGO_PKG_VERSION")},
+        "chosen": {"model":"whisper-turbo","device":"cuda","compute_type":"int8_float16"},
+        "verified": true, "attempts": [], "vram_free_mib": 3962, "measured_at": 1,
+        "batch": {"compute_type":"int8_float16","tested":[[1,true],[2,true],[4,true],[8,false]],"max_safe":safe,"origin":"probe","measured_at":1}
+    }]);
+    fs::write(&store, value.to_string()).unwrap();
+}
+
+fn groups(env: &Env) -> Vec<String> {
+    transcribe_log(env)
+        .iter()
+        .map(|l| l.rsplit(' ').next().unwrap().to_owned())
+        .collect()
+}
+
+fn transcribe_to_the_end(env: &Env) -> i64 {
+    std::env::set_var(
+        "CLIPES_FAKE_TRANSCRIBE_LOG",
+        env.root.path().join("transcribe.log"),
+    );
+    let source = env.import(0);
+    env.start(source).unwrap();
+    wait("transcrição completa", || {
+        env.status(source)["transcript"]["state"] == "complete"
+    });
+    assert_complete_transcript(&env.rows(source));
+    source
+}
+
+#[test]
+fn grouping_is_off_by_default_and_one_span_is_sent_per_call() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_models();
+    gpu_with_measured_batch(&env, 4);
+    let state = run("transcription.grouping", json!({})).unwrap();
+    assert_eq!(state, json!({"enabled": false, "size": 1}));
+    transcribe_to_the_end(&env);
+    assert!(groups(&env).iter().all(|g| g == "1"), "{:?}", groups(&env));
+}
+
+#[test]
+fn enabled_grouping_uses_the_measured_safe_batch_and_keeps_blocks_unchanged() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_models();
+    gpu_with_measured_batch(&env, 4);
+    let state = run("transcription.grouping", json!({"enabled": true})).unwrap();
+    assert_eq!(state, json!({"enabled": true, "size": 4}));
+    let source = transcribe_to_the_end(&env);
+    assert!(groups(&env).iter().all(|g| g == "4"), "{:?}", groups(&env));
+    // Mesmo formato de bloco e checkpoint: um bloco por 8 s de Fonte, como sem agrupar.
+    assert_eq!(env.status(source)["transcript"]["resume_us"], 25_000_000);
+    assert!(run("transcription.grouping", json!({"enabled": "sim"})).is_err());
+}
+
+#[test]
+fn grouping_without_a_measured_batch_stays_at_one() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_models();
+    choose("whisper-turbo", "cuda", "int8_float16");
+    let state = run("transcription.grouping", json!({"enabled": true})).unwrap();
+    assert_eq!(state["size"], 1);
+}
+
+#[test]
+fn out_of_memory_halves_the_group_redoes_only_the_block_and_updates_the_measurement() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_models();
+    gpu_with_measured_batch(&env, 8);
+    run("transcription.grouping", json!({"enabled": true})).unwrap();
+    std::env::set_var("CLIPES_FAKE_GROUP_OOM", "3");
+    transcribe_to_the_end(&env);
+    // O primeiro bloco tenta 8, depois 4, depois 2 e passa; os seguintes já começam em 2.
+    let log = groups(&env);
+    assert_eq!(&log[..3], ["8", "4", "2"], "{log:?}");
+    assert!(log[3..].iter().all(|g| g == "2"), "{log:?}");
+    let store: Value = serde_json::from_slice(
+        &fs::read(env.root.path().join("data/transcription-hardware.json")).unwrap(),
+    )
+    .unwrap();
+    let batch = &store["probes"][0]["batch"];
+    assert_eq!(batch["max_safe"], 2);
+    assert_eq!(batch["origin"], "oom");
+    assert!(batch["tested"]
+        .as_array()
+        .unwrap()
+        .contains(&json!([4, false])));
+    assert_eq!(run("transcription.grouping", json!({})).unwrap()["size"], 2);
+}
+
+#[test]
+fn out_of_memory_with_a_group_of_one_is_still_a_typed_failure() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_models();
+    gpu_with_measured_batch(&env, 2);
+    run("transcription.grouping", json!({"enabled": true})).unwrap();
+    std::env::set_var("CLIPES_FAKE_GROUP_OOM", "1");
+    std::env::set_var(
+        "CLIPES_FAKE_TRANSCRIBE_LOG",
+        env.root.path().join("transcribe.log"),
+    );
+    let source = env.import(0);
+    env.start(source).unwrap();
+    env.wait_transcribe("failed");
+    assert_eq!(groups(&env), ["2", "1"]);
 }

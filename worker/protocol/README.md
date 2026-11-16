@@ -35,7 +35,9 @@ Os pedidos rodam um de cada vez, na ordem de chegada. O `cancel` é lido enquant
 
 Um pedido transcreve **um bloco** de áudio; o núcleo corta o áudio da faixa de microfone escolhida na Fonte (WAV PCM 16 bits, 16 kHz, mono) e mantém o worker vivo entre os blocos.
 
-`params`: `audio` (caminho do WAV do bloco), `final` (`true` no último bloco da Fonte), `batch_size` (1 a 32) e `model` (`id`, `dir` com o diretório local do modelo, `device` `cuda` ou `cpu`, `compute_type` `int8_float16` ou `int8`). Os parâmetros são validados antes de carregar o modelo; o modelo vem sempre de `dir`, nunca do Hub.
+`params`: `audio` (caminho do WAV do bloco), `final` (`true` no último bloco da Fonte), `batch_size` (1 a 32), `group_size` (opcional, 1 a 32; padrão 1) e `model` (`id`, `dir` com o diretório local do modelo, `device` `cuda` ou `cpu`, `compute_type` `int8_float16` ou `int8`). Os parâmetros são validados antes de carregar o modelo; o modelo vem sempre de `dir`, nunca do Hub.
+
+Com `group_size` > 1 (#162), trechos consecutivos de VAD do mesmo idioma vão juntos, até `group_size` por chamada, com `clip_timestamps` sobre o áudio do bloco inteiro e `batch_size` igual ao grupo; o idioma continua detectado em cada trecho e os tempos de palavra saem absolutos no bloco, no mesmo formato. Falta de memória (CUDA ou RAM) responde `out_of_memory`, e o núcleo refaz o bloco com a metade do grupo.
 
 `result.data`: `covered_us` (até onde o bloco foi coberto, em µs desde o início do bloco), `words` (`text`, `start_us`, `end_us`, `language`, tempos relativos ao início do bloco) e `silences` (`start_us`, `end_us`). Se a última fala encosta no fim de um bloco que não é o `final`, ela fica de fora e `covered_us` termina onde ela começa: o núcleo começa o bloco seguinte ali, sem cortar palavra. O núcleo grava tudo; o worker só entrega.
 

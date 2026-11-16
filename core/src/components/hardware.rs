@@ -185,6 +185,76 @@ impl Config {
     }
 }
 
+/// Teto do grupo, o mesmo do protocolo do worker.
+const MAX_GROUP: u32 = 32;
+
+/// Quantos trechos de VAD vão numa chamada de transcrição (#162).
+///
+/// 1 (um trecho por chamada, o comportamento anterior) com a opção desligada. Ligada, na GPU é
+/// o lote seguro medido pela sonda (#50) para a precisão em uso, ou 1 se não houve medição; em
+/// CPU é o lote do benchmark (8).
+pub(crate) fn group_size(settings: &Settings, config: &Config) -> u32 {
+    let store = read_store(settings);
+    if !store.group_vad {
+        return 1;
+    }
+    if config.device == "cpu" {
+        return config.batch_size();
+    }
+    let gpu = detect_gpu();
+    store
+        .probes
+        .iter()
+        .rev()
+        .find(|p| {
+            p.key.gpu == gpu_label(&gpu)
+                && p.key.driver == gpu_driver(&gpu)
+                && p.key.app_version == env!("CARGO_PKG_VERSION")
+        })
+        .and_then(|p| p.batch.as_ref())
+        .filter(|b| b.compute_type == config.compute_type)
+        .and_then(|b| b.max_safe)
+        .map_or(1, |n| n.clamp(1, MAX_GROUP))
+}
+
+/// `group_size` com as configurações do app.
+pub(crate) fn current_group_size(config: &Config) -> u32 {
+    load_settings().map_or(1, |s| group_size(&s, config))
+}
+
+/// Queda por falta de memória com lote `failed` na GPU: o lote seguro medido passa a ser `safe`
+/// (a metade) e a origem da medição vira `oom`. Sem medição da sonda, não há o que atualizar.
+pub(crate) fn record_batch_oom(config: &Config, failed: u32, safe: u32) {
+    if config.device == "cpu" {
+        return;
+    }
+    let Ok(settings) = load_settings() else {
+        return;
+    };
+    let gpu = detect_gpu();
+    let mut store = read_store(&settings);
+    let Some(batch) = store
+        .probes
+        .iter_mut()
+        .rev()
+        .find(|p| {
+            p.key.gpu == gpu_label(&gpu)
+                && p.key.driver == gpu_driver(&gpu)
+                && p.key.app_version == env!("CARGO_PKG_VERSION")
+        })
+        .and_then(|p| p.batch.as_mut())
+        .filter(|b| b.compute_type == config.compute_type)
+    else {
+        return;
+    };
+    batch.tested.retain(|(size, _)| *size != failed);
+    batch.tested.push((failed, false));
+    batch.max_safe = Some(safe.max(1));
+    batch.origin = "oom".into();
+    batch.measured_at = now();
+    let _ = write_store(&settings, &mut store);
+}
+
 /// A configuração de fábrica: turbo `int8_float16` com o worker CUDA, `small` INT8 em CPU.
 fn default_config(settings: &Settings) -> Config {
     if super::worker::cuda_installed(settings) {
@@ -342,6 +412,9 @@ pub(crate) struct Store {
     pub probes: Vec<ProbeRecord>,
     #[serde(default)]
     pub rates: Vec<RateRecord>,
+    /// Agrupar trechos de VAD numa chamada (#162). Desligado por padrão até o ganho estar medido.
+    #[serde(default)]
+    pub group_vad: bool,
 }
 
 fn store_path(settings: &Settings) -> PathBuf {
@@ -803,6 +876,21 @@ fn diagnostic_text() -> String {
 inventory::submit! { CommandRegistration { name: "transcription.hardware.status", execute: status } }
 inventory::submit! { CommandRegistration { name: "transcription.hardware.probe", execute: probe } }
 inventory::submit! { CommandRegistration { name: "transcription.hardware.choose", execute: choose } }
+/// `{enabled}` liga ou desliga o agrupamento de trechos de VAD (#162); sem argumentos só consulta.
+fn grouping(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let settings = load_settings()?;
+    let mut store = read_store(&settings);
+    if let Some(enabled) = v.get("enabled") {
+        store.group_vad = enabled
+            .as_bool()
+            .ok_or_else(|| error("invalid_grouping", "Opção de agrupamento inválida."))?;
+        write_store(&settings, &mut store)?;
+    }
+    let config = effective(&settings);
+    Ok(json!({"enabled": store.group_vad, "size": group_size(&settings, &config)}))
+}
+
+inventory::submit! { CommandRegistration { name: "transcription.grouping", execute: grouping } }
 inventory::submit! { CommandRegistration { name: "transcription.hardware.diagnostic", execute: diagnostic_record } }
 inventory::submit! { crate::diagnostic::DiagnosticField { kind: crate::diagnostic::DiagnosticKind::GpuVram, value: diagnostic_text } }
 
