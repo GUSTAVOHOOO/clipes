@@ -116,6 +116,7 @@ fn every_preset_renders_the_prepared_cues_in_the_safe_zone_with_its_font() {
             end_us: 3_500_000,
             audio_track: 1,
             words: styled.iter().map(|w| w.word.clone()).collect(),
+            crop: Vec::new(),
         };
         render_styled(
             Path::new(&ffmpeg_path()),

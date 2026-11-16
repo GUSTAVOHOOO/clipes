@@ -199,11 +199,7 @@ pub fn resolve(timeline: &CropTimeline) -> Vec<CropSegment> {
     let mut resolved = Vec::new();
     for (i, seg) in suggested.segments.iter().enumerate() {
         let low = if i == 0 { i64::MIN } else { seg.start_us };
-        let high = if i + 1 == count {
-            i64::MAX
-        } else {
-            seg.end_us
-        };
+        let high = if i + 1 == count { i64::MAX } else { seg.end_us };
         let edited: Vec<CropKeyframe> = timeline
             .edits
             .iter()

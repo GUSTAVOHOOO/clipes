@@ -57,7 +57,10 @@ fn migrates_v1_clip_documents_to_v2_and_preserves_suggested_separately_from_edit
     .unwrap();
 
     // Documento v1 é migrado para v2; versão futura é recusada.
-    let opened = call("editor.open", json!({"source_id":source,"start_id":2,"end_id":6}));
+    let opened = call(
+        "editor.open",
+        json!({"source_id":source,"start_id":2,"end_id":6}),
+    );
     assert_eq!(opened["schemaVersion"], 2);
     assert_eq!(opened["revision"], 3);
     assert_eq!(opened["crop"]["hasCrop"], false);
@@ -82,16 +85,27 @@ fn migrates_v1_clip_documents_to_v2_and_preserves_suggested_separately_from_edit
     assert_eq!(example["resolved"].as_array().unwrap().len(), 2);
     let suggested_before = example["suggested"].clone();
     let seg2_start = suggested_before["segments"][1]["startUs"].as_i64().unwrap();
-    let seg2_x = suggested_before["segments"][1]["keyframes"][0]["x"].as_f64().unwrap();
+    let seg2_x = suggested_before["segments"][1]["keyframes"][0]["x"]
+        .as_f64()
+        .unwrap();
 
     let edited = call(
         "editor.crop.set_edits",
         json!({"clip_id":1,"edits":[{"timeUs":15_000_000,"x":0.4,"y":0.0,"width":0.3,"height":1.0}]}),
     );
-    assert_eq!(edited["suggested"], suggested_before, "suggested é imutável");
-    let at_seg1 = call("editor.crop.evaluate", json!({"clip_id":1,"time_us":20_000_000}));
+    assert_eq!(
+        edited["suggested"], suggested_before,
+        "suggested é imutável"
+    );
+    let at_seg1 = call(
+        "editor.crop.evaluate",
+        json!({"clip_id":1,"time_us":20_000_000}),
+    );
     assert!((at_seg1["rect"]["x"].as_f64().unwrap() - 0.4).abs() < 1e-9);
-    let at_seg2 = call("editor.crop.evaluate", json!({"clip_id":1,"time_us":seg2_start}));
+    let at_seg2 = call(
+        "editor.crop.evaluate",
+        json!({"clip_id":1,"time_us":seg2_start}),
+    );
     assert!((at_seg2["rect"]["x"].as_f64().unwrap() - seg2_x).abs() < 1e-9);
 
     // Refazer a sugestão preserva os edits existentes.
@@ -106,5 +120,78 @@ fn migrates_v1_clip_documents_to_v2_and_preserves_suggested_separately_from_edit
     let reopened = call("editor.crop.get", json!({"clip_id":1}));
     assert_eq!(reopened["edits"].as_array().unwrap().len(), 1);
     assert_eq!(reopened["suggested"], suggested_before);
+
+    // export.start congela resolved_crop no enfileiramento; edições depois não mudam o job.
+    let data = root.path().join("data");
+    std::fs::write(
+        data.join("component-settings.json"),
+        json!({"data_dir":data,"cache_dir":data.join("cache"),"cache_limit_bytes":1_000_000,"ffmpeg_path":env!("CARGO_BIN_EXE_fake-export")}).to_string(),
+    )
+    .unwrap();
+    let cand = with_writer(|c| {
+        c.execute("INSERT INTO selection_runs(transcript_id,task_version,prompt_sha256,state,min_us,max_us,weights,plan_state,windows_total) SELECT id,1,'h','completed',20000000,180000000,'[]','ready',0 FROM transcripts WHERE source_id=?1",[source])?;
+        let run = c.last_insert_rowid();
+        c.execute("INSERT INTO selection_candidates(run_id,rank,start_id,end_id,start_us,end_us,axes,total_centi,windows) VALUES (?1,1,2,6,10000000,60000000,'{}',500,'[]')",[run])?;
+        Ok(c.last_insert_rowid())
+    })
+    .unwrap();
+    call(
+        "selection.decide",
+        json!({"candidate":cand,"decision":"approved"}),
+    );
+    let media = root.path().join("media.mp4");
+    std::fs::write(&media, b"fake media").unwrap();
+    let bytes = std::fs::read(&media).unwrap();
+    use sha2::{Digest, Sha256};
+    let hash = format!("{:x}", Sha256::digest(bytes.repeat(3)));
+    with_writer(|c| {
+        c.execute(
+            "UPDATE sources SET path=?2,size=?3,partial_hash=?4 WHERE id=?1",
+            (source, media.to_str().unwrap(), bytes.len() as i64, hash),
+        )?;
+        Ok(())
+    })
+    .unwrap();
+    let cand_clip = call(
+        "editor.open",
+        json!({"source_id":source,"start_id":2,"end_id":6,"candidate_id":cand}),
+    )["clipId"]
+        .as_i64()
+        .unwrap();
+    call(
+        "editor.crop.set_edits",
+        json!({"clip_id":cand_clip,"edits":[{"timeUs":10_000_000,"x":0.15,"y":0.0,"width":0.3,"height":1.0}]}),
+    );
+    let out = root.path().join("frozen-crop.mp4");
+    let job = call(
+        "export.start",
+        json!({"source_id":source,"start_id":2,"end_id":6,"candidate_id":cand,"clip_id":cand_clip,"output":out,"resolved_crop":[{"startUs":0,"endUs":1,"reason":"start","keyframes":[]}]}),
+    )["job"]
+        .as_i64()
+        .unwrap();
+    let frozen: String = clipes_core::projects::with_reader(|c| {
+        c.query_row("SELECT request FROM exports WHERE job_id=?1", [job], |r| {
+            r.get(0)
+        })
+    })
+    .unwrap();
+    let frozen_json: Value = serde_json::from_str(&frozen).unwrap();
+    assert_eq!(frozen_json["resolved_crop"][0]["keyframes"][0]["x"], 0.15);
+    call(
+        "editor.crop.set_edits",
+        json!({"clip_id":cand_clip,"edits":[{"timeUs":10_000_000,"x":0.55,"y":0.0,"width":0.3,"height":1.0}]}),
+    );
+    let frozen_after: String = clipes_core::projects::with_reader(|c| {
+        c.query_row("SELECT request FROM exports WHERE job_id=?1", [job], |r| {
+            r.get(0)
+        })
+    })
+    .unwrap();
+    assert_eq!(
+        serde_json::from_str::<Value>(&frozen_after).unwrap()["resolved_crop"][0]["keyframes"][0]
+            ["x"],
+        0.15,
+        "edição de crop depois de enfileirar não muda o job"
+    );
     call("projects.close", json!({}));
 }

@@ -146,6 +146,7 @@ fn detects_in_order_caches_invalidates_switches_and_falls_back_to_x264() {
             start_us: 0,
             end_us: 800_000,
         }],
+        crop: Vec::new(),
     };
     let outcome =
         encoder::render_with_fallback(&ffmpeg, &input, "h264_nvenc", &cancel, &mut |_| {}).unwrap();

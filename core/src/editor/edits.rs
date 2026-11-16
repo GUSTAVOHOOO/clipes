@@ -502,10 +502,7 @@ fn crop_set_suggested(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     } else if v.get("suggested").is_some_and(Value::is_null) {
         None
     } else {
-        Some(
-            serde_json::from_value(v["suggested"].clone())
-                .map_err(|_| crop::invalid_crop())?,
-        )
+        Some(serde_json::from_value(v["suggested"].clone()).map_err(|_| crop::invalid_crop())?)
     };
     if let Some(ref sug) = suggested {
         crop::validate_suggested(sug)?;

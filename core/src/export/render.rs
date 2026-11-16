@@ -37,6 +37,8 @@ pub struct RenderInput {
     pub audio_track: i64,
     /// Tempos relativos ao início do Corte, texto efetivo.
     pub words: Vec<CaptionWord>,
+    /// Segmentos resolvidos de crop (#66); vazio mantém Fit 1080×1920.
+    pub crop: Vec<crate::editor::crop::CropSegment>,
 }
 #[derive(Default)]
 struct Report {
@@ -321,7 +323,15 @@ fn render_ass(
         )
     })?;
     let measured = measure_loudness(ffmpeg, &source, input, work.path(), cancel, progress)?;
-    let plan = pipeline::with_loudness(encoder, measured);
+    let crop = (!input.crop.is_empty()).then_some(pipeline::Crop {
+        segments: &input.crop,
+        start_us: input.start_us,
+        end_us: input.end_us,
+    });
+    let plan = pipeline::with_crop(encoder, measured, crop);
+    if let Some(commands) = &plan.crop_commands {
+        fs::write(work.path().join("crop.cmd"), commands).map_err(|_| failed())?;
+    }
     let mut args: Vec<OsString> = vec![
         "-hide_banner".into(),
         "-nostdin".into(),

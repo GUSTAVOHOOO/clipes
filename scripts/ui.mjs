@@ -5,6 +5,7 @@ import { testCaptions } from './captions-ui.mjs';
 import { createServer } from 'node:net';
 import { mkdir } from 'node:fs/promises';
 import { testEditorBorders } from './editor-borders.mjs';
+import { testEditorCrop } from './editor-crop.mjs';
 const socket = createServer();
 await new Promise(resolve => socket.listen(0, '127.0.0.1', resolve));
 const port = socket.address().port;
@@ -1136,6 +1137,7 @@ try {
   }
   await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
   await testEditorBorders(page, url);
+  await testEditorCrop(page, url);
   assert.deepEqual(errors, []);
   console.log('UI keyboard, preferences, about, drawer and screenshots: OK');
 } finally { await browser?.close(); server.kill(); }
