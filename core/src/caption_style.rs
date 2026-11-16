@@ -98,7 +98,7 @@ impl Style {
     }
     pub fn font_bytes(&self) -> &'static [u8] {
         if self.font == "Noto Serif" {
-            include_bytes!("../assets/fonts/NotoSerif-Bold.ttf")
+            crate::export::render::SERIF_FONT_BYTES
         } else {
             crate::export::render::FONT_BYTES
         }
