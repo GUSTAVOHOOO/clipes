@@ -959,6 +959,63 @@ try {
     assert.match(await cloudBox.innerText(), L.remote);
     assert.doesNotMatch(await cloudBox.innerText(), L.lm);
   }
+  // Editor do Corte (#61): teclado, sincronização com o preview, virtualização e capturas, PT e EN, com o núcleo simulado.
+  for (const L of [
+    { lang: 'pt-BR', title: 'Editor do Corte', close: 'Fechar editor', timeline: 'Timeline do Corte', transcript: 'Transcrição do editor', borders: 'Bordas do Corte', error: 'O Corte ficaria abaixo da duração mínima.', hint: 'voltar · pausar · avançar' },
+    { lang: 'en', title: 'Clip editor', close: 'Close editor', timeline: 'Clip timeline', transcript: 'Editor Transcript', borders: 'Clip borders', error: 'The Clip would fall below the minimum duration.', hint: 'reverse · pause · forward' },
+  ]) {
+    await page.evaluate(lang => localStorage.setItem('clipes.language', lang), L.lang);
+    await page.goto(`${url}?source-test=1&transcript-test=1&editor-test=1`);
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('clipes-editor-open', { detail: { source_id: 1, start_id: 361, end_id: 366 } })));
+    const editor = page.getByRole('region', { name: L.title, exact: true });
+    await editor.waitFor({ timeout: 10000 });
+    const timeline = editor.getByRole('region', { name: L.timeline });
+    await timeline.locator('[data-editor-sentence="361"]').waitFor();
+    assert.equal(await editor.locator('aside[data-aberta="true"]').count(), 0, 'gavetas fechadas: só preview e timeline');
+    assert.ok(await timeline.locator('[data-editor-sentence]').count() < 35, 'só blocos visíveis montados');
+    assert.ok(await timeline.locator('[data-thumb]').count() < 35, 'miniaturas virtualizadas');
+    await timeline.locator('[data-wave]').first().waitFor();
+    await timeline.locator('[data-editor-sentence="362"]').click();
+    const preview = editor.locator('[data-preview-state]');
+    assert.equal(await preview.getAttribute('data-seek-us'), '3610000000', 'clicar numa Frase leva o preview até ela');
+    await page.keyboard.press('i');
+    await page.waitForFunction(() => document.querySelector('[data-start-id="362"]'));
+    await timeline.locator('[data-editor-sentence="362"]').click();
+    await page.keyboard.press('o');
+    await editor.getByRole('alert').getByText(L.error).waitFor();
+    assert.equal(await editor.getAttribute('data-end-id'), '366', 'o erro preserva a borda');
+    await page.keyboard.press('ArrowRight');
+    assert.ok(Math.abs(Number(await editor.getAttribute('data-source-us')) - (3610000000 + 1e6 / 24)) < 2, 'seta avança um quadro');
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await editor.getAttribute('data-source-us'), '3620000000', 'seta vai à Frase seguinte');
+    await page.keyboard.press('l');
+    await page.keyboard.press('l');
+    assert.equal(await editor.getAttribute('data-rate'), '2');
+    await page.keyboard.press('k');
+    assert.equal(await editor.getAttribute('data-rate'), '0');
+    await page.keyboard.press('j');
+    assert.equal(await editor.getAttribute('data-rate'), '-1');
+    await page.keyboard.press('k');
+    // Preview → timeline: o proxy começa 3480 s depois do zero da Fonte.
+    await preview.locator('video').evaluate(v => { v.currentTime = 150; v.dispatchEvent(new Event('timeupdate')); });
+    await timeline.locator('[data-editor-sentence="364"][aria-current="true"]').waitFor();
+    await page.keyboard.press('[');
+    const transcriptDrawer = editor.getByRole('dialog', { name: L.transcript });
+    await transcriptDrawer.waitFor();
+    await page.waitForFunction(() => document.activeElement?.closest('aside[data-aberta="true"]'));
+    await page.keyboard.press('Escape');
+    await transcriptDrawer.waitFor({ state: 'hidden' });
+    await page.keyboard.press(']');
+    const bordersDrawer = editor.getByRole('dialog', { name: L.borders });
+    await bordersDrawer.waitFor();
+    await page.screenshot({ path: `shots/editor-${L.lang}.png` });
+    await page.keyboard.press('Escape');
+    await bordersDrawer.waitFor({ state: 'hidden' });
+    assert.match(await editor.innerText(), new RegExp(L.hint), 'atalhos visíveis junto dos controles');
+    for (const key of ['J', 'K', 'L', 'I', 'O']) assert.ok((await editor.locator('kbd', { hasText: new RegExp(`^${key}$`) }).count()) > 0, `tecla ${key} visível`);
+    await editor.getByRole('button', { name: L.close, exact: true }).click();
+    await editor.waitFor({ state: 'detached' });
+  }
   await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
   assert.deepEqual(errors, []);
   console.log('UI keyboard, preferences, about, drawer and screenshots: OK');
