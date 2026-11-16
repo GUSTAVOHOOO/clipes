@@ -87,6 +87,10 @@ export function captionsMock(name: string, a: Record<string, any>, textOf: (posi
   });
   const words = rawWords.map(w => ({ ...w, missingGlyph: missingGlyphs.find(m => m.position === w.position) ?? null }));
   const visible = words.map(w => ({ ...w, text: w.text.replace(/\p{Extended_Pictographic}/gu, '').trim(), color: w.overrides.color ?? style.color, activeColor: w.overrides.activeColor ?? style.activeColor, highlight: style.highlight && (w.overrides.highlight ?? true) }));
-  const cues = [0, 3, 6].map(i => ({ startUs: visible[i].startUs, endUs: visible[i + 2].endUs, lines: [visible.slice(i, i + 3)] }));
+  const cues: { startUs: number; endUs: number; lines: typeof visible[] }[] = [];
+  for (let i = 0; i < visible.length; i += 3) {
+    const slice = visible.slice(i, i + 3);
+    cues.push({ startUs: slice[0].startUs, endUs: slice[slice.length - 1].endUs, lines: [slice] });
+  }
   return { ass: '', style, cues, emojiRemoved: words.filter(w => emoji.test(w.text)).length, words, transcriptId: 1, start_us: startBase, end_us: endBase, durationUs: splice.effectiveDurationUs, segments: splice.segments, lines: [], missingGlyphs };
 }
