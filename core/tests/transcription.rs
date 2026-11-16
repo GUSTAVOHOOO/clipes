@@ -1054,11 +1054,11 @@ fn out_of_memory_halves_the_group_redoes_only_the_block_and_updates_the_measurem
     let batch = &store["probes"][0]["batch"];
     assert_eq!(batch["max_safe"], 2);
     assert_eq!(batch["origin"], "oom");
-    assert!(batch["tested"].as_array().unwrap().contains(&json!([4, false])));
-    assert_eq!(
-        run("transcription.grouping", json!({})).unwrap()["size"],
-        2
-    );
+    assert!(batch["tested"]
+        .as_array()
+        .unwrap()
+        .contains(&json!([4, false])));
+    assert_eq!(run("transcription.grouping", json!({})).unwrap()["size"], 2);
 }
 
 #[test]

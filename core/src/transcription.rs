@@ -182,13 +182,11 @@ impl TranscriptionEngine for LocalEngine {
             if group > 1 {
                 params["group_size"] = json!(group);
             }
-            let result = self
-                .client
-                .run("transcribe", params, cancel, &mut |event| {
-                    if let WorkerEvent::Progress { percentage, .. } = event {
-                        progress(percentage);
-                    }
-                });
+            let result = self.client.run("transcribe", params, cancel, &mut |event| {
+                if let WorkerEvent::Progress { percentage, .. } = event {
+                    progress(percentage);
+                }
+            });
             match result {
                 // Falta de memória com lote > 1: cai pela metade e refaz só este bloco (o áudio e o
                 // checkpoint não mudaram); a medição da sonda (#50) passa a valer o novo lote.
