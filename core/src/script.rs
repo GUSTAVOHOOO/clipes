@@ -1089,10 +1089,7 @@ fn block_arg(v: &Value) -> Result<i64, CoreError> {
 }
 
 /// O Roteiro mostrado e o bloco pedido, que tem de ser dele e estar livre de job.
-fn shown_block<'a>(
-    gens: &'a [Generation],
-    id: i64,
-) -> Result<(&'a Generation, &'a Block), CoreError> {
+fn shown_block(gens: &[Generation], id: i64) -> Result<(&Generation, &Block), CoreError> {
     let gen = latest_with_blocks(gens)
         .ok_or_else(|| error("block_not_found", "Bloco não encontrado."))?;
     let block = gen
