@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { PanelLeft, PanelRight, X } from 'lucide-react';
+import { Captions, PanelLeft, PanelRight, X } from 'lucide-react';
 import { coreDispatch, type ExportRequest } from '@/lib/core';
 import { useText } from '@/lib/i18n';
 import { useComandos } from '@/lib/comandos';
@@ -12,6 +12,8 @@ import { CabecalhoGaveta, GavetaBorda, Puxador, ZonaBorda, useGaveta } from '@/c
 import { CutPreview, previewSeekEvent, type PreviewSeekEvent } from '@/features/projects/CutPreview';
 import { clock, fill } from '@/features/projects/selectionFormat';
 import { PX_PER_SEC, neighborStart, nextRate, pxToUs, sentenceAt, usToPx, visiblePx, visibleSentences, visibleThumbs, type TimelineSentence } from './timelineMath';
+import { CaptionPanel } from '@/features/captions/CaptionPanel';
+import { useCaptions } from '@/features/captions/useCaptions';
 import { BorderHandles, type Adjustment, type Edge } from './BorderHandles';
 
 export const editorOpenEvent = 'clipes-editor-open';
@@ -25,7 +27,7 @@ type Timeline = { state: 'queued' | 'running' | 'ready' | 'failed' | 'cancelled'
 
 const texts = {
   'pt-BR': {
-    title: 'Editor do Corte', close: 'Fechar editor', timeline: 'Timeline do Corte', transcript: 'Transcrição do editor', borders: 'Bordas do Corte',
+    title: 'Editor do Corte', close: 'Fechar editor', timeline: 'Timeline do Corte', transcript: 'Transcrição do editor', borders: 'Bordas do Corte', captions: 'Legenda',
     markIn: 'Marcar entrada', markOut: 'Marcar saída', back: 'Voltar', pause: 'Pausar', forward: 'Avançar', rate: 'Velocidade', export: 'Exportar', exportNeedsCandidate: 'Abra um candidato aprovado para exportar.',
     shortcuts: 'Atalhos', hintPlay: 'voltar · pausar · avançar', hintMark: 'entrada · saída (Frase inteira)', hintFrame: 'quadro', hintSentence: 'Frase anterior/próxima', hintDrawers: 'gavetas',
     duration: 'Duração {value}', start: 'Entrada', end: 'Saída', startEarlier: 'Estender início', startLater: 'Encurtar início', endEarlier: 'Encurtar fim', endLater: 'Estender fim',
@@ -35,7 +37,7 @@ const texts = {
     errors: { adjust_empty: 'O Corte precisa manter ao menos uma Frase.', adjust_too_short: 'O Corte ficaria abaixo da duração mínima.', adjust_too_long: 'O Corte ficaria acima da duração máxima.', unknown_sentence_id: 'Frase desconhecida.', invalid_range: 'Intervalo do Corte inválido.', candidate_not_found: 'Candidato não encontrado.', transcript_missing: 'Transcrição não encontrada.', source_not_found: 'Fonte não encontrada.', default: 'Não foi possível abrir o editor.' } as Record<string, string>,
   },
   en: {
-    title: 'Clip editor', close: 'Close editor', timeline: 'Clip timeline', transcript: 'Editor Transcript', borders: 'Clip borders',
+    title: 'Clip editor', close: 'Close editor', timeline: 'Clip timeline', transcript: 'Editor Transcript', borders: 'Clip borders', captions: 'Captions',
     markIn: 'Mark in', markOut: 'Mark out', back: 'Reverse', pause: 'Pause', forward: 'Forward', rate: 'Speed', export: 'Export', exportNeedsCandidate: 'Open an approved candidate to export.',
     shortcuts: 'Shortcuts', hintPlay: 'reverse · pause · forward', hintMark: 'in · out (whole Sentence)', hintFrame: 'frame', hintSentence: 'previous/next Sentence', hintDrawers: 'drawers',
     duration: 'Duration {value}', start: 'In', end: 'Out', startEarlier: 'Extend start', startLater: 'Shorten start', endEarlier: 'Shorten end', endLater: 'Extend end',
@@ -84,6 +86,10 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
   const operations = useRef<Promise<void>>(Promise.resolve());
   const left = useGaveta();
   const right = useGaveta();
+  const [view, setView] = useState<'borders' | 'captions'>('borders');
+  const openRight = useCallback((next: 'borders' | 'captions') => { if (right.aberta && view !== next) setView(next); else { setView(next); right.alternar(); } }, [right, view]);
+  const captionRequest = useMemo(() => opened && range ? { source_id: request.source_id, start_id: startId, end_id: endId, candidate_id: request.candidate_id, clip_id: opened.clipId, start_us: range.startUs, end_us: range.endUs } : null, [opened, range, request.source_id, request.candidate_id, startId, endId]);
+  const captions = useCaptions(captionRequest);
   const scroller = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const state = useRef({ sourceUs: 0, rate: 0, startId, endId, sentences, opened, fps: 30 });
@@ -243,7 +249,8 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (target?.closest('[data-edge]') && key.startsWith('Arrow')) return;
       if (key === '[' && !inLayer?.closest('aside[data-lado="dir"]')) { take(); right.fechar(); left.alternar(); return; }
-      if (key === ']' && !inLayer?.closest('aside[data-lado="esq"]')) { take(); left.fechar(); right.alternar(); return; }
+      if (key === ']' && !inLayer?.closest('aside[data-lado="esq"]')) { take(); left.fechar(); openRight('borders'); return; }
+      if ((key === 'c' || key === 'C') && !inLayer) { take(); left.fechar(); openRight('captions'); return; }
       if (key === 'Escape') {
         if (left.aberta || right.aberta) { take(); left.fechar(); right.fechar(); } else if (!inLayer) { take(); close(); }
         return;
@@ -265,7 +272,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [left, right, close, seek, markAtPlayhead, edit, moveEdge]);
+  }, [left, right, openRight, close, seek, markAtPlayhead, edit, moveEdge]);
 
   // Tamanho da área rolável e rolagem; só o que cabe nela (mais uma folga) é montado.
   useEffect(() => {
@@ -334,10 +341,10 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
     <div className="relative flex min-h-0 flex-1 flex-col">
       <ZonaBorda lado="esq" g={left} /><ZonaBorda lado="dir" g={right} />
       <Puxador lado="esq" g={left} itens={[{ id: 'transcript', rotulo: t.transcript, atalho: '[', icone: <PanelLeft size={16} />, onClick: () => { right.fechar(); left.alternar(); } }]} />
-      <Puxador lado="dir" g={right} itens={[{ id: 'borders', rotulo: t.borders, atalho: ']', icone: <PanelRight size={16} />, onClick: () => { left.fechar(); right.alternar(); } }]} />
+      <Puxador lado="dir" g={right} itens={[{ id: 'borders', rotulo: t.borders, atalho: ']', icone: <PanelRight size={16} />, onClick: () => { left.fechar(); openRight('borders'); } }, { id: 'captions', rotulo: t.captions, atalho: 'C', icone: <Captions size={16} />, onClick: () => { left.fechar(); openRight('captions'); } }]} />
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4"><div className="m-auto flex flex-col items-center gap-3">
         {!opened && !error && <p aria-live="polite" className="text-fg-2">{t.loading}</p>}
-        {opened && <div style={{ width: 'min(18rem, 22vh)' }}><CutPreview sourceId={request.source_id} startUs={opened.startUs} endUs={opened.endUs} rate={rate} onSourceTime={us => setSourceUs(us)} /></div>}
+        {opened && <div style={{ width: 'min(18rem, 22vh)' }}><CutPreview sourceId={request.source_id} startUs={opened.startUs} endUs={opened.endUs} rate={rate} onSourceTime={us => setSourceUs(us)} captions={captions.data} /></div>}
         {opened && <div className="flex flex-wrap items-center justify-center gap-2" role="group" aria-label={t.shortcuts}>
           <Button tamanho="sm" onClick={() => setRate(nextRate(rate, 'j'))} atalho="J">{t.back.replace(/ \(.\)$/, '')}</Button>
           <Button tamanho="sm" onClick={() => setRate(0)} atalho="K">{t.pause.replace(/ \(.\)$/, '')}</Button>
@@ -398,7 +405,9 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
             <span className="mr-2 font-mono text-xs text-fg-3">{clock(s.startUs)}</span>{s.text}</button></li>)}
         </ol>
       </GavetaBorda>
-      <GavetaBorda lado="dir" g={right} rotulo={t.borders}>
+      <GavetaBorda lado="dir" g={right} rotulo={view === 'captions' ? t.captions : t.borders}>
+        {view === 'captions' ? <><CabecalhoGaveta acoes={<Button tamanho="sm" onClick={right.fechar}>{t.close.replace(/ .*/, '')}</Button>}><h3 className="font-semibold">{t.captions}</h3></CabecalhoGaveta>
+          {opened && <CaptionPanel data={captions.data} clipId={opened.clipId} sourceId={request.source_id} refresh={captions.refresh} loadError={captions.error} />}</> : <>
         <CabecalhoGaveta acoes={<Button tamanho="sm" onClick={right.fechar}>{t.close.replace(/ .*/, '')}</Button>}><h3 className="font-semibold">{t.borders}</h3></CabecalhoGaveta>
         <div className="flex flex-col gap-3 overflow-y-auto p-3 text-sm">
           <section aria-label={t.start}><h4 className="text-xs text-fg-2">{t.start} · #{startId}</h4><p>{startSentence?.text}</p>
@@ -407,7 +416,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
             <div className="mt-1 flex flex-wrap gap-2"><Button tamanho="sm" onClick={() => moveEdge('end', -1)} atalho="Ctrl+Shift+ArrowUp">{t.endEarlier}</Button><Button tamanho="sm" onClick={() => moveEdge('end', 1)} atalho="Ctrl+Shift+ArrowDown">{t.endLater}</Button></div></section>
           {range && <p className="font-mono text-xs text-fg-2">{fill(t.duration, { value: clock(range.endUs - range.startUs) })}</p>}
           <p className="text-fg-2">{t.note}</p>
-        </div>
+        </div></>}
       </GavetaBorda>
     </div>
   </section>;

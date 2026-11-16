@@ -4,6 +4,8 @@ import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
 import { coreDispatch } from '@/lib/core';
 import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
+import { CaptionOverlay } from '@/features/captions/CaptionOverlay';
+import type { CaptionData } from '@/features/captions/types';
 
 /** Corte (ou candidato da seleção) a pré-visualizar: tempos em µs da Fonte. */
 export type CutRange = { sourceId: number; startUs: number; endUs: number };
@@ -42,7 +44,7 @@ const mediaUrl = (key: string) => (isTauri() ? convertFileSrc(`proxy/${key}`, 'c
 
 /** Preview 9:16 em Fit (barras, sem corte) de um Corte, sobre o proxy de GOP curto gerado pelo núcleo. */
 /** `rate` (editor, #61): 0 pausa, >0 toca nessa velocidade, <0 volta por passos. `onSourceTime` informa o tempo da Fonte a cada atualização. */
-export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime }: { sourceId: number; startUs: number; endUs: number; rate?: number; onSourceTime?: (sourceUs: number) => void }) {
+export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, captions }: { sourceId: number; startUs: number; endUs: number; rate?: number; onSourceTime?: (sourceUs: number) => void; captions?: CaptionData | null }) {
   const t = useText(texts);
   const video = useRef<HTMLVideoElement>(null);
   const pending = useRef<number | null>(null);
@@ -147,10 +149,11 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime }: { s
       <div><Button tamanho="sm" onClick={() => void request(() => true)}>{t.retry}</Button></div>
     </div>}
     {proxy?.state === 'ready' && <>
-      <div className="aspect-[9/16] w-full overflow-hidden rounded-md border border-line bg-black">
+      <div className="relative aspect-[9/16] w-full overflow-hidden rounded-md border border-line bg-black">
         <video ref={video} src={mediaUrl(proxy.key)} aria-label={t.video} className="h-full w-full object-contain" playsInline preload="auto"
           onLoadedMetadata={onLoaded} onTimeUpdate={e => { setTime(e.currentTarget.currentTime); if (proxy) onSourceTime?.(proxy.windowStartUs + e.currentTarget.currentTime * 1_000_000); }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
           onError={() => { if (isTauri()) setNotice(t.playError); }} />
+        {captions && <CaptionOverlay data={captions} video={video} windowStartUs={proxy.windowStartUs} />}
       </div>
       <div className="flex items-center gap-2">
         <Button tamanho="sm" onClick={toggle}>{playing ? t.pause : t.play}</Button>

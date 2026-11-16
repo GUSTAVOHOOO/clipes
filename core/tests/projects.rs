@@ -73,9 +73,17 @@ fn project_lifecycle_and_library_rebuild() {
 #[test]
 fn document_envelopes_are_validated_by_type() {
     for kind in ["clip", "style", "script", "packaging"] {
+        let document = if kind == "style" {
+            serde_json::to_value(clipes_core::caption_style::Style::preset(
+                clipes_core::caption_style::Preset::Vertical,
+            ))
+            .unwrap()
+        } else {
+            json!({"schemaVersion":1,"revision":0})
+        };
         assert!(dispatch(
             "documents.validate",
-            json!({"type":kind,"document":{"schemaVersion":1,"revision":0}}),
+            json!({"type":kind,"document":document}),
             &mut |_| {}
         )
         .is_ok());
