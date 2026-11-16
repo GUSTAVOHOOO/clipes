@@ -5,8 +5,15 @@ import { sourceToSplicedUs } from '@/features/editor/timelineMath';
 
 type Style = { schemaVersion: 1; revision: number; preset: string; font: string; fontSize: number; color: string; activeColor: string; dimColor: string; outlineColor: string; outline: number; shadow: number; x: number; y: number; highlight: boolean };
 type Override = { color?: string; activeColor?: string; highlight?: boolean };
-const base = (preset: string): Style => ({ schemaVersion: 1, revision: 0, preset, font: preset === 'cinema' ? 'Noto Serif' : 'Noto Sans', fontSize: preset === 'vertical' ? 64 : 56, color: '#ffffff', activeColor: '#facc15', dimColor: '#ffffff', outlineColor: '#101010', outline: preset === 'cinema' ? 3 : 6, shadow: 0, x: 540, y: 1440, highlight: preset !== 'simple' });
+const base = (preset: string): Style => ({ schemaVersion: 1, revision: 0, preset, font: preset === 'cinema' ? 'Noto Serif' : 'Noto Sans', fontSize: preset === 'vertical' ? 64 : 56, color: '#FFFFFF', activeColor: '#FACC15', dimColor: '#FFFFFF', outlineColor: '#101010', outline: preset === 'cinema' ? 3 : 6, shadow: 0, x: 540, y: 1440, highlight: preset !== 'simple' });
 let projectDefault: Style | null = null;
+export function getDefaultCaptionStyleMock(): Style {
+  return { ...(projectDefault ?? base('vertical')) };
+}
+export function setDefaultCaptionStyleMock(style: Style): Style {
+  projectDefault = { ...style, revision: (projectDefault?.revision ?? 0) + 1 };
+  return { ...projectDefault };
+}
 const styles = new Map<number, Style>();
 const overrides = new Map<number, Override>();
 const emoji = /[\u200d\ufe0e\ufe0f\u20e3\u00a9\u00ae\u2300-\u23ff\u2600-\u27ff\u{1f000}-\u{1faff}]/u;

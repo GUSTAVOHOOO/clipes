@@ -310,21 +310,32 @@ struct Range {
 }
 
 fn parse_range(v: &Value) -> Result<Range, CoreError> {
-    let min_us = v["minUs"].as_i64().unwrap_or(MIN_CUT_US);
-    let max_us = v["maxUs"].as_i64().unwrap_or(MAX_CUT_US);
-    if min_us <= 0 || min_us >= max_us {
-        return Err(error(
+    let defaults = crate::channel_profile::selection_defaults()?;
+    let range_err = || {
+        error(
             "invalid_cut_range",
             "A faixa de duração dos Cortes é inválida: o mínimo precisa ser positivo e menor que o máximo.",
-        ));
+        )
+    };
+    let min_us = match v.get("minUs") {
+        None | Some(Value::Null) => defaults.min_us,
+        Some(n) => n.as_i64().ok_or_else(range_err)?,
+    };
+    let max_us = match v.get("maxUs") {
+        None | Some(Value::Null) => defaults.max_us,
+        Some(n) => n.as_i64().ok_or_else(range_err)?,
+    };
+    if min_us <= 0 || min_us >= max_us {
+        return Err(range_err());
     }
     Ok(Range { min_us, max_us })
 }
 
-/// `videoKind` do pedido: ausente vale Corte direto; qualquer outro valor é recusado.
+/// `videoKind` do pedido: ausente usa o padrão do Perfil de canal (Corte direto sem Perfil
+/// customizado); qualquer outro valor é recusado.
 pub(crate) fn parse_kind(v: &Value) -> Result<VideoKind, CoreError> {
     match v.get("videoKind") {
-        None | Some(Value::Null) => Ok(VideoKind::Direct),
+        None | Some(Value::Null) => Ok(crate::channel_profile::selection_defaults()?.video_kind),
         Some(Value::String(k)) => VideoKind::parse(k).ok_or_else(invalid_kind),
         _ => Err(invalid_kind()),
     }
@@ -351,10 +362,11 @@ fn window_input(frases: &[Sentence], range: &Range, marks: &Marks) -> TaskInput 
     let compact = sentences::compact_with_hint_marked(frases, marks);
     let length = frases.last().map_or(0, |s| s.end_us) - frases.first().map_or(0, |s| s.start_us);
     let target = target_candidates(length);
+    let desired_max = PREFERRED_MAX_US.min(range.max_us).max(range.min_us);
     let header = format!(
         "#JANELA max_candidatos={target} duracao_desejada_s={}-{} duracao_maxima_s={}\n",
         range.min_us / SECOND_US,
-        PREFERRED_MAX_US.max(range.min_us) / SECOND_US,
+        desired_max / SECOND_US,
         range.max_us / SECOND_US
     );
     TaskInput {
@@ -555,6 +567,8 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     Ok(json!({
         "paid": matches!(s.safety, Safety::Paid),
         "profile": s.profile,
+        "minUs": s.range.min_us,
+        "maxUs": s.range.max_us,
         "plan": {
             "state": state_label(s.plan.state),
             "windows": windows_json(&s),
@@ -674,7 +688,7 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         },
     )?;
     Ok(
-        json!({"run": run, "batch": batch_for(run), "videoKind": s.kind.as_str(), "windows": s.plan.windows.len(), "planState": state_label(s.plan.state), "weights": weights_json(s.kind)}),
+        json!({"run": run, "batch": batch_for(run), "videoKind": s.kind.as_str(), "minUs": s.range.min_us, "maxUs": s.range.max_us, "windows": s.plan.windows.len(), "planState": state_label(s.plan.state), "weights": weights_json(s.kind)}),
     )
 }
 

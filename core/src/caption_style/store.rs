@@ -8,6 +8,55 @@ use unicode_normalization::UnicodeNormalization;
 #[derive(Clone, Copy, Debug)]
 pub struct ClipId(pub i64);
 
+/// Lê o estilo padrão do Projeto em `caption_style_default`, caindo em Vertical quando ausente.
+pub(crate) fn default_style_in(
+    c: &rusqlite::Connection,
+) -> rusqlite::Result<Result<Style, CoreError>> {
+    let default: Option<String> = c
+        .query_row(
+            "SELECT document FROM caption_style_default WHERE id=1",
+            [],
+            |r| r.get(0),
+        )
+        .optional()?;
+    let style = match default {
+        Some(doc) => match serde_json::from_str::<Style>(&doc) {
+            Ok(s) => s,
+            Err(_) => return Ok(Err(invalid())),
+        },
+        None => Style::preset(Preset::Vertical),
+    };
+    Ok(style.validate().map(|()| style))
+}
+
+/// Grava o estilo padrão do Projeto em `caption_style_default`, incrementando a revisão.
+pub(crate) fn save_default_style_in(
+    tx: &Transaction<'_>,
+    mut next: Style,
+) -> rusqlite::Result<Result<Style, CoreError>> {
+    if let Err(e) = next.validate() {
+        return Ok(Err(e));
+    }
+    let revision = tx
+        .query_row(
+            "SELECT json_extract(document,'$.revision') FROM caption_style_default WHERE id=1",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .optional()?
+        .unwrap_or(0);
+    next.revision = revision.saturating_add(1) as u64;
+    let encoded = match serde_json::to_string(&next) {
+        Ok(s) => s,
+        Err(_) => return Ok(Err(invalid())),
+    };
+    tx.execute(
+        "INSERT INTO caption_style_default VALUES (1,?1) ON CONFLICT(id) DO UPDATE SET document=excluded.document",
+        [encoded],
+    )?;
+    Ok(Ok(next))
+}
+
 /// A criação é preguiçosa: cada Corte recebe uma cópia independente do padrão.
 pub fn style(clip: ClipId) -> Result<Style, CoreError> {
     let result = projects::with_writer(|c| {
@@ -30,17 +79,7 @@ pub fn style(clip: ClipId) -> Result<Style, CoreError> {
         let result = if let Some(saved) = saved {
             serde_json::from_str::<Style>(&saved).map_err(|_| invalid())
         } else {
-            let default: Option<String> = tx
-                .query_row(
-                    "SELECT document FROM caption_style_default WHERE id=1",
-                    [],
-                    |r| r.get(0),
-                )
-                .optional()?;
-            let mut style = match default {
-                Some(doc) => serde_json::from_str::<Style>(&doc).map_err(|_| invalid()),
-                None => Ok(Style::preset(Preset::Vertical)),
-            };
+            let mut style = default_style_in(&tx)?;
             if let Ok(style) = &mut style {
                 style.revision = 0;
                 tx.execute(
@@ -103,22 +142,16 @@ fn preset_style(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     set_style(json!({"clip_id":id.0,"style":next}), events)
 }
 fn default_style(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let mut next = style(clip(&v)?)?;
-    projects::with_writer(|c| {
+    let next = style(clip(&v)?)?;
+    let saved = projects::with_writer(|c| {
         let tx = c.transaction()?;
-        let revision = tx
-            .query_row(
-                "SELECT json_extract(document,'$.revision') FROM caption_style_default WHERE id=1",
-                [],
-                |r| r.get::<_, i64>(0),
-            )
-            .optional()?
-            .unwrap_or(0);
-        next.revision = revision.saturating_add(1) as u64;
-        tx.execute("INSERT INTO caption_style_default VALUES (1,?1) ON CONFLICT(id) DO UPDATE SET document=excluded.document",[serde_json::to_string(&next).unwrap()])?;
-        tx.commit()
-    })?;
-    Ok(json!(next))
+        let saved = save_default_style_in(&tx, next)?;
+        if saved.is_ok() {
+            tx.commit()?;
+        }
+        Ok(saved)
+    })??;
+    Ok(json!(saved))
 }
 
 inventory::submit! {projects::Migration {id:"0065_001_caption_styles",sql:"
