@@ -117,7 +117,15 @@ impl TranscriptionEngine for GroqEngine {
         let token = crate::provider::CancelToken::new();
         let finished = AtomicBool::new(false);
         let mut response_sha256 = None;
-        let call = remote::begin(job, transcript, resume, covered, &self.endpoint, &audio)?;
+        let call = remote::begin(
+            job,
+            transcript,
+            resume,
+            covered,
+            &self.endpoint,
+            &audio,
+            input.language,
+        )?;
         progress(0);
         let result = std::thread::scope(|scope| {
             scope.spawn(|| {
@@ -133,6 +141,7 @@ impl TranscriptionEngine for GroqEngine {
                 &self.endpoint,
                 &self.key,
                 &audio,
+                input.language,
                 &token,
                 self.timeout,
                 &mut response_sha256,
@@ -264,14 +273,18 @@ inventory::submit! { CommandRegistration { name: "transcription.groq.key.test", 
 const BOUNDARY: &str = "clipes-transcription-boundary";
 
 /// O corpo multipart exato enviado ao Groq (a trilha de auditoria, #125, conta seus bytes).
-pub(super) fn multipart_body(audio: &[u8]) -> Vec<u8> {
+pub(super) fn multipart_body(audio: &[u8], language: Option<&str>) -> Vec<u8> {
     let boundary = BOUNDARY;
     let mut body = Vec::with_capacity(audio.len() + 1024);
-    for (name, value) in [
+    let mut fields = vec![
         ("model", "whisper-large-v3-turbo"),
         ("response_format", "verbose_json"),
         ("timestamp_granularities[]", "word"),
-    ] {
+    ];
+    if let Some(lang) = language {
+        fields.push(("language", lang));
+    }
+    for (name, value) in fields {
         body.extend_from_slice(
             format!(
                 "--{boundary}
@@ -322,7 +335,19 @@ pub(super) fn request(
     cancel: &crate::provider::CancelToken,
     timeout: Duration,
 ) -> Result<Vec<Word>, CoreError> {
-    request_audited(endpoint, key, audio, cancel, timeout, &mut None)
+    request_audited(endpoint, key, audio, None, cancel, timeout, &mut None)
+}
+
+#[cfg(test)]
+pub(super) fn request_with_language(
+    endpoint: &str,
+    key: &str,
+    audio: &[u8],
+    language: Option<&str>,
+    cancel: &crate::provider::CancelToken,
+    timeout: Duration,
+) -> Result<Vec<Word>, CoreError> {
+    request_audited(endpoint, key, audio, language, cancel, timeout, &mut None)
 }
 
 /// Como `request`, e guarda em `response_sha256` o SHA-256 do último corpo de resposta
@@ -331,6 +356,7 @@ pub(super) fn request_audited(
     endpoint: &str,
     key: &str,
     audio: &[u8],
+    language: Option<&str>,
     cancel: &crate::provider::CancelToken,
     timeout: Duration,
     response_sha256: &mut Option<String>,
@@ -346,7 +372,7 @@ pub(super) fn request_audited(
         ));
     }
     let boundary = BOUNDARY;
-    let body = multipart_body(audio);
+    let body = multipart_body(audio, language);
     let client = reqwest::blocking::Client::builder()
         .timeout(timeout)
         .redirect(reqwest::redirect::Policy::none())
@@ -488,9 +514,8 @@ pub(super) fn request_audited(
                                 .into(),
                             start_us,
                             end_us,
-                            language: value["language"]
-                                .as_str()
-                                .and_then(language_code)
+                            language: language
+                                .or_else(|| value["language"].as_str().and_then(language_code))
                                 .map(str::to_owned),
                         })
                     })
@@ -504,7 +529,7 @@ pub(super) fn request_audited(
 
 // Whisper tokenizer LANGUAGES, excluding the three-letter `yue`, which is not ISO-639-1.
 // https://github.com/openai/whisper/blob/main/whisper/tokenizer.py
-const LANGUAGES: &[(&str, &str)] = &[
+pub const LANGUAGES: &[(&str, &str)] = &[
     ("en", "english"),
     ("zh", "chinese"),
     ("de", "german"),
@@ -605,7 +630,7 @@ const LANGUAGES: &[(&str, &str)] = &[
     ("su", "sundanese"),
 ];
 
-pub(super) fn language_code(input: &str) -> Option<&'static str> {
+pub fn language_code(input: &str) -> Option<&'static str> {
     LANGUAGES
         .iter()
         .find(|(code, name)| input.eq_ignore_ascii_case(code) || input.eq_ignore_ascii_case(name))
