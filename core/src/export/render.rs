@@ -187,6 +187,17 @@ pub fn render(
     cancel: &CancelToken,
     progress: &mut dyn FnMut(u8),
 ) -> Result<(), CoreError> {
+    render_with(ffmpeg, input, super::encoder::X264, cancel, progress)
+}
+
+/// Igual a `render`, com o encoder da etapa `SelectedEncoder` (#62).
+pub fn render_with(
+    ffmpeg: &Path,
+    input: &RenderInput,
+    encoder: &str,
+    cancel: &CancelToken,
+    progress: &mut dyn FnMut(u8),
+) -> Result<(), CoreError> {
     validate_output(&input.output)?;
     if input.start_us < 0 || input.end_us <= input.start_us || input.audio_track < 0 {
         return Err(error("export_bounds", "As bordas do Corte são inválidas."));
@@ -214,7 +225,7 @@ pub fn render(
             "A Fonte está indisponível ou foi alterada.",
         )
     })?;
-    let plan = pipeline::standard();
+    let plan = pipeline::with_encoder(encoder);
     let mut args: Vec<OsString> = vec![
         "-hide_banner".into(),
         "-nostdin".into(),
