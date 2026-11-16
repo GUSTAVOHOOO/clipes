@@ -398,11 +398,28 @@ pub fn render_styled_spliced_with_fallback(
     cancel: &CancelToken,
     progress: &mut dyn FnMut(u8),
 ) -> Result<Outcome, CoreError> {
+    render_styled_spliced_with_fallback_overwrite(
+        ffmpeg, input, segments, prepared, preferred, false, cancel, progress,
+    )
+}
+
+/// Variante interna usada pelo lote (#64) com sobrescrita confirmada.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn render_styled_spliced_with_fallback_overwrite(
+    ffmpeg: &Path,
+    input: &RenderInput,
+    segments: &[crate::editor::silences::KeptSegment],
+    prepared: &crate::caption_style::Prepared,
+    preferred: &str,
+    overwrite: bool,
+    cancel: &CancelToken,
+    progress: &mut dyn FnMut(u8),
+) -> Result<Outcome, CoreError> {
     with_fallback(
         preferred,
         |encoder, progress| {
-            render::render_styled_spliced_with(
-                ffmpeg, input, segments, prepared, encoder, cancel, progress,
+            render::render_styled_spliced_with_overwrite(
+                ffmpeg, input, segments, prepared, encoder, overwrite, cancel, progress,
             )
         },
         progress,

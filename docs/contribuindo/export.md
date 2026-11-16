@@ -40,9 +40,12 @@ Se a Fonte mudou ou ficou offline, o export é bloqueado. A fila verifica de nov
 Fonte, bordas, revisão e texto ao começar. Uma interrupção do app recoloca o job
 local na fila; ele refaz o render inteiro. Não reaproveita MP4 parcial.
 
-O destino deve ser um caminho absoluto `.mp4` em pasta existente. O diálogo do
-sistema pode avisar sobre arquivo existente, mas **o núcleo sempre recusa
-sobrescrita**, inclusive se outro processo criou o arquivo durante o render.
+O destino deve ser um caminho absoluto `.mp4` em pasta existente. No export
+avulso, o diálogo do sistema pode avisar sobre arquivo existente, mas **o núcleo
+sempre recusa sobrescrita** (`persist_noclobber`), inclusive se outro processo
+criou o arquivo durante o render. A única exceção é o **lote de export (#64)**
+quando o usuário confirma explicitamente a substituição dos conflitos listados
+(`confirmed: true` após `confirmation_required`).
 Um temporário exclusivo na mesma pasta só é publicado depois do sucesso de
 FFmpeg/libass; falha, cancelamento e encerramento normal removem os temporários.
 Erros usam códigos/mensagens fixos, sem stderr, Transcrição ou caminhos pessoais
@@ -51,6 +54,32 @@ Erros usam códigos/mensagens fixos, sem stderr, Transcrição ou caminhos pesso
 `export_glyph_missing` (informa a palavra sem glifo da legenda, o codepoint e a
 Frase, validado no `cmap` antes de chamar o FFmpeg), `export_failed`,
 `source_changed`, `component_missing` e `cancelled`.
+
+## Export em lote (#64)
+
+`export/batch.rs` (migração `0064_001_export_batches`) exporta todos os Cortes
+aprovados de uma Fonte (`{source_id, output_dir}`) ou do Projeto aberto
+(`{project?, output_dir}`), considerando **todas** as `selection_runs` da
+Transcrição ativa (completa) de cada Fonte; Transcrições inativas ficam fora.
+Quando o Corte tem documento editado no #70 (`clip_edits` para
+`candidate:<id>`), o lote usa o `clip_id` (bordas editadas, silêncios e crop);
+senão, usa as bordas aprovadas da revisão.
+
+- O lote não reimplementa o render: enfileira N jobs `export` individuais na fila
+  do #44, preserva o `ProgressEvent` de cada Corte e agrega o progresso total
+  **ponderado pela duração** (`export-batch-<id>`).
+- Os nomes são estáveis e sem colisão na pasta escolhida uma única vez:
+  `<fonte>-<nn>-<início>.mp4`. Se algum nome já existir na pasta, `export.batch.start`
+  recusa antes de renderizar com `confirmation_required` e `usage.conflicts`
+  contendo só os basenames (sem caminhos, ADR-0006). Com `confirmed: true`, cada
+  arquivo é renderizado em temporário na mesma pasta e substituído atomicamente
+  ao concluir com sucesso.
+- `export.batch.cancel {id}` aciona o `CancelToken` do job em andamento e cancela
+  os jobs ainda na fila. Uma falha em um Corte registra o código tipado no item
+  e o lote segue nos demais.
+- Comandos: `export.batch.start`, `export.batch.status {id}`,
+  `export.batch.list {source_id?}` e `export.batch.cancel {id}`. Testes
+  headless com FFmpeg real: `core/tests/export_batch.rs`.
 
 ## Etapas e pontos de extensão
 
