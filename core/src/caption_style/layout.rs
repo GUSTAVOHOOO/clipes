@@ -150,7 +150,7 @@ fn time(us: i64) -> String {
     )
 }
 fn ass(cues: &[Cue], s: &Style) -> String {
-    let mut out=format!("[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nScaledBorderAndShadow: yes\nWrapStyle: 2\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,{},{},{},{},{},&H00000000,-1,0,0,0,100,100,0,0,1,{},{},2,0,0,0,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n",s.font,s.font_size,color(&s.active_color),color(&s.color),color(&s.outline_color),s.outline,s.shadow);
+    let mut out=format!("[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nScaledBorderAndShadow: yes\nWrapStyle: 2\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,{},{},{},{},{},&H00000000,{},0,0,0,100,100,0,0,1,{},{},2,0,0,0,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n",s.ass_font(),s.font_size,color(&s.active_color),color(&s.color),color(&s.outline_color),s.ass_bold(),s.outline,s.shadow);
     for cue in cues {
         let mut text = format!(
             "{{\\an2\\pos({},{}){}}}",

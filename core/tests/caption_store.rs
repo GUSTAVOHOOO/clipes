@@ -1,12 +1,14 @@
 //! Mesma fronteira de dispatch da UI, sem rede e com Projeto isolado.
 use clipes_core::{dispatch, projects::with_writer};
 use serde_json::{json, Value};
+static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 fn call(name: &str, args: Value) -> Value {
     dispatch(name, args, &mut |_| {}).unwrap()
 }
 
 #[test]
 fn overrides_are_persistent_independent_of_presets_and_remap_only_unique_near_words() {
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let root = tempfile::tempdir().unwrap();
     std::env::set_var("CLIPES_DATA_DIR", root.path().join("data"));
     let project = call(
@@ -58,5 +60,45 @@ fn overrides_are_persistent_independent_of_presets_and_remap_only_unique_near_wo
         call("captions.remap_status", json!({"source_id":1}))["discarded"],
         2
     );
+    call("projects.close", json!({}));
+}
+
+#[test]
+fn style_is_per_clip_new_clips_copy_the_project_default_and_stale_revisions_conflict() {
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let root = tempfile::tempdir().unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", root.path().join("data"));
+    call(
+        "projects.create",
+        json!({"parent":root.path(),"name":"Estilos"}),
+    );
+    let first = call("captions.style.get", json!({"clip_id":1}));
+    assert_eq!(first["preset"], "vertical");
+    let cinema = call(
+        "captions.style.preset",
+        json!({"clip_id":1,"preset":"cinema","revision":first["revision"]}),
+    );
+    assert_eq!(cinema["revision"], 1);
+    let stale = dispatch(
+        "captions.style.preset",
+        json!({"clip_id":1,"preset":"simple","revision":0}),
+        &mut |_| {},
+    )
+    .unwrap_err();
+    assert_eq!(stale.code, "caption_style_conflict");
+    // O padrão ainda é o inicial: o Corte 2 não herda o estilo do Corte 1.
+    assert_eq!(
+        call("captions.style.get", json!({"clip_id":2}))["preset"],
+        "vertical"
+    );
+    call("captions.style.default", json!({"clip_id":1}));
+    let third = call("captions.style.get", json!({"clip_id":3}));
+    assert_eq!(third["preset"], "cinema");
+    assert_eq!(third["revision"], 0);
+    assert_eq!(
+        call("captions.style.get", json!({"clip_id":2}))["preset"],
+        "vertical"
+    );
+    assert!(dispatch("captions.style.get", json!({"clip_id":0}), &mut |_| {}).is_err());
     call("projects.close", json!({}));
 }

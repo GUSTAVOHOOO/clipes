@@ -12,14 +12,7 @@ pub struct ClipId(pub i64);
 pub fn style(clip: ClipId) -> Result<Style, CoreError> {
     let result = projects::with_writer(|c| {
         let tx = c.transaction()?;
-        let exists = tx.query_row(
-            "SELECT EXISTS(SELECT 1 FROM clip_edits WHERE id=?1)",
-            [clip.0],
-            |r| r.get::<_, bool>(0),
-        )?;
-        if !exists {
-            return Ok(Err(invalid()));
-        }
+        // TODO(#70): validar o Corte em clip_edits e ligar a FK ON DELETE CASCADE quando o #199 entrar.
         let saved: Option<String> = tx
             .query_row(
                 "SELECT document FROM caption_styles WHERE clip_id=?1",

@@ -140,3 +140,24 @@ pub struct StyledWord {
     pub position: i64,
     pub overrides: WordOverride,
 }
+
+impl Style {
+    /// O TTF do Noto Serif Bold declara família "Noto Serif Bold" (nameID 1) e "Noto Serif"
+    /// só como família tipográfica (nameID 16): DirectWrite só enxerga a primeira.
+    /// fontconfig lista as duas, então o nome longo casa nas duas plataformas.
+    pub fn ass_font(&self) -> &str {
+        if self.font == "Noto Serif" {
+            "Noto Serif Bold"
+        } else {
+            &self.font
+        }
+    }
+    /// O nome longo já é o peso Bold; pedir negrito de novo faria o libass sintetizar.
+    pub fn ass_bold(&self) -> i32 {
+        if self.font == "Noto Serif" {
+            0
+        } else {
+            -1
+        }
+    }
+}
