@@ -6,6 +6,7 @@ use serde_json::{json, Value};
 
 pub mod assets;
 pub(crate) mod edits;
+pub mod silences;
 
 /// Faixa de duração quando o Corte não vem de um candidato (a mesma da seleção, #53).
 pub const MIN_CLIP_US: i64 = 20_000_000;

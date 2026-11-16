@@ -33,6 +33,11 @@ pub(crate) struct Document {
     undo: Vec<Borders>,
     redo: Vec<Borders>,
 }
+impl Document {
+    pub(crate) fn active_silences(&self) -> Vec<(i64, i64)> {
+        Vec::new()
+    }
+}
 struct Entry {
     doc: Document,
     dirty: Option<Instant>,

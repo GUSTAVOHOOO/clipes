@@ -1,4 +1,7 @@
 //! Etapas compõem um plano, nunca executam processos. Veja docs/contribuindo/export.md.
+use crate::editor::silences::{KeptSegment, SPLICE_FADE_US};
+use std::fmt::Write;
+
 #[derive(Default, Debug)]
 pub struct ExportPlan {
     pub video_filters: Vec<String>,
@@ -114,4 +117,112 @@ pub fn with_loudness(encoder: &str, measured: Option<Measured>) -> ExportPlan {
         stage.apply(&mut plan);
     }
     plan
+}
+
+fn sec(us: i64) -> String {
+    format!("{}.{:06}", us / 1_000_000, us % 1_000_000)
+}
+
+fn push_audio_trim_fade(
+    out: &mut String,
+    idx: usize,
+    start_us: i64,
+    end_us: i64,
+    fade_in: bool,
+    fade_out: bool,
+) {
+    let dur_us = end_us - start_us;
+    let fade_us = SPLICE_FADE_US.min(dur_us / 2);
+    let _ = write!(
+        out,
+        "[a{idx}]atrim=start={}:end={},asetpts=PTS-STARTPTS",
+        sec(start_us),
+        sec(end_us)
+    );
+    if fade_in && fade_us > 0 {
+        let _ = write!(out, ",afade=t=in:st=0:d={}", sec(fade_us));
+    }
+    if fade_out && fade_us > 0 {
+        let _ = write!(
+            out,
+            ",afade=t=out:st={}:d={}",
+            sec(dur_us - fade_us),
+            sec(fade_us)
+        );
+    }
+    let _ = write!(out, "[at{idx}];");
+}
+
+/// Monta o grafo da 1ª passagem do `loudnorm` sobre o áudio já emendado (#77).
+pub fn build_measure_filter_complex(
+    audio_track: i64,
+    clip_start_us: i64,
+    segments: &[KeptSegment],
+) -> String {
+    let n = segments.len();
+    let mut out = format!("[0:{audio_track}]asplit={n}");
+    for i in 0..n {
+        let _ = write!(out, "[a{i}]");
+    }
+    out.push(';');
+    for (i, seg) in segments.iter().enumerate() {
+        push_audio_trim_fade(
+            &mut out,
+            i,
+            seg.source_start_us - clip_start_us,
+            seg.source_end_us - clip_start_us,
+            i > 0,
+            i + 1 < n,
+        );
+    }
+    for i in 0..n {
+        let _ = write!(out, "[at{i}]");
+    }
+    let _ = write!(
+        out,
+        "concat=n={n}:v=0:a=1,{}[aout]",
+        loudnorm_measure_filter()
+    );
+    out
+}
+
+/// Monta o grafo completo (#77): corte e `concat` de vídeo e áudio pelos mesmos pontos
+/// com `afade` curto sem sobreposição (nunca `acrossfade`), antes de legenda e loudness.
+pub fn build_spliced_filter_complex(
+    audio_track: i64,
+    clip_start_us: i64,
+    segments: &[KeptSegment],
+    plan: &ExportPlan,
+) -> String {
+    let n = segments.len();
+    let mut out = format!("[0:v:0]split={n}");
+    for i in 0..n {
+        let _ = write!(out, "[v{i}]");
+    }
+    let _ = write!(out, ";[0:{audio_track}]asplit={n}");
+    for i in 0..n {
+        let _ = write!(out, "[a{i}]");
+    }
+    out.push(';');
+    for (i, seg) in segments.iter().enumerate() {
+        let rel_s = seg.source_start_us - clip_start_us;
+        let rel_e = seg.source_end_us - clip_start_us;
+        let _ = write!(
+            out,
+            "[v{i}]trim=start={}:end={},setpts=PTS-STARTPTS[vt{i}];",
+            sec(rel_s),
+            sec(rel_e)
+        );
+        push_audio_trim_fade(&mut out, i, rel_s, rel_e, i > 0, i + 1 < n);
+    }
+    for i in 0..n {
+        let _ = write!(out, "[vt{i}][at{i}]");
+    }
+    let _ = write!(
+        out,
+        "concat=n={n}:v=1:a=1[vc][ac];[vc]{}[vout];[ac]{}[aout]",
+        plan.video_filters.join(","),
+        plan.audio_filters.join(",")
+    );
+    out
 }

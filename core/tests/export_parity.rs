@@ -368,3 +368,150 @@ fn real_ffmpeg_preserves_fit_geometry_timing_vfr_sar_rotation_and_bundled_font()
         .count();
     assert!(changed > 100, "métrica não detectou fallback: {changed}");
 }
+
+#[test]
+fn real_ffmpeg_silence_splicing_keeps_av_duration_parity_and_remaps_captions() {
+    use clipes_core::editor::silences::{
+        detect_from_words, refine_valleys, SpliceMap, DEFAULT_MIN_SILENCE_US,
+    };
+    use clipes_core::export::render::render_spliced;
+
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("speech_with_silences.mp4");
+    // 11 trechos de fala (1.0 s) separados por 10 silêncios de 1.2 s -> 24 s totais a 25 fps.
+    let audio_expr = "sine=frequency=440:sample_rate=48000:duration=24,volume='if(lt(mod(t,2.2),1.0),0.8,0.0)':eval=frame";
+    ffmpeg(&[
+        "-v",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc2=size=160x90:rate=25:duration=24",
+        "-f",
+        "lavfi",
+        "-i",
+        audio_expr,
+        "-map",
+        "0:v",
+        "-map",
+        "1:a",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-y",
+        source.to_str().unwrap(),
+    ]);
+
+    let mut raw_words = Vec::new();
+    for i in 0..11_i64 {
+        let s = i * 2_200_000 + 200_000;
+        let e = s + 600_000;
+        raw_words.push((s, e));
+    }
+    let mut intervals =
+        detect_from_words(&raw_words, 0, 24_000_000, DEFAULT_MIN_SILENCE_US).unwrap();
+    assert_eq!(intervals.len(), 10, "esperava 10 silêncios detectados");
+
+    let program = std::env::var("CLIPES_TEST_FFMPEG").unwrap_or("ffmpeg".into());
+    if let Some(samples) =
+        clipes_core::editor::silences::extract_pcm(Path::new(&program), &source, 1, 0, 24_000_000)
+    {
+        refine_valleys(&mut intervals, &samples, 16_000, 0);
+    }
+
+    let active_cuts: Vec<(i64, i64)> = intervals.iter().map(|i| (i.start_us, i.end_us)).collect();
+    let splice = SpliceMap::new(0, 24_000_000, &active_cuts);
+    assert_eq!(splice.segments.len(), 11);
+
+    let words: Vec<CaptionWord> = raw_words
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &(s, e))| {
+            let (ms, me) = splice.remap_word(s, e)?;
+            Some(CaptionWord {
+                text: format!("palavra{i}"),
+                start_us: ms,
+                end_us: me,
+            })
+        })
+        .collect();
+    assert_eq!(words.len(), 11);
+
+    let output = root.path().join("spliced.mp4");
+    let input = RenderInput {
+        source: source.clone(),
+        output: output.clone(),
+        start_us: 0,
+        end_us: 24_000_000,
+        audio_track: 1,
+        words: words.clone(),
+    };
+    let mut progress = Vec::new();
+    render_spliced(
+        Path::new(&program),
+        &input,
+        &splice.segments,
+        &CancelToken::new(),
+        &mut |p| progress.push(p),
+    )
+    .unwrap();
+    assert_eq!(progress.last(), Some(&100));
+
+    let info = probe(&output);
+    let v_dur: f64 = info["streams"][0]["duration"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let a_dur: f64 = info["streams"][1]["duration"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let expected_s = splice.output_duration_us as f64 / 1_000_000.0;
+    assert!(
+        (v_dur - a_dur).abs() < 0.05,
+        "deriva entre vídeo ({v_dur}s) e áudio ({a_dur}s) após 10 emendas"
+    );
+    assert!(
+        (a_dur - expected_s).abs() < 0.12,
+        "duração emendada ({a_dur}s) distante do esperado ({expected_s}s)"
+    );
+
+    // Após 9 emendas, a 10ª palavra continua alinhada no vídeo e na legenda.
+    let w9 = &words[9];
+    let mid_out = (w9.start_us + w9.end_us) as f64 / 2_000_000.0;
+    let mid_src = splice.output_to_source((w9.start_us + w9.end_us) / 2) as f64 / 1_000_000.0;
+    let actual = frame(&output, mid_out, "scale=270:480");
+    let ref_filter =
+        "scale=1080:606,setsar=1,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,scale=270:480";
+    let metrics: Vec<_> = [-0.08, -0.04, 0.0, 0.04]
+        .into_iter()
+        .map(|dt| {
+            let expected = frame(&source, (mid_src + dt).max(0.0), ref_filter);
+            differences(&actual, &expected)
+        })
+        .collect();
+    let best = metrics
+        .iter()
+        .min_by(|a, b| a.0.total_cmp(&b.0))
+        .copied()
+        .unwrap();
+    eprintln!(
+        "spliced parity: v_dur={v_dur} a_dur={a_dur} expected={expected_s} best={best:?} all={metrics:?}"
+    );
+    assert!(
+        best.0 < 2.0,
+        "fundo desalinhado após 9 emendas: erro {}",
+        best.0
+    );
+    assert!(
+        best.1 + best.2 > 20,
+        "legenda remapeada ausente no quadro esperado: {best:?}"
+    );
+}

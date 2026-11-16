@@ -134,3 +134,73 @@ fn exported_audio_lands_on_the_platform_target_for_quiet_and_loud_sources() {
         assert!(info.status.success());
     }
 }
+
+#[test]
+fn spliced_audio_is_measured_and_normalized_after_silence_removal() {
+    use clipes_core::editor::silences::SpliceMap;
+    use clipes_core::export::render::render_spliced;
+
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("spliced_loudness.mp4");
+    // Fala baixa nos trechos mantidos e ruído alto apenas nos silêncios removidos: o loudnorm
+    // deve medir só o áudio já emendado, não os trechos descartados.
+    let audio = "sine=frequency=440:sample_rate=44100:duration=8,volume='if(between(t,2.0,4.0),1.0,0.08)':eval=frame[s];\
+                 anoisesrc=color=pink:sample_rate=44100:duration=8:amplitude=0.4,volume='if(between(t,2.0,4.0),1.0,0.05)':eval=frame[n];\
+                 [s][n]amix=inputs=2:normalize=0[a]";
+    ffmpeg(&[
+        "-v",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc2=size=320x180:rate=15:duration=8",
+        "-filter_complex",
+        audio,
+        "-map",
+        "0:v",
+        "-map",
+        "[a]",
+        "-t",
+        "8",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-c:a",
+        "aac",
+        "-y",
+        source.to_str().unwrap(),
+    ]);
+    let splice = SpliceMap::new(0, 8_000_000, &[(2_000_000, 4_000_000)]);
+    let output = root.path().join("spliced.mp4");
+    let program = std::env::var("CLIPES_TEST_FFMPEG").unwrap_or("ffmpeg".into());
+    let input = RenderInput {
+        source,
+        output: output.clone(),
+        start_us: 0,
+        end_us: 8_000_000,
+        audio_track: 1,
+        words: vec![CaptionWord {
+            text: "fala".into(),
+            start_us: 0,
+            end_us: 500_000,
+        }],
+    };
+    render_spliced(
+        Path::new(&program),
+        &input,
+        &splice.segments,
+        &CancelToken::new(),
+        &mut |_| {},
+    )
+    .unwrap();
+    let (integrated, peak) = measure(&output);
+    assert!(
+        (integrated - -14.0).abs() <= TOLERANCE_LU,
+        "emendado: {integrated} LUFS fora de -14 ± 1"
+    );
+    assert!(
+        peak <= -1.0 + PEAK_TOLERANCE_DB,
+        "emendado: true peak {peak} dBTP acima de -1 (+0,1)"
+    );
+}
