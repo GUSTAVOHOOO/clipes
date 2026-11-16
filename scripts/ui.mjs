@@ -579,6 +579,18 @@ try {
     await packTitle.fill('Meu título');
     await pack.getByRole('button', { name: /Salvar edições|Save edits/ }).click();
     await pack.getByRole('status').filter({ hasText: /salvas|saved/ }).waitFor();
+    // Capa (#74): sugestão do Provedor, escolha pelo preview e export em PNG.
+    const cover = review.locator('[data-thumbnail]');
+    assert.equal(await cover.getByRole('button', { name: /Salvar capa|Save cover/ }).isDisabled(), true, 'sem momento escolhido não há o que exportar');
+    await cover.getByRole('button', { name: /Sugerir momento|Suggest the cover/ }).click();
+    await cover.locator('[data-thumbnail-current]').waitFor();
+    assert.equal(await cover.locator('[data-thumbnail-current]').getAttribute('data-thumbnail-current'), '65000000');
+    assert.match(await cover.innerText(), /maior impacto|biggest impact|greatest impact/i);
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('clipes-preview-time', { detail: { source_id: 1, us: 90_000_000 } })));
+    await cover.getByRole('button', { name: /Usar o instante do preview|Use the preview time/ }).click();
+    await cover.locator('[data-thumbnail-current="90000000"]').waitFor();
+    await cover.getByRole('button', { name: /Salvar capa|Save cover/ }).click();
+    await cover.getByRole('status').filter({ hasText: /Capa salva|Cover saved/ }).waitFor();
     await review.getByRole('button', { name: L.export }).click();
     await review.getByText(L.exportRunning).waitFor();
     await review.getByRole('button', { name: L.exportCancel }).click();

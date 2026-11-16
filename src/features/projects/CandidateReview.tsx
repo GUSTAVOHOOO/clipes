@@ -6,6 +6,7 @@ import { Kbd } from '@/components/ui/Kbd';
 import { clock, fill } from './selectionFormat';
 import { VideoKindBadge, type VideoKind } from './videoKind';
 import { Packaging } from './Packaging';
+import { Thumbnail } from './Thumbnail';
 import { ExportButton } from '@/features/export/ExportButton';
 
 type Weight = { key: string; weight: number };
@@ -181,6 +182,7 @@ export function CandidateReview({ sourceId, run, videoKind = 'direct', candidate
           <ExportButton key={`${sourceId}-${current.id}`} sourceId={sourceId} candidateId={current.id} title={current.title} startId={review?.startId} endId={review?.endId} approved={review?.status === 'approved'} />
         </div>
         {review?.status === 'approved' && <Packaging key={current.id} candidate={current.id} />}
+        {review?.status === 'approved' && <Thumbnail key={`thumbnail-${current.id}`} candidate={current.id} />}
       </section>}
     </div>
     {error && <p role="alert" className="text-danger">{error}</p>}

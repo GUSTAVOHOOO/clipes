@@ -11,6 +11,9 @@ export type CutRange = { sourceId: number; startUs: number; endUs: number };
 export type PreviewSeekEvent = { source_id: number; us: number };
 export const previewSeekEvent = 'clipes-preview-seek';
 export const previewOpenEvent = 'clipes-preview-open';
+/** O preview aberto avisa o instante em que está (µs da Fonte); a capa (#74) usa para marcar o quadro. */
+export type PreviewTimeEvent = { source_id: number; us: number };
+export const previewTimeEvent = 'clipes-preview-time';
 /** Abre o preview de um Corte ou candidato no painel da Fonte (#55 usa isto a partir da lista de candidatos). */
 export function openCutPreview(cut: CutRange) { window.dispatchEvent(new CustomEvent<CutRange>(previewOpenEvent, { detail: cut })); }
 
