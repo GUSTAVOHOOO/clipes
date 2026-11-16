@@ -10,7 +10,7 @@
 //! worker Python (faster-whisper). Um Motor remoto implementaria a mesma interface.
 
 use crate::{
-    components::{models, worker::start_worker},
+    components::{hardware, models, worker::start_worker},
     jobs::{self, preview},
     projects,
     worker::{WorkerClient, WorkerEvent},
@@ -111,6 +111,8 @@ pub struct LocalEngine {
     client: WorkerClient,
     model: Value,
     batch_size: u32,
+    /// Trechos de VAD por chamada (#162); só cai, por falta de memória, durante a vida do Motor.
+    group_cap: Option<u32>,
     /// O modelo da Transcrição: nunca muda; a precisão e o dispositivo podem mudar entre blocos.
     model_id: String,
 }
@@ -124,6 +126,7 @@ impl LocalEngine {
             model_id: model["id"].as_str().unwrap_or_default().to_owned(),
             model,
             batch_size,
+            group_cap: None,
         }
     }
 
@@ -140,6 +143,7 @@ impl LocalEngine {
                 "compute_type": selection.config.compute_type,
             }),
             batch_size: selection.config.batch_size(),
+            group_cap: None,
             model_id: model_id.to_owned(),
         })
     }
@@ -159,24 +163,46 @@ impl TranscriptionEngine for LocalEngine {
         progress: &mut dyn FnMut(u8),
     ) -> Result<BlockResult, CoreError> {
         // A precisão e o dispositivo valem para este bloco: uma nova sonda ou escolha manual entra aqui.
+        let mut group = 1;
+        let mut config = None;
         if let Ok(selection) = models::selection_for(&self.model_id) {
             self.model = json!({"id": selection.spec.id, "dir": selection.dir, "device": selection.config.device, "compute_type": selection.config.compute_type});
             self.batch_size = selection.config.batch_size();
+            group = hardware::current_group_size(&selection.config);
+            config = Some(selection.config);
         }
-        let params = json!({
-            "audio": request.audio,
-            "final": request.final_block,
-            "batch_size": self.batch_size,
-            "model": self.model,
-        });
-        let data = self
-            .client
-            .run("transcribe", params, cancel, &mut |event| {
-                if let WorkerEvent::Progress { percentage, .. } = event {
-                    progress(percentage);
+        group = group.min(self.group_cap.unwrap_or(u32::MAX));
+        loop {
+            let mut params = json!({
+                "audio": request.audio,
+                "final": request.final_block,
+                "batch_size": self.batch_size,
+                "model": self.model,
+            });
+            if group > 1 {
+                params["group_size"] = json!(group);
+            }
+            let result = self
+                .client
+                .run("transcribe", params, cancel, &mut |event| {
+                    if let WorkerEvent::Progress { percentage, .. } = event {
+                        progress(percentage);
+                    }
+                });
+            match result {
+                // Falta de memória com lote > 1: cai pela metade e refaz só este bloco (o áudio e o
+                // checkpoint não mudaram); a medição da sonda (#50) passa a valer o novo lote.
+                Err(e) if e.code == "out_of_memory" && group > 1 => {
+                    let next = group / 2;
+                    if let Some(config) = &config {
+                        hardware::record_batch_oom(config, group, next);
+                    }
+                    self.group_cap = Some(next);
+                    group = next;
                 }
-            })?;
-        parse_block(&data)
+                other => return parse_block(&other?),
+            }
+        }
     }
 }
 

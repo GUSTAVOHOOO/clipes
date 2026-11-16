@@ -182,13 +182,28 @@ fn transcribe_worker() {
                             .unwrap();
                         writeln!(
                             file,
-                            "{} {} {}",
+                            "{} {} {} {}",
                             params["model"]["id"].as_str().unwrap_or(""),
                             params["model"]["device"].as_str().unwrap_or(""),
-                            params["model"]["compute_type"].as_str().unwrap_or("")
+                            params["model"]["compute_type"].as_str().unwrap_or(""),
+                            params["group_size"].as_u64().unwrap_or(1)
                         )
                         .unwrap();
                     }
+                }
+                // CLIPES_FAKE_GROUP_OOM=n: falta de memória em `transcribe` com `group_size` >= n (#162).
+                if message["task"] == "transcribe"
+                    && params["group_size"].as_u64().unwrap_or(1)
+                        >= std::env::var("CLIPES_FAKE_GROUP_OOM")
+                            .ok()
+                            .and_then(|n| n.parse().ok())
+                            .unwrap_or(u64::MAX)
+                {
+                    send(
+                        &mut out,
+                        serde_json::json!({"v":1,"type":"error","id":id,"code":"out_of_memory","message":"x"}),
+                    );
+                    continue;
                 }
                 if message["task"] == "probe" {
                     probe_reply(&mut out, &id, params);
