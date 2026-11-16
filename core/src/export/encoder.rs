@@ -385,10 +385,25 @@ pub fn render_styled_with_fallback(
     cancel: &CancelToken,
     progress: &mut dyn FnMut(u8),
 ) -> Result<Outcome, CoreError> {
+    render_styled_spliced_with_fallback(ffmpeg, input, &[], prepared, preferred, cancel, progress)
+}
+
+/// Igual a `render_styled_with_fallback`, aplicando os trechos mantidos do corte de silêncios (#77).
+pub fn render_styled_spliced_with_fallback(
+    ffmpeg: &Path,
+    input: &RenderInput,
+    segments: &[crate::editor::silences::KeptSegment],
+    prepared: &crate::caption_style::Prepared,
+    preferred: &str,
+    cancel: &CancelToken,
+    progress: &mut dyn FnMut(u8),
+) -> Result<Outcome, CoreError> {
     with_fallback(
         preferred,
         |encoder, progress| {
-            render::render_styled_with(ffmpeg, input, prepared, encoder, cancel, progress)
+            render::render_styled_spliced_with(
+                ffmpeg, input, segments, prepared, encoder, cancel, progress,
+            )
         },
         progress,
     )

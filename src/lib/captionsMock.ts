@@ -1,4 +1,7 @@
-// Fixture determinística do contrato #65 (VITE_CORE_MOCK + editor-test). O núcleo real está em core/src/caption_style.
+// Fixture determinística do contrato #65/#77 (VITE_CORE_MOCK + editor-test). O núcleo real está em core/src/caption_style.
+import { getMockClipSplice } from './editorEditsMock';
+import { sourceToSplicedUs } from '@/features/editor/timelineMath';
+
 type Style = { schemaVersion: 1; revision: number; preset: string; font: string; fontSize: number; color: string; activeColor: string; dimColor: string; outlineColor: string; outline: number; shadow: number; x: number; y: number; highlight: boolean };
 type Override = { color?: string; activeColor?: string; highlight?: boolean };
 const base = (preset: string): Style => ({ schemaVersion: 1, revision: 0, preset, font: preset === 'cinema' ? 'Noto Serif' : 'Noto Sans', fontSize: preset === 'vertical' ? 64 : 56, color: '#ffffff', activeColor: '#facc15', dimColor: '#ffffff', outlineColor: '#101010', outline: preset === 'cinema' ? 3 : 6, shadow: 0, x: 540, y: 1440, highlight: preset !== 'simple' });
@@ -22,8 +25,22 @@ export function captionsMock(name: string, a: Record<string, any>, textOf: (posi
   if (name === 'captions.override') { if (Object.keys(a.overrides).length) overrides.set(a.position, a.overrides); else overrides.delete(a.position); return { position: a.position, overrides: a.overrides }; }
   if (name === 'captions.overrides') return [...overrides].map(([position, o]) => ({ position, overrides: o }));
   const style = current(a.clip_id);
-  const words = Array.from({ length: 9 }, (_, p) => ({ position: p, text: ' ' + textOf(p), startUs: p * 500_000, endUs: p * 500_000 + 450_000, overrides: overrides.get(p) ?? {} }));
+  const startBase = a.start_us ?? 0;
+  const endBase = a.end_us ?? startBase + 4_500_000;
+  const splice = getMockClipSplice(a.clip_id, startBase, endBase);
+  const words = Array.from({ length: 9 }, (_, p) => {
+    const absStart = startBase + p * 500_000;
+    const absEnd = absStart + 450_000;
+    return {
+      position: p,
+      text: ' ' + textOf(p),
+      startUs: sourceToSplicedUs(absStart, splice.segments, startBase),
+      endUs: sourceToSplicedUs(absEnd, splice.segments, startBase),
+      sourceStartUs: absStart,
+      overrides: overrides.get(p) ?? {},
+    };
+  });
   const visible = words.map(w => ({ ...w, text: w.text.replace(/\p{Extended_Pictographic}/gu, '').trim(), color: w.overrides.color ?? style.color, activeColor: w.overrides.activeColor ?? style.activeColor, highlight: style.highlight && (w.overrides.highlight ?? true) }));
   const cues = [0, 3, 6].map(i => ({ startUs: visible[i].startUs, endUs: visible[i + 2].endUs, lines: [visible.slice(i, i + 3)] }));
-  return { ass: '', style, cues, emojiRemoved: words.filter(w => emoji.test(w.text)).length, words, transcriptId: 1, start_us: a.start_us ?? 0, end_us: a.end_us ?? 4_500_000, lines: [] };
+  return { ass: '', style, cues, emojiRemoved: words.filter(w => emoji.test(w.text)).length, words, transcriptId: 1, start_us: startBase, end_us: endBase, durationUs: splice.effectiveDurationUs, segments: splice.segments, lines: [] };
 }
