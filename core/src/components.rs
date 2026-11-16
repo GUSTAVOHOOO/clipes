@@ -35,9 +35,21 @@ fn manifest() -> Vec<Component> {
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     let assets = [("ffmpeg", "N-128889-g88c46fce27", "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-11-13-12-43/ffmpeg-N-128889-g88c46fce27-linux64-gpl.tar.xz", "efa8f93583e84d5a1036e7e08e19db9f03ca637d7620ed58b0ecca39e9e34323", 157401784), ("yt-dlp", "2026.11.04.232659", "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/2026.11.04.232659/yt-dlp_linux", "16e96c02ffefd0bd1fe8ae6cc943b16c96e575c29eed7038d15213034437bc34", 41179568), ("uv", "0.13.8", "https://github.com/astral-sh/uv/releases/download/0.13.8/uv-x86_64-unknown-linux-gnu.tar.gz", "5acfd9177cfecf0bf87578f059728215ccc884388988f55f7a65041b57387d91", 16855069), ("deno", "2.9.8", "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-unknown-linux-gnu.zip", "e890975bc2549807bbcc0b584ffafda72cc7c93349dd99c80483dd784f6c4609", 41963064)];
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    let assets = [("deno", "2.9.8", "https://github.com/denoland/deno/releases/download/v2.9.8/deno-aarch64-apple-darwin.zip", "9f0bf660393da2eaff044cdc7444cb08c73f235849b61d224d825a194ce7c98e", 38770795)];
+    let assets = [(
+        "deno",
+        "2.9.8",
+        "https://github.com/denoland/deno/releases/download/v2.9.8/deno-aarch64-apple-darwin.zip",
+        "9f0bf660393da2eaff044cdc7444cb08c73f235849b61d224d825a194ce7c98e",
+        38770795,
+    )];
     #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
-    let assets = [("deno", "2.9.8", "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-apple-darwin.zip", "4b2f5edd2639b7470f034238b321d7002d8dfb4726d8558f52c17afac370eb2c", 42797031)];
+    let assets = [(
+        "deno",
+        "2.9.8",
+        "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-apple-darwin.zip",
+        "4b2f5edd2639b7470f034238b321d7002d8dfb4726d8558f52c17afac370eb2c",
+        42797031,
+    )];
     #[cfg(not(any(
         all(target_os = "windows", target_arch = "x86_64"),
         all(target_os = "linux", target_arch = "x86_64"),
@@ -174,7 +186,9 @@ fn deno_status(_: Value, _: &mut EventSink<'_>) -> CommandResult {
     let file = deno_file(&load_settings()?);
     let version = file.is_file().then(|| deno_version(&file)).flatten();
     let outdated = version.is_some() && version.as_deref() != pinned;
-    Ok(json!({"installed": version.is_some(), "version": version, "pinned": pinned, "outdated": outdated}))
+    Ok(
+        json!({"installed": version.is_some(), "version": version, "pinned": pinned, "outdated": outdated}),
+    )
 }
 pub(crate) fn ytdlp_version(exe: &Path) -> String {
     update::installed(exe).unwrap_or_else(|_| "indisponível".into())
@@ -1062,8 +1076,16 @@ mod deno_tests {
         ))
     }
     fn build_fake(root: &Path) -> PathBuf {
-        let fake = root.join(if cfg!(windows) { "fake-deno.exe" } else { "fake-deno" });
-        let rustc = PathBuf::from(env!("CARGO")).with_file_name(if cfg!(windows) { "rustc.exe" } else { "rustc" });
+        let fake = root.join(if cfg!(windows) {
+            "fake-deno.exe"
+        } else {
+            "fake-deno"
+        });
+        let rustc = PathBuf::from(env!("CARGO")).with_file_name(if cfg!(windows) {
+            "rustc.exe"
+        } else {
+            "rustc"
+        });
         assert!(std::process::Command::new(rustc)
             .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fake_deno.rs"))
             .arg("-o")
@@ -1075,7 +1097,8 @@ mod deno_tests {
     }
     fn zip_with(path: &Path, name: &str, contents: &[u8]) {
         let mut zip = zip::ZipWriter::new(File::create(path).unwrap());
-        zip.start_file(name, zip::write::SimpleFileOptions::default()).unwrap();
+        zip.start_file(name, zip::write::SimpleFileOptions::default())
+            .unwrap();
         zip.write_all(contents).unwrap();
         zip.finish().unwrap();
     }
@@ -1083,7 +1106,9 @@ mod deno_tests {
     fn manifest_pins_deno_with_mit_license_per_platform() {
         let deno = manifest().into_iter().find(|c| c.id == "deno").unwrap();
         assert_eq!(deno.license, "MIT");
-        assert!(deno.url.starts_with("https://github.com/denoland/deno/releases/download/v"));
+        assert!(deno
+            .url
+            .starts_with("https://github.com/denoland/deno/releases/download/v"));
         assert!(deno.url.contains(deno.version) && deno.url.ends_with(".zip"));
         assert_eq!(deno.sha256.len(), 64);
         assert!(deno.sha256.bytes().all(|b| b.is_ascii_hexdigit()));

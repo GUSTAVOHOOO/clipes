@@ -320,7 +320,12 @@ fn probe_args(url: &str, deno: Option<&Path>) -> Vec<OsString> {
     args
 }
 const PROBE_TIMEOUT: Duration = Duration::from_secs(60);
-fn probe(exe: &Path, deno: Option<&Path>, url: &str, flag: &AtomicBool) -> Result<Option<Probe>, CoreError> {
+fn probe(
+    exe: &Path,
+    deno: Option<&Path>,
+    url: &str,
+    flag: &AtomicBool,
+) -> Result<Option<Probe>, CoreError> {
     // Qualquer falha aqui vira None: a detecção nunca bloqueia o download.
     let Ok((mut child, group)) = crate::process::spawn_managed(exe, probe_args(url, deno)) else {
         return Ok(None);
@@ -710,7 +715,11 @@ mod download_tests {
     }
     #[test]
     fn deno_component_is_passed_to_probe_and_download_only_when_installed() {
-        let deno = Path::new(if cfg!(windows) { r"C:\x\deno.exe" } else { "/x/deno" });
+        let deno = Path::new(if cfg!(windows) {
+            r"C:\x\deno.exe"
+        } else {
+            "/x/deno"
+        });
         let with = probe_args("https://example.com/v", Some(deno));
         let i = with.iter().position(|a| a == "--js-runtimes").unwrap();
         let mut expected = OsString::from("deno:");
@@ -727,10 +736,17 @@ mod download_tests {
         let root = std::env::temp_dir().join(format!(
             "clipes-203-fake-{}-{}",
             std::process::id(),
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         fs::create_dir_all(&root).unwrap();
-        let rustc = PathBuf::from(env!("CARGO")).with_file_name(if cfg!(windows) { "rustc.exe" } else { "rustc" });
+        let rustc = PathBuf::from(env!("CARGO")).with_file_name(if cfg!(windows) {
+            "rustc.exe"
+        } else {
+            "rustc"
+        });
         let fake = root.join(if cfg!(windows) { "fake.exe" } else { "fake" });
         assert!(Command::new(rustc)
             .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fake_ytdlp.rs"))
@@ -749,14 +765,45 @@ mod download_tests {
             .unwrap();
         assert_eq!(found.age_limit, Some(0));
         let out = root.join("with");
-        let file = run_download(&fake, Some(&deno), &out, "https://example.com/deno", "job", &flag, &mut |_| {}).unwrap();
+        let file = run_download(
+            &fake,
+            Some(&deno),
+            &out,
+            "https://example.com/deno",
+            "job",
+            &flag,
+            &mut |_| {},
+        )
+        .unwrap();
         assert_eq!(fs::read(file).unwrap(), b"media");
         // Sem o deno nada muda: o falso exige a ausência de `--js-runtimes`.
         let out = root.join("without");
-        assert!(run_download(&fake, None, &out, "https://example.com/no-deno", "job", &flag, &mut |_| {}).is_ok());
-        assert!(probe(&fake, None, "https://example.com/probe-no-deno", &flag).unwrap().is_some());
+        assert!(run_download(
+            &fake,
+            None,
+            &out,
+            "https://example.com/no-deno",
+            "job",
+            &flag,
+            &mut |_| {}
+        )
+        .is_ok());
+        assert!(
+            probe(&fake, None, "https://example.com/probe-no-deno", &flag)
+                .unwrap()
+                .is_some()
+        );
         // Sem o deno e com o aviso do yt-dlp: erro tipado que sugere o Componente.
-        let err = run_download(&fake, None, &out, "https://example.com/js", "job", &flag, &mut |_| {}).unwrap_err();
+        let err = run_download(
+            &fake,
+            None,
+            &out,
+            "https://example.com/js",
+            "job",
+            &flag,
+            &mut |_| {},
+        )
+        .unwrap_err();
         assert_eq!(err.code, "js_runtime_missing");
         assert!(err.message.contains("Componente deno"));
         fs::remove_dir_all(root).unwrap();
