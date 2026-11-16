@@ -5,6 +5,7 @@ import { testCaptions } from './captions-ui.mjs';
 import { createServer } from 'node:net';
 import { mkdir } from 'node:fs/promises';
 import { testEditorBorders } from './editor-borders.mjs';
+import { testEditorSilencesPanel, testEditorSilencesPreview } from './editor-silences.mjs';
 import { testEditorCrop } from './editor-crop.mjs';
 const socket = createServer();
 await new Promise(resolve => socket.listen(0, '127.0.0.1', resolve));
@@ -1130,6 +1131,7 @@ try {
     await page.keyboard.press('Escape');
     await bordersDrawer.waitFor({ state: 'hidden' });
     await testCaptions(page, editor, L.lang);
+    await testEditorSilencesPanel(page, editor, L.lang);
     assert.match(await editor.innerText(), new RegExp(L.hint), 'atalhos visíveis junto dos controles');
     for (const key of ['J', 'K', 'L', 'I', 'O']) assert.ok((await editor.locator('kbd', { hasText: new RegExp(`^${key}$`) }).count()) > 0, `tecla ${key} visível`);
     await editor.getByRole('button', { name: L.close, exact: true }).click();
@@ -1137,6 +1139,7 @@ try {
   }
   await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
   await testEditorBorders(page, url);
+  await testEditorSilencesPreview(page, url);
   await testEditorCrop(page, url);
   assert.deepEqual(errors, []);
   console.log('UI keyboard, preferences, about, drawer and screenshots: OK');

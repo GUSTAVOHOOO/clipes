@@ -4,7 +4,7 @@ import { correctionEvent, type CorrectionEvent } from '@/features/projects/Trans
 import type { CaptionData } from './types';
 
 export type CaptionRequest = ExportRequest & { clip_id?: number };
-export function useCaptions(request: CaptionRequest | null) {
+export function useCaptions(request: CaptionRequest | null, revision = 0) {
   const [data, setData] = useState<CaptionData | null>(null);
   const [error, setError] = useState(false);
   const key = request ? JSON.stringify(request) : '';
@@ -21,6 +21,6 @@ export function useCaptions(request: CaptionRequest | null) {
     const corrected = (event: Event) => { if ((event as CustomEvent<CorrectionEvent>).detail.source_id === JSON.parse(key).source_id) void refresh().catch(() => setError(true)); };
     window.addEventListener(correctionEvent, corrected);
     return () => { alive = false; window.removeEventListener(correctionEvent, corrected); };
-  }, [key, refresh]);
+  }, [key, refresh, revision]);
   return { data, error, refresh };
 }

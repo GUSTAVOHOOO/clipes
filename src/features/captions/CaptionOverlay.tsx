@@ -1,4 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react';
+import { sourceToSplicedUs } from '@/features/editor/timelineMath';
 import { drawCaption, loadCaptionFonts } from './render';
 import type { CaptionData } from './types';
 
@@ -14,7 +15,8 @@ export function CaptionOverlay({ data, video, windowStartUs }: { data: CaptionDa
     void loadCaptionFonts().then(() => {
       const tick = () => {
         if (!alive) return;
-        const time = Math.floor((windowStartUs + (video.current?.currentTime ?? 0) * 1e6 - data.start_us) / 10_000) * 10_000;
+        const sourceUs = windowStartUs + (video.current?.currentTime ?? 0) * 1e6;
+        const time = Math.floor(sourceToSplicedUs(sourceUs, data.segments, data.start_us) / 10_000) * 10_000;
         if (time !== last) { drawCaption(el, data, time); last = time; }
         frame = requestAnimationFrame(tick);
       };
