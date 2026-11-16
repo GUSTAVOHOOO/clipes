@@ -81,6 +81,35 @@ Os picos de volume da Fonte (gritos, risadas) entram na seleção como uma **mar
 - **Prompt v2.** `prompt.md` explica que `[energia …]` é um sinal de áudio relativo à Fonte, entra no eixo `energy` e não decide sozinho; `version` 2 e entrada nova em `prompt-lock.json`.
 - **Testes.** Áudio sempre sintético (tom com trechos altos e baixos gerado por código ou pelo FFmpeg), nunca o dataset #28. `core/tests/energy.rs` roda o job completo com um FFmpeg falso que entrega PCM sintético e, se `ffmpeg` e `ffprobe` estiverem no PATH, com o FFmpeg de verdade (o CI não instala FFmpeg, então ali só a parte falsa roda). Futuro, fora da v1: detector de eventos sonoros (risada, aplauso) como segundo sinal; checar a licença dos pesos pela política do ADR-0003.
 
+## Chat da live (#151)
+
+Quando a Fonte é uma live do YouTube com replay de chat, a velocidade do chat entra na seleção como **segundo sinal local**, ao lado da energia do áudio. Ele informa o Provedor e **nunca escolhe Cortes sozinho**. Código em `core/src/chat.rs`; testes em `core/src/chat/tests.rs` (puros) e `core/tests/chat.rs` (headless, yt-dlp falso).
+
+- **Busca.** Toda Fonte importada por URL ganha um job `chat` na fila (local, cancelável). `chat.fetch {source_id}` é o "buscar o chat depois" (só Fonte com URL de origem; `chat_needs_url` nas locais; idempotente com job na fila) e `chat.status {source_id}` devolve `state` (`none`, `available`, `absent` = sem replay), `canFetch`, `peaks` e o último job. O job roda `yt-dlp --skip-download --write-subs --sub-langs live_chat` (o replay sai pela API do YouTube, sem tocar na mídia, e não precisa do `--download-sections`, que trava). Vídeo sem replay ou com replay vazio fica `absent`, sem erro; falha do yt-dlp é `chat_failed` (mensagem fixa).
+- **Privacidade.** O replay bruto fica no disco, **ao lado da mídia** (`<nome>.live_chat.json`), e é reaproveitado sem rede se já existir. O Projeto guarda só a série agregada (`chat_series`, migração `0151_001_chat`): pessoas distintas, mensagens, Super Chats e contagens de reação por intervalo. Os IDs de autor só existem em memória durante a agregação (nem hash é gravado). Texto de mensagem e nome de autor nunca vão ao Provedor nem a log.
+- **Limpeza.** Ignora mensagens que começam com `!` (comandos de bot) e a mesma mensagem repetida pelo mesmo autor (`REPEAT_WINDOW_US`; cada repetição renova a janela); conta **pessoas distintas**, não mensagens. Super Chat conta sempre.
+- **Pico.** Medido contra a **mediana móvel da própria Fonte**, nunca contra um número absoluto. Uma série guarda o intervalo com que foi feita.
+- **Marca.** Mesmo lugar e estilo da energia: `123 [energia alta] [chat 3,1× · risadas] texto`, montada por `chat::mark` e posta por `sentences::line` (a mesma função do serializador, do planejador de Janelas e do estimador de tokens). O chat chega depois do momento, então o pico marca as Frases que tocam o trecho `[início − atraso, fim − atraso)`. O rótulo de reação (`risadas`, `surpresa`, `pedido de clip`) só aparece quando a reação **domina** o intervalo. Sem marca de energia, o chat segue sozinho.
+- **Uma decisão por execução.** Como a energia: `selection.start` guarda em `selection_runs.chat_marks` se a execução usou o chat; refazer Janela e o resumo seguem isso. `summary.chat` (e `selection.estimate`) traz `{available: false}` ou `{available: true, peaks, marked}`, e a UI diz qual dos dois ocorreu.
+- **Candidato.** `selection_candidates.chat_marks` guarda as marcas que estavam no trecho do Corte (`chat` em cada candidato de `selection.get`: `ratio`, `reaction`, `atUs`), para a revisão (#55) mostrar o porquê.
+- **Prompt v3.** Explica `[chat …]` e diz que pico de chat é indício e não prova (raid, sorteio e trem de subs também fazem o chat disparar); `version` 3 e entrada nova em `prompt-lock.json`.
+- **Tela.** Na seleção (`Selection.tsx`), o botão "Buscar o chat da live" aparece só para Fonte de URL sem chat; Fonte local não o mostra.
+- **Testes.** Replays **sintéticos** escritos à mão no formato real (`replayChatItemAction` / `addChatItemAction` / `liveChatTextMessageRenderer` / `liveChatPaidMessageRenderer`), com textos, nomes e IDs inventados: nenhuma mensagem, nome ou ID de canal real entra no repositório, e nenhum teste usa a rede. Cenários: com replay (raid, comandos, spam, Super Chat), sem replay, replay vazio, "buscar depois" depois de uma falha e Fonte local.
+
+Constantes iniciais (nomeadas em `chat.rs`, **calibradas depois no #57**):
+
+| Constante | Valor | Papel |
+|---|---|---|
+| `INTERVAL_US` | 10 s | intervalo da série |
+| `MEDIAN_WINDOW_US` | 10 min | mediana móvel da própria Fonte (centrada no intervalo, cortada nas pontas) |
+| `PEAK_RATIO` | 2,0× | pico: pessoas distintas ≥ razão × mediana |
+| `BASELINE_FLOOR` | 1,0 | piso da mediana na razão (chat quase mudo) |
+| `MIN_PEAK_PEOPLE` | 4 | guarda de ruído: menos pessoas nunca é pico |
+| `REACTION_DELAY_US` | 10 s | a marca aponta para trás |
+| `REPEAT_WINDOW_US` | 60 s | repetição idêntica do mesmo autor é spam |
+| `REACTION_DOMINANCE_PERCENT` / `REACTION_MIN_MESSAGES` | 40 % / 3 | quando a reação domina o intervalo e ganha rótulo |
+| `LAUGH_MIN_K` / `SURPRISE_MIN_QUESTION_MARKS` | 3 / 3 | `kkk…`, `???…` |
+
 ## Testes
 
 Unitários em `core/src/selection/cut.rs` e `core/src/selection/tests.rs`; headless em `core/tests/selection.rs` (Provedor falso na fila, sem rede, `CLIPES_DATA_DIR` isolado): bordas, faixa (curto estendido, longo encurtado, impossível descartado), duplicatas, ordem, Janela vazia, falha isolada e refeita, retomada sem repetir Janela concluída, bloqueio por contexto, pausa por orçamento do lote, cancelamento, `context_truncated`, confirmação de Provedor pago e veto "somente local". A UI está em `src/features/projects/Selection.tsx`, coberta por `bun run test:ui`.

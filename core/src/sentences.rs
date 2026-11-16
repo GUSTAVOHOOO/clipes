@@ -10,6 +10,7 @@
 //! e é idempotente: se as Frases gravadas já são as calculadas, nada é escrito.
 
 use crate::{
+    chat,
     energy::{self, EnergyMarks},
     projects, CommandRegistration, CommandResult, CoreError, EventSink,
 };
@@ -367,18 +368,50 @@ inventory::submit! { CommandRegistration { name: "transcription.timeline", execu
 /// Uma linha do formato compacto: `ID texto`, ou `ID [energia alta] texto` quando a Frase tem
 /// marca de energia (#54, [`crate::energy::mark`]). É a **única** função que monta a linha:
 /// o serializador, o planejador de Janelas (#144) e o estimador (#140) contam o mesmo texto.
-pub fn line(sentence: &Sentence, marks: &EnergyMarks) -> String {
-    match marks.get(&sentence.id).copied().and_then(energy::mark) {
-        Some(mark) => format!(
-            "{} {} {}
-",
-            sentence.id, mark, sentence.text
-        ),
-        None => format!(
-            "{} {}
-",
-            sentence.id, sentence.text
-        ),
+pub fn line(sentence: &Sentence, marks: &impl SentenceMarks) -> String {
+    let mut out = sentence.id.to_string();
+    if let Some(mark) = marks.energy_of(sentence.id).and_then(energy::mark) {
+        out.push(' ');
+        out.push_str(mark);
+    }
+    if let Some(mark) = marks.chat_of(sentence.id) {
+        out.push(' ');
+        out.push_str(&chat::mark(mark));
+    }
+    out.push(' ');
+    out.push_str(&sentence.text);
+    out.push('\n');
+    out
+}
+
+/// De onde `line` lê as marcas de uma Frase: energia do áudio (#54) e chat da live (#151).
+/// `EnergyMarks` sozinho continua valendo (sem chat).
+pub trait SentenceMarks {
+    fn energy_of(&self, id: i64) -> Option<energy::EnergyLevel>;
+    fn chat_of(&self, _id: i64) -> Option<&chat::ChatMark> {
+        None
+    }
+}
+
+impl SentenceMarks for EnergyMarks {
+    fn energy_of(&self, id: i64) -> Option<energy::EnergyLevel> {
+        self.get(&id).copied()
+    }
+}
+
+/// Todas as marcas de uma execução de seleção.
+#[derive(Debug, Clone, Default)]
+pub struct Marks {
+    pub energy: EnergyMarks,
+    pub chat: chat::ChatMarks,
+}
+
+impl SentenceMarks for Marks {
+    fn energy_of(&self, id: i64) -> Option<energy::EnergyLevel> {
+        self.energy.get(&id).copied()
+    }
+    fn chat_of(&self, id: i64) -> Option<&chat::ChatMark> {
+        self.chat.get(&id)
     }
 }
 
@@ -389,7 +422,7 @@ pub fn compact(sentences: &[Sentence]) -> String {
 }
 
 /// [`compact`] com as marcas de energia do áudio (#54) nas Frases que as têm.
-pub fn compact_marked(sentences: &[Sentence], marks: &EnergyMarks) -> String {
+pub fn compact_marked(sentences: &[Sentence], marks: &impl SentenceMarks) -> String {
     use std::fmt::Write;
     let mut result = String::new();
     let mut previous = None;
@@ -419,7 +452,10 @@ pub fn compact_with_hint(sentences: &[Sentence]) -> CompactTranscript {
 
 /// [`compact_with_hint`] com as marcas de energia: o texto (e portanto a estimativa de tokens)
 /// inclui as marcas, que são texto enviado.
-pub fn compact_with_hint_marked(sentences: &[Sentence], marks: &EnergyMarks) -> CompactTranscript {
+pub fn compact_with_hint_marked(
+    sentences: &[Sentence],
+    marks: &impl SentenceMarks,
+) -> CompactTranscript {
     let mut counts = std::collections::BTreeMap::<&str, usize>::new();
     for s in sentences {
         *counts
