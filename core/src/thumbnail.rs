@@ -209,7 +209,7 @@ fn route_safety() -> Result<(String, Safety), CoreError> {
 fn estimate_of(input: &TaskInput, safety: Safety) -> Value {
     let paid = matches!(safety, Safety::Paid);
     let unknown = json!({"kind": "unknown", "minMicroUsd": null, "maxMicroUsd": null});
-    let Ok((target, profile)) = jobs::route_of(TASK_ID, paid) else {
+    let Ok((target, profile)) = jobs::route_of_profile(TASK_ID, paid, None) else {
         return unknown;
     };
     let Ok((wire, _)) = ai_task::check_definition(task()) else {
