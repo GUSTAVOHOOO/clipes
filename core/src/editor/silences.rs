@@ -187,8 +187,7 @@ pub fn refine_valleys(
 
     for interval in intervals {
         let start_lo = (interval.start_us - VALLEY_SEARCH_US).max(interval.gap_start_us);
-        let start_hi =
-            (interval.start_us + VALLEY_SEARCH_US).min(interval.end_us - MIN_CUT_US);
+        let start_hi = (interval.start_us + VALLEY_SEARCH_US).min(interval.end_us - MIN_CUT_US);
         let new_start = find_valley(
             samples,
             &prefix,
@@ -260,7 +259,7 @@ fn find_valley(
     for idx in zc_lo..=zc_hi {
         let cur = i32::from(samples[idx]);
         let crosses = cur == 0
-            || (idx + 1 <= zc_hi
+            || (idx < zc_hi
                 && ((cur <= 0 && samples[idx + 1] >= 0) || (cur >= 0 && samples[idx + 1] <= 0)));
         if crosses {
             let candidate = (cur.abs(), idx.abs_diff(best_idx), idx);
@@ -288,7 +287,12 @@ impl SpliceMap {
         }
         let mut cuts: Vec<(i64, i64)> = active_cuts
             .iter()
-            .map(|(s, e)| ((*s).clamp(clip_start_us, clip_end_us), (*e).clamp(clip_start_us, clip_end_us)))
+            .map(|(s, e)| {
+                (
+                    (*s).clamp(clip_start_us, clip_end_us),
+                    (*e).clamp(clip_start_us, clip_end_us),
+                )
+            })
             .filter(|(s, e)| e > s)
             .collect();
         cuts.sort_unstable();
@@ -438,9 +442,7 @@ pub fn extract_pcm(
     let dur = crate::export::render::seconds(duration);
     let rate = VALLEY_SAMPLE_RATE.to_string();
     let map_arg = format!("0:{audio_track}");
-    let args = [
-        "-v", "error", "-nostdin", "-ss", &ss, "-t", &dur, "-i",
-    ];
+    let args = ["-v", "error", "-nostdin", "-ss", &ss, "-t", &dur, "-i"];
     let mut full: Vec<std::ffi::OsString> = args.iter().map(Into::into).collect();
     full.push(source.as_os_str().to_owned());
     full.extend(
@@ -459,7 +461,9 @@ pub fn extract_pcm(
     }
     let samples = output
         .stdout
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|b| i16::from_le_bytes([b[0], b[1]]))
         .collect();
     Some(samples)
@@ -494,9 +498,13 @@ pub(crate) fn refine_for_source(
                 && c.end_us >= clip_end_us
         });
         if !hit {
-            let Some(samples) =
-                extract_pcm(&ffmpeg, &source_path, audio_track, clip_start_us, clip_end_us)
-            else {
+            let Some(samples) = extract_pcm(
+                &ffmpeg,
+                &source_path,
+                audio_track,
+                clip_start_us,
+                clip_end_us,
+            ) else {
                 return;
             };
             *guard = Some(CachedPcm {
@@ -509,7 +517,12 @@ pub(crate) fn refine_for_source(
             });
         }
         if let Some(cached) = guard.as_ref() {
-            refine_valleys(intervals, &cached.samples, VALLEY_SAMPLE_RATE, cached.start_us);
+            refine_valleys(
+                intervals,
+                &cached.samples,
+                VALLEY_SAMPLE_RATE,
+                cached.start_us,
+            );
         }
     }
 }
@@ -531,8 +544,7 @@ mod tests {
         assert_eq!(found[0].start_us, 2_120_000);
         assert_eq!(found[0].end_us, 2_720_000);
         assert_eq!(
-            (found[0].start_us - found[0].gap_start_us)
-                + (found[0].gap_end_us - found[0].end_us),
+            (found[0].start_us - found[0].gap_start_us) + (found[0].gap_end_us - found[0].end_us),
             BREATH_PAUSE_US
         );
         assert_eq!(found[1].start_us, 3_420_000);
@@ -587,13 +599,26 @@ mod tests {
 
     #[test]
     fn splice_map_keeps_segments_consistent_across_words_and_reverts() {
-        let map = SpliceMap::new(1_000_000, 6_000_000, &[(2_000_000, 3_000_000), (4_000_000, 4_500_000)]);
+        let map = SpliceMap::new(
+            1_000_000,
+            6_000_000,
+            &[(2_000_000, 3_000_000), (4_000_000, 4_500_000)],
+        );
         assert_eq!(map.removed_us, 1_500_000);
         assert_eq!(map.output_duration_us, 3_500_000);
         assert_eq!(map.segments.len(), 3);
-        assert_eq!(map.remap_word(1_100_000, 1_500_000), Some((100_000, 500_000)));
-        assert_eq!(map.remap_word(3_200_000, 3_800_000), Some((1_200_000, 1_800_000)));
-        assert_eq!(map.remap_word(5_000_000, 5_500_000), Some((2_500_000, 3_000_000)));
+        assert_eq!(
+            map.remap_word(1_100_000, 1_500_000),
+            Some((100_000, 500_000))
+        );
+        assert_eq!(
+            map.remap_word(3_200_000, 3_800_000),
+            Some((1_200_000, 1_800_000))
+        );
+        assert_eq!(
+            map.remap_word(5_000_000, 5_500_000),
+            Some((2_500_000, 3_000_000))
+        );
         assert_eq!(map.output_to_source(1_500_000), 3_500_000);
         assert_eq!(map.source_to_output(2_500_000), 1_000_000);
     }

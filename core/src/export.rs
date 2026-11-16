@@ -88,10 +88,9 @@ fn parse(v: Value) -> Result<ExportRequest, CoreError> {
     serde_json::from_value(v).map_err(|_| bounds())
 }
 
-fn target(
-    request: &ExportRequest,
-    frozen: Option<((i64, i64), Vec<(i64, i64)>)>,
-) -> Result<Target, CoreError> {
+type FrozenTarget = ((i64, i64), Vec<(i64, i64)>);
+
+fn target(request: &ExportRequest, frozen: Option<FrozenTarget>) -> Result<Target, CoreError> {
     let edited = request
         .clip_id
         .map(crate::editor::edits::document)
@@ -142,9 +141,12 @@ fn target(
         let ((start_us, end_us), active_cuts) = edited
             .as_ref()
             .map(|doc| {
-                frozen
-                    .clone()
-                    .unwrap_or_else(|| ((doc.range.start_us, doc.range.end_us), doc.active_silences()))
+                frozen.clone().unwrap_or_else(|| {
+                    (
+                        (doc.range.start_us, doc.range.end_us),
+                        doc.active_silences(),
+                    )
+                })
             })
             .unwrap_or(((start_us, end_us), Vec::new()));
         let duration: i64 = c.query_row(
@@ -166,22 +168,19 @@ fn target(
         let mut q=c.prepare(&format!("SELECT {},w.start_us,w.end_us,w.position,o.document FROM transcript_words w LEFT JOIN caption_word_overrides o ON o.transcript_id=w.transcript_id AND o.position=w.position WHERE w.transcript_id=?1 AND w.kind='word' AND ((?6=1 AND w.end_us>?4 AND w.start_us<?5) OR (?6=0 AND w.position BETWEEN ?2 AND ?3)) ORDER BY w.position",crate::corrections::EFFECTIVE_TEXT))?;
         let clamp = edited.is_some();
         let rows = q
-            .query_map(
-                (transcript, first, last, start_us, end_us, clamp),
-                |r| {
-                    Ok((
-                        r.get::<_, String>(0)?,
-                        r.get::<_, i64>(1)?,
-                        r.get::<_, i64>(2)?,
-                        r.get::<_, i64>(3)?,
-                        r.get::<_, Option<String>>(4)?
-                            .map(|doc| serde_json::from_str::<WordOverride>(&doc))
-                            .transpose()
-                            .map_err(|_| rusqlite::Error::InvalidQuery)?
-                            .unwrap_or_default(),
-                    ))
-                },
-            )?
+            .query_map((transcript, first, last, start_us, end_us, clamp), |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, i64>(2)?,
+                    r.get::<_, i64>(3)?,
+                    r.get::<_, Option<String>>(4)?
+                        .map(|doc| serde_json::from_str::<WordOverride>(&doc))
+                        .transpose()
+                        .map_err(|_| rusqlite::Error::InvalidQuery)?
+                        .unwrap_or_default(),
+                ))
+            })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         let mut styled = Vec::with_capacity(rows.len());
         let mut source_starts = Vec::with_capacity(rows.len());
@@ -268,10 +267,7 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .cut
         .clip_id
         .map(|_| (resolved.start_us, resolved.end_us));
-    request.resolved_silences = request
-        .cut
-        .clip_id
-        .map(|_| resolved.active_cuts);
+    request.resolved_silences = request.cut.clip_id.map(|_| resolved.active_cuts);
     render::validate_output(&request.output)?;
     let project = current_path()?;
     let _ = crate::jobs::preview::source(request.cut.source_id, &project)?;
@@ -357,8 +353,7 @@ pub(crate) fn run(
             .resolved_bounds
             .map(|b| (b, request.resolved_silences.clone().unwrap_or_default()));
         let target = target(&request.cut, frozen)?;
-        let prepared =
-            caption_style::prepare(&target.styled, &style, target.output_duration_us)?;
+        let prepared = caption_style::prepare(&target.styled, &style, target.output_duration_us)?;
         let (source, _, audio, _, _) =
             crate::jobs::preview::source(request.cut.source_id, project)?;
         let ffmpeg = crate::components::cache_settings()?

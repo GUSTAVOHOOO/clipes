@@ -1,9 +1,7 @@
 //! Documento do Corte e histórico limitado. Prévias são puras; só o pointerup edita.
 //! Ordem de locks: editor -> sessão do Projeto. Troca/fechamento passam por
 //! `project_change`, que impede autosave tardio em outro Projeto.
-use super::silences::{
-    self, SilenceConfig, SilenceStatus, SpliceMap, DEFAULT_MIN_SILENCE_US,
-};
+use super::silences::{self, SilenceConfig, SilenceStatus, SpliceMap, DEFAULT_MIN_SILENCE_US};
 use super::*;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -343,7 +341,10 @@ fn validate_silences(range: &Borders, silences: Option<&SilenceConfig>) -> Resul
     }
     Ok(())
 }
-fn clip_silences_to_range(silences: &Option<SilenceConfig>, range: &Borders) -> Option<SilenceConfig> {
+fn clip_silences_to_range(
+    silences: &Option<SilenceConfig>,
+    range: &Borders,
+) -> Option<SilenceConfig> {
     silences.as_ref().map(|cfg| SilenceConfig {
         threshold_us: cfg.threshold_us,
         intervals: cfg
@@ -535,7 +536,9 @@ fn clip_words(source_id: i64, start_us: i64, end_us: i64) -> Result<Vec<(i64, i6
             "SELECT start_us, end_us FROM transcript_words WHERE transcript_id=?1 AND kind='word' AND end_us>?2 AND start_us<?3 ORDER BY position",
         )?;
         let rows = q
-            .query_map((transcript, start_us, end_us), |r| Ok((r.get(0)?, r.get(1)?)))?
+            .query_map((transcript, start_us, end_us), |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(rows)
     })
@@ -548,15 +551,13 @@ fn silences_detect(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let mut s = lock()?;
     let id = id(&v)?;
     let entry = load(&mut s, id)?;
-    let threshold_us = v["threshold_us"]
-        .as_i64()
-        .unwrap_or_else(|| {
-            entry
-                .doc
-                .silences
-                .as_ref()
-                .map_or(DEFAULT_MIN_SILENCE_US, |c| c.threshold_us)
-        });
+    let threshold_us = v["threshold_us"].as_i64().unwrap_or_else(|| {
+        entry
+            .doc
+            .silences
+            .as_ref()
+            .map_or(DEFAULT_MIN_SILENCE_US, |c| c.threshold_us)
+    });
     let words = clip_words(
         entry.doc.original.source_id,
         entry.doc.range.start_us,
@@ -610,9 +611,11 @@ fn silences_toggle(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         }
         None => None,
     };
-    let mut next = entry.doc.silences.clone().ok_or_else(|| {
-        error("invalid_silence_interval", "Trecho de silêncio inválido.")
-    })?;
+    let mut next = entry
+        .doc
+        .silences
+        .clone()
+        .ok_or_else(|| error("invalid_silence_interval", "Trecho de silêncio inválido."))?;
     let Some(item) = next.intervals.iter_mut().find(|i| i.id == interval_id) else {
         return Err(error(
             "invalid_silence_interval",

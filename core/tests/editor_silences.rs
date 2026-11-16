@@ -102,7 +102,10 @@ fn silences_detect_preview_toggle_revert_undo_persist_and_freeze_for_export() {
         "editor.silences.detect",
         json!({"clip_id": clip_id, "threshold_us": 300_000, "preview": true}),
     );
-    assert_eq!(preview["silences"]["intervals"].as_array().unwrap().len(), 3);
+    assert_eq!(
+        preview["silences"]["intervals"].as_array().unwrap().len(),
+        3
+    );
     assert_eq!(preview["undoCount"], 0);
 
     // Aplicar padrão (600 ms) encontra 2 pausas (900 ms e 1200 ms), ignorando 450 ms e bordas.
@@ -197,10 +200,7 @@ fn silences_detect_preview_toggle_revert_undo_persist_and_freeze_for_export() {
     })
     .unwrap();
     let frozen_val: Value = serde_json::from_str(&frozen_req).unwrap();
-    assert_eq!(
-        frozen_val["resolved_silences"].as_array().unwrap().len(),
-        2
-    );
+    assert_eq!(frozen_val["resolved_silences"].as_array().unwrap().len(), 2);
     call("jobs.cancel", json!({"id": job}));
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     while call("export.status", json!({"job": job}))["state"] == "running"

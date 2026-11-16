@@ -246,7 +246,14 @@ pub fn render_spliced(
     cancel: &CancelToken,
     progress: &mut dyn FnMut(u8),
 ) -> Result<(), CoreError> {
-    render_spliced_with(ffmpeg, input, segments, super::encoder::X264, cancel, progress)
+    render_spliced_with(
+        ffmpeg,
+        input,
+        segments,
+        super::encoder::X264,
+        cancel,
+        progress,
+    )
 }
 
 pub fn render_spliced_with(
@@ -258,7 +265,9 @@ pub fn render_spliced_with(
     progress: &mut dyn FnMut(u8),
 ) -> Result<(), CoreError> {
     let duration = if segments.len() > 1 {
-        segments.last().map_or(input.end_us - input.start_us, |s| s.output_end_us)
+        segments
+            .last()
+            .map_or(input.end_us - input.start_us, |s| s.output_end_us)
     } else {
         input.end_us - input.start_us
     };

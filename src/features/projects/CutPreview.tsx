@@ -42,9 +42,20 @@ export function toProxySeconds(sourceUs: number, windowStartUs: number, windowEn
 }
 const mediaUrl = (key: string) => (isTauri() ? convertFileSrc(`proxy/${key}`, 'clipes-media') : `/__clipes-media__/proxy/${key}`);
 
+export type SkipInterval = { startUs: number; endUs: number };
+
+/** Se `sourceUs` caiu dentro de um corte de silêncio ativo, devolve a borda de saída para pular. */
+export function skipCutForward(sourceUs: number, intervals?: SkipInterval[]): number | null {
+  if (!intervals || intervals.length === 0) return null;
+  for (const cut of intervals) {
+    if (sourceUs >= cut.startUs && sourceUs < cut.endUs - 5_000) return cut.endUs;
+  }
+  return null;
+}
+
 /** Preview 9:16 em Fit (barras, sem corte) de um Corte, sobre o proxy de GOP curto gerado pelo núcleo. */
 /** `rate` (editor, #61): 0 pausa, >0 toca nessa velocidade, <0 volta por passos. `onSourceTime` informa o tempo da Fonte a cada atualização. */
-export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, captions }: { sourceId: number; startUs: number; endUs: number; rate?: number; onSourceTime?: (sourceUs: number) => void; captions?: CaptionData | null }) {
+export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, captions, skipIntervals }: { sourceId: number; startUs: number; endUs: number; rate?: number; onSourceTime?: (sourceUs: number) => void; captions?: CaptionData | null; skipIntervals?: SkipInterval[] }) {
   const t = useText(texts);
   const video = useRef<HTMLVideoElement>(null);
   const pending = useRef<number | null>(null);
@@ -89,6 +100,9 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, capti
     return () => { alive = false; unlisten?.(); window.clearInterval(timer); };
   }, [working, proxy?.key, request]);
 
+  const skipRef = useRef(skipIntervals);
+  skipRef.current = skipIntervals;
+
   // Velocidade pedida pelo editor. Para trás o `<video>` não toca: volta em passos de 100 ms.
   useEffect(() => {
     const el = video.current;
@@ -96,9 +110,44 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, capti
     if (rate > 0) { el.playbackRate = rate; el.play().catch(() => {}); return; }
     el.pause();
     if (rate === 0) return;
-    const timer = window.setInterval(() => { el.currentTime = Math.max(0, el.currentTime + rate * 0.1); if (el.currentTime <= 0) window.clearInterval(timer); }, 100);
+    const timer = window.setInterval(() => {
+      let nextTime = Math.max(0, el.currentTime + rate * 0.1);
+      const nextSource = proxy.windowStartUs + nextTime * 1_000_000;
+      const cut = skipRef.current?.find(c => nextSource > c.startUs + 5_000 && nextSource <= c.endUs);
+      if (cut) {
+        const mapped = toProxySeconds(cut.startUs, proxy.windowStartUs, proxy.windowEndUs);
+        if (mapped !== null) nextTime = mapped;
+      }
+      el.currentTime = nextTime;
+      if (el.currentTime <= 0) window.clearInterval(timer);
+    }, 100);
     return () => window.clearInterval(timer);
-  }, [rate, proxy?.state]);
+  }, [rate, proxy?.state, proxy?.windowStartUs, proxy?.windowEndUs]);
+
+  // Pula silêncios ativos com latência de quadro enquanto o preview está reproduzindo.
+  useEffect(() => {
+    if (!playing || !proxy || proxy.state !== 'ready' || !skipIntervals?.length) return;
+    let alive = true, frame = 0;
+    const tick = () => {
+      if (!alive) return;
+      const el = video.current;
+      if (el && !el.paused) {
+        const cur = proxy.windowStartUs + el.currentTime * 1_000_000;
+        const jumpTo = skipCutForward(cur, skipRef.current);
+        if (jumpTo !== null) {
+          const mapped = toProxySeconds(jumpTo, proxy.windowStartUs, proxy.windowEndUs);
+          if (mapped !== null) {
+            el.currentTime = mapped;
+            setTime(mapped);
+            onSourceTime?.(jumpTo);
+          }
+        }
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => { alive = false; cancelAnimationFrame(frame); };
+  }, [playing, proxy, skipIntervals, onSourceTime]);
 
   const windowSeconds = proxy ? (proxy.windowEndUs - proxy.windowStartUs) / 1_000_000 : 0;
   function seekProxy(seconds: number) {
@@ -151,7 +200,18 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, capti
     {proxy?.state === 'ready' && <>
       <div className="relative aspect-[9/16] w-full overflow-hidden rounded-md border border-line bg-black">
         <video ref={video} src={mediaUrl(proxy.key)} aria-label={t.video} className="h-full w-full object-contain" playsInline preload="auto"
-          onLoadedMetadata={onLoaded} onTimeUpdate={e => { setTime(e.currentTarget.currentTime); if (proxy) onSourceTime?.(proxy.windowStartUs + e.currentTarget.currentTime * 1_000_000); }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
+          onLoadedMetadata={onLoaded} onTimeUpdate={e => {
+            const curSec = e.currentTarget.currentTime;
+            if (proxy && !e.currentTarget.paused) {
+              const jumpTo = skipCutForward(proxy.windowStartUs + curSec * 1_000_000, skipRef.current);
+              if (jumpTo !== null) {
+                const mapped = toProxySeconds(jumpTo, proxy.windowStartUs, proxy.windowEndUs);
+                if (mapped !== null) { e.currentTarget.currentTime = mapped; setTime(mapped); onSourceTime?.(jumpTo); return; }
+              }
+            }
+            setTime(curSec);
+            if (proxy) onSourceTime?.(proxy.windowStartUs + curSec * 1_000_000);
+          }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
           onError={() => { if (isTauri()) setNotice(t.playError); }} />
         {captions && <CaptionOverlay data={captions} video={video} windowStartUs={proxy.windowStartUs} />}
       </div>
