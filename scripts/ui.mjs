@@ -337,6 +337,10 @@ try {
   await page.getByRole('button', {name:'Baixar por URL'}).click();
   await terms.getByRole('button', {name:'Entendi e continuar'}).click();
   await page.getByText('/test/downloaded.mp4').waitFor();
+  await page.getByLabel('URL do vídeo').fill('https://example.com/age-test');
+  await page.getByRole('button', {name:'Baixar por URL'}).click();
+  await page.getByText(/Este vídeo tem restrição de idade/).waitFor();
+  await page.getByLabel('URL do vídeo').fill('https://example.com/video');
   await page.getByLabel('Permissão').selectOption('none');
   await page.getByRole('button', {name:'Importar Fonte'}).click();
   await page.getByRole('button', {name:'Baixar por URL'}).click();
