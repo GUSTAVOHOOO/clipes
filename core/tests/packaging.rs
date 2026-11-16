@@ -270,7 +270,7 @@ fn packaging_flow_credit_edits_regeneration_and_failures() {
         .unwrap()
         .contains("Canal Exemplo"));
     let generation = &doc["generations"][0];
-    assert_eq!(generation["taskVersion"], 1);
+    assert_eq!(generation["taskVersion"], 2);
     assert_eq!(generation["promptSha256"].as_str().unwrap().len(), 64);
     assert_eq!(generation["profile"], "legacy");
     let validated = call(
@@ -284,6 +284,10 @@ fn packaging_flow_credit_edits_regeneration_and_failures() {
         let seen = fake.seen.lock().unwrap();
         let request = &seen[0];
         assert!(request.transcript.starts_with("#CORTE idioma=pt-BR\n"));
+        assert!(
+            !request.transcript.contains("#ANGULO"),
+            "Corte direto mantém a entrada sem ângulo"
+        );
         for text in [&request.transcript, &request.instruction] {
             for secret in [WHERE, SCOPE, "Canal Exemplo", "example.com"] {
                 assert!(!text.contains(secret), "{secret} leaked to the provider");

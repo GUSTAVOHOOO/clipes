@@ -12,7 +12,14 @@ pub struct ClipId(pub i64);
 pub fn style(clip: ClipId) -> Result<Style, CoreError> {
     let result = projects::with_writer(|c| {
         let tx = c.transaction()?;
-        // TODO(#70): validar o Corte em clip_edits e ligar a FK ON DELETE CASCADE quando o #199 entrar.
+        let exists = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM clip_edits WHERE id=?1)",
+            [clip.0],
+            |r| r.get::<_, bool>(0),
+        )?;
+        if !exists {
+            return Ok(Err(invalid()));
+        }
         let saved: Option<String> = tx
             .query_row(
                 "SELECT document FROM caption_styles WHERE clip_id=?1",
@@ -115,7 +122,7 @@ fn default_style(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 }
 
 inventory::submit! {projects::Migration {id:"0065_001_caption_styles",sql:"
-CREATE TABLE caption_styles (clip_id INTEGER PRIMARY KEY, document TEXT NOT NULL);
+CREATE TABLE caption_styles (clip_id INTEGER PRIMARY KEY REFERENCES clip_edits(id) ON DELETE CASCADE, document TEXT NOT NULL);
 CREATE TABLE caption_style_default (id INTEGER PRIMARY KEY CHECK(id=1), document TEXT NOT NULL);
 CREATE TABLE caption_word_overrides (transcript_id INTEGER NOT NULL, position INTEGER NOT NULL, document TEXT NOT NULL, PRIMARY KEY(transcript_id,position), FOREIGN KEY(transcript_id,position) REFERENCES transcript_words(transcript_id,position) ON DELETE CASCADE) WITHOUT ROWID;
 CREATE TABLE caption_remap_pending (source_id INTEGER NOT NULL, audio_track INTEGER NOT NULL, position INTEGER NOT NULL, normalized TEXT NOT NULL, start_us INTEGER NOT NULL, document TEXT NOT NULL, PRIMARY KEY(source_id,audio_track,position)) WITHOUT ROWID;

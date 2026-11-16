@@ -48,5 +48,30 @@
     "id": "thumbnail",
     "version": 1,
     "sha256": "f7c54202c96bf601c6b0bd3bbbcb7913638aa3219b2428e8980bcb6f33ae0766"
+  },
+  {
+    "id": "angles",
+    "version": 1,
+    "sha256": "a1ad388ce6799e27247084e6887b47cdeeca3f413956db62aafbe0958f52f8ef"
+  },
+  {
+    "id": "script",
+    "version": 2,
+    "sha256": "99926b7d91298a925692925c2c8274feba2d4a51bca4161667faae9bbb91946b"
+  },
+  {
+    "id": "script_block",
+    "version": 2,
+    "sha256": "2f21d62aa3f3d2cd4ec85b8de540e8c3d6e18aca729c3ccec3bcc5740b26e2d0"
+  },
+  {
+    "id": "packaging",
+    "version": 2,
+    "sha256": "542a860d038280e656ed5e158ef60b1fd128b98bf49ad6bcf18d228ca5f32ad6"
+  },
+  {
+    "id": "thumbnail",
+    "version": 2,
+    "sha256": "37ed6bd58eccb8d830b294505b829acfcdb2b4d5c102834e0900cf36d902c634"
   }
 ]

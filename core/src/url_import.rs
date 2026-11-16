@@ -63,7 +63,7 @@ inventory::submit! { CommandRegistration { name: "sources.url.settings.set", exe
 
 use crate::{projects, ProgressEvent};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     ffi::OsString,
     io::{BufRead, BufReader, Read, Write},
     path::Path,
@@ -154,6 +154,101 @@ fn handle_line(line: &str, job: &str, events: &mut EventSink<'_>, filename: &mut
         *filename = Some(PathBuf::from(p));
     }
 }
+// Only fixed identifiers leave this module; stderr can contain arbitrary private data.
+fn stderr_pattern(line: &[u8]) -> &'static str {
+    let text = String::from_utf8_lossy(line).to_lowercase();
+    // ERROR: Sign in to confirm your age
+    if text.contains("sign in to confirm your age") {
+        "yt_dlp.sign_in_age"
+    }
+    // ERROR: Sorry, this content is age-restricted
+    else if text.contains("age-restricted") || text.contains("age restricted") {
+        "yt_dlp.age_restricted"
+    }
+    // ERROR: Sign in to confirm you're not a bot
+    else if text.contains("sign in") || text.contains("login required") {
+        "yt_dlp.login_required"
+    }
+    // WARNING: No supported JavaScript runtime could be found
+    else if text.contains("no supported javascript runtime could be found")
+        || text.contains("n challenge solving failed")
+    {
+        "yt_dlp.no_js_runtime"
+    }
+    // WARNING: YouTube may have enabled the SABR-only streaming experiment
+    else if text.contains("sabr") {
+        "yt_dlp.sabr_unavailable"
+    }
+    // ERROR: HTTP Error 403: Forbidden
+    else if text.contains("http error 403") {
+        "yt_dlp.http_403"
+    } else {
+        "yt_dlp.unrecognized"
+    }
+}
+
+fn read_stderr(mut input: impl Read) -> (Vec<&'static str>, u8) {
+    let mut lines = VecDeque::new();
+    let mut line = Vec::with_capacity(300);
+    let mut flags = 0u8;
+    let mut buffer = [0u8; 8192];
+    let mut finish = |line: &mut Vec<u8>| {
+        let pattern = stderr_pattern(line);
+        flags |= match pattern {
+            "yt_dlp.sign_in_age" | "yt_dlp.age_restricted" => 1,
+            "yt_dlp.login_required" => 2,
+            "yt_dlp.no_js_runtime" => 4,
+            "yt_dlp.sabr_unavailable" => 8,
+            _ => 0,
+        };
+        if lines.len() == 50 {
+            lines.pop_front();
+        }
+        lines.push_back(pattern);
+        line.clear();
+    };
+    loop {
+        let count = match input.read(&mut buffer) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => n,
+        };
+        for &byte in &buffer[..count] {
+            if byte == b'\n' {
+                finish(&mut line);
+            } else if line.len() < 300 {
+                line.push(byte);
+            }
+        }
+    }
+    if !line.is_empty() {
+        finish(&mut line);
+    }
+    (lines.into_iter().collect(), flags)
+}
+
+fn classified_error(flags: u8) -> CoreError {
+    if flags & 1 != 0 {
+        error(
+            "age_restricted",
+            "Este vídeo tem restrição de idade. Baixe por conta própria e importe o arquivo local.",
+        )
+    } else if flags & 2 != 0 {
+        error("login_required", "Este vídeo exige login para ser baixado.")
+    } else if flags & 4 != 0 {
+        error(
+            "js_runtime_missing",
+            "Um ambiente JavaScript é necessário para baixar este vídeo.",
+        )
+    } else if flags & 8 != 0 {
+        error(
+            "sabr_unavailable",
+            "Os formatos SABR deste vídeo estão indisponíveis.",
+        )
+    } else {
+        error("download_failed", "Não foi possível baixar a Fonte")
+    }
+}
+
 fn run_download(
     exe: &Path,
     destination: &Path,
@@ -214,9 +309,7 @@ fn run_download(
             }
         }
     });
-    let error_reader = thread::spawn(move || {
-        let _ = std::io::copy(&mut BufReader::new(stderr), &mut std::io::sink());
-    });
+    let error_reader = thread::spawn(move || read_stderr(stderr));
     let mut filename = None;
     let status = loop {
         while let Ok(line) = rx.try_recv() {
@@ -241,12 +334,20 @@ fn run_download(
     };
     drop(group);
     let _ = output_reader.join();
-    let _ = error_reader.join();
+    let (patterns, flags) = error_reader.join().unwrap_or_default();
     for line in rx.try_iter() {
         handle_line(&line, job, events, &mut filename);
     }
-    if !status?.success() {
-        return Err(failure());
+    let status = status?;
+    if !status.success() {
+        let result = classified_error(flags);
+        crate::diagnostic::record_ytdlp(
+            &result.code,
+            &patterns,
+            status.code(),
+            &crate::components::ytdlp_version(exe),
+        );
+        return Err(result);
     }
     if flag.load(Ordering::Relaxed) {
         return Err(error("cancelled", "Download cancelado"));
@@ -344,6 +445,26 @@ inventory::submit! { CommandRegistration { name: "sources.url.cancel", execute: 
 mod download_tests {
     use super::*;
     use std::process::Command;
+    #[test]
+    fn stderr_is_bounded_and_classification_survives_history_truncation() {
+        let stderr = format!(
+            "ERROR: Sign in to confirm your age\n{}",
+            "unknown secret https://googlevideo.com/?sig=secret\n".repeat(70)
+        );
+        let (patterns, flags) = read_stderr(stderr.as_bytes());
+        assert_eq!(patterns.len(), 50);
+        assert!(patterns.iter().all(|p| *p == "yt_dlp.unrecognized"));
+        assert_eq!(classified_error(flags).code, "age_restricted");
+        assert_eq!(classified_error(0).code, "download_failed");
+        let long = format!(
+            "{}\nERROR: HTTP Error 403: Forbidden",
+            "x".repeat(1_000_000)
+        );
+        assert_eq!(
+            read_stderr(long.as_bytes()).0,
+            vec!["yt_dlp.unrecognized", "yt_dlp.http_403"]
+        );
+    }
     #[test]
     fn fake_downloader_reports_progress_cleans_failures_and_cancellation() {
         let root = std::env::temp_dir().join(format!(

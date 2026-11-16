@@ -158,7 +158,7 @@ fn open(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .ok()
         .and_then(|v| v["path"].as_str().map(PathBuf::from));
     crate::jobs::stop_worker();
-    let name = match backups::open_session(path.clone()) {
+    let name = match crate::editor::edits::project_change(|| backups::open_session(path.clone())) {
         Ok(name) => name,
         Err(err) => {
             if let Some(previous) = previous {

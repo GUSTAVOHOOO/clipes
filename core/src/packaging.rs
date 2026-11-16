@@ -327,9 +327,9 @@ fn language_matches(input: &TaskInput, output: &Value) -> Vec<Violation> {
 inventory::submit! {
     AiTask {
         id: TASK_ID,
-        version: 1,
+        version: 2,
         prompt: PROMPT,
-        prompt_sha256: "6a0ccbcd85b760aab2b3232d61445b413f0edc50c92108625dd8d903d20aaaf9",
+        prompt_sha256: "542a860d038280e656ed5e158ef60b1fd128b98bf49ad6bcf18d228ca5f32ad6",
         wire_schema: WIRE,
         full_schema: FULL,
         verifiers: &[language_matches, limits, no_urls],
@@ -527,7 +527,8 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let (profile, safety) = route_safety()?;
     let lang = pick_language(&ctx, &v)?;
     let credit = build_credit(lang, &ctx.permission, ctx.origin_url.as_deref());
-    let input = build_input(&ctx.cut.sentences, lang, credit.as_deref());
+    let mut input = build_input(&ctx.cut.sentences, lang, credit.as_deref());
+    crate::angles::add_to_input(&mut input, &ctx.cut, false)?;
     Ok(json!({
         "paid": matches!(safety, Safety::Paid),
         "profile": profile,
@@ -543,7 +544,8 @@ fn cmd_generate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let lang = pick_language(&ctx, &v)?;
     let (profile, safety) = route_safety()?;
     let credit = build_credit(lang, &ctx.permission, ctx.origin_url.as_deref());
-    let input = build_input(&ctx.cut.sentences, lang, credit.as_deref());
+    let mut input = build_input(&ctx.cut.sentences, lang, credit.as_deref());
+    crate::angles::add_to_input(&mut input, &ctx.cut, false)?;
     if matches!(safety, Safety::Paid) && v["confirmed"] != true {
         return Err(CoreError {
             code: "confirmation_required".into(),

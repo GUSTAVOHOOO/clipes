@@ -72,6 +72,17 @@ fn style_is_per_clip_new_clips_copy_the_project_default_and_stale_revisions_conf
         "projects.create",
         json!({"parent":root.path(),"name":"Estilos"}),
     );
+    with_writer(|c| {
+        for i in 1..=3 {
+            c.execute(
+                "INSERT INTO clip_edits(identity,document) VALUES (?1,'{}')",
+                [format!("candidate:{i}")],
+            )?;
+        }
+        Ok(())
+    })
+    .unwrap();
+    assert!(dispatch("captions.style.get", json!({"clip_id":99}), &mut |_| {}).is_err());
     let first = call("captions.style.get", json!({"clip_id":1}));
     assert_eq!(first["preset"], "vertical");
     let cinema = call(
@@ -100,5 +111,15 @@ fn style_is_per_clip_new_clips_copy_the_project_default_and_stale_revisions_conf
         "vertical"
     );
     assert!(dispatch("captions.style.get", json!({"clip_id":0}), &mut |_| {}).is_err());
+    with_writer(|c| c.execute("DELETE FROM clip_edits WHERE id=1", [])).unwrap();
+    let left: i64 = with_writer(|c| {
+        c.query_row(
+            "SELECT COUNT(*) FROM caption_styles WHERE clip_id=1",
+            [],
+            |r| r.get(0),
+        )
+    })
+    .unwrap();
+    assert_eq!(left, 0, "estilo some com o Corte (ON DELETE CASCADE)");
     call("projects.close", json!({}));
 }

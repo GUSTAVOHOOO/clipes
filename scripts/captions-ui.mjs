@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 export async function testCaptions(page, editor, language) {
   const en = language === 'en';
   const label = en ? 'Captions' : 'Legenda';
-  await editor.getByRole('button', { name: label, exact: true }).click();
+  await editor.getByRole('button', { name: new RegExp('^' + label) }).click();
   const panel = editor.getByRole('dialog', { name: label, exact: true });
   await panel.waitFor();
   const preset = panel.getByLabel(en ? 'Preset' : 'Preset');

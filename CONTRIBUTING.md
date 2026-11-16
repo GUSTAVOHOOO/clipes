@@ -46,6 +46,10 @@ bun run build
 
 ## Contrato do núcleo
 
+O [ângulo antes do Roteiro](docs/contribuindo/angulos.md) descreve a tarefa `angles`,
+que herda a rota de `script`, os comandos de escolha e os blocos desatualizados ao
+trocar a promessa do Vídeo transformado.
+
 Export local, contrato de entrada do Corte, ASS compartilhado com preview, harness
 de paridade e pontos de extensão do pipeline: [Export](docs/contribuindo/export.md).
 
@@ -113,6 +117,9 @@ As fronteiras e os IDs das Frases são função só do texto original e dos temp
 Desfazer e refazer usam uma pilha por Projeto em `transcript_corrections` (texto antes e depois), persistida no SQLite do Projeto; uma correção nova limpa o refazer. A busca (`transcription.search`) usa a tabela FTS5 `sentence_search` (`unicode61 remove_diacritics 2`, então “acao” acha “ação”) sobre o texto efetivo das Frases de todas as Transcrições do Projeto. Gatilhos em `sentences` mantêm o índice na mesma transação de qualquer gravação de Frases e o limpam na exclusão em cascata. A entrada do usuário nunca vai crua ao `MATCH`: cada termo é citado e o último aceita prefixo.
 
 ## Preview do Corte (#58)
+
+Bordas, documento do Corte, histórico, autosave e snapshots do editor (#70):
+[Editor do Corte](docs/contribuindo/editor-bordas.md).
 
 O preview de um Corte usa um proxy H.264 de GOP curto, só da janela do Corte ±2 min, gerado como job local da fila e guardado num cache **fora do Projeto** (`<cache>/proxies`, LRU por tamanho). Ele é servido pelo protocolo de mídia `clipes-media`, implementado no núcleo (`core::media::serve`, com `Range`) e traduzido pelo adaptador em `src-tauri`. O protocolo só serve um id opaco (`proxy/<chave>` ou `source/<id>`), nunca um caminho vindo da URL. A UI é `CutPreview` (`{ sourceId, startUs, endUs }`), e clicar numa palavra da Transcrição posiciona o preview nela. Fonte offline não gera nada. Detalhes, constantes e testes em [Preview do Corte](docs/contribuindo/preview-do-corte.md).
 

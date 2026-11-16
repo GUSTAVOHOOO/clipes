@@ -1,11 +1,12 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import { editorEditsMock } from './editorEditsMock';
 import { version } from '../../package.json';
 import { exportMock } from '@/features/export/mock';
 
 /** Contrato do Corte para export, compartilhado pela revisão e pelo editor (#61).
  * `export.start` recebe estes campos mais `output` (caminho MP4 escolhido no diálogo).
  */
-export type ExportRequest = { source_id: number; start_id: number; end_id: number; candidate_id?: number };
+export type ExportRequest = { source_id: number; start_id: number; end_id: number; candidate_id?: number; clip_id?: number };
 import { batchMockDispatch } from './batchMock';
 import { packagingMockDispatch } from './packagingMock';
 import { thumbnailMockDispatch } from './thumbnailMock';
@@ -232,7 +233,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'projects.local_only.set') { projectVetoMock = (args as { enabled: boolean }).enabled; return { open: true, enabled: projectVetoMock } as T; }
     if (sourceTest && new URLSearchParams(location.search).has('batch-test')) { const handled = batchMockDispatch(name, args); if (handled !== undefined) return handled as T; }
     if (name.startsWith('thumbnail.')) { const handled = thumbnailMockDispatch(name, args); if (handled !== undefined) return handled as T; }
-    if (name.startsWith('script.')) { const handled = scriptMockDispatch(name, args); if (handled !== undefined) return handled as T; }
+    if (name.startsWith('script.') || name.startsWith('angles.')) { const handled = scriptMockDispatch(name, args); if (handled !== undefined) return handled as T; }
     if (name.startsWith('packaging.')) { const handled = packagingMockDispatch(name, args); if (handled !== undefined) return handled as T; }
     if (name === 'jobs.list') return (sourceTest ? jobItems : []) as T;
     if (name === 'jobs.cancel' && (args as { id: number }).id === 99) { transcribeMock = { ...transcribeMock, job: { id: 99, state: 'cancelled', progress: 40 } }; return null as T; }
@@ -248,7 +249,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'sources.url.settings.get') return urlSettingsMock as T;
     if (name === 'sources.url.settings.set') { urlSettingsMock = {...urlSettingsMock, ...(args as typeof urlSettingsMock)}; return urlSettingsMock as T; }
     if (sourceTest && name === 'sources.list') return sourceItems as T;
-    if (sourceTest && name === 'sources.url.download') return {path:'/test/downloaded.mp4',url:(args as {url:string}).url} as T;
+    if (sourceTest && name === 'sources.url.download') { const url=(args as {url:string}).url; if(url.endsWith('/age-test')) throw {code:'age_restricted',message:'test'}; return {path:'/test/downloaded.mp4',url} as T; }
     if (sourceTest && name === 'sources.inspect') return {format:{duration:'12'},streams:[{index:0,codec_type:'audio',codec_name:'aac'}]} as T;
     if (sourceTest && name === 'sources.import') { const a=args as {path:string;permission:{status:string};origin_url?:string}; const item={id:4,path:a.path,status:'available',available:true,verified:true,permission:a.permission}; sourceItems.push(item); return {...item,origin_url:a.origin_url} as T; }
 
@@ -396,6 +397,8 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
 const editorTest = transcriptTest && typeof location !== 'undefined' && new URLSearchParams(location.search).has('editor-test');
 const editorKey = 'ab'.repeat(32);
 function editorMock(name: string, a: Record<string, number>) {
+  const edited = editorEditsMock(name, a);
+  if (edited !== undefined) return edited;
   const fail = (code: string, message: string) => { throw { code, message }; };
   const range = () => {
     if (!(a.start_id >= 1 && a.start_id <= 720 && a.end_id >= 1 && a.end_id <= 720)) fail('unknown_sentence_id', 'Frase desconhecida.');
@@ -406,7 +409,6 @@ function editorMock(name: string, a: Record<string, number>) {
     return { startUs, endUs };
   };
   if (name === 'editor.range') return { request: a, ...range() };
-  if (name === 'editor.open') { const r = range(); return { request: a, ...r, windowStartUs: Math.max(0, r.startUs - 120_000_000), windowEndUs: r.endUs + 120_000_000, fps: 24 }; }
   if (name === 'editor.sentences') {
     const first = Math.max(a.after_id + 1, Math.ceil(a.start_us / 10_000_000) + 1), last = Math.min(Math.floor(a.end_us / 10_000_000), 720);
     return Array.from({ length: Math.max(0, Math.min(a.limit, last - first + 1)) }, (_, n) => { const id = first + n; return { id, startUs: (id - 1) * 10_000_000, endUs: id * 10_000_000, text: `Frase ${id}` }; });

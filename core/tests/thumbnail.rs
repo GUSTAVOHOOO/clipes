@@ -257,7 +257,7 @@ fn thumbnail_flow_suggestion_choice_history_and_png_export() {
     let instant = current["instantUs"].as_i64().unwrap();
     assert!((cut_start..=cut_end).contains(&instant));
     assert_eq!(doc["suggestions"][0]["sentenceId"], 10);
-    assert_eq!(doc["suggestions"][0]["taskVersion"], 1);
+    assert_eq!(doc["suggestions"][0]["taskVersion"], 2);
     assert_eq!(
         doc["suggestions"][0]["promptSha256"]
             .as_str()
@@ -269,6 +269,10 @@ fn thumbnail_flow_suggestion_choice_history_and_png_export() {
         let seen = fake.seen.lock().unwrap();
         let request = &seen[0];
         assert!(request.transcript.starts_with("#CAPA\n"));
+        assert!(
+            !request.transcript.contains("#ANGULO"),
+            "Corte direto mantém a entrada sem ângulo"
+        );
         assert!(request.transcript.lines().any(|l| l.starts_with("10 ")));
         for secret in ["live.mkv", "Canal"] {
             assert!(!request.transcript.contains(secret));

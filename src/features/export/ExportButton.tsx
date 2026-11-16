@@ -24,7 +24,7 @@ export function exportFilename(title: string, id: number): string {
   return `${name}.mp4`;
 }
 
-export function ExportButton({ sourceId, candidateId, title, startId, endId, approved }: { sourceId: number; candidateId: number; title: string; startId?: number; endId?: number; approved: boolean }) {
+export function ExportButton({ sourceId, candidateId, clipId, title, startId, endId, approved }: { sourceId: number; candidateId: number; clipId?: number; title: string; startId?: number; endId?: number; approved: boolean }) {
   const t = useText(texts);
   const [status, setStatus] = useState<Status | null>(null);
   const [busy, setBusy] = useState(false);
@@ -55,7 +55,7 @@ export function ExportButton({ sourceId, candidateId, title, startId, endId, app
       if (!chosen || !alive.current) return;
       const output = /\.mp4$/i.test(chosen) ? chosen : `${chosen}.mp4`;
       setStatus(null);
-      const request: ExportRequest = { source_id: sourceId, candidate_id: candidateId, start_id: startId, end_id: endId };
+      const request: ExportRequest = { source_id: sourceId, candidate_id: candidateId, start_id: startId, end_id: endId, clip_id: clipId };
       const answer = await coreDispatch<{ job: number }>('export.start', { ...request, output });
       if (alive.current) setStatus({ job: answer.job, state: 'queued', progress: 0 });
     } catch (e) {

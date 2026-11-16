@@ -132,6 +132,9 @@ pub(crate) fn ytdlp_executable() -> Result<PathBuf, CoreError> {
     update::installed(&executable)?;
     Ok(executable)
 }
+pub(crate) fn ytdlp_version(exe: &Path) -> String {
+    update::installed(exe).unwrap_or_else(|_| "indisponível".into())
+}
 pub(crate) fn configured_ffmpeg() -> Option<PathBuf> {
     load_settings().ok().and_then(|s| s.ffmpeg_path)
 }
