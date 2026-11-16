@@ -48,7 +48,7 @@ fn main() {
     println!("clipes-progress: 42.0%"); io::stdout().flush().unwrap();
     if url.ends_with("hang") || url.ends_with("hang-child") { thread::sleep(Duration::from_secs(30)); }
     let failure = if url.ends_with("age") { Some("ERROR: Sign in to confirm your age") }
-        else if url.ends_with("login") { Some("ERROR: Sign in to confirm you’re not a bot") }
+        else if url.ends_with("login") { Some("ERROR: Sign in to confirm you are not a bot") }
         else if url.ends_with("js") { Some("WARNING: No supported JavaScript runtime could be found") }
         else if url.ends_with("sabr") { Some("WARNING: YouTube may have enabled the SABR-only streaming experiment") }
         else if url.ends_with("fail") { Some("ERROR: HTTP Error 403: Forbidden") }

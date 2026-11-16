@@ -91,9 +91,16 @@ fn url_settings_persist_terms_and_download_directory_per_installation() {
         ("sabr", "sabr_unavailable", "yt_dlp.sabr_unavailable"),
         ("fail", "download_failed", "yt_dlp.http_403"),
     ] {
-        let err = run("sources.url.download", json!({"project":project,"url":format!("https://example.com/{suffix}"),"job":suffix})).unwrap_err();
+        let err = run(
+            "sources.url.download",
+            json!({"project":project,"url":format!("https://example.com/{suffix}"),"job":suffix}),
+        )
+        .unwrap_err();
         assert_eq!(err.code, code);
-        let diagnostic = run("diagnostic.get", json!({})).unwrap()["text"].as_str().unwrap().to_owned();
+        let diagnostic = run("diagnostic.get", json!({})).unwrap()["text"]
+            .as_str()
+            .unwrap()
+            .to_owned();
         assert!(diagnostic.contains(code), "{diagnostic}");
         assert!(diagnostic.contains(pattern), "{diagnostic}");
         assert!(diagnostic.contains("2027.01.01.000000"));
