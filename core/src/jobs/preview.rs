@@ -62,7 +62,7 @@ pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
             if begin(id).unwrap_or(false) {
                 if kind.starts_with(ai::KIND_PREFIX) {
                     ai::execute(id, &stop);
-                    if kind == crate::selection::JOB_KIND {
+                    if crate::selection::is_job_kind(&kind) {
                         crate::selection::on_job_settled(id);
                     }
                     continue;

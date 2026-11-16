@@ -111,9 +111,12 @@ function hardwareMockDispatch(name: string, args: object): unknown {
 // Seleção de Cortes simulada (#53): quatro Janelas; a terceira falha até ser refeita. `selection-paid` simula Provedor pago e `selection-blocked` o contexto pequeno demais.
 const chatMock = { fetched: false };
 const selectionFlag = (name: string) => typeof location !== 'undefined' && new URLSearchParams(location.search).has(name);
-const selectionWeights = [{key:'hook',weight:0.3},{key:'selfContained',weight:0.2},{key:'energy',weight:0.2},{key:'value',weight:0.15},{key:'closing',weight:0.15}];
-const selectionMock = { run: null as null | { id: number; ticks: number; state: string; cancelled: boolean; redone: boolean } };
-function selectionAxes(scores: number[]) { return Object.fromEntries(selectionWeights.map((w, i) => [w.key, { score: scores[i], why: `Motivo do eixo ${w.key}.` }])); }
+const selectionWeightsDirect = [{key:'hook',weight:0.3},{key:'selfContained',weight:0.2},{key:'energy',weight:0.2},{key:'value',weight:0.15},{key:'closing',weight:0.15}];
+// Vídeo transformado (#67): 6º eixo `commentary` e os pesos da decisão de 15/11/2026.
+const selectionWeightsTransformed = [{key:'commentary',weight:0.3},{key:'hook',weight:0.2},{key:'energy',weight:0.15},{key:'value',weight:0.15},{key:'selfContained',weight:0.1},{key:'closing',weight:0.1}];
+const selectionMock = { run: null as null | { id: number; ticks: number; state: string; cancelled: boolean; redone: boolean; videoKind: string } };
+const weightsOf = (kind: string) => kind === 'transformed' ? selectionWeightsTransformed : selectionWeightsDirect;
+function selectionAxes(scores: number[], kind: string) { return Object.fromEntries(weightsOf(kind).map((w, i) => [w.key, { score: scores[i % scores.length], why: `Motivo do eixo ${w.key}.` }])); }
 // Revisão simulada (#55): Frases de 10 s (a Frase k vai de 10(k-1) s a 10k s), faixa de 20 s a 3 min e pilha de decisões.
 type MockReview = { status: 'pending' | 'approved' | 'rejected'; start: number; end: number; origin: [number, number] };
 const reviewMock = { items: new Map<number, MockReview>([[1, { status: 'pending', start: 10, end: 14, origin: [10, 14] }], [2, { status: 'pending', start: 40, end: 41, origin: [40, 41] }], [3, { status: 'pending', start: 200, end: 203, origin: [200, 203] }]]), history: [] as { id: number; before: MockReview }[] };
@@ -159,14 +162,16 @@ function selectionMockDispatch(name: string, args: object): unknown {
   if (name === 'chat.fetch') { chatMock.fetched = true; return { state: 'queued', job: 1 }; }
   if (name === 'selection.estimate') {
     if (selectionFlag('selection-blocked')) throw { code: 'context_too_small', message: 'O contexto efetivo de 4096 tokens (definido por você no perfil) não comporta a janela mínima. Aumente o contexto no Perfil de Provedor ou escolha outro perfil.' };
-    return { paid, profile: 'legacy', plan: { state: 'full', windows: [{}, {}, {}, {}], contextTokens: 32768 }, weights: selectionWeights, estimate };
+    const kind = (args as { videoKind?: string }).videoKind ?? 'direct';
+    return { paid, profile: 'legacy', videoKind: kind, plan: { state: 'full', windows: [{}, {}, {}, {}], contextTokens: 32768 }, weights: weightsOf(kind), estimate };
   }
   const run = selectionMock.run;
-  if (name === 'selection.list') return run ? [{ id: run.id, state: run.state, createdAt: '2026-11-15T12:00:00Z', weights: selectionWeights, budgetPause: null, counts: { windows: 4, completed: 0, failed: 0, kept: 0, discarded: 0, merged: 0 } }] : [];
+  if (name === 'selection.list') return run ? [{ id: run.id, state: run.state, createdAt: '2026-11-15T12:00:00Z', videoKind: run.videoKind, weights: weightsOf(run.videoKind), budgetPause: null, counts: { windows: 4, completed: 0, failed: 0, kept: 0, discarded: 0, merged: 0 } }] : [];
   if (name === 'selection.start') {
     if (paid && !(args as { confirmed?: boolean }).confirmed) throw { code: 'confirmation_required', message: 'confirmação obrigatória' };
-    selectionMock.run = { id: 1, ticks: 0, state: 'running', cancelled: false, redone: false };
-    return { run: 1, windows: 4, planState: 'full', weights: selectionWeights };
+    const kind = (args as { videoKind?: string }).videoKind ?? 'direct';
+    selectionMock.run = { id: 1, ticks: 0, state: 'running', cancelled: false, redone: false, videoKind: kind };
+    return { run: 1, videoKind: kind, windows: 4, planState: 'full', weights: weightsOf(kind) };
   }
   if (name === 'selection.cancel') { if (run) { run.cancelled = true; run.state = 'partial'; } return null; }
   if (name === 'selection.redo' || name === 'selection.resume') {
@@ -183,11 +188,11 @@ function selectionMockDispatch(name: string, args: object): unknown {
     const windows = states.map((state, index) => ({ index, firstId: index * 90 + 1, lastId: index * 90 + 90, startUs: index * 720_000_000, endUs: index * 720_000_000 + 900_000_000, jobId: index + 1, state, code: state === 'cancelled' ? 'cancelled' : state === 'failed' ? 'verification_failed' : null }));
     const done = states.filter(s => s === 'completed').length;
     const candidates = run.ticks === 1 && !run.cancelled ? [] : [
-      { id: 1, rank: 0, startId: 10, endId: 14, startUs: 90_000_000, endUs: 140_000_000, axes: selectionAxes([9, 8, 7, 9, 8]), total: 8.35, title: 'A virada do jogo', windows: [0, 1], adjusted: false, adjust: null },
-      { id: 2, rank: 1, startId: 40, endId: 41, startUs: 390_000_000, endUs: 410_000_000, axes: selectionAxes([8, 6, 7, 9, 5]), total: 7.1, title: '', windows: [0], adjusted: true, adjust: { extendedAfter: 1 } },
-      { id: 3, rank: 2, startId: 200, endId: 203, startUs: 1_990_000_000, endUs: 2_030_000_000, axes: selectionAxes([4, 4, 4, 4, 4]), total: 4, title: 'Piada longa', windows: [2], adjusted: true, adjust: { trimmedEnd: 3 } },
+      { id: 1, rank: 0, startId: 10, endId: 14, startUs: 90_000_000, endUs: 140_000_000, axes: selectionAxes([9, 8, 7, 9, 8], run.videoKind), total: 8.35, title: 'A virada do jogo', windows: [0, 1], adjusted: false, adjust: null },
+      { id: 2, rank: 1, startId: 40, endId: 41, startUs: 390_000_000, endUs: 410_000_000, axes: selectionAxes([8, 6, 7, 9, 5], run.videoKind), total: 7.1, title: '', windows: [0], adjusted: true, adjust: { extendedAfter: 1 } },
+      { id: 3, rank: 2, startId: 200, endId: 203, startUs: 1_990_000_000, endUs: 2_030_000_000, axes: selectionAxes([4, 4, 4, 4, 4], run.videoKind), total: 4, title: 'Piada longa', windows: [2], adjusted: true, adjust: { trimmedEnd: 3 } },
     ];
-    return { run: { id: 1, state: run.state, summary: { energy: selectionFlag('selection-energy') ? { measured: true, high: 4, peak: 2 } : { measured: false }, chat: selectionFlag('selection-chat') ? { available: true, peaks: 3 } : { available: false } }, weights: selectionWeights, budgetPause: null, createdAt: '2026-11-15T12:00:00Z', counts: { windows: 4, completed: done, failed: states.filter(s => s === 'failed' || s === 'cancelled').length, kept: candidates.length, discarded: 0, merged: 1 } }, windows, candidates };
+    return { run: { id: 1, state: run.state, videoKind: run.videoKind, summary: { energy: selectionFlag('selection-energy') ? { measured: true, high: 4, peak: 2 } : { measured: false }, chat: selectionFlag('selection-chat') ? { available: true, peaks: 3 } : { available: false } }, weights: weightsOf(run.videoKind), budgetPause: null, createdAt: '2026-11-15T12:00:00Z', counts: { windows: 4, completed: done, failed: states.filter(s => s === 'failed' || s === 'cancelled').length, kept: candidates.length, discarded: 0, merged: 1 } }, windows, candidates };
   }
   throw { code: 'run_not_found', message: 'Execução de seleção não encontrada.' };
 }

@@ -718,6 +718,34 @@ try {
   const blockedSelection = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
   await blockedSelection.getByText(/contexto efetivo de 4096 tokens/).waitFor();
   assert.equal(await blockedSelection.getByRole('button', { name: 'Selecionar Cortes' }).isDisabled(), true);
+  // Tipo de vídeo (#67): escolha antes de produzir, explicação fixa, 6º eixo e pesos do Vídeo transformado.
+  const kindChecks = async (L) => {
+    const region = page.getByRole('region', { name: L.region }).first();
+    const group = region.getByRole('group', { name: L.kindLabel });
+    assert.equal(await group.getByRole('radio', { name: L.direct }).isChecked(), true, 'Corte direto é o padrão');
+    assert.match(await group.innerText(), L.directText);
+    assert.match(await group.innerText(), L.transformedText);
+    assert.match(await region.innerText(), L.directWeights);
+    await group.getByRole('radio', { name: L.transformed }).check();
+    await region.getByText(L.transformedWeights).waitFor();
+    return { region, group };
+  };
+  const KIND_PT = { lang: 'pt-BR', region: 'Seleção de Cortes', kindLabel: 'Tipo de vídeo', direct: /Corte direto/, transformed: /Vídeo transformado/, directText: /monetização pode ser recusada/, transformedText: /nunca é 100% automático/, directWeights: /Pesos da Nota neste tipo: Gancho 30% · Autossuficiência 20% · Emoção\/energia 20% · Valor 15% · Fechamento 15%/, transformedWeights: /Pesos da Nota neste tipo: Espaço para comentário 30% · Gancho 20% · Emoção\/energia 15% · Valor 15% · Autossuficiência 10% · Fechamento 10%/, axis: 'Espaço para comentário', weight: 'peso 30%', badge: 'Tipo: Vídeo transformado' };
+  const KIND_EN = { lang: 'en', region: 'Clip selection', kindLabel: 'Video type', direct: /Direct Clip/, transformed: /Transformed Video/, directText: /reused-content policy/, transformedText: /never 100% automatic/, directWeights: /Score weights for this type: Hook 30% · Self-contained 20% · Emotion\/energy 20% · Value 15% · Closing 15%/, transformedWeights: /Score weights for this type: Room for commentary 30% · Hook 20% · Emotion\/energy 15% · Value 15% · Self-contained 10% · Closing 10%/, axis: 'Room for commentary', weight: 'weight 30%', badge: 'Type: Transformed Video' };
+  await page.goto(`${url}?source-test=1&transcript-test=1`);
+  const kindPt = await kindChecks(KIND_PT);
+  await kindPt.region.getByRole('button', { name: 'Selecionar Cortes' }).click();
+  await kindPt.region.getByText(/Seleção com janelas pendentes/).waitFor({ timeout: 15000 });
+  await kindPt.region.locator('[data-video-kind="transformed"]').first().waitFor();
+  assert.ok(await kindPt.region.locator('[data-video-kind="transformed"]').count() >= 2, 'o tipo aparece na seleção e na revisão');
+  assert.equal(await kindPt.region.locator('[data-video-kind="direct"]').count(), 0);
+  assert.match(await kindPt.region.innerText(), new RegExp(KIND_PT.badge));
+  await kindPt.region.locator('[data-candidate="1"] button').click();
+  const detailPt = kindPt.region.locator('[data-detail="1"]');
+  assert.match(await detailPt.innerText(), new RegExp(KIND_PT.axis));
+  assert.match(await detailPt.innerText(), new RegExp(KIND_PT.weight));
+  assert.equal(await detailPt.locator('dt').count(), 6, 'seis eixos no Vídeo transformado');
+  await page.screenshot({ path: 'shots/selection-video-kind-pt-BR.png', fullPage: true });
   // Lote de Fontes (#56): montar, confirmar custo, pausar, retomar Fonte e teto.
   await page.goto(`${url}?source-test=1&batch-test=1&batch-paid=1`);
   const batches = page.getByRole('region', { name: 'Lote de Fontes' });
@@ -739,9 +767,11 @@ try {
   assert.match(await batchDialog.innerText(), /não substitui o consentimento/);
   await batchDialog.getByRole('button', { name: 'Cancelar' }).click();
   await batchDialog.waitFor({ state: 'hidden' });
+  await batches.getByRole('radio', { name: /Vídeo transformado/ }).check();
   await batches.getByRole('button', { name: 'Criar lote' }).click();
   await batchDialog.getByRole('button', { name: 'Confirmar e criar lote' }).click();
   const batchCard = batches.getByRole('listitem', { name: 'Lote de Fontes 1' });
+  await batchCard.getByText('Tipo: Vídeo transformado').waitFor();
   await batchCard.getByText(/Em andamento|Precisa de atenção/).first().waitFor();
   assert.match(await batchCard.innerText(), /1 de 3 Fontes concluídas/);
   assert.match(await batchCard.innerText(), /Teto: US\$ 0\.5000/);
@@ -779,6 +809,9 @@ try {
   await enSelection.getByRole('button', { name: 'Select Clips' }).click();
   await enSelection.getByText(/Selection with pending windows/).waitFor({ timeout: 15000 });
   await reviewChecks(EN);
+  const kindEn = await kindChecks(KIND_EN);
+  await page.screenshot({ path: 'shots/selection-video-kind-en.png', fullPage: true });
+  assert.match(await kindEn.group.innerText(), /Direct Clip/);
   await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
   await page.goto(`${url}?source-test=1&groq-retry-test=1`);
   const uncertainAudio = page.locator('li').filter({hasText:'/test/downloaded.mp4'}).first();

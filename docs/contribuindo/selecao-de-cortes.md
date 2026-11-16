@@ -28,7 +28,27 @@ O adaptador já faz **um** reparo para JSON ou schema fio inválido (ADR-0008). 
 
 ## Nota total
 
-Tabela única `cut::AXES` (chave e peso em pontos percentuais); a Nota total é a média ponderada `Σ peso × nota`, calculada em centésimos (`total_centi`, de 0 a 1000) para a comparação ser exata. **Sem curva.** Pesos da v1, decisão do dev em 15/11/2026: Gancho (`hook`) 0,30; Autossuficiência (`selfContained`) 0,20; Emoção/energia (`energy`) 0,20; Valor (`value`) 0,15; Fechamento (`closing`) 0,15. O #57 pode comparar outras distribuições. O 6º eixo (Espaço para comentário, do Vídeo transformado) não entra aqui; a tabela é extensível, mas o schema (`wire.json`, `full.json`) e o prompt também precisam ganhar o eixo, com `version` nova e entrada na trava. Um teste confere que os eixos do schema seguem a tabela e que os pesos somam 100. Cada candidato e cada execução devolvem os pesos usados.
+Tabelas únicas em `cut::AXES` (Corte direto) e `cut::AXES_TRANSFORMED` (Vídeo transformado, #67): chave e peso em pontos percentuais. A Nota total é a média ponderada `Σ peso × nota`, calculada em centésimos (`total_centi(kind, notas)`, de 0 a 1000) para a comparação ser exata, com as notas na ordem da tabela do tipo. **Sem curva.** Cada tabela soma 100, e um teste confere isso, o total calculado à mão e que o schema (`wire.json`, `full.json` e as versões `_transformed`) tem exatamente os eixos da tabela. Cada candidato e cada execução devolvem os pesos usados.
+
+| Eixo | Chave | Corte direto | Vídeo transformado |
+|---|---|---|---|
+| Espaço para comentário | `commentary` | n/a | 30 |
+| Gancho | `hook` | 30 | 20 |
+| Autossuficiência | `selfContained` | 20 | 10 |
+| Emoção/energia | `energy` | 20 | 15 |
+| Valor | `value` | 15 | 15 |
+| Fechamento | `closing` | 15 | 10 |
+
+Decisões do dev em **15/11/2026**: o Corte direto fica com os 5 eixos e os pesos 30/20/20/15/15; o Vídeo transformado ganha o 6º eixo e usa Espaço para comentário 30, Gancho 20, Emoção/energia 15, Valor 15, Autossuficiência 10 e Fechamento 10. O #57 pode comparar outras distribuições.
+
+## Tipo de vídeo (#67)
+
+O tipo (ADR-0001) é escolhido **antes** da seleção, por execução, e é um de `direct` (Corte direto, o padrão) ou `transformed` (Vídeo transformado). `selection.estimate` e `selection.start` aceitam `videoKind`; um valor desconhecido devolve `invalid_video_kind` sem criar nada. `batches.create` também aceita `videoKind` e cada Fonte do lote herda o tipo. A resposta de `selection.start`, `selection.estimate`, `selection.get`, `selection.list` e `batches.get` traz `videoKind`, e o resumo da execução também (`summary.videoKind`), para a revisão e o editor lerem o tipo sem adivinhar.
+
+- **Duas Tarefas de IA, um roteamento.** O Corte direto segue na tarefa `selection` v2, **sem mudança de prompt, schema nem versão**. O Vídeo transformado é a tarefa `selection_transformed` v1 (`prompt_transformed.md`, `wire_transformed.json`, `full_transformed.json`, entrada nova em `prompt-lock.json`): o 6º eixo `commentary` entra no prompt e no schema **só nela**, e o verificador dela exige o eixo (o do Corte direto não o conhece). `ai_task::routing_id` faz `selection_transformed` usar a escolha de Provedor e o veto "somente local" de `selection`, então nada muda para quem já configurou. O job fica como `ai:selection_transformed`; `selection::is_job_kind` reconhece os dois.
+- **Persistência.** Migração `0067_001_video_kind`: `selection_runs.video_kind` e `source_batches.video_kind` (`direct` por padrão). Execuções e lotes anteriores valem como Corte direto. Refazer e retomar leem o tipo da execução.
+- **O que o tipo implica** (texto fixo na UI, PT/EN, baseado no ADR-0001): o Corte direto é o trecho com legenda e pode ter a monetização recusada pela política de conteúdo reutilizado do YouTube; o Vídeo transformado exige Narração ou comentário humano revisado e nunca é 100% automático. Esta tarefa só escolhe e mostra o tipo e muda a seleção; Roteiro e Narração são de outros tickets.
+- **Testes.** `core/src/selection/cut.rs` e `core/src/selection/tests.rs` (tabelas, schema, verificador por tipo, roteamento) e `core/tests/selection_video_kind.rs` (headless, Provedor falso: os dois tipos, o 6º eixo exigido só no transformado, total com os pesos novos, ordem, retomada, lote e veto).
 
 ## Ajuste de bordas (só código, por Frase inteira)
 
