@@ -1,4 +1,7 @@
-use clipes_core::export::pipeline::{Audio, Encoder, ExportPlan, Stage, Subtitle, Video};
+use clipes_core::editor::crop::{CropKeyframe, CropSegment};
+use clipes_core::export::pipeline::{
+    self, Audio, Crop, Encoder, ExportPlan, Stage, Subtitle, Video,
+};
 
 #[test]
 fn a_new_stage_enters_without_changing_existing_stages() {
@@ -54,4 +57,63 @@ fn loudness_is_the_last_audio_stage_and_returns_to_48_khz() {
         pipeline::loudnorm_measure_filter(),
         "loudnorm=I=-14:TP=-1:LRA=11:print_format=json"
     );
+}
+
+#[test]
+fn crop_stage_uses_exact_1_and_scales_before_crop_only_when_animated() {
+    let kf = |time_us, x, width| CropKeyframe {
+        time_us,
+        x,
+        y: 0.0,
+        width,
+        height: 1.0,
+        confidence: None,
+        cut: false,
+    };
+    let static_seg = vec![CropSegment {
+        start_us: 0,
+        end_us: 2_000_000,
+        reason: "start".into(),
+        keyframes: vec![kf(0, 0.2, 0.3)],
+    }];
+    let static_plan = pipeline::with_crop(
+        "libx264",
+        None,
+        Some(Crop {
+            segments: &static_seg,
+            start_us: 0,
+            end_us: 2_000_000,
+        }),
+    );
+    assert!(static_plan.crop_commands.is_none());
+    assert!(static_plan.video_filters[0].starts_with("crop="));
+    assert!(static_plan.video_filters[0].contains(":exact=1"));
+    assert!(static_plan.video_filters[1].contains("flags=lanczos"));
+    assert!(static_plan
+        .video_filters
+        .last()
+        .unwrap()
+        .contains("ass=filename=captions.ass"));
+
+    let pan_seg = vec![CropSegment {
+        start_us: 0,
+        end_us: 2_000_000,
+        reason: "start".into(),
+        keyframes: vec![kf(0, 0.1, 0.3), kf(2_000_000, 0.2, 0.3)],
+    }];
+    let pan_plan = pipeline::with_crop(
+        "libx264",
+        None,
+        Some(Crop {
+            segments: &pan_seg,
+            start_us: 0,
+            end_us: 2_000_000,
+        }),
+    );
+    assert!(pan_plan.crop_commands.is_some());
+    assert_eq!(pan_plan.video_filters[0], "sendcmd=f=crop.cmd");
+    assert!(pan_plan.video_filters[1].starts_with("scale="));
+    assert!(pan_plan.video_filters[1].contains("flags=lanczos"));
+    assert!(pan_plan.video_filters[3].starts_with("crop@c="));
+    assert!(pan_plan.video_filters[3].contains(":exact=1"));
 }

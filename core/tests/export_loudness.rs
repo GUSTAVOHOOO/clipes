@@ -62,6 +62,7 @@ fn cut(source: &Path, output: &Path, start_us: i64, end_us: i64) {
             start_us: 0,
             end_us: 500_000,
         }],
+        crop: Vec::new(),
     };
     let mut progress = Vec::new();
     render(Path::new(&program), &input, &CancelToken::new(), &mut |p| {

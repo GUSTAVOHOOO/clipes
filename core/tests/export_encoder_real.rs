@@ -121,6 +121,7 @@ fn real_ffmpeg_detects_a_working_encoder_and_exports_30_seconds() {
                 start_us: 0,
                 end_us: 800_000,
             }],
+            crop: Vec::new(),
         };
         let started = Instant::now();
         render_with(Path::new("ffmpeg"), &input, name, &cancel, &mut |_| {}).unwrap();

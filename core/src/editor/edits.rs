@@ -15,6 +15,8 @@ CREATE TABLE clip_snapshots (id INTEGER PRIMARY KEY, clip_id INTEGER NOT NULL RE
 CREATE INDEX clip_snapshots_clip ON clip_snapshots(clip_id,id);
 " } }
 
+pub(crate) const SCHEMA_VERSION: u64 = 2;
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct Borders {
@@ -22,6 +24,16 @@ pub(crate) struct Borders {
     pub end_id: i64,
     pub start_us: i64,
     pub end_us: i64,
+}
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DocumentV1 {
+    schema_version: u64,
+    revision: u64,
+    original: crate::export::ExportRequest,
+    range: Borders,
+    undo: Vec<Borders>,
+    redo: Vec<Borders>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -32,6 +44,7 @@ pub(crate) struct Document {
     pub range: Borders,
     undo: Vec<Borders>,
     redo: Vec<Borders>,
+    pub crop: crop::CropTimeline,
 }
 struct Entry {
     doc: Document,
@@ -52,14 +65,38 @@ fn lock() -> Result<std::sync::MutexGuard<'static, State>, CoreError> {
     state().lock().map_err(|_| invalid())
 }
 fn decode(encoded: &str) -> Result<Document, CoreError> {
-    let doc: Document = serde_json::from_str(encoded).map_err(|_| invalid())?;
-    if doc.schema_version != 1
+    let raw: Value = serde_json::from_str(encoded).map_err(|_| invalid())?;
+    let version = raw
+        .get("schemaVersion")
+        .and_then(Value::as_u64)
+        .ok_or_else(invalid)?;
+    let doc = match version {
+        1 => {
+            let v1: DocumentV1 = serde_json::from_value(raw).map_err(|_| invalid())?;
+            if v1.schema_version != 1 {
+                return Err(invalid());
+            }
+            Document {
+                schema_version: SCHEMA_VERSION,
+                revision: v1.revision,
+                original: v1.original,
+                range: v1.range,
+                undo: v1.undo,
+                redo: v1.redo,
+                crop: crop::CropTimeline::default(),
+            }
+        }
+        SCHEMA_VERSION => serde_json::from_value(raw).map_err(|_| invalid())?,
+        _ => return Err(invalid()),
+    };
+    if doc.schema_version != SCHEMA_VERSION
         || doc.undo.len() + doc.redo.len() > 100
         || doc.revision == u64::MAX
         || doc.original.clip_id.is_some()
     {
         return Err(invalid());
     }
+    crop::validate_timeline(&doc.crop)?;
     Ok(doc)
 }
 fn load(s: &mut State, id: i64) -> Result<&mut Entry, CoreError> {
@@ -76,11 +113,21 @@ fn load(s: &mut State, id: i64) -> Result<&mut Entry, CoreError> {
     }
     s.entries.get_mut(&id).ok_or_else(invalid)
 }
+fn crop_view(crop: &crop::CropTimeline) -> Value {
+    let resolved = crop::resolve(crop);
+    json!({
+        "suggested": crop.suggested,
+        "edits": crop.edits,
+        "resolved": resolved,
+        "hasCrop": !resolved.is_empty(),
+    })
+}
 fn answer(id: i64, doc: &Document) -> Value {
     let r = &doc.range;
     json!({"clipId":id,"schemaVersion":doc.schema_version,"revision":doc.revision,
         "request":{"source_id":doc.original.source_id,"candidate_id":doc.original.candidate_id,"start_id":r.start_id,"end_id":r.end_id},
-        "startUs":r.start_us,"endUs":r.end_us,"undoCount":doc.undo.len(),"redoCount":doc.redo.len()})
+        "startUs":r.start_us,"endUs":r.end_us,"undoCount":doc.undo.len(),"redoCount":doc.redo.len(),
+        "crop":crop_view(&doc.crop)})
 }
 fn save(s: &mut State, due_only: bool) -> Result<(), CoreError> {
     let ids: Vec<_> = s
@@ -184,7 +231,7 @@ pub(super) fn open(request: &Request, start: i64, end: i64) -> Result<Value, Cor
         id
     } else {
         let doc = Document {
-            schema_version: 1,
+            schema_version: SCHEMA_VERSION,
             revision: 0,
             original: crate::export::ExportRequest {
                 source_id: request.source,
@@ -201,6 +248,7 @@ pub(super) fn open(request: &Request, start: i64, end: i64) -> Result<Value, Cor
             },
             undo: vec![],
             redo: vec![],
+            crop: crop::CropTimeline::default(),
         };
         let encoded = serde_json::to_string(&doc).map_err(|_| invalid())?;
         projects::with_writer(|c| {
@@ -422,8 +470,95 @@ fn snapshots(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     .collect::<Result<Vec<_>, _>>()
     .map(Value::from)
 }
+fn crop_answer(id: i64, doc: &Document) -> Value {
+    let mut out = crop_view(&doc.crop);
+    out["clipId"] = json!(id);
+    out["schemaVersion"] = json!(doc.schema_version);
+    out["revision"] = json!(doc.revision);
+    out
+}
+fn crop_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let id = id(&v)?;
+    let mut s = lock()?;
+    let entry = load(&mut s, id)?;
+    Ok(crop_answer(id, &entry.doc))
+}
+fn crop_set_suggested(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let id = id(&v)?;
+    let mut s = lock()?;
+    let entry = load(&mut s, id)?;
+    let suggested: Option<crop::SuggestedCrop> = if let Some(reframe_id) = v["reframe_id"].as_i64()
+    {
+        let raw: Option<String> = projects::with_reader(|c| {
+            c.query_row(
+                "SELECT timeline FROM reframe_suggestions WHERE id=?1 AND source_id=?2",
+                (reframe_id, entry.doc.original.source_id),
+                |r| r.get(0),
+            )
+            .optional()
+        })?;
+        let text = raw.ok_or_else(crop::invalid_crop)?;
+        Some(serde_json::from_str(&text).map_err(|_| crop::invalid_crop())?)
+    } else if v.get("suggested").is_some_and(Value::is_null) {
+        None
+    } else {
+        Some(serde_json::from_value(v["suggested"].clone()).map_err(|_| crop::invalid_crop())?)
+    };
+    if let Some(ref sug) = suggested {
+        crop::validate_suggested(sug)?;
+    }
+    if entry.doc.crop.suggested != suggested {
+        entry.doc.crop.suggested = suggested;
+        entry.doc.revision += 1;
+        entry.dirty = Some(Instant::now());
+    }
+    Ok(crop_answer(id, &entry.doc))
+}
+fn crop_set_edits(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let id = id(&v)?;
+    let edits: Vec<crop::CropKeyframe> =
+        serde_json::from_value(v["edits"].clone()).map_err(|_| crop::invalid_crop())?;
+    crop::validate_edits(&edits)?;
+    let mut s = lock()?;
+    let entry = load(&mut s, id)?;
+    if entry.doc.crop.edits != edits {
+        entry.doc.crop.edits = edits;
+        entry.doc.revision += 1;
+        entry.dirty = Some(Instant::now());
+    }
+    Ok(crop_answer(id, &entry.doc))
+}
+fn crop_evaluate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let id = id(&v)?;
+    let time_us = v["time_us"].as_i64().ok_or_else(crop::invalid_crop)?;
+    let mut s = lock()?;
+    let entry = load(&mut s, id)?;
+    let resolved = crop::resolve(&entry.doc.crop);
+    let rect = crop::interpolate(&resolved, time_us);
+    Ok(json!({ "clipId": id, "timeUs": time_us, "rect": rect }))
+}
+fn crop_example(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let id = id(&v)?;
+    let aspect = v["aspect"].as_f64().unwrap_or(16.0 / 9.0);
+    if !aspect.is_finite() || !(0.1..=10.0).contains(&aspect) {
+        return Err(crop::invalid_crop());
+    }
+    let mut s = lock()?;
+    let entry = load(&mut s, id)?;
+    let example = crop::example_timeline(entry.doc.range.start_us, entry.doc.range.end_us, aspect);
+    crop::validate_suggested(&example)?;
+    entry.doc.crop.suggested = Some(example);
+    entry.doc.revision += 1;
+    entry.dirty = Some(Instant::now());
+    Ok(crop_answer(id, &entry.doc))
+}
 inventory::submit! {CommandRegistration {name:"editor.adjust",execute:adjust}}
 inventory::submit! {CommandRegistration {name:"editor.undo",execute:undo}}
 inventory::submit! {CommandRegistration {name:"editor.redo",execute:redo}}
 inventory::submit! {CommandRegistration {name:"editor.flush",execute:flush}}
 inventory::submit! {CommandRegistration {name:"editor.snapshots",execute:snapshots}}
+inventory::submit! {CommandRegistration {name:"editor.crop.get",execute:crop_get}}
+inventory::submit! {CommandRegistration {name:"editor.crop.set_suggested",execute:crop_set_suggested}}
+inventory::submit! {CommandRegistration {name:"editor.crop.set_edits",execute:crop_set_edits}}
+inventory::submit! {CommandRegistration {name:"editor.crop.evaluate",execute:crop_evaluate}}
+inventory::submit! {CommandRegistration {name:"editor.crop.example",execute:crop_example}}

@@ -5,6 +5,7 @@ use rusqlite::OptionalExtension;
 use serde_json::{json, Value};
 
 pub mod assets;
+pub mod crop;
 pub(crate) mod edits;
 
 /// Faixa de duração quando o Corte não vem de um candidato (a mesma da seleção, #53).

@@ -23,6 +23,7 @@ fn input(source: &Path, output: &Path) -> RenderInput {
             start_us: 0,
             end_us: 800_000,
         }],
+        crop: Vec::new(),
     }
 }
 fn files(path: &Path) -> Vec<PathBuf> {
