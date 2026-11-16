@@ -1,6 +1,6 @@
 // Fixture determinística do contrato #65 (VITE_CORE_MOCK + editor-test). O núcleo real está em core/src/caption_style.
 type Style = { schemaVersion: 1; revision: number; preset: string; font: string; fontSize: number; color: string; activeColor: string; dimColor: string; outlineColor: string; outline: number; shadow: number; x: number; y: number; highlight: boolean };
-type Override = { color?: string; activeColor?: string; highlight?: boolean };
+type Override = { color?: string; activeColor?: string; highlight?: boolean; hidden?: boolean };
 const base = (preset: string): Style => ({ schemaVersion: 1, revision: 0, preset, font: preset === 'cinema' ? 'Noto Serif' : 'Noto Sans', fontSize: preset === 'vertical' ? 64 : 56, color: '#ffffff', activeColor: '#facc15', dimColor: '#ffffff', outlineColor: '#101010', outline: preset === 'cinema' ? 3 : 6, shadow: 0, x: 540, y: 1440, highlight: preset !== 'simple' });
 let projectDefault: Style | null = null;
 const styles = new Map<number, Style>();
@@ -23,7 +23,7 @@ export function captionsMock(name: string, a: Record<string, any>, textOf: (posi
   if (name === 'captions.overrides') return [...overrides].map(([position, o]) => ({ position, overrides: o }));
   const style = current(a.clip_id);
   const words = Array.from({ length: 9 }, (_, p) => ({ position: p, text: ' ' + textOf(p), startUs: p * 500_000, endUs: p * 500_000 + 450_000, overrides: overrides.get(p) ?? {} }));
-  const visible = words.map(w => ({ ...w, text: w.text.replace(/\p{Extended_Pictographic}/gu, '').trim(), color: w.overrides.color ?? style.color, activeColor: w.overrides.activeColor ?? style.activeColor, highlight: style.highlight && (w.overrides.highlight ?? true) }));
-  const cues = [0, 3, 6].map(i => ({ startUs: visible[i].startUs, endUs: visible[i + 2].endUs, lines: [visible.slice(i, i + 3)] }));
+  const visible = words.filter(w => !w.overrides.hidden).map(w => ({ ...w, text: w.text.replace(/\p{Extended_Pictographic}/gu, '').trim(), color: w.overrides.color ?? style.color, activeColor: w.overrides.activeColor ?? style.activeColor, highlight: style.highlight && (w.overrides.highlight ?? true) }));
+  const cues = Array.from({ length: Math.ceil(visible.length / 3) }, (_, k) => visible.slice(k * 3, k * 3 + 3)).map(line => ({ startUs: line[0].startUs, endUs: line[line.length - 1].endUs, lines: [line] }));
   return { ass: '', style, cues, emojiRemoved: words.filter(w => emoji.test(w.text)).length, words, transcriptId: 1, start_us: a.start_us ?? 0, end_us: a.end_us ?? 4_500_000, lines: [] };
 }

@@ -120,6 +120,8 @@ pub struct WordOverride {
     pub active_color: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub highlight: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hidden: Option<bool>,
 }
 impl WordOverride {
     pub fn validate(&self) -> Result<(), CoreError> {

@@ -178,7 +178,11 @@ fn target(request: &ExportRequest, frozen: Option<(i64, i64)>) -> Result<Target,
             .as_ref()
             .map(|doc| crop::resolve(&doc.crop))
             .unwrap_or_default();
-        let words = styled.iter().map(|w| w.word.clone()).collect();
+        let words = styled
+            .iter()
+            .filter(|w| !w.overrides.hidden.unwrap_or(false))
+            .map(|w| w.word.clone())
+            .collect();
         Ok(Ok(Target {
             start_us,
             end_us,
