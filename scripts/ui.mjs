@@ -151,6 +151,15 @@ try {
   await groqSettings.getByText('Chave testada.').waitFor();
   await groqSettings.getByRole('button', { name: 'Remover chave' }).click();
   await groqSettings.getByText('Chave não configurada.').waitFor();
+  // Encoder do export (#62): detecção, lista dos que passaram e troca manual.
+  const encoderSettings = page.getByRole('region', { name: 'Encoder de vídeo do export' });
+  await encoderSettings.getByText('Ainda não detectado: o primeiro export testa os encoders.').waitFor();
+  await encoderSettings.getByRole('button', { name: 'Detectar de novo' }).click();
+  await encoderSettings.getByText('Em uso: NVENC (NVIDIA)').waitFor();
+  await encoderSettings.getByLabel('Encoder').selectOption('libx264');
+  await encoderSettings.getByText('Em uso: x264 (processador)').waitFor();
+  await encoderSettings.getByLabel('Encoder').selectOption('');
+  await encoderSettings.getByText('Em uso: NVENC (NVIDIA)').waitFor();
   await page.getByLabel('Tema').selectOption('claro');
   await page.getByLabel('Idioma').selectOption('en');
   await page.reload();
@@ -603,7 +612,13 @@ try {
     await review.getByRole('button', { name: L.export }).click();
     await review.getByText(L.exportRunning).waitFor();
     await review.getByText(L.exportCompleted).waitFor();
+    assert.equal(await review.locator('[data-export-fallback]').count(), 0, 'sem falha, sem aviso de fallback');
     await page.screenshot({ path: `shots/export-${L.lang}.png`, fullPage: true });
+    // Fallback do encoder (#62): o aviso aparece junto do Corte exportado.
+    await page.evaluate(() => { const u = new URL(location.href); u.searchParams.set('export-fallback', '1'); history.replaceState(null, '', u); });
+    await review.getByRole('button', { name: L.export }).click();
+    await review.locator('[data-export-fallback]').waitFor();
+    await page.evaluate(() => { const u = new URL(location.href); u.searchParams.delete('export-fallback'); history.replaceState(null, '', u); });
     await page.evaluate(() => { const u = new URL(location.href); u.searchParams.set('export-exists', '1'); history.replaceState(null, '', u); });
     await review.getByRole('button', { name: L.export }).click();
     await review.getByRole('alert').getByText(L.exportExists).waitFor();

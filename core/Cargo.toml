@@ -44,3 +44,9 @@ name = "fake-export"
 path = "tests/fixtures/fake_export.rs"
 test = false
 doctest = false
+
+[[bin]]
+name = "fake-encoders"
+path = "tests/fixtures/fake_encoders.rs"
+test = false
+doctest = false

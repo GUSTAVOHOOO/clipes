@@ -1,5 +1,6 @@
 //! Export local de Cortes (#59), independente do Tauri e de Provedores.
 pub mod captions;
+pub mod encoder;
 pub mod pipeline;
 pub mod render;
 
@@ -47,6 +48,12 @@ CREATE TABLE exports (
   error_code TEXT,
   error_message TEXT
 );
+" } }
+
+inventory::submit! { projects::Migration { id:"0062_001_export_encoder", sql:"
+ALTER TABLE exports ADD COLUMN encoder TEXT;
+ALTER TABLE exports ADD COLUMN fallback_from TEXT;
+ALTER TABLE exports ADD COLUMN fallback_reason TEXT;
 " } }
 
 struct Target {
@@ -224,7 +231,7 @@ fn cmd_status(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .as_i64()
         .ok_or_else(|| error("invalid_job", "Tarefa inválida."))?;
     projects::with_reader(|c| {
-        c.query_row("SELECT j.state,j.progress,e.request,e.error_code,e.error_message FROM exports e JOIN jobs j ON j.id=e.job_id WHERE j.id=?1",[id],|r| {
+        c.query_row("SELECT j.state,j.progress,e.request,e.error_code,e.error_message,e.encoder,e.fallback_from,e.fallback_reason FROM exports e JOIN jobs j ON j.id=e.job_id WHERE j.id=?1",[id],|r| {
         let request:String=r.get(2)?;
         let request:Value=serde_json::from_str(&request).unwrap_or(Value::Null);
         let code:Option<String>=r.get(3)?;
@@ -263,6 +270,7 @@ pub(crate) fn run(
     project: &Path,
     stop: &AtomicBool,
 ) -> Result<(), CoreError> {
+    let mut used: Option<encoder::Outcome> = None;
     let result = (|| {
         crate::jobs::preview::check(id, stop)?;
         let request: String = projects::with_reader(|c| {
@@ -286,6 +294,8 @@ pub(crate) fn run(
             words: target.words,
         };
         let cancel = crate::provider::CancelToken::new();
+        // Etapa de encoder (#62): detecta na primeira vez, usa o do cache e cai para x264.
+        let preferred = encoder::resolve(&ffmpeg, &cancel)?;
         let finished = AtomicBool::new(false);
         crate::jobs::progress(id, "export", 1, "Exportando Corte")?;
         let result = std::thread::scope(|scope| {
@@ -299,27 +309,36 @@ pub(crate) fn run(
                 }
             });
             let mut last = 0;
-            let result = render::render(&ffmpeg, &input, &cancel, &mut |percentage| {
-                if percentage > last {
-                    let _ = crate::jobs::progress(id, "export", percentage, "Exportando Corte");
-                    last = percentage;
-                }
-            });
+            let result = encoder::render_with_fallback(
+                &ffmpeg,
+                &input,
+                &preferred,
+                &cancel,
+                &mut |percentage| {
+                    if percentage > last {
+                        let _ = crate::jobs::progress(id, "export", percentage, "Exportando Corte");
+                        last = percentage;
+                    }
+                },
+            );
             finished.store(true, Ordering::SeqCst);
             result
         });
         if stop.load(Ordering::SeqCst) && result.as_ref().is_err_and(|e| e.code == "cancelled") {
             return Err(error("interrupted", "O export foi interrompido."));
         }
-        result
+        result.map(|outcome| used = Some(outcome))
     })();
     projects::with_writer(|c| {
         c.execute(
-            "UPDATE exports SET error_code=?2,error_message=?3 WHERE job_id=?1",
+            "UPDATE exports SET error_code=?2,error_message=?3,encoder=?4,fallback_from=?5,fallback_reason=?6 WHERE job_id=?1",
             (
                 id,
                 result.as_ref().err().map(|e| &e.code),
                 result.as_ref().err().map(|e| &e.message),
+                used.as_ref().map(|o| &o.encoder),
+                used.as_ref().and_then(|o| o.fallback.as_ref()).map(|f| &f.from),
+                used.as_ref().and_then(|o| o.fallback.as_ref()).map(|f| f.reason),
             ),
         )?;
         Ok(())
