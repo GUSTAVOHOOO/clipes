@@ -256,6 +256,10 @@ fn script_blocks_gate_the_narration_until_every_block_is_approved() {
     );
 
     // Sem Roteiro, a Narração não passa.
+    call(
+        "angles.choose",
+        json!({"candidate":cand,"angle":{"name":"Comentário sobre o trecho","promise":"Entenda o contexto do Corte."}}),
+    );
     let none = script::narration_allowed(cand).unwrap_err();
     assert_eq!(none.code, "script_not_approved");
     assert_eq!(none.usage.unwrap()["reason"], "no_script");
@@ -318,7 +322,7 @@ fn script_blocks_gate_the_narration_until_every_block_is_approved() {
     );
     assert_eq!(blocks(&doc)[0]["refs"], json!([10, 11]));
     let generation = &doc["generations"][0];
-    assert_eq!(generation["taskVersion"], 1);
+    assert_eq!(generation["taskVersion"], 2);
     assert_eq!(generation["promptSha256"].as_str().unwrap().len(), 64);
     assert_eq!(generation["profile"], "legacy");
     assert_eq!(
