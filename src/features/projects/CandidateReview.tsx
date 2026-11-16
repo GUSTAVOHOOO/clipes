@@ -7,6 +7,7 @@ import { clock, fill } from './selectionFormat';
 import { VideoKindBadge, type VideoKind } from './videoKind';
 import { Packaging } from './Packaging';
 import { Thumbnail } from './Thumbnail';
+import { Script } from './Script';
 import { ExportButton } from '@/features/export/ExportButton';
 import { RedoWithProfile, useProfiles, type Blocked } from './RedoWithProfile';
 
@@ -192,6 +193,7 @@ export function CandidateReview({ sourceId, run, videoKind = 'direct', candidate
           <Button aria-pressed={review?.status === 'rejected'} onClick={() => decide('rejected')} atalho="R">{t.reject}</Button>
           <ExportButton key={`${sourceId}-${current.id}`} sourceId={sourceId} candidateId={current.id} title={current.title} startId={review?.startId} endId={review?.endId} approved={review?.status === 'approved'} />
         </div>
+        {review?.status === 'approved' && videoKind === 'transformed' && <Script key={`script-${current.id}`} candidate={current.id} />}
         {onRedoStarted && <RedoWithProfile key={`redo-${current.id}`} run={run} windows={current.windows} currentProfile={current.profile ?? ''} profiles={profiles} onStarted={onRedoStarted}
           blocked={blockedOf(current.windows, windowStates)} />}
         {review?.status === 'approved' && <Packaging key={current.id} candidate={current.id} />}

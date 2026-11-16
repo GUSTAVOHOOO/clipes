@@ -88,6 +88,7 @@ pub fn routing_id(id: &str) -> &str {
         "selection_transformed" => "selection",
         // A sugestão de capa (#74) usa a rota e o veto "somente local" do empacotamento.
         "thumbnail" => "packaging",
+        "script_block" => "script",
         other => other,
     }
 }

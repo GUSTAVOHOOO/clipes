@@ -801,6 +801,36 @@ try {
   assert.match(await detailPt.innerText(), new RegExp(KIND_PT.weight));
   assert.equal(await detailPt.locator('dt').count(), 6, 'seis eixos no Vídeo transformado');
   await page.screenshot({ path: 'shots/selection-video-kind-pt-BR.png', fullPage: true });
+  // Roteiro (#73): só no Vídeo transformado aprovado; editar, aprovar e regenerar bloco a bloco, sem aprovação em massa.
+  const kindReview = kindPt.region.getByRole('group', { name: 'Revisão dos candidatos' });
+  assert.equal(await kindReview.locator('[data-script]').count(), 0, 'o Roteiro só aparece depois de aprovar o candidato');
+  await kindReview.focus();
+  await page.keyboard.press('a');
+  const script = kindReview.locator('[data-script]');
+  await script.getByRole('button', { name: 'Sugerir Roteiro' }).click();
+  await script.locator('[data-script-block]').first().waitFor();
+  assert.equal(await script.locator('[data-script-block]').count(), 3);
+  const remaining = script.locator('[data-script-remaining]');
+  await remaining.getByText('Faltam 3 de 3 blocos para aprovar.').waitFor();
+  assert.equal(await script.getByRole('button', { name: /aprovar todos|approve all/i }).count(), 0, 'não há aprovação em massa');
+  await script.locator('[data-script-block]').nth(0).getByRole('button', { name: 'Aprovar bloco' }).click();
+  await remaining.getByText('Faltam 2 de 3 blocos para aprovar.').waitFor();
+  const second = script.locator('[data-script-block]').nth(1);
+  await second.getByLabel('Texto do bloco 2').fill('Minha fala editada.');
+  assert.equal(await second.getByRole('button', { name: 'Aprovar bloco' }).isDisabled(), true, 'não aprova texto com edição por salvar');
+  await second.getByRole('button', { name: 'Salvar edição' }).click();
+  await script.getByRole('status').filter({ hasText: 'Edição salva.' }).waitFor();
+  await second.getByRole('button', { name: 'Aprovar bloco' }).click();
+  await script.locator('[data-script-block]').nth(2).getByRole('button', { name: 'Aprovar bloco' }).click();
+  await remaining.getByText(/a Narração está liberada/).waitFor();
+  await second.getByLabel('Texto do bloco 2').fill('Outra edição.');
+  await second.getByRole('button', { name: 'Salvar edição' }).click();
+  await remaining.getByText('Faltam 1 de 3 blocos para aprovar.').waitFor();
+  assert.equal(await second.getAttribute('data-status'), 'pendente', 'editar um bloco aprovado o devolve a pendente');
+  await second.getByRole('button', { name: 'Gerar bloco de novo' }).click();
+  await second.getByText('Nova fala do bloco').or(second.locator('textarea')).first().waitFor();
+  await page.waitForFunction(() => document.querySelector('[data-script-block]:nth-child(2) textarea')?.value.startsWith('Nova fala'));
+  await page.screenshot({ path: 'shots/script-pt-BR.png', fullPage: true });
   // Lote de Fontes (#56): montar, confirmar custo, pausar, retomar Fonte e teto.
   await page.goto(`${url}?source-test=1&batch-test=1&batch-paid=1`);
   const batches = page.getByRole('region', { name: 'Lote de Fontes' });
