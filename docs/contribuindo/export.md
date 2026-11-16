@@ -72,7 +72,7 @@ e legenda sem alterar nenhuma das etapas existentes.
 | --- | --- |
 | Encoder de hardware | Feito no #62: `SelectedEncoder` substitui `Encoder`, mantendo o plano/runner. |
 | Crop/reenquadramento (#61) | Etapa de vídeo antes de `Subtitle`, produzindo o canvas final 1080×1920. |
-| Loudness (#63) | Etapa que acrescenta filtros de áudio antes do encode. |
+| Loudness (#63) | Feito: etapa `Loudness`, última do áudio. As etapas de áudio futuras entram antes dela. |
 | Silêncios (#82) | Etapa de montagem anterior ao plano audiovisual; deve fornecer **um mapa de tempos compartilhado por vídeo, legenda e áudio**. Não basta acrescentar um filtro só de áudio. |
 | Narração/ducking (#82) | Etapa de áudio com novos inputs e grafo de mixagem; ampliar o plano para inputs/labels e manter o runner gerenciado. |
 
@@ -112,6 +112,28 @@ jamais vira filtro, argumento de processo ou caminho.
   falhas por variável de ambiente); `core/tests/export_encoder_real.rs` usa o FFmpeg do sistema e
   pula sem encoder de hardware (`cargo test --test export_encoder_real -- --nocapture` mostra o
   encoder escolhido e os tempos de um export de 30 s).
+
+## Loudness do export (#63)
+
+O áudio sai a **-14 LUFS integrado, true peak ≤ -1 dBTP e LRA 11 LU** (constantes `TARGET_*` em
+`export/pipeline.rs`), com `loudnorm` em duas passagens e saída fixa em 48 kHz.
+
+- **Ordem do áudio** (spec): limpeza da Narração → ducking → trilha → `amix` com `normalize=0` →
+  `loudnorm`. Hoje só existe o áudio da Fonte (`Audio`); a etapa `Loudness` é a última e as etapas
+  futuras (#82, #154, #155) entram **antes** dela em `with_loudness`.
+- **Passagem 1** (`render::measure_loudness`): mede só o trecho do Corte com
+  `loudnorm=I=-14:TP=-1:LRA=11:print_format=json`, sem gravar arquivo (`-vn -f null -`). O `-t` vai
+  **antes de `-i`**: como opção de saída, o `loudnorm` ainda mede áudio depois do Corte. Do stderr
+  só se leem os cinco campos numéricos do JSON (`input_i`, `input_tp`, `input_lra`,
+  `input_thresh`, `target_offset`); o stderr nunca é guardado (ADR-0006).
+- **Passagem 2**: `loudnorm` com `measured_*`, `offset` e `linear=true`, seguido de
+  `aresample=48000` (o `loudnorm` reamostra internamente), antes do AAC.
+- **Áudio mudo** (medição `-inf`): não há o que normalizar; o export segue sem `loudnorm`. Falta
+  total do JSON é `export_failed`.
+- **Progresso**: a passagem 1 ocupa 1–10% da barra e a renderização 10–95%; cancelar vale nas duas.
+- **Harness**: `core/tests/export_loudness.rs` gera áudio sintético (`sine` + `anoisesrc`, trecho
+  baixo e trecho alto), exporta dois Cortes e mede o MP4 com `ebur128`: I = -14 ± 1 LU e
+  true peak ≤ -1 dBTP (+0,1 dB de tolerância).
 
 ## ASS e fonte
 
