@@ -69,6 +69,7 @@ pub(super) fn begin(
     duration: i64,
     endpoint: &str,
     audio: &[u8],
+    language: Option<&str>,
 ) -> Result<i64, CoreError> {
     guard()?;
     let estimate = groq::estimate_cost(groq::MODEL, duration);
@@ -95,7 +96,7 @@ pub(super) fn begin(
                 groq::host_of(endpoint),
                 groq::MODEL,
                 crate::provider::cost::sha256_hex(audio),
-                (groq::multipart_body(&[]).len() + audio.len()) as i64,
+                (groq::multipart_body(&[], language).len() + audio.len()) as i64,
             ),
         )?;
         tx.execute(
