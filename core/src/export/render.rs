@@ -408,10 +408,9 @@ fn render_ass_spliced(
             segments,
             &plan,
         );
-        fs::write(work.path().join("filter_complex.txt"), graph).map_err(|_| failed())?;
         args.extend([
-            "-filter_complex_script".into(),
-            "filter_complex.txt".into(),
+            "-filter_complex".into(),
+            graph.into(),
             "-map".into(),
             "[vout]".into(),
             "-map".into(),
@@ -525,10 +524,9 @@ fn measure_loudness(
     if segments.len() > 1 {
         let graph =
             pipeline::build_measure_filter_complex(input.audio_track, input.start_us, segments);
-        fs::write(work.join("measure_filter.txt"), graph).map_err(|_| failed())?;
         args.extend([
-            "-filter_complex_script".into(),
-            "measure_filter.txt".into(),
+            "-filter_complex".into(),
+            graph.into(),
             "-map".into(),
             "[aout]".into(),
         ]);
