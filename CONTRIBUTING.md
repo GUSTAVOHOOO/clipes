@@ -114,6 +114,9 @@ Desfazer e refazer usam uma pilha por Projeto em `transcript_corrections` (texto
 
 ## Preview do Corte (#58)
 
+Bordas, documento do Corte, histórico, autosave e snapshots do editor (#70):
+[Editor do Corte](docs/contribuindo/editor-bordas.md).
+
 O preview de um Corte usa um proxy H.264 de GOP curto, só da janela do Corte ±2 min, gerado como job local da fila e guardado num cache **fora do Projeto** (`<cache>/proxies`, LRU por tamanho). Ele é servido pelo protocolo de mídia `clipes-media`, implementado no núcleo (`core::media::serve`, com `Range`) e traduzido pelo adaptador em `src-tauri`. O protocolo só serve um id opaco (`proxy/<chave>` ou `source/<id>`), nunca um caminho vindo da URL. A UI é `CutPreview` (`{ sourceId, startUs, endUs }`), e clicar numa palavra da Transcrição posiciona o preview nela. Fonte offline não gera nada. Detalhes, constantes e testes em [Preview do Corte](docs/contribuindo/preview-do-corte.md).
 
 ## Perfis de Provedor

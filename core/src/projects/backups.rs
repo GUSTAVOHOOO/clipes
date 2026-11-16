@@ -259,7 +259,11 @@ fn current(_: Value, _: &mut EventSink<'_>) -> CommandResult {
     })
 }
 fn close(_: Value, _: &mut EventSink<'_>) -> CommandResult {
+    crate::dispatch("editor.flush", json!({}), &mut |_| {})?;
     crate::jobs::stop_worker();
+    crate::editor::edits::project_change(close_session)
+}
+fn close_session() -> CommandResult {
     let mut g = state().lock().map_err(|_| busy())?;
     if g.as_ref().is_some_and(|s| s.jobs > 0) {
         if let Some(s) = g.as_ref() {
@@ -299,6 +303,7 @@ fn config_set(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     Ok(Value::Null)
 }
 fn create(_: Value, _: &mut EventSink<'_>) -> CommandResult {
+    crate::dispatch("editor.flush", json!({}), &mut |_| {})?;
     let mut g = state().lock().map_err(|_| busy())?;
     take(session(&mut g)?)?;
     Ok(Value::Null)
@@ -325,7 +330,7 @@ fn list(_: Value, _: &mut EventSink<'_>) -> CommandResult {
 }
 fn restore(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     crate::jobs::stop_worker();
-    let result = restore_inner(v, events);
+    let result = crate::editor::edits::project_change(|| restore_inner(v, events));
     let path = state()
         .lock()
         .ok()
