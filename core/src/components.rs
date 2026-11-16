@@ -31,12 +31,18 @@ struct Component {
 
 fn manifest() -> Vec<Component> {
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-    let assets = [("ffmpeg", "N-128889-g88c46fce27", "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-11-13-12-43/ffmpeg-N-128889-g88c46fce27-win64-gpl.zip", "35fa1c17eeead1f572072b134458788caf71c4a7fbce9e0bb2f3c41032959531", 201952396), ("yt-dlp", "2026.11.04.232659", "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/2026.11.04.232659/yt-dlp.exe", "85c8d440422108bee7ecd11e584d56cc04fb3bd1a0b3200bdc8a66d5c5a985fc", 23587638), ("uv", "0.13.8", "https://github.com/astral-sh/uv/releases/download/0.13.8/uv-x86_64-pc-windows-msvc.zip", "529e78a9cec6cd7e3e014f7ecd8bda0c113969d4ed0f2efeedb85c30943325b8", 15529884)];
+    let assets = [("ffmpeg", "N-128889-g88c46fce27", "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-11-13-12-43/ffmpeg-N-128889-g88c46fce27-win64-gpl.zip", "35fa1c17eeead1f572072b134458788caf71c4a7fbce9e0bb2f3c41032959531", 201952396), ("yt-dlp", "2026.11.04.232659", "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/2026.11.04.232659/yt-dlp.exe", "85c8d440422108bee7ecd11e584d56cc04fb3bd1a0b3200bdc8a66d5c5a985fc", 23587638), ("uv", "0.13.8", "https://github.com/astral-sh/uv/releases/download/0.13.8/uv-x86_64-pc-windows-msvc.zip", "529e78a9cec6cd7e3e014f7ecd8bda0c113969d4ed0f2efeedb85c30943325b8", 15529884), ("deno", "2.9.8", "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-pc-windows-msvc.zip", "cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf", 42917472)];
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    let assets = [("ffmpeg", "N-128889-g88c46fce27", "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-11-13-12-43/ffmpeg-N-128889-g88c46fce27-linux64-gpl.tar.xz", "efa8f93583e84d5a1036e7e08e19db9f03ca637d7620ed58b0ecca39e9e34323", 157401784), ("yt-dlp", "2026.11.04.232659", "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/2026.11.04.232659/yt-dlp_linux", "16e96c02ffefd0bd1fe8ae6cc943b16c96e575c29eed7038d15213034437bc34", 41179568), ("uv", "0.13.8", "https://github.com/astral-sh/uv/releases/download/0.13.8/uv-x86_64-unknown-linux-gnu.tar.gz", "5acfd9177cfecf0bf87578f059728215ccc884388988f55f7a65041b57387d91", 16855069)];
+    let assets = [("ffmpeg", "N-128889-g88c46fce27", "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-11-13-12-43/ffmpeg-N-128889-g88c46fce27-linux64-gpl.tar.xz", "efa8f93583e84d5a1036e7e08e19db9f03ca637d7620ed58b0ecca39e9e34323", 157401784), ("yt-dlp", "2026.11.04.232659", "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/2026.11.04.232659/yt-dlp_linux", "16e96c02ffefd0bd1fe8ae6cc943b16c96e575c29eed7038d15213034437bc34", 41179568), ("uv", "0.13.8", "https://github.com/astral-sh/uv/releases/download/0.13.8/uv-x86_64-unknown-linux-gnu.tar.gz", "5acfd9177cfecf0bf87578f059728215ccc884388988f55f7a65041b57387d91", 16855069), ("deno", "2.9.8", "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-unknown-linux-gnu.zip", "e890975bc2549807bbcc0b584ffafda72cc7c93349dd99c80483dd784f6c4609", 41963064)];
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    let assets = [("deno", "2.9.8", "https://github.com/denoland/deno/releases/download/v2.9.8/deno-aarch64-apple-darwin.zip", "9f0bf660393da2eaff044cdc7444cb08c73f235849b61d224d825a194ce7c98e", 38770795)];
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    let assets = [("deno", "2.9.8", "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-apple-darwin.zip", "4b2f5edd2639b7470f034238b321d7002d8dfb4726d8558f52c17afac370eb2c", 42797031)];
     #[cfg(not(any(
         all(target_os = "windows", target_arch = "x86_64"),
-        all(target_os = "linux", target_arch = "x86_64")
+        all(target_os = "linux", target_arch = "x86_64"),
+        all(target_os = "macos", target_arch = "aarch64"),
+        all(target_os = "macos", target_arch = "x86_64")
     )))]
     let assets: [(&str, &str, &str, &str, u64); 0] = [];
     assets
@@ -51,12 +57,14 @@ fn manifest() -> Vec<Component> {
                 "ffmpeg" => "GPL-3.0-or-later",
                 // Licença dupla "Apache-2.0 OR MIT"; adotamos a Apache-2.0 do projeto.
                 "uv" => "Apache-2.0",
+                "deno" => "MIT",
                 _ => "Unlicense",
             },
             build_source_url: if id == "ffmpeg" { Some("https://github.com/FFmpeg-Builds/FFmpeg-Builds/tree/autobuild-2026-11-13-12-43") } else { None },
             source_url: match id {
                 "ffmpeg" => "https://github.com/FFmpeg/FFmpeg/tree/88c46fce27",
                 "uv" => "https://github.com/astral-sh/uv/tree/0.13.8",
+                "deno" => "https://github.com/denoland/deno/tree/v2.9.8",
                 _ => "https://github.com/yt-dlp/yt-dlp-nightly-builds/tree/2026.11.04.232659",
             },
         })
@@ -132,6 +140,42 @@ pub(crate) fn ytdlp_executable() -> Result<PathBuf, CoreError> {
     update::installed(&executable)?;
     Ok(executable)
 }
+fn deno_file(settings: &Settings) -> PathBuf {
+    settings
+        .data_dir
+        .join("components")
+        .join(if cfg!(windows) { "deno.exe" } else { "deno" })
+}
+/// Versão do `deno` que o executável informa (`deno 2.9.8 (...)`), sem caminhos.
+fn deno_version(exe: &Path) -> Option<String> {
+    let output = crate::process::spawn(exe, ["--version"], None)
+        .and_then(|child| child.wait_with_output())
+        .ok()?;
+    let text = String::from_utf8_lossy(&output.stdout);
+    let version = text.strip_prefix("deno ")?.split_whitespace().next()?;
+    (output.status.success()
+        && !version.is_empty()
+        && version.bytes().all(|b| b.is_ascii_digit() || b == b'.'))
+    .then(|| version.to_owned())
+}
+/// Caminho absoluto do deno instalado como Componente, se existir (#203).
+pub(crate) fn deno_executable() -> Option<PathBuf> {
+    let file = deno_file(&load_settings().ok()?);
+    if !file.is_file() {
+        return None;
+    }
+    std::path::absolute(file).ok()
+}
+fn deno_status(_: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let pinned = manifest()
+        .into_iter()
+        .find(|c| c.id == "deno")
+        .map(|c| c.version);
+    let file = deno_file(&load_settings()?);
+    let version = file.is_file().then(|| deno_version(&file)).flatten();
+    let outdated = version.is_some() && version.as_deref() != pinned;
+    Ok(json!({"installed": version.is_some(), "version": version, "pinned": pinned, "outdated": outdated}))
+}
 pub(crate) fn ytdlp_version(exe: &Path) -> String {
     update::installed(exe).unwrap_or_else(|_| "indisponível".into())
 }
@@ -176,6 +220,10 @@ fn diagnostic_components_for(settings: &Settings) -> String {
                     }
                 }
                 "uv" => worker::uv_version_for(settings).unwrap_or_else(|| "não instalado".into()),
+                "deno" => Some(deno_file(settings))
+                    .filter(|exe| exe.is_file())
+                    .and_then(|exe| deno_version(&exe))
+                    .unwrap_or_else(|| "não instalado".into()),
                 _ => "indisponível".into(),
             };
             format!("{}: {}", item.id, value)
@@ -492,6 +540,9 @@ fn install(item: &Component, part: &Path, exe: &Path) -> Result<(), CoreError> {
     if item.id == "uv" {
         return install_uv(part, exe);
     }
+    if item.id == "deno" {
+        return install_deno(part, exe);
+    }
     let probe = exe.with_file_name(probe_name());
     let tmp_exe = exe.with_extension("installing");
     let tmp_probe = probe.with_extension("installing");
@@ -630,6 +681,33 @@ fn install_uv(part: &Path, exe: &Path) -> Result<(), CoreError> {
     }
     result
 }
+/// Extrai só o executável `deno` do .zip oficial (o mesmo formato nas três plataformas).
+fn install_deno(part: &Path, exe: &Path) -> Result<(), CoreError> {
+    let tmp = exe.with_extension("installing");
+    let name = if cfg!(windows) { "deno.exe" } else { "deno" };
+    let result = (|| {
+        let mut zip = zip::ZipArchive::new(File::open(part).map_err(|e| error("install", e))?)
+            .map_err(|e| error("install", e))?;
+        let index = (0..zip.len())
+            .find(|i| {
+                zip.by_index(*i)
+                    .map(|f| f.name().is_ok_and(|p| p == name))
+                    .unwrap_or(false)
+            })
+            .ok_or_else(|| error("install", "Executável deno ausente"))?;
+        let mut src = zip.by_index(index).map_err(|e| error("install", e))?;
+        io::copy(
+            &mut src,
+            &mut File::create(&tmp).map_err(|e| error("install", e))?,
+        )
+        .map_err(|e| error("install", e))?;
+        promote(&tmp, exe)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    result
+}
 fn promote(tmp: &Path, exe: &Path) -> Result<(), CoreError> {
     #[cfg(unix)]
     {
@@ -643,6 +721,7 @@ fn promote(tmp: &Path, exe: &Path) -> Result<(), CoreError> {
     fs::rename(tmp, exe).map_err(|e| error("install", e))
 }
 
+inventory::submit! { CommandRegistration { name: "components.deno.status", execute: deno_status } }
 inventory::submit! { CommandRegistration { name: "components.ffmpeg.status", execute: ffmpeg_status } }
 inventory::submit! { CommandRegistration { name: "components.manifest", execute: manifest_command } }
 inventory::submit! { CommandRegistration { name: "components.download", execute: download } }
@@ -965,6 +1044,83 @@ mod diagnostic_tests {
         assert!(result.contains(&format!("ffmpeg: {version}")));
         assert!(result.contains("yt-dlp: 2027.01.01.000000"));
         assert!(!result.contains(root.to_str().unwrap()));
+        fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod deno_tests {
+    use super::*;
+    fn root() -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "clipes-203-deno-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    }
+    fn build_fake(root: &Path) -> PathBuf {
+        let fake = root.join(if cfg!(windows) { "fake-deno.exe" } else { "fake-deno" });
+        let rustc = PathBuf::from(env!("CARGO")).with_file_name(if cfg!(windows) { "rustc.exe" } else { "rustc" });
+        assert!(std::process::Command::new(rustc)
+            .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fake_deno.rs"))
+            .arg("-o")
+            .arg(&fake)
+            .status()
+            .unwrap()
+            .success());
+        fake
+    }
+    fn zip_with(path: &Path, name: &str, contents: &[u8]) {
+        let mut zip = zip::ZipWriter::new(File::create(path).unwrap());
+        zip.start_file(name, zip::write::SimpleFileOptions::default()).unwrap();
+        zip.write_all(contents).unwrap();
+        zip.finish().unwrap();
+    }
+    #[test]
+    fn manifest_pins_deno_with_mit_license_per_platform() {
+        let deno = manifest().into_iter().find(|c| c.id == "deno").unwrap();
+        assert_eq!(deno.license, "MIT");
+        assert!(deno.url.starts_with("https://github.com/denoland/deno/releases/download/v"));
+        assert!(deno.url.contains(deno.version) && deno.url.ends_with(".zip"));
+        assert_eq!(deno.sha256.len(), 64);
+        assert!(deno.sha256.bytes().all(|b| b.is_ascii_hexdigit()));
+        assert!(deno.source_url.contains(deno.version));
+    }
+    #[test]
+    fn fake_deno_component_installs_reports_version_and_hides_paths() {
+        let root = root();
+        let dir = root.join("components");
+        fs::create_dir_all(&dir).unwrap();
+        let fake = build_fake(&root);
+        let settings = Settings {
+            data_dir: root.clone(),
+            cache_dir: root.join("cache"),
+            cache_limit_bytes: 1,
+            ffmpeg_path: None,
+        };
+        assert!(diagnostic_components_for(&settings).contains("deno: não instalado"));
+        let exe = deno_file(&settings);
+        assert!(!exe.is_file());
+        let name = if cfg!(windows) { "deno.exe" } else { "deno" };
+        // Arquivo sem o executável: erro tipado e nada instalado.
+        let bad = dir.join("bad.zip");
+        zip_with(&bad, "LICENSE", b"x");
+        assert_eq!(install_deno(&bad, &exe).unwrap_err().code, "install");
+        assert!(!exe.is_file() && !exe.with_extension("installing").exists());
+        // Arquivo oficial: o .zip traz só o executável na raiz.
+        let good = dir.join("good.zip");
+        zip_with(&good, name, &fs::read(&fake).unwrap());
+        install_deno(&good, &exe).unwrap();
+        assert_eq!(deno_version(&exe).as_deref(), Some("2.9.8"));
+        let report = diagnostic_components_for(&settings);
+        assert!(report.contains("deno: 2.9.8"));
+        assert!(!report.contains(root.to_str().unwrap()));
+        // Reinstalar (atualização) substitui o executável anterior.
+        install_deno(&good, &exe).unwrap();
+        assert_eq!(deno_version(&exe).as_deref(), Some("2.9.8"));
         fs::remove_dir_all(root).unwrap();
     }
 }

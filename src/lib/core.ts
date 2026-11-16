@@ -13,6 +13,7 @@ import { thumbnailMockDispatch } from './thumbnailMock';
 import { scriptMockDispatch } from './scriptMock';
 
 const groqRetryTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('groq-retry-test');
+const denoMock = { installed: false };
 const sourceTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('source-test');
 const budgetTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('budget-test');
 const transcriptTest = sourceTest && typeof location !== 'undefined' && new URLSearchParams(location.search).has('transcript-test');
@@ -249,7 +250,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'sources.url.settings.get') return urlSettingsMock as T;
     if (name === 'sources.url.settings.set') { urlSettingsMock = {...urlSettingsMock, ...(args as typeof urlSettingsMock)}; return urlSettingsMock as T; }
     if (sourceTest && name === 'sources.list') return sourceItems as T;
-    if (sourceTest && name === 'sources.url.download') { const url=(args as {url:string}).url; if(url.endsWith('/age-test')) throw {code:'age_restricted',message:'test'}; return {path:'/test/downloaded.mp4',url} as T; }
+    if (sourceTest && name === 'sources.url.download') { const url=(args as {url:string}).url; if(url.endsWith('/age-test')) throw {code:'age_restricted',message:'test'}; if(url.endsWith('/js-test') && !denoMock.installed) throw {code:'js_runtime_missing',message:'test'}; return {path:'/test/downloaded.mp4',url} as T; }
     if (sourceTest && name === 'sources.inspect') return {format:{duration:'12'},streams:[{index:0,codec_type:'audio',codec_name:'aac'}]} as T;
     if (sourceTest && name === 'sources.import') { const a=args as {path:string;permission:{status:string};origin_url?:string}; const item={id:4,path:a.path,status:'available',available:true,verified:true,permission:a.permission}; sourceItems.push(item); return {...item,origin_url:a.origin_url} as T; }
 
@@ -260,6 +261,8 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       return {} as T;
     }
     if (name === 'app.version') return { version } as T;
+    if (name === 'components.deno.status') return { installed: denoMock.installed, version: denoMock.installed ? '2.9.8' : null, pinned: '2.9.8', outdated: false } as T;
+    if (name === 'components.download' && (args as { id?: string }).id === 'deno') { denoMock.installed = true; return { path: '/test/components/deno' } as T; }
     if (name === 'components.ytdlp.status') return {installed:true,version:'test'} as T;
     if (name === 'components.ytdlp.update') return {version:'test'} as T;
     if (name === 'components.worker.status') return { installed: true, outdated: false, cuda: false, gpu: true, uv: '0.13.8', handshake: { protocol: 1, worker: '0.1.0', python: '3.12.16', libs: { 'faster-whisper': '1.2.1', onnxruntime: '1.32.0', numpy: '2.4.6', 'opencv-python-headless': null } } } as T;
@@ -355,6 +358,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'components.manifest') return [
       { id: 'ffmpeg', version: 'test', size: 2000000, license: 'GPL-3.0-or-later', source_url: 'https://github.com/FFmpeg/FFmpeg' },
       { id: 'yt-dlp', version: 'test', size: 1000000, license: 'Unlicense', source_url: 'https://github.com/yt-dlp/yt-dlp' },
+      { id: 'deno', version: '2.9.8', size: 42917472, license: 'MIT', source_url: 'https://github.com/denoland/deno/tree/v2.9.8' },
       { id: 'uv', version: '0.13.8', size: 15000000, license: 'Apache-2.0', source_url: 'https://github.com/astral-sh/uv' },
     ] as T;
     if (name === 'components.models.manifest') return [

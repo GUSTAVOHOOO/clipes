@@ -5,7 +5,7 @@ use serde_json::json;
 fn components_manifest_contains_pinned_licensed_downloads() {
     let result = dispatch("components.manifest", json!({}), &mut |_| {}).unwrap();
     let entries = result.as_array().unwrap();
-    for id in ["ffmpeg", "yt-dlp"] {
+    for id in ["ffmpeg", "yt-dlp", "deno"] {
         let item = entries.iter().find(|entry| entry["id"] == id).unwrap();
         assert!(item["url"].as_str().unwrap().starts_with("https://"));
         assert_eq!(item["sha256"].as_str().unwrap().len(), 64);
@@ -58,6 +58,20 @@ fn download_requires_confirmation() {
     )
     .unwrap_err();
     assert_eq!(err.code, "confirmation_required");
+}
+
+#[test]
+fn deno_download_requires_confirmation_and_status_reports_missing_component() {
+    let err = dispatch(
+        "components.download",
+        json!({"id":"deno", "confirmed":false}),
+        &mut |_| {},
+    )
+    .unwrap_err();
+    assert_eq!(err.code, "confirmation_required");
+    let status = dispatch("components.deno.status", json!({}), &mut |_| {}).unwrap();
+    assert!(status["pinned"].is_string());
+    assert!(status["installed"].is_boolean());
 }
 
 #[test]

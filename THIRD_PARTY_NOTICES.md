@@ -62,6 +62,8 @@ Os dois foram convertidos para WAV PCM 16 bits, mono, 16 kHz.
 
 O catálogo apresenta FFmpeg, Whisper e Kokoro como exemplos de interface. Nenhum executável ou peso desses projetos é distribuído neste repositório. As licenças e fontes de cada build/modelo devem acompanhar o download real no app desktop, conforme ADR-0003.
 
+O app desktop baixa, só com confirmação, o **deno** 2.9.8 (Componente), usado pelo yt-dlp como ambiente JavaScript para resolver os desafios do YouTube: licença MIT, código em [github.com/denoland/deno](https://github.com/denoland/deno/tree/v2.9.8), executável dos .zip oficiais da release com SHA-256 fixo por plataforma. Nenhum executável do deno é distribuído neste repositório.
+
 O app desktop também baixa, ao instalar o worker de ML:
 
 - **Python standalone gerenciado** (instalado pelo uv no ambiente do worker): licença PSF-2.0, texto em [python.org/psf/license](https://docs.python.org/3/license.html).
