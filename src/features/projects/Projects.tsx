@@ -7,6 +7,7 @@ import { Sources } from './Sources';
 import { Backups } from './Backups';
 import { Jobs } from './Jobs';
 import { SourceBatches } from './SourceBatches';
+import { BatchExport } from '@/features/export/BatchExport';
 import { ProjectPrivacy } from './ProjectPrivacy';
 import { TranscriptSearch } from './TranscriptSearch';
 
@@ -37,6 +38,7 @@ export function Projects() {
     {current && <p className="mt-6 text-sm">{t.current}: <strong>{current.name}</strong></p>}
     {current && <Sources project={current.path} />}
     {current && <SourceBatches key={`batches-${current.id}`} project={current.path} projectId={current.id} />}
+    {current && <BatchExport key={`export-batch-${current.id}`} scope="project" project={current.path} projectId={current.id} />}
     {current && <TranscriptSearch projectId={current.id} />}
     {current && <Jobs key={current.id} projectId={current.id} />}
     {current && <ProjectPrivacy projectId={current.id} />}

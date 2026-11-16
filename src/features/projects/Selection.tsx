@@ -8,6 +8,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { openCutPreview } from './CutPreview';
 import { openEditor } from '@/features/editor/Editor';
 import { CandidateReview } from './CandidateReview';
+import { BatchExport } from '@/features/export/BatchExport';
 import { clock, fill, message } from './selectionFormat';
 import { VideoKindBadge, VideoKindPicker, WeightsLine, kindOf, type VideoKind } from './videoKind';
 
@@ -184,6 +185,7 @@ export function Selection({ sourceId }: { sourceId: number }) {
       {current !== null && shown.length > 0 && <CandidateReview sourceId={sourceId} run={current} videoKind={runKind} candidates={shown} weights={weights} onOpenPreview={(_, startUs, endUs) => openCutPreview({ sourceId, startUs, endUs })} onOpenEditor={(candidate, startId, endId) => openEditor({ source_id: sourceId, start_id: startId, end_id: endId, candidate_id: candidate })}
         windowStates={Object.fromEntries(detail.windows.map(w => [w.index, w.state]))} onRedoStarted={() => void loadDetail(current).catch(() => setError(t.error))} />}
     </div>}
+    {runs.length > 0 && <BatchExport scope="source" sourceId={sourceId} />}
     {error && <p role="alert" className="text-danger">{error}</p>}
     <ConfirmDialog open={pending !== null} onOpenChange={open => { if (!open) setPending(null); }} title={t.confirmTitle}
       description={dialogEstimate ? fill(pending?.kind === 'redo' ? t.confirmRedo : t.confirmBody, { cost: costText(dialogEstimate) }) : ''}

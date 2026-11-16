@@ -1,4 +1,5 @@
 //! Export local de Cortes (#59), independente do Tauri e de Provedores.
+pub mod batch;
 pub mod captions;
 pub mod encoder;
 pub mod pipeline;
@@ -34,18 +35,21 @@ pub struct ExportRequest {
 }
 
 #[derive(Serialize, Deserialize)]
-struct StartRequest {
+pub(crate) struct StartRequest {
     #[serde(flatten)]
-    cut: ExportRequest,
+    pub(crate) cut: ExportRequest,
     #[serde(default)]
-    output: PathBuf,
+    pub(crate) output: PathBuf,
     // Congela as bordas, os silêncios e o crop no enfileiramento, para edições posteriores não mudarem o job.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    resolved_bounds: Option<(i64, i64)>,
+    pub(crate) resolved_bounds: Option<(i64, i64)>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    resolved_silences: Option<Vec<(i64, i64)>>,
+    pub(crate) resolved_silences: Option<Vec<(i64, i64)>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    resolved_crop: Option<Vec<CropSegment>>,
+    pub(crate) resolved_crop: Option<Vec<CropSegment>>,
+    // Só o lote (#64) com `confirmed: true` ativa a substituição atômica de destino existente.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(crate) overwrite: bool,
 }
 
 inventory::submit! { projects::Migration { id:"0059_001_exports", sql:"
@@ -63,17 +67,17 @@ ALTER TABLE exports ADD COLUMN fallback_from TEXT;
 ALTER TABLE exports ADD COLUMN fallback_reason TEXT;
 " } }
 
-struct Target {
-    start_us: i64,
-    end_us: i64,
-    output_duration_us: i64,
-    words: Vec<CaptionWord>,
-    styled: Vec<StyledWord>,
-    source_starts: Vec<i64>,
-    segments: Vec<KeptSegment>,
-    active_cuts: Vec<(i64, i64)>,
-    transcript: i64,
-    crop: Vec<CropSegment>,
+pub(crate) struct Target {
+    pub(crate) start_us: i64,
+    pub(crate) end_us: i64,
+    pub(crate) output_duration_us: i64,
+    pub(crate) words: Vec<CaptionWord>,
+    pub(crate) styled: Vec<StyledWord>,
+    pub(crate) source_starts: Vec<i64>,
+    pub(crate) segments: Vec<KeptSegment>,
+    pub(crate) active_cuts: Vec<(i64, i64)>,
+    pub(crate) transcript: i64,
+    pub(crate) crop: Vec<CropSegment>,
 }
 fn bounds() -> CoreError {
     error(
@@ -92,9 +96,12 @@ fn parse(v: Value) -> Result<ExportRequest, CoreError> {
     serde_json::from_value(v).map_err(|_| bounds())
 }
 
-type FrozenTarget = ((i64, i64), Vec<(i64, i64)>);
+pub(crate) type FrozenTarget = ((i64, i64), Vec<(i64, i64)>);
 
-fn target(request: &ExportRequest, frozen: Option<FrozenTarget>) -> Result<Target, CoreError> {
+pub(crate) fn target(
+    request: &ExportRequest,
+    frozen: Option<FrozenTarget>,
+) -> Result<Target, CoreError> {
     let edited = request
         .clip_id
         .map(crate::editor::edits::document)
@@ -225,7 +232,7 @@ fn target(request: &ExportRequest, frozen: Option<FrozenTarget>) -> Result<Targe
     })?
 }
 
-fn current_path() -> Result<PathBuf, CoreError> {
+pub(crate) fn current_path() -> Result<PathBuf, CoreError> {
     let current = crate::dispatch("projects.current", json!({}), &mut |_| {})?;
     current["path"]
         .as_str()
@@ -267,9 +274,10 @@ fn request_style(v: &Value) -> Result<Style, CoreError> {
     }
 }
 
-fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let _guard = projects::start_job()?;
-    let mut request: StartRequest = serde_json::from_value(v).map_err(|_| bounds())?;
+pub(crate) fn prepare_start_request(
+    mut request: StartRequest,
+    project: &Path,
+) -> Result<(StartRequest, i64), CoreError> {
     // Ignora qualquer snapshot enviado pela UI; o núcleo resolve o documento atual.
     let resolved = target(&request.cut, None)?;
     request.resolved_bounds = request
@@ -278,24 +286,42 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .map(|_| (resolved.start_us, resolved.end_us));
     request.resolved_silences = request.cut.clip_id.map(|_| resolved.active_cuts);
     request.resolved_crop = request.cut.clip_id.map(|_| resolved.crop);
-    render::validate_output(&request.output)?;
+    render::validate_output_with_overwrite(&request.output, request.overwrite)?;
+    let _ = crate::jobs::preview::source(request.cut.source_id, project)?;
+    Ok((request, resolved.output_duration_us))
+}
+
+pub(crate) fn enqueue_tx(
+    tx: &rusqlite::Transaction<'_>,
+    request: &StartRequest,
+    batch_key: Option<&str>,
+) -> rusqlite::Result<i64> {
+    let encoded = serde_json::to_string(request).map_err(|_| rusqlite::Error::InvalidQuery)?;
+    tx.execute(
+        "INSERT INTO jobs(kind,safety,state,source_id,batch) VALUES ('export','local','queued',?1,?2)",
+        (request.cut.source_id, batch_key),
+    )?;
+    let id = tx.last_insert_rowid();
+    tx.execute(
+        "INSERT INTO exports(job_id,request) VALUES (?1,?2)",
+        (id, encoded),
+    )?;
+    Ok(id)
+}
+
+fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let _guard = projects::start_job()?;
+    let mut request: StartRequest = serde_json::from_value(v).map_err(|_| bounds())?;
+    // O export avulso nunca sobrescreve destino existente.
+    request.overwrite = false;
     let project = current_path()?;
-    let _ = crate::jobs::preview::source(request.cut.source_id, &project)?;
+    let (request, _) = prepare_start_request(request, &project)?;
     if crate::components::cache_settings()?.2.is_none() {
         return Err(error("component_missing", "Instale o Componente FFmpeg."));
     }
-    let encoded = serde_json::to_string(&request).map_err(|_| failed())?;
     let id = projects::with_writer(|c| {
         let tx = c.transaction()?;
-        tx.execute(
-            "INSERT INTO jobs(kind,safety,state,source_id) VALUES ('export','local','queued',?1)",
-            [request.cut.source_id],
-        )?;
-        let id = tx.last_insert_rowid();
-        tx.execute(
-            "INSERT INTO exports(job_id,request) VALUES (?1,?2)",
-            (id, encoded),
-        )?;
+        let id = enqueue_tx(&tx, &request, None)?;
         tx.commit()?;
         Ok(id)
     })?;
@@ -326,7 +352,7 @@ fn settings_path() -> Result<PathBuf, CoreError> {
         .map(|p| p.join("export-settings.json"))
         .ok_or_else(failed)
 }
-fn save_directory(path: &Path) -> Result<(), CoreError> {
+pub(crate) fn save_directory(path: &Path) -> Result<(), CoreError> {
     let target = settings_path()?;
     fs::create_dir_all(target.parent().unwrap()).map_err(|_| failed())?;
     fs::write(target, json!({"last_directory":path}).to_string()).map_err(|_| failed())
@@ -384,6 +410,7 @@ pub(crate) fn run(
         let preferred = encoder::resolve(&ffmpeg, &cancel)?;
         let finished = AtomicBool::new(false);
         crate::jobs::progress(id, "export", 1, "Exportando Corte")?;
+        batch::on_job_progress(id);
         let result = std::thread::scope(|scope| {
             scope.spawn(|| {
                 while !finished.load(Ordering::SeqCst) {
@@ -395,16 +422,18 @@ pub(crate) fn run(
                 }
             });
             let mut last = 0;
-            let result = encoder::render_styled_spliced_with_fallback(
+            let result = encoder::render_styled_spliced_with_fallback_overwrite(
                 &ffmpeg,
                 &input,
                 &target.segments,
                 &prepared,
                 &preferred,
+                request.overwrite,
                 &cancel,
                 &mut |percentage| {
                     if percentage > last {
                         let _ = crate::jobs::progress(id, "export", percentage, "Exportando Corte");
+                        batch::on_job_progress(id);
                         last = percentage;
                     }
                 },

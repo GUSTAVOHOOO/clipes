@@ -198,7 +198,14 @@ pub fn check_ass(ffmpeg: &Path, cancel: &CancelToken) -> Result<(), CoreError> {
 }
 
 pub fn validate_output(output: &Path) -> Result<(), CoreError> {
-    if output.exists() {
+    validate_output_with_overwrite(output, false)
+}
+
+pub(crate) fn validate_output_with_overwrite(
+    output: &Path,
+    overwrite: bool,
+) -> Result<(), CoreError> {
+    if !overwrite && output.exists() {
         return Err(error(
             "export_exists",
             "Já existe um arquivo no destino. Escolha outro nome.",
@@ -279,7 +286,9 @@ pub fn render_spliced_with(
         font_file: "NotoSans-Bold.ttf",
         font_bytes: FONT_BYTES,
     };
-    render_ass_spliced(ffmpeg, input, segments, &doc, encoder, cancel, progress)
+    render_ass_spliced(
+        ffmpeg, input, segments, &doc, encoder, false, cancel, progress,
+    )
 }
 
 /// O job usa exatamente o documento/cues entregue ao preview no início do render.
@@ -322,13 +331,32 @@ pub fn render_styled_spliced_with(
     cancel: &CancelToken,
     progress: &mut dyn FnMut(u8),
 ) -> Result<(), CoreError> {
+    render_styled_spliced_with_overwrite(
+        ffmpeg, input, segments, prepared, encoder, false, cancel, progress,
+    )
+}
+
+/// Variante interna usada pelo lote (#64) quando a sobrescrita foi confirmada pelo usuário.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn render_styled_spliced_with_overwrite(
+    ffmpeg: &Path,
+    input: &RenderInput,
+    segments: &[KeptSegment],
+    prepared: &crate::caption_style::Prepared,
+    encoder: &str,
+    overwrite: bool,
+    cancel: &CancelToken,
+    progress: &mut dyn FnMut(u8),
+) -> Result<(), CoreError> {
     prepared.style.validate()?;
     let doc = AssDoc {
         ass: &prepared.ass,
         font_file: prepared.style.font_file(),
         font_bytes: prepared.style.font_bytes(),
     };
-    render_ass_spliced(ffmpeg, input, segments, &doc, encoder, cancel, progress)
+    render_ass_spliced(
+        ffmpeg, input, segments, &doc, encoder, overwrite, cancel, progress,
+    )
 }
 
 struct AssDoc<'a> {
@@ -337,16 +365,18 @@ struct AssDoc<'a> {
     font_bytes: &'a [u8],
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_ass_spliced(
     ffmpeg: &Path,
     input: &RenderInput,
     segments: &[KeptSegment],
     doc: &AssDoc<'_>,
     encoder: &str,
+    overwrite: bool,
     cancel: &CancelToken,
     progress: &mut dyn FnMut(u8),
 ) -> Result<(), CoreError> {
-    validate_output(&input.output)?;
+    validate_output_with_overwrite(&input.output, overwrite)?;
     if input.start_us < 0 || input.end_us <= input.start_us || input.audio_track < 0 {
         return Err(error("export_bounds", "As bordas do Corte são inválidas."));
     }
@@ -486,16 +516,20 @@ fn render_ass_spliced(
             "A fonte empacotada da legenda não foi usada pelo FFmpeg.",
         ));
     }
-    partial.persist_noclobber(&input.output).map_err(|e| {
-        if e.error.kind() == std::io::ErrorKind::AlreadyExists {
-            error(
-                "export_exists",
-                "Já existe um arquivo no destino. Escolha outro nome.",
-            )
-        } else {
-            failed()
-        }
-    })?;
+    if overwrite {
+        partial.persist(&input.output).map_err(|_| failed())?;
+    } else {
+        partial.persist_noclobber(&input.output).map_err(|e| {
+            if e.error.kind() == std::io::ErrorKind::AlreadyExists {
+                error(
+                    "export_exists",
+                    "Já existe um arquivo no destino. Escolha outro nome.",
+                )
+            } else {
+                failed()
+            }
+        })?;
+    }
     progress(100);
     Ok(())
 }
