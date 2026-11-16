@@ -16,6 +16,17 @@ use std::{
 pub const FONT_BYTES: &[u8] = include_bytes!("../../assets/fonts/NotoSans-Bold.ttf");
 pub const FONT_SHA256: &str = "c976e4b1b99edc88775377fcc21692ca4bfa46b6d6ca6522bfda505b28ff9d6a";
 pub const PROCESS_POLL: Duration = Duration::from_millis(25);
+/// Campos do JSON do `loudnorm` (ordem de `Measured`).
+const MEASURED_KEYS: [&str; 5] = [
+    "input_i",
+    "input_tp",
+    "input_lra",
+    "input_thresh",
+    "target_offset",
+];
+/// A medição ocupa o começo da barra; a renderização, o resto (até 95%).
+const MEASURE_END: u64 = 10;
+const RENDER_END: u64 = 95;
 pub const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub struct RenderInput {
@@ -29,6 +40,7 @@ pub struct RenderInput {
 }
 #[derive(Default)]
 struct Report {
+    measured: [Option<f64>; 5],
     help: String,
     font_selected: bool,
     font_fallback: bool,
@@ -39,6 +51,7 @@ fn cancelled() -> CoreError {
     error("cancelled", "Export cancelado.")
 }
 
+#[allow(clippy::too_many_arguments)]
 fn execute(
     program: &Path,
     args: &[OsString],
@@ -46,6 +59,7 @@ fn execute(
     cancel: &CancelToken,
     duration_us: i64,
     font_file: Option<&'static str>,
+    range: (u64, u64),
     progress: &mut dyn FnMut(u8),
 ) -> Result<Report, CoreError> {
     let probe = font_file.is_none();
@@ -83,7 +97,23 @@ fn execute(
         let mut selected = false;
         let mut fallback = false;
         let mut loaded = false;
+        let mut measured = [None; 5];
         for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+            // Só os campos numéricos do JSON do `loudnorm`; o resto do stderr é descartado.
+            if let Some((key, value)) = line
+                .trim()
+                .strip_prefix('"')
+                .and_then(|s| s.split_once('"'))
+            {
+                if let Some(i) = MEASURED_KEYS.iter().position(|k| *k == key) {
+                    measured[i] = value
+                        .trim_start_matches([' ', ':'])
+                        .trim_end_matches(',')
+                        .trim_matches('"')
+                        .parse::<f64>()
+                        .ok();
+                }
+            }
             loaded |= line.contains("Loading font file") && line.contains(font_file);
             if line.contains("fontselect:") && line.contains(" -> ") {
                 if line
@@ -97,7 +127,7 @@ fn execute(
                 }
             }
         }
-        (selected, fallback, loaded)
+        (selected, fallback, loaded, measured)
     });
     let started = Instant::now();
     let status = loop {
@@ -111,7 +141,9 @@ fn execute(
             });
         }
         for value in rx.try_iter() {
-            progress((value.saturating_mul(95) / duration_us.max(1)).clamp(1, 95) as u8);
+            let (low, high) = range;
+            let part = (value.max(0) as u64).saturating_mul(high - low) / duration_us.max(1) as u64;
+            progress((low + part).clamp(low.max(1), high.max(1)) as u8);
         }
         match child.try_wait() {
             Ok(Some(status)) => {
@@ -130,9 +162,11 @@ fn execute(
         }
     };
     let help = reader.join().map_err(|_| failed())?;
-    let (font_selected, font_fallback, font_loaded) = errors.join().map_err(|_| failed())?;
+    let (font_selected, font_fallback, font_loaded, measured) =
+        errors.join().map_err(|_| failed())?;
     status?;
     Ok(Report {
+        measured,
         help,
         font_selected,
         font_fallback,
@@ -149,6 +183,7 @@ pub fn check_ass(ffmpeg: &Path, cancel: &CancelToken) -> Result<(), CoreError> {
         cancel,
         1,
         None,
+        (0, 0),
         &mut |_| {},
     )?;
     if !report.help.lines().any(|s| s.trim() == "Filter ass") || !report.help.contains("fontsdir") {
@@ -285,7 +320,8 @@ fn render_ass(
             "A Fonte está indisponível ou foi alterada.",
         )
     })?;
-    let plan = pipeline::with_encoder(encoder);
+    let measured = measure_loudness(ffmpeg, &source, input, work.path(), cancel, progress)?;
+    let plan = pipeline::with_loudness(encoder, measured);
     let mut args: Vec<OsString> = vec![
         "-hide_banner".into(),
         "-nostdin".into(),
@@ -340,6 +376,7 @@ fn render_ass(
         cancel,
         duration,
         Some(doc.font_file),
+        (if measured.is_some() { MEASURE_END } else { 0 }, RENDER_END),
         progress,
     )?;
     if cancel.is_cancelled() {
@@ -368,4 +405,65 @@ fn render_ass(
 }
 pub fn seconds(us: i64) -> String {
     format!("{}.{:06}", us / 1_000_000, us % 1_000_000)
+}
+
+/// Primeira passagem do `loudnorm` (#63): mede só o trecho do Corte, sem gravar nada.
+/// `None` quando o áudio é silencioso (medição infinita): então não há o que normalizar.
+fn measure_loudness(
+    ffmpeg: &Path,
+    source: &Path,
+    input: &RenderInput,
+    work: &Path,
+    cancel: &CancelToken,
+    progress: &mut dyn FnMut(u8),
+) -> Result<Option<pipeline::Measured>, CoreError> {
+    let duration = input.end_us - input.start_us;
+    let args: Vec<OsString> = vec![
+        "-hide_banner".into(),
+        "-nostdin".into(),
+        "-loglevel".into(),
+        "verbose".into(),
+        "-ss".into(),
+        seconds(input.start_us).into(),
+        "-t".into(),
+        seconds(duration).into(),
+        "-i".into(),
+        source.as_os_str().to_owned(),
+        "-map".into(),
+        format!("0:{}", input.audio_track).into(),
+        "-vn".into(),
+        "-af".into(),
+        pipeline::loudnorm_measure_filter().into(),
+        "-progress".into(),
+        "pipe:1".into(),
+        "-f".into(),
+        "null".into(),
+        "-".into(),
+    ];
+    let report = execute(
+        ffmpeg,
+        &args,
+        Some(work),
+        cancel,
+        duration,
+        Some("NotoSans-Bold.ttf"),
+        (0, MEASURE_END),
+        progress,
+    )?;
+    // O FFmpeg sempre imprime o JSON; a falta dele é falha. `-inf` (áudio mudo) não é.
+    let [Some(input_i), Some(input_tp), Some(input_lra), Some(input_thresh), Some(target_offset)] =
+        report.measured
+    else {
+        return Err(failed());
+    };
+    let finite = [input_i, input_tp, input_lra, input_thresh, target_offset]
+        .iter()
+        .all(|v| v.is_finite());
+    Ok(finite.then_some(pipeline::Measured {
+        input_i,
+        input_tp,
+        input_lra,
+        input_thresh,
+        target_offset,
+    }))
 }

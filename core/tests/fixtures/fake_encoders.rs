@@ -67,6 +67,11 @@ fn main() {
         println!("Filter ass\nfontsdir filename");
         return;
     }
+    // Primeira passagem do loudnorm (#63): só imprime a medição no stderr, sem saída.
+    if args.iter().any(|a| a == "-vn") {
+        eprintln!("[Parsed_loudnorm_0 @ 0x0] \n{{\n\t\"input_i\" : \"-27.61\",\n\t\"input_tp\" : \"-4.47\",\n\t\"input_lra\" : \"18.06\",\n\t\"input_thresh\" : \"-39.20\",\n\t\"output_i\" : \"-16.58\",\n\t\"normalization_type\" : \"dynamic\",\n\t\"target_offset\" : \"0.58\"\n}}");
+        return;
+    }
     let encoder = args
         .iter()
         .position(|a| a == "-c:v")
