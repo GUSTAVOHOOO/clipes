@@ -369,14 +369,44 @@ pub fn render_with_fallback(
     cancel: &CancelToken,
     progress: &mut dyn FnMut(u8),
 ) -> Result<Outcome, CoreError> {
-    match render::render_with(ffmpeg, input, preferred, cancel, progress) {
+    with_fallback(
+        preferred,
+        |encoder, progress| render::render_with(ffmpeg, input, encoder, cancel, progress),
+        progress,
+    )
+}
+
+/// Igual a `render_with_fallback`, com as legendas estilizadas do Corte (#65).
+pub fn render_styled_with_fallback(
+    ffmpeg: &Path,
+    input: &RenderInput,
+    prepared: &crate::caption_style::Prepared,
+    preferred: &str,
+    cancel: &CancelToken,
+    progress: &mut dyn FnMut(u8),
+) -> Result<Outcome, CoreError> {
+    with_fallback(
+        preferred,
+        |encoder, progress| {
+            render::render_styled_with(ffmpeg, input, prepared, encoder, cancel, progress)
+        },
+        progress,
+    )
+}
+
+fn with_fallback(
+    preferred: &str,
+    mut run: impl FnMut(&str, &mut dyn FnMut(u8)) -> Result<(), CoreError>,
+    progress: &mut dyn FnMut(u8),
+) -> Result<Outcome, CoreError> {
+    match run(preferred, progress) {
         Ok(()) => Ok(Outcome {
             encoder: preferred.into(),
             fallback: None,
         }),
         Err(e) if preferred != X264 && e.code == "export_failed" => {
             forget(preferred);
-            render::render_with(ffmpeg, input, X264, cancel, progress)?;
+            run(X264, progress)?;
             Ok(Outcome {
                 encoder: X264.into(),
                 fallback: Some(Fallback {

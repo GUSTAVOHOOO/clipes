@@ -448,6 +448,11 @@ pub fn run_with(
         commit(id, transcript, step, duration_us, block, config)?;
     }
     crate::sentences::segment_transcript(transcript)?;
+    projects::with_writer(|c| {
+        let tx = c.transaction()?;
+        crate::caption_style::store::finish_remap(&tx, transcript)?;
+        tx.commit()
+    })?;
     // A energia do áudio (#54) é medida sozinha; falhar em enfileirar não afeta a Transcrição.
     crate::energy::enqueue_after_transcription(source_id);
     Ok(())
@@ -716,6 +721,7 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let (transcript, state, job) = projects::with_writer(|conn| {
         let tx = conn.transaction()?;
         if switching {
+            crate::caption_style::store::stage_remap(&tx, existing.as_ref().unwrap().0)?;
             tx.execute(
                 "DELETE FROM transcripts WHERE id=?1",
                 [existing.as_ref().unwrap().0],
