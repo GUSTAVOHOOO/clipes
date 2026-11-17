@@ -7,8 +7,11 @@ import time
 from pathlib import Path
 
 from .protocol import WorkerError
-from .reframe_camera import Detection, iou, timeline
+from .reframe_camera import Detection, iou, timeline, two_people_timelines
+from .reframe_webcam import DEFAULT_GAMEPLAY_SPLIT, gameplay_webcam_timelines, temporal_edge_map
 from .tasks import Task
+
+SUPPORTED_LAYOUTS = ("face", "gameplay_webcam", "two_people")
 
 PROXY_HEIGHT = 480
 ANALYSIS_FPS = 5
@@ -130,6 +133,8 @@ def analyze(detector, params, ctx):
     import cv2
     started = time.perf_counter()
     start, end = params["start_us"], params["end_us"]
+    layout = params.get("layout", "face")
+    split_ratio = params.get("split_ratio")
     duration = (end - start) / 1_000_000
     with tempfile.TemporaryDirectory(prefix="clipes-reframe-") as directory:
         proxy = str(Path(directory) / "proxy.mkv")
@@ -150,6 +155,8 @@ def analyze(detector, params, ctx):
             video.release()
             raise WorkerError("internal")
         count = 0
+        gray_samples = []
+        frame_dets = []
         def frames():
             nonlocal count
             while True:
@@ -161,19 +168,53 @@ def analyze(detector, params, ctx):
                 if stamp >= end:
                     break
                 detections = detector.detect(frame)
+                if layout == "gameplay_webcam":
+                    frame_dets.append(detections)
+                    if len(gray_samples) < 24 and (count % max(1, round(duration * ANALYSIS_FPS / 24)) == 0):
+                        gray = cv2.cvtColor(cv2.resize(frame, (320, 180)), cv2.COLOR_BGR2GRAY)
+                        gray_samples.append(gray)
                 yield stamp, detections, count in cuts
                 count += 1
                 ctx.progress("reframe_faces", min(99, 25 + round(74 * count / max(1, duration * ANALYSIS_FPS))),
                              "Analisando enquadramento do Corte")
+        extra_metrics = {}
         try:
-            result = timeline(frames(), start, end, width / height)
+            aspect = width / height
+            if layout == "gameplay_webcam":
+                for _ in frames():
+                    pass
+                edge_map = temporal_edge_map(gray_samples)
+                ratio = DEFAULT_GAMEPLAY_SPLIT if split_ratio is None else split_ratio
+                top_segs, bot_segs, wc_detected, wc_conf = gameplay_webcam_timelines(
+                    frame_dets, edge_map, start, end, aspect, ratio
+                )
+                result = {
+                    "schemaVersion": 1,
+                    "revision": 1,
+                    "status": "suggestion",
+                    "segments": top_segs,
+                    "secondarySegments": bot_segs,
+                }
+                extra_metrics = {"webcamDetected": wc_detected, "webcamConfidence": wc_conf}
+            elif layout == "two_people":
+                ratio = 0.50 if split_ratio is None else split_ratio
+                top_segs, bot_segs = two_people_timelines(frames(), start, end, aspect, ratio)
+                result = {
+                    "schemaVersion": 1,
+                    "revision": 1,
+                    "status": "suggestion",
+                    "segments": top_segs,
+                    "secondarySegments": bot_segs,
+                }
+            else:
+                result = timeline(frames(), start, end, aspect)
         finally:
             video.release()
         if not count:
             raise WorkerError("internal")
     ctx.checkpoint()
     result["metrics"] = {"device": detector.device, "frames": count,
-                         "elapsedMs": round((time.perf_counter() - started) * 1000)}
+                         "elapsedMs": round((time.perf_counter() - started) * 1000), **extra_metrics}
     return result
 
 
@@ -181,8 +222,12 @@ def reframe_task(loader=Yunet, runner=analyze):
     def resolve(params):
         model = params.get("model", {})
         start, end = params.get("start_us"), params.get("end_us")
+        layout = params.get("layout", "face")
+        split_ratio = params.get("split_ratio")
         if (not isinstance(model, dict) or not all(isinstance(params.get(k), str) and params[k] for k in ("source", "ffmpeg"))
                 or type(start) is not int or type(end) is not int or not 0 <= start < end
+                or layout not in SUPPORTED_LAYOUTS
+                or (split_ratio is not None and (type(split_ratio) not in (int, float) or isinstance(split_ratio, bool) or not 0.1 <= float(split_ratio) <= 0.9))
                 or not isinstance(model.get("path"), str) or not model["path"]
                 or model.get("device") not in ("cpu", "cuda")):
             raise WorkerError("invalid_message")

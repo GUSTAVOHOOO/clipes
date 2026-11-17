@@ -174,5 +174,22 @@ fn chosen_interval_runs_locally_persists_and_cancels_without_partial_suggestion(
     assert_eq!(bad["state"], "failed");
     assert_eq!(bad["error"]["code"], "worker_protocol");
     assert!(bad["timeline"].is_null());
+
+    // Layouts multi-painel (gameplay_webcam e two_people) passam layout/split_ratio ao worker e gravam secondaryTimeline.
+    let gw = call(
+        "reframe.start",
+        json!({"source":1,"startUs":2000000,"endUs":4000000,"requested":true,"layout":"gameplay_webcam","splitRatio":0.30}),
+    );
+    let gw_done = wait(&gw["id"]);
+    assert_eq!(gw_done["state"], "completed");
+    assert_eq!(gw_done["layout"], "gameplay_webcam");
+    assert!(gw_done["secondaryTimeline"]["segments"].is_array());
+    assert!(
+        gw_done["timeline"]["segments"][0]["keyframes"][0]["confidence"]
+            .as_f64()
+            .unwrap()
+            <= 0.65
+    );
+
     call("projects.close", json!({}));
 }

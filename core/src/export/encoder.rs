@@ -415,11 +415,29 @@ pub(crate) fn render_styled_spliced_with_fallback_overwrite(
     cancel: &CancelToken,
     progress: &mut dyn FnMut(u8),
 ) -> Result<Outcome, CoreError> {
+    render_styled_spliced_crop_plan_with_fallback_overwrite(
+        ffmpeg, input, segments, prepared, preferred, overwrite, None, cancel, progress,
+    )
+}
+
+/// Variante interna usada pelo export com plano de layout (#78).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn render_styled_spliced_crop_plan_with_fallback_overwrite(
+    ffmpeg: &Path,
+    input: &RenderInput,
+    segments: &[crate::editor::silences::KeptSegment],
+    prepared: &crate::caption_style::Prepared,
+    preferred: &str,
+    overwrite: bool,
+    crop_plan: Option<&crate::editor::crop::ResolvedCropPlan>,
+    cancel: &CancelToken,
+    progress: &mut dyn FnMut(u8),
+) -> Result<Outcome, CoreError> {
     with_fallback(
         preferred,
         |encoder, progress| {
-            render::render_styled_spliced_with_overwrite(
-                ffmpeg, input, segments, prepared, encoder, overwrite, cancel, progress,
+            render::render_styled_spliced_crop_plan_with_overwrite(
+                ffmpeg, input, segments, prepared, encoder, overwrite, crop_plan, cancel, progress,
             )
         },
         progress,

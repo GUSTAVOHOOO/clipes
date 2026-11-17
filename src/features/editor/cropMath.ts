@@ -1,13 +1,30 @@
 /**
- * Tipos, resolução e interpolação de crop (#66/#71) espelhando exatamente `core/src/editor/crop.rs`.
+ * Tipos, resolução e interpolação de crop (#66/#71/#78) espelhando exatamente `core/src/editor/crop.rs`.
  * Coordenadas normalizadas (0–1) e tempos em µs relativos à Fonte.
  */
 
+export type CropLayout = 'fit' | 'face' | 'gameplay_webcam' | 'two_people' | 'fullscreen_roi';
+export type PanelFitMode = 'fit' | 'fill';
 export type CropRect = { x: number; y: number; width: number; height: number };
 export type CropKeyframe = CropRect & { timeUs: number; confidence?: number | null; cut?: boolean };
 export type CropSegment = { startUs: number; endUs: number; reason: string; keyframes: CropKeyframe[] };
 export type SuggestedCrop = { schemaVersion: number; revision: number; status: string; segments: CropSegment[]; metrics?: unknown };
-export type ClipCrop = { suggested: SuggestedCrop | null; edits: CropKeyframe[]; resolved: CropSegment[]; hasCrop: boolean };
+export type CropPanelDoc = { suggested: SuggestedCrop | null; edits: CropKeyframe[] };
+export type DualCropPanels = { top: CropPanelDoc; bottom: CropPanelDoc };
+export type PanelPlan = { targetWidth: number; targetHeight: number; fitMode: PanelFitMode; segments: CropSegment[] };
+export type ResolvedCropPlan = { layout: CropLayout; splitRatio: number; panels: PanelPlan[] };
+export type ClipCrop = {
+  layout?: CropLayout;
+  explicitLayout?: CropLayout | null;
+  splitRatio?: number;
+  suggested: SuggestedCrop | null;
+  edits: CropKeyframe[];
+  gameplayWebcam?: DualCropPanels | null;
+  twoPeople?: DualCropPanels | null;
+  resolved: CropSegment[];
+  hasCrop: boolean;
+  plan?: ResolvedCropPlan;
+};
 
 const TARGET_ASPECT = 9 / 16;
 
@@ -15,25 +32,67 @@ function clamp(v: number, min: number, max: number) {
   return Math.min(max, Math.max(min, v));
 }
 
-export function baseCropSize(sourceAspect: number): { width: number; height: number } {
-  const aspect = Number.isFinite(sourceAspect) && sourceAspect > 0.1 && sourceAspect <= 10 ? sourceAspect : 16 / 9;
+export function sanitizeAspect(aspect: number): number {
+  return Number.isFinite(aspect) && aspect >= 0.1 && aspect <= 10 ? aspect : 16 / 9;
+}
+
+export function splitBounds(layout: CropLayout): [number, number, number] | null {
+  if (layout === 'gameplay_webcam') return [0.30, 0.20, 0.50];
+  if (layout === 'two_people') return [0.50, 0.30, 0.70];
+  return null;
+}
+
+export function panelHeights(layout: CropLayout, splitRatio?: number | null): [number, number] {
+  const bounds = splitBounds(layout);
+  if (!bounds) return [1920, 0];
+  const [def, min, max] = bounds;
+  const ratio = clamp(splitRatio ?? def, min, max);
+  const minPx = Math.round(1920 * min);
+  const maxPx = Math.round(1920 * max);
+  const topH = clamp(Math.round((1920 * ratio) / 2) * 2, minPx, maxPx);
+  return [topH, 1920 - topH];
+}
+
+export function effectiveSplitRatio(layout: CropLayout, splitRatio?: number | null): number {
+  return panelHeights(layout, splitRatio)[0] / 1920;
+}
+
+export function panelCropBaseSize(sourceAspect: number, panelAspect: number): { width: number; height: number } {
+  const aspect = sanitizeAspect(sourceAspect);
+  const target = Number.isFinite(panelAspect) && panelAspect > 0.05 ? panelAspect : TARGET_ASPECT;
+  const ratio = target / aspect;
   return {
-    width: clamp(TARGET_ASPECT / aspect, 0.05, 1),
-    height: clamp(aspect / TARGET_ASPECT, 0.05, 1),
+    width: clamp(ratio, 0.05, 1),
+    height: clamp(1 / ratio, 0.05, 1),
+  };
+}
+
+export function baseCropSize(sourceAspect: number): { width: number; height: number } {
+  return panelCropBaseSize(sourceAspect, TARGET_ASPECT);
+}
+
+export function defaultPanelRect(
+  sourceAspect: number,
+  panelAspect: number,
+  zoom = 1,
+  cx = 0.5,
+  cy = 0.5,
+  maxZoom = 8,
+): CropRect {
+  const base = panelCropBaseSize(sourceAspect, panelAspect);
+  const z = clamp(zoom, 1, maxZoom);
+  const width = clamp(base.width / z, 0.05, 1);
+  const height = clamp(base.height / z, 0.05, 1);
+  return {
+    x: clamp(cx - width / 2, 0, Math.max(0, 1 - width)),
+    y: clamp(cy - height / 2, 0, Math.max(0, 1 - height)),
+    width,
+    height,
   };
 }
 
 export function defaultCropRect(sourceAspect: number, zoom = 1): CropRect {
-  const base = baseCropSize(sourceAspect);
-  const z = clamp(zoom, 1, 2.5);
-  const width = clamp(base.width / z, 0.05, 1);
-  const height = clamp(base.height / z, 0.05, 1);
-  return {
-    x: (1 - width) / 2,
-    y: (1 - height) / 2,
-    width,
-    height,
-  };
+  return defaultPanelRect(sourceAspect, TARGET_ASPECT, zoom, 0.5, 0.5, 2.5);
 }
 
 export function clampCropRect(rect: CropRect): CropRect {
@@ -44,15 +103,30 @@ export function clampCropRect(rect: CropRect): CropRect {
   return { x, y, width, height };
 }
 
-export function cropZoomFactor(rect: CropRect, sourceAspect: number): number {
-  const base = baseCropSize(sourceAspect);
+export function panelZoomFactor(
+  rect: CropRect,
+  sourceAspect: number,
+  panelAspect: number,
+  maxZoom = 8,
+): number {
+  const base = panelCropBaseSize(sourceAspect, panelAspect);
   if (rect.width <= 0) return 1;
-  return clamp(base.width / rect.width, 1, 2.5);
+  return clamp(base.width / rect.width, 1, maxZoom);
 }
 
-export function zoomCropRect(rect: CropRect, sourceAspect: number, zoom: number): CropRect {
-  const base = baseCropSize(sourceAspect);
-  const z = clamp(zoom, 1, 2.5);
+export function cropZoomFactor(rect: CropRect, sourceAspect: number): number {
+  return panelZoomFactor(rect, sourceAspect, TARGET_ASPECT, 2.5);
+}
+
+export function zoomPanelRect(
+  rect: CropRect,
+  sourceAspect: number,
+  panelAspect: number,
+  zoom: number,
+  maxZoom = 8,
+): CropRect {
+  const base = panelCropBaseSize(sourceAspect, panelAspect);
+  const z = clamp(zoom, 1, maxZoom);
   const width = clamp(base.width / z, 0.05, 1);
   const height = clamp(base.height / z, 0.05, 1);
   const cx = rect.x + rect.width / 2;
@@ -63,6 +137,29 @@ export function zoomCropRect(rect: CropRect, sourceAspect: number, zoom: number)
     width,
     height,
   });
+}
+
+export function zoomCropRect(rect: CropRect, sourceAspect: number, zoom: number): CropRect {
+  return zoomPanelRect(rect, sourceAspect, TARGET_ASPECT, zoom, 2.5);
+}
+
+export function zoomFitRect(rect: CropRect, zoom: number): CropRect {
+  const z = clamp(zoom, 1, 2.5);
+  const width = clamp(1 / z, 0.05, 1);
+  const height = clamp(1 / z, 0.05, 1);
+  const cx = rect.x + rect.width / 2;
+  const cy = rect.y + rect.height / 2;
+  return clampCropRect({
+    x: cx - width / 2,
+    y: cy - height / 2,
+    width,
+    height,
+  });
+}
+
+export function fitZoomFactor(rect: CropRect): number {
+  if (rect.width <= 0) return 1;
+  return clamp(1 / rect.width, 1, 2.5);
 }
 
 function splitManualCuts(startUs: number, endUs: number, firstReason: string, keyframes: CropKeyframe[]): CropSegment[] {
@@ -110,6 +207,73 @@ export function resolveCrop(suggested: SuggestedCrop | null | undefined, edits: 
     }
   }
   return resolved;
+}
+
+function staticSegment(startUs: number, endUs: number, rect: CropRect): CropSegment {
+  return {
+    startUs,
+    endUs: Math.max(endUs, startUs + 1),
+    reason: 'start',
+    keyframes: [{ timeUs: startUs, ...rect }],
+  };
+}
+
+export function effectiveCropLayout(crop: Partial<ClipCrop>): CropLayout {
+  if (crop.explicitLayout) return crop.explicitLayout;
+  if (crop.layout) return crop.layout;
+  if (crop.suggested || (crop.edits && crop.edits.length > 0)) return 'face';
+  return 'fit';
+}
+
+export function resolveCropPlan(
+  crop: Partial<ClipCrop>,
+  sourceAspect: number,
+  clipStartUs: number,
+  clipEndUs: number,
+): ResolvedCropPlan {
+  const layout = effectiveCropLayout(crop);
+  const aspect = sanitizeAspect(sourceAspect);
+  if (layout === 'fit') {
+    const edits = crop.edits ?? [];
+    const segments = edits.length > 0 ? resolveCrop(null, edits) : [staticSegment(clipStartUs, clipEndUs, { x: 0, y: 0, width: 1, height: 1 })];
+    return { layout, splitRatio: 1, panels: [{ targetWidth: 1080, targetHeight: 1920, fitMode: 'fit', segments }] };
+  }
+  if (layout === 'face') {
+    let segments = resolveCrop(crop.suggested, crop.edits ?? []);
+    if (segments.length === 0) {
+      segments = [staticSegment(clipStartUs, clipEndUs, defaultPanelRect(aspect, TARGET_ASPECT, 1, 0.5, 0.5))];
+    }
+    return { layout, splitRatio: 1, panels: [{ targetWidth: 1080, targetHeight: 1920, fitMode: 'fill', segments }] };
+  }
+  if (layout === 'fullscreen_roi') {
+    const edits = crop.edits ?? [];
+    const segments = edits.length > 0 ? resolveCrop(null, edits) : [staticSegment(clipStartUs, clipEndUs, defaultPanelRect(aspect, TARGET_ASPECT, 1, 0.5, 0.5))];
+    return { layout, splitRatio: 1, panels: [{ targetWidth: 1080, targetHeight: 1920, fitMode: 'fill', segments }] };
+  }
+  const [topH, botH] = panelHeights(layout, crop.splitRatio);
+  const dual = layout === 'gameplay_webcam' ? crop.gameplayWebcam : crop.twoPeople;
+  let topSegs = dual ? resolveCrop(dual.top.suggested, dual.top.edits) : [];
+  if (topSegs.length === 0) {
+    const rect = layout === 'gameplay_webcam'
+      ? defaultPanelRect(aspect, 1080 / topH, 3.0, 0.18, 0.22)
+      : defaultPanelRect(aspect, 1080 / topH, 1.0, 0.25, 0.5);
+    topSegs = [staticSegment(clipStartUs, clipEndUs, rect)];
+  }
+  let botSegs = dual ? resolveCrop(dual.bottom.suggested, dual.bottom.edits) : [];
+  if (botSegs.length === 0) {
+    const rect = layout === 'gameplay_webcam'
+      ? defaultPanelRect(aspect, 1080 / botH, 1.0, 0.5, 0.5)
+      : defaultPanelRect(aspect, 1080 / botH, 1.0, 0.75, 0.5);
+    botSegs = [staticSegment(clipStartUs, clipEndUs, rect)];
+  }
+  return {
+    layout,
+    splitRatio: topH / 1920,
+    panels: [
+      { targetWidth: 1080, targetHeight: topH, fitMode: 'fill', segments: topSegs },
+      { targetWidth: 1080, targetHeight: botH, fitMode: 'fill', segments: botSegs },
+    ],
+  };
 }
 
 export function upsertCropKeyframe(
