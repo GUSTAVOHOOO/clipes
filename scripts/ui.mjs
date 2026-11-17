@@ -836,7 +836,12 @@ try {
   await page.goto(`${url}?source-test=1&transcript-test=1&selection-blocked=1`);
   const blockedSelection = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
   await blockedSelection.getByText(/contexto efetivo de 4096 tokens/).waitFor();
-  assert.equal(await blockedSelection.getByRole('button', { name: 'Selecionar Cortes' }).isDisabled(), true);
+  const blockedButton = blockedSelection.getByRole('button', { name: 'Selecionar Cortes' });
+  assert.equal(await blockedButton.isDisabled(), true);
+  const blockedReasonId = await blockedButton.getAttribute('aria-describedby');
+  assert.ok(blockedReasonId, 'botão desabilitado aponta para a explicação');
+  assert.match(await blockedSelection.locator(`#${blockedReasonId}`).innerText(), /contexto efetivo de 4096 tokens/);
+  assert.match((await blockedButton.getAttribute('title')) ?? '', /contexto efetivo de 4096 tokens/);
   // Refazer com outro perfil (#126): perfil, custo e saída da máquina antes de rodar, confirmação, vetos e Janela incerta.
   const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const redoChecks = async L => {
