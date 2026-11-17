@@ -15,8 +15,13 @@ use std::{
 const FAKE: &str = env!("CARGO_BIN_EXE_fake-worker");
 // CLIPES_DATA_DIR é global ao processo: os testes de dispatch rodam um por vez.
 static ENV: Mutex<()> = Mutex::new(());
+// Linux recusa executar (ETXTBSY) um binário que ainda está aberto para escrita, e um fork de outro
+// thread herda esse descritor até o exec. Copiar o uv falso não pode coincidir com nenhum spawn
+// dos testes que não pegam ENV: os spawns pegam leitura, a cópia pega escrita (#175).
+static SPAWN: std::sync::RwLock<()> = std::sync::RwLock::new(());
 
 fn client(scenario: &str) -> WorkerClient {
+    let _spawning = SPAWN.read().unwrap_or_else(|e| e.into_inner());
     WorkerClient::start(FAKE, ["--scenario", scenario], |_| {}).unwrap()
 }
 fn idle() -> AtomicBool {
@@ -141,6 +146,7 @@ fn contract_violation_by_the_core_makes_the_fake_fail() {
 
 #[test]
 fn missing_executable_is_a_typed_error_without_paths() {
+    let _spawning = SPAWN.read().unwrap_or_else(|e| e.into_inner());
     let error = WorkerClient::start("/nao/existe/worker", ["x"], |_| {})
         .err()
         .unwrap();
@@ -212,6 +218,7 @@ impl Data {
             .to_owned();
         let dir = self.root.path().join("components");
         fs::create_dir_all(&dir).unwrap();
+        let _copying = SPAWN.write().unwrap_or_else(|e| e.into_inner());
         fs::copy(FAKE, dir.join(Self::exe("uv"))).unwrap();
         fs::write(dir.join("uv.version"), version).unwrap();
     }
@@ -410,6 +417,7 @@ fn local_engine_follows_the_shared_transcribe_block_example() {
             &BlockRequest {
                 audio,
                 final_block: false,
+                language: None,
             },
             &idle(),
             &mut |p| percentages.push(p),
@@ -439,6 +447,7 @@ fn local_engine_follows_the_shared_transcribe_block_example() {
             &BlockRequest {
                 audio,
                 final_block: true,
+                language: None,
             },
             &idle(),
             &mut |p| percentages.push(p),
@@ -468,4 +477,60 @@ fn vad_contract() {
     );
     assert_eq!(data["silences"].as_array().unwrap().len(), 2);
     client.shutdown();
+}
+
+#[test]
+fn resyncs_embedded_worker_scripts_when_project_dir_already_exists() {
+    let data = Data::new();
+    data.fake_uv();
+    install(&mut Vec::new()).unwrap();
+
+    let pkg = data.worker().join("project/src/clipes_worker");
+    let tasks = pkg.join("tasks.py");
+    let reframe = pkg.join("reframe.py");
+    let obsolete = pkg.join("obsolete_script.py");
+    let pycache = pkg.join("__pycache__");
+    let expected_tasks = fs::read(&tasks).unwrap();
+    let expected_reframe = fs::read(&reframe).unwrap();
+
+    // Simula versão anterior do app com scripts diferentes, arquivo ausente, arquivo obsoleto e pycache.
+    fs::write(&tasks, b"# old tasks.py from previous app version\n").unwrap();
+    fs::remove_file(&reframe).unwrap();
+    fs::write(&obsolete, b"# removed in newer version\n").unwrap();
+    fs::create_dir_all(&pycache).unwrap();
+    fs::write(pycache.join("tasks.cpython-312.pyc"), b"stale-pyc").unwrap();
+
+    let state_file = data.worker().join("worker.state.json");
+    let mut state: Value = serde_json::from_slice(&fs::read(&state_file).unwrap()).unwrap();
+    let original_lock = state["lock_sha256"].clone();
+    state["files_sha256"] = json!("old-files-hash");
+    fs::write(&state_file, serde_json::to_vec_pretty(&state).unwrap()).unwrap();
+
+    let status = dispatch("components.worker.status", json!({}), &mut |_| {}).unwrap();
+    assert_eq!(status["installed"], true);
+    assert_eq!(status["outdated"], false);
+
+    assert_eq!(fs::read(&tasks).unwrap(), expected_tasks);
+    assert_eq!(fs::read(&reframe).unwrap(), expected_reframe);
+    assert!(!obsolete.exists());
+    assert!(!pycache.exists());
+
+    let updated_state: Value = serde_json::from_slice(&fs::read(&state_file).unwrap()).unwrap();
+    assert_eq!(updated_state["lock_sha256"], original_lock);
+    assert_ne!(updated_state["files_sha256"], json!("old-files-hash"));
+
+    // Se o lockfile também tiver mudado, os scripts ainda são ressincronizados, mas outdated continua true.
+    let mut lock_stale_state = updated_state;
+    lock_stale_state["lock_sha256"] = json!("old-lock-hash");
+    fs::write(&tasks, b"# stale again\n").unwrap();
+    fs::write(
+        &state_file,
+        serde_json::to_vec_pretty(&lock_stale_state).unwrap(),
+    )
+    .unwrap();
+
+    let status = dispatch("components.worker.status", json!({}), &mut |_| {}).unwrap();
+    assert_eq!(status["installed"], true);
+    assert_eq!(status["outdated"], true);
+    assert_eq!(fs::read(&tasks).unwrap(), expected_tasks);
 }

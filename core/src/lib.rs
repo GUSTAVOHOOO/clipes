@@ -57,19 +57,93 @@ pub fn dispatch(name: &str, arguments: Value, events: &mut EventSink<'_>) -> Com
 }
 
 pub mod ai_task;
+pub mod angles;
 mod assistant;
+pub mod audio;
+mod audit;
+pub mod caption_style;
+pub mod channel_profile;
+pub mod chat;
 mod components;
+mod context_notice;
+pub mod corrections;
+pub mod editor;
+pub mod energy;
+pub mod export;
+pub mod guardrails;
 pub mod jobs;
+pub mod media;
+pub mod montage;
+pub mod narration_align;
+pub mod narration_cleanup;
+pub mod narration_import;
+pub mod narration_record;
+pub mod packaging;
+pub mod paths;
 pub mod process;
 pub mod projects;
 pub mod provider;
 mod provider_cli;
+mod proxy;
+pub mod reframe;
+pub mod script;
+pub mod selection;
+pub mod selection_windows;
 pub mod sentences;
+mod source_batches;
 mod sources;
+pub mod thumbnail;
 pub mod transcription;
+pub use transcription::SUPPORTED_LANGUAGES;
+pub mod translation;
+pub mod tts;
 mod url_import;
 pub(crate) mod vault;
 mod version;
 pub mod worker;
 
 pub mod diagnostic;
+
+/// Serializes the unit tests that set or read `CLIPES_DATA_DIR` (#188): a test that points the
+/// variable at its temporary directory must not leak it to another test that reads it.
+#[cfg(test)]
+pub(crate) mod test_env {
+    use std::{
+        ffi::OsString,
+        path::Path,
+        sync::{Mutex, MutexGuard},
+    };
+
+    static LOCK: Mutex<()> = Mutex::new(());
+
+    /// Takes the lock for a test that reads `CLIPES_DATA_DIR` without changing it.
+    pub(crate) fn lock() -> MutexGuard<'static, ()> {
+        LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Points `CLIPES_DATA_DIR` at `dir` until the guard is dropped, then restores the previous value.
+    pub(crate) fn set_data_dir(dir: &Path) -> DataDirGuard {
+        let lock = lock();
+        let previous = std::env::var_os("CLIPES_DATA_DIR");
+        std::env::set_var("CLIPES_DATA_DIR", dir);
+        DataDirGuard {
+            _lock: lock,
+            previous,
+        }
+    }
+
+    /// Holds the lock and restores `CLIPES_DATA_DIR` on drop, including during a panic.
+    pub(crate) struct DataDirGuard {
+        _lock: MutexGuard<'static, ()>,
+        previous: Option<OsString>,
+    }
+
+    impl Drop for DataDirGuard {
+        fn drop(&mut self) {
+            match self.previous.take() {
+                Some(value) => std::env::set_var("CLIPES_DATA_DIR", value),
+                None => std::env::remove_var("CLIPES_DATA_DIR"),
+            }
+        }
+    }
+}

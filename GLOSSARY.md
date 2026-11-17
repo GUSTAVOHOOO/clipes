@@ -56,6 +56,7 @@ Gravação de uma live depois de encerrada. É o único tipo de live que vira Fo
 
 **Corte** (Clip)
 Trecho curto gerado a partir de uma Fonte, com legenda e enquadramento próprios, pronto para exportar.
+No editor, Alt permite ajustar as bordas por quadro da Fonte, como exceção ao encaixe padrão em Frase.
 _Evitar_: clipe, short, highlight
 
 **Transcrição** (Transcript)
@@ -78,6 +79,13 @@ _Evitar_: janela sozinha, Janela de contexto (é o limite do modelo, não o trec
 Avaliação explicável do potencial de um Corte, formada por eixos nomeados (como Gancho, Autossuficiência e Fechamento), cada um com uma justificativa. Não é previsão de views.
 _Evitar_: score viral, pontuação de viralidade
 
+**Espaço para comentário** (Room for commentary)
+Eixo da Nota usado só no Vídeo transformado: o quanto o trecho abre algo (uma opinião, um fato, uma polêmica) que uma pessoa pode comentar, analisar ou contextualizar. Tem o maior peso nesse tipo; o Corte direto não usa esse eixo.
+
+**Lote de Fontes** (Source Batch)
+Conjunto de Fontes do Projeto que o app processa em sequência (Transcrição e seleção), com teto de custo opcional. Uma Fonte com erro do Provedor pausa sozinha; as outras seguem.
+_Evitar_: fila (a fila é o mecanismo de jobs), batch
+
 **Motor de transcrição** (Transcription Engine)
 O que produz a Transcrição. Pode ser local, rodando na máquina do usuário (o padrão), ou remoto, via API paga escolhida pelo usuário.
 _Evitar_: modelo de transcrição (o modelo é uma escolha dentro de um Motor)
@@ -89,6 +97,10 @@ _Evitar_: IA, modelo, conta
 **Perfil de Provedor** (Provider Profile)
 Conjunto salvo de um Provedor já configurado: nome livre, tipo, endpoint, modelo, preço e chave no cofre. Pode haver vários ao mesmo tempo, e cada Tarefa de IA aponta para um por regra fixa que o usuário escolhe. Não existe perfil padrão de fábrica, e nem o Projeto nem o Perfil de canal escolhem um.
 _Evitar_: perfil sozinho (confunde com Perfil de canal), conta, preset
+
+**Revisão da execução** (Run revision)
+Versão dos candidatos de uma execução de seleção. Refazer Janelas com outro Perfil de Provedor gera uma revisão nova; as anteriores e as decisões já tomadas na revisão dos candidatos continuam no Projeto.
+_Evitar_: versão, rodada
 
 **Tarefa de IA** (AI Task)
 Cada trabalho que o Provedor faz no app: seleção de Cortes, Empacotamento, Roteiro e tradução. É um workflow fixo no núcleo, com prompt versionado, schema de saída, verificadores e orçamento, e nunca um agente com ferramentas.

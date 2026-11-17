@@ -2,8 +2,13 @@ use crate::{projects, CommandRegistration, CommandResult, EventSink};
 use serde_json::{json, Value};
 mod ai;
 mod budget;
+pub(crate) use ai::route_of_profile;
 pub(crate) mod preview;
-pub use ai::{enqueue_ai, enqueue_ai_in_batch, set_ai_provider, set_ai_route};
+pub mod redo;
+pub use ai::{
+    enqueue_ai, enqueue_ai_in_batch, enqueue_ai_with_profile, set_ai_provider, set_ai_route,
+};
+pub(crate) use budget::{audio_precheck, pause as pause_scope};
 
 #[derive(Clone, Copy)]
 pub enum Safety {
@@ -28,7 +33,7 @@ pub fn enqueue(kind: &str, safety: Safety) -> Result<i64, crate::CoreError> {
 pub fn begin(id: i64) -> Result<bool, crate::CoreError> {
     projects::with_writer(|c| {
         Ok(c.execute(
-            "UPDATE jobs SET state='running',attempts=attempts+1 WHERE id=?1 AND state='queued'",
+            "UPDATE jobs SET state='running',attempts=attempts+1,result=NULL WHERE id=?1 AND state='queued'",
             [id],
         )? == 1)
     })
@@ -46,6 +51,8 @@ pub fn checkpoint(id: i64, checkpoint: &str) -> Result<(), crate::CoreError> {
 
 /// Records an execution result; a provider timeout may have incurred a charge.
 pub fn finish(id: i64, result: Result<(), crate::CoreError>) -> Result<(), crate::CoreError> {
+    // Código fixo do erro (nunca texto): o lote de Fontes (#56) lê daqui por que a Fonte parou.
+    let code = result.as_ref().err().map(|e| e.code.clone());
     let state = match result {
         Ok(()) => "completed",
         Err(ref e) if e.code == "timeout_uncertain" => "uncertain",
@@ -54,8 +61,8 @@ pub fn finish(id: i64, result: Result<(), crate::CoreError>) -> Result<(), crate
     };
     projects::with_writer(|c| {
         c.execute(
-            "UPDATE jobs SET state=?2, progress=CASE WHEN ?2='completed' THEN 100 ELSE progress END WHERE id=?1 AND state='running'",
-            (id, state),
+            "UPDATE jobs SET state=?2, progress=CASE WHEN ?2='completed' THEN 100 ELSE progress END, result=COALESCE(result, CASE WHEN ?3 IS NULL THEN NULL ELSE json_object('outcome',?2,'code',?3) END) WHERE id=?1 AND state='running'",
+            (id, state, code),
         )?;
         Ok(())
     })

@@ -1,4 +1,4 @@
-use super::groq::{language_code, request};
+use super::groq::{language_code, request, request_with_language};
 use super::*;
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -269,4 +269,139 @@ fn oversized_or_cancelled_audio_never_connects() {
         .code,
         "audio_too_large"
     );
+}
+
+#[test]
+fn batch_budget_checks_each_audio_call_and_counts_it_after_reset() {
+    let root = tempfile::tempdir().unwrap();
+    // Declared after `root`, so the variable is restored before the temporary directory is removed.
+    let _data_dir = crate::test_env::set_data_dir(&root.path().join("data"));
+    let call = |name, value| crate::dispatch(name, value, &mut |_| {}).unwrap();
+    call(
+        "projects.create",
+        json!({"parent":root.path(),"name":"Audio"}),
+    );
+    call(
+        "transcription.groq.confirm",
+        json!({"endpoint":super::groq::ENDPOINT,"confirmed":true}),
+    );
+    let (job, transcript) = crate::projects::with_writer(|c| {
+        c.execute("INSERT INTO sources(path,size,duration_us,partial_hash,metadata,permission,audio_track) VALUES ('test.mp4',1,20000000,'x','{}','{}',0)", [])?;
+        let source = c.last_insert_rowid();
+        c.execute("INSERT INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,duration_us) VALUES (?1,0,'groq','m','','remote',20000000)", [source])?;
+        let transcript = c.last_insert_rowid();
+        c.execute("INSERT INTO jobs(kind,safety,state,source_id,batch) VALUES ('transcription','paid','running',?1,'test-audio')", [source])?;
+        Ok((c.last_insert_rowid(), transcript))
+    }).unwrap();
+    let cap = super::groq::estimate_cost(super::groq::MODEL, 10_000_000)["maxMicroUsd"]
+        .as_i64()
+        .unwrap();
+    call(
+        "jobs.budget.set",
+        json!({"scope":"batch","key":"test-audio","maxCostMicroUsd":cap}),
+    );
+    crate::projects::with_writer(|c| {
+        c.execute("INSERT INTO provider_costs(task,batch,provider,model,calls,cost_kind,cost_micro_usd,table_updated_at,created_at) VALUES ('selection','test-audio','openai','fake',1,'usd',1,'test',?1)", [crate::provider::cost::now_micros()])?;
+        Ok(())
+    }).unwrap();
+    let err = super::remote::begin(
+        job,
+        transcript,
+        0,
+        10_000_000,
+        super::groq::ENDPOINT,
+        b"fake",
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code, "budget_cost");
+    let count = crate::projects::with_reader(|c| {
+        c.query_row("SELECT COUNT(*) FROM transcription_calls", [], |r| {
+            r.get::<_, i64>(0)
+        })
+    })
+    .unwrap();
+    assert_eq!(count, 0);
+    call(
+        "jobs.budget.continue",
+        json!({"scope":"batch","key":"test-audio","maxCostMicroUsd":1000,"resetUsage":true}),
+    );
+    super::remote::begin(
+        job,
+        transcript,
+        0,
+        10_000_000,
+        super::groq::ENDPOINT,
+        b"fake",
+        None,
+    )
+    .unwrap();
+    let budget = call(
+        "jobs.budget.get",
+        json!({"scope":"batch","key":"test-audio"}),
+    );
+    assert!(
+        budget["budgets"][0]["usage"]["audioMicroUsd"]
+            .as_i64()
+            .unwrap()
+            > 0
+    );
+    call("projects.close", json!({}));
+}
+
+#[test]
+fn fixed_language_is_sent_in_multipart_body_and_applied_to_words() {
+    let server = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", server.local_addr().unwrap());
+    let thread = std::thread::spawn(move || {
+        let (mut socket, _) = server.accept().unwrap();
+        socket.set_nonblocking(false).unwrap();
+        socket
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        let mut request = Vec::new();
+        let mut buffer = [0u8; 4096];
+        loop {
+            let n = socket.read(&mut buffer).unwrap();
+            request.extend_from_slice(&buffer[..n]);
+            if let Some(end) = request.windows(4).position(|w| w == b"\r\n\r\n") {
+                let headers = String::from_utf8_lossy(&request[..end]);
+                let len: usize = headers
+                    .lines()
+                    .find_map(|line| {
+                        line.to_ascii_lowercase()
+                            .strip_prefix("content-length: ")
+                            .and_then(|v| v.parse().ok())
+                    })
+                    .unwrap();
+                if request.len() >= end + 4 + len {
+                    break;
+                }
+            }
+        }
+        let body_text = String::from_utf8_lossy(&request);
+        assert!(
+            body_text.contains("name=\"language\"\r\n\r\npt\r\n")
+                || body_text.contains("name=\"language\"\n\npt\n")
+        );
+        let body = r#"{"words":[{"word":"olá","start":0.1,"end":0.5}]}"#;
+        write!(
+            socket,
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .unwrap();
+    });
+    let result = request_with_language(
+        &url,
+        "fake-key",
+        b"audio",
+        Some("pt"),
+        &crate::provider::CancelToken::new(),
+        Duration::from_secs(5),
+    )
+    .unwrap();
+    assert_eq!(result[0].language.as_deref(), Some("pt"));
+    thread.join().unwrap();
 }

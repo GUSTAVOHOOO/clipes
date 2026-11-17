@@ -50,7 +50,8 @@ pub(crate) fn check(id: i64, stop: &AtomicBool) -> Result<(), crate::CoreError> 
 
 pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
     while !stop.load(Ordering::SeqCst) {
-        let next = projects::with_reader(|c| c.query_row("SELECT id,COALESCE(source_id,0),kind FROM jobs WHERE ((kind='preview' AND safety='local') OR kind='transcription' OR kind LIKE 'ai:%') AND state='queued' AND NOT EXISTS (SELECT 1 FROM ai_pauses p WHERE (p.scope='task' AND jobs.kind='ai:'||p.key) OR (p.scope='batch' AND jobs.batch=p.key)) ORDER BY id LIMIT 1", [], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?))).optional()).ok().flatten();
+        crate::source_batches::tick();
+        let next = projects::with_reader(|c| c.query_row("SELECT id,COALESCE(source_id,0),kind FROM jobs WHERE ((kind IN ('preview','proxy','export','timeline') AND safety='local') OR kind='transcription' OR kind='energy' OR kind='chat' OR kind='narration' OR kind='narration_align' OR kind='narration_import' OR (kind='reframe' AND safety='local') OR kind LIKE 'ai:%') AND state='queued' AND NOT EXISTS (SELECT 1 FROM ai_pauses p WHERE (p.scope='task' AND jobs.kind='ai:'||p.key) OR (p.scope='batch' AND jobs.batch=p.key)) ORDER BY id LIMIT 1", [], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?))).optional()).ok().flatten();
         if let Some((id, source, kind)) = next {
             let Ok(_guard) = projects::start_job() else {
                 break;
@@ -61,14 +62,40 @@ pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
             if begin(id).unwrap_or(false) {
                 if kind.starts_with(ai::KIND_PREFIX) {
                     ai::execute(id, &stop);
+                    if crate::selection::is_job_kind(&kind) {
+                        crate::selection::on_job_settled(id);
+                    } else if kind == crate::translation::JOB_KIND {
+                        crate::translation::on_job_settled(id);
+                    }
                     continue;
                 }
-                let result = if kind == "transcription" {
+                let result = if kind == "reframe" {
+                    crate::reframe::run(id, &project, &stop)
+                } else if kind == "transcription" {
                     crate::transcription::run(id, source, &project, &stop)
+                } else if kind == crate::editor::assets::JOB_KIND {
+                    crate::editor::assets::run(id, source, &project, &stop)
+                } else if kind == "proxy" {
+                    crate::proxy::run(id, source, &project, &stop)
+                } else if kind == crate::chat::JOB_KIND {
+                    crate::chat::run(id, source, &project, &stop)
+                } else if kind == crate::energy::JOB_KIND {
+                    crate::energy::run(id, source, &project, &stop)
+                } else if kind == crate::tts::JOB_KIND {
+                    crate::tts::run(id, &project, &stop)
+                } else if kind == crate::narration_align::JOB_KIND {
+                    crate::narration_align::run(id, &project, &stop)
+                } else if kind == crate::narration_import::JOB_KIND {
+                    crate::narration_import::run(id, &project, &stop)
+                } else if kind == crate::export::JOB_KIND {
+                    crate::export::run(id, source, &project, &stop)
                 } else {
                     generate(id, source, &project, &stop)
                 };
-                if result.as_ref().is_err_and(|e| e.code == "interrupted") {
+                if result
+                    .as_ref()
+                    .is_err_and(|e| matches!(e.code.as_str(), "interrupted" | "budget_cost"))
+                {
                     let _ = projects::with_writer(|c| {
                         c.execute(
                             "UPDATE jobs SET state='queued' WHERE id=?1 AND state='running'",
@@ -79,6 +106,9 @@ pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
                 } else {
                     let err = result.as_ref().err().cloned();
                     let _ = finish(id, result);
+                    if kind == crate::export::JOB_KIND {
+                        crate::export::batch::on_job_settled(id);
+                    }
                     let _ = progress_event(id, err, &kind);
                 }
             }
@@ -103,8 +133,24 @@ fn progress_event(
         stage: if err.is_some() { "failed" } else { "complete" }.into(),
         percentage: if err.is_some() { 0 } else { 100 },
         message: match (kind, err.is_some()) {
+            ("reframe", true) => "Análise de enquadramento interrompida",
+            ("reframe", false) => "Sugestão de enquadramento pronta",
             ("transcription", true) => "Transcrição interrompida",
             ("transcription", false) => "Transcrição pronta",
+            ("chat", true) => "Busca do chat interrompida",
+            ("chat", false) => "Chat da live pronto",
+            ("timeline", true) => "Timeline do Corte interrompida",
+            ("timeline", false) => "Timeline do Corte pronta",
+            ("energy", true) => "Medição de energia interrompida",
+            ("energy", false) => "Energia do áudio medida",
+            ("narration", true) => "Narração interrompida",
+            ("narration", false) => "Narração pronta",
+            ("narration_align", true) => "Alinhamento da Narração interrompido",
+            ("narration_align", false) => "Alinhamento da Narração pronto",
+            ("narration_import", true) => "Importação de áudio da Narração interrompida",
+            ("narration_import", false) => "Áudio da Narração importado",
+            ("export", true) => "Export interrompido",
+            ("export", false) => "Corte exportado",
             (_, true) => "Prévia interrompida",
             (_, false) => "Prévia pronta",
         }
@@ -280,11 +326,23 @@ fn generate(
     Ok(())
 }
 
-fn run_process(
+pub(crate) fn run_process(
     ffmpeg: &Path,
     args: Vec<std::ffi::OsString>,
     id: i64,
     stop: &AtomicBool,
+    consume: impl FnMut(&[u8]),
+) -> Result<(), crate::CoreError> {
+    run_process_as(ffmpeg, args, id, stop, failed, consume)
+}
+
+/// Como [`run_process`], com o erro tipado do job que chama (energia do áudio, #54).
+pub(crate) fn run_process_as(
+    ffmpeg: &Path,
+    args: Vec<std::ffi::OsString>,
+    id: i64,
+    stop: &AtomicBool,
+    failed: fn() -> crate::CoreError,
     mut consume: impl FnMut(&[u8]),
 ) -> Result<(), crate::CoreError> {
     let (mut child, group) = crate::process::spawn_managed(ffmpeg, args).map_err(|_| failed())?;

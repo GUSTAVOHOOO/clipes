@@ -1,0 +1,1 @@
+{"type":"object","properties":{"schemaVersion":{"type":"integer","enum":[1]},"language":{"type":"string","enum":["pt-BR","en"]},"lines":{"type":"array","items":{"type":"object","properties":{"id":{"type":"integer"},"text":{"type":"string"}},"required":["id","text"],"additionalProperties":false}}},"required":["schemaVersion","language","lines"],"additionalProperties":false}

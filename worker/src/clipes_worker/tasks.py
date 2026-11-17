@@ -24,12 +24,18 @@ def _model_missing():
 
 
 def default_tasks():
+    from .align import align_task
+    from .hardware_probe import probe_task
     from .transcribe import transcribe_task, vad_task
+    from .reframe import reframe_task
 
     tasks = {
         name: Task(model=model, load=_model_missing, run=lambda *_: {})
-        for name, model in (("reframe", "yunet"), ("tts", "kokoro"))
+        for name, model in (("tts", "kokoro"),)
     }
     tasks["transcribe"] = transcribe_task()
+    tasks["align"] = align_task()
     tasks["vad"] = vad_task()
+    tasks["probe"] = probe_task()
+    tasks["reframe"] = reframe_task()
     return tasks

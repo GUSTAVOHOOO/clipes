@@ -3,7 +3,9 @@ name: Instaladores e release
 on:
   pull_request:
   push:
-    tags: ['*']
+    tags:
+      - '*'
+      - '!catalog-*'
 
 permissions:
   contents: read

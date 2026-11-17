@@ -6,7 +6,6 @@ use serde_json::{json, Value};
 use std::{fs, path::PathBuf, sync::Mutex};
 
 /// Anthropic requires a limit; this mirrors the adapter default.
-const ANTHROPIC_DEFAULT_MAX_OUTPUT_TOKENS: u64 = 8192;
 const EMBEDDED: &str = include_str!("prices.json");
 static LOCK: Mutex<()> = Mutex::new(());
 mod catalog;
@@ -34,18 +33,8 @@ fn embedded() -> Table {
     serde_json::from_str(EMBEDDED).expect("embedded price table is valid")
 }
 fn overrides_path() -> Result<PathBuf, CoreError> {
-    if let Some(dir) = std::env::var_os("CLIPES_DATA_DIR") {
-        return Ok(PathBuf::from(dir).join("provider-prices.json"));
-    }
-    #[cfg(test)]
-    return Ok(std::env::temp_dir().join(format!(
-        "clipes-price-overrides-test-{}.json",
-        std::process::id()
-    )));
-    #[cfg(not(test))]
-    directories::ProjectDirs::from("io", "github.gustavohooo", "clipes")
-        .map(|p| p.config_dir().join("provider-prices.json"))
-        .ok_or_else(|| error("settings", "Could not locate settings directory"))
+    crate::paths::config_file("provider-prices.json")
+        .map_err(|_| error("settings", "Could not locate settings directory"))
 }
 fn read_overrides() -> Result<Overrides, CoreError> {
     match fs::read(overrides_path()?) {
@@ -134,6 +123,21 @@ impl Cost {
     }
 }
 
+/// Maps `(kind, endpoint)` to the catalog provider name (`api.groq.com` resolves to `"groq"`).
+pub fn catalog_provider<'a>(kind: &'a str, endpoint: &str) -> &'a str {
+    let kind = if kind.is_empty() { "openai" } else { kind };
+    if kind == "openai"
+        && reqwest::Url::parse(endpoint)
+            .ok()
+            .and_then(|u| u.host_str().map(|h| h.eq_ignore_ascii_case("api.groq.com")))
+            .unwrap_or(false)
+    {
+        "groq"
+    } else {
+        kind
+    }
+}
+
 /// An override wins over the embedded table; the match is exact on provider and model.
 pub fn price_for(provider: &str, model: &str) -> Result<Option<(Price, &'static str)>, CoreError> {
     let _g = LOCK
@@ -148,11 +152,44 @@ pub fn price_for(provider: &str, model: &str) -> Result<Option<(Price, &'static 
         if let Some(base) = find(embedded().prices) {
             p.context_window = p.context_window.or(base.context_window);
             p.max_output = p.max_output.or(base.max_output);
+            p.tokens_per_request = p.tokens_per_request.or(base.tokens_per_request);
+            p.tokens_per_minute = p.tokens_per_minute.or(base.tokens_per_minute);
+            p.tokens_per_day = p.tokens_per_day.or(base.tokens_per_day);
             p.limits_source = p.limits_source.or(base.limits_source).or(base.source);
         }
         return Ok(Some((p, "override")));
     }
     Ok(find(embedded().prices).map(|p| (p, "table")))
+}
+
+/// Resolves price and model limits taking the endpoint host into account (e.g. `api.groq.com`).
+pub fn price_for_endpoint(
+    kind: &str,
+    endpoint: &str,
+    model: &str,
+) -> Result<Option<(Price, &'static str)>, CoreError> {
+    let catalog = catalog_provider(kind, endpoint);
+    if let Some(found) = price_for(catalog, model)? {
+        return Ok(Some(found));
+    }
+    if catalog != kind {
+        return price_for(kind, model);
+    }
+    Ok(None)
+}
+
+fn price_for_target(
+    profile: Option<&str>,
+    provider: &str,
+    model: &str,
+) -> Result<Option<(Price, &'static str)>, CoreError> {
+    if let Some(endpoint) = profile
+        .filter(|p| !p.is_empty())
+        .and_then(super::profile_endpoint)
+    {
+        return price_for_endpoint(provider, &endpoint, model);
+    }
+    price_for(provider, model)
 }
 
 fn micro_usd(tokens: u64, per_million: f64) -> u64 {
@@ -169,9 +206,11 @@ pub(crate) fn price_micro_usd(price: &Price, input_tokens: u64, output_tokens: u
 
 /// Number of valid calls retained per profile/model/format/language.
 pub const CALIBRATION_SAMPLES: usize = 20;
-const CALIBRATION_MIN_SAMPLES: usize = 3;
+pub(crate) const CALIBRATION_MIN_SAMPLES: usize = 3;
 const INITIAL_LOW: f64 = 0.8;
 const INITIAL_HIGH: f64 = 1.5;
+/// Fator sobre o ponto da estimativa que o planejador de Janelas (#144) usa antes da calibração (#173).
+pub const PLANNING_UNCALIBRATED_FACTOR: f64 = 1.2;
 const OBSERVED_LOW: f64 = 0.95;
 const OBSERVED_HIGH: f64 = 1.10;
 const MIN_RANGE_LOW: f64 = 0.9;
@@ -266,6 +305,53 @@ pub fn token_range(
         high: (chars * high).ceil() as u64,
     })
 }
+/// Fonte única da razão de planejamento (#173): sem calibração (menos de
+/// [`CALIBRATION_MIN_SAMPLES`] amostras da chave) vale o ponto × [`PLANNING_UNCALIBRATED_FACTOR`];
+/// com calibração, a ponta alta calibrada. Orçamento e guard de envio NÃO usam esta função:
+/// ficam em `token_range(..).high`.
+pub fn planning_range(
+    profile: &str,
+    model: &str,
+    request: &StructuredRequest,
+) -> Result<TokenRange, CoreError> {
+    let range = token_range(profile, model, request)?;
+    if calibration_samples(profile, model, request) >= CALIBRATION_MIN_SAMPLES {
+        return Ok(range);
+    }
+    let high = (range.high as f64 * PLANNING_UNCALIBRATED_FACTOR / INITIAL_HIGH).ceil() as u64;
+    Ok(TokenRange {
+        low: range.low,
+        high: high.max(range.low),
+    })
+}
+/// Tokens da parte fixa (envelope, instrução, schema) para o planejamento (#173). Esse texto é o
+/// mesmo em toda janela e o núcleo o conhece inteiro; a margem ×1,2 cobre a variação da FALA, não
+/// dele. Sem calibração vale o ponto ×1,0; com calibração, a ponta alta calibrada. A margem de
+/// 15 % do contexto continua cobrindo o erro do estimador. Orçamento e guard não usam isto.
+pub fn planning_fixed_tokens(
+    profile: &str,
+    model: &str,
+    request: &StructuredRequest,
+) -> Result<u64, CoreError> {
+    let range = token_range(profile, model, request)?;
+    if calibration_samples(profile, model, request) >= CALIBRATION_MIN_SAMPLES {
+        return Ok(range.high);
+    }
+    Ok((range.high as f64 / INITIAL_HIGH).ceil() as u64)
+}
+/// Valid observations kept for the key of this request (profile, model, format, language).
+fn calibration_samples(profile: &str, model: &str, request: &StructuredRequest) -> usize {
+    super::settings::calibration_read()
+        .unwrap_or_default()
+        .iter()
+        .find(|v| {
+            v.profile == profile
+                && v.model == model
+                && v.format == request.estimate_hint.format
+                && v.language == request.estimate_hint.language
+        })
+        .map_or(0, |v| v.samples.len())
+}
 pub fn observe_tokens(
     profile: &str,
     model: &str,
@@ -308,7 +394,12 @@ pub fn estimate_for(
         Target::Cli { name } => name.as_str(),
     };
     let range = token_range(profile, model, request)?;
-    let mut value = estimate_with_range(target, request, range)?;
+    let mut value = estimate_with_range_for(
+        (!profile.is_empty()).then_some(profile),
+        target,
+        request,
+        range,
+    )?;
     value["inputTokensLow"] = json!(range.low);
     value["inputCharacters"] = json!(input_characters(request));
     value["estimateHint"] = if request.estimate_hint.valid() {
@@ -317,6 +408,7 @@ pub fn estimate_for(
         Value::Null
     };
     value["initialRatio"] = json!(initial_ratio(request));
+    value["calibrationSamples"] = json!(calibration_samples(profile, model, request));
     Ok(value)
 }
 /// Learn only successful calls, using the exact request metadata captured before sending.
@@ -357,6 +449,15 @@ pub(crate) fn estimate_with_range(
     request: &StructuredRequest,
     range: TokenRange,
 ) -> Result<Value, CoreError> {
+    estimate_with_range_for(None, target, request, range)
+}
+
+pub(crate) fn estimate_with_range_for(
+    profile: Option<&str>,
+    target: &Target,
+    request: &StructuredRequest,
+    range: TokenRange,
+) -> Result<Value, CoreError> {
     let (low_input, high_input) = (range.low, range.high);
     let mut tier = Value::Null;
     let (kind, ceiling, min, max, source) = match target {
@@ -374,12 +475,17 @@ pub(crate) fn estimate_with_range(
         Target::Api {
             provider, model, ..
         } => {
-            let ceiling = request.max_output_tokens.or(if provider == "anthropic" {
-                Some(ANTHROPIC_DEFAULT_MAX_OUTPUT_TOKENS)
-            } else {
-                None
-            });
-            match price_for(provider, model)? {
+            let price = price_for_target(profile, provider, model)?;
+            // The same ceiling the adapter sends (#147): the request, the model's `max_output`
+            // and the conservative fallback; Anthropic always has one.
+            let ceiling = super::limits::output_ceiling(super::limits::CeilingInput {
+                ask: request.max_output_tokens,
+                profile: None,
+                model: price.as_ref().and_then(|(p, _)| p.max_output),
+                requires_ceiling: provider == "anthropic",
+            })
+            .map(|limit| limit.tokens);
+            match price {
                 None => ("unknown", ceiling, None, None, None),
                 Some((p, source)) => {
                     if !p.tiers.is_empty() {
@@ -419,6 +525,15 @@ pub(crate) fn estimate_with_range(
 
 /// Real cost from the `usage` returned by the adapter (both token counts are needed).
 pub fn actual(target: &Target, usage: &Value) -> Result<Cost, CoreError> {
+    actual_for(None, target, usage)
+}
+
+/// Real cost using the profile's endpoint to resolve host-specific catalog entries (e.g. Groq).
+pub(crate) fn actual_for(
+    profile: Option<&str>,
+    target: &Target,
+    usage: &Value,
+) -> Result<Cost, CoreError> {
     Ok(match target {
         Target::Cli { .. } => Cost::PlanQuota,
         Target::OpenCode { model } => {
@@ -438,7 +553,7 @@ pub fn actual(target: &Target, usage: &Value) -> Result<Cost, CoreError> {
             ) else {
                 return Ok(Cost::Unknown);
             };
-            match price_for(provider, model)? {
+            match price_for_target(profile, provider, model)? {
                 None => Cost::Unknown,
                 Some((p, source)) => Cost::Usd {
                     micro_usd: price_micro_usd(&p, i, o),
@@ -463,6 +578,39 @@ inventory::submit! { projects::Migration { id: "0120_001_provider_costs_profile"
 // that stopped on one.
 inventory::submit! { projects::Migration { id: "0124_001_ai_call_costs_and_budgets", sql: "ALTER TABLE provider_costs ADD COLUMN job_id INTEGER; ALTER TABLE provider_costs ADD COLUMN task_version INTEGER; ALTER TABLE provider_costs ADD COLUMN attempt INTEGER CHECK(attempt IS NULL OR attempt IN (0,1)); ALTER TABLE provider_costs ADD COLUMN outcome TEXT CHECK(outcome IS NULL OR outcome IN ('ok','invalid_json','truncated','refused','timeout_uncertain','rate_limit','provider_http','cancelled')); ALTER TABLE provider_costs ADD COLUMN code TEXT; ALTER TABLE provider_costs ADD COLUMN estimate_micro_usd INTEGER; ALTER TABLE provider_costs ADD COLUMN duration_ms INTEGER; CREATE INDEX provider_costs_job ON provider_costs(job_id); ALTER TABLE jobs ADD COLUMN batch TEXT; CREATE TABLE ai_budgets (scope TEXT NOT NULL CHECK(scope IN ('task','batch')), key TEXT NOT NULL, max_calls INTEGER, max_tokens INTEGER, max_wall_ms INTEGER, max_cost_micro_usd INTEGER, unknown_confirmed INTEGER NOT NULL DEFAULT 0, since INTEGER NOT NULL, PRIMARY KEY(scope,key)); CREATE TABLE ai_pauses (scope TEXT NOT NULL CHECK(scope IN ('task','batch')), key TEXT NOT NULL, reason TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000000), PRIMARY KEY(scope,key));" } }
 
+// #125: the audit trail of the Project (ADR-0009, rules 7 to 10), one row per call, written in the
+// same transaction as its `provider_costs` row (or linked to its `transcription_calls` row).
+// Hashes and metadata only, never text. What `provider_costs` already holds (task, version,
+// profile, model, outcome, duration) is not repeated. Transport fields are nullable: a Provider
+// injected in tests exposes no body.
+inventory::submit! { projects::Migration { id: "0125_001_call_audit", sql: "CREATE TABLE call_audit (id INTEGER PRIMARY KEY, cost_id INTEGER REFERENCES provider_costs(id) ON DELETE CASCADE, transcription_call_id INTEGER REFERENCES transcription_calls(id) ON DELETE CASCADE, provider_kind TEXT NOT NULL, host TEXT, model TEXT, prompt_sha256 TEXT, input_sha256 TEXT, sent_bytes INTEGER, response_sha256 TEXT, CHECK((cost_id IS NULL) <> (transcription_call_id IS NULL)), CHECK(prompt_sha256 IS NULL OR length(prompt_sha256)=64), CHECK(input_sha256 IS NULL OR length(input_sha256)=64), CHECK(response_sha256 IS NULL OR length(response_sha256)=64)); CREATE UNIQUE INDEX call_audit_cost ON call_audit(cost_id) WHERE cost_id IS NOT NULL; CREATE UNIQUE INDEX call_audit_transcription ON call_audit(transcription_call_id) WHERE transcription_call_id IS NOT NULL;" } }
+
+/// Lowercase hex SHA-256 of `bytes`.
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(bytes))
+}
+
+type Transport = (Option<String>, Option<String>, Option<i64>, Option<String>);
+
+/// The transport facts of one call, as the adapters note them in the call log entry:
+/// `host`, `inputSha256`, `sentBytes` and `responseSha256`. A value that is not of the expected
+/// shape is dropped, so a malformed entry can never put free text in the audit row.
+fn transport_of(entry: &Value) -> Transport {
+    let hex = |k: &str| {
+        entry[k]
+            .as_str()
+            .filter(|h| h.len() == 64 && h.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')))
+            .map(str::to_owned)
+    };
+    (
+        entry["host"].as_str().map(str::to_owned),
+        hex("inputSha256"),
+        entry["sentBytes"].as_u64().map(|v| v as i64),
+        hex("responseSha256"),
+    )
+}
+
 /// Microseconds since the Unix epoch: the clock of `provider_costs.created_at` and of the
 /// `since` of a budget, so a budget reset never counts rows written before it.
 pub fn now_micros() -> i64 {
@@ -477,10 +625,10 @@ pub fn now_micros() -> i64 {
 pub fn outcome_of(code: &str) -> &'static str {
     match code {
         "ok" => "ok",
-        "output_truncated" | "truncated" => "truncated",
+        "output_truncated" | "context_truncated" | "truncated" => "truncated",
         "refusal" | "refused" => "refused",
         "timeout_uncertain" | "budget_time" => "timeout_uncertain",
-        "rate_limit" => "rate_limit",
+        "rate_limit" | "provider_daily_limit" => "rate_limit",
         "cancelled" => "cancelled",
         "invalid_json"
         | "invalid_response"
@@ -507,14 +655,24 @@ pub struct CallRow<'a> {
     pub code: &'a str,
     pub estimate_micro_usd: Option<u64>,
     pub duration_ms: Option<u64>,
+    /// The call log entry: where the audit row (#125) takes host, hashes and size from.
+    pub transport: &'a Value,
 }
 
 /// Records one call with its job, outcome and estimate (#124).
 pub fn record_call(row: &CallRow<'_>) -> Result<(), CoreError> {
     let (provider, model) = row.target.label();
     let table = embedded().updated_at;
+    let (host, input, sent, response) = transport_of(row.transport);
+    let prompt = crate::ai_task::find(row.task).map(|t| t.prompt_sha256);
+    let kind = if row.target.is_cli() {
+        "cli"
+    } else {
+        provider.as_str()
+    };
     projects::with_writer(|c| {
-        c.execute(
+        let tx = c.transaction()?;
+        tx.execute(
             "INSERT INTO provider_costs(task,batch,provider,model,input_tokens,output_tokens,calls,cost_kind,cost_micro_usd,price_source,table_updated_at,profile,job_id,task_version,attempt,outcome,code,estimate_micro_usd,duration_ms,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20)",
             rusqlite::params![
                 row.task,
@@ -539,7 +697,12 @@ pub fn record_call(row: &CallRow<'_>) -> Result<(), CoreError> {
                 now_micros()
             ],
         )?;
-        Ok(())
+        let cost_id = tx.last_insert_rowid();
+        tx.execute(
+            "INSERT INTO call_audit(cost_id,provider_kind,host,prompt_sha256,input_sha256,sent_bytes,response_sha256) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            rusqlite::params![cost_id, kind, host, prompt, input, sent, response],
+        )?;
+        tx.commit()
     })
 }
 
@@ -547,6 +710,12 @@ pub fn record_call(row: &CallRow<'_>) -> Result<(), CoreError> {
 /// task fails here, before any call.
 pub fn route_for(task: &str) -> Result<(Target, String), CoreError> {
     target_now(Some(task), None)
+}
+
+/// Like [`route_for`], for one run that names its Profile (`profile`, #126). The "local only"
+/// vetoes (task and Project) still apply, before any call, and the task's own route is untouched.
+pub fn route_with_profile(task: &str, profile: &str) -> Result<(Target, String), CoreError> {
+    target_now(Some(task), Some(profile))
 }
 
 /// Totals of `provider_costs` grouped by `column` (`task`, `profile` or `batch`), keyed by the
@@ -589,11 +758,33 @@ pub(crate) fn totals_since(column: &str, key: &str, since: i64) -> Result<Value,
         "task" | "batch" => column,
         _ => return Err(error("invalid_request", "Invalid cost grouping")),
     };
-    projects::with_reader(|c| {
+    let mut totals = projects::with_reader(|c| {
         c.query_row(
             &format!("SELECT {TOTALS} FROM provider_costs WHERE {column}=?1 AND created_at>=?2"),
             rusqlite::params![key, since],
             |r| totals_row(r, 0),
+        )
+    })?;
+    if column == "batch" {
+        // O áudio pago (Groq, #51) de um lote de Fontes entra no mesmo teto que a seleção (#56).
+        let audio = batch_audio_micro_usd(key, since)?;
+        totals["audioMicroUsd"] = json!(audio);
+        totals["microUsd"] = json!(totals["microUsd"]
+            .as_i64()
+            .unwrap_or(0)
+            .saturating_add(audio));
+    }
+    Ok(totals)
+}
+
+/// Estimated audio spend (µUS$, rounded up per call) of the transcription jobs in `batch` since
+/// `since`. Pending and uncertain calls count as spent: the charge may have happened.
+pub(crate) fn batch_audio_micro_usd(batch: &str, since: i64) -> Result<i64, CoreError> {
+    projects::with_reader(|c| {
+        c.query_row(
+            "SELECT COALESCE(SUM(CAST(c.estimated_usd*1000000.0 AS INTEGER) + CASE WHEN c.estimated_usd*1000000.0 > CAST(c.estimated_usd*1000000.0 AS INTEGER) THEN 1 ELSE 0 END),0) FROM transcription_calls c JOIN jobs j ON j.id=c.job_id WHERE j.batch=?1 AND c.created_at>=?2 AND c.state IN ('pending','completed','uncertain') AND c.estimated_usd IS NOT NULL",
+            rusqlite::params![batch, since],
+            |r| r.get::<_, i64>(0),
         )
     })
 }
@@ -672,7 +863,10 @@ pub fn run_costed_for(
     let guard = Box::new(move |request: &StructuredRequest, _: &[Value]| {
         estimate_for(&priced_target, &priced_profile, request)
     });
-    let (reply, mut log) = super::control::with_call_scope(None, Some(guard), call);
+    let ((reply, transport), mut log) = super::control::with_call_scope(None, Some(guard), || {
+        let reply = call();
+        (reply, super::control::take_transport())
+    });
     if let Err(e) = &reply {
         if let Some(last) = log.last_mut() {
             if last["code"] == "ok" || last["code"] == "cancelled" {
@@ -685,10 +879,10 @@ pub fn run_costed_for(
         // could incorrectly move two low-tier calls into the high tier.
         let costs = log
             .iter()
-            .map(|entry| actual(target, &entry["usage"]))
+            .map(|entry| actual_for(profile, target, &entry["usage"]))
             .collect::<Result<Vec<_>, _>>()?;
         let cost = if costs.is_empty() {
-            actual(target, usage)?
+            actual_for(profile, target, usage)?
         } else if costs.contains(&Cost::Unknown) {
             Cost::Unknown
         } else if let Cost::Usd { source, .. } = costs[0] {
@@ -701,7 +895,8 @@ pub fn run_costed_for(
         } else {
             costs[0].clone()
         };
-        let fallback = [json!({"usage":usage,"calls":calls,"code":code})];
+        let mut fallback = [json!({"usage":usage,"calls":calls,"code":code})];
+        super::control::merge_transport(&mut fallback, &transport);
         let entries = if log.is_empty() {
             &fallback[..]
         } else {
@@ -719,7 +914,7 @@ pub fn run_costed_for(
             } else {
                 entry["usage"].clone()
             };
-            let each_cost = actual(target, &usage)?;
+            let each_cost = actual_for(profile, target, &usage)?;
             let row = CallRow {
                 profile,
                 target,
@@ -734,6 +929,7 @@ pub fn run_costed_for(
                 code: entry["code"].as_str().unwrap_or(code),
                 estimate_micro_usd: entry["estimate"]["maxMicroUsd"].as_u64(),
                 duration_ms: entry["durationMs"].as_u64(),
+                transport: entry,
             };
             recorded &= record_call(&row).is_ok();
         }
@@ -753,7 +949,11 @@ pub fn run_costed_for(
             if let Some(info) = e.usage.clone().filter(|i| i.get("calls").is_some()) {
                 let calls = info["calls"].as_u64().unwrap_or(1);
                 let cost = settle(&info["usage"], calls, &e.code)?;
-                e.usage = Some(json!({"usage":info["usage"],"calls":calls,"cost":cost}));
+                let mut next = json!({"usage":info["usage"],"calls":calls,"cost":cost});
+                if let Some(reset) = info.get("resetAtMs").filter(|v| !v.is_null()) {
+                    next["resetAtMs"] = reset.clone();
+                }
+                e.usage = Some(next);
             } else if !log.is_empty()
                 || matches!(e.code.as_str(), "timeout_uncertain" | "cancelled")
             {

@@ -5,11 +5,8 @@ use std::path::PathBuf;
 inventory::submit! { projects::Migration { id: "0051_001_transcription_calls", sql: "CREATE TABLE transcription_calls (id INTEGER PRIMARY KEY, transcript_id INTEGER REFERENCES transcripts(id) ON DELETE SET NULL, job_id INTEGER NOT NULL REFERENCES jobs(id), start_us INTEGER NOT NULL, end_us INTEGER NOT NULL, state TEXT NOT NULL CHECK(state IN ('pending','completed','failed','uncertain')), estimated_usd REAL); CREATE TABLE transcription_blocks (transcript_id INTEGER NOT NULL REFERENCES transcripts(id) ON DELETE CASCADE, start_us INTEGER NOT NULL, end_us INTEGER NOT NULL, PRIMARY KEY(transcript_id,start_us));" } }
 
 fn consent_path() -> Result<PathBuf, CoreError> {
-    std::env::var_os("CLIPES_DATA_DIR")
-        .map(PathBuf::from)
-        .or_else(|| dirs::config_local_dir().map(|p| p.join("Clipes")))
-        .map(|p| p.join("transcription-consent.json"))
-        .ok_or_else(|| error("settings", "Configurações indisponíveis."))
+    crate::paths::config_file("transcription-consent.json")
+        .map_err(|_| error("settings", "Configurações indisponíveis."))
 }
 
 fn consents() -> Result<Value, CoreError> {
@@ -67,14 +64,38 @@ pub(super) fn begin(
     transcript: i64,
     start: i64,
     duration: i64,
+    endpoint: &str,
+    audio: &[u8],
+    language: Option<&str>,
 ) -> Result<i64, CoreError> {
     guard()?;
     let estimate = groq::estimate_cost(groq::MODEL, duration);
+    let batch: Option<String> = projects::with_reader(|c| {
+        c.query_row("SELECT batch FROM jobs WHERE id=?1", [job], |r| r.get(0))
+    })?;
+    if let Some(batch) = batch {
+        let next = estimate["maxMicroUsd"].as_i64().ok_or_else(bad_result)?;
+        if let Some(code) = jobs::audio_precheck(&batch, next)? {
+            jobs::pause_scope("batch", &batch, code);
+            return Err(error(code, "O teto de custo do lote foi atingido."));
+        }
+    }
     projects::with_writer(|c| {
         let tx = c.transaction()?;
-        tx.execute("INSERT INTO transcription_calls(transcript_id,job_id,start_us,end_us,state,estimated_usd) VALUES (?1,?2,?3,?4,'pending',?5)",
-            (transcript, job, start, start + duration, estimate["usd"].as_f64()))?;
+        tx.execute("INSERT INTO transcription_calls(transcript_id,job_id,start_us,end_us,state,estimated_usd,created_at) VALUES (?1,?2,?3,?4,'pending',?5,?6)",
+            (transcript, job, start, start + duration, estimate["usd"].as_f64(), crate::provider::cost::now_micros()))?;
         let call = tx.last_insert_rowid();
+        // Trilha de auditoria (#125), na mesma transação da chamada: só hashes e metadados.
+        tx.execute(
+            "INSERT INTO call_audit(transcription_call_id,provider_kind,host,model,input_sha256,sent_bytes) VALUES (?1,'transcription',?2,?3,?4,?5)",
+            (
+                call,
+                groq::host_of(endpoint),
+                groq::MODEL,
+                crate::provider::cost::sha256_hex(audio),
+                (groq::multipart_body(&[], language).len() + audio.len()) as i64,
+            ),
+        )?;
         tx.execute(
             "UPDATE jobs SET checkpoint=?2 WHERE id=?1 AND state='running'",
             (
@@ -86,6 +107,19 @@ pub(super) fn begin(
         tx.commit()?;
         Ok(call)
     })
+}
+
+/// Guarda o hash do corpo da resposta recebida na linha de auditoria da chamada.
+pub(super) fn audit_response(call: i64, response_sha256: Option<String>) {
+    if let Some(hash) = response_sha256 {
+        let _ = projects::with_writer(|c| {
+            c.execute(
+                "UPDATE call_audit SET response_sha256=?2 WHERE transcription_call_id=?1",
+                (call, hash),
+            )?;
+            Ok(())
+        });
+    }
 }
 
 pub(super) fn failed(call: i64, uncertain: bool) -> Result<(), CoreError> {

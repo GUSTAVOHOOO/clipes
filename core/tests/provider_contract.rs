@@ -137,11 +137,11 @@ fn final_rate_limit_after_retries_counts_every_http_call() {
             &json!({"usage":{"prompt_tokens":5,"completion_tokens":1}}),
         ))
     };
-    let (endpoint, _, server) = serve(vec![limited(), limited(), limited()]);
+    let (endpoint, _, server) = serve(vec![limited(), limited(), limited(), limited()]);
     let error = openai(endpoint).structured(&request()).unwrap_err();
     assert_eq!(error.code, "rate_limit");
-    assert_eq!(error.usage.unwrap()["calls"], 3);
-    assert_eq!(server.join().unwrap(), 3);
+    assert_eq!(error.usage.unwrap()["calls"], 4);
+    assert_eq!(server.join().unwrap(), 4);
 }
 
 #[test]
@@ -293,4 +293,83 @@ fn timeouts_have_documented_defaults_and_validate_overrides() {
             "invalid_settings"
         );
     }
+}
+
+#[test]
+fn retries_413_and_429_with_reset_headers_and_rejects_413_without_reset() {
+    let ok = http(
+        "200 OK",
+        "",
+        &json!({"choices":[{"message":{"content":"{\"schemaVersion\":1}"}}],"usage":{"prompt_tokens":10,"completion_tokens":2}}),
+    );
+    // 413 with Retry-After retries and succeeds.
+    let (endpoint, _, server) = serve(vec![
+        Some(http(
+            "413 Payload Too Large",
+            "Retry-After: 0\r\n",
+            &json!({}),
+        )),
+        Some(ok.clone()),
+    ]);
+    let reply = openai(endpoint).structured(&request()).unwrap();
+    assert_eq!(reply["data"]["schemaVersion"], 1);
+    assert_eq!(reply["calls"], 2);
+    assert_eq!(server.join().unwrap(), 2);
+
+    // 429 with x-ratelimit-reset-tokens: 50ms (even if x-ratelimit-reset-requests is 12h while
+    // remaining-requests > 0) waits briefly and succeeds.
+    let (endpoint, _, server) = serve(vec![
+        Some(http(
+            "429 Too Many Requests",
+            "x-ratelimit-remaining-tokens: 0\r\nx-ratelimit-reset-tokens: 50ms\r\nx-ratelimit-remaining-requests: 100\r\nx-ratelimit-reset-requests: 12h\r\n",
+            &json!({}),
+        )),
+        Some(ok),
+    ]);
+    let reply = openai(endpoint).structured(&request()).unwrap();
+    assert_eq!(reply["calls"], 2);
+    assert_eq!(server.join().unwrap(), 2);
+
+    // 429 with x-ratelimit-reset-tokens: 2m59.56s (> 90 s cap, <= 10 min) fails as rate_limit without sleeping.
+    let (endpoint, _, server) = serve(vec![Some(http(
+        "429 Too Many Requests",
+        "x-ratelimit-reset-tokens: 2m59.56s\r\n",
+        &json!({}),
+    ))]);
+    let started = Instant::now();
+    let error = openai(endpoint).structured(&request()).unwrap_err();
+    assert_eq!(error.code, "rate_limit");
+    assert!(started.elapsed() < Duration::from_secs(2));
+    assert_eq!(server.join().unwrap(), 1);
+
+    // 413 without any reset header does NOT retry and returns request_too_large.
+    let (endpoint, _, server) = serve(vec![Some(http("413 Payload Too Large", "", &json!({})))]);
+    let error = openai(endpoint).structured(&request()).unwrap_err();
+    assert_eq!(error.code, "request_too_large");
+    assert_eq!(server.join().unwrap(), 1);
+}
+
+#[test]
+fn daily_limit_returns_provider_daily_limit_without_retrying() {
+    // Groq-style TPD error body + reset header.
+    let (endpoint, _, server) = serve(vec![Some(http(
+        "429 Too Many Requests",
+        "x-ratelimit-remaining-requests: 0\r\nx-ratelimit-reset-requests: 1h30m\r\n",
+        &json!({"error":{"message":"Rate limit reached on tokens per day (TPD): Limit 200000, Used 200000","code":"rate_limit_exceeded"}}),
+    ))]);
+    let error = openai(endpoint).structured(&request()).unwrap_err();
+    assert_eq!(error.code, "provider_daily_limit");
+    assert!(error.usage.unwrap()["resetAtMs"].as_u64().is_some());
+    assert_eq!(server.join().unwrap(), 1);
+
+    // Reset > 10 min triggers provider_daily_limit even without body hint.
+    let (endpoint, _, server) = serve(vec![Some(http(
+        "429 Too Many Requests",
+        "x-ratelimit-reset-requests: 15m\r\n",
+        &json!({}),
+    ))]);
+    let error = openai(endpoint).structured(&request()).unwrap_err();
+    assert_eq!(error.code, "provider_daily_limit");
+    assert!(error.usage.unwrap()["resetAtMs"].as_u64().is_some());
+    assert_eq!(server.join().unwrap(), 1);
 }

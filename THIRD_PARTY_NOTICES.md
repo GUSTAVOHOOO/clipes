@@ -2,13 +2,81 @@
 
 Gerado por `node design-system/scripts/avisos.ts` a partir dos pacotes instalados e fixados em `design-system/bun.lock`. Os avisos abaixo cobrem as dependências de runtime desta interface e suas dependências transitivas.
 
+## YuNet — modelo de reenquadramento sob demanda (#60)
+
+Código e pesos `face_detection_yunet_2023mar.onnx`, OpenCV Zoo, revisão
+`48b10fa505aeb51fbd127fc60a5c660040e823b7`, sob MIT.
+[Licença oficial do diretório do modelo](https://github.com/opencv/opencv_zoo/blob/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/face_detection_yunet/LICENSE).
+SHA-256: `8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4`.
+Os pesos não são redistribuídos no repositório: Componentes mostra MIT, fonte,
+revisão e integridade antes de pedir o download explícito.
+
+```text
+MIT License
+
+Copyright (c) 2020 Shiqi Yu <shiqi.yu@gmail.com>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## Fonte das legendas exportadas
+
+`core/assets/fonts/NotoSans-Bold.ttf`: Noto Sans Bold, Copyright 2018 The Noto
+Project Authors, sob a SIL Open Font License 1.1. O texto integral acompanha a
+fonte em `core/assets/fonts/OFL.txt`. Origem: [notofonts/noto-fonts, revisão
+ffebf8c1ee449e544955a7e813c54f9b73848eac](https://github.com/notofonts/noto-fonts/tree/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSans).
+SHA-256: `c976e4b1b99edc88775377fcc21692ca4bfa46b6d6ca6522bfda505b28ff9d6a`.
+O núcleo inclui os bytes no executável e os entrega ao libass por `fontsdir`;
+nenhuma fonte do sistema é exigida.
+
+`core/assets/fonts/NotoSerif-Bold.ttf`: Noto Serif Bold, Copyright 2018 The Noto
+Project Authors, SIL Open Font License 1.1, texto integral em
+`core/assets/fonts/NotoSerif-LICENSE.txt`. Origem: [notofonts/noto-fonts,
+revisão ffebf8c1ee449e544955a7e813c54f9b73848eac](https://github.com/notofonts/noto-fonts/tree/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSerif).
+SHA-256: `3b2086a869bcded2aeb4416fc281ceec9d6ce3c06756cda19f8f763636204e7d`.
+O preview importa esses mesmos arquivos TTF; o export usa os bytes incorporados
+em `fontsdir`. Não há CDN nem seleção de fontes do sistema.
+
 ## Quadros de demonstração
 
 Tears of Steel, © Blender Foundation, 2012. Filme original: [mango.blender.org](https://mango.blender.org/). Licença [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/). Os arquivos em `design-system/src/data/img/` são quadros reduzidos e recortados do filme, usados apenas na demonstração do editor; o áudio e as falas derivam do mesmo filme.
 
+## Clipe da sonda de hardware
+
+Os arquivos `worker/src/clipes_worker/data/probe-pt.wav` e `probe-en.wav` (9 s cada, WAV 16 kHz mono) são recortes usados pela sonda de hardware da Transcrição (#50):
+
+- **Português:** trecho de *O Alienista*, de Machado de Assis (obra em domínio público), na leitura do LibriVox, publicada em domínio público ([item no Internet Archive](https://archive.org/details/o_alienista_0904_librivox), capítulo 1, de 30 s a 39 s do arquivo `oalienista_1_machadodeassis_64kb.mp3`; licença declarada no item: <http://creativecommons.org/licenses/publicdomain/>).
+- **Inglês:** trecho de [Richard Rogers - voice - en.ogg](https://commons.wikimedia.org/wiki/File:Richard_Rogers_-_voice_-_en.ogg), de Vera de Kok, no Wikimedia Commons, licença CC0 (de 1 s a 10 s).
+
+Os dois foram convertidos para WAV PCM 16 bits, mono, 16 kHz.
+
 ## Componentes sob demanda
 
-O catálogo apresenta FFmpeg, Whisper e Kokoro como exemplos de interface. Nenhum executável ou peso desses projetos é distribuído neste repositório. As licenças e fontes de cada build/modelo devem acompanhar o download real no app desktop, conforme ADR-0003.
+O catálogo apresenta FFmpeg, Whisper e Pocket TTS como Componentes sob demanda. Nenhum executável ou peso desses projetos é distribuído neste repositório. As licenças e fontes de cada build/modelo acompanham o download no app desktop, conforme ADR-0003.
+
+O app desktop baixa, só com confirmação, o **Pocket TTS** 3.3.0 (release `v4.0.1`, Componente executável da Kyutai) para síntese local da Narração: código sob licença **MIT** em [github.com/kyutai-labs/pocket-tts](https://github.com/kyutai-labs/pocket-tts/tree/v4.0.1), pesos dos modelos (`portuguese_24l`, `portuguese` 6L e `english`) sob licença **CC-BY-4.0** no mirror sem gate [`kyutai/pocket-tts-without-voice-cloning`](https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/tree/a7056f505a4a8ca72d8b5fb1440071d6f1a35739) (revisão `a7056f505a4a8ca72d8b5fb1440071d6f1a35739`), sujeitos ao termo de uso proibido exibido na tela de Componentes antes do download. Atribuição das vozes pré-computadas:
+
+- **Voz PT-BR 13063:** derivada do dataset **BRSpeech-TTS** ([`freds0/BRSpeech-TTS`](https://huggingface.co/datasets/freds0/BRSpeech-TTS), CEIA/UFG, **CC-BY-4.0**) e **CML-TTS** ([`ylacombe/cml-tts`](https://huggingface.co/datasets/ylacombe/cml-tts), OpenSLR 146, **CC-BY-4.0**), a partir de leitura voluntária do LibriVox em domínio público.
+- **Voz EN `alba`:** Alba MacKenna ([`kyutai/tts-voices/alba-mackenna/casual.wav`](https://huggingface.co/kyutai/tts-voices/blob/323332d33f997de8394f24a193e1a76df720e01a/README.md), revisão `323332d33f997de8394f24a193e1a76df720e01a`), licença **CC-BY-4.0**.
+- **Voz EN `marius`:** Unmute Voice Donation Project ([`kyutai/tts-voices/voice-donations/Selfie.wav`](https://huggingface.co/kyutai/tts-voices/blob/323332d33f997de8394f24a193e1a76df720e01a/README.md), revisão `323332d33f997de8394f24a193e1a76df720e01a`), licença **CC0-1.0**.
+
+O app desktop baixa, só com confirmação, o **deno** 2.9.8 (Componente), usado pelo yt-dlp como ambiente JavaScript para resolver os desafios do YouTube: licença MIT, código em [github.com/denoland/deno](https://github.com/denoland/deno/tree/v2.9.8), executável dos .zip oficiais da release com SHA-256 fixo por plataforma. Nenhum executável do deno é distribuído neste repositório.
 
 O app desktop também baixa, ao instalar o worker de ML:
 

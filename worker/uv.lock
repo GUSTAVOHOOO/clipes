@@ -1,6 +1,10 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = "==3.12.*"
+conflicts = [[
+    { package = "clipes-worker", extra = "cpu" },
+    { package = "clipes-worker", extra = "cuda" },
+]]
 
 [[package]]
 name = "anyio"
@@ -48,14 +52,17 @@ source = { virtual = "." }
 dependencies = [
     { name = "faster-whisper" },
     { name = "numpy" },
-    { name = "onnxruntime" },
     { name = "opencv-python-headless" },
 ]
 
 [package.optional-dependencies]
+cpu = [
+    { name = "onnxruntime" },
+]
 cuda = [
     { name = "nvidia-cublas-cu12", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "nvidia-cudnn-cu12", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "onnxruntime-gpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 
 [package.dev-dependencies]
@@ -69,10 +76,11 @@ requires-dist = [
     { name = "numpy", specifier = "==2.4.6" },
     { name = "nvidia-cublas-cu12", marker = "(sys_platform == 'linux' and extra == 'cuda') or (sys_platform == 'win32' and extra == 'cuda')", specifier = "==12.9.1.4" },
     { name = "nvidia-cudnn-cu12", marker = "(sys_platform == 'linux' and extra == 'cuda') or (sys_platform == 'win32' and extra == 'cuda')", specifier = "==9.10.2.21" },
-    { name = "onnxruntime", specifier = "==1.32.0" },
+    { name = "onnxruntime", marker = "extra == 'cpu'", specifier = "==1.32.0" },
+    { name = "onnxruntime-gpu", marker = "(sys_platform == 'linux' and extra == 'cuda') or (sys_platform == 'win32' and extra == 'cuda')", specifier = "==1.32.0" },
     { name = "opencv-python-headless", specifier = "==5.0.0.93" },
 ]
-provides-extras = ["cuda"]
+provides-extras = ["cpu", "cuda"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = "==8.4.2" }]
@@ -187,11 +195,11 @@ name = "httpx2"
 version = "2.16.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "anyio", marker = "sys_platform != 'emscripten'" },
-    { name = "httpcore2", marker = "sys_platform != 'emscripten'" },
-    { name = "httpx2-jsfetch", marker = "sys_platform == 'emscripten'" },
+    { name = "anyio", marker = "sys_platform != 'emscripten' or (extra == 'extra-13-clipes-worker-cpu' and extra == 'extra-13-clipes-worker-cuda')" },
+    { name = "httpcore2", marker = "sys_platform != 'emscripten' or (extra == 'extra-13-clipes-worker-cpu' and extra == 'extra-13-clipes-worker-cuda')" },
+    { name = "httpx2-jsfetch", marker = "sys_platform == 'emscripten' or (extra == 'extra-13-clipes-worker-cpu' and extra == 'extra-13-clipes-worker-cuda')" },
     { name = "idna" },
-    { name = "truststore", marker = "sys_platform != 'emscripten'" },
+    { name = "truststore", marker = "sys_platform != 'emscripten' or (extra == 'extra-13-clipes-worker-cpu' and extra == 'extra-13-clipes-worker-cuda')" },
     { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/43/73/5ca2cedf5e4e50423d1c258877865a6b62793633b561c58499f8aeb33b7e/httpx2-2.16.0.tar.gz", hash = "sha256:0d54c98128e8f2ff7fbbde0fca8c359e5f032edeaaaac443cdb7f31f685bcd7f", size = 103116, upload-time = "2026-10-21T07:09:46.348Z" }
@@ -216,7 +224,7 @@ dependencies = [
     { name = "click" },
     { name = "filelock" },
     { name = "fsspec" },
-    { name = "hf-xet", marker = "platform_machine == 'AMD64' or platform_machine == 'ARM64' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'" },
+    { name = "hf-xet", marker = "platform_machine == 'AMD64' or platform_machine == 'ARM64' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64' or (extra == 'extra-13-clipes-worker-cpu' and extra == 'extra-13-clipes-worker-cuda')" },
     { name = "httpx2" },
     { name = "packaging" },
     { name = "pyyaml" },
@@ -307,6 +315,22 @@ wheels = [
 ]
 
 [[package]]
+name = "onnxruntime-gpu"
+version = "1.32.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "flatbuffers" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "protobuf" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ce/8b/c48e90baf9b9389c4c709dae202938e03a01c7ffc792888bafcf60e9a6b6/onnxruntime_gpu-1.32.0-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:09637f3e38a1addc308dec5ef825a36eeb786e9615f45ec76aa29909df5cdd36", size = 251396935, upload-time = "2026-11-13T10:44:22.067Z" },
+    { url = "https://files.pythonhosted.org/packages/23/ae/49cf240c83e71385e482b37bfdf592d3c5da5d4736d8d27b4b551f3ca9d9/onnxruntime_gpu-1.32.0-cp312-cp312-manylinux_2_34_aarch64.whl", hash = "sha256:44c135429a1a24a5b7fa417dc0164164c34aadc1c6c03273a5b918a1339530f2", size = 311905052, upload-time = "2026-11-13T10:22:38.69Z" },
+    { url = "https://files.pythonhosted.org/packages/ee/3b/6ce3c2548db5f8f3e639373640fa7f7fcdbcbce7b754971c0b293ab105b5/onnxruntime_gpu-1.32.0-cp312-cp312-win_amd64.whl", hash = "sha256:d8bc5d7668872889d605c1e7253581e021db7dea41a142ad2ab78d6d96f3f289", size = 157765830, upload-time = "2026-11-13T10:08:52.526Z" },
+]
+
+[[package]]
 name = "opencv-python-headless"
 version = "5.0.0.93"
 source = { registry = "https://pypi.org/simple" }
@@ -372,7 +396,7 @@ name = "pytest"
 version = "8.4.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-13-clipes-worker-cpu' and extra == 'extra-13-clipes-worker-cuda')" },
     { name = "iniconfig" },
     { name = "packaging" },
     { name = "pluggy" },
@@ -433,7 +457,7 @@ name = "tqdm"
 version = "4.70.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-13-clipes-worker-cpu' and extra == 'extra-13-clipes-worker-cuda')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0d/ea/b2a5bd54b28a324dae8211928b2d730b6547500342c7e6c6dea08bd0a485/tqdm-4.70.1.tar.gz", hash = "sha256:cefd0eca11b2a37a3aee776544d4f4ae913f02688135b5556b8788dfa474afc4", size = 171846, upload-time = "2026-09-11T07:25:16.601Z" }
 wheels = [

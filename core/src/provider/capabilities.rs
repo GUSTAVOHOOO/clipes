@@ -21,6 +21,15 @@ pub struct Usage {
     pub thinking: Option<String>,
 }
 
+/// JSON pointers into the reply: a boolean `truncated` and the count of tokens the server
+/// evaluated (llama.cpp `truncated` and `tokens_evaluated`).
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InputTruncationSignal {
+    pub truncated: Option<String>,
+    pub evaluated: Option<String>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Capabilities {
@@ -35,6 +44,10 @@ pub struct Capabilities {
     pub repair_native: bool,
     pub schema_always: bool,
     pub context_sources: Vec<String>,
+    /// Where a server reports, on its own, that it cut the input (#145). Absent: the usage
+    /// heuristic is the only defence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_truncation_signal: Option<InputTruncationSignal>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub models: BTreeMap<String, ModelObservation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -96,6 +109,16 @@ impl Capabilities {
             .and_then(|p| response.pointer(p))
             .and_then(Value::as_str)
             .is_some_and(|reason| self.truncation_values.iter().any(|v| v == reason))
+    }
+    pub(super) fn input_truncation(&self, response: &Value) -> truncation::Explicit {
+        let Some(signal) = &self.input_truncation_signal else {
+            return truncation::Explicit::default();
+        };
+        let read = |p: &Option<String>| p.as_ref().and_then(|p| response.pointer(p));
+        truncation::Explicit {
+            truncated: read(&signal.truncated).and_then(Value::as_bool) == Some(true),
+            evaluated: read(&signal.evaluated).and_then(Value::as_u64),
+        }
     }
     pub(super) fn refused(&self, response: &Value) -> bool {
         self.refusal_pointer

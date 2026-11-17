@@ -9,7 +9,11 @@
 //! A segmentação roda ao fim do job de transcrição (e sob demanda, para Transcrições antigas)
 //! e é idempotente: se as Frases gravadas já são as calculadas, nada é escrito.
 
-use crate::{projects, CommandRegistration, CommandResult, CoreError, EventSink};
+use crate::{
+    chat,
+    energy::{self, EnergyMarks},
+    projects, CommandRegistration, CommandResult, CoreError, EventSink,
+};
 use rusqlite::OptionalExtension;
 use serde_json::{json, Value};
 
@@ -17,6 +21,39 @@ use serde_json::{json, Value};
 pub const PAUSE_US: i64 = 700_000;
 /// Duração máxima de uma Frase antes de ser quebrada na maior pausa interna.
 pub const MAX_SENTENCE_US: i64 = 25_000_000;
+/// Duração mínima garantida para palavras e Frases normalizadas (1 µs).
+pub const MIN_SPAN_DURATION_US: i64 = 1;
+
+/// Normaliza intervalos `(start_us, end_us)` em ordem monotônica: cada item começa em
+/// `start_us.max(prev_end)` e termina em `end_us.max(start_us + MIN_SPAN_DURATION_US)`.
+/// Tempos negativos retornam `Err(())` em vez de serem mascarados.
+pub(crate) fn normalize_spans(
+    spans: &mut [(i64, i64)],
+    initial_prev_end_us: Option<i64>,
+) -> Result<bool, ()> {
+    if initial_prev_end_us.is_some_and(|p| p < 0) {
+        return Err(());
+    }
+    let mut prev_end = initial_prev_end_us;
+    let mut changed = false;
+    for (start, end) in spans.iter_mut() {
+        if *start < 0 || *end < 0 {
+            return Err(());
+        }
+        let norm_start = match prev_end {
+            Some(prev) => (*start).max(prev),
+            None => *start,
+        };
+        let norm_end = (*end).max(norm_start.saturating_add(MIN_SPAN_DURATION_US));
+        if norm_start != *start || norm_end != *end {
+            *start = norm_start;
+            *end = norm_end;
+            changed = true;
+        }
+        prev_end = Some(norm_end);
+    }
+    Ok(changed)
+}
 
 inventory::submit! { projects::Migration { id: "0049_001_sentences", sql: "CREATE TABLE sentences (transcript_id INTEGER NOT NULL REFERENCES transcripts(id) ON DELETE CASCADE, id INTEGER NOT NULL, first_position INTEGER NOT NULL, last_position INTEGER NOT NULL, start_us INTEGER NOT NULL, end_us INTEGER NOT NULL, language TEXT, text TEXT NOT NULL, PRIMARY KEY (transcript_id, id)) WITHOUT ROWID; CREATE INDEX sentences_by_time ON sentences(transcript_id, start_us);" } }
 
@@ -101,6 +138,15 @@ fn language_of(words: &[WordRow]) -> Option<String> {
     best.map(|(l, _)| l.to_owned())
 }
 
+/// Texto de uma Frase a partir do texto das suas palavras (aparado, sem vazios, com um espaço).
+pub(crate) fn join_text<'a>(words: impl Iterator<Item = &'a str>) -> String {
+    words
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Segmenta as palavras (em ordem de posição) em Frases com IDs 1, 2, 3…
 pub fn segment(words: &[WordRow]) -> Vec<Sentence> {
     let mut ranges: Vec<(usize, usize)> = Vec::new();
@@ -124,12 +170,7 @@ pub fn segment(words: &[WordRow]) -> Vec<Sentence> {
                 start_us: slice[0].start_us,
                 end_us: slice[slice.len() - 1].end_us,
                 language: language_of(slice),
-                text: slice
-                    .iter()
-                    .map(|w| w.text.trim())
-                    .filter(|t| !t.is_empty())
-                    .collect::<Vec<_>>()
-                    .join(" "),
+                text: join_text(slice.iter().map(|w| w.text.as_str())),
             }
         })
         .collect()
@@ -146,7 +187,7 @@ pub(crate) fn segment_transcript(transcript: i64) -> Result<(usize, bool), CoreE
         if state.as_deref() != Some("complete") {
             return Ok(None);
         }
-        let words = {
+        let mut words = {
             let mut q = tx.prepare(
                 "SELECT position, text, start_us, end_us, language FROM transcript_words WHERE transcript_id=?1 AND kind='word' ORDER BY position",
             )?;
@@ -161,7 +202,38 @@ pub(crate) fn segment_transcript(transcript: i64) -> Result<(usize, bool), CoreE
             })?;
             rows.collect::<rusqlite::Result<Vec<_>>>()?
         };
-        let computed = segment(&words);
+        // Reparo idempotente para palavras já salvas com sobreposição ou duração zero; tempos
+        // negativos permanecem intocados para que a validação devolva erro tipado.
+        let mut word_spans: Vec<(i64, i64)> =
+            words.iter().map(|w| (w.start_us, w.end_us)).collect();
+        if let Ok(true) = normalize_spans(&mut word_spans, None) {
+            let mut update = tx.prepare(
+                "UPDATE transcript_words SET start_us=?3, end_us=?4 WHERE transcript_id=?1 AND position=?2",
+            )?;
+            for (word, &(start, end)) in words.iter_mut().zip(&word_spans) {
+                if word.start_us != start || word.end_us != end {
+                    word.start_us = start;
+                    word.end_us = end;
+                    update.execute((transcript, word.position, start, end))?;
+                }
+            }
+        }
+        // Fronteiras e IDs vêm só do texto original do Motor e dos tempos (estáveis por
+        // contrato); o texto de cada Frase vem do texto efetivo (com as correções, #52).
+        let mut computed = segment(&words);
+        let effective = {
+            let mut q = tx.prepare(&format!(
+                "SELECT {} FROM transcript_words WHERE transcript_id=?1 AND kind='word' ORDER BY position",
+                crate::corrections::EFFECTIVE_TEXT
+            ))?;
+            let rows = q.query_map([transcript], |r| r.get::<_, String>(0))?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        for sentence in &mut computed {
+            let first = words.partition_point(|w| w.position < sentence.first_position);
+            let last = words.partition_point(|w| w.position <= sentence.last_position);
+            sentence.text = join_text(effective[first..last].iter().map(String::as_str));
+        }
         let stored = load(&tx, transcript)?;
         let changed = stored != computed;
         if changed {
@@ -212,7 +284,7 @@ fn load(conn: &rusqlite::Connection, transcript: i64) -> rusqlite::Result<Vec<Se
     rows.collect()
 }
 
-fn source_transcript(v: &Value) -> Result<i64, CoreError> {
+pub(crate) fn source_transcript(v: &Value) -> Result<i64, CoreError> {
     let source = v["source_id"]
         .as_i64()
         .ok_or_else(|| error("source_missing", "Fonte não encontrada"))?;
@@ -274,18 +346,132 @@ fn timeline_command(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                 json!({"type": "silence", "start_us": r.get::<_, i64>(2)?, "end_us": r.get::<_, i64>(3)?})
             })
         })?;
-        let items = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        let mut items = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        attach_words(c, transcript, &mut items)?;
         Ok(json!({"total": total, "offset": offset, "items": items}))
     })
+}
+
+/// Acrescenta a cada Frase da página `first_position`, `last_position` e `words`
+/// (`position`, `text` efetivo, `corrected`, `start_us` na Fonte, que o preview usa ao clicar), para a UI focar e corrigir palavra a palavra.
+fn attach_words(
+    c: &rusqlite::Connection,
+    transcript: i64,
+    items: &mut [Value],
+) -> rusqlite::Result<()> {
+    let ids: Vec<i64> = items.iter().filter_map(|i| i["id"].as_i64()).collect();
+    let (Some(min), Some(max)) = (ids.iter().min(), ids.iter().max()) else {
+        return Ok(());
+    };
+    let mut q = c.prepare(
+        "SELECT id, first_position, last_position FROM sentences WHERE transcript_id=?1 AND id BETWEEN ?2 AND ?3",
+    )?;
+    let ranges = q
+        .query_map((transcript, min, max), |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, i64>(1)?,
+                r.get::<_, i64>(2)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let low = ranges.iter().map(|r| r.1).min().unwrap_or(0);
+    let high = ranges.iter().map(|r| r.2).max().unwrap_or(-1);
+    let mut q = c.prepare(&format!(
+        "SELECT position, {}, corrected_text IS NOT NULL, start_us FROM transcript_words WHERE transcript_id=?1 AND kind='word' AND position BETWEEN ?2 AND ?3 ORDER BY position",
+        crate::corrections::EFFECTIVE_TEXT
+    ))?;
+    let words = q
+        .query_map((transcript, low, high), |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, bool>(2)?,
+                r.get::<_, i64>(3)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for item in items.iter_mut() {
+        let Some(id) = item["id"].as_i64() else {
+            continue;
+        };
+        let Some(&(_, first, last)) = ranges.iter().find(|r| r.0 == id) else {
+            continue;
+        };
+        let from = words.partition_point(|w| w.0 < first);
+        let to = words.partition_point(|w| w.0 <= last);
+        item["first_position"] = json!(first);
+        item["last_position"] = json!(last);
+        item["words"] = words[from..to]
+            .iter()
+            .map(|(p, t, c, start)| json!({"position": p, "text": t.trim(), "corrected": c, "start_us": start}))
+            .collect();
+    }
+    Ok(())
 }
 
 inventory::submit! { CommandRegistration { name: "transcription.segment", execute: segment_command } }
 inventory::submit! { CommandRegistration { name: "transcription.sentences", execute: sentences_command } }
 inventory::submit! { CommandRegistration { name: "transcription.timeline", execute: timeline_command } }
 
+/// Uma linha do formato compacto: `ID texto`, ou `ID [energia alta] texto` quando a Frase tem
+/// marca de energia (#54, [`crate::energy::mark`]). É a **única** função que monta a linha:
+/// o serializador, o planejador de Janelas (#144) e o estimador (#140) contam o mesmo texto.
+pub fn line(sentence: &Sentence, marks: &impl SentenceMarks) -> String {
+    let mut out = sentence.id.to_string();
+    if let Some(mark) = marks.energy_of(sentence.id).and_then(energy::mark) {
+        out.push(' ');
+        out.push_str(mark);
+    }
+    if let Some(mark) = marks.chat_of(sentence.id) {
+        out.push(' ');
+        out.push_str(&chat::mark(mark));
+    }
+    out.push(' ');
+    out.push_str(&sentence.text);
+    out.push('\n');
+    out
+}
+
+/// De onde `line` lê as marcas de uma Frase: energia do áudio (#54) e chat da live (#151).
+/// `EnergyMarks` sozinho continua valendo (sem chat).
+pub trait SentenceMarks {
+    fn energy_of(&self, id: i64) -> Option<energy::EnergyLevel>;
+    fn chat_of(&self, _id: i64) -> Option<&chat::ChatMark> {
+        None
+    }
+}
+
+impl SentenceMarks for EnergyMarks {
+    fn energy_of(&self, id: i64) -> Option<energy::EnergyLevel> {
+        self.get(&id).copied()
+    }
+}
+
+/// Todas as marcas de uma execução de seleção.
+#[derive(Debug, Clone, Default)]
+pub struct Marks {
+    pub energy: EnergyMarks,
+    pub chat: chat::ChatMarks,
+}
+
+impl SentenceMarks for Marks {
+    fn energy_of(&self, id: i64) -> Option<energy::EnergyLevel> {
+        self.energy.get(&id).copied()
+    }
+    fn chat_of(&self, id: i64) -> Option<&chat::ChatMark> {
+        self.chat.get(&id)
+    }
+}
+
 /// Serialize a selection using the stable IDs of the full transcript. Minute markers are
 /// context only; timestamps for any returned IDs must be resolved by the core.
 pub fn compact(sentences: &[Sentence]) -> String {
+    compact_marked(sentences, &EnergyMarks::new())
+}
+
+/// [`compact`] com as marcas de energia do áudio (#54) nas Frases que as têm.
+pub fn compact_marked(sentences: &[Sentence], marks: &impl SentenceMarks) -> String {
     use std::fmt::Write;
     let mut result = String::new();
     let mut previous = None;
@@ -295,7 +481,7 @@ pub fn compact(sentences: &[Sentence]) -> String {
             let _ = writeln!(result, "## {:02}:{:02}", minute / 60, minute % 60);
             previous = Some(minute);
         }
-        let _ = writeln!(result, "{} {}", sentence.id, sentence.text);
+        result.push_str(&line(sentence, marks));
     }
     result
 }
@@ -310,6 +496,15 @@ pub struct CompactTranscript {
 }
 
 pub fn compact_with_hint(sentences: &[Sentence]) -> CompactTranscript {
+    compact_with_hint_marked(sentences, &EnergyMarks::new())
+}
+
+/// [`compact_with_hint`] com as marcas de energia: o texto (e portanto a estimativa de tokens)
+/// inclui as marcas, que são texto enviado.
+pub fn compact_with_hint_marked(
+    sentences: &[Sentence],
+    marks: &impl SentenceMarks,
+) -> CompactTranscript {
     let mut counts = std::collections::BTreeMap::<&str, usize>::new();
     for s in sentences {
         *counts
@@ -331,10 +526,15 @@ pub fn compact_with_hint(sentences: &[Sentence]) -> CompactTranscript {
             .map_or("mul", |(language, _)| language)
     };
     CompactTranscript {
-        text: compact(sentences),
+        text: compact_marked(sentences, marks),
         hint: crate::provider::EstimateHint {
             format: "compact".into(),
             language: language.into(),
         },
     }
+}
+
+/// Todas as Frases da Transcrição por ID crescente (texto efetivo, #52), para o núcleo.
+pub(crate) fn load_for(transcript: i64) -> Result<Vec<Sentence>, CoreError> {
+    projects::with_reader(|c| load(c, transcript))
 }

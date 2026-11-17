@@ -52,17 +52,8 @@ struct Settings {
 }
 
 fn path() -> Result<PathBuf, CoreError> {
-    if let Some(dir) = std::env::var_os("CLIPES_DATA_DIR") {
-        return Ok(PathBuf::from(dir).join("assistant.json"));
-    }
-    #[cfg(test)]
-    return Ok(
-        std::env::temp_dir().join(format!("clipes-assistant-test-{}.json", std::process::id()))
-    );
-    #[cfg(not(test))]
-    directories::ProjectDirs::from("io", "github.gustavohooo", "clipes")
-        .map(|p| p.config_dir().join("assistant.json"))
-        .ok_or_else(|| error("settings", "Could not locate settings directory"))
+    crate::paths::config_file("assistant.json")
+        .map_err(|_| error("settings", "Could not locate settings directory"))
 }
 
 fn read() -> Result<Settings, CoreError> {
@@ -121,7 +112,7 @@ fn valid_choice(choice: &str) -> bool {
 }
 
 fn valid_task(task: &str) -> bool {
-    TASKS.contains(&task)
+    TASKS.contains(&crate::ai_task::routing_id(task))
 }
 
 fn profile_exists(id: &str) -> Result<bool, CoreError> {
@@ -141,7 +132,7 @@ pub(crate) fn route(task: Option<&str>) -> Result<Route, CoreError> {
         read()?
     };
     let choice = task
-        .and_then(|task| settings.tasks.get(task))
+        .and_then(|task| settings.tasks.get(crate::ai_task::routing_id(task)))
         .filter(|choice| !choice.is_empty())
         .unwrap_or(&settings.default);
     match choice.as_str() {
@@ -171,7 +162,11 @@ pub(crate) fn route(task: Option<&str>) -> Result<Route, CoreError> {
 /// Se a tarefa só aceita Provedor local. Vale só para a tarefa; o veto por Projeto é outro.
 pub(crate) fn local_only(task: &str) -> Result<bool, CoreError> {
     let _lock = locked()?;
-    Ok(read()?.local_only.get(task).copied().unwrap_or(false))
+    Ok(read()?
+        .local_only
+        .get(crate::ai_task::routing_id(task))
+        .copied()
+        .unwrap_or(false))
 }
 
 /// Esquece as escolhas que apontam para um CLI desativado.
@@ -325,20 +320,23 @@ fn tasks(_: Value, _: &mut EventSink<'_>) -> CommandResult {
         read()?
     };
     let infos = crate::provider::profile_infos()?;
-    let cost_of = |kind: &str, model: &str, local: bool| -> Result<Value, CoreError> {
-        if local {
-            return Ok(json!({"kind": "zero"}));
-        }
-        Ok(match crate::provider::cost::price_for(kind, model)? {
-            None => json!({"kind": "unknown"}),
-            Some((price, source)) => json!({
-                "kind": "usd",
-                "inputPerMillion": price.input_per_million,
-                "outputPerMillion": price.output_per_million,
-                "priceSource": source,
-            }),
-        })
-    };
+    let cost_of =
+        |kind: &str, endpoint: &str, model: &str, local: bool| -> Result<Value, CoreError> {
+            if local {
+                return Ok(json!({"kind": "zero"}));
+            }
+            Ok(
+                match crate::provider::cost::price_for_endpoint(kind, endpoint, model)? {
+                    None => json!({"kind": "unknown"}),
+                    Some((price, source)) => json!({
+                        "kind": "usd",
+                        "inputPerMillion": price.input_per_million,
+                        "outputPerMillion": price.output_per_million,
+                        "priceSource": source,
+                    }),
+                },
+            )
+        };
     let from_profile = |id: &str| -> Result<Option<Value>, CoreError> {
         let Some(p) = infos.iter().find(|p| p.id == id) else {
             return Ok(None);
@@ -346,7 +344,7 @@ fn tasks(_: Value, _: &mut EventSink<'_>) -> CommandResult {
         let local = crate::provider::is_loopback_endpoint(&p.endpoint);
         Ok(Some(json!({
             "id": p.id, "label": p.label, "kind": p.kind, "model": p.model,
-            "local": local, "cli": false, "cost": cost_of(&p.kind, &p.model, local)?,
+            "local": local, "cli": false, "cost": cost_of(&p.kind, &p.endpoint, &p.model, local)?,
         })))
     };
     let target = |choice: &str| -> Result<Option<Value>, CoreError> {
@@ -500,12 +498,21 @@ fn probe(server: Server, base: &Url) -> Value {
             .or_else(|| get(&client, base, "health").map(|_| Vec::new())),
     };
     match models {
-        Some(models) => json!({
-            "found": true,
-            // Base compatível com a API da OpenAI, pronta para `provider.configure`.
-            "endpoint": base.join("v1").map(|u| u.to_string()).unwrap_or_default(),
-            "models": models,
-        }),
+        Some(models) => {
+            let endpoint = match server {
+                // Ollama usa a raiz para `/api/show`, `/api/ps` e `/api/chat` (sem `/v1`).
+                Server::Ollama => base.as_str().trim_end_matches('/').to_owned(),
+                // Base compatível com a API da OpenAI, pronta para `provider.configure`.
+                Server::LmStudio | Server::LlamaCpp => {
+                    base.join("v1").map(|u| u.to_string()).unwrap_or_default()
+                }
+            };
+            json!({
+                "found": true,
+                "endpoint": endpoint,
+                "models": models,
+            })
+        }
         None => absent,
     }
 }

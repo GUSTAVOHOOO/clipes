@@ -17,7 +17,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf ffmpeg
+      # Harness #59: executável separado com libass e x264, só mídia sintética.
+      - name: Install FFmpeg with libass (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg --yes --no-progress
+      - name: Verify libass for export parity
+        shell: bash
+        run: ffmpeg -hide_banner -h filter=ass
       - run: bun install --frozen-lockfile
       - name: Testar métricas do benchmark
         shell: bash
@@ -74,9 +81,9 @@ jobs:
         with:
           version: '0.13.8'
       - name: Testar o worker contra as mensagens de exemplo
-        run: uv run --frozen --project worker pytest worker/tests
+        run: uv run --frozen --extra cpu --project worker pytest worker/tests
       - name: Verificar licenças do ambiente Python fixado
-        run: uv run --frozen --project worker python worker/check_licenses.py
+        run: uv run --frozen --extra cpu --project worker python worker/check_licenses.py
   licenses:
     runs-on: ubuntu-latest
     steps:

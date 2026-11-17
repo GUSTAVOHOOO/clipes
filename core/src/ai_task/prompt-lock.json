@@ -3,5 +3,80 @@
     "id": "example",
     "version": 1,
     "sha256": "9b4e7b18b09bbdc1aa0e17f38f2af8e045c679b6c7e6f86068201ab399e8b1ae"
+  },
+  {
+    "id": "selection",
+    "version": 1,
+    "sha256": "c17df5c8f1cc2bef1ed06f7ecc6c99b634f231240c9ca66fe71f5a4659db32e1"
+  },
+  {
+    "id": "selection",
+    "version": 2,
+    "sha256": "8be769b3c853e1dcbbc9650d51c81670b52d901e8c217ac31606b35822878304"
+  },
+  {
+    "id": "selection",
+    "version": 3,
+    "sha256": "e00332d06248cff669ccb8922aae9d50190a7e30715630e566c4943941469b8a"
+  },
+  {
+    "id": "selection_transformed",
+    "version": 1,
+    "sha256": "fb6ef24096c53ac75a22fb97cbe1dc3252e9c4dca5ad55bd2bd6f70fbdc3eaa6"
+  },
+  {
+    "id": "selection_transformed",
+    "version": 2,
+    "sha256": "9d02b5dd4589777e97b14c5e69c582444ab40e1af878cfe7dfcc5d56a2d284ec"
+  },
+  {
+    "id": "packaging",
+    "version": 1,
+    "sha256": "6a0ccbcd85b760aab2b3232d61445b413f0edc50c92108625dd8d903d20aaaf9"
+  },
+  {
+    "id": "script",
+    "version": 1,
+    "sha256": "77b47723dcc5d9a88dbfaf80c2578db9777baab357073d880f6161cd4a90874f"
+  },
+  {
+    "id": "script_block",
+    "version": 1,
+    "sha256": "27233fa1bb44933c0ed00700259d8a03a9190db28a407ce848cc2d667da82fc7"
+  },
+  {
+    "id": "thumbnail",
+    "version": 1,
+    "sha256": "f7c54202c96bf601c6b0bd3bbbcb7913638aa3219b2428e8980bcb6f33ae0766"
+  },
+  {
+    "id": "angles",
+    "version": 1,
+    "sha256": "a1ad388ce6799e27247084e6887b47cdeeca3f413956db62aafbe0958f52f8ef"
+  },
+  {
+    "id": "script",
+    "version": 2,
+    "sha256": "99926b7d91298a925692925c2c8274feba2d4a51bca4161667faae9bbb91946b"
+  },
+  {
+    "id": "script_block",
+    "version": 2,
+    "sha256": "2f21d62aa3f3d2cd4ec85b8de540e8c3d6e18aca729c3ccec3bcc5740b26e2d0"
+  },
+  {
+    "id": "packaging",
+    "version": 2,
+    "sha256": "542a860d038280e656ed5e158ef60b1fd128b98bf49ad6bcf18d228ca5f32ad6"
+  },
+  {
+    "id": "thumbnail",
+    "version": 2,
+    "sha256": "37ed6bd58eccb8d830b294505b829acfcdb2b4d5c102834e0900cf36d902c634"
+  },
+  {
+    "id": "translation",
+    "version": 1,
+    "sha256": "6a1964dcb96897bf51587676535bab2608d26a3440f527c3e5f1a4abfa231e1d"
   }
 ]

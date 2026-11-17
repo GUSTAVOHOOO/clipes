@@ -80,6 +80,19 @@ pub fn all() -> Vec<&'static AiTask> {
     inventory::iter::<AiTask>.into_iter().collect()
 }
 
+/// A Tarefa que decide o Provedor (Perfil, "somente local") de `id`. Quase sempre é o próprio
+/// id; uma variante com prompt e schema próprios (a seleção do Vídeo transformado, #67) usa a
+/// escolha da Tarefa que a originou, para o usuário não configurar a mesma coisa duas vezes.
+pub fn routing_id(id: &str) -> &str {
+    match id {
+        "selection_transformed" => "selection",
+        // A sugestão de capa (#74) usa a rota e o veto "somente local" do empacotamento.
+        "thumbnail" => "packaging",
+        "script_block" | "angles" => "script",
+        other => other,
+    }
+}
+
 pub fn find(id: &str) -> Option<&'static AiTask> {
     inventory::iter::<AiTask>.into_iter().find(|t| t.id == id)
 }

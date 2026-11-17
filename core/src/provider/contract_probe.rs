@@ -77,7 +77,11 @@ fn request(native: bool, scenario: &str, sample: usize) -> StructuredRequest {
         } else {
             "Summarize the synthetic story. Return schemaVersion 1, a short summary, category story, and two keywords."
         }.into(),
-        transcript: prompts[sample % prompts.len()].into(),
+        transcript: if scenario == "input_truncation" {
+            "Synthetic filler line: the quick brown fox jumps over the lazy dog.\n".repeat(2000)
+        } else {
+            prompts[sample % prompts.len()].into()
+        },
         schema: json!({"type":"object","properties":{
             "schemaVersion":{"type":"integer","enum":[1]},
             "summary":{"type":"string"},"category":{"type":"string","enum":["story"]},
@@ -134,7 +138,8 @@ fn real_provider_contract() {
     let service = env("CLIPES_CONTRACT_SERVICE");
     let ledger = PathBuf::from(env("CLIPES_CONTRACT_LEDGER"));
     let data = tempfile::tempdir().expect("Could not isolate manual probe data");
-    std::env::set_var("CLIPES_DATA_DIR", data.path());
+    // Declared after `data`, so the variable is restored before the temporary directory is removed.
+    let _data_dir = crate::test_env::set_data_dir(data.path());
     let gate = Arc::new(Mutex::new(Instant::now() - Duration::from_secs(60)));
     let (endpoint, ceiling, key) = match service.as_str() {
         "openrouter" => (
@@ -196,6 +201,8 @@ fn real_provider_contract() {
             "matrix" => {}
             "prompt-truncation" if !cli => scenarios = vec![(false, "truncation", 0)],
             "schema-smoke" if !cli => scenarios = vec![(true, "normal", 0), (false, "normal", 0)],
+            // #145: a prompt larger than the context of a local server (start it with a small one).
+            "input-truncation" if !cli => scenarios = vec![(false, "input_truncation", 0)],
             _ => panic!("Invalid manual probe case"),
         }
         if cli {
@@ -239,7 +246,13 @@ fn real_provider_contract() {
                     } else {
                         let mut p =
                             OpenAiProvider::new(endpoint.clone(), model.into(), key.clone())
-                                .unwrap();
+                                .unwrap()
+                                // Optional: the context the local server was started with (#145).
+                                .with_context(
+                                    std::env::var("CLIPES_CONTRACT_CONTEXT")
+                                        .ok()
+                                        .and_then(|v| v.parse().ok()),
+                                );
                         p.confirm(true);
                         p.structured_with(&req, &CancelToken::new())
                     }

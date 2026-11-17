@@ -20,6 +20,7 @@ struct Env {
     _guard: std::sync::MutexGuard<'static, ()>,
     root: tempfile::TempDir,
     project: String,
+    _smi: Option<tempfile::TempDir>,
 }
 
 fn run(name: &str, args: Value) -> Result<Value, clipes_core::CoreError> {
@@ -46,7 +47,17 @@ impl Env {
     /// Projeto aberto, FFmpeg falso, uv/worker falsos instalados e os dois modelos marcados
     /// como instalados. `seconds` é a duração que o ffprobe falso informa.
     fn new(seconds: u32) -> Env {
+        Env::build(seconds, None)
+    }
+
+    /// Com o hardware simulado (`nvidia-smi` falso ou ausente) antes de instalar o worker.
+    fn with_gpu(seconds: u32, gpu: Option<&str>) -> Env {
+        Env::build(seconds, Some(gpu))
+    }
+
+    fn build(seconds: u32, gpu: Option<Option<&str>>) -> Env {
         let guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let smi = gpu.map(gpu_env);
         let root = tempfile::tempdir().unwrap();
         let data = root.path().join("data");
         let fake = root.path().join(exe("fake-ffmpeg"));
@@ -75,6 +86,15 @@ impl Env {
         std::env::set_var("CLIPES_FAKE_WORKER_MODE", "transcribe");
         std::env::remove_var("CLIPES_FAKE_WORKER_CRASH");
         std::env::remove_var("CLIPES_FAKE_WORKER_HOLD");
+        std::env::remove_var("CLIPES_FAKE_WORKER_HELD");
+        std::env::remove_var("CLIPES_FAKE_TRANSCRIBE_LOG");
+        std::env::remove_var("CLIPES_FAKE_LANGUAGE_LOG");
+        std::env::remove_var("CLIPES_FAKE_SILENT_BLOCKS");
+        std::env::remove_var("CLIPES_FAKE_GROUP_OOM");
+        std::env::remove_var("CLIPES_FAKE_PROBE_FAIL");
+        std::env::remove_var("CLIPES_FAKE_PROBE_LOG");
+        std::env::remove_var("CLIPES_FAKE_CUDA_TYPES");
+        std::env::remove_var("CLIPES_PROBE_TIMEOUT_SECONDS");
         run("components.settings.set", json!({"data_dir":data,"cache_dir":root.path().join("cache"),"cache_limit_bytes":1_000_000,"ffmpeg_path":fake})).unwrap();
 
         // uv falso, como se o Componente já tivesse sido baixado, e worker falso instalado por ele.
@@ -103,17 +123,22 @@ impl Env {
             _guard: guard,
             root,
             project,
+            _smi: smi,
         }
     }
 
     fn install_models(&self) {
+        self.install_only_models(&["whisper-turbo", "whisper-small", "yunet"]);
+    }
+
+    fn install_only_models(&self, ids: &[&str]) {
         let models = run("components.models.manifest", json!({})).unwrap();
         for model in models.as_array().unwrap() {
-            let dir = self
-                .root
-                .path()
-                .join("data/models")
-                .join(model["id"].as_str().unwrap());
+            let id = model["id"].as_str().unwrap();
+            if !ids.contains(&id) {
+                continue;
+            }
+            let dir = self.root.path().join("data/models").join(id);
             fs::create_dir_all(&dir).unwrap();
             fs::write(
                 dir.join("model.state.json"),
@@ -247,6 +272,11 @@ fn transcribes_in_blocks_and_stores_words_with_orders_and_silences() {
     assert_eq!(started["state"], "running");
     env.wait_transcribe("completed");
     assert_complete_transcript(&env.rows(source));
+    // A energia do áudio (#54) é enfileirada sozinha quando a Transcrição fica completa.
+    assert!(
+        env.job_state("energy").is_some(),
+        "job de energia enfileirado"
+    );
     let status = env.status(source);
     assert_eq!(status["transcript"]["state"], "complete");
     assert_eq!(status["transcript"]["resume_us"], 25_000_000);
@@ -275,10 +305,15 @@ fn killing_the_worker_mid_transcription_resumes_from_the_last_block_without_dupl
     assert_eq!(status["transcript"]["words"], 8);
     assert!(!crash.exists());
     let job = run("jobs.list", json!({})).unwrap();
-    assert_eq!(
-        job[job.as_array().unwrap().len() - 1]["checkpoint"],
-        json!(json!({"resume_us": 8_000_000}).to_string())
-    );
+    // O checkpoint leva também o dispositivo e a precisão do bloco (#50).
+    let checkpoint: Value = serde_json::from_str(
+        job[job.as_array().unwrap().len() - 1]["checkpoint"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(checkpoint["resume_us"], 8_000_000);
+    assert!(checkpoint["device"].is_string() && checkpoint["compute_type"].is_string());
     // Retomar: um novo job continua do último bloco concluído.
     env.start(source).unwrap();
     wait("segundo job concluído", || {
@@ -617,6 +652,28 @@ fn groq_uses_vad_checkpoints_absolute_times_and_one_paid_call_per_block() {
     })
     .unwrap();
     assert_eq!(count, 3);
+    // Trilha de auditoria (#125): uma linha por chamada paga, só com hashes e metadados.
+    let audit = dispatch("provider.audit.list", json!({}), &mut |_| {}).unwrap();
+    let audit = audit.as_array().unwrap();
+    assert_eq!(audit.len(), 3);
+    let response = include_str!("fixtures/groq-words.json");
+    for row in audit {
+        assert_eq!(row["providerKind"], "transcription");
+        assert_eq!(row["host"], "127.0.0.1");
+        assert_eq!(row["model"], "whisper-large-v3-turbo");
+        assert!(row["promptSha256"].is_null() && row["costId"].is_null());
+        assert!(row["transcriptionCallId"].is_i64());
+        assert_eq!(row["outcome"], "completed");
+        assert_eq!(row["inputSha256"].as_str().unwrap().len(), 64);
+        assert!(row["sentBytes"].as_i64().unwrap() > 0);
+        assert_eq!(
+            row["responseSha256"],
+            format!(
+                "{:x}",
+                <sha2::Sha256 as sha2::Digest>::digest(response.as_bytes())
+            )
+        );
+    }
 }
 
 #[test]
@@ -746,4 +803,841 @@ fn assert_paid_uncertain(second_response: &'static str, second_delay: Duration) 
     let e = env.start(source).unwrap_err();
     assert_eq!(e.code, "transcription_retry_confirmation");
     assert_eq!(e.usage.unwrap()["estimate"]["kind"], "usd");
+}
+
+// ---- modelo fixo por Transcrição, precisão e dispositivo por bloco (#50) ----
+
+const FAKE_GPU: &str = "NVIDIA GeForce RTX 3050 Laptop GPU, 616.92, 4096, 3962";
+const GIB: u64 = 1024 * 1024 * 1024;
+
+/// Sem NVIDIA (padrão: `small` em CPU) ou com um `nvidia-smi` falso (turbo na GPU), antes de instalar o worker.
+fn gpu_env(gpu: Option<&str>) -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    let smi = dir.path().join(exe("nvidia-smi"));
+    fs::copy(FAKE_WORKER, &smi).unwrap();
+    std::env::set_var("CLIPES_NVIDIA_SMI", &smi);
+    match gpu {
+        Some(gpu) => std::env::set_var("CLIPES_FAKE_GPU", gpu),
+        None => std::env::remove_var("CLIPES_FAKE_GPU"),
+    }
+    std::env::set_var("CLIPES_FAKE_RAM", format!("{},{}", 16 * GIB, 12 * GIB));
+    dir
+}
+
+fn choose(model: &str, device: &str, compute_type: &str) {
+    run(
+        "transcription.hardware.choose",
+        json!({"model":model,"device":device,"compute_type":compute_type}),
+    )
+    .unwrap();
+}
+
+fn crash_after_first_block(env: &Env, source: i64) {
+    let crash = env.root.path().join("crash");
+    fs::write(&crash, b"1").unwrap();
+    std::env::set_var("CLIPES_FAKE_WORKER_CRASH", &crash);
+    env.start(source).unwrap();
+    env.wait_transcribe("failed");
+    assert_eq!(env.status(source)["transcript"]["resume_us"], 8_000_000);
+}
+
+fn transcribe_log(env: &Env) -> Vec<String> {
+    fs::read_to_string(env.root.path().join("transcribe.log"))
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn resuming_keeps_the_model_even_when_another_configuration_is_saved() {
+    let env = Env::with_gpu(25, None);
+    env.install_models();
+    std::env::set_var(
+        "CLIPES_FAKE_TRANSCRIBE_LOG",
+        env.root.path().join("transcribe.log"),
+    );
+    let source = env.import(0);
+    crash_after_first_block(&env, source);
+    assert_eq!(env.status(source)["transcript"]["model"], "whisper-small");
+    // Uma sonda posterior escolheu o turbo em CPU para este hardware: não vale para esta Transcrição.
+    fs::write(
+        env.root.path().join("data/transcription-hardware.json"),
+        json!({"probes":[{"key":{"gpu":"cpu","driver":"","ct2_version":"4.9.0","model":"whisper-turbo","app_version":env!("CARGO_PKG_VERSION")},"chosen":{"model":"whisper-turbo","device":"cpu","compute_type":"int8"},"verified":true,"attempts":[],"batch":null,"vram_free_mib":null,"measured_at":1}]}).to_string(),
+    )
+    .unwrap();
+    let status = run("transcription.hardware.status", json!({})).unwrap();
+    assert_eq!(status["effective"]["model"], "whisper-turbo");
+    env.start(source).unwrap();
+    wait("retomada concluída", || {
+        env.status(source)["transcript"]["state"] == "complete"
+    });
+    assert_eq!(env.status(source)["transcript"]["model"], "whisper-small");
+    let log = transcribe_log(&env);
+    assert!(
+        log.len() >= 3 && log.iter().all(|l| l.starts_with("whisper-small ")),
+        "{log:?}"
+    );
+    assert_complete_transcript(&env.rows(source));
+}
+
+#[test]
+fn precision_and_device_of_each_block_are_recorded_and_may_change_between_blocks() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_models();
+    let source = env.import(0);
+    choose("whisper-turbo", "cuda", "int8_float16");
+    crash_after_first_block(&env, source);
+    // Mesmo modelo, outra precisão (queda da cadeia ou nova sonda): sem confirmação, sem recomeçar.
+    choose("whisper-turbo", "cuda", "float16");
+    env.start(source).unwrap();
+    wait("retomada concluída", || {
+        env.status(source)["transcript"]["state"] == "complete"
+    });
+    let blocks = run("transcription.blocks", json!({"source_id":source})).unwrap();
+    let blocks = blocks.as_array().unwrap();
+    assert_eq!(blocks.len(), 3);
+    assert_eq!(blocks[0]["compute_type"], "int8_float16");
+    assert_eq!(blocks[0]["device"], "cuda");
+    assert!(blocks[1..].iter().all(|b| b["compute_type"] == "float16"));
+    assert_eq!(env.status(source)["transcript"]["model"], "whisper-turbo");
+    assert_complete_transcript(&env.rows(source));
+}
+
+#[test]
+fn manually_switching_the_model_of_a_partial_transcript_asks_before_discarding_it() {
+    let env = Env::with_gpu(25, None);
+    env.install_models();
+    let source = env.import(0);
+    crash_after_first_block(&env, source);
+    choose("whisper-turbo", "cpu", "int8");
+    let error = env.start(source).unwrap_err();
+    assert_eq!(error.code, "engine_change_confirmation");
+    assert_eq!(error.usage.unwrap()["blocks"], 1);
+    // Nada foi apagado e o modelo continua o mesmo até confirmar.
+    assert_eq!(env.status(source)["transcript"]["model"], "whisper-small");
+    assert_eq!(env.status(source)["transcript"]["words"], 8);
+    run(
+        "transcription.start",
+        json!({"project":env.project,"source_id":source,"replace_confirmed":true}),
+    )
+    .unwrap();
+    wait("transcrição nova concluída", || {
+        env.status(source)["transcript"]["state"] == "complete"
+    });
+    assert_eq!(env.status(source)["transcript"]["model"], "whisper-turbo");
+    assert_complete_transcript(&env.rows(source));
+    // Completa: trocar o modelo só vale para uma retranscrição futura e não mexe na atual.
+    choose("whisper-small", "cpu", "int8");
+    let kept = env.start(source).unwrap();
+    assert_eq!(kept["state"], "complete");
+    assert_eq!(env.status(source)["transcript"]["model"], "whisper-turbo");
+}
+
+#[test]
+fn resuming_a_partial_transcript_never_overwrites_corrections() {
+    let env = Env::new(25);
+    env.install_models();
+    let source = env.import(0);
+    let crash = env.root.path().join("crash");
+    fs::write(&crash, b"1").unwrap();
+    std::env::set_var("CLIPES_FAKE_WORKER_CRASH", &crash);
+    env.start(source).unwrap();
+    env.wait_transcribe("failed");
+    // Transcrição parcial (sem Frases ainda): corrige a primeira palavra gravada.
+    let first = env
+        .rows(source)
+        .into_iter()
+        .find(|r| r["kind"] == "word")
+        .unwrap();
+    let position = first["position"].as_i64().unwrap();
+    let original = first["text"].as_str().unwrap().to_owned();
+    run(
+        "transcription.correct",
+        json!({"source_id":source,"position":position,"text":"CORRIGIDA"}),
+    )
+    .unwrap();
+    env.start(source).unwrap();
+    wait("transcrição completa", || {
+        env.status(source)["transcript"]["state"] == "complete"
+    });
+    let rows = env.rows(source);
+    let word = rows.iter().find(|r| r["position"] == position).unwrap();
+    assert_eq!(word["text"].as_str().unwrap().trim(), "CORRIGIDA");
+    assert_eq!(word["original_text"], original);
+    assert_eq!(word["corrected"], true);
+    // Blocos novos acrescentaram palavras sem repetir nem mexer nas anteriores.
+    assert_eq!(rows.iter().filter(|r| r["corrected"] == true).count(), 1);
+    // Frase e busca já nascem com o texto corrigido.
+    let sentences = run("transcription.sentences", json!({"source_id":source})).unwrap();
+    assert!(sentences[0]["text"].as_str().unwrap().contains("CORRIGIDA"));
+    let hits = run("transcription.search", json!({"query":"corrigida"})).unwrap();
+    assert_eq!(hits.as_array().unwrap().len(), 1);
+}
+
+// ---- Agrupar trechos de VAD (#162) ----
+
+/// Grava uma sonda com lote seguro medido `safe` para a GPU falsa e escolhe o turbo em `int8_float16`.
+fn gpu_with_measured_batch(env: &Env, safe: u32) {
+    choose("whisper-turbo", "cuda", "int8_float16");
+    let store = env.root.path().join("data/transcription-hardware.json");
+    let mut value: Value = serde_json::from_slice(&fs::read(&store).unwrap()).unwrap();
+    value["probes"] = json!([{
+        "key": {"gpu":"NVIDIA GeForce RTX 3050 Laptop GPU","driver":"616.92","ct2_version":"4.9.0","model":"whisper-turbo","app_version":env!("CARGO_PKG_VERSION")},
+        "chosen": {"model":"whisper-turbo","device":"cuda","compute_type":"int8_float16"},
+        "verified": true, "attempts": [], "vram_free_mib": 3962, "measured_at": 1,
+        "batch": {"compute_type":"int8_float16","tested":[[1,true],[2,true],[4,true],[8,false]],"max_safe":safe,"origin":"probe","measured_at":1}
+    }]);
+    fs::write(&store, value.to_string()).unwrap();
+}
+
+fn groups(env: &Env) -> Vec<String> {
+    transcribe_log(env)
+        .iter()
+        .map(|l| l.rsplit(' ').next().unwrap().to_owned())
+        .collect()
+}
+
+fn transcribe_to_the_end(env: &Env) -> i64 {
+    std::env::set_var(
+        "CLIPES_FAKE_TRANSCRIBE_LOG",
+        env.root.path().join("transcribe.log"),
+    );
+    let source = env.import(0);
+    env.start(source).unwrap();
+    wait("transcrição completa", || {
+        env.status(source)["transcript"]["state"] == "complete"
+    });
+    assert_complete_transcript(&env.rows(source));
+    source
+}
+
+#[test]
+fn grouping_is_off_by_default_and_one_span_is_sent_per_call() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_models();
+    gpu_with_measured_batch(&env, 4);
+    let state = run("transcription.grouping", json!({})).unwrap();
+    assert_eq!(
+        state,
+        json!({"enabled": false, "size": 1, "measured_size": 4})
+    );
+    transcribe_to_the_end(&env);
+    assert!(groups(&env).iter().all(|g| g == "1"), "{:?}", groups(&env));
+}
+
+#[test]
+fn enabled_grouping_uses_the_measured_safe_batch_and_keeps_blocks_unchanged() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_models();
+    gpu_with_measured_batch(&env, 4);
+    let state = run("transcription.grouping", json!({"enabled": true})).unwrap();
+    assert_eq!(
+        state,
+        json!({"enabled": true, "size": 4, "measured_size": 4})
+    );
+    // Persiste em disco e pode ser alternado de volta para desligado.
+    assert_eq!(
+        run("transcription.grouping", json!({})).unwrap(),
+        json!({"enabled": true, "size": 4, "measured_size": 4})
+    );
+    let source = transcribe_to_the_end(&env);
+    assert!(groups(&env).iter().all(|g| g == "4"), "{:?}", groups(&env));
+    // Mesmo formato de bloco e checkpoint: um bloco por 8 s de Fonte, como sem agrupar.
+    assert_eq!(env.status(source)["transcript"]["resume_us"], 25_000_000);
+    assert!(run("transcription.grouping", json!({"enabled": "sim"})).is_err());
+    assert_eq!(
+        run("transcription.grouping", json!({"enabled": false})).unwrap(),
+        json!({"enabled": false, "size": 1, "measured_size": 4})
+    );
+    let store: Value = serde_json::from_slice(
+        &fs::read(env.root.path().join("data/transcription-hardware.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(store["group_vad"], false);
+}
+
+#[test]
+fn grouping_without_a_measured_batch_stays_at_one() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_models();
+    choose("whisper-turbo", "cuda", "int8_float16");
+    let state = run("transcription.grouping", json!({"enabled": true})).unwrap();
+    assert_eq!(state["size"], 1);
+}
+
+#[test]
+fn out_of_memory_halves_the_group_redoes_only_the_block_and_updates_the_measurement() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_models();
+    gpu_with_measured_batch(&env, 8);
+    run("transcription.grouping", json!({"enabled": true})).unwrap();
+    std::env::set_var("CLIPES_FAKE_GROUP_OOM", "3");
+    transcribe_to_the_end(&env);
+    // O primeiro bloco tenta 8, depois 4, depois 2 e passa; os seguintes já começam em 2.
+    let log = groups(&env);
+    assert_eq!(&log[..3], ["8", "4", "2"], "{log:?}");
+    assert!(log[3..].iter().all(|g| g == "2"), "{log:?}");
+    let store: Value = serde_json::from_slice(
+        &fs::read(env.root.path().join("data/transcription-hardware.json")).unwrap(),
+    )
+    .unwrap();
+    let batch = &store["probes"][0]["batch"];
+    assert_eq!(batch["max_safe"], 2);
+    assert_eq!(batch["origin"], "oom");
+    assert!(batch["tested"]
+        .as_array()
+        .unwrap()
+        .contains(&json!([4, false])));
+    assert_eq!(run("transcription.grouping", json!({})).unwrap()["size"], 2);
+}
+
+#[test]
+fn out_of_memory_with_a_group_of_one_is_still_a_typed_failure() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_models();
+    gpu_with_measured_batch(&env, 2);
+    run("transcription.grouping", json!({"enabled": true})).unwrap();
+    std::env::set_var("CLIPES_FAKE_GROUP_OOM", "1");
+    std::env::set_var(
+        "CLIPES_FAKE_TRANSCRIBE_LOG",
+        env.root.path().join("transcribe.log"),
+    );
+    let source = env.import(0);
+    env.start(source).unwrap();
+    env.wait_transcribe("failed");
+    assert_eq!(groups(&env), ["2", "1"]);
+}
+
+// ---- Idioma fixo por Fonte (#195) ----
+
+#[test]
+fn fixed_source_language_is_sent_to_every_block_across_crash_and_resume() {
+    let env = Env::new(25);
+    env.install_models();
+    let lang_log = env.root.path().join("language.log");
+    std::env::set_var("CLIPES_FAKE_LANGUAGE_LOG", &lang_log);
+    let media = env.root.path().join("source-en.mp4");
+    fs::write(&media, b"media").unwrap();
+    let imported = run(
+        "sources.import",
+        json!({"project":env.project,"path":media,"permission":{"status":"none"},"audio_track":0,"language":"en"}),
+    )
+    .unwrap();
+    assert_eq!(imported["language"], "en");
+    let source = imported["id"].as_i64().unwrap();
+    assert_eq!(env.status(source)["language"], "en");
+
+    let crash = env.root.path().join("crash");
+    fs::write(&crash, b"1").unwrap();
+    std::env::set_var("CLIPES_FAKE_WORKER_CRASH", &crash);
+    env.start(source).unwrap();
+    env.wait_transcribe("failed");
+    assert_eq!(env.status(source)["transcript"]["resume_us"], 8_000_000);
+
+    env.start(source).unwrap();
+    env.wait_transcribe("completed");
+
+    let sent: Vec<String> = fs::read_to_string(&lang_log)
+        .unwrap()
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    assert!(sent.len() >= 3, "{sent:?}");
+    assert!(sent.iter().all(|l| l == "en"), "{sent:?}");
+
+    let rows = env.rows(source);
+    let words: Vec<_> = rows.iter().filter(|r| r["kind"] == "word").collect();
+    assert_eq!(words.len(), 25);
+    assert!(words.iter().all(|w| w["language"] == "en"));
+    let sentences = run("transcription.sentences", json!({"source_id":source})).unwrap();
+    assert!(sentences
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|s| s["language"] == "en"));
+}
+
+#[test]
+fn silence_only_first_block_keeps_fixed_language_on_subsequent_blocks() {
+    let env = Env::new(20);
+    env.install_models();
+    let lang_log = env.root.path().join("language-silent.log");
+    std::env::set_var("CLIPES_FAKE_LANGUAGE_LOG", &lang_log);
+    std::env::set_var("CLIPES_FAKE_SILENT_BLOCKS", "1");
+    let media = env.root.path().join("source-es.mp4");
+    fs::write(&media, b"media").unwrap();
+    let source = run(
+        "sources.import",
+        json!({"project":env.project,"path":media,"permission":{"status":"none"},"audio_track":0,"language":"es"}),
+    )
+    .unwrap()["id"]
+        .as_i64()
+        .unwrap();
+    env.start(source).unwrap();
+    env.wait_transcribe("completed");
+
+    let sent: Vec<String> = fs::read_to_string(&lang_log)
+        .unwrap()
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(sent, ["es", "es"]);
+    let rows = env.rows(source);
+    assert_eq!(rows[0]["kind"], "silence");
+    assert_eq!(rows[0]["start_us"], 0);
+    // Bloco 1 (0..10 s só silêncio) se funde com o silêncio inicial do bloco 2 (10..10,1 s).
+    assert_eq!(rows[0]["end_us"], 10_100_000);
+    let words: Vec<_> = rows.iter().filter(|r| r["kind"] == "word").collect();
+    assert_eq!(words.len(), 10);
+    assert!(words.iter().all(|w| w["language"] == "es"));
+}
+
+#[test]
+fn source_language_is_editable_before_start_and_locked_after_progress() {
+    let env = Env::new(25);
+    env.install_models();
+    let source = env.import(0);
+    assert_eq!(env.status(source)["language"], "pt");
+
+    assert_eq!(
+        run(
+            "sources.language.set",
+            json!({"project":env.project,"id":source,"language":"invalid-code"}),
+        )
+        .unwrap_err()
+        .code,
+        "invalid_language"
+    );
+
+    let updated = run(
+        "sources.language.set",
+        json!({"project":env.project,"id":source,"language":"fr"}),
+    )
+    .unwrap();
+    assert_eq!(updated["language"], "fr");
+    assert_eq!(env.status(source)["language"], "fr");
+
+    let hold = env.root.path().join("hold");
+    let held = env.root.path().join("held");
+    fs::write(&hold, b"1").unwrap();
+    std::env::set_var("CLIPES_FAKE_WORKER_HOLD", &hold);
+    std::env::set_var("CLIPES_FAKE_WORKER_HELD", &held);
+    let started = run(
+        "transcription.start",
+        json!({"project":env.project,"source_id":source,"language":"de"}),
+    )
+    .unwrap();
+    assert_eq!(env.status(source)["language"], "de");
+    wait("worker falso segurou a transcrição", || {
+        held.exists()
+            && env
+                .job_state("transcription")
+                .is_some_and(|(s, _)| s == "running")
+    });
+    assert_eq!(
+        run(
+            "sources.language.set",
+            json!({"project":env.project,"id":source,"language":"it"}),
+        )
+        .unwrap_err()
+        .code,
+        "transcription_busy"
+    );
+    run("jobs.cancel", json!({"id":started["job_id"]})).unwrap();
+    // Só solta o worker depois de confirmar o cancelamento, para não concluir o 1º bloco antes do sinal chegar.
+    env.wait_transcribe("cancelled");
+    fs::remove_file(&hold).unwrap();
+    let _ = fs::remove_file(&held);
+    std::env::remove_var("CLIPES_FAKE_WORKER_HOLD");
+    std::env::remove_var("CLIPES_FAKE_WORKER_HELD");
+
+    // 0 blocos gravados: ainda permite editar antes de retomar com blocos.
+    assert_eq!(env.status(source)["transcript"]["resume_us"], 0);
+    run(
+        "sources.language.set",
+        json!({"project":env.project,"id":source,"language":"it"}),
+    )
+    .unwrap();
+    assert_eq!(env.status(source)["language"], "it");
+
+    // Após gravar o 1º bloco, trava o idioma como fixo da Fonte.
+    let crash = env.root.path().join("crash");
+    fs::write(&crash, b"1").unwrap();
+    std::env::set_var("CLIPES_FAKE_WORKER_CRASH", &crash);
+    env.start(source).unwrap();
+    env.wait_transcribe("failed");
+    assert_eq!(env.status(source)["transcript"]["resume_us"], 8_000_000);
+    assert_eq!(
+        run(
+            "sources.language.set",
+            json!({"project":env.project,"id":source,"language":"es"}),
+        )
+        .unwrap_err()
+        .code,
+        "transcript_partial"
+    );
+
+    env.start(source).unwrap();
+    env.wait_transcribe("completed");
+    assert_eq!(
+        run(
+            "sources.language.set",
+            json!({"project":env.project,"id":source,"language":"es"}),
+        )
+        .unwrap_err()
+        .code,
+        "transcript_complete"
+    );
+    assert!(env
+        .rows(source)
+        .iter()
+        .filter(|r| r["kind"] == "word")
+        .all(|w| w["language"] == "it"));
+}
+
+#[test]
+fn groq_engine_sends_fixed_source_language_in_every_block() {
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        sync::atomic::AtomicBool,
+    };
+    let env = Env::new(25);
+    let media = env.root.path().join("source-groq-en.mp4");
+    fs::write(&media, b"media").unwrap();
+    let source = run(
+        "sources.import",
+        json!({"project":env.project,"path":media,"permission":{"status":"none"},"audio_track":0,"language":"en"}),
+    )
+    .unwrap()["id"]
+        .as_i64()
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let endpoint = format!(
+        "http://{}/audio/transcriptions",
+        listener.local_addr().unwrap()
+    );
+    let server = std::thread::spawn(move || {
+        for _ in 0..3 {
+            let (mut socket, _) = listener.accept().unwrap();
+            socket.set_nonblocking(false).unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut bytes = Vec::new();
+            let mut buf = [0; 4096];
+            loop {
+                let n = socket.read(&mut buf).unwrap();
+                assert!(n > 0);
+                bytes.extend_from_slice(&buf[..n]);
+                if let Some(end) = bytes.windows(4).position(|w| w == b"\r\n\r\n") {
+                    let len = String::from_utf8_lossy(&bytes[..end])
+                        .lines()
+                        .find_map(|l| {
+                            l.to_lowercase()
+                                .strip_prefix("content-length: ")
+                                .and_then(|s| s.parse::<usize>().ok())
+                        })
+                        .unwrap();
+                    if bytes.len() >= end + 4 + len {
+                        break;
+                    }
+                }
+            }
+            let request = String::from_utf8_lossy(&bytes);
+            assert!(
+                request.contains("name=\"language\"\r\n\r\nen\r\n")
+                    || request.contains("name=\"language\"\n\nen\n"),
+                "campo language=en ausente no multipart"
+            );
+            let body = r#"{"language":"english","words":[{"word":"hello","start":0.1,"end":0.5}]}"#;
+            write!(
+                socket,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .unwrap();
+        }
+    });
+    let job = env.paid_job(source);
+    let client =
+        clipes_core::worker::WorkerClient::start(FAKE_WORKER, ["--scenario", "unused"], |_| {})
+            .unwrap();
+    let mut engine = clipes_core::transcription::GroqEngine::with_worker(
+        client,
+        "fake-key".into(),
+        endpoint,
+        env.root.path().join(exe("fake-ffmpeg")),
+        Duration::from_secs(5),
+    );
+    clipes_core::transcription::run_with(
+        &mut engine,
+        job,
+        source,
+        Path::new(&env.project),
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    server.join().unwrap();
+    let words: Vec<_> = env
+        .rows(source)
+        .into_iter()
+        .filter(|r| r["kind"] == "word")
+        .collect();
+    assert_eq!(words.len(), 3);
+    assert!(words.iter().all(|w| w["language"] == "en"));
+}
+
+#[test]
+fn commit_normalizes_overlapping_and_zero_duration_words_across_blocks() {
+    use clipes_core::transcription::{BlockRequest, BlockResult, TranscriptionEngine, Word};
+    use std::sync::atomic::AtomicBool;
+
+    struct OverlapEngine {
+        calls: usize,
+    }
+    impl TranscriptionEngine for OverlapEngine {
+        fn transcribe_block(
+            &mut self,
+            _request: &BlockRequest<'_>,
+            _cancel: &AtomicBool,
+            _progress: &mut dyn FnMut(u8),
+        ) -> Result<BlockResult, clipes_core::CoreError> {
+            self.calls += 1;
+            if self.calls == 1 {
+                // Bloco 1 (0..10s): palavra 1 começa 196 ms antes do fim da 0, com duração zero
+                // e fim antes do fim da anterior; última palavra cruza para 10,2s.
+                Ok(BlockResult {
+                    covered_us: 10_000_000,
+                    words: vec![
+                        Word {
+                            text: "um".into(),
+                            start_us: 500_000,
+                            end_us: 840_000,
+                            language: Some("pt".into()),
+                        },
+                        Word {
+                            text: "dois.".into(),
+                            start_us: 644_000,
+                            end_us: 644_000,
+                            language: Some("pt".into()),
+                        },
+                        Word {
+                            text: "tres".into(),
+                            start_us: 9_900_000,
+                            end_us: 10_200_000,
+                            language: Some("pt".into()),
+                        },
+                    ],
+                    silences: vec![],
+                })
+            } else {
+                // Bloco 2 (resume = 10s): primeira palavra a +100ms (10,1s) sobrepõe o fim da
+                // última palavra do bloco 1 (10,2s).
+                Ok(BlockResult {
+                    covered_us: 10_000_000,
+                    words: vec![Word {
+                        text: "quatro.".into(),
+                        start_us: 100_000,
+                        end_us: 400_000,
+                        language: Some("pt".into()),
+                    }],
+                    silences: vec![],
+                })
+            }
+        }
+    }
+
+    let env = Env::new(20);
+    let source = env.import(0);
+    let job = env.paid_job(source);
+    let mut engine = OverlapEngine { calls: 0 };
+    clipes_core::transcription::run_with(
+        &mut engine,
+        job,
+        source,
+        Path::new(&env.project),
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+
+    let words: Vec<_> = env
+        .rows(source)
+        .into_iter()
+        .filter(|r| r["kind"] == "word")
+        .collect();
+    assert_eq!(words.len(), 4);
+    assert_eq!(words[0]["start_us"], 500_000);
+    assert_eq!(words[0]["end_us"], 840_000);
+    assert_eq!(words[1]["start_us"], 840_000);
+    assert_eq!(words[1]["end_us"], 840_001);
+    assert_eq!(words[2]["start_us"], 9_900_000);
+    assert_eq!(words[2]["end_us"], 10_200_000);
+    assert_eq!(words[3]["start_us"], 10_200_000);
+    assert_eq!(words[3]["end_us"], 10_400_000);
+
+    let sentences = run("transcription.sentences", json!({"source_id": source})).unwrap();
+    let list = sentences.as_array().unwrap();
+    assert_eq!(list.len(), 2);
+    assert!(list[0]["end_us"].as_i64().unwrap() <= list[1]["start_us"].as_i64().unwrap());
+    assert!(list[0]["end_us"].as_i64().unwrap() > list[0]["start_us"].as_i64().unwrap());
+}
+
+// ---- Sonda automática em GPU NVIDIA (#253) ----
+
+fn probe_log(env: &Env) -> Vec<String> {
+    fs::read_to_string(env.root.path().join("probe.log"))
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn auto_probe_runs_once_before_first_local_transcription_and_caches_result() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_models();
+    std::env::set_var("CLIPES_FAKE_PROBE_LOG", env.root.path().join("probe.log"));
+    std::env::set_var(
+        "CLIPES_FAKE_TRANSCRIBE_LOG",
+        env.root.path().join("transcribe.log"),
+    );
+    assert_eq!(
+        run("transcription.grouping", json!({})).unwrap(),
+        json!({"enabled": false, "size": 1, "measured_size": null})
+    );
+    let source1 = env.import(0);
+    env.start(source1).unwrap();
+    wait("primeira transcrição concluída", || {
+        env.status(source1)["transcript"]["state"] == "complete"
+    });
+    let first_probe_count = probe_log(&env).len();
+    assert!(
+        first_probe_count >= 5,
+        "sonda deveria ter rodado: {first_probe_count}"
+    );
+    assert_eq!(
+        run("transcription.grouping", json!({})).unwrap(),
+        json!({"enabled": false, "size": 1, "measured_size": 8})
+    );
+    let hw = run("transcription.hardware.status", json!({})).unwrap();
+    assert_eq!(hw["effective"]["compute_type"], "int8_float16");
+    assert!(hw["fallback_reason"].is_null());
+    assert!(!hw.to_string().contains("max_safe"));
+
+    // Segunda transcrição na mesma GPU/driver/modelo não dispara a sonda de novo.
+    let source2 = env.import(0);
+    env.start(source2).unwrap();
+    wait("segunda transcrição concluída", || {
+        env.status(source2)["transcript"]["state"] == "complete"
+    });
+    assert_eq!(probe_log(&env).len(), first_probe_count);
+}
+
+#[test]
+fn auto_probe_is_cancellable_via_jobs_cancel_and_does_not_cache() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_models();
+    std::env::set_var("CLIPES_FAKE_PROBE_LOG", env.root.path().join("probe.log"));
+    std::env::set_var("CLIPES_FAKE_PROBE_FAIL", "hang:int8_float16");
+    let source = env.import(0);
+    let started = env.start(source).unwrap();
+    let job_id = started["job_id"].as_i64().unwrap();
+    wait("sonda iniciada", || !probe_log(&env).is_empty());
+    run("jobs.cancel", json!({"id": job_id})).unwrap();
+    env.wait_transcribe("cancelled");
+    assert!(!env
+        .root
+        .path()
+        .join("data/transcription-hardware.json")
+        .exists());
+}
+
+#[test]
+fn auto_probe_failure_falls_back_to_cpu_small_with_warning_and_diagnostic() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_models();
+    std::env::set_var("CLIPES_FAKE_PROBE_LOG", env.root.path().join("probe.log"));
+    std::env::set_var(
+        "CLIPES_FAKE_TRANSCRIBE_LOG",
+        env.root.path().join("transcribe.log"),
+    );
+    std::env::set_var(
+        "CLIPES_FAKE_PROBE_FAIL",
+        "fail:int8_float16,fail:float16,fail:int8",
+    );
+    let source = env.import(0);
+    env.start(source).unwrap();
+    wait("transcrição em fallback CPU concluída", || {
+        env.status(source)["transcript"]["state"] == "complete"
+    });
+    assert_eq!(env.status(source)["transcript"]["model"], "whisper-small");
+    assert!(transcribe_log(&env)
+        .iter()
+        .all(|l| l.starts_with("whisper-small cpu int8")));
+    let hw = run("transcription.hardware.status", json!({})).unwrap();
+    assert_eq!(hw["effective"]["model"], "whisper-small");
+    assert_eq!(hw["effective"]["device"], "cpu");
+    assert_eq!(hw["no_compatible_gpu"], true);
+    assert_eq!(hw["fallback_reason"], "gpu_probe_failed");
+    let diag = run("diagnostic.get", json!({})).unwrap()["text"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        diag.contains("Aviso: sonda da GPU falhou; transcrição em CPU"),
+        "{diag}"
+    );
+    assert!(diag.contains("fallback CPU"), "{diag}");
+
+    // Cache gravado: segunda transcrição não repete a sonda falhada.
+    let before = probe_log(&env).len();
+    let source2 = env.import(0);
+    env.start(source2).unwrap();
+    wait("segunda transcrição concluída", || {
+        env.status(source2)["transcript"]["state"] == "complete"
+    });
+    assert_eq!(probe_log(&env).len(), before);
+}
+
+#[test]
+fn auto_probe_failure_falls_back_to_turbo_on_cpu_when_small_missing_and_ram_sufficient() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_only_models(&["whisper-turbo"]);
+    std::env::set_var(
+        "CLIPES_FAKE_TRANSCRIBE_LOG",
+        env.root.path().join("transcribe.log"),
+    );
+    std::env::set_var("CLIPES_FAKE_PROBE_FAIL", "fail:info");
+    let source = env.import(0);
+    env.start(source).unwrap();
+    wait("transcrição com turbo em CPU concluída", || {
+        env.status(source)["transcript"]["state"] == "complete"
+    });
+    assert_eq!(env.status(source)["transcript"]["model"], "whisper-turbo");
+    assert!(transcribe_log(&env)
+        .iter()
+        .all(|l| l.starts_with("whisper-turbo cpu int8")));
+    let hw = run("transcription.hardware.status", json!({})).unwrap();
+    assert_eq!(hw["effective"]["model"], "whisper-turbo");
+    assert_eq!(hw["effective"]["device"], "cpu");
+    assert_eq!(hw["fallback_reason"], "gpu_probe_failed");
+}
+
+#[test]
+fn auto_probe_failure_without_usable_cpu_model_fails_with_model_missing() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_only_models(&["whisper-turbo"]);
+    std::env::set_var("CLIPES_FAKE_RAM", format!("{},{}", 4 * GIB, 3 * GIB));
+    std::env::set_var(
+        "CLIPES_FAKE_PROBE_FAIL",
+        "fail:int8_float16,fail:float16,fail:int8",
+    );
+    let source = env.import(0);
+    env.start(source).unwrap();
+    env.wait_transcribe("failed");
+    let st = env.status(source);
+    assert_eq!(st["job"]["code"], "model_missing");
 }

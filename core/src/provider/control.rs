@@ -21,6 +21,10 @@ impl CancelToken {
     pub fn is_cancelled(&self) -> bool {
         self.0.load(Ordering::SeqCst)
     }
+    /// Bridge to the worker protocol, sharing the same cancellation flag.
+    pub(crate) fn flag(&self) -> &AtomicBool {
+        &self.0
+    }
 }
 
 pub(crate) type CallGuard = Box<dyn Fn(&StructuredRequest, &[Value]) -> Result<Value, CoreError>>;
@@ -30,6 +34,9 @@ struct CallScope {
     limit: Option<u64>,
     log: Vec<Value>,
     guard: Option<CallGuard>,
+    transport: Option<Value>,
+    /// When the executor's time budget (#121) ends; timeouts never go past it (#147).
+    deadline: Option<std::time::Instant>,
 }
 thread_local! {
     static SCOPE: std::cell::RefCell<Option<CallScope>> = const { std::cell::RefCell::new(None) };
@@ -49,10 +56,33 @@ pub(crate) fn with_call_scope<T>(
         limit,
         log: Vec::new(),
         guard,
+        transport: None,
+        deadline: None,
     }));
     let result = f();
     let scope = SCOPE.replace(previous).unwrap_or_default();
     (result, scope.log)
+}
+
+/// Sets, for the open scope, the instant the executor's time budget ends (#147). Called by the
+/// AI job executor inside the scope; outside one it does nothing.
+pub(crate) fn set_deadline(deadline: Option<std::time::Instant>) {
+    SCOPE.with_borrow_mut(|scope| {
+        if let Some(scope) = scope {
+            scope.deadline = deadline;
+        }
+    });
+}
+
+/// What is left of the executor's time budget, read before each send; `None` outside a scope
+/// or when the scope has no deadline.
+pub(crate) fn remaining_budget() -> Option<Duration> {
+    SCOPE.with_borrow(|scope| {
+        scope
+            .as_ref()
+            .and_then(|s| s.deadline)
+            .map(|d| d.saturating_duration_since(std::time::Instant::now()))
+    })
 }
 
 /// Called immediately before every HTTP send, including rate-limit retries and repairs.
@@ -62,7 +92,8 @@ pub(crate) fn before_call(request: &StructuredRequest, log: &[Value]) -> Result<
         let Some(scope) = scope else {
             return Ok(Value::Null);
         };
-        if scope.limit.is_some_and(|max| log.len() as u64 >= max) {
+        let counted = log.iter().filter(|e| e["rateLimitRetry"] != true).count() as u64;
+        if scope.limit.is_some_and(|max| counted >= max) {
             return Err(error("budget_calls", "Call budget reached before sending"));
         }
         match &scope.guard {
@@ -166,5 +197,48 @@ impl Timeouts {
     /// The values in force, for `provider.status`.
     pub fn effective(&self) -> Value {
         json!({"remote":self.endpoint(false).as_secs(),"local":self.endpoint(true).as_secs()})
+    }
+}
+
+/// Notes, for the audit trail (#125), the prompt a subscription CLI is about to receive on
+/// stdin. CLIs have no HTTP call log, so their transport facts travel on their own slot of the
+/// scope and are merged into the one cost entry by the caller (`take_transport`). Outside a
+/// scope these functions do nothing. Only the hash and size are kept, never the bytes.
+pub(crate) fn note_request(host: &str, bytes: &[u8]) {
+    SCOPE.with_borrow_mut(|scope| {
+        if let Some(scope) = scope {
+            scope.transport = Some(
+                json!({"host":host,"inputSha256":cost::sha256_hex(bytes),"sentBytes":bytes.len()}),
+            );
+        }
+    });
+}
+
+/// Notes the hash of what the CLI wrote on stdout.
+pub(crate) fn note_response(bytes: &[u8]) {
+    SCOPE.with_borrow_mut(|scope| {
+        if let Some(transport) = scope.as_mut().and_then(|s| s.transport.as_mut()) {
+            transport["responseSha256"] = json!(cost::sha256_hex(bytes));
+        }
+    });
+}
+
+/// The transport facts noted by the CLI call that ran in the open scope, if any.
+pub(crate) fn take_transport() -> Option<Value> {
+    SCOPE.with_borrow_mut(|scope| scope.as_mut().and_then(|s| s.transport.take()))
+}
+
+/// Fills the transport fields of the one fallback entry of a CLI call (`entries` has no HTTP
+/// log) with what the CLI noted.
+pub(crate) fn merge_transport(entries: &mut [Value], transport: &Option<Value>) {
+    let (Some(transport), [entry]) = (transport, entries) else {
+        return;
+    };
+    if entry.get("host").is_none() {
+        for key in ["host", "inputSha256", "sentBytes", "responseSha256"] {
+            if let Some(value) = transport.get(key) {
+                entry[key] = value.clone();
+            }
+        }
     }
 }

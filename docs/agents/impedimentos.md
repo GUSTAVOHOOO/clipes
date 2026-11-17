@@ -51,6 +51,11 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Causa:** a execução já tinha compilado a biblioteca anterior ao merge e depois compilou o teste novo; a árvore mudou durante o comando.
 - **Ação:** finalize o merge antes de executar a verificação e repita o comando com a árvore estável. Não altere o Provedor para contornar o resultado da execução antiga.
 
+### Arquivo binário em `worker/` corrompido no commit
+- **Sintoma:** um `.wav` (ou outro binário) novo em `worker/` entra no commit com tamanho diferente do original; o teste que confere o cabeçalho `RIFF` ou o hash falha.
+- **Causa:** `.gitattributes` marca `worker/** text eol=lf`, e o Git converte CRLF dentro do binário.
+- **Ação:** acrescente uma regra `binary` específica depois da regra geral (já existe para `worker/src/clipes_worker/data/*.wav`) e confira com `git show :caminho | wc -c`.
+
 ### Tickets da mesma onda mexendo nos mesmos arquivos da raiz
 - **Ação:** faça o merge de um PR e mande o outro worker fazer rebase em `origin/master` antes de abrir (ou atualizar) o PR. Nada de push forçado em branch alheia.
 
@@ -81,7 +86,40 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
   Depois, `chromium.connectOverCDP('http://127.0.0.1:9333')`, exporte os cookies para um `cookies.txt` (formato Netscape) fora do repo e passe `--cookies` ao yt-dlp.
 - **Limpeza obrigatória:** apague o `cookies.txt`, feche esse Chrome e apague o perfil `%TEMP%\clipes-yt-chrome`. Cookies e perfis nunca vão para o repo.
 
+### Vídeo com restrição de idade (#194)
+- **Sintoma:** `Sign in to confirm your age` (sem cookies) ou `Sorry, this content is age-restricted. To view this video, please provide more info so we can be sure you're an adult` (com cookies).
+- **Causa:** o portão é a **conta ser adulta e verificada**; cookies, deno e PO Token sozinhos não bastam. A segunda mensagem significa sessão reconhecida, conta não verificada. PO Token (bgutil) não destrava a idade.
+- **Ação:** para detectar sem login, `yt-dlp --skip-download --ignore-no-formats-error --print "%(age_limit)s %(availability)s" -- <url>` (`18` e `needs_auth`). Vídeo +18 embedável baixa só com deno, sem login; não embedável não. Veja `docs/research/2026-11-16-youtube-restricao-idade.md`.
+
+### Sem deno, o yt-dlp perde formatos no YouTube
+- **Sintoma:** `No supported JavaScript runtime could be found` e `n challenge solving failed`.
+- **Ação:** só o deno vem habilitado por padrão; deixe no PATH, ao lado do `yt-dlp.exe`, ou passe `--js-runtimes deno:<caminho>`. Instale só em `%TEMP%\clipes-<n>-*` e apague no fim.
+
+### Cookies exportados logo após o login não têm sessão do YouTube
+- **Sintoma:** `cookies.txt` com `SAPISID`, mas sem `LOGIN_INFO`; o yt-dlp segue pedindo login.
+- **Causa:** o login terminou em `accounts.google.com` e o YouTube ainda não criou a sessão.
+- **Ação:** depois do login, abra `https://www.youtube.com/` no mesmo perfil, confira `LOGIN_INFO` (só o nome, nunca o valor) e então exporte; feche o Chrome logo depois (o YouTube rotaciona cookies de abas abertas).
+
+### Plugin do bgutil não carrega com `yt-dlp.exe` standalone
+- **Ação:** `pip install --target <dir>/bgutil bgutil-ytdlp-pot-provider` e passe `--plugin-dirs <dir>` (a pasta que contém `bgutil/yt_dlp_plugins`). Servidor: clonar o repo, `npm ci`, `npx tsc`, `node build/main.js --port 4416` (escuta em loopback); encerre o PID depois, conferindo a linha de comando.
+
+### Nunca abrir issue ou PR no yt-dlp com texto de agente
+- O yt-dlp tem uma política "NO AI / NO LLM" e bloqueia o autor. Reporte o problema ao dev; ele decide se e como relatar.
+
 ## Ambiente Windows
+
+### Fixture de vídeo sem rotação no FFmpeg 8
+- **Sintoma:** remuxar com `-metadata:s:v:0 rotate=90` termina com sucesso, mas
+  `ffprobe` não encontra display matrix e o vídeo continua sem rotação.
+- **Causa:** nessa versão, a tag sozinha não produz a matriz de exibição.
+- **Ação:** para gerar o fixture sintético, use `-display_rotation 90` **antes**
+  de `-i`, com `-c copy`, e confirme `side_data_list.rotation` via `ffprobe`.
+  O harness `export_parity` faz essa confirmação antes de comparar os quadros.
+
+### `-filter_complex_script` removido no FFmpeg 9 (CI Windows)
+- **Sintoma:** `export_loudness` e `export_parity` passam no Ubuntu (FFmpeg 6.x) e localmente no FFmpeg 8.1, mas falham com `export_failed` no CI Windows (`choco install ffmpeg` v9.0.2).
+- **Causa:** o FFmpeg 9.0 removeu `-filter_complex_script` em favor de `-/filter_complex`, enquanto o FFmpeg 6.1 do Ubuntu ainda não tem `-/filter_complex`.
+- **Ação:** passe o grafo diretamente via `-filter_complex <grafo>` (funciona do FFmpeg 6 ao 9 sem depender de sintaxe específica de versão).
 
 ### OpenCode isolado: cota gratuita esgotada
 - **Sintoma:** teste real pendente: cota gratuita do OpenCode esgotada (HTTP 429 `provider.free-limit`, ~22 h), isolamento confirmado com `debug agents` e 3 tentativas fora do adaptador que chegaram ao serviço.
@@ -132,6 +170,11 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Causa:** `thirdparty_binary` acrescenta aspas ao caminho e as passa como parte do nome para `subprocess` no Windows.
 - **Ação:** antes de executar o MFA, anteponha ao `PATH` o caminho curto 8.3 da pasta `Library\bin` do ambiente conda. Exemplo: `$short = cmd /c 'for %I in ("%TEMP%\clipes-mfa-env") do @echo %~sI'; $env:PATH="$short\Library\bin;$short\Scripts;$short;$env:PATH"`; execute `& "$short\python.exe" -m montreal_forced_aligner ...`. Mantenha o ambiente e `MFA_ROOT_DIR` no TEMP.
 
+### Comparação de detectores de cena em mídia real (#60)
+- **Sintoma:** a avaliação do `scdet`/PySceneDetect/TransNet V2 em gameplay do #28 ficou sem rodar.
+- **Causa:** `yt-dlp --download-sections` trava; só 2 downloads nativos (≤480p, sem cookies, fora do repo, timeout de 15 min) foram autorizados, e o TransNet V2 exige TensorFlow.
+- **Ação:** o #60 entregou `scdet` conservador com comparação sintética em `docs/research/2026-11-15-reenquadramento-deteccao.md`. Rode `benchmarks/reenquadramento/compare.py` localmente para fechar a pendência; só agregados vão ao repo.
+
 ## Testes E2E Tauri (WebDriver)
 
 ### `tauri-driver --version` falha como se não estivesse instalado
@@ -158,3 +201,10 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Sintoma:** salvar/remover chaves em Preferências durante o E2E sobrescreve credenciais reais no Windows Credential Manager ou retorna erro `vault` em runners Linux headless.
 - **Causa:** num executável compilado (`clipes`), `#[cfg(test)]` está desligado e o núcleo chamaria `keyring::Entry` real.
 - **Ação:** em builds de depuração (`#[cfg(debug_assertions)]`), passe `CLIPES_TEST_VAULT_FILE` apontando para um JSON temporário (`core/src/vault.rs`). Não habilite esse caminho fora de `debug_assertions`.
+
+## Disco
+
+### Disco C: cheio com vários worktrees compilando
+- **Sintoma:** `No space left on device`, ou build e download de modelo falhando com poucos GB livres.
+- **Causa:** cada worktree tem o próprio `target/`. No Windows, cada binário de teste gera um `.pdb` de ~177 MB em `target/debug/build/clipes-core/<hash>/out/`, e o cargo não apaga as versões antigas; um worktree passou de 18 GB. Os testes em `core/tests/` criam pastas `%TEMP%\clipes-*` com o PID e não as apagam, e os ambientes Python de tickets fechados ficam no `%TEMP%`.
+- **Ação:** apague o `target/` de worktree sem `cargo` rodando (confira a última escrita), as pastas `%TEMP%\clipes-<ticket>-*` de tickets fechados e as de teste com mais de 1 h (nunca as de um worker ativo), depois rode `uv cache prune` (os venvs do uv usam hardlinks para o cache, então o espaço só volta depois disso). Em 15/11/2026 isso levou o C: de 4,9 GB para 58,6 GB livres.

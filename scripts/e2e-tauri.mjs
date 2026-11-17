@@ -579,6 +579,7 @@ async function withTauriSession(config, callback) {
     CLIPES_TEST_VAULT_FILE: config.vaultFile,
     CLIPES_FAKE_YTDLP_MEDIA: config.urlFixtureMp4,
     CLIPES_FAKE_WORKER_HOLD: config.holdFile,
+    CLIPES_NVIDIA_SMI: config.noNvidiaSmi,
     CLIPES_TRANSCRIBE_BLOCK_SECONDS: '2',
     FAKE_LOG: config.fakeCliLog,
   };
@@ -1075,7 +1076,7 @@ async function runSession2(ui, ctx) {
   await ui.selectField('Motor de transcrição', 'local', { rowContains: 'source-moved.mkv' });
   await rm(ctx.holdFile, { force: true });
   await ui.clickButton('Retomar', { rowContains: 'source-moved.mkv' });
-  await ui.waitForText(/Transcrição pronta · [23] palavras/, 'main', 25_000);
+  await ui.waitForText(/Transcrição pronta · .+ · [23] palavras/, 'main', 25_000);
   const timelineText = await ui.waitForText('palavra', 'section[aria-label="Transcrição"]');
   assert.match(timelineText, /Silêncio/);
   assert.match(timelineText, /pt/);
@@ -1121,6 +1122,7 @@ async function main() {
   const vaultFile = path.join(tempRoot, 'vault.json');
   const holdFile = path.join(tempRoot, 'worker.hold');
   const fakeCliLog = path.join(tempRoot, 'fake-cli.log');
+  const noNvidiaSmi = path.join(tempRoot, 'no-nvidia-smi');
   let providerServer;
 
   try {
@@ -1134,6 +1136,7 @@ async function main() {
       vaultFile,
       holdFile,
       fakeCliLog,
+      noNvidiaSmi,
       cliBinDir: fixtures.cliBinDir,
       urlFixtureMp4: fixtures.urlFixtureMp4,
     };

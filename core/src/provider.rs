@@ -131,9 +131,12 @@ pub trait Provider {
 
 mod adapters;
 pub mod capabilities;
+mod context;
 #[cfg(test)]
 pub(crate) mod contract_probe;
 pub(crate) mod control;
+pub mod limits;
+mod truncation;
 pub use adapters::{AnthropicProvider, GeminiProvider, OllamaProvider, OpenAiProvider};
 pub use control::{CancelToken, Timeouts};
 pub mod cost;
@@ -141,8 +144,9 @@ fn token_calibration_diagnostic() -> String {
     settings::calibration_status()
 }
 inventory::submit! { crate::diagnostic::DiagnosticField { kind: crate::diagnostic::DiagnosticKind::TokenCalibration, value: token_calibration_diagnostic } }
-pub use settings::run_structured;
-pub(crate) use settings::{profile_infos, routed, Routed};
+pub(crate) use context::effective_cached;
+pub use settings::{output_reserve, run_structured};
+pub(crate) use settings::{profile_endpoint, profile_infos, routed, Routed};
 
 mod settings {
     use super::*;
@@ -203,6 +207,18 @@ mod settings {
         vault_account: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         context: Option<u64>,
+        /// Output ceiling the user sets for this profile (#147); absent keeps the model's.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max_output: Option<u64>,
+        /// Timeout in seconds the user sets for this profile (#147); absent uses the default.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        timeout_secs: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tokens_per_request: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tokens_per_minute: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tokens_per_day: Option<u64>,
     }
     impl Profile {
         fn account(&self) -> String {
@@ -231,6 +247,11 @@ mod settings {
             native_schema: settings.native_schema,
             vault_account: None,
             context: None,
+            max_output: None,
+            timeout_secs: None,
+            tokens_per_request: None,
+            tokens_per_minute: None,
+            tokens_per_day: None,
         }]
     }
     fn find(settings: &Settings, id: &str) -> Option<Profile> {
@@ -273,6 +294,111 @@ mod settings {
         let settings = read()?;
         Ok(profiles(&settings).iter().map(ProfileInfo::from).collect())
     }
+    /// Endpoint of a saved profile by id, used to resolve host-specific catalog entries.
+    pub(crate) fn profile_endpoint(id: &str) -> Option<String> {
+        let _guard = locked().ok()?;
+        let settings = read().ok()?;
+        find(&settings, id).map(|p| p.endpoint)
+    }
+    /// What context discovery (#143) needs about one profile. The key is read separately,
+    /// after the vetoes, so a skipped probe never touches the vault.
+    pub(super) struct ContextTarget {
+        pub id: String,
+        pub kind: String,
+        pub endpoint: String,
+        pub model: String,
+        pub user_context: Option<u64>,
+        pub user_max_output: Option<u64>,
+        pub tokens_per_request: Option<u64>,
+        pub tokens_per_minute: Option<u64>,
+        pub native_schema: bool,
+        pub confirmed: bool,
+        pub timeouts: Timeouts,
+        account: Option<String>,
+    }
+    impl ContextTarget {
+        pub fn key(&self) -> Result<Option<String>, CoreError> {
+            self.account.as_deref().map(vault_get).transpose()
+        }
+    }
+    pub(super) enum ContextPick {
+        Cli(String),
+        Profile(ContextTarget),
+    }
+    /// Read-only: the explicit `profileId`, else the route of the task (same choice as a call).
+    pub(super) fn context_pick(
+        task: Option<&str>,
+        explicit: Option<&str>,
+    ) -> Result<ContextPick, CoreError> {
+        let mut profile_id = explicit.map(str::to_owned);
+        if let Some(id) = explicit.filter(|id| CLI_IDS.contains(id)) {
+            return Ok(ContextPick::Cli(id.to_owned()));
+        }
+        if explicit.is_none() {
+            match crate::assistant::route(task)? {
+                crate::assistant::Route::Cli(kind) => return Ok(ContextPick::Cli(kind)),
+                crate::assistant::Route::Profile(id) => profile_id = Some(id),
+                crate::assistant::Route::Endpoint => {}
+                crate::assistant::Route::Unset => {
+                    if let Some(kind) = crate::provider_cli::selected()? {
+                        return Ok(ContextPick::Cli(kind));
+                    }
+                }
+            }
+        }
+        let settings = {
+            let _guard = locked()?;
+            read()?
+        };
+        let profile = pick_by(&settings, profile_id.as_deref())?
+            .filter(|p| !p.endpoint.is_empty())
+            .ok_or_else(|| error("invalid_settings", "Configure the provider first"))?;
+        Ok(ContextPick::Profile(context_target(&settings, profile)))
+    }
+    /// Output tokens the window planner (#144) reserves for a call that asks for `ask`: the
+    /// same static ceiling the call applies (#147), so the plan and the call do not diverge.
+    /// It is the request cut by the profile's limit and the model's `max_output`. Cache only,
+    /// no network. A CLI has no output limit to apply: the request stays as it is.
+    pub fn output_reserve(
+        task: Option<&str>,
+        profile_id: Option<&str>,
+        ask: u64,
+    ) -> Result<u64, CoreError> {
+        let ContextPick::Profile(target) = context_pick(task, profile_id)? else {
+            return Ok(ask);
+        };
+        let known = super::context::cached_limits(&target);
+        Ok(super::limits::output_ceiling(super::limits::CeilingInput {
+            ask: Some(ask),
+            profile: target.user_max_output,
+            model: known.model_max_output,
+            requires_ceiling: false,
+        })
+        .map_or(ask, |limit| limit.tokens))
+    }
+    fn context_target(settings: &Settings, profile: Profile) -> ContextTarget {
+        let account = profile.account();
+        ContextTarget {
+            confirmed: metadata(settings, &profile.endpoint).confirmed,
+            account: metadata(settings, &account)
+                .key_last_four
+                .is_some()
+                .then_some(account),
+            id: profile.id,
+            kind: profile.kind,
+            endpoint: profile.endpoint,
+            model: profile.model,
+            user_context: profile.context,
+            user_max_output: profile.max_output,
+            tokens_per_request: profile.tokens_per_request,
+            tokens_per_minute: profile.tokens_per_minute,
+            native_schema: profile.native_schema,
+            timeouts: settings.timeouts,
+        }
+    }
+    pub(super) fn data_file(name: &str) -> Result<PathBuf, CoreError> {
+        Ok(path()?.with_file_name(name))
+    }
     /// Where a call goes, already past the "local only" veto. Used by the cost estimate.
     pub(crate) enum Routed {
         Cli(String),
@@ -280,14 +406,16 @@ mod settings {
     }
     enum Picked {
         Cli(String),
-        Profile(Profile),
+        Profile(Box<Profile>),
     }
     /// Resolves the destination of one call and applies the per-task "local only" veto before
     /// the consent check, the vault and any network access. Locality is computed here, at
     /// call time, never stored. Only the app settings choose; the Project never does.
     fn pick_target(task: Option<&str>, explicit: Option<&str>) -> Result<Picked, CoreError> {
         let mut profile_id = explicit.map(str::to_owned);
-        let mut cli = explicit.filter(|id| *id == "opencode").map(str::to_owned);
+        let mut cli = explicit
+            .filter(|id| CLI_IDS.contains(id))
+            .map(str::to_owned);
         if explicit.is_none() {
             match crate::assistant::route(task)? {
                 crate::assistant::Route::Cli(kind) => cli = Some(kind),
@@ -327,14 +455,14 @@ mod settings {
         if local_only && !is_loopback_endpoint(&profile.endpoint) {
             return Err(local_only_violation());
         }
-        Ok(Picked::Profile(profile))
+        Ok(Picked::Profile(Box::new(profile)))
     }
     pub(crate) fn routed(task: Option<&str>, explicit: Option<&str>) -> Result<Routed, CoreError> {
         Ok(match pick_target(task, explicit)? {
             Picked::Cli(kind) => Routed::Cli(kind),
             Picked::Profile(p) => Routed::Api {
                 local: is_loopback_endpoint(&p.endpoint),
-                profile: ProfileInfo::from(&p),
+                profile: ProfileInfo::from(&*p),
             },
         })
     }
@@ -362,17 +490,8 @@ mod settings {
                 .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
     }
     fn path() -> Result<PathBuf, CoreError> {
-        if let Some(dir) = std::env::var_os("CLIPES_DATA_DIR") {
-            return Ok(PathBuf::from(dir).join("provider.json"));
-        }
-        #[cfg(test)]
-        return Ok(
-            std::env::temp_dir().join(format!("clipes-provider-test-{}.json", std::process::id()))
-        );
-        #[cfg(not(test))]
-        directories::ProjectDirs::from("io", "github.gustavohooo", "clipes")
-            .map(|p| p.config_dir().join("provider.json"))
-            .ok_or_else(|| error("settings", "Could not locate settings directory"))
+        crate::paths::config_file("provider.json")
+            .map_err(|_| error("settings", "Could not locate settings directory"))
     }
     fn read() -> Result<Settings, CoreError> {
         match fs::read(path()?) {
@@ -445,7 +564,7 @@ mod settings {
         };
         let remote = !is_local_endpoint(&p.endpoint).unwrap_or(false);
         let key = metadata(settings, &p.account());
-        json!({"profileId":p.id, "endpoint":p.endpoint, "model":p.model, "kind":p.kind, "nativeSchema":p.native_schema, "context":p.context, "timeouts":settings.timeouts.effective(), "keyLastFour":key.key_last_four, "remote":remote, "confirmed":metadata(settings, &p.endpoint).confirmed})
+        json!({"profileId":p.id, "endpoint":p.endpoint, "model":p.model, "kind":p.kind, "nativeSchema":p.native_schema, "context":p.context, "maxOutput":p.max_output, "timeoutSecs":p.timeout_secs, "tokensPerRequest":p.tokens_per_request, "tokensPerMinute":p.tokens_per_minute, "tokensPerDay":p.tokens_per_day, "limits":limits_view(settings, p), "timeouts":settings.timeouts.effective(), "keyLastFour":key.key_last_four, "remote":remote, "confirmed":metadata(settings, &p.endpoint).confirmed})
     }
     fn status(args: Value, _: &mut EventSink<'_>) -> CommandResult {
         let _guard = locked()?;
@@ -453,8 +572,42 @@ mod settings {
         let profile = pick(&settings, &args)?;
         Ok(status_json(&settings, profile.as_ref()))
     }
+    /// The limits in force for a profile with no task and no input (#147): the output ceiling
+    /// and where it comes from, the timeout before the share proportional to the input, and the
+    /// constants of the rule. The call itself also cuts the output to the free context.
+    fn limits_view(settings: &Settings, p: &Profile) -> Value {
+        let model_max = (!p.endpoint.is_empty())
+            .then(|| super::context::cached_limits(&context_target(settings, p.clone())))
+            .and_then(|l| l.model_max_output);
+        let output = super::limits::profile_output_limit(p.max_output, model_max);
+        let local = is_local_endpoint(&p.endpoint).unwrap_or(false);
+        let timeout = super::limits::timeout(
+            settings.timeouts.endpoint(local),
+            p.timeout_secs.map(Duration::from_secs),
+            0,
+            None,
+        );
+        let catalog = super::cost::price_for_endpoint(&p.kind, &p.endpoint, &p.model)
+            .ok()
+            .flatten()
+            .map(|(price, _)| price);
+        let rate_entry = |profile_val: Option<u64>, catalog_val: Option<u64>| {
+            profile_val
+                .map(|value| json!({"value": value, "source": "profile"}))
+                .or_else(|| catalog_val.map(|value| json!({"value": value, "source": "catalog"})))
+        };
+        json!({
+            "maxOutput": {"value": output.tokens, "source": output.source},
+            "timeout": {"seconds": timeout.duration.as_secs(), "source": timeout.source},
+            "timeoutMsPer1kInputTokens": super::limits::TIMEOUT_MS_PER_1K_INPUT_TOKENS,
+            "minUsefulOutput": super::limits::MIN_USEFUL_OUTPUT_TOKENS,
+            "tokensPerRequest": rate_entry(p.tokens_per_request, catalog.as_ref().and_then(|c| c.tokens_per_request)),
+            "tokensPerMinute": rate_entry(p.tokens_per_minute, catalog.as_ref().and_then(|c| c.tokens_per_minute)),
+            "tokensPerDay": rate_entry(p.tokens_per_day, catalog.as_ref().and_then(|c| c.tokens_per_day)),
+        })
+    }
     fn profile_view(settings: &Settings, p: &Profile) -> Value {
-        let price = super::cost::price_for(&p.kind, &p.model)
+        let price = super::cost::price_for_endpoint(&p.kind, &p.endpoint, &p.model)
             .ok()
             .flatten()
             .map(|(price, source)| {
@@ -463,6 +616,10 @@ mod settings {
         json!({
             "id": p.id, "label": p.label, "kind": p.kind, "endpoint": p.endpoint,
             "model": p.model, "nativeSchema": p.native_schema, "context": p.context,
+            "maxOutput": p.max_output, "timeoutSecs": p.timeout_secs,
+            "tokensPerRequest": p.tokens_per_request, "tokensPerMinute": p.tokens_per_minute,
+            "tokensPerDay": p.tokens_per_day,
+            "limits": limits_view(settings, p),
             "ownKey": p.vault_account.is_some(),
             "keyLastFour": metadata(settings, &p.account()).key_last_four,
             "local": is_local_endpoint(&p.endpoint).unwrap_or(false),
@@ -555,16 +712,45 @@ mod settings {
             Some(false) => stale = vault_account.take(),
             None => {}
         }
-        let context = match args.get("context") {
-            None => existing.and_then(|i| list[i].context),
-            Some(Value::Null) => None,
-            Some(value) => Some(
-                value
-                    .as_u64()
-                    .filter(|n| *n > 0 && *n <= u32::MAX as u64)
-                    .ok_or_else(|| error("invalid_settings", "Invalid context"))?,
-            ),
+        let parse_limit = |field: &str, existing_val: Option<u64>, msg: &str| match args.get(field)
+        {
+            None => Ok(existing_val),
+            Some(Value::Null) => Ok(None),
+            Some(value) => value
+                .as_u64()
+                .filter(|n| *n > 0 && *n <= u32::MAX as u64)
+                .map(Some)
+                .ok_or_else(|| error("invalid_settings", msg)),
         };
+        let context = parse_limit(
+            "context",
+            existing.and_then(|i| list[i].context),
+            "Invalid context",
+        )?;
+        let max_output = parse_limit(
+            "maxOutput",
+            existing.and_then(|i| list[i].max_output),
+            "Invalid max output",
+        )?;
+        let timeout_secs = match args.get("timeoutSecs") {
+            None => existing.and_then(|i| list[i].timeout_secs),
+            Some(value) => super::control::parse_seconds(value)?,
+        };
+        let tokens_per_request = parse_limit(
+            "tokensPerRequest",
+            existing.and_then(|i| list[i].tokens_per_request),
+            "Invalid tokens per request",
+        )?;
+        let tokens_per_minute = parse_limit(
+            "tokensPerMinute",
+            existing.and_then(|i| list[i].tokens_per_minute),
+            "Invalid tokens per minute",
+        )?;
+        let tokens_per_day = parse_limit(
+            "tokensPerDay",
+            existing.and_then(|i| list[i].tokens_per_day),
+            "Invalid tokens per day",
+        )?;
         let profile = Profile {
             id: target.into(),
             label,
@@ -577,6 +763,11 @@ mod settings {
                 .unwrap_or(false),
             vault_account,
             context,
+            max_output,
+            timeout_secs,
+            tokens_per_request,
+            tokens_per_minute,
+            tokens_per_day,
         };
         match existing {
             Some(i) => list[i] = profile,
@@ -726,6 +917,7 @@ mod settings {
             file.entries.retain(|entry| entry.profile != id);
             let _ = calibration_save(&file);
         }
+        super::context::forget(id);
         Ok(json!({}))
     }
     fn key_set(args: Value, _: &mut EventSink<'_>) -> CommandResult {
@@ -803,7 +995,7 @@ mod settings {
                 return crate::provider_cli::CliProvider(kind, timeout)
                     .structured_with(&request, cancel);
             }
-            Picked::Profile(profile) => profile,
+            Picked::Profile(profile) => *profile,
         };
         let settings = {
             let _guard = locked()?;
@@ -816,35 +1008,65 @@ mod settings {
                 "Confirm sending text to this provider first",
             ));
         }
+        let mut request: StructuredRequest = serde_json::from_value(args)
+            .map_err(|_| error("invalid_request", "Invalid structured request"))?;
+        request.native_schema = profile.native_schema;
+        // Output limit (#147), after the vetoes and before the vault and the network: a call
+        // with no room for an answer is refused here, with nothing sent and nothing recorded.
+        let target = context_target(&settings, profile.clone());
+        let known = super::context::cached_limits(&target);
+        let input_high = super::cost::token_range(&profile.id, &profile.model, &request)?.high;
+        let ceiling = super::limits::output_ceiling(super::limits::CeilingInput {
+            ask: request.max_output_tokens,
+            profile: profile.max_output,
+            model: known.model_max_output,
+            requires_ceiling: profile.kind == "anthropic",
+        });
+        request.max_output_tokens = super::limits::apply_free_space(
+            ceiling,
+            super::limits::Space {
+                context: known.context,
+                input_high,
+                reasoning: super::limits::DEFAULT_REASONING_RESERVE,
+            },
+        )?
+        .map(|limit| limit.tokens);
         let account = profile.account();
         let key = if metadata(&settings, &account).key_last_four.is_some() {
             Some(vault_get(&account)?)
         } else {
             None
         };
-        let mut request: StructuredRequest = serde_json::from_value(args)
-            .map_err(|_| error("invalid_request", "Invalid structured request"))?;
-        request.native_schema = profile.native_schema;
+        let limits = (profile.timeout_secs, input_high);
         match profile.kind.as_str() {
             "" | "openai" => {
-                let mut p = OpenAiProvider::new(profile.endpoint, profile.model, key)?;
+                let sent = super::context::cached_sent(&target);
+                let mut p = OpenAiProvider::new(profile.endpoint, profile.model, key)?
+                    .with_timeouts(settings.timeouts)
+                    .with_context(sent)
+                    .with_call_limits(limits.0, limits.1);
                 p.confirm(consent.confirmed);
-                p.structured(&request)
+                p.structured_with(&request, cancel)
             }
             "anthropic" => {
-                let mut p = AnthropicProvider::new(profile.endpoint, profile.model, key)?;
+                let mut p = AnthropicProvider::new(profile.endpoint, profile.model, key)?
+                    .with_timeouts(settings.timeouts)
+                    .with_call_limits(limits.0, limits.1);
                 p.confirm(consent.confirmed);
-                p.structured(&request)
+                p.structured_with(&request, cancel)
             }
             "gemini" => {
-                let mut p = GeminiProvider::new(profile.endpoint, profile.model, key)?;
+                let mut p = GeminiProvider::new(profile.endpoint, profile.model, key)?
+                    .with_timeouts(settings.timeouts)
+                    .with_call_limits(limits.0, limits.1);
                 p.confirm(consent.confirmed);
-                p.structured(&request)
+                p.structured_with(&request, cancel)
             }
             "ollama" => {
                 let mut p = OllamaProvider::new(profile.endpoint, profile.model, key)?
                     .with_timeouts(settings.timeouts)
-                    .with_context(profile.context);
+                    .with_context(Some(known.context))
+                    .with_call_limits(limits.0, limits.1);
                 p.confirm(consent.confirmed);
                 p.structured_with(&request, cancel)
             }
@@ -877,6 +1099,19 @@ mod settings {
         result
     }
     fn test(args: Value, events: &mut EventSink<'_>) -> CommandResult {
+        // Optional, explicit and local only (#145): measures the context with a synthetic text.
+        if args["probeContext"] == true {
+            let explicit = args.get("profileId").and_then(Value::as_str);
+            return match context_pick(None, explicit)? {
+                ContextPick::Cli(_) => Err(error(
+                    "probe_not_local",
+                    "The context probe only runs on a local provider",
+                )),
+                ContextPick::Profile(target) => {
+                    super::context::probe(target, &CancelToken::default())
+                }
+            };
+        }
         let (native, profile_id) = {
             let _guard = locked()?;
             let settings = read()?;
@@ -913,10 +1148,10 @@ mod settings {
             net::TcpListener,
             thread,
         };
-        static GUARD: Mutex<()> = Mutex::new(());
-        /// Serializes the tests that share the settings file and the fake vault, and resets both.
+        /// Serializes the tests that share the settings file, the fake vault and `CLIPES_DATA_DIR`
+        /// (#188), and resets the first two.
         fn fresh() -> std::sync::MutexGuard<'static, ()> {
-            let guard = GUARD.lock().unwrap_or_else(|e| e.into_inner());
+            let guard = crate::test_env::lock();
             let _ = fs::remove_file(path().unwrap());
             FAKE_VAULT.lock().unwrap().clear();
             guard
@@ -1300,6 +1535,90 @@ mod security_tests {
             "timeout_uncertain"
         );
         assert_eq!(server.join().unwrap(), 1);
+    }
+
+    /// A server that answers the first connection after `delay` (valid OpenAI reply).
+    fn delayed(delay: Duration) -> (String, thread::JoinHandle<usize>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = format!("http://{}/v1", listener.local_addr().unwrap());
+        listener.set_nonblocking(true).unwrap();
+        let server = thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(3);
+            let mut connections = 0;
+            while Instant::now() < deadline {
+                if let Ok((mut stream, _)) = listener.accept() {
+                    connections += 1;
+                    let _ = super::test_http::read_request(&mut stream);
+                    thread::sleep(delay);
+                    let body = json!({"choices":[{"message":{"content":"{\"schemaVersion\":1}"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":3}}).to_string();
+                    let _ = std::io::Write::write_all(
+                        &mut stream,
+                        format!(
+                            "HTTP/1.1 200 OK
+Content-Length: {}
+Connection: close
+
+{body}",
+                            body.len()
+                        )
+                        .as_bytes(),
+                    );
+                }
+                thread::sleep(Duration::from_millis(5));
+            }
+            connections
+        });
+        (endpoint, server)
+    }
+
+    #[test]
+    fn default_timeout_grows_with_the_input_and_the_budget_caps_every_timeout() {
+        // Base 1 s; the same 1.5 s answer times out for a tiny input and succeeds when the
+        // estimated input adds 3 s.
+        let timeouts = Timeouts {
+            local: Some(1),
+            remote: Some(1),
+        };
+        let (endpoint, server) = delayed(Duration::from_millis(1500));
+        let small = OpenAiProvider::new(endpoint, "model".into(), None)
+            .unwrap()
+            .with_timeouts(timeouts);
+        assert_eq!(
+            small.structured(&input()).unwrap_err().code,
+            "timeout_uncertain"
+        );
+        server.join().unwrap();
+        let (endpoint, server) = delayed(Duration::from_millis(1500));
+        let big = OpenAiProvider::new(endpoint, "model".into(), None)
+            .unwrap()
+            .with_timeouts(timeouts)
+            .with_call_limits(None, 3_000);
+        assert!(big.structured(&input()).is_ok());
+        server.join().unwrap();
+
+        // The profile's 30 s is capped by the 300 ms the executor has left.
+        let (endpoint, server) = delayed(Duration::from_millis(1500));
+        let capped = OpenAiProvider::new(endpoint, "model".into(), None)
+            .unwrap()
+            .with_call_limits(Some(30), 0);
+        let started = Instant::now();
+        let (reply, _) = control::with_call_scope(None, None, || {
+            control::set_deadline(Some(Instant::now() + Duration::from_millis(300)));
+            capped.structured(&input())
+        });
+        assert_eq!(reply.unwrap_err().code, "timeout_uncertain");
+        assert!(started.elapsed() < Duration::from_secs(1));
+        server.join().unwrap();
+
+        // With no time left nothing is sent.
+        let (endpoint, server) = delayed(Duration::ZERO);
+        let none = OpenAiProvider::new(endpoint, "model".into(), None).unwrap();
+        let (reply, _) = control::with_call_scope(None, None, || {
+            control::set_deadline(Some(Instant::now()));
+            none.structured(&input())
+        });
+        assert_eq!(reply.unwrap_err().code, "time_budget_exhausted");
+        assert_eq!(server.join().unwrap(), 0);
     }
 
     #[test]

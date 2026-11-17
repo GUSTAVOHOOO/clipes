@@ -1,0 +1,246 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "id": "whisper-turbo",
+      "label": "Whisper large-v3-turbo (GPU NVIDIA)",
+      "repo": "dropbox-dash/faster-whisper-large-v3-turbo",
+      "former_repo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+      "revision": "0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf",
+      "license": "MIT",
+      "device": "cuda",
+      "files": [
+        {
+          "name": "config.json",
+          "size": 2263,
+          "sha256": "b0253ea6c0d3bea6b1e19e91a02acfd3b53f4467362efcb5a3e6b16c9b3a9b7e"
+        },
+        {
+          "name": "model.bin",
+          "size": 1617884929,
+          "sha256": "e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da"
+        },
+        {
+          "name": "preprocessor_config.json",
+          "size": 340,
+          "sha256": "7ccc62c6f2765af1f3b46c00c9b5894426835a05021c8b9c01eecb6dfb542711"
+        },
+        {
+          "name": "tokenizer.json",
+          "size": 2710337,
+          "sha256": "297b13372ac43916285644fb9687add3cc62ee2a1adb60da3dc25cc94c1871fd"
+        },
+        {
+          "name": "vocabulary.json",
+          "size": 1068114,
+          "sha256": "c69260f2ab26d659b7c398f9a2b2b48ed0df16c3b47d7326782fd9cba71690c1"
+        }
+      ]
+    },
+    {
+      "id": "whisper-small",
+      "label": "Whisper small (CPU)",
+      "repo": "Systran/faster-whisper-small",
+      "former_repo": null,
+      "revision": "536b0662742c02347bc0e980a01041f333bce120",
+      "license": "MIT",
+      "device": "cpu",
+      "files": [
+        {
+          "name": "config.json",
+          "size": 2370,
+          "sha256": "b55496ac7940a7ae47d2c01eab40edfd8701feec1229d9cce3b40014383fb828"
+        },
+        {
+          "name": "model.bin",
+          "size": 483546902,
+          "sha256": "3e305921506d8872816023e4c273e75d2419fb89b24da97b4fe7bce14170d671"
+        },
+        {
+          "name": "tokenizer.json",
+          "size": 2203239,
+          "sha256": "fb7b63191e9bb045082c79fd742a3106a12c99513ab30df4a0d47fa6cb6fd0ab"
+        },
+        {
+          "name": "vocabulary.txt",
+          "size": 459861,
+          "sha256": "34ce3fe1c5041027b3f8d42912270993f986dbc4bb34cf27f951e34a1e453913"
+        }
+      ]
+    },
+    {
+      "id": "yunet",
+      "label": "YuNet (reenquadramento)",
+      "repo": "opencv/opencv_zoo",
+      "former_repo": null,
+      "revision": "48b10fa505aeb51fbd127fc60a5c660040e823b7",
+      "license": "MIT",
+      "device": "cpu",
+      "files": [
+        {
+          "name": "face_detection_yunet_2023mar.onnx",
+          "size": 232589,
+          "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"
+        }
+      ]
+    }
+  ],
+  "tts": {
+    "voice_release_base_url": "https://github.com/GUSTAVOHOOO/clipes/releases/download/tts-voices-1",
+    "engines": [
+      {
+        "id": "pocket-tts",
+        "label": "Pocket TTS (Kyutai)",
+        "component_id": "pocket-tts",
+        "code_license": "MIT",
+        "source_url": "https://github.com/kyutai-labs/pocket-tts/tree/v4.0.1",
+        "supports_quantize": true
+      }
+    ],
+    "models": [
+      {
+        "id": "portuguese_24l",
+        "engine_id": "pocket-tts",
+        "language": "pt",
+        "label": "Pocket TTS PT-BR (24 camadas · padrão)",
+        "description": "Qualidade superior em PT-BR (336M parâmetros); roda em CPU com quantização int8.",
+        "default_for_language": true,
+        "lightweight": false,
+        "repo": "kyutai/pocket-tts-without-voice-cloning",
+        "revision": "a7056f505a4a8ca72d8b5fb1440071d6f1a35739",
+        "license": "CC-BY-4.0",
+        "files": [
+          {
+            "name": "model.safetensors",
+            "url": "https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/resolve/a7056f505a4a8ca72d8b5fb1440071d6f1a35739/languages/portuguese_24l/model.safetensors",
+            "size": 672178676,
+            "sha256": "ce7911fe914d055e55dcb8dcc973f735d9f51d09fe6fec4fe35d80ac2c9d9670"
+          },
+          {
+            "name": "tokenizer.json",
+            "url": "https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/resolve/a7056f505a4a8ca72d8b5fb1440071d6f1a35739/languages/portuguese_24l/tokenizer.json",
+            "size": 247014,
+            "sha256": "b33e269f7f042a763080d71ba087d74d2f6759674b238a723c028e436b1a25ab"
+          }
+        ]
+      },
+      {
+        "id": "portuguese",
+        "engine_id": "pocket-tts",
+        "language": "pt",
+        "label": "Pocket TTS PT-BR (6 camadas · leve)",
+        "description": "Variante destilada mais rápida (~4× tempo real em CPU) e menor download (219 MB).",
+        "default_for_language": false,
+        "lightweight": true,
+        "repo": "kyutai/pocket-tts-without-voice-cloning",
+        "revision": "a7056f505a4a8ca72d8b5fb1440071d6f1a35739",
+        "license": "CC-BY-4.0",
+        "files": [
+          {
+            "name": "model.safetensors",
+            "url": "https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/resolve/a7056f505a4a8ca72d8b5fb1440071d6f1a35739/languages/portuguese/model.safetensors",
+            "size": 219029196,
+            "sha256": "28e20f32515ba8bd0eaec69671f11f8921414fcdc375aa072fa09f46cc1057c5"
+          },
+          {
+            "name": "tokenizer.json",
+            "url": "https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/resolve/a7056f505a4a8ca72d8b5fb1440071d6f1a35739/languages/portuguese/tokenizer.json",
+            "size": 247014,
+            "sha256": "b33e269f7f042a763080d71ba087d74d2f6759674b238a723c028e436b1a25ab"
+          }
+        ]
+      },
+      {
+        "id": "english",
+        "engine_id": "pocket-tts",
+        "language": "en",
+        "label": "Pocket TTS EN (6 camadas · padrão)",
+        "description": "Modelo oficial em inglês (109M parâmetros) para roteiros em EN.",
+        "default_for_language": true,
+        "lightweight": true,
+        "repo": "kyutai/pocket-tts-without-voice-cloning",
+        "revision": "a7056f505a4a8ca72d8b5fb1440071d6f1a35739",
+        "license": "CC-BY-4.0",
+        "files": [
+          {
+            "name": "model.safetensors",
+            "url": "https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/resolve/a7056f505a4a8ca72d8b5fb1440071d6f1a35739/languages/english/model.safetensors",
+            "size": 219029196,
+            "sha256": "4c56cbd171c63e8a26ea61f5d48b8a0cd8f3c51f4652c0ab9a19bfcced8c931d"
+          },
+          {
+            "name": "tokenizer.json",
+            "url": "https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/resolve/a7056f505a4a8ca72d8b5fb1440071d6f1a35739/languages/english/tokenizer.json",
+            "size": 245020,
+            "sha256": "f498428e1eafee50492f7be13dc9bfafcfc12e508cd0eb1b01c92ecd5d8c6687"
+          }
+        ]
+      }
+    ],
+    "voices": [
+      {
+        "id": "13063",
+        "engine_id": "pocket-tts",
+        "language": "pt",
+        "gender": "male",
+        "label": "Narrador PT-BR 13063 (masculina)",
+        "default_for_language": true,
+        "license": "CC-BY-4.0",
+        "attribution": "BRSpeech-TTS / CML-TTS (CEIA/UFG, CC-BY 4.0) a partir de gravação LibriVox em domínio público",
+        "source_url": "https://huggingface.co/datasets/freds0/BRSpeech-TTS",
+        "embeddings": [
+          {
+            "model_id": "portuguese_24l",
+            "filename": "13063-pt-24l.safetensors",
+            "size": 28906528,
+            "sha256": "1047a37288518872f9759d8802495d1e045a98463077ac81366fafe445283078"
+          },
+          {
+            "model_id": "portuguese",
+            "filename": "13063-pt-6l.safetensors",
+            "size": 7226616,
+            "sha256": "529b2693901f4fa6a06b2fa9060833bd7e95e10f6a3c5c55d09f08bdf21c7a27"
+          }
+        ]
+      },
+      {
+        "id": "alba",
+        "engine_id": "pocket-tts",
+        "language": "en",
+        "gender": "female",
+        "label": "Alba (EN, feminina)",
+        "default_for_language": true,
+        "license": "CC-BY-4.0",
+        "attribution": "Alba MacKenna (kyutai/tts-voices/alba-mackenna/casual.wav, CC-BY 4.0)",
+        "source_url": "https://huggingface.co/kyutai/tts-voices/tree/323332d33f997de8394f24a193e1a76df720e01a/alba-mackenna",
+        "embeddings": [
+          {
+            "model_id": "english",
+            "filename": "alba-en.safetensors",
+            "size": 6243576,
+            "sha256": "c10abce6ca7a66cb2b9b24265490f482bb9a9c761818c810f161d59825a7837b"
+          }
+        ]
+      },
+      {
+        "id": "marius",
+        "engine_id": "pocket-tts",
+        "language": "en",
+        "gender": "male",
+        "label": "Marius (EN, masculina)",
+        "default_for_language": false,
+        "license": "CC0-1.0",
+        "attribution": "Unmute Voice Donation Project (kyutai/tts-voices/voice-donations/Selfie.wav, CC0 1.0)",
+        "source_url": "https://huggingface.co/kyutai/tts-voices/tree/323332d33f997de8394f24a193e1a76df720e01a/voice-donations",
+        "embeddings": [
+          {
+            "model_id": "english",
+            "filename": "marius-en.safetensors",
+            "size": 6243576,
+            "sha256": "d6e31471c4636fc5885657486f595b46bd2b8ec356c92c0409ef8beff6cafe1a"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -4,7 +4,7 @@
 
 O Clipes é um app de desktop gratuito e open source. Você dá a ele uma live de 4 horas e ele acha os melhores momentos, corta, coloca legenda palavra por palavra, ajusta para o formato vertical (9:16) e exporta. Tudo roda na sua máquina, sem marca d'água, sem assinatura e sem mandar seu vídeo para a nuvem.
 
-> **Status: em construção (pré-v1).** A base do app está pronta, mas o fluxo completo de "importar uma live e sair com os Cortes" ainda está sendo montado. Ainda não há versão estável. Veja [Em que pé estamos](#em-que-pé-estamos).
+> **Status: pré-v1 (núcleo completo).** O núcleo da v1 já executa o fluxo inteiro (da importação da live à exportação dos Cortes), ligado às telas iniciais; a interface ainda está sendo refinada antes da primeira versão estável. Veja [Em que pé estamos](#em-que-pé-estamos).
 
 ## Por que existe
 
@@ -38,13 +38,13 @@ Dois tipos de canal, com dois tipos de vídeo:
 
 ## Em que pé estamos
 
-Atualizado em 15/11/2026. O plano completo está na issue [#26](https://github.com/GUSTAVOHOOO/clipes/issues/26).
+Atualizado em 17/11/2026. O plano completo está na issue [#26](https://github.com/GUSTAVOHOOO/clipes/issues/26).
 
 ### O que já foi construído
 
 **A base do app**
-- Aplicativo desktop com instaladores para Windows e Linux, atualização assinada e CI automatizado.
-- Download sob demanda de FFmpeg e yt-dlp, com verificação de integridade. Nada é baixado sem você confirmar.
+- Aplicativo desktop com instaladores para Windows e Linux (validado em ambos no CI), atualização assinada e CI automatizado.
+- Download sob demanda de FFmpeg, yt-dlp, deno e Pocket TTS, com verificação de integridade. Nada é baixado sem você confirmar.
 - Checagem automática de licenças e vulnerabilidades das dependências.
 
 **O design system "Foco"**
@@ -55,35 +55,35 @@ Atualizado em 15/11/2026. O plano completo está na issue [#26](https://github.c
 **Projetos e Fontes**
 - Um Projeto é uma pasta portátil com um banco SQLite, que você pode levar para outro computador.
 - Backup automático rotativo e restauração verificada.
-- Importação de vídeo local ou por link (yt-dlp), com registro da Permissão do streamer.
+- Importação de vídeo local ou por link (yt-dlp), com registro e edição da Permissão do streamer e processamento em lote.
 - Fila de tarefas que continua de onde parou se o app fechar.
 
-**Transcrição local**
-- Roda no seu PC com faster-whisper, usando a GPU NVIDIA quando existe. Numa RTX 3050 ficou mais rápida que o tempo real.
-- Trabalha em blocos com checkpoint: se travar, retoma sem refazer tudo.
-- A transcrição é dividida em frases navegáveis.
+**Transcrição**
+- Roda no seu PC com faster-whisper, detectando GPU NVIDIA ou CPU automaticamente. Numa RTX 3050 ficou mais rápida que o tempo real.
+- Opção de transcrição remota pelo Groq (envia só o áudio, com estimativa de custo e confirmação).
+- Trabalha em blocos com checkpoint, divide em frases navegáveis e tem correção e busca na transcrição.
 - Foi medida contra um conjunto de VODs reais, em português e inglês.
 
 **IA e provedores**
-- Funciona com OpenAI, Anthropic, Gemini, Ollama, qualquer endpoint compatível com OpenAI e os CLIs Codex e Claude Code (experimentais).
-- Você pode ter vários perfis de provedor e dizer qual usar em cada tarefa.
-- Custo por chamada, orçamento por tarefa e por lote, e um modo "somente local" que veta qualquer envio externo.
+- Funciona com OpenAI, Anthropic, Gemini, Ollama, qualquer endpoint compatível com OpenAI e os CLIs Codex, Claude Code e OpenCode (experimentais).
+- Perfis de provedor, catálogo de modelos com faixas de preço, formato compacto das frases, custo por chamada, orçamento por tarefa e por lote, trilha de auditoria e modo "somente local" por tarefa e por Projeto.
 - Uma chamada paga com resultado incerto nunca é repetida às cegas.
 
-### O que está sendo feito agora
+**Seleção de Cortes, editor e exportação**
+- Seleção de Cortes com janelas ajustadas ao contexto do modelo, energia do áudio, replay de chat do YouTube e nota explicável, com revisão de candidatos e opção de refazer com outro perfil.
+- Editor com preview por proxy, timeline, ajuste de bordas, remoção de silêncios, legenda karaokê personalizável e reenquadramento 9:16 (YuNet, layouts e crop manual).
+- Exportação individual e em lote com FFmpeg e libass, loudness em duas passagens e detecção de encoder (NVENC, QSV, AMF, VideoToolbox e x264).
 
-- Transcrição remota opcional pelo Groq ([#51](https://github.com/GUSTAVOHOOO/clipes/issues/51)).
-- Suporte ao OpenCode como provedor ([#135](https://github.com/GUSTAVOHOOO/clipes/issues/135)).
-- Formato compacto das frases para gastar menos tokens ([#140](https://github.com/GUSTAVOHOOO/clipes/issues/140)).
-- Catálogo de modelos e custo por faixa de tokens ([#141](https://github.com/GUSTAVOHOOO/clipes/issues/141)).
+**Vídeo transformado e Empacotamento**
+- Escolha de ângulo, Roteiro em blocos com trava antes da narração, Narração (Pocket TTS local, gravação com teleprompter ou áudio importado), alinhamento por palavra, redução automática do volume da Fonte (ducking), trilha sonora e efeitos.
+- Empacotamento (título, descrição, tags, ideia de thumbnail/capa, capítulos), tradução de legenda (PT-BR ↔ EN), Perfil de canal e guarda-corpos de monetização antes de exportar.
 
 ### O que falta para a v1
 
-- **Escolher os Cortes com IA** (o coração do produto): lidar com lives longas dentro da janela de contexto do modelo, pontuar os momentos, revisar os candidatos e medir a qualidade.
-- **Editor real e export:** preview de vídeo, timeline, legenda karaokê no vídeo final, reenquadramento 9:16, remoção de silêncios e export em lote.
-- **Vídeo transformado:** Roteiro em blocos, Narração (TTS, gravação ou importação), redução automática do volume da Fonte quando há fala, trilha e efeitos.
-- **Empacotamento:** título, descrição, tags, ideia de thumbnail, capítulos e tradução de legenda.
-- **Qualidade:** avisos sobre monetização e originalidade, Perfil de canal, validação no Linux e testes com provedores reais.
+- **Interface v2:** reorganizar as telas atuais para deixar a jornada mais fluida (o núcleo já expõe todas as funcionalidades da v1; veja [funcionalidades do núcleo](docs/produto/funcionalidades.md)).
+- **Lançamento:** publicar a primeira release estável assinada.
+
+O que fica para depois da v1 está listado em [melhorias futuras](docs/futuro.md).
 
 ## Tecnologias
 
@@ -92,7 +92,7 @@ Atualizado em 15/11/2026. O plano completo está na issue [#26](https://github.c
 | Aplicativo desktop | [Tauri 2](https://tauri.app/): leve e usa o navegador do sistema |
 | Interface | React, TypeScript e Bun, com componentes Base UI e cores em OKLCH |
 | Núcleo do app | Rust: Projetos, fila de tarefas, provedores de IA e componentes |
-| Transcrição e modelos de ML | Python (gerenciado pelo `uv`) com faster-whisper |
+| Transcrição e modelos de ML | Python (gerenciado pelo `uv`) com faster-whisper e YuNet; Pocket TTS para narração |
 | Armazenamento | SQLite, uma pasta portátil por Projeto |
 | Vídeo | FFmpeg e libass para o render e as legendas |
 | Importação por link | yt-dlp, com atualização verificada por assinatura |
@@ -116,7 +116,13 @@ As decisões e os motivos estão nos [ADRs](docs/adr/). O vocabulário do projet
 
 Baixe o instalador na página de [releases](https://github.com/GUSTAVOHOOO/clipes/releases). No Windows, o instalador NSIS instala para o usuário atual, sem exigir administrador. No Linux há AppImage e `.deb`. Os instaladores não incluem FFmpeg, Python nem modelos: você os baixa pela tela de Componentes, vendo o tamanho e a licença de cada um.
 
-O beta do Windows ainda não tem assinatura de código, então o SmartScreen pode avisar que o app é desconhecido. Confira o SHA-256 do arquivo com o `SHA256SUMS.txt` da release. Se confiar, escolha **Mais informações** e depois **Executar assim mesmo**. No PowerShell: `Get-FileHash .\<instalador.exe> -Algorithm SHA256`.
+No Linux, o pacote `.deb` já declara as dependências GStreamer para o preview (`gstreamer1.0-plugins-good`, `gstreamer1.0-plugins-bad` e `gstreamer1.0-libav`). O **AppImage** não embute GStreamer nem `libav` (`bundleMediaFramework: false`, conforme o [ADR-0003](docs/adr/0003-licenca-apache-ffmpeg-sob-demanda-e-politica-de-modelos.md)) e depende dos codecs do sistema hospedeiro; em Debian/Ubuntu sem esses pacotes, instale:
+
+```sh
+sudo apt install gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav
+```
+
+O beta do Windows ainda não tem assinatura de código. Por isso, o Microsoft Defender SmartScreen pode avisar que o aplicativo é desconhecido. Confira a origem e o SHA-256 do arquivo com o `SHA256SUMS.txt` publicado na release; se confiar no arquivo, escolha **Mais informações** e depois **Executar assim mesmo** no aviso. No PowerShell, calcule o hash com `Get-FileHash .\<instalador.exe> -Algorithm SHA256`.
 
 ## Quer ajudar?
 
