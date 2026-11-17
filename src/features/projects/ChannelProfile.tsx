@@ -3,6 +3,7 @@ import { coreDispatch } from '@/lib/core';
 import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import type { CaptionStyle } from '@/features/captions/types';
+import { GUARDRAILS_UPDATED_EVENT, guardrailsTexts } from '@/features/guardrails/GuardrailsPanel';
 import { VideoKindPicker, type VideoKind } from './videoKind';
 
 export const CHANNEL_PROFILE_UPDATED_EVENT = 'clipes:channel-profile-updated';
@@ -21,6 +22,7 @@ export type ChannelProfileData = {
   captionStyle: CaptionStyle;
   allowedSources: AllowedSource[];
   narrationVoice: string | null;
+  directMonetizationAck?: boolean;
   limits: {
     defaultMinUs: number;
     defaultMaxUs: number;
@@ -151,6 +153,7 @@ function validHttpUrl(value: string): boolean {
 /** Perfil de canal (#72): escolhas padrão do Projeto aberto, sem credenciais sociais nem Provedor. */
 export function ChannelProfile({ projectId }: { projectId: string }) {
   const t = useText(texts);
+  const directNotice = useText(guardrailsTexts).directNotice;
   const [profile, setProfile] = useState<ChannelProfileData | null>(null);
   const [languages, setLanguages] = useState<LanguageOption[]>([
     { code: 'pt', name: 'portuguese' },
@@ -180,6 +183,11 @@ export function ChannelProfile({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     void load().catch(() => setError(t.loadError));
+    const onGuardrails = () => {
+      void load().catch(() => {});
+    };
+    window.addEventListener(GUARDRAILS_UPDATED_EVENT, onGuardrails);
+    return () => window.removeEventListener(GUARDRAILS_UPDATED_EVENT, onGuardrails);
   }, [projectId, load, t.loadError]);
 
   function addAllowedSource() {
@@ -471,6 +479,19 @@ export function ChannelProfile({ projectId }: { projectId: string }) {
           <p role="note" className="rounded-md border border-line bg-field p-3 text-fg-2">
             {t.cadence}
           </p>
+
+          <section
+            data-direct-notice-review
+            data-direct-notice-status={profile.directMonetizationAck ? 'acknowledged' : 'pending'}
+            className="rounded-md border border-line bg-field p-3 text-fg-2"
+            aria-label={directNotice.sectionTitle}
+          >
+            <p className="font-medium text-fg">{directNotice.sectionTitle}</p>
+            <p className="mt-1">{directNotice.description}</p>
+            <p className="mt-1 text-xs">
+              {profile.directMonetizationAck ? directNotice.ackedStatus : directNotice.pendingStatus}
+            </p>
+          </section>
 
           <div className="flex flex-wrap items-center gap-3">
             <Button variante="primario" disabled={busy} onClick={() => void save()}>

@@ -69,6 +69,7 @@ pub mod corrections;
 pub mod editor;
 pub mod energy;
 pub mod export;
+pub mod guardrails;
 pub mod jobs;
 pub mod media;
 pub mod montage;

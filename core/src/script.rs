@@ -1210,6 +1210,41 @@ pub fn narration_allowed(candidate: i64) -> Result<(), CoreError> {
     gate(&refresh(&cut)?)
 }
 
+pub(crate) struct GuardrailScriptStatus {
+    pub has_script: bool,
+    pub approved: bool,
+    pub pending_blocks: usize,
+    pub total_blocks: usize,
+}
+
+/// Estado resumido do Roteiro para o checklist informativo pré-export (#76).
+pub(crate) fn guardrail_status(candidate: i64) -> Result<Option<GuardrailScriptStatus>, CoreError> {
+    let cut = match context(candidate) {
+        Ok(c) => c,
+        Err(e) if e.code == "script_requires_transformed" => return Ok(None),
+        Err(e) => return Err(e),
+    };
+    let gens = refresh(&cut)?;
+    let Some(shown) = latest_with_blocks(&gens) else {
+        return Ok(Some(GuardrailScriptStatus {
+            has_script: false,
+            approved: false,
+            pending_blocks: 0,
+            total_blocks: 0,
+        }));
+    };
+    let total_blocks = shown.blocks.len();
+    let pending_blocks = shown.blocks.iter().filter(|b| !b.approved()).count();
+    let approved =
+        !gens.last().is_some_and(Generation::busy) && pending_blocks == 0 && total_blocks > 0;
+    Ok(Some(GuardrailScriptStatus {
+        has_script: true,
+        approved,
+        pending_blocks,
+        total_blocks,
+    }))
+}
+
 /// `script.narration_allowed {candidate}`: `{allowed: true}` ou o erro `script_not_approved`.
 fn cmd_narration_allowed(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     narration_allowed(candidate_arg(&v)?)?;

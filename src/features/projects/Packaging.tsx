@@ -3,6 +3,7 @@ import { coreDispatch } from '@/lib/core';
 import { LanguageContext, useText, type Language } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { AiDisclosureNote } from '@/features/guardrails/GuardrailsPanel';
 import { fill } from './selectionFormat';
 
 type Limits = { titleChars: number; descriptionBytes: number; tagsChars: number; tags: number; tagChars: number; hashtags: number };
@@ -144,6 +145,7 @@ export function Packaging({ candidate }: { candidate: number }) {
         <input className={field} value={hashtags} onChange={e => setHashtags(e.target.value)} /></label>
       <div className="flex items-center gap-2"><Button variante="primario" tamanho="sm" onClick={() => void save()}>{t.save}</Button>{note && <span role="status" className="text-xs text-fg-2">{note}</span>}</div>
     </div>}
+    <AiDisclosureNote />
     {error && <p role="alert" className="text-danger">{error}</p>}
     <ConfirmDialog open={pending !== null} onOpenChange={open => { if (!open) setPending(null); }} title={t.confirmTitle}
       description={pending ? fill(t.confirmBody, { cost: cost(pending.estimate) }) : ''} cancelLabel={t.cancel} confirmLabel={t.confirm}
