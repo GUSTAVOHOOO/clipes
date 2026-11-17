@@ -582,7 +582,19 @@ fn cmd_run_arm(args: &[String]) -> Result<(), String> {
         None => None,
     };
 
-    let tag = format!("{}-{}", arm, model.replace(['/', ':', '.'], "_"));
+    let clean_model: String = model
+        .to_ascii_lowercase()
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .take(24)
+        .collect();
+    let tag = format!("{}-{}", arm, clean_model);
     let data_dir = bench_dir.join(format!("data-routing-{tag}"));
     setup_env(&data_dir)?;
 
@@ -812,7 +824,10 @@ fn cmd_run_arm(args: &[String]) -> Result<(), String> {
 
             let violations: Vec<String> = job_result
                 .as_ref()
-                .and_then(|r| r.pointer("/usage/violations"))
+                .and_then(|r| {
+                    r.get("violations")
+                        .or_else(|| r.pointer("/usage/violations"))
+                })
                 .and_then(Value::as_array)
                 .map(|arr| {
                     arr.iter()
