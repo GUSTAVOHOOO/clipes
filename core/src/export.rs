@@ -764,10 +764,12 @@ pub(crate) fn prepare_start_request(
     let _ = crate::jobs::preview::source(request.cut.source_id, project)?;
     check_target_glyphs(&resolved, &style)?;
     let narration = resolve_narration_render(
+        project,
         request.cut.candidate_id,
         request.cut.clip_id,
         &resolved,
         request.resolved_narration_starts.as_ref(),
+        None,
     )?;
     let _ = resolve_audio_render(
         project,
@@ -977,12 +979,15 @@ fn resolve_audio_render(
 }
 
 /// Resolve as faixas de Narração e `tpad` final a partir de `montage::audio_mix_plan` e dos
-/// WAVs gravados pelo #79. Retorna `None` quando o Corte não tem Narração sintetizada.
+/// WAVs gravados pelo #79/#83/#84, aplicando a limpeza de voz (#155) antes do ducking (#82).
+/// Retorna `None` quando o Corte não tem Narração.
 fn resolve_narration_render(
+    project: &Path,
     candidate_id: Option<i64>,
     clip_id: Option<i64>,
     target: &Target,
     frozen_starts: Option<&std::collections::BTreeMap<i64, i64>>,
+    cleanup_ffmpeg: Option<(&Path, &crate::provider::CancelToken)>,
 ) -> Result<Option<render::NarrationRenderInput>, CoreError> {
     let Some(candidate_id) = candidate_id else {
         return Ok(None);
@@ -1033,19 +1038,27 @@ fn resolve_narration_render(
         manual_starts: &manual_starts,
     })?;
     let mix = crate::montage::audio_mix_plan(&plan);
-    let tracks: Vec<render::NarrationTrackInput> = mix
-        .segments
-        .into_iter()
-        .filter_map(|seg| {
-            audio_map
-                .get(&seg.block_id)
-                .map(|audio| render::NarrationTrackInput {
-                    path: audio.path.clone(),
-                    start_us: seg.start_us,
-                    duration_us: audio.duration_us,
-                })
-        })
-        .collect();
+    let mut tracks = Vec::with_capacity(mix.segments.len());
+    for seg in mix.segments {
+        if let Some(audio) = audio_map.get(&seg.block_id) {
+            let (path, duration_us) = match cleanup_ffmpeg {
+                Some((ffmpeg, cancel)) => crate::narration_cleanup::resolve_export_audio_path(
+                    project,
+                    audio.narration_id,
+                    &audio.path,
+                    audio.duration_us,
+                    ffmpeg,
+                    Some(cancel),
+                )?,
+                None => (audio.path.clone(), audio.duration_us),
+            };
+            tracks.push(render::NarrationTrackInput {
+                path,
+                start_us: seg.start_us,
+                duration_us,
+            });
+        }
+    }
     if tracks.is_empty() {
         return Ok(None);
     }
@@ -1180,11 +1193,17 @@ pub(crate) fn run(
             &style,
             target.captions_duration_us,
         )?;
+        let ffmpeg = crate::components::cache_settings()?
+            .2
+            .ok_or_else(|| error("component_missing", "Instale o Componente FFmpeg."))?;
+        let cancel = crate::provider::CancelToken::new();
         let narration = resolve_narration_render(
+            project,
             request.cut.candidate_id,
             request.cut.clip_id,
             &target,
             request.resolved_narration_starts.as_ref(),
+            Some((&ffmpeg, &cancel)),
         )?;
         let extra_audio = resolve_audio_render(
             project,
@@ -1198,9 +1217,6 @@ pub(crate) fn run(
         )?;
         let (source, _, audio, _, _) =
             crate::jobs::preview::source(request.cut.source_id, project)?;
-        let ffmpeg = crate::components::cache_settings()?
-            .2
-            .ok_or_else(|| error("component_missing", "Instale o Componente FFmpeg."))?;
         let crop_plan = request.resolved_crop_plan.or(target.crop_plan);
         let crop = request.resolved_crop.unwrap_or(target.crop);
         let input = render::RenderInput {
@@ -1212,7 +1228,6 @@ pub(crate) fn run(
             words: target.words,
             crop,
         };
-        let cancel = crate::provider::CancelToken::new();
         // Etapa de encoder (#62): detecta na primeira vez, usa o do cache e cai para x264.
         let preferred = encoder::resolve(&ffmpeg, &cancel)?;
         let finished = AtomicBool::new(false);

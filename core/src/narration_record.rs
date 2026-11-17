@@ -134,14 +134,14 @@ fn decode_base64(input: &str) -> Result<Vec<u8>, CoreError> {
 }
 
 #[derive(Clone, Debug)]
-struct PcmAudio {
+pub(crate) struct PcmAudio {
     sample_rate: u32,
     channels: u16,
     /// Amostras normalizadas por quadro intercaladas por canal.
     samples: Vec<f32>,
 }
 
-fn try_parse_wav(bytes: &[u8]) -> Option<PcmAudio> {
+pub(crate) fn try_parse_wav(bytes: &[u8]) -> Option<PcmAudio> {
     if bytes.len() < 44 || &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WAVE" {
         return None;
     }
@@ -219,7 +219,7 @@ fn try_parse_wav(bytes: &[u8]) -> Option<PcmAudio> {
     })
 }
 
-fn to_mono_resampled(audio: &PcmAudio, target_rate: u32) -> Vec<i16> {
+pub(crate) fn to_mono_resampled(audio: &PcmAudio, target_rate: u32) -> Vec<i16> {
     let ch = usize::from(audio.channels);
     let frames = audio.samples.len() / ch;
     let mono: Vec<f32> = if ch == 1 {
@@ -254,7 +254,7 @@ fn to_mono_resampled(audio: &PcmAudio, target_rate: u32) -> Vec<i16> {
     out
 }
 
-fn resample_i16_mono(samples: &[i16], src_rate: u32, dst_rate: u32) -> Vec<i16> {
+pub(crate) fn resample_i16_mono(samples: &[i16], src_rate: u32, dst_rate: u32) -> Vec<i16> {
     if src_rate == dst_rate || samples.is_empty() {
         return samples.to_vec();
     }
@@ -274,7 +274,7 @@ fn resample_i16_mono(samples: &[i16], src_rate: u32, dst_rate: u32) -> Vec<i16> 
     out
 }
 
-fn encode_pcm_wav_mono(samples: &[i16], sample_rate: u32) -> Vec<u8> {
+pub(crate) fn encode_pcm_wav_mono(samples: &[i16], sample_rate: u32) -> Vec<u8> {
     let data_bytes = (samples.len() * 2) as u32;
     let byte_rate = sample_rate * 2;
     let mut buf = Vec::with_capacity(44 + data_bytes as usize);
@@ -296,7 +296,7 @@ fn encode_pcm_wav_mono(samples: &[i16], sample_rate: u32) -> Vec<u8> {
     buf
 }
 
-fn write_atomic_bytes(dest: &Path, bytes: &[u8]) -> Result<(), CoreError> {
+pub(crate) fn write_atomic_bytes(dest: &Path, bytes: &[u8]) -> Result<(), CoreError> {
     if let Some(parent) = dest.parent() {
         fs::create_dir_all(parent).map_err(|_| {
             error(
@@ -432,10 +432,15 @@ fn draft_wav_path(work_dir: &Path, candidate_id: i64, block_id: i64) -> PathBuf 
     work_dir.join(format!("draft-c{candidate_id}-b{block_id}.wav"))
 }
 
-fn trim_with_silero_vad(
-    samples_24k: &[i16],
-    work_dir: &Path,
-) -> Result<(usize, usize, i64, i64), CoreError> {
+struct VadTrimResult {
+    start_idx: usize,
+    end_idx: usize,
+    first_start_us: i64,
+    last_end_us: i64,
+    silences_us: Vec<(i64, i64)>,
+}
+
+fn trim_with_silero_vad(samples_24k: &[i16], work_dir: &Path) -> Result<VadTrimResult, CoreError> {
     if samples_24k.is_empty() {
         return Err(error(
             "no_speech_detected",
@@ -502,6 +507,8 @@ fn trim_with_silero_vad(
     }
 
     let total = samples_24k.len();
+    let total_us = ((total as u128 * 1_000_000) / u128::from(TARGET_SAMPLE_RATE)) as i64;
+    let silences_us = crate::narration_cleanup::extract_vad_silences(&data, total_us);
     let start_idx =
         ((first_start_us as u128 * u128::from(TARGET_SAMPLE_RATE)) / 1_000_000) as usize;
     let start_idx = start_idx.min(total.saturating_sub(1));
@@ -509,7 +516,13 @@ fn trim_with_silero_vad(
         (last_end_us as u128 * u128::from(TARGET_SAMPLE_RATE)).div_ceil(1_000_000) as usize;
     let end_idx = end_idx.clamp(start_idx + 1, total);
 
-    Ok((start_idx, end_idx, first_start_us, last_end_us))
+    Ok(VadTrimResult {
+        start_idx,
+        end_idx,
+        first_start_us,
+        last_end_us,
+        silences_us,
+    })
 }
 
 fn ensure_not_busy(c: &Connection, candidate_id: i64) -> rusqlite::Result<Result<(), CoreError>> {
@@ -623,6 +636,8 @@ fn persist_recorded_block(
     target: &RecordTarget<'_>,
     samples_24k: &[i16],
     trim: &TrimState,
+    noise_floor: &crate::narration_cleanup::NoiseFloorMeasurement,
+    preserve_cleanup_toggle: bool,
 ) -> Result<(i64, String, crate::tts::narration::WavInfo), CoreError> {
     let rel_path = format!(
         "narrations/c{}/b{}-v{}.wav",
@@ -688,6 +703,18 @@ fn persist_recorded_block(
                 trim.end_us,
             ),
         )?;
+        crate::narration_cleanup::remove_clean_file_for_narration(
+            &tx,
+            target.project,
+            narration_id,
+        );
+        crate::narration_cleanup::upsert_pending_in(
+            &tx,
+            narration_id,
+            &info.sha256,
+            Some(noise_floor),
+            preserve_cleanup_toggle,
+        )?;
         crate::narration_align::mark_pending_in(
             &tx,
             narration_id,
@@ -748,42 +775,60 @@ fn cmd_record_block(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     let draft_path = draft_wav_path(&work_dir, candidate_id, block_id);
     let _ = fs::remove_file(&draft_path);
 
-    let (trimmed, slice, trim_start_us, trim_end_us, warning_code, warning) = if vad_ready() {
-        events(crate::ProgressEvent {
-            job: "narration_record".into(),
-            project: None,
-            stage: "vad".into(),
-            percentage: 40,
-            message: "Aparando silêncios da gravação".into(),
-            error: None,
-        });
-        match trim_with_silero_vad(&samples_24k, &work_dir) {
-            Ok((s, e, s_us, e_us)) => (true, &samples_24k[s..e], s_us, e_us, None, None),
-            Err(err) if err.code == "no_speech_detected" => {
-                let raw_wav = encode_pcm_wav_mono(&samples_24k, TARGET_SAMPLE_RATE);
-                let _ = write_atomic_bytes(&draft_path, &raw_wav);
-                let raw_duration_us = ((samples_24k.len() as u128 * 1_000_000)
-                    / u128::from(TARGET_SAMPLE_RATE)) as i64;
-                return Err(error_with_usage(
-                    "no_speech_detected",
-                    "Nenhuma fala detectada na gravação. O áudio anterior foi mantido; descarte ou grave novamente.",
-                    json!({ "hasDraft": true, "durationUs": raw_duration_us }),
-                ));
+    let (trimmed, slice, trim_start_us, trim_end_us, noise_floor, warning_code, warning) =
+        if vad_ready() {
+            events(crate::ProgressEvent {
+                job: "narration_record".into(),
+                project: None,
+                stage: "vad".into(),
+                percentage: 40,
+                message: "Aparando silêncios da gravação".into(),
+                error: None,
+            });
+            match trim_with_silero_vad(&samples_24k, &work_dir) {
+                Ok(vad) => {
+                    let nf = crate::narration_cleanup::measure_noise_floor_from_silences(
+                        &samples_24k,
+                        TARGET_SAMPLE_RATE,
+                        &vad.silences_us,
+                    );
+                    (
+                        true,
+                        &samples_24k[vad.start_idx..vad.end_idx],
+                        vad.first_start_us,
+                        vad.last_end_us,
+                        nf,
+                        None,
+                        None,
+                    )
+                }
+                Err(err) if err.code == "no_speech_detected" => {
+                    let raw_wav = encode_pcm_wav_mono(&samples_24k, TARGET_SAMPLE_RATE);
+                    let _ = write_atomic_bytes(&draft_path, &raw_wav);
+                    let raw_duration_us = ((samples_24k.len() as u128 * 1_000_000)
+                        / u128::from(TARGET_SAMPLE_RATE))
+                        as i64;
+                    return Err(error_with_usage(
+                        "no_speech_detected",
+                        "Nenhuma fala detectada na gravação. O áudio anterior foi mantido; descarte ou grave novamente.",
+                        json!({ "hasDraft": true, "durationUs": raw_duration_us }),
+                    ));
+                }
+                Err(err) => return Err(err),
             }
-            Err(err) => return Err(err),
-        }
-    } else {
-        let full_us = ((samples_24k.len() as u128 * 1_000_000) / u128::from(TARGET_SAMPLE_RATE))
-            .max(1) as i64;
-        (
-            false,
-            samples_24k.as_slice(),
-            0,
-            full_us,
-            Some("vad_unavailable"),
-            Some("Aparo de silêncio indisponível: instale o worker."),
-        )
-    };
+        } else {
+            let full_us = ((samples_24k.len() as u128 * 1_000_000) / u128::from(TARGET_SAMPLE_RATE))
+                .max(1) as i64;
+            (
+                false,
+                samples_24k.as_slice(),
+                0,
+                full_us,
+                crate::narration_cleanup::vad_unavailable_noise_floor(),
+                Some("vad_unavailable"),
+                Some("Aparo de silêncio indisponível: instale o worker."),
+            )
+        };
 
     let (narration_id, rel_path, info) = persist_recorded_block(
         &RecordTarget {
@@ -799,6 +844,8 @@ fn cmd_record_block(v: Value, events: &mut EventSink<'_>) -> CommandResult {
             start_us: trim_start_us,
             end_us: trim_end_us,
         },
+        &noise_floor,
+        false,
     )?;
 
     events(crate::ProgressEvent {
@@ -897,7 +944,12 @@ fn cmd_trim_block(v: Value, events: &mut EventSink<'_>) -> CommandResult {
         message: "Aparando silêncios da gravação".into(),
         error: None,
     });
-    let (start_idx, end_idx, start_us, end_us) = trim_with_silero_vad(&samples_24k, &work_dir)?;
+    let vad = trim_with_silero_vad(&samples_24k, &work_dir)?;
+    let noise_floor = crate::narration_cleanup::measure_noise_floor_from_silences(
+        &samples_24k,
+        TARGET_SAMPLE_RATE,
+        &vad.silences_us,
+    );
     let (narration_id, rel_path, info) = persist_recorded_block(
         &RecordTarget {
             project: &project,
@@ -906,12 +958,14 @@ fn cmd_trim_block(v: Value, events: &mut EventSink<'_>) -> CommandResult {
             version_id,
             norm_lang: &norm_lang,
         },
-        &samples_24k[start_idx..end_idx],
+        &samples_24k[vad.start_idx..vad.end_idx],
         &TrimState {
             trimmed: true,
-            start_us,
-            end_us,
+            start_us: vad.first_start_us,
+            end_us: vad.last_end_us,
         },
+        &noise_floor,
+        true,
     )?;
 
     Ok(json!({

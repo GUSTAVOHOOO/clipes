@@ -30,18 +30,28 @@ pub(crate) enum Resource {
     /// Sprite de miniaturas da timeline (#61), na pasta do proxy.
     Thumbs(String),
     Source(i64),
-    /// Áudio WAV da Narração por bloco (#79), dentro da pasta do Projeto.
+    /// Áudio WAV da Narração por bloco (#79/#155), dentro da pasta do Projeto (ativo: limpo ou original).
     Narration(i64),
+    /// Áudio WAV original da Narração sem limpeza (#155), para prévia "Antes".
+    NarrationOriginal(i64),
+    /// Áudio WAV derivado com limpeza de voz (#155), para prévia "Depois".
+    NarrationClean(i64),
     /// Trilha sonora ou efeito sonoro importado pelo usuário (#154), dentro da pasta `audio/` do Projeto.
     Audio(i64),
 }
 
 /// Aceita só `proxy/<64 hex minúsculo>`, `thumbs/<64 hex>`, `source/<dígitos>`,
-/// `narration/<dígitos>` e `audio/<dígitos>`; `%2F` (como o WebView codifica a barra com `convertFileSrc`) vale como `/`.
+/// `narration/<dígitos>`, `narration-original/<dígitos>`, `narration-clean/<dígitos>` e `audio/<dígitos>`;
+/// `%2F` (como o WebView codifica a barra com `convertFileSrc`) vale como `/`.
 pub(crate) fn parse_resource(raw: &str) -> Option<Resource> {
     let raw = raw.strip_prefix('/').unwrap_or(raw);
     let decoded = raw.replace("%2F", "/").replace("%2f", "/");
     let (kind, id) = decoded.split_once('/')?;
+    let parse_id = |s: &str| -> Option<i64> {
+        (!s.is_empty() && s.len() <= 18 && s.bytes().all(|b| b.is_ascii_digit()))
+            .then(|| s.parse().ok())
+            .flatten()
+    };
     match kind {
         "proxy" if id.len() == 64 && id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) => {
             Some(Resource::Proxy(id.to_owned()))
@@ -51,17 +61,11 @@ pub(crate) fn parse_resource(raw: &str) -> Option<Resource> {
         {
             Some(Resource::Thumbs(id.to_owned()))
         }
-        "source" if !id.is_empty() && id.len() <= 18 && id.bytes().all(|b| b.is_ascii_digit()) => {
-            id.parse().ok().map(Resource::Source)
-        }
-        "narration"
-            if !id.is_empty() && id.len() <= 18 && id.bytes().all(|b| b.is_ascii_digit()) =>
-        {
-            id.parse().ok().map(Resource::Narration)
-        }
-        "audio" if !id.is_empty() && id.len() <= 18 && id.bytes().all(|b| b.is_ascii_digit()) => {
-            id.parse().ok().map(Resource::Audio)
-        }
+        "source" => parse_id(id).map(Resource::Source),
+        "narration" => parse_id(id).map(Resource::Narration),
+        "narration-original" => parse_id(id).map(Resource::NarrationOriginal),
+        "narration-clean" => parse_id(id).map(Resource::NarrationClean),
+        "audio" => parse_id(id).map(Resource::Audio),
         _ => None,
     }
 }
@@ -226,7 +230,15 @@ pub fn resolve(resource: &str) -> Option<ResolvedMedia> {
         Some(Resource::Proxy(key)) => (proxy_path(&key), true),
         Some(Resource::Thumbs(key)) => (thumbs_path(&key), true),
         Some(Resource::Source(id)) => (source_path(id), false),
-        Some(Resource::Narration(id)) => (crate::tts::narration::media_audio_path(id), false),
+        Some(Resource::Narration(id)) => {
+            (crate::narration_cleanup::media_active_audio_path(id), false)
+        }
+        Some(Resource::NarrationOriginal(id)) => {
+            (crate::tts::narration::media_audio_path(id), false)
+        }
+        Some(Resource::NarrationClean(id)) => {
+            (crate::narration_cleanup::media_clean_audio_path(id), false)
+        }
         Some(Resource::Audio(id)) => (crate::audio::media_audio_path(id), false),
         None => (None, false),
     };
