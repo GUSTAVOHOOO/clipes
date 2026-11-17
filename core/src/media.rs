@@ -111,7 +111,6 @@ pub(crate) fn parse_range(header: Option<&str>, len: u64) -> ByteRange {
 fn respond(status: u16, mut headers: Vec<(&'static str, String)>, body: Vec<u8>) -> MediaResponse {
     headers.push(("Cache-Control", "no-store".into()));
     headers.push(("X-Content-Type-Options", "nosniff".into()));
-    headers.push(("Access-Control-Allow-Origin", "*".into()));
     MediaResponse {
         status,
         headers,
@@ -172,12 +171,20 @@ fn source_path(id: i64) -> Option<PathBuf> {
     })
     .ok()?;
     let stored = PathBuf::from(stored);
-    let path = if stored.is_absolute() {
-        stored
-    } else {
+    let is_relative = stored.is_relative();
+    let path = if is_relative {
         project.join(stored)
+    } else {
+        stored
     };
-    path.canonicalize().ok().filter(|p| p.is_file())
+    let canonical = path.canonicalize().ok()?;
+    if is_relative {
+        let root = project.canonicalize().ok()?;
+        if !canonical.starts_with(&root) {
+            return None;
+        }
+    }
+    canonical.is_file().then_some(canonical)
 }
 
 pub(crate) fn touch(path: &Path) {
@@ -186,8 +193,26 @@ pub(crate) fn touch(path: &Path) {
     }
 }
 
-/// Serve `resource` com o cabeçalho `Range` opcional.
-pub fn serve(resource: &str, range: Option<&str>) -> MediaResponse {
+/// Metadados de um recurso de mídia já validado e resolvido para caminho canônico no disco.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedMedia {
+    pub path: PathBuf,
+    pub len: u64,
+    pub content_type: &'static str,
+    pub cached: bool,
+}
+
+impl ResolvedMedia {
+    /// Atualiza o mtime para o LRU do cache quando o recurso vem da pasta de proxies.
+    pub fn mark_used(&self) {
+        if self.cached {
+            touch(&self.path);
+        }
+    }
+}
+
+/// Valida o identificador opaco e resolve o caminho canônico do arquivo no Projeto aberto ou cache.
+pub fn resolve(resource: &str) -> Option<ResolvedMedia> {
     let (path, cached) = match parse_resource(resource) {
         Some(Resource::Proxy(key)) => (proxy_path(&key), true),
         Some(Resource::Thumbs(key)) => (thumbs_path(&key), true),
@@ -195,16 +220,26 @@ pub fn serve(resource: &str, range: Option<&str>) -> MediaResponse {
         Some(Resource::Narration(id)) => (crate::tts::narration::media_audio_path(id), false),
         None => (None, false),
     };
-    let Some(path) = path else {
+    let path = path?;
+    let len = fs::metadata(&path).ok()?.len();
+    Some(ResolvedMedia {
+        content_type: content_type(&path),
+        path,
+        len,
+        cached,
+    })
+}
+
+/// Serve `resource` com o cabeçalho `Range` opcional.
+pub fn serve(resource: &str, range: Option<&str>) -> MediaResponse {
+    let Some(resolved) = resolve(resource) else {
         return not_found();
     };
-    let Ok(mut file) = File::open(&path) else {
+    let Ok(mut file) = File::open(&resolved.path) else {
         return not_found();
     };
-    let Ok(len) = file.metadata().map(|m| m.len()) else {
-        return not_found();
-    };
-    let kind = content_type(&path);
+    let len = resolved.len;
+    let kind = resolved.content_type;
     let (status, start, end) = match parse_range(range, len) {
         ByteRange::Unsatisfiable => {
             return respond(
@@ -226,9 +261,9 @@ pub fn serve(resource: &str, range: Option<&str>) -> MediaResponse {
     if file.seek(SeekFrom::Start(start)).is_err() || file.read_exact(&mut body).is_err() {
         return not_found();
     }
-    if cached {
+    if resolved.cached {
         // Uso recente para o LRU, inclusive ao buscar no meio. Nunca altera a Fonte.
-        touch(&path);
+        resolved.mark_used();
     }
     let mut headers = vec![
         ("Content-Type", kind.to_owned()),
@@ -330,5 +365,59 @@ mod tests {
             );
         }
         assert_eq!(parse_range(Some("bytes=0-"), 0), ByteRange::Unsatisfiable);
+    }
+
+    #[test]
+    fn source_rejects_relative_escape_symlinks_and_closed_project() {
+        let tmp = tempfile::tempdir().unwrap();
+        let _guard = crate::test_env::set_data_dir(tmp.path());
+
+        let project = crate::dispatch(
+            "projects.create",
+            serde_json::json!({"parent": tmp.path(), "name": "MidiaProj"}),
+            &mut |_| {},
+        )
+        .unwrap();
+        let proj_dir = PathBuf::from(project["path"].as_str().unwrap());
+        fs::create_dir_all(proj_dir.join("media")).unwrap();
+        fs::write(proj_dir.join("media/ok.mp4"), b"mp4bytes").unwrap();
+        fs::write(tmp.path().join("outside.mp4"), b"secreto").unwrap();
+
+        projects::with_writer(|c| {
+            c.execute(
+                "INSERT INTO sources (id, path, size, duration_us, partial_hash, metadata, permission, audio_track) VALUES (1, 'media/ok.mp4', 8, 1000, 'h', '{}', '{}', 1)",
+                [],
+            )?;
+            c.execute(
+                "INSERT INTO sources (id, path, size, duration_us, partial_hash, metadata, permission, audio_track) VALUES (2, '../outside.mp4', 7, 1000, 'h', '{}', '{}', 1)",
+                [],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(serve("source/1", None).status, 200);
+        assert_eq!(serve("source/2", None).status, 404);
+
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(
+                tmp.path().join("outside.mp4"),
+                proj_dir.join("media/escape.mp4"),
+            )
+            .unwrap();
+            projects::with_writer(|c| {
+                c.execute(
+                    "INSERT INTO sources (id, path, size, duration_us, partial_hash, metadata, permission, audio_track) VALUES (3, 'media/escape.mp4', 7, 1000, 'h', '{}', '{}', 1)",
+                    [],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+            assert_eq!(serve("source/3", None).status, 404);
+        }
+
+        crate::dispatch("projects.close", serde_json::json!({}), &mut |_| {}).unwrap();
+        assert_eq!(serve("source/1", None).status, 404);
     }
 }
