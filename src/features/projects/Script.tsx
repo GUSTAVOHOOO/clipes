@@ -49,7 +49,7 @@ const usd = (micro: number) => (micro / 1_000_000).toFixed(4);
 const codeOf = (e: unknown) => (typeof e === 'object' && e !== null && 'code' in e ? String(e.code) : '');
 
 /** Roteiro do Corte aprovado do Vídeo transformado (#73): editar, aprovar e regenerar bloco a bloco. */
-export function Script({ candidate }: { candidate: number }) {
+export function Script({ candidate, onChanged }: { candidate: number; onChanged?: () => void }) {
   const t = useText(texts);
   const uiLanguage: Language = useContext(LanguageContext);
   const [doc, setDoc] = useState<Doc | null>(null);
@@ -57,6 +57,11 @@ export function Script({ candidate }: { candidate: number }) {
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
   const [ask, setAsk] = useState<Ask | null>(null);
+
+  const applyDoc = useCallback((d: Doc) => {
+    setDoc(d);
+    onChanged?.();
+  }, [onChanged]);
 
   useEffect(() => {
     let active = true;
@@ -66,9 +71,9 @@ export function Script({ candidate }: { candidate: number }) {
   const busy = doc?.busy === true;
   useEffect(() => {
     if (!busy) return;
-    const timer = window.setInterval(() => { coreDispatch<Doc>('script.get', { candidate }).then(setDoc).catch(() => {}); }, 800);
+    const timer = window.setInterval(() => { coreDispatch<Doc>('script.get', { candidate }).then(applyDoc).catch(() => {}); }, 800);
     return () => window.clearInterval(timer);
-  }, [busy, candidate]);
+  }, [applyDoc, busy, candidate]);
 
   const cost = (e: Estimate['estimate']) => e.kind === 'zero' ? t.free : e.kind === 'plan_quota' ? t.quota : e.kind === 'usd' && e.minMicroUsd !== null && e.maxMicroUsd !== null ? fill(t.range, { min: usd(e.minMicroUsd), max: usd(e.maxMicroUsd) }) : t.unknown;
   const fail = (e: unknown) => setError(t.errors[codeOf(e)] ?? t.errors.default);
@@ -78,7 +83,7 @@ export function Script({ candidate }: { candidate: number }) {
     setError(''); setNote('');
     try {
       await coreDispatch(block === null ? 'script.generate' : 'script.regenerate', { ...base(), ...(block !== null ? { block } : {}), ...(confirmed ? { confirmed: true } : {}) });
-      setDoc(await coreDispatch<Doc>('script.get', { candidate }));
+      applyDoc(await coreDispatch<Doc>('script.get', { candidate }));
     } catch (e) { fail(e); }
   }
   async function start(block: number | null) {
@@ -90,7 +95,7 @@ export function Script({ candidate }: { candidate: number }) {
   }
   async function act(name: 'script.edit' | 'script.approve', block: number, extra: object = {}) {
     setError(''); setNote('');
-    try { setDoc(await coreDispatch<Doc>(name, { candidate, block, ...extra })); if (name === 'script.edit') setNote(t.saved); }
+    try { applyDoc(await coreDispatch<Doc>(name, { candidate, block, ...extra })); if (name === 'script.edit') setNote(t.saved); }
     catch (e) { fail(e); }
   }
 
@@ -108,7 +113,7 @@ export function Script({ candidate }: { candidate: number }) {
       </select>
       <span className="text-xs text-fg-2">{t.languageHint}</span>
     </label>}
-    <Angles key={candidate} candidate={candidate} language={language} selected={doc.angle} disabled={busy} onChanged={async () => { setDoc(await coreDispatch<Doc>('script.get', { candidate })); }} />
+    <Angles key={candidate} candidate={candidate} language={language} selected={doc.angle} disabled={busy} onChanged={async () => { applyDoc(await coreDispatch<Doc>('script.get', { candidate })); }} />
     <div className="flex flex-wrap items-center gap-2">
       <Button variante={cur ? 'secundario' : 'primario'} tamanho="sm" disabled={busy || !doc.angle} carregando={busy} onClick={() => void start(null)}>{busy ? t.generating : cur ? t.regenerateAll : t.generate}</Button>
       {cur && <span role="status" data-script-remaining data-pending={cur.pending} className="text-sm text-fg-2">{cur.pending === 0 ? t.allApproved : fill(t.remaining, { n: cur.pending, total: cur.blocks.length })}</span>}

@@ -9,6 +9,7 @@ import { testEditorSilencesPanel, testEditorSilencesPreview } from './editor-sil
 import { testEditorCrop } from './editor-crop.mjs';
 import { testEditorMontage } from './editor-montage.mjs';
 import { testTranslation, testTranslationBlocked } from './translation-ui.mjs';
+import { testTtsComponents, testTtsNarrationLocked, testTtsNarrationUnlocked } from './tts-ui.mjs';
 const socket = createServer();
 await new Promise(resolve => socket.listen(0, '127.0.0.1', resolve));
 const port = socket.address().port;
@@ -111,6 +112,8 @@ try {
   await hardwareCard.getByText(/\(automática\)/).waitFor();
   await hardwareCard.getByRole('button', { name: 'Medir hardware' }).click();
   await hardwareCard.getByText('Medição concluída.').waitFor();
+
+  await testTtsComponents(page);
 
   page.once('dialog', dialog => dialog.dismiss());
   await page.getByRole('button', { name: 'Baixar' }).first().click();
@@ -353,7 +356,10 @@ try {
   assert.equal(await channelProfile.getByLabel('Duração mínima (s)').inputValue(), '20');
   assert.equal(await channelProfile.getByLabel('Duração máxima (s)').inputValue(), '60');
   assert.equal(await channelProfile.getByLabel('Preset').inputValue(), 'vertical');
-  await channelProfile.getByText(/campo reservado para o TTS/).waitFor();
+  const voiceSelect = channelProfile.locator('[data-channel-narration-voice]');
+  await voiceSelect.waitFor();
+  await voiceSelect.selectOption('13063');
+  assert.equal(await voiceSelect.inputValue(), '13063');
   await channelProfile.getByText(/Ritmo de publicação sugerido/).waitFor();
   assert.equal(await channelProfile.getByLabel(/Provedor|Chave|OAuth|Senha/i).count(), 0);
   await channelProfile.getByLabel('Duração máxima (s)').fill('181');
@@ -947,6 +953,7 @@ try {
   const remaining = script.locator('[data-script-remaining]');
   await remaining.getByText('Faltam 3 de 3 blocos para aprovar.').waitFor();
   assert.equal(await script.getByRole('button', { name: /aprovar todos|approve all/i }).count(), 0, 'não há aprovação em massa');
+  await testTtsNarrationLocked(kindReview);
   await script.locator('[data-script-block]').nth(0).getByRole('button', { name: 'Aprovar bloco' }).click();
   await remaining.getByText('Faltam 2 de 3 blocos para aprovar.').waitFor();
   const second = script.locator('[data-script-block]').nth(1);
@@ -957,6 +964,7 @@ try {
   await second.getByRole('button', { name: 'Aprovar bloco' }).click();
   await script.locator('[data-script-block]').nth(2).getByRole('button', { name: 'Aprovar bloco' }).click();
   await remaining.getByText(/a Narração está liberada/).waitFor();
+  await testTtsNarrationUnlocked(page, kindReview);
   await second.getByLabel('Texto do bloco 2').fill('Outra edição.');
   await second.getByRole('button', { name: 'Salvar edição' }).click();
   await remaining.getByText('Faltam 1 de 3 blocos para aprovar.').waitFor();
@@ -1043,7 +1051,10 @@ try {
   const enProfile = page.getByRole('region', { name: 'Channel profile' });
   await enProfile.waitFor();
   await enProfile.getByText(/Suggested publishing cadence/).waitFor();
-  await enProfile.getByText(/field reserved for TTS/).waitFor();
+  const enVoice = enProfile.locator('[data-channel-narration-voice]');
+  await enVoice.waitFor();
+  await enVoice.selectOption('alba');
+  assert.equal(await enVoice.inputValue(), 'alba');
   const enNotice = enProfile.locator('[data-direct-notice-review]');
   assert.equal(await enNotice.getAttribute('data-direct-notice-status'), 'pending');
   assert.match(await enNotice.innerText(), /Not yet shown during export/);

@@ -30,10 +30,12 @@ pub(crate) enum Resource {
     /// Sprite de miniaturas da timeline (#61), na pasta do proxy.
     Thumbs(String),
     Source(i64),
+    /// Áudio WAV da Narração por bloco (#79), dentro da pasta do Projeto.
+    Narration(i64),
 }
 
-/// Aceita só `proxy/<64 hex minúsculo>` e `source/<dígitos>`; `%2F` (como o WebView
-/// codifica a barra com `convertFileSrc`) vale como `/`. Todo o resto é recusado.
+/// Aceita só `proxy/<64 hex minúsculo>`, `thumbs/<64 hex>`, `source/<dígitos>` e
+/// `narration/<dígitos>`; `%2F` (como o WebView codifica a barra com `convertFileSrc`) vale como `/`.
 pub(crate) fn parse_resource(raw: &str) -> Option<Resource> {
     let raw = raw.strip_prefix('/').unwrap_or(raw);
     let decoded = raw.replace("%2F", "/").replace("%2f", "/");
@@ -49,6 +51,11 @@ pub(crate) fn parse_resource(raw: &str) -> Option<Resource> {
         }
         "source" if !id.is_empty() && id.len() <= 18 && id.bytes().all(|b| b.is_ascii_digit()) => {
             id.parse().ok().map(Resource::Source)
+        }
+        "narration"
+            if !id.is_empty() && id.len() <= 18 && id.bytes().all(|b| b.is_ascii_digit()) =>
+        {
+            id.parse().ok().map(Resource::Narration)
         }
         _ => None,
     }
@@ -127,6 +134,7 @@ fn content_type(path: &Path) -> &'static str {
         Some("jpg") => "image/jpeg",
         Some("mkv") => "video/x-matroska",
         Some("mov") => "video/quicktime",
+        Some("wav") => "audio/wav",
         _ => "application/octet-stream",
     }
 }
@@ -184,6 +192,7 @@ pub fn serve(resource: &str, range: Option<&str>) -> MediaResponse {
         Some(Resource::Proxy(key)) => (proxy_path(&key), true),
         Some(Resource::Thumbs(key)) => (thumbs_path(&key), true),
         Some(Resource::Source(id)) => (source_path(id), false),
+        Some(Resource::Narration(id)) => (crate::tts::narration::media_audio_path(id), false),
         None => (None, false),
     };
     let Some(path) = path else {
