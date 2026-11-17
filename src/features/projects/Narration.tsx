@@ -11,6 +11,16 @@ import type { TtsCatalog } from '@/features/components/TtsCatalogCard';
 import { fill } from './selectionFormat';
 import { TeleprompterRecorder } from './TeleprompterRecorder';
 
+type CleanupInfo = {
+  applicable: boolean;
+  enabled: boolean;
+  ready: boolean;
+  noiseFloorDb: number | null;
+  noiseFloorSource: 'pending' | 'vad' | 'default';
+  warningCode: string | null;
+  warning: string | null;
+};
+
 type AudioInfo = {
   id: number;
   versionId: number;
@@ -24,6 +34,7 @@ type AudioInfo = {
   bytes: number;
   stale: boolean;
   trimmed?: boolean;
+  cleanup?: CleanupInfo | null;
 };
 
 type BlockAlignment = {
@@ -133,6 +144,15 @@ const texts = {
     importMultiStreamWarning: 'O arquivo tinha mais de uma faixa de áudio; apenas a primeira foi usada.',
     importedAudio: 'Áudio importado',
     recordedAudio: 'Áudio gravado',
+    cleanupLabel: 'Limpeza de voz',
+    previewBefore: 'Antes (original)',
+    previewAfter: 'Depois (limpa)',
+    preparingCleanup: 'Limpando…',
+    noiseFloorMeasured: 'Piso medido: {db} dB',
+    cleanupWarnings: {
+      vad_unavailable: 'Piso de ruído padrão (-50 dB): instale o worker para medir o ruído da gravação.',
+      insufficient_silence: 'Trecho sem fala insuficiente para medir o ruído; usando piso padrão (-50 dB).',
+    } as Record<string, string>,
     audioFilter: 'Áudio',
     replaceTitle: 'Substituir áudio do bloco?',
     replaceDescription: 'Este bloco já tem {kind}. Importar um novo arquivo vai substituir o áudio atual e refazer o alinhamento.',
@@ -175,6 +195,9 @@ const texts = {
       import_failed: 'Não foi possível converter o áudio importado para Narração.',
       import_in_progress: 'Já há uma importação de áudio em andamento.',
       ffprobe_missing: 'Instale o Componente FFmpeg (com ffprobe) em Componentes.',
+      ffmpeg_missing: 'Instale o Componente FFmpeg em Componentes para aplicar a limpeza de voz.',
+      cleanup_not_applicable: 'A limpeza de voz só se aplica a Narração gravada ou importada.',
+      narration_cleanup_failed: 'Não foi possível aplicar a limpeza de voz neste bloco.',
       default: 'Não foi possível concluir a Narração.',
     } as Record<string, string>,
   },
@@ -214,6 +237,15 @@ const texts = {
     importMultiStreamWarning: 'The file had multiple audio streams; only the first one was used.',
     importedAudio: 'Imported audio',
     recordedAudio: 'Recorded audio',
+    cleanupLabel: 'Voice cleanup',
+    previewBefore: 'Before (original)',
+    previewAfter: 'After (cleaned)',
+    preparingCleanup: 'Cleaning…',
+    noiseFloorMeasured: 'Measured floor: {db} dB',
+    cleanupWarnings: {
+      vad_unavailable: 'Default noise floor (-50 dB): install the worker to measure recording noise.',
+      insufficient_silence: 'Not enough non-speech to measure noise; using default floor (-50 dB).',
+    } as Record<string, string>,
     audioFilter: 'Audio',
     replaceTitle: 'Replace block audio?',
     replaceDescription: 'This block already has {kind}. Importing a new file will replace the current audio and redo alignment.',
@@ -256,6 +288,9 @@ const texts = {
       import_failed: 'Could not convert the imported audio for Narration.',
       import_in_progress: 'An audio import is already running.',
       ffprobe_missing: 'Install the FFmpeg Component (with ffprobe) in Components.',
+      ffmpeg_missing: 'Install the FFmpeg Component in Components to apply voice cleanup.',
+      cleanup_not_applicable: 'Voice cleanup only applies to recorded or imported Narration.',
+      narration_cleanup_failed: 'Could not apply voice cleanup to this block.',
       default: 'Could not complete Narration.',
     } as Record<string, string>,
   },
@@ -274,6 +309,8 @@ export function Narration({ candidate, refreshKey = 0, onChanged }: { candidate:
   const [recordNotice, setRecordNotice] = useState('');
   const [recordingBlockId, setRecordingBlockId] = useState<number | null>(null);
   const [replacePending, setReplacePending] = useState<{ blockId: number; kind: 'tts' | 'imported' | 'recorded' } | null>(null);
+  const [previewMode, setPreviewMode] = useState<Record<number, 'original' | 'clean'>>({});
+  const [preparingCleanupBlock, setPreparingCleanupBlock] = useState<number | null>(null);
   const importFocusRef = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(async () => {
@@ -429,6 +466,43 @@ export function Narration({ candidate, refreshKey = 0, onChanged }: { candidate:
     setRecordNotice(warning ?? '');
     setDoc(await coreDispatch<NarrationDoc>('narration.get', { candidate }));
     onChanged?.();
+  }
+
+  async function toggleCleanup(block: number, enabled: boolean) {
+    setError('');
+    try {
+      await coreDispatch('narration.cleanup.set', { candidate, block, enabled });
+      setDoc(await coreDispatch<NarrationDoc>('narration.get', { candidate }));
+      if (!enabled) {
+        setPreviewMode(cur => ({ ...cur, [block]: 'original' }));
+      }
+      onChanged?.();
+    } catch (e) {
+      setError(t.errors[codeOf(e)] ?? t.errors.default);
+    }
+  }
+
+  async function selectPreviewMode(b: NarrationBlock, mode: 'original' | 'clean') {
+    setError('');
+    if (mode === 'original') {
+      setPreviewMode(cur => ({ ...cur, [b.blockId]: 'original' }));
+      return;
+    }
+    if (b.audio?.cleanup?.ready) {
+      setPreviewMode(cur => ({ ...cur, [b.blockId]: 'clean' }));
+      return;
+    }
+    setPreparingCleanupBlock(b.blockId);
+    try {
+      await coreDispatch('narration.cleanup.prepare', { candidate, block: b.blockId });
+      setDoc(await coreDispatch<NarrationDoc>('narration.get', { candidate }));
+      setPreviewMode(cur => ({ ...cur, [b.blockId]: 'clean' }));
+      onChanged?.();
+    } catch (e) {
+      setError(t.errors[codeOf(e)] ?? t.errors.default);
+    } finally {
+      setPreparingCleanupBlock(cur => (cur === b.blockId ? null : cur));
+    }
   }
 
   if (!doc) return error ? <p role="alert" className="text-danger">{error}</p> : null;
@@ -595,8 +669,83 @@ export function Narration({ candidate, refreshKey = 0, onChanged }: { candidate:
                     </Button>
                   </div>
                 </div>
-                {b.audio && !b.audio.stale && (
-                  <audio controls preload="none" className="mt-1 h-8 w-full" src={mediaUrl(`narration/${b.audio.id}`)} />
+                {b.audio && !b.audio.stale && b.audio.cleanup?.applicable ? (
+                  (() => {
+                    const cleanup = b.audio.cleanup;
+                    const activeMode: 'original' | 'clean' =
+                      previewMode[b.blockId] ?? (cleanup.enabled && cleanup.ready ? 'clean' : 'original');
+                    const audioRes = activeMode === 'clean' && cleanup.ready
+                      ? `narration-clean/${b.audio.id}`
+                      : `narration-original/${b.audio.id}`;
+                    const preparing = preparingCleanupBlock === b.blockId;
+                    const warnText = cleanup.warningCode
+                      ? (t.cleanupWarnings[cleanup.warningCode] ?? cleanup.warning ?? '')
+                      : '';
+                    return (
+                      <div className="mt-1 flex flex-col gap-1" data-narration-cleanup={b.blockId}>
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                role="switch"
+                                className="foco"
+                                data-narration-cleanup-toggle={b.blockId}
+                                checked={cleanup.enabled}
+                                disabled={anyBusy || preparing}
+                                onChange={e => void toggleCleanup(b.blockId, e.target.checked)}
+                              />
+                              <span>{t.cleanupLabel}</span>
+                            </label>
+                            {cleanup.noiseFloorSource === 'vad' && cleanup.noiseFloorDb !== null && (
+                              <span className="text-fg-2" data-narration-noise-floor>
+                                {fill(t.noiseFloorMeasured, { db: cleanup.noiseFloorDb.toFixed(0) })}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1" role="group" aria-label={t.cleanupLabel}>
+                            <Button
+                              tamanho="sm"
+                              variante={activeMode === 'original' ? 'primario' : 'secundario'}
+                              aria-pressed={activeMode === 'original'}
+                              data-narration-preview-before={b.blockId}
+                              disabled={anyBusy || preparing}
+                              onClick={() => void selectPreviewMode(b, 'original')}
+                            >
+                              {t.previewBefore}
+                            </Button>
+                            <Button
+                              tamanho="sm"
+                              variante={activeMode === 'clean' ? 'primario' : 'secundario'}
+                              aria-pressed={activeMode === 'clean'}
+                              data-narration-preview-after={b.blockId}
+                              disabled={anyBusy || preparing}
+                              carregando={preparing}
+                              onClick={() => void selectPreviewMode(b, 'clean')}
+                            >
+                              {preparing ? t.preparingCleanup : t.previewAfter}
+                            </Button>
+                          </div>
+                        </div>
+                        {warnText && (
+                          <p role="note" className="text-xs text-warning" data-narration-cleanup-warning={cleanup.warningCode}>
+                            {warnText}
+                          </p>
+                        )}
+                        <audio
+                          controls
+                          preload="none"
+                          data-narration-audio={activeMode}
+                          className="h-8 w-full"
+                          src={mediaUrl(audioRes)}
+                        />
+                      </div>
+                    );
+                  })()
+                ) : (
+                  b.audio && !b.audio.stale && (
+                    <audio controls preload="none" className="mt-1 h-8 w-full" src={mediaUrl(`narration/${b.audio.id}`)} />
+                  )
                 )}
                 {b.audio && !b.audio.stale && al && (al.status === 'needs_review' || al.status === 'approved') && al.spokenText && (
                   <div data-narration-review={b.blockId} className="mt-1 flex flex-col gap-1 rounded border border-line-strong bg-surface p-2 text-xs">

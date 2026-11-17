@@ -159,6 +159,14 @@ export async function testTeleprompterRecording(page, url) {
   await narration.locator('[data-narration-duration="2400000"]').first().waitFor();
   await narration.locator('[data-narration-align-status="aligned"]').first().waitFor();
 
+  // Limpeza de voz (#155) na gravação: ligada por padrão e prévia antes/depois.
+  await narration.locator('[data-narration-cleanup]').first().waitFor();
+  assert.equal(await narration.locator('[data-narration-cleanup-toggle]').first().isChecked(), true);
+  await narration.locator('[data-narration-preview-after]').first().click();
+  await narration.locator('[data-narration-audio="clean"]').first().waitFor();
+  await narration.locator('[data-narration-preview-before]').first().click();
+  await narration.locator('[data-narration-audio="original"]').first().waitFor();
+
   // Navega para o próximo bloco dentro do teleprompter.
   await rec.getByRole('button', { name: 'Próximo bloco', exact: true }).click();
   assert.match(await rec.locator('[data-teleprompter]').innerText(), /\S+/);
@@ -183,6 +191,7 @@ export async function testTeleprompterRecording(page, url) {
   await recNoWorker.locator('[data-record-stop]').click();
   await narNoWorker.locator('[data-narration-untrimmed]').waitFor();
   await narNoWorker.locator('[data-narration-record-notice]').waitFor();
+  await narNoWorker.locator('[data-narration-cleanup-warning="vad_unavailable"]').waitFor();
 
   // 3. VAD sem fala detectada (`no_speech_detected`): exibe erro, preserva rascunho e descarta.
   const reviewNoSpeech = await openTransformedApprovedNarration(page, `${url}/?source-test=1&transcript-test=1&record-no-speech=1`);

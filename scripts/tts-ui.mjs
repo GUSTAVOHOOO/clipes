@@ -75,6 +75,7 @@ export async function testTtsNarrationUnlocked(page, kindReview) {
   assert.equal(await narration.locator('[data-narration-duration]').count(), 3);
   assert.match(await narration.locator('[data-narration-total]').innerText(), /9\.60 s/);
   assert.equal(await narration.locator('audio').count(), 3);
+  assert.equal(await narration.locator('[data-narration-cleanup]').count(), 0, 'TTS não passa pela limpeza de voz');
   assert.equal(await narration.locator('[data-narration-align-status="aligned"]').count(), 3);
   await narration.getByRole('button', { name: 'Realinhar Narração', exact: true }).click();
   assert.equal(await narration.locator('[data-narration-align-status="aligned"]').count(), 3);
@@ -91,6 +92,19 @@ export async function testTtsNarrationUnlocked(page, kindReview) {
   assert.match(await firstBlock.innerText(), /Áudio importado/);
   assert.match(await narration.locator('[data-narration-total]').innerText(), /9\.20 s/);
   assert.equal(await firstBlock.locator('[data-narration-align-status="aligned"]').count(), 1);
+
+  // Limpeza de voz (#155): ligada por padrão no importado, prévia antes/depois e chave para desligar.
+  await firstBlock.locator('[data-narration-cleanup]').waitFor();
+  const cleanupToggle = firstBlock.locator('[data-narration-cleanup-toggle]');
+  assert.equal(await cleanupToggle.isChecked(), true, 'limpeza vem ligada por padrão para áudio importado');
+  await firstBlock.locator('[data-narration-preview-after]').click();
+  await firstBlock.locator('[data-narration-audio="clean"]').waitFor();
+  await firstBlock.locator('[data-narration-preview-before]').click();
+  await firstBlock.locator('[data-narration-audio="original"]').waitFor();
+  await cleanupToggle.uncheck();
+  assert.equal(await cleanupToggle.isChecked(), false);
+  await cleanupToggle.check();
+  assert.equal(await cleanupToggle.isChecked(), true);
 
   await narration.screenshot({ path: 'shots/narration-pt-BR.png' });
 }
