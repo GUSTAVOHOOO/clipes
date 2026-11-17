@@ -2849,7 +2849,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("plan-matrix") => cmd_plan_matrix(&args[1..]),
         Some("run-matrix") => cmd_run_matrix(&args[1..]),
         Some("eval-two-pass") => cmd_eval_two_pass(&args[1..]),
-        _ => Err("Subcomandos: prepare | calibrate-chat | plan-sample | run-selection | plan-matrix | run-matrix | eval-two-pass".into()),
+        Some("deterministic-eval") => {
+            clipes_core::selection::deterministic_benchmark::run_cli(&args[1..])
+        }
+        _ => Err(
+            "Subcomandos: prepare | calibrate-chat | plan-sample | run-selection | plan-matrix | run-matrix | eval-two-pass | deterministic-eval"
+                .into(),
+        ),
     };
     res.map_err(|e| io::Error::other(e).into())
 }
