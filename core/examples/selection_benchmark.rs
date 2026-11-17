@@ -216,16 +216,52 @@ fn cmd_prepare(args: &[String]) -> Result<(), String> {
             json!({"parent": bench_dir, "name": "bench"}),
         )?;
     }
+    let project_path = PathBuf::from(
+        call("projects.current", json!({}))?["path"]
+            .as_str()
+            .ok_or("projeto sem caminho")?,
+    );
 
     let lives = load_lives(&manifest_path)?;
     let mut stats = Vec::with_capacity(lives.len());
 
-    let client = start_real_worker(&python)?;
-    let mut engine = LocalEngine::with_worker(
-        client,
-        json!({"id":"real","dir":model_dir,"device":device,"compute_type":compute_type}),
-        batch,
-    );
+    let auto_worker = args[3] == "auto" && args[4] == "auto";
+    if auto_worker {
+        let ws = call("components.worker.status", json!({}))?;
+        if ws["installed"] != true {
+            println!("[prepare] Instalando worker de ML isolado em CLIPES_DATA_DIR...");
+            call("components.worker.install", json!({"confirmed": true}))?;
+        }
+        let models = call("components.models.manifest", json!({}))?;
+        let turbo_installed = models
+            .as_array()
+            .and_then(|a| a.iter().find(|m| m["id"] == "whisper-turbo"))
+            .is_some_and(|m| m["installed"] == true);
+        if !turbo_installed {
+            println!("[prepare] Baixando modelo whisper-turbo...");
+            call(
+                "components.models.download",
+                json!({"id": "whisper-turbo", "confirmed": true}),
+            )?;
+        }
+        if device == "cuda" {
+            call(
+                "transcription.hardware.choose",
+                json!({"model": "whisper-turbo", "device": "cuda", "compute_type": "int8_float16"}),
+            )?;
+        }
+    }
+
+    let mut manual_engine = if auto_worker {
+        None
+    } else {
+        let client = start_real_worker(&python)?;
+        Some(LocalEngine::with_worker(
+            client,
+            json!({"id":"real","dir":model_dir,"device":device,"compute_type":compute_type}),
+            batch,
+        ))
+    };
 
     for (idx, item) in lives.iter().enumerate() {
         let media = media_dir
@@ -289,7 +325,7 @@ fn cmd_prepare(args: &[String]) -> Result<(), String> {
                     rusqlite::Error::QueryReturnedNoRows => Ok(None),
                     other => Err(other),
                 })?;
-            if existing.is_none() {
+            if existing.is_none() && !auto_worker {
                 c.execute(
                     "INSERT INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,duration_us) VALUES (?1,?2,'local','whisper-turbo','0a363e91',?3,?4)",
                     (source_id, track, compute_type, duration),
@@ -301,36 +337,44 @@ fn cmd_prepare(args: &[String]) -> Result<(), String> {
 
         let mut transcribe_ms = 0_u64;
         if t_state.as_deref() != Some("complete") {
-            let job = projects::with_writer(|c| {
-                c.execute(
-                    "INSERT INTO jobs(kind,safety,state,source_id) VALUES ('transcribe-manual','local','running',?1)",
-                    [source_id],
-                )?;
-                Ok(c.last_insert_rowid())
-            })
-            .map_err(|e| format!("{}: {}", e.code, e.message))?;
             println!(
                 "[prepare] Transcrevendo source_{idx} ({:.2}h, lang={}) na GPU...",
                 duration_us as f64 / 3_600_000_000.0,
                 item.language()
             );
             let started = Instant::now();
-            run_with(
-                &mut engine,
-                job,
-                source_id,
-                &project_path,
-                &AtomicBool::new(false),
-            )
-            .map_err(|e| format!("transcribe falhou: {}: {}", e.code, e.message))?;
-            projects::with_writer(|c| {
-                c.execute(
-                    "UPDATE jobs SET state='completed', progress=100 WHERE id=?1",
-                    [job],
+            if let Some(engine) = manual_engine.as_mut() {
+                let job = projects::with_writer(|c| {
+                    c.execute(
+                        "INSERT INTO jobs(kind,safety,state,source_id) VALUES ('transcribe-manual','local','running',?1)",
+                        [source_id],
+                    )?;
+                    Ok(c.last_insert_rowid())
+                })
+                .map_err(|e| format!("{}: {}", e.code, e.message))?;
+                run_with(
+                    engine,
+                    job,
+                    source_id,
+                    &project_path,
+                    &AtomicBool::new(false),
+                )
+                .map_err(|e| format!("transcribe falhou: {}: {}", e.code, e.message))?;
+                projects::with_writer(|c| {
+                    c.execute(
+                        "UPDATE jobs SET state='completed', progress=100 WHERE id=?1",
+                        [job],
+                    )?;
+                    Ok(())
+                })
+                .map_err(|e| format!("{}: {}", e.code, e.message))?;
+            } else {
+                call(
+                    "transcription.start",
+                    json!({"project": project_path, "source_id": source_id}),
                 )?;
-                Ok(())
-            })
-            .map_err(|e| format!("{}: {}", e.code, e.message))?;
+                wait_for_job("transcription", source_id, Duration::from_secs(18_000))?;
+            }
             transcribe_ms = started.elapsed().as_millis() as u64;
         }
 
