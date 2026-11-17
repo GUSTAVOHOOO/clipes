@@ -18,6 +18,7 @@ use cut::*;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
+pub mod benchmark;
 pub mod cut;
 mod review;
 pub(crate) use review::{approved_cut, ApprovedCut};
