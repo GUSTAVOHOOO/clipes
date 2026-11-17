@@ -33,7 +33,7 @@ export function captionsMock(name: string, a: Record<string, any>, textOf: (posi
   if (name === 'captions.style.default') { projectDefault = { ...current(a.clip_id) }; return projectDefault; }
   if (name === 'captions.override') { if (Object.keys(a.overrides).length) overrides.set(a.position, a.overrides); else overrides.delete(a.position); return { position: a.position, overrides: a.overrides }; }
   if (name === 'captions.overrides') return [...overrides].map(([position, o]) => ({ position, overrides: o }));
-  const style = current(a.clip_id);
+  const style = typeof a.clip_id === 'number' ? current(a.clip_id) : getDefaultCaptionStyleMock();
   const startBase = a.start_us ?? 0;
   const endBase = a.end_us ?? startBase + 4_500_000;
   const splice = getMockClipSplice(a.clip_id, startBase, endBase);
