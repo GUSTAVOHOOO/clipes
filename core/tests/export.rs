@@ -455,3 +455,331 @@ fn export_batch_rejects_missing_glyph_per_cut_before_render() {
         .exists());
     call("projects.close", json!({}));
 }
+
+#[test]
+fn single_export_without_clip_id_resolves_candidate_clip_edits() {
+    let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let root = tempfile::tempdir().unwrap();
+    let data = root.path().join("data");
+    fs::create_dir_all(&data).unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", &data);
+    call(
+        "projects.create",
+        json!({"parent": root.path(), "name": "AvulsoEditado"}),
+    );
+    let media = root.path().join("original.mp4");
+    fs::write(&media, b"original").unwrap();
+    let mut hash = Sha256::new();
+    for _ in 0..3 {
+        hash.update(b"original");
+    }
+    let source = with_writer(|c| {
+        c.execute(
+            "INSERT INTO sources(path,size,duration_us,partial_hash,metadata,permission,audio_track) VALUES (?1,8,4000000,?2,'{}','{}',1)",
+            (media.to_str().unwrap(), format!("{:x}", hash.finalize())),
+        )?;
+        let source = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,state,duration_us) VALUES (?1,1,'local','m','r','c','complete',4000000)",
+            [source],
+        )?;
+        let transcript = c.last_insert_rowid();
+        for (pos, text, start, end) in [
+            (0, " primeira.", 0, 900_000),
+            (1, " segunda.", 1_000_000, 1_900_000),
+            (2, " terceira.", 2_000_000, 2_900_000),
+            (3, " quarta.", 3_000_000, 3_900_000),
+        ] {
+            c.execute(
+                "INSERT INTO transcript_words(transcript_id,position,kind,text,start_us,end_us,language) VALUES (?1,?2,'word',?3,?4,?5,'pt')",
+                (transcript, pos, text, start, end),
+            )?;
+        }
+        Ok(source)
+    })
+    .unwrap();
+    call("transcription.segment", json!({"source_id": source}));
+
+    let candidate = with_writer(|c| {
+        c.execute(
+            "INSERT INTO selection_runs(transcript_id,task_version,prompt_sha256,state,min_us,max_us,weights,plan_state,windows_total) SELECT id,1,'h','completed',500000,9999999,'[]','ready',0 FROM transcripts WHERE source_id=?1",
+            [source],
+        )?;
+        let run = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO selection_candidates(run_id,rank,start_id,end_id,start_us,end_us,axes,total_centi,windows) VALUES (?1,1,1,2,0,1900000,'{}',500,'[]')",
+            [run],
+        )?;
+        Ok(c.last_insert_rowid())
+    })
+    .unwrap();
+    call(
+        "selection.decide",
+        json!({"candidate": candidate, "decision": "approved"}),
+    );
+
+    // Editar bordas, crop, estilo de legenda e faixa traduzida no Editor.
+    let opened = call(
+        "editor.open",
+        json!({"source_id": source, "start_id": 1, "end_id": 2, "candidate_id": candidate}),
+    );
+    let clip_id = opened["clipId"].as_i64().unwrap();
+    call(
+        "editor.adjust",
+        json!({"clip_id": clip_id, "edge": "end", "sentence_id": 3}),
+    );
+    call(
+        "editor.crop.set_edits",
+        json!({"clip_id": clip_id, "edits": [{"timeUs": 0, "x": 0.25, "y": 0.0, "width": 0.4, "height": 1.0}]}),
+    );
+    let style = call("captions.style.get", json!({"clip_id": clip_id}));
+    call(
+        "captions.style.preset",
+        json!({"clip_id": clip_id, "preset": "simple", "revision": style["revision"]}),
+    );
+    with_writer(|c| {
+        c.execute(
+            "INSERT INTO clip_caption_tracks(clip_id,active_track,target_language) VALUES (?1,'translated','en')",
+            [clip_id],
+        )?;
+        for (sid, txt) in [(1, "First."), (2, "Second."), (3, "Third.")] {
+            c.execute(
+                "INSERT INTO clip_translated_sentences(clip_id,language,sentence_id,translated_text,generated_text,edited) VALUES (?1,'en',?2,?3,?3,1)",
+                (clip_id, sid, txt),
+            )?;
+        }
+        Ok(())
+    })
+    .unwrap();
+    call("editor.flush", json!({}));
+
+    // Exportar pelo card da revisão sem enviar clip_id deve resolver candidate:{id}.
+    let captions = call(
+        "export.captions",
+        json!({"source_id": source, "start_id": 1, "end_id": 2, "candidate_id": candidate}),
+    );
+    assert_eq!(captions["start_us"], 0);
+    assert_eq!(captions["end_us"], 2_900_000);
+    assert_eq!(captions["style"]["preset"], "simple");
+    assert_eq!(captions["track"], "translated");
+    assert!(captions["ass"].as_str().unwrap().contains("Third."));
+
+    fs::write(
+        data.join("component-settings.json"),
+        json!({
+            "data_dir": data,
+            "cache_dir": data.join("cache"),
+            "cache_limit_bytes": 1_000_000,
+            "ffmpeg_path": env!("CARGO_BIN_EXE_fake-export")
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let output = root.path().join("corte-editado.mp4");
+    let job = call(
+        "export.start",
+        json!({
+            "source_id": source,
+            "start_id": 1,
+            "end_id": 2,
+            "candidate_id": candidate,
+            "output": output
+        }),
+    )["job"]
+        .as_i64()
+        .unwrap();
+    let frozen: Value = serde_json::from_str(
+        &clipes_core::projects::with_reader(|c| {
+            c.query_row("SELECT request FROM exports WHERE job_id=?1", [job], |r| {
+                r.get::<_, String>(0)
+            })
+        })
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(frozen["clip_id"], clip_id);
+    assert_eq!(frozen["resolved_bounds"], json!([0, 2_900_000]));
+    assert!(
+        (frozen["resolved_crop"][0]["keyframes"][0]["x"]
+            .as_f64()
+            .unwrap()
+            - 0.25)
+            .abs()
+            < 1e-6
+    );
+    assert!(frozen["resolved_captions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|w| w["text"].as_str().unwrap().contains("Third.")));
+    assert_eq!(settled(job)["state"], "completed");
+    assert!(output.is_file());
+    call("projects.close", json!({}));
+}
+
+#[test]
+fn style_for_clip_inherits_channel_profile_caption_style_and_falls_back_to_vertical() {
+    let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let root = tempfile::tempdir().unwrap();
+    let data = root.path().join("data");
+    fs::create_dir_all(&data).unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", &data);
+    call(
+        "projects.create",
+        json!({"parent": root.path(), "name": "CanalEstilo"}),
+    );
+    let media = root.path().join("original.mp4");
+    fs::write(&media, b"original").unwrap();
+    let mut hash = Sha256::new();
+    for _ in 0..3 {
+        hash.update(b"original");
+    }
+    let source = with_writer(|c| {
+        c.execute(
+            "INSERT INTO sources(path,size,duration_us,partial_hash,metadata,permission,audio_track) VALUES (?1,8,3000000,?2,'{}','{}',1)",
+            (media.to_str().unwrap(), format!("{:x}", hash.finalize())),
+        )?;
+        let source = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,state,duration_us) VALUES (?1,1,'local','m','r','c','complete',3000000)",
+            [source],
+        )?;
+        let transcript = c.last_insert_rowid();
+        for (pos, text, start, end) in [
+            (0, " olá.", 0, 500_000),
+            (1, " mundo.", 600_000, 1_500_000),
+        ] {
+            c.execute(
+                "INSERT INTO transcript_words(transcript_id,position,kind,text,start_us,end_us,language) VALUES (?1,?2,'word',?3,?4,?5,'pt')",
+                (transcript, pos, text, start, end),
+            )?;
+        }
+        Ok(source)
+    })
+    .unwrap();
+    call("transcription.segment", json!({"source_id": source}));
+
+    let (cand_unedited, cand_edited) = with_writer(|c| {
+        c.execute(
+            "INSERT INTO selection_runs(transcript_id,task_version,prompt_sha256,state,min_us,max_us,weights,plan_state,windows_total) SELECT id,1,'h','completed',500000,9999999,'[]','ready',0 FROM transcripts WHERE source_id=?1",
+            [source],
+        )?;
+        let run = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO selection_candidates(run_id,rank,start_id,end_id,start_us,end_us,axes,total_centi,windows) VALUES (?1,1,1,2,0,1500000,'{}',800,'[]')",
+            [run],
+        )?;
+        let c1 = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO selection_candidates(run_id,rank,start_id,end_id,start_us,end_us,axes,total_centi,windows) VALUES (?1,2,1,2,0,1500000,'{}',700,'[]')",
+            [run],
+        )?;
+        let c2 = c.last_insert_rowid();
+        Ok((c1, c2))
+    })
+    .unwrap();
+    call(
+        "selection.decide",
+        json!({"candidate": cand_unedited, "decision": "approved"}),
+    );
+    call(
+        "selection.decide",
+        json!({"candidate": cand_edited, "decision": "approved"}),
+    );
+
+    // Sem estilo configurado no Perfil de canal, cai no padrão vertical.
+    let fallback_cap = call(
+        "export.captions",
+        json!({"source_id": source, "start_id": 1, "end_id": 2, "candidate_id": cand_unedited}),
+    );
+    assert_eq!(fallback_cap["style"]["preset"], "vertical");
+
+    // Configura captionStyle no Perfil de canal.
+    let mut channel_style =
+        clipes_core::caption_style::Style::preset(clipes_core::caption_style::Preset::Cinema);
+    channel_style.color = "#FEF08A".into();
+    channel_style.font_size = 72;
+    call(
+        "channel_profile.set",
+        json!({"captionStyle": channel_style}),
+    );
+
+    // Corte sem estilo próprio herda o captionStyle do Perfil de canal.
+    let inherited_cap = call(
+        "export.captions",
+        json!({"source_id": source, "start_id": 1, "end_id": 2, "candidate_id": cand_unedited}),
+    );
+    assert_eq!(inherited_cap["style"]["preset"], "cinema");
+    assert_eq!(inherited_cap["style"]["color"], "#FEF08A");
+    assert_eq!(inherited_cap["style"]["fontSize"], 72);
+
+    // Corte com estilo próprio salvo no Editor preserva a sobrescrita.
+    let clip_id = call(
+        "editor.open",
+        json!({"source_id": source, "start_id": 1, "end_id": 2, "candidate_id": cand_edited}),
+    )["clipId"]
+        .as_i64()
+        .unwrap();
+    let clip_style = call("captions.style.get", json!({"clip_id": clip_id}));
+    call(
+        "captions.style.preset",
+        json!({"clip_id": clip_id, "preset": "simple", "revision": clip_style["revision"]}),
+    );
+    let override_cap = call(
+        "export.captions",
+        json!({"source_id": source, "start_id": 1, "end_id": 2, "candidate_id": cand_edited}),
+    );
+    assert_eq!(override_cap["style"]["preset"], "simple");
+
+    fs::write(
+        data.join("component-settings.json"),
+        json!({
+            "data_dir": data,
+            "cache_dir": data.join("cache"),
+            "cache_limit_bytes": 1_000_000,
+            "ffmpeg_path": env!("CARGO_BIN_EXE_fake-export")
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let out_inherited = root.path().join("canal.mp4");
+    // Noto Serif (Cinema) chega até a checagem de carregamento de fonte no render (fake_export só carrega Noto Sans).
+    let cinema_job = call(
+        "export.start",
+        json!({
+            "source_id": source,
+            "start_id": 1,
+            "end_id": 2,
+            "candidate_id": cand_unedited,
+            "output": out_inherited
+        }),
+    )["job"]
+        .as_i64()
+        .unwrap();
+    let cinema_status = settled(cinema_job);
+    assert_eq!(cinema_status["state"], "failed");
+    assert_eq!(cinema_status["error"]["code"], "export_font_missing");
+
+    // Com Noto Sans no estilo personalizado do Perfil de canal, o export conclui com sucesso.
+    channel_style.font = "Noto Sans".into();
+    call(
+        "channel_profile.set",
+        json!({"captionStyle": channel_style}),
+    );
+    let job = call(
+        "export.start",
+        json!({
+            "source_id": source,
+            "start_id": 1,
+            "end_id": 2,
+            "candidate_id": cand_unedited,
+            "output": out_inherited
+        }),
+    )["job"]
+        .as_i64()
+        .unwrap();
+    assert_eq!(settled(job)["state"], "completed");
+    assert!(out_inherited.is_file());
+    call("projects.close", json!({}));
+}
