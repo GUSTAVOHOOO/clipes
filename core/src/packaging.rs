@@ -15,6 +15,8 @@ use crate::{
 };
 use serde_json::{json, Value};
 
+pub mod chapters;
+
 pub const TASK_ID: &str = "packaging";
 pub const JOB_KIND: &str = "ai:packaging";
 
@@ -258,7 +260,8 @@ fn limits(input: &TaskInput, output: &Value) -> Vec<Violation> {
     let Some(f) = fields_of(output) else {
         return vec![v("schema", "", "Output violates the full schema")];
     };
-    let credit = input.context["creditBytes"].as_u64().unwrap_or(0) as usize;
+    let credit = input.context["creditBytes"].as_u64().unwrap_or(0) as usize
+        + input.context["chaptersBytes"].as_u64().unwrap_or(0) as usize;
     let mut out = check_limits(&f, credit);
     if f.description.trim().is_empty() {
         out.push(v(
@@ -439,6 +442,7 @@ CREATE INDEX packaging_edits_generation ON packaging_edits(generation_id, id);
 " } }
 
 struct Context {
+    candidate: i64,
     cut: crate::selection::ApprovedCut,
     source: i64,
     permission: Value,
@@ -457,6 +461,7 @@ fn context(candidate: i64) -> Result<Context, CoreError> {
         })
         .map_err(|_| error("source_missing", "Fonte não encontrada"))?;
     Ok(Context {
+        candidate,
         cut,
         source,
         permission: serde_json::from_str(&permission).unwrap_or(Value::Null),
@@ -476,12 +481,22 @@ fn pick_language(ctx: &Context, v: &Value) -> Result<Lang, CoreError> {
     })
 }
 
-fn build_input(frases: &[Sentence], lang: Lang, credit: Option<&str>) -> TaskInput {
+fn build_input(
+    frases: &[Sentence],
+    lang: Lang,
+    credit: Option<&str>,
+    chapters_block: Option<&str>,
+) -> TaskInput {
     let compact = sentences::compact_with_hint(frases);
+    let chapters_bytes = chapters_block.map_or(0, |b| b.len() + 2);
     TaskInput {
         transcript: format!("#CORTE idioma={}\n{}", lang.code(), compact.text),
         estimate_hint: compact.hint,
-        context: json!({"language": lang.code(), "creditBytes": credit_bytes(credit)}),
+        context: json!({
+            "language": lang.code(),
+            "creditBytes": credit_bytes(credit),
+            "chaptersBytes": chapters_bytes,
+        }),
         native_schema: false,
     }
 }
@@ -527,7 +542,13 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let (profile, safety) = route_safety()?;
     let lang = pick_language(&ctx, &v)?;
     let credit = build_credit(lang, &ctx.permission, ctx.origin_url.as_deref());
-    let mut input = build_input(&ctx.cut.sentences, lang, credit.as_deref());
+    let chapters_res = chapters::resolve(ctx.candidate, lang)?;
+    let mut input = build_input(
+        &ctx.cut.sentences,
+        lang,
+        credit.as_deref(),
+        chapters_res.block.as_deref(),
+    );
     crate::angles::add_to_input(&mut input, &ctx.cut, false)?;
     Ok(json!({
         "paid": matches!(safety, Safety::Paid),
@@ -544,7 +565,13 @@ fn cmd_generate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let lang = pick_language(&ctx, &v)?;
     let (profile, safety) = route_safety()?;
     let credit = build_credit(lang, &ctx.permission, ctx.origin_url.as_deref());
-    let mut input = build_input(&ctx.cut.sentences, lang, credit.as_deref());
+    let chapters_res = chapters::resolve(ctx.candidate, lang)?;
+    let mut input = build_input(
+        &ctx.cut.sentences,
+        lang,
+        credit.as_deref(),
+        chapters_res.block.as_deref(),
+    );
     crate::angles::add_to_input(&mut input, &ctx.cut, false)?;
     if matches!(safety, Safety::Paid) && v["confirmed"] != true {
         return Err(CoreError {
@@ -596,27 +623,82 @@ struct Generation {
     job_result: Option<Value>,
 }
 
+fn append_chapters_within_limit(description: &str, block: &str, credit_bytes: usize) -> String {
+    let base = description.trim_end();
+    if base.is_empty() {
+        return block.to_owned();
+    }
+    let combined = format!("{base}\n\n{block}");
+    if combined.len() + credit_bytes <= MAX_DESCRIPTION_BYTES {
+        return combined;
+    }
+    let overhead = credit_bytes + block.len() + 2;
+    let max_base = MAX_DESCRIPTION_BYTES.saturating_sub(overhead);
+    if max_base == 0 {
+        return block.to_owned();
+    }
+    let ellipsis = "…";
+    let mut cut = String::new();
+    let limit = max_base.saturating_sub(ellipsis.len());
+    for ch in base.chars() {
+        if cut.len() + ch.len_utf8() > limit {
+            break;
+        }
+        cut.push(ch);
+    }
+    let cut = cut.trim_end();
+    if cut.is_empty() {
+        return block.to_owned();
+    }
+    format!("{cut}{ellipsis}\n\n{block}")
+}
+
 /// Grava a saída dos jobs concluídos que ainda não têm campos (idempotente).
-fn materialize(run: i64, identity: (i64, i64)) -> Result<(), CoreError> {
-    projects::with_writer(|c| {
+fn materialize(ctx: &Context) -> Result<(), CoreError> {
+    let (run, identity) = (ctx.cut.run, ctx.cut.identity);
+    let pending: Vec<(i64, String, Option<String>)> = projects::with_reader(|c| {
         let mut q = c.prepare(
-            "SELECT g.id,j.result FROM packaging_generations g JOIN jobs j ON j.id=g.job_id WHERE g.run_id=?1 AND g.cand_start_id=?2 AND g.cand_end_id=?3 AND g.generated IS NULL AND j.state='completed'",
+            "SELECT g.id,g.language,j.result FROM packaging_generations g JOIN jobs j ON j.id=g.job_id WHERE g.run_id=?1 AND g.cand_start_id=?2 AND g.cand_end_id=?3 AND g.generated IS NULL AND j.state='completed'",
         )?;
-        let rows: Vec<(i64, Option<String>)> = q
+        let rows = q
             .query_map((run, identity.0, identity.1), |r| {
-                Ok((r.get(0)?, r.get(1)?))
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
             })?
-            .collect::<rusqlite::Result<_>>()?;
-        for (id, result) in rows {
-            let data = result
-                .and_then(|t| serde_json::from_str::<Value>(&t).ok())
-                .and_then(|r| Fields::from_value(&r["data"]));
-            if let Some(f) = data {
-                c.execute(
-                    "UPDATE packaging_generations SET generated=?2 WHERE id=?1",
-                    (id, f.to_value().to_string()),
-                )?;
+            .collect::<rusqlite::Result<Vec<_>>>();
+        rows
+    })?;
+    if pending.is_empty() {
+        return Ok(());
+    }
+    let mut updates = Vec::new();
+    for (id, lang_code, result) in pending {
+        let data = result
+            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+            .and_then(|r| Fields::from_value(&r["data"]));
+        if let Some(mut f) = data {
+            let lang = Lang::parse(&lang_code).unwrap_or(Lang::Pt);
+            let credit = build_credit(lang, &ctx.permission, ctx.origin_url.as_deref());
+            if let Ok(res) = chapters::resolve(ctx.candidate, lang) {
+                if let Some(block) = res.block {
+                    f.description = append_chapters_within_limit(
+                        &f.description,
+                        &block,
+                        credit_bytes(credit.as_deref()),
+                    );
+                }
             }
+            updates.push((id, f.to_value().to_string()));
+        }
+    }
+    if updates.is_empty() {
+        return Ok(());
+    }
+    projects::with_writer(|c| {
+        for (id, encoded) in &updates {
+            c.execute(
+                "UPDATE packaging_generations SET generated=?2 WHERE id=?1",
+                (id, encoded),
+            )?;
         }
         Ok(())
     })
@@ -713,7 +795,7 @@ fn current_of(g: &Generation) -> Option<&Fields> {
 
 fn document(ctx: &Context) -> Result<Value, CoreError> {
     let (run, identity) = (ctx.cut.run, ctx.cut.identity);
-    materialize(run, identity)?;
+    materialize(ctx)?;
     let all = read_generations(run, identity)?;
     let done: Vec<&Generation> = all.iter().filter(|g| g.generated.is_some()).collect();
     let latest_job = all.last();
@@ -723,6 +805,17 @@ fn document(ctx: &Context) -> Result<Value, CoreError> {
         .and_then(|g| Lang::parse(&g.language))
         .or(detected);
     let credit = lang.and_then(|l| build_credit(l, &ctx.permission, ctx.origin_url.as_deref()));
+    let chapters_lang = lang.unwrap_or(Lang::Pt);
+    let chapters_res = chapters::resolve(ctx.candidate, chapters_lang)?;
+    let current_desc = done
+        .last()
+        .and_then(|g| current_of(g))
+        .map(|f| f.description.as_str());
+    let has_delimiters = current_desc.is_some_and(|d| chapters::find_delimited_range(d).is_some());
+    let edit_warnings = current_desc.map_or_else(Vec::new, |d| {
+        chapters::validate_description_chapters(d, chapters_res.total_duration_secs)
+    });
+    let (delim_start, delim_end) = chapters::delimiters_for(chapters_lang);
     let revision: usize = done.iter().map(|g| 1 + g.edits.len()).sum();
     let current = done.last().and_then(|g| {
         let f = current_of(g)?;
@@ -772,6 +865,17 @@ fn document(ctx: &Context) -> Result<Value, CoreError> {
         "languageRequired": detected.is_none(),
         "current": current,
         "credit": {"text": credit, "warning": if ctx.permission["status"] != "granted" { json!("no_permission") } else { Value::Null }},
+        "chapters": {
+            "applicable": chapters_res.applicable,
+            "canGenerate": chapters_res.can_generate,
+            "status": chapters_res.status,
+            "hasDelimiters": has_delimiters,
+            "delimiters": {"start": delim_start, "end": delim_end},
+            "suggested": chapters_res.suggested,
+            "block": chapters_res.block,
+            "generationWarning": chapters_res.generation_warning,
+            "editWarnings": edit_warnings,
+        },
         "job": job,
         "limits": limits_json(),
         "generations": generations,
@@ -802,7 +906,7 @@ fn edit_field(v: &Value, key: &str) -> Result<Option<Vec<String>>, CoreError> {
 fn cmd_edit(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let ctx = context(candidate_arg(&v)?)?;
     let (run, identity) = (ctx.cut.run, ctx.cut.identity);
-    materialize(run, identity)?;
+    materialize(&ctx)?;
     let all = read_generations(run, identity)?;
     let g = all
         .iter()
@@ -849,10 +953,89 @@ fn cmd_edit(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     document(&ctx)
 }
 
+/// `packaging.refresh_chapters {candidate, description?}`: reescreve somente o bloco delimitado
+/// de capítulos na descrição atual, preservando todo o restante editado pelo usuário.
+/// Se os delimitadores tiverem sido apagados, avisa com `chapter_delimiters_missing` sem alterar nada.
+fn cmd_refresh_chapters(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let ctx = context(candidate_arg(&v)?)?;
+    let (run, identity) = (ctx.cut.run, ctx.cut.identity);
+    materialize(&ctx)?;
+    let all = read_generations(run, identity)?;
+    let g = all
+        .iter()
+        .rev()
+        .find(|g| g.generated.is_some())
+        .ok_or_else(|| {
+            error(
+                "nothing_to_edit",
+                "Gere o empacotamento antes de atualizar capítulos.",
+            )
+        })?;
+    let mut f = current_of(g).cloned().expect("generated is present");
+    let before = f.clone();
+    match &v["description"] {
+        Value::Null => {}
+        Value::String(s) => f.description = s.clone(),
+        _ => return Err(error("invalid_edit", "Edição inválida.")),
+    }
+
+    let lang = Lang::parse(&g.language).unwrap_or(Lang::Pt);
+    let chapters_res = chapters::resolve(ctx.candidate, lang)?;
+    if !chapters_res.applicable {
+        return Err(error(
+            "chapters_require_transformed",
+            "Capítulos automáticos só existem para Vídeo transformado.",
+        ));
+    }
+    if chapters::find_delimited_range(&f.description).is_none() {
+        return Err(error(
+            "chapter_delimiters_missing",
+            "Os delimitadores de capítulos foram removidos da descrição. Nada foi alterado.",
+        ));
+    }
+    let Some(new_block) = chapters_res.block else {
+        let w = chapters_res
+            .generation_warning
+            .unwrap_or(chapters::ChapterWarning {
+                code: "chapters_unavailable".into(),
+                message: "Não foi possível gerar capítulos válidos para este corte.".into(),
+            });
+        return Err(error(&w.code, &w.message));
+    };
+    let Some(updated) = chapters::replace_delimited_block(&f.description, &new_block) else {
+        return Err(error(
+            "chapter_delimiters_missing",
+            "Os delimitadores de capítulos foram removidos da descrição. Nada foi alterado.",
+        ));
+    };
+    f.description = updated;
+
+    let credit = build_credit(lang, &ctx.permission, ctx.origin_url.as_deref());
+    let violations = check_limits(&f, credit_bytes(credit.as_deref()));
+    if !violations.is_empty() {
+        return Err(CoreError {
+            code: "edit_invalid".into(),
+            message: "A edição passa de um limite do YouTube ou tem formato inválido.".into(),
+            usage: Some(json!({"violations": violations})),
+        });
+    }
+    if f != before {
+        projects::with_writer(|c| {
+            c.execute(
+                "INSERT INTO packaging_edits(generation_id,fields) VALUES (?1,?2)",
+                (g.id, f.to_value().to_string()),
+            )?;
+            Ok(())
+        })?;
+    }
+    document(&ctx)
+}
+
 inventory::submit! { CommandRegistration { name: "packaging.estimate", execute: cmd_estimate } }
 inventory::submit! { CommandRegistration { name: "packaging.generate", execute: cmd_generate } }
 inventory::submit! { CommandRegistration { name: "packaging.get", execute: cmd_get } }
 inventory::submit! { CommandRegistration { name: "packaging.edit", execute: cmd_edit } }
+inventory::submit! { CommandRegistration { name: "packaging.refresh_chapters", execute: cmd_refresh_chapters } }
 
 #[cfg(test)]
 mod tests {
