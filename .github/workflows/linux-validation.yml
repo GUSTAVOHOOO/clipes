@@ -1,0 +1,73 @@
+name: Validação no Linux
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/linux-validation.yml'
+      - 'scripts/linux-validation.mjs'
+  workflow_dispatch:
+
+jobs:
+  validate-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Instalar dependências de build e runtime Linux
+        run: |
+          sudo apt-get update
+          if apt-cache show webkitgtk-webdriver >/dev/null 2>&1; then
+            DRIVER_PKG=webkitgtk-webdriver
+          else
+            DRIVER_PKG=webkit2gtk-driver
+          fi
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            "$DRIVER_PKG" \
+            xvfb \
+            ffmpeg \
+            gstreamer1.0-tools \
+            gstreamer1.0-libav \
+            gstreamer1.0-plugins-bad
+          which WebKitWebDriver || dpkg -L "$DRIVER_PKG" | grep -E 'WebKitWebDriver|bin/' || true
+      - name: Verificar libass no FFmpeg
+        run: ffmpeg -hide_banner -h filter=ass
+      - name: Cachear tauri-driver
+        id: cache-tauri-driver
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/tauri-driver
+          key: tauri-driver-${{ runner.os }}-2
+      - name: Instalar tauri-driver
+        if: steps.cache-tauri-driver.outputs.cache-hit != 'true'
+        run: cargo install tauri-driver --locked
+      - run: bun install --frozen-lockfile
+      - name: Compilar pacote .deb
+        env:
+          VITE_UPDATER_MOCK: available
+        run: bun run tauri build --bundles deb --config '{"bundle":{"createUpdaterArtifacts":false}}'
+      - name: Inspecionar e instalar o pacote .deb
+        run: |
+          DEB_FILE=$(ls target/release/bundle/deb/*.deb | head -n 1)
+          dpkg-deb -I "$DEB_FILE"
+          sudo apt-get install -y "./$DEB_FILE"
+          which clipes
+      - name: Executar validação ponta a ponta sob Xvfb + tauri-driver
+        run: |
+          mkdir -p linux-validation-artifacts
+          xvfb-run -a -s "-screen 0 1366x768x24" \
+            bun scripts/linux-validation.mjs \
+              --out linux-validation-artifacts/result.json \
+              --screenshot linux-validation-artifacts
+      - name: Publicar relatório e capturas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-validation-artifacts
+          path: linux-validation-artifacts/
+          if-no-files-found: warn
