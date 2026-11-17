@@ -719,7 +719,7 @@ pub(crate) fn auto_probe_before_transcription(
     };
     if !super::worker::installed(&settings)
         || !super::worker::cuda_installed(&settings)
-        || !TURBO.installed(&settings)
+        || !turbo_spec(&settings).is_installed_on_disk(&settings)
     {
         return Ok(None);
     }

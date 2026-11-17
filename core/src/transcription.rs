@@ -399,15 +399,17 @@ pub(crate) fn run(
             },
         )? {
             if resume_us == 0 {
-                if let Some(spec) = chosen.spec() {
-                    projects::with_writer(|c| {
-                        c.execute(
-                            "UPDATE transcripts SET model=?2, revision=?3, compute_type=?4 WHERE id=?1 AND resume_us=0",
-                            (transcript_id, spec.id, spec.revision, &chosen.compute_type),
-                        )?;
-                        Ok(())
-                    })?;
-                    model = spec.id.to_owned();
+                if let Ok(settings) = crate::components::load_settings() {
+                    if let Some(spec) = chosen.spec(&settings) {
+                        projects::with_writer(|c| {
+                            c.execute(
+                                "UPDATE transcripts SET model=?2, revision=?3, compute_type=?4 WHERE id=?1 AND resume_us=0",
+                                (transcript_id, spec.id.as_str(), spec.revision.as_str(), &chosen.compute_type),
+                            )?;
+                            Ok(())
+                        })?;
+                        model = spec.id;
+                    }
                 }
             }
         }
