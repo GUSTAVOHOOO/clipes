@@ -20,6 +20,20 @@ type AudioInfo = {
   stale: boolean;
 };
 
+type BlockAlignment = {
+  status: 'pending' | 'aligned' | 'needs_review' | 'approved' | 'failed';
+  choice: 'script' | 'spoken' | null;
+  activeTrack: 'script' | 'spoken' | null;
+  substitutions: number;
+  insertions: number;
+  deletions: number;
+  maxConsecutiveInsertions: number;
+  errorCode: string | null;
+  modelId: string;
+  spokenText: string | null;
+  wordCount: number;
+};
+
 type NarrationBlock = {
   blockId: number;
   position: number;
@@ -27,6 +41,7 @@ type NarrationBlock = {
   versionId: number | null;
   narrationText: string | null;
   audio: AudioInfo | null;
+  alignment?: BlockAlignment | null;
 };
 
 type NarrationJob = {
@@ -39,6 +54,14 @@ type NarrationJob = {
   modelId: string;
 };
 
+type AlignJob = {
+  id: number;
+  state: string;
+  progress: number;
+  code: string | null;
+  blockId: number | null;
+};
+
 type NarrationDoc = {
   candidate: number;
   narrationAllowed: boolean;
@@ -48,6 +71,9 @@ type NarrationDoc = {
   activeModelId: string;
   busy: boolean;
   job: NarrationJob | null;
+  alignBusy?: boolean;
+  alignJob?: AlignJob | null;
+  alignPrerequisitesReady?: boolean;
   blocks: NarrationBlock[];
   totalDurationUs: number;
 };
@@ -70,10 +96,33 @@ const texts = {
     totalDuration: 'Duração total da Narração: {sec} s',
     progress: 'Progresso da síntese',
     failed: 'Não foi possível sintetizar a Narração.',
+    align: 'Alinhar Narração',
+    realign: 'Realinhar Narração',
+    aligning: 'Alinhando…',
+    alignProgress: 'Progresso do alinhamento',
+    alignBlock: 'Alinhar bloco',
+    alignPendingPrereq: 'Alinhamento pendente: instale o Worker Python e um modelo Whisper local em Componentes para gerar legendas da Narração.',
+    alignFailed: 'Não foi possível alinhar a Narração.',
+    alignStatus: {
+      pending: 'Alinhamento pendente',
+      aligned: 'Alinhada ({words} palavras)',
+      needs_review: 'Desvio do Roteiro — sem legenda até revisar',
+      approved_script: 'Aprovada (texto do Roteiro)',
+      approved_spoken: 'Aprovada (texto falado)',
+      failed: 'Falha no alinhamento',
+    },
+    deviationSummary: 'O áudio diverge do Roteiro ({subs} substituições, {ins} inserções seguidas). Escolha qual texto vira legenda:',
+    spokenPreview: 'Texto detectado na fala: “{text}”',
+    useScriptText: 'Usar texto do Roteiro',
+    useSpokenText: 'Usar texto falado',
     errors: {
       script_not_approved: 'Aprove todos os blocos do Roteiro antes de gerar a Narração.',
       component_missing: 'Instale o Componente Pocket TTS em Componentes.',
       tts_model_missing: 'Baixe o modelo TTS deste idioma em Componentes antes de gerar.',
+      worker_missing: 'Instale o Worker Python em Componentes para alinhar a Narração.',
+      model_missing: 'Baixe um modelo Whisper local em Componentes antes de alinhar.',
+      narration_missing: 'Gere ou importe o áudio da Narração antes de alinhar.',
+      narration_align_in_progress: 'Já há um alinhamento de Narração em andamento.',
       generation_in_progress: 'Já há uma síntese de Narração em andamento.',
       narration_failed: 'O motor Pocket TTS falhou ao sintetizar um bloco.',
       default: 'Não foi possível concluir a Narração.',
@@ -96,10 +145,33 @@ const texts = {
     totalDuration: 'Total Narration duration: {sec} s',
     progress: 'Synthesis progress',
     failed: 'Could not synthesize Narration.',
+    align: 'Align Narration',
+    realign: 'Realign Narration',
+    aligning: 'Aligning…',
+    alignProgress: 'Alignment progress',
+    alignBlock: 'Align block',
+    alignPendingPrereq: 'Alignment pending: install the Python Worker and a local Whisper model in Components to generate Narration captions.',
+    alignFailed: 'Could not align Narration.',
+    alignStatus: {
+      pending: 'Alignment pending',
+      aligned: 'Aligned ({words} words)',
+      needs_review: 'Script deviation — captions paused until reviewed',
+      approved_script: 'Approved (Script text)',
+      approved_spoken: 'Approved (spoken text)',
+      failed: 'Alignment failed',
+    },
+    deviationSummary: 'Spoken audio diverges from Script ({subs} substitutions, {ins} consecutive insertions). Choose which text to caption:',
+    spokenPreview: 'Spoken words detected: “{text}”',
+    useScriptText: 'Use Script text',
+    useSpokenText: 'Use spoken text',
     errors: {
       script_not_approved: 'Approve all Script blocks before generating Narration.',
       component_missing: 'Install the Pocket TTS Component in Components.',
       tts_model_missing: 'Download this language’s TTS model in Components before generating.',
+      worker_missing: 'Install the Python Worker in Components to align Narration.',
+      model_missing: 'Download a local Whisper model in Components before aligning.',
+      narration_missing: 'Generate or import Narration audio before aligning.',
+      narration_align_in_progress: 'A Narration alignment is already running.',
       generation_in_progress: 'A Narration synthesis is already running.',
       narration_failed: 'Pocket TTS failed while synthesizing a block.',
       default: 'Could not complete Narration.',
@@ -136,8 +208,10 @@ export function Narration({ candidate, refreshKey = 0 }: { candidate: number; re
   }, [load, refreshKey, t.errors.default]);
 
   const busy = doc?.busy === true;
+  const alignBusy = doc?.alignBusy === true;
+  const anyBusy = busy || alignBusy;
   useEffect(() => {
-    if (!busy) return;
+    if (!anyBusy) return;
     const timer = window.setInterval(() => {
       coreDispatch<NarrationDoc>('narration.get', { candidate }).then(setDoc).catch(() => {});
     }, 700);
@@ -151,7 +225,7 @@ export function Narration({ candidate, refreshKey = 0 }: { candidate: number; re
       window.clearInterval(timer);
       unlisten?.();
     };
-  }, [busy, candidate]);
+  }, [anyBusy, candidate]);
 
   async function generateAll() {
     setError('');
@@ -174,9 +248,40 @@ export function Narration({ candidate, refreshKey = 0 }: { candidate: number; re
   }
 
   async function cancelJob() {
-    if (!doc?.job) return;
+    const id = doc?.busy ? doc.job?.id : doc?.alignJob?.id;
+    if (!id) return;
     try {
-      await coreDispatch('jobs.cancel', { id: doc.job.id });
+      await coreDispatch('jobs.cancel', { id });
+      setDoc(await coreDispatch<NarrationDoc>('narration.get', { candidate }));
+    } catch (e) {
+      setError(t.errors[codeOf(e)] ?? t.errors.default);
+    }
+  }
+
+  async function alignAll() {
+    setError('');
+    try {
+      await coreDispatch('narration.align', { candidate });
+      setDoc(await coreDispatch<NarrationDoc>('narration.get', { candidate }));
+    } catch (e) {
+      setError(t.errors[codeOf(e)] ?? t.errors.default);
+    }
+  }
+
+  async function alignBlock(block: number) {
+    setError('');
+    try {
+      await coreDispatch('narration.align_block', { candidate, block });
+      setDoc(await coreDispatch<NarrationDoc>('narration.get', { candidate }));
+    } catch (e) {
+      setError(t.errors[codeOf(e)] ?? t.errors.default);
+    }
+  }
+
+  async function reviewBlock(block: number, choice: 'script' | 'spoken') {
+    setError('');
+    try {
+      await coreDispatch('narration.review', { candidate, block, choice });
       setDoc(await coreDispatch<NarrationDoc>('narration.get', { candidate }));
     } catch (e) {
       setError(t.errors[codeOf(e)] ?? t.errors.default);
@@ -186,8 +291,10 @@ export function Narration({ candidate, refreshKey = 0 }: { candidate: number; re
   if (!doc) return error ? <p role="alert" className="text-danger">{error}</p> : null;
 
   const voices = (catalog?.voices ?? []).filter(v => v.language === doc.language);
-  const hasAnyAudio = doc.blocks.some(b => b.audio !== null);
+  const hasAnyAudio = doc.blocks.some(b => b.audio !== null && !b.audio.stale);
+  const hasAlignedAudio = doc.blocks.some(b => b.audio && !b.audio.stale && b.alignment && b.alignment.status !== 'pending');
   const jobFailed = doc.job && (doc.job.state === 'failed' || doc.job.state === 'cancelled');
+  const alignJobFailed = doc.alignJob && (doc.alignJob.state === 'failed' || doc.alignJob.state === 'cancelled');
 
   return (
     <section aria-label={t.title} data-narration className="flex flex-col gap-2 rounded-md border border-line p-3">
@@ -217,53 +324,123 @@ export function Narration({ candidate, refreshKey = 0 }: { candidate: number; re
         <Button
           variante="primario"
           tamanho="sm"
-          disabled={!doc.narrationAllowed || busy}
+          disabled={!doc.narrationAllowed || anyBusy}
           carregando={busy}
           onClick={() => void generateAll()}
         >
           {busy ? t.generating : hasAnyAudio ? t.regenerateAll : t.generate}
         </Button>
+        {hasAnyAudio && (
+          <Button
+            tamanho="sm"
+            disabled={anyBusy}
+            carregando={alignBusy}
+            onClick={() => void alignAll()}
+          >
+            {alignBusy ? t.aligning : hasAlignedAudio ? t.realign : t.align}
+          </Button>
+        )}
         {busy && doc.job && (
           <>
             <progress max={100} value={doc.job.progress} aria-label={t.progress} />
             <Button tamanho="sm" onClick={() => void cancelJob()}>{t.cancel}</Button>
           </>
         )}
+        {alignBusy && doc.alignJob && (
+          <>
+            <progress max={100} value={doc.alignJob.progress} aria-label={t.alignProgress} />
+            <Button tamanho="sm" onClick={() => void cancelJob()}>{t.cancel}</Button>
+          </>
+        )}
       </div>
 
+      {hasAnyAudio && doc.alignPrerequisitesReady === false && (
+        <p className="text-xs text-fg-2" data-narration-align-pending>{t.alignPendingPrereq}</p>
+      )}
       {jobFailed && <p role="alert" className="text-xs text-danger">{t.errors[doc.job?.code ?? ''] ?? t.failed}</p>}
+      {alignJobFailed && <p role="alert" className="text-xs text-danger">{t.errors[doc.alignJob?.code ?? ''] ?? t.alignFailed}</p>}
       {error && <p role="alert" className="text-xs text-danger">{error}</p>}
 
       {doc.blocks.length > 0 && (
         <ol className="flex flex-col gap-2">
-          {doc.blocks.map(b => (
-            <li key={b.blockId} data-narration-block={b.blockId} className="flex flex-col gap-1 rounded-md border border-line p-2 text-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-medium">{fill(t.block, { n: b.position })} · {b.title}</span>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-fg-2">
-                  {b.audio ? (
-                    <>
-                      <span data-narration-duration={b.audio.durationUs}>{fill(t.duration, { sec: fmtSeconds(b.audio.durationUs) })}</span>
-                      <span>{b.audio.voiceId} · {b.audio.modelId}</span>
-                      {b.audio.stale && <span className="text-danger">{t.stale}</span>}
-                    </>
-                  ) : (
-                    <span>{t.noAudio}</span>
-                  )}
-                  <Button
-                    tamanho="sm"
-                    disabled={!doc.narrationAllowed || busy}
-                    onClick={() => void regenerateBlock(b.blockId)}
-                  >
-                    {t.regenerateBlock}
-                  </Button>
+          {doc.blocks.map(b => {
+            const al = b.alignment;
+            const alignLabel = !b.audio || b.audio.stale || !al
+              ? null
+              : al.status === 'aligned'
+                ? fill(t.alignStatus.aligned, { words: al.wordCount })
+                : al.status === 'approved'
+                  ? (al.choice === 'spoken' ? t.alignStatus.approved_spoken : t.alignStatus.approved_script)
+                  : al.status === 'needs_review'
+                    ? t.alignStatus.needs_review
+                    : al.status === 'failed'
+                      ? t.alignStatus.failed
+                      : t.alignStatus.pending;
+            return (
+              <li key={b.blockId} data-narration-block={b.blockId} className="flex flex-col gap-1 rounded-md border border-line p-2 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium">{fill(t.block, { n: b.position })} · {b.title}</span>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-fg-2">
+                    {b.audio ? (
+                      <>
+                        <span data-narration-duration={b.audio.durationUs}>{fill(t.duration, { sec: fmtSeconds(b.audio.durationUs) })}</span>
+                        <span>{b.audio.voiceId} · {b.audio.modelId}</span>
+                        {b.audio.stale && <span className="text-danger">{t.stale}</span>}
+                        {alignLabel && (
+                          <span data-narration-align-status={al?.status} className={al?.status === 'needs_review' || al?.status === 'failed' ? 'text-danger font-medium' : ''}>
+                            {alignLabel}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span>{t.noAudio}</span>
+                    )}
+                    {b.audio && !b.audio.stale && (
+                      <Button tamanho="sm" disabled={anyBusy} onClick={() => void alignBlock(b.blockId)}>
+                        {t.alignBlock}
+                      </Button>
+                    )}
+                    <Button
+                      tamanho="sm"
+                      disabled={!doc.narrationAllowed || anyBusy}
+                      onClick={() => void regenerateBlock(b.blockId)}
+                    >
+                      {t.regenerateBlock}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-              {b.audio && !b.audio.stale && (
-                <audio controls preload="none" className="mt-1 h-8 w-full" src={mediaUrl(`narration/${b.audio.id}`)} />
-              )}
-            </li>
-          ))}
+                {b.audio && !b.audio.stale && (
+                  <audio controls preload="none" className="mt-1 h-8 w-full" src={mediaUrl(`narration/${b.audio.id}`)} />
+                )}
+                {b.audio && !b.audio.stale && al && (al.status === 'needs_review' || al.status === 'approved') && al.spokenText && (
+                  <div data-narration-review={b.blockId} className="mt-1 flex flex-col gap-1 rounded border border-line-strong bg-surface p-2 text-xs">
+                    <p className={al.status === 'needs_review' ? 'font-medium text-danger' : 'text-fg-2'}>
+                      {fill(t.deviationSummary, { subs: al.substitutions, ins: al.maxConsecutiveInsertions })}
+                    </p>
+                    <p className="text-fg-2">{fill(t.spokenPreview, { text: al.spokenText })}</p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        tamanho="sm"
+                        variante={al.choice === 'script' ? 'primario' : 'secundario'}
+                        disabled={anyBusy}
+                        onClick={() => void reviewBlock(b.blockId, 'script')}
+                      >
+                        {t.useScriptText}
+                      </Button>
+                      <Button
+                        tamanho="sm"
+                        variante={al.choice === 'spoken' ? 'primario' : 'secundario'}
+                        disabled={anyBusy}
+                        onClick={() => void reviewBlock(b.blockId, 'spoken')}
+                      >
+                        {t.useSpokenText}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ol>
       )}
 
