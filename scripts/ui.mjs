@@ -1297,6 +1297,45 @@ try {
   await conflictBatch.getByText(/Concluído com falhas · 100%/).waitFor({ timeout: 10000 });
   assert.match(await conflictBatch.innerText(), /1 de 2 Cortes exportados · 1 com falha/);
   assert.match(await conflictBatch.innerText(), /Não foi possível exportar o Corte\./);
+  // Aviso de codecs GStreamer ausentes no Linux (#247): checa canPlayType vazio e exibe comando apt fixo.
+  const codecPage = await browser.newPage();
+  codecPage.on('pageerror', err => errors.push(err.message));
+  codecPage.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+  try {
+    await codecPage.addInitScript(() => {
+      Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
+      HTMLMediaElement.prototype.canPlayType = type => (type.includes('avc1.42E01E') ? '' : 'maybe');
+    });
+    await codecPage.goto(`${url}?source-test=1&transcript-test=1`);
+    await codecPage.getByRole('dialog', { name: 'Atualização disponível' }).getByRole('button', { name: 'Agora não' }).click();
+    await codecPage.getByText(/Transcrição pronta/).first().waitFor({ timeout: 10000 });
+    await codecPage.evaluate(() => window.dispatchEvent(new CustomEvent('clipes-preview-open', { detail: { sourceId: 1, startUs: 1_000_000, endUs: 2_000_000 } })));
+    const missingPreview = codecPage.getByRole('region', { name: 'Preview do Corte' });
+    await missingPreview.getByRole('button', { name: 'Reproduzir' }).waitFor({ timeout: 10000 });
+    await missingPreview.locator('[data-missing-h264-codec]').waitFor({ timeout: 10000 });
+    const missingText = await missingPreview.locator('[data-missing-h264-codec]').innerText();
+    assert.match(missingText, /sudo apt install gstreamer1\.0-plugins-good gstreamer1\.0-plugins-bad gstreamer1\.0-libav/);
+  } finally {
+    await codecPage.close();
+  }
+  const okCodecPage = await browser.newPage();
+  okCodecPage.on('pageerror', err => errors.push(err.message));
+  okCodecPage.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+  try {
+    await okCodecPage.addInitScript(() => {
+      Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
+      HTMLMediaElement.prototype.canPlayType = type => (type.includes('avc1.42E01E') ? 'probably' : '');
+    });
+    await okCodecPage.goto(`${url}?source-test=1&transcript-test=1`);
+    await okCodecPage.getByRole('dialog', { name: 'Atualização disponível' }).getByRole('button', { name: 'Agora não' }).click();
+    await okCodecPage.getByText(/Transcrição pronta/).first().waitFor({ timeout: 10000 });
+    await okCodecPage.evaluate(() => window.dispatchEvent(new CustomEvent('clipes-preview-open', { detail: { sourceId: 1, startUs: 1_000_000, endUs: 2_000_000 } })));
+    const readyPreview = okCodecPage.getByRole('region', { name: 'Preview do Corte' });
+    await readyPreview.getByRole('button', { name: 'Reproduzir' }).waitFor({ timeout: 10000 });
+    assert.equal(await readyPreview.locator('[data-missing-h264-codec]').count(), 0);
+  } finally {
+    await okCodecPage.close();
+  }
   assert.deepEqual(errors, []);
   console.log('UI keyboard, preferences, about, drawer and screenshots: OK');
 } finally { await browser?.close(); server.kill(); }

@@ -27,14 +27,23 @@ const texts = {
   'pt-BR': {
     title: 'Preview do Corte', video: 'Vídeo do preview em 9:16 com barras', play: 'Reproduzir', pause: 'Pausar', seek: 'Posição no preview', cancel: 'Cancelar preview', retry: 'Gerar de novo', close: 'Fechar preview',
     preparing: 'Preparando o preview do Corte', queued: 'Preview na fila', running: 'Gerando o preview', failed: 'Não foi possível gerar o preview.', cancelled: 'Preview cancelado.', outside: 'Esse trecho fica fora do preview deste Corte (a janela vai até 2 min antes e depois).', playError: 'O vídeo do preview não pôde ser tocado.', error: 'Não foi possível preparar o preview.',
+    missingCodec: 'Faltam codecs GStreamer para H.264/AAC no sistema (comum no AppImage). Instale: sudo apt install gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav',
     code: { source_offline: 'A Fonte está offline: reconecte ou relocalize a Fonte para ver o preview.', source_changed: 'A Fonte foi alterada: verifique a identidade dela antes do preview.', component_missing: 'Instale o Componente FFmpeg para gerar o preview.', clip_too_long: 'O Corte é longo demais para o preview.', invalid_range: 'Intervalo do Corte inválido.' } as Record<string, string>,
   },
   en: {
     title: 'Clip preview', video: '9:16 preview video with bars', play: 'Play', pause: 'Pause', seek: 'Preview position', cancel: 'Cancel preview', retry: 'Generate again', close: 'Close preview',
     preparing: 'Preparing the Clip preview', queued: 'Preview queued', running: 'Generating the preview', failed: 'Could not generate the preview.', cancelled: 'Preview cancelled.', outside: 'That part is outside this Clip’s preview (the window spans 2 min before and after).', playError: 'The preview video could not be played.', error: 'Could not prepare the preview.',
+    missingCodec: 'GStreamer codecs for H.264/AAC are missing on this system (common with AppImage). Install: sudo apt install gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav',
     code: { source_offline: 'The Source is offline: reconnect or relocate the Source to see the preview.', source_changed: 'The Source was changed: verify its identity before the preview.', component_missing: 'Install the FFmpeg Component to generate the preview.', clip_too_long: 'The Clip is too long for the preview.', invalid_range: 'Invalid Clip range.' } as Record<string, string>,
   },
 };
+function isLinuxMissingH264(): boolean {
+  if (typeof navigator === 'undefined' || typeof document === 'undefined') return false;
+  const platform = `${navigator.platform ?? ''} ${navigator.userAgent ?? ''}`;
+  if (!/linux/i.test(platform) || /android/i.test(platform)) return false;
+  const probe = document.createElement('video');
+  return typeof probe.canPlayType === 'function' && probe.canPlayType('video/mp4; codecs="avc1.42E01E"') === '';
+}
 function clock(us: number) { const s = Math.max(0, Math.floor(us / 1_000_000)); const h = Math.floor(s / 3600); const m = String(Math.floor(s / 60) % 60).padStart(2, '0'); const ss = String(s % 60).padStart(2, '0'); return h > 0 ? `${h}:${m}:${ss}` : `${m}:${ss}`; }
 function code(error: unknown) { return typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : ''; }
 /** Tempo da Fonte (µs) para o do proxy (s); `null` fora da janela. Igual a `proxy::to_proxy_us` do núcleo. */
@@ -70,6 +79,7 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
   const [lastSeekUs, setLastSeekUs] = useState<number | null>(null);
+  const [missingH264] = useState(isLinuxMissingH264);
 
   const request = useCallback(async (active: () => boolean) => {
     setError(null); setNotice('');
@@ -298,7 +308,7 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
         setTime(curSec);
         if (proxy) onSourceTime?.(proxy.windowStartUs + curSec * 1_000_000);
       }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
-      onError={() => { if (isTauri()) setNotice(t.playError); }} />
+      onError={() => { if (isTauri() && !missingH264) setNotice(t.playError); }} />
   );
   return <section aria-label={t.title} data-preview-state={proxy?.state ?? (error ? 'error' : 'loading')} data-seek-us={lastSeekUs ?? undefined} data-crop-active={hasCrop ? 'true' : undefined} data-crop-layout={cropPlan?.layout} data-split-ratio={isDual ? splitRatio.toFixed(4) : undefined} className="flex w-full max-w-[18rem] flex-col gap-2 text-sm">
     {!proxy && !error && <p aria-live="polite" className="text-fg-2">{t.preparing}</p>}
@@ -331,6 +341,7 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
         <span className="font-mono text-xs text-fg-2" data-preview-clock>{clock(sourceUs)}</span>
       </div>
       <input type="range" aria-label={t.seek} min={0} max={windowSeconds} step={0.01} value={Math.min(time, windowSeconds)} onChange={e => seekProxy(Number(e.target.value))} className="w-full" />
+      {missingH264 && <p role="alert" data-missing-h264-codec className="rounded-md border border-line bg-warning-subtle p-3 text-fg">{t.missingCodec}</p>}
     </>}
     {notice && <p role="status" className="text-fg-2">{notice}</p>}
   </section>;
