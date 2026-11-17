@@ -11,6 +11,7 @@ import { testEditorMontage, testEditorDucking } from './editor-montage.mjs';
 import { testEditorAudio, testEditorAudioDuckingPreview } from './editor-audio.mjs';
 import { testTranslation, testTranslationBlocked } from './translation-ui.mjs';
 import { testTtsComponents, testTtsNarrationLocked, testTtsNarrationUnlocked, testNarrationDeviationAndTrack } from './tts-ui.mjs';
+import { testTeleprompterRecording } from './record-ui.mjs';
 import { testPackagingChapters } from './packaging-chapters-ui.mjs';
 import { testThumbnailPreview } from './thumbnail-preview-ui.mjs';
 const socket = createServer();
@@ -1328,6 +1329,7 @@ try {
   await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
   await testTranslationBlocked(page, url);
   await testNarrationDeviationAndTrack(page, url);
+  await testTeleprompterRecording(page, url);
   await testEditorBorders(page, url);
   await testEditorSilencesPreview(page, url);
   await testEditorCrop(page, url);

@@ -76,6 +76,7 @@ pub mod media;
 pub mod montage;
 pub mod narration_align;
 pub mod narration_import;
+pub mod narration_record;
 pub mod packaging;
 pub mod paths;
 pub mod process;
