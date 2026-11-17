@@ -30,7 +30,7 @@ const CATALOG_SIG_NAME: &str = "catalog.json.sig";
 /// Chave pública Ed25519 em hexadecimal (32 bytes / 64 caracteres hex) usada para verificar
 /// o catálogo remoto assinado (#256).
 pub(crate) const CATALOG_PUBLIC_KEY_HEX: &str =
-    "0000000000000000000000000000000000000000000000000000000000000000";
+    "b924c3160b4cd42c22401f67f50032ca7b1bc70af1d6947a6f31455531d4e2d1";
 
 static EMBEDDED_CACHE: OnceLock<CatalogManifest> = OnceLock::new();
 static CHECK_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -960,6 +960,8 @@ mod tests {
 
     #[test]
     fn embedded_catalog_is_valid_and_complete() {
+        assert_ne!(CATALOG_PUBLIC_KEY_HEX, "0".repeat(64));
+        parse_public_key_hex(CATALOG_PUBLIC_KEY_HEX).unwrap();
         let cat = embedded_catalog();
         assert_eq!(cat.version, 1);
         assert_eq!(cat.models.len(), 3);
