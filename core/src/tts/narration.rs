@@ -365,7 +365,7 @@ pub(crate) fn guardrail_status(candidate_id: i64) -> Result<Option<TtsGuardrailS
             };
             let row: Option<(String, String)> = c
                 .query_row(
-                    "SELECT voice_id, audio_rel_path FROM narration_blocks WHERE block_id=?1 AND version_id=?2",
+                    "SELECT voice_id, audio_rel_path FROM narration_blocks WHERE block_id=?1 AND version_id=?2 AND engine_id NOT IN ('imported', 'recorded')",
                     (b.block_id, ver_id),
                     |r| Ok((r.get(0)?, r.get(1)?)),
                 )
@@ -475,6 +475,7 @@ struct AudioRow {
     ver_id: i64,
     voice_id: String,
     model_id: String,
+    engine_id: String,
     rel: String,
     dur: i64,
     sr: i64,
@@ -495,15 +496,27 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .map(str::to_owned);
 
     let cut = crate::selection::approved_cut(candidate_id)?;
-    let (latest, job_busy, job_json, align_busy, align_job_json) = projects::with_reader(|c| {
-        let latest = match read_latest_script_in(c, &cut)? {
-            Ok(s) => s,
-            Err(e) => return Ok(Err(e)),
-        };
-        let (busy, job) = read_job_json(c, candidate_id)?;
-        let (align_busy, align_job) = crate::narration_align::read_align_job_json(c, candidate_id)?;
-        Ok(Ok((latest, busy, job, align_busy, align_job)))
-    })??;
+    let (latest, job_busy, job_json, import_busy, import_job_json, align_busy, align_job_json) =
+        projects::with_reader(|c| {
+            let latest = match read_latest_script_in(c, &cut)? {
+                Ok(s) => s,
+                Err(e) => return Ok(Err(e)),
+            };
+            let (busy, job) = read_job_json(c, candidate_id)?;
+            let (import_busy, import_job) =
+                crate::narration_import::read_import_job_json(c, candidate_id)?;
+            let (align_busy, align_job) =
+                crate::narration_align::read_align_job_json(c, candidate_id)?;
+            Ok(Ok((
+                latest,
+                busy,
+                job,
+                import_busy,
+                import_job,
+                align_busy,
+                align_job,
+            )))
+        })??;
     let align_ready = crate::narration_align::prerequisites_ready();
 
     let Some(latest) = latest else {
@@ -516,6 +529,8 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             "activeModelId": catalog::active_model_id(&crate::components::load_settings()?, "pt"),
             "busy": job_busy,
             "job": job_json,
+            "importBusy": import_busy,
+            "importJob": import_job_json,
             "alignBusy": align_busy,
             "alignJob": align_job_json,
             "alignPrerequisitesReady": align_ready,
@@ -534,7 +549,7 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         for b in &latest.blocks {
             let row = c
                 .query_row(
-                    "SELECT id, version_id, voice_id, model_id, audio_rel_path, duration_us, sample_rate, channels, bytes, sha256
+                    "SELECT id, version_id, voice_id, model_id, engine_id, audio_rel_path, duration_us, sample_rate, channels, bytes, sha256
                      FROM narration_blocks WHERE block_id=?1 ORDER BY id DESC LIMIT 1",
                     [b.block_id],
                     |r| {
@@ -543,12 +558,13 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                             ver_id: r.get(1)?,
                             voice_id: r.get(2)?,
                             model_id: r.get(3)?,
-                            rel: r.get(4)?,
-                            dur: r.get(5)?,
-                            sr: r.get(6)?,
-                            ch: r.get(7)?,
-                            bytes: r.get(8)?,
-                            sha256: r.get(9)?,
+                            engine_id: r.get(4)?,
+                            rel: r.get(5)?,
+                            dur: r.get(6)?,
+                            sr: r.get(7)?,
+                            ch: r.get(8)?,
+                            bytes: r.get(9)?,
+                            sha256: r.get(10)?,
                         })
                     },
                 )
@@ -570,6 +586,7 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                             "versionId": r.ver_id,
                             "voiceId": r.voice_id,
                             "modelId": r.model_id,
+                            "engineId": r.engine_id,
                             "relPath": r.rel,
                             "durationUs": r.dur,
                             "sampleRate": r.sr,
@@ -604,6 +621,8 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         "activeModelId": active_model_id,
         "busy": job_busy,
         "job": job_json,
+        "importBusy": import_busy,
+        "importJob": import_job_json,
         "alignBusy": align_busy,
         "alignJob": align_job_json,
         "alignPrerequisitesReady": align_ready,
