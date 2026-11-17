@@ -176,7 +176,7 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
         : { active, blockId: activeBlockId, gain: nextGain }
     ));
 
-    const forwardPlaying = (!el.paused || tailRef.current.active) && !el.ended && (rate === undefined || rate > 0);
+    const forwardPlaying = (!el.paused || tailRef.current.active) && !el.ended && (rate === undefined || rate >= 0);
     const playbackRate = rate && rate > 0 ? rate : (el.playbackRate || 1);
     for (const seg of narrationSegments) {
       const audioEl = audioRefs.current.get(seg.blockId);
