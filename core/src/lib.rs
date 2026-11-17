@@ -88,6 +88,7 @@ mod sources;
 pub mod thumbnail;
 pub mod transcription;
 pub use transcription::SUPPORTED_LANGUAGES;
+pub mod translation;
 mod url_import;
 mod version;
 pub mod worker;

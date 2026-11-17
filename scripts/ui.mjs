@@ -7,6 +7,7 @@ import { mkdir } from 'node:fs/promises';
 import { testEditorBorders } from './editor-borders.mjs';
 import { testEditorSilencesPanel, testEditorSilencesPreview } from './editor-silences.mjs';
 import { testEditorCrop } from './editor-crop.mjs';
+import { testTranslation, testTranslationBlocked } from './translation-ui.mjs';
 const socket = createServer();
 await new Promise(resolve => socket.listen(0, '127.0.0.1', resolve));
 const port = socket.address().port;
@@ -1219,12 +1220,14 @@ try {
     await guardrailsBox.locator('[data-guardrails-over60s]').waitFor({ state: 'detached' });
     await testCaptions(page, editor, L.lang);
     await testEditorSilencesPanel(page, editor, L.lang);
+    await testTranslation(page, editor, L.lang);
     assert.match(await editor.innerText(), new RegExp(L.hint), 'atalhos visíveis junto dos controles');
     for (const key of ['J', 'K', 'L', 'I', 'O']) assert.ok((await editor.locator('kbd', { hasText: new RegExp(`^${key}$`) }).count()) > 0, `tecla ${key} visível`);
     await editor.getByRole('button', { name: L.close, exact: true }).click();
     await editor.waitFor({ state: 'detached' });
   }
   await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
+  await testTranslationBlocked(page, url);
   await testEditorBorders(page, url);
   await testEditorSilencesPreview(page, url);
   await testEditorCrop(page, url);
