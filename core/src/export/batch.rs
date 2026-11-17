@@ -54,7 +54,7 @@ pub(crate) struct PlannedCut {
 }
 
 enum PreparedItem {
-    Queued(StartRequest, i64),
+    Queued(Box<StartRequest>, i64),
     Failed(CoreError, i64),
 }
 
@@ -653,10 +653,14 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             resolved_captions: None,
             resolved_output_captions: None,
             resolved_narration_starts: None,
+            resolved_soundtrack: None,
+            resolved_sfx: None,
             overwrite: confirmed,
         };
         match super::prepare_start_request(req, &project) {
-            Ok((resolved, dur)) => prepared.push(PreparedItem::Queued(resolved, dur.max(1))),
+            Ok((resolved, dur)) => {
+                prepared.push(PreparedItem::Queued(Box::new(resolved), dur.max(1)))
+            }
             Err(err) => prepared.push(PreparedItem::Failed(err, cut.duration_us)),
         }
     }

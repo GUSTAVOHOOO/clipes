@@ -411,6 +411,40 @@ pub fn full_description(description: &str, credit: Option<&str>) -> String {
     }
 }
 
+/// Combina o crédito da Fonte com eventuais atribuições CC-BY de trilhas/efeitos (#154).
+pub fn build_full_credit(
+    lang: Lang,
+    permission: &Value,
+    origin_url: Option<&str>,
+    cc_by_attributions: &[String],
+) -> Option<String> {
+    let mut parts = Vec::new();
+    if let Some(source_credit) = build_credit(lang, permission, origin_url) {
+        parts.push(source_credit);
+    }
+    if !cc_by_attributions.is_empty() {
+        let prefix = match lang {
+            Lang::Pt => "Música / áudio (CC-BY): ",
+            Lang::En => "Music / audio (CC-BY): ",
+        };
+        let lines: Vec<String> = cc_by_attributions
+            .iter()
+            .map(|a| a.trim())
+            .filter(|a| !a.is_empty())
+            .map(|a| format!("{prefix}{a}"))
+            .collect();
+        if !lines.is_empty() {
+            parts.push(lines.join("\n"));
+        }
+    }
+    (!parts.is_empty()).then(|| parts.join("\n\n"))
+}
+
+fn credit_for_candidate(ctx: &Context, lang: Lang) -> Option<String> {
+    let attrs = crate::audio::cc_by_attributions_for_candidate(ctx.candidate).unwrap_or_default();
+    build_full_credit(lang, &ctx.permission, ctx.origin_url.as_deref(), &attrs)
+}
+
 fn credit_bytes(credit: Option<&str>) -> usize {
     credit.map_or(0, |c| c.len() + 2)
 }
@@ -541,7 +575,7 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let ctx = context(candidate_arg(&v)?)?;
     let (profile, safety) = route_safety()?;
     let lang = pick_language(&ctx, &v)?;
-    let credit = build_credit(lang, &ctx.permission, ctx.origin_url.as_deref());
+    let credit = credit_for_candidate(&ctx, lang);
     let chapters_res = chapters::resolve(ctx.candidate, lang)?;
     let mut input = build_input(
         &ctx.cut.sentences,
@@ -564,7 +598,7 @@ fn cmd_generate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let ctx = context(candidate_arg(&v)?)?;
     let lang = pick_language(&ctx, &v)?;
     let (profile, safety) = route_safety()?;
-    let credit = build_credit(lang, &ctx.permission, ctx.origin_url.as_deref());
+    let credit = credit_for_candidate(&ctx, lang);
     let chapters_res = chapters::resolve(ctx.candidate, lang)?;
     let mut input = build_input(
         &ctx.cut.sentences,
@@ -677,7 +711,7 @@ fn materialize(ctx: &Context) -> Result<(), CoreError> {
             .and_then(|r| Fields::from_value(&r["data"]));
         if let Some(mut f) = data {
             let lang = Lang::parse(&lang_code).unwrap_or(Lang::Pt);
-            let credit = build_credit(lang, &ctx.permission, ctx.origin_url.as_deref());
+            let credit = credit_for_candidate(ctx, lang);
             if let Ok(res) = chapters::resolve(ctx.candidate, lang) {
                 if let Some(block) = res.block {
                     f.description = append_chapters_within_limit(
@@ -804,7 +838,7 @@ fn document(ctx: &Context) -> Result<Value, CoreError> {
         .last()
         .and_then(|g| Lang::parse(&g.language))
         .or(detected);
-    let credit = lang.and_then(|l| build_credit(l, &ctx.permission, ctx.origin_url.as_deref()));
+    let credit = lang.and_then(|l| credit_for_candidate(ctx, l));
     let chapters_lang = lang.unwrap_or(Lang::Pt);
     let chapters_res = chapters::resolve(ctx.candidate, chapters_lang)?;
     let current_desc = done
@@ -932,7 +966,7 @@ fn cmd_edit(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     f.tags = f.tags.iter().map(|t| t.trim().to_owned()).collect();
     f.hashtags = f.hashtags.iter().map(|t| t.trim().to_owned()).collect();
     let lang = Lang::parse(&g.language).unwrap_or(Lang::Pt);
-    let credit = build_credit(lang, &ctx.permission, ctx.origin_url.as_deref());
+    let credit = credit_for_candidate(&ctx, lang);
     let violations = check_limits(&f, credit_bytes(credit.as_deref()));
     if !violations.is_empty() {
         return Err(CoreError {
@@ -1010,7 +1044,7 @@ fn cmd_refresh_chapters(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     };
     f.description = updated;
 
-    let credit = build_credit(lang, &ctx.permission, ctx.origin_url.as_deref());
+    let credit = credit_for_candidate(&ctx, lang);
     let violations = check_limits(&f, credit_bytes(credit.as_deref()));
     if !violations.is_empty() {
         return Err(CoreError {

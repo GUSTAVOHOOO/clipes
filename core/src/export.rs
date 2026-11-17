@@ -83,6 +83,10 @@ pub(crate) struct StartRequest {
     pub(crate) resolved_output_captions: Option<Box<(String, i64, Vec<FrozenOutputCaptionWord>)>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) resolved_narration_starts: Option<std::collections::BTreeMap<i64, i64>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) resolved_soundtrack: Option<crate::audio::SoundtrackEdit>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) resolved_sfx: Option<Vec<crate::audio::SfxEdit>>,
     // Só o lote (#64) com `confirmed: true` ativa a substituição atômica de destino existente.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub(crate) overwrite: bool,
@@ -744,23 +748,232 @@ pub(crate) fn prepare_start_request(
         (resolved.caption_track == "translated").then(|| resolved.frozen_captions());
     request.resolved_output_captions = (resolved.caption_track == "narration")
         .then(|| Box::new(resolved.frozen_output_captions()));
-    request.resolved_narration_starts = request
+    let doc_for_freeze = request
         .cut
         .clip_id
         .map(crate::editor::edits::document)
-        .transpose()?
-        .map(|doc| doc.narration_starts);
+        .transpose()?;
+    request.resolved_narration_starts = doc_for_freeze
+        .as_ref()
+        .map(|doc| doc.narration_starts.clone());
+    request.resolved_soundtrack = doc_for_freeze
+        .as_ref()
+        .and_then(|doc| doc.soundtrack.clone());
+    request.resolved_sfx = doc_for_freeze.map(|doc| doc.sfx);
     render::validate_output_with_overwrite(&request.output, request.overwrite)?;
     let _ = crate::jobs::preview::source(request.cut.source_id, project)?;
     check_target_glyphs(&resolved, &style)?;
-    let total_duration_us = resolve_narration_render(
+    let narration = resolve_narration_render(
         request.cut.candidate_id,
         request.cut.clip_id,
         &resolved,
         request.resolved_narration_starts.as_ref(),
-    )?
-    .map_or(resolved.output_duration_us, |n| n.total_duration_us);
+    )?;
+    let _ = resolve_audio_render(
+        project,
+        request.cut.candidate_id,
+        request.cut.clip_id,
+        &resolved,
+        request.resolved_narration_starts.as_ref(),
+        request.resolved_soundtrack.as_ref(),
+        request.resolved_sfx.as_deref(),
+        narration.as_ref(),
+    )?;
+    let total_duration_us = narration.map_or(resolved.output_duration_us, |n| n.total_duration_us);
     Ok((request, total_duration_us))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn resolve_audio_render(
+    project: &Path,
+    candidate_id: Option<i64>,
+    clip_id: Option<i64>,
+    target: &Target,
+    frozen_starts: Option<&std::collections::BTreeMap<i64, i64>>,
+    frozen_soundtrack: Option<&crate::audio::SoundtrackEdit>,
+    frozen_sfx: Option<&[crate::audio::SfxEdit]>,
+    narration: Option<&render::NarrationRenderInput>,
+) -> Result<Option<render::AudioMixRenderInput>, CoreError> {
+    let (soundtrack, sfx_list): (
+        Option<crate::audio::SoundtrackEdit>,
+        Vec<crate::audio::SfxEdit>,
+    ) = if frozen_soundtrack.is_some() || frozen_sfx.is_some() {
+        (
+            frozen_soundtrack.cloned(),
+            frozen_sfx
+                .map(<[crate::audio::SfxEdit]>::to_vec)
+                .unwrap_or_default(),
+        )
+    } else if let Some(cid) = clip_id {
+        let doc = crate::editor::edits::document(cid)?;
+        (doc.soundtrack, doc.sfx)
+    } else {
+        (None, Vec::new())
+    };
+    if soundtrack.is_none() && sfx_list.is_empty() {
+        return Ok(None);
+    }
+
+    let splice = SpliceMap::new(target.start_us, target.end_us, &target.active_cuts);
+    let montage_plan = if let Some(cid) = candidate_id {
+        if let Some(script_doc) = crate::script::montage_blocks_readonly(cid)? {
+            let audio_map = crate::tts::block_audio_for_candidate(cid)?;
+            let manual_starts = match frozen_starts {
+                Some(starts) => starts.clone(),
+                None => match clip_id {
+                    Some(id) => crate::editor::edits::document(id)?.narration_starts,
+                    None => std::collections::BTreeMap::new(),
+                },
+            };
+            let sentences = crate::montage::load_transcript_sentences(target.transcript)?;
+            let blocks: Vec<crate::montage::MontageBlockInput> = script_doc
+                .blocks
+                .into_iter()
+                .map(|b| {
+                    let (duration_us, estimated) = match audio_map.get(&b.id) {
+                        Some(audio) => (audio.duration_us, false),
+                        None => (
+                            b.narration
+                                .as_deref()
+                                .map_or(0, crate::montage::estimate_block_duration_us),
+                            true,
+                        ),
+                    };
+                    crate::montage::MontageBlockInput {
+                        block_id: b.id,
+                        position: b.position,
+                        title: b.title,
+                        refs: b.refs,
+                        duration_us,
+                        estimated,
+                    }
+                })
+                .collect();
+            Some(crate::montage::resolve(&crate::montage::MontageInput {
+                blocks: &blocks,
+                sentences: &sentences,
+                splice: &splice,
+                manual_starts: &manual_starts,
+            })?)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let clip_duration_us = narration
+        .map_or(splice.output_duration_us, |n| n.clip_duration_us)
+        .max(splice.output_duration_us);
+    let total_duration_us = narration
+        .map_or(clip_duration_us, |n| n.total_duration_us)
+        .max(clip_duration_us);
+
+    let approved = candidate_id.and_then(|cid| crate::selection::approved_cut(cid).ok());
+    let (assets, speech_intervals, sfx_anchors) = projects::with_reader(|c| {
+        let assets = crate::audio::load_assets_map(c)?;
+        let speech = crate::audio::resolve_speech_intervals_for_clip(
+            c,
+            Some(target.transcript),
+            &splice,
+            approved.as_ref(),
+            montage_plan.as_ref(),
+        )?;
+        let mut anchors = Vec::with_capacity(sfx_list.len());
+        for s in &sfx_list {
+            anchors.push(crate::audio::resolve_sfx_anchor(
+                c,
+                &s.anchor,
+                Some(target.transcript),
+                &splice,
+                montage_plan.as_ref(),
+            )?);
+        }
+        Ok((assets, speech, anchors))
+    })?;
+
+    let soundtrack_input = if let Some(st) = soundtrack {
+        let asset = assets.get(&st.asset_id).ok_or_else(|| {
+            error(
+                "audio_asset_missing",
+                "Trilha sonora não foi encontrada para exportar.",
+            )
+        })?;
+        let path = crate::audio::resolve_audio_rel_path(project, &asset.audio_rel_path)
+            .ok_or_else(|| {
+                error(
+                    "audio_asset_missing",
+                    "Arquivo da trilha sonora não foi encontrado para exportar.",
+                )
+            })?;
+        let start_us = st.start_us.clamp(0, total_duration_us);
+        let remaining = (total_duration_us - start_us).max(0);
+        let play_duration_us = if st.loop_to_fit {
+            remaining
+        } else {
+            remaining.min(asset.duration_us)
+        };
+        if play_duration_us > 0 {
+            Some(render::SoundtrackRenderInput {
+                path,
+                asset_duration_us: asset.duration_us,
+                start_us,
+                play_duration_us,
+                volume: st.volume,
+                fade_in_us: st.fade_in_us.clamp(0, play_duration_us),
+                fade_out_us: st.fade_out_us.clamp(0, play_duration_us),
+                loop_to_fit: st.loop_to_fit,
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let mut sfx_inputs = Vec::with_capacity(sfx_list.len());
+    for (s, (start_us, _, _, outside_clip)) in sfx_list.into_iter().zip(sfx_anchors) {
+        if outside_clip {
+            continue;
+        }
+        let asset = assets.get(&s.asset_id).ok_or_else(|| {
+            error(
+                "audio_asset_missing",
+                "Efeito sonoro não foi encontrado para exportar.",
+            )
+        })?;
+        let path = crate::audio::resolve_audio_rel_path(project, &asset.audio_rel_path)
+            .ok_or_else(|| {
+                error(
+                    "audio_asset_missing",
+                    "Arquivo do efeito sonoro não foi encontrado para exportar.",
+                )
+            })?;
+        let play_duration_us = (total_duration_us - start_us).clamp(0, asset.duration_us);
+        if play_duration_us <= 0 {
+            continue;
+        }
+        sfx_inputs.push(render::SfxRenderInput {
+            path,
+            start_us,
+            play_duration_us,
+            volume: s.volume,
+            fade_in_us: s.fade_in_us.clamp(0, play_duration_us),
+            fade_out_us: s.fade_out_us.clamp(0, play_duration_us),
+        });
+    }
+
+    if soundtrack_input.is_none() && sfx_inputs.is_empty() {
+        return Ok(None);
+    }
+
+    Ok(Some(render::AudioMixRenderInput {
+        soundtrack: soundtrack_input,
+        sfx: sfx_inputs,
+        speech_intervals,
+        clip_duration_us,
+        total_duration_us,
+    }))
 }
 
 /// Resolve as faixas de Narração e `tpad` final a partir de `montage::audio_mix_plan` e dos
@@ -973,6 +1186,16 @@ pub(crate) fn run(
             &target,
             request.resolved_narration_starts.as_ref(),
         )?;
+        let extra_audio = resolve_audio_render(
+            project,
+            request.cut.candidate_id,
+            request.cut.clip_id,
+            &target,
+            request.resolved_narration_starts.as_ref(),
+            request.resolved_soundtrack.as_ref(),
+            request.resolved_sfx.as_deref(),
+            narration.as_ref(),
+        )?;
         let (source, _, audio, _, _) =
             crate::jobs::preview::source(request.cut.source_id, project)?;
         let ffmpeg = crate::components::cache_settings()?
@@ -1006,24 +1229,27 @@ pub(crate) fn run(
                 }
             });
             let mut last = 0;
-            let result = encoder::render_styled_spliced_crop_plan_narration_with_fallback_overwrite(
-                &ffmpeg,
-                &input,
-                &target.segments,
-                &prepared,
-                &preferred,
-                request.overwrite,
-                crop_plan.as_ref(),
-                narration.as_ref(),
-                &cancel,
-                &mut |percentage| {
-                    if percentage > last {
-                        let _ = crate::jobs::progress(id, "export", percentage, "Exportando Corte");
-                        batch::on_job_progress(id);
-                        last = percentage;
-                    }
-                },
-            );
+            let result =
+                encoder::render_styled_spliced_crop_plan_narration_audio_with_fallback_overwrite(
+                    &ffmpeg,
+                    &input,
+                    &target.segments,
+                    &prepared,
+                    &preferred,
+                    request.overwrite,
+                    crop_plan.as_ref(),
+                    narration.as_ref(),
+                    extra_audio.as_ref(),
+                    &cancel,
+                    &mut |percentage| {
+                        if percentage > last {
+                            let _ =
+                                crate::jobs::progress(id, "export", percentage, "Exportando Corte");
+                            batch::on_job_progress(id);
+                            last = percentage;
+                        }
+                    },
+                );
             finished.store(true, Ordering::SeqCst);
             result
         });

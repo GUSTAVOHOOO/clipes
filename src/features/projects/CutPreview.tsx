@@ -8,8 +8,17 @@ import { Button } from '@/components/ui/Button';
 import { CaptionOverlay } from '@/features/captions/CaptionOverlay';
 import type { CaptionData } from '@/features/captions/types';
 import { cropVideoTransform, interpolateCrop, type CropSegment, type ResolvedCropPlan } from '@/features/editor/cropMath';
-import { sourceToSplicedUs, type KeptSegment, type MontageState } from '@/features/editor/timelineMath';
-import { activeNarrationAt, stepDuckGain, targetDuckGain, type PreviewNarrationSegment } from '@/features/editor/duckingMath';
+import { sourceToSplicedUs, type AudioMixState, type KeptSegment, type MontageState } from '@/features/editor/timelineMath';
+import {
+  activeNarrationAt,
+  activeSpeechAt,
+  computeSoundtrackGain,
+  fadeEnvelope,
+  soundtrackPlaybackSec,
+  stepDuckGain,
+  targetDuckGain,
+  type PreviewNarrationSegment,
+} from '@/features/editor/duckingMath';
 
 /** Corte (ou candidato da seleção) a pré-visualizar: tempos em µs da Fonte. */
 export type CutRange = { sourceId: number; startUs: number; endUs: number };
@@ -55,6 +64,7 @@ export function toProxySeconds(sourceUs: number, windowStartUs: number, windowEn
 }
 const mediaUrl = (key: string) => buildMediaUrl(`proxy/${key}`);
 const narrationMediaUrl = (id: number) => buildMediaUrl(`narration/${id}`);
+const audioAssetMediaUrl = (mediaId: string) => buildMediaUrl(mediaId);
 
 export type SkipInterval = { startUs: number; endUs: number };
 
@@ -71,13 +81,16 @@ export type PreviewProxyInfo = { state: Proxy['state']; key: string; windowStart
 
 /** Preview 9:16 em Fit (barras, sem corte) de um Corte, sobre o proxy de GOP curto gerado pelo núcleo. */
 /** `rate` (editor, #61): 0 pausa, >0 toca nessa velocidade, <0 volta por passos. `onSourceTime` informa o tempo da Fonte a cada atualização. */
-export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onProxyChange, captions, skipIntervals, crop, cropPlan, montage, keptSegments, clipStartUs, clipEndUs }: { sourceId: number; startUs: number; endUs: number; rate?: number; onSourceTime?: (sourceUs: number) => void; onProxyChange?: (proxy: PreviewProxyInfo | null) => void; captions?: CaptionData | null; skipIntervals?: SkipInterval[]; crop?: CropSegment[] | null; cropPlan?: ResolvedCropPlan | null; montage?: MontageState | null; keptSegments?: KeptSegment[]; clipStartUs?: number; clipEndUs?: number }) {
+export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onProxyChange, captions, skipIntervals, crop, cropPlan, montage, audioMix, keptSegments, clipStartUs, clipEndUs }: { sourceId: number; startUs: number; endUs: number; rate?: number; onSourceTime?: (sourceUs: number) => void; onProxyChange?: (proxy: PreviewProxyInfo | null) => void; captions?: CaptionData | null; skipIntervals?: SkipInterval[]; crop?: CropSegment[] | null; cropPlan?: ResolvedCropPlan | null; montage?: MontageState | null; audioMix?: AudioMixState | null; keptSegments?: KeptSegment[]; clipStartUs?: number; clipEndUs?: number }) {
   const t = useText(texts);
   const frame = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
   const bottomVideo = useRef<HTMLVideoElement>(null);
   const audioRefs = useRef(new Map<number, HTMLAudioElement>());
+  const soundtrackRef = useRef<HTMLAudioElement>(null);
+  const sfxRefs = useRef(new Map<number, HTMLAudioElement>());
   const duckGainRef = useRef(1);
+  const musicDuckGainRef = useRef(1);
   const tailRef = useRef({ active: false, tailUs: 0, lastTs: 0 });
   const pending = useRef<number | null>(null);
   const loadedWindow = useRef<{ sourceId: number; windowStartUs: number; windowEndUs: number } | null>(null);
@@ -87,6 +100,8 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
   const [playing, setPlaying] = useState(false);
   const [tailActive, setTailActive] = useState(false);
   const [duckState, setDuckState] = useState<{ active: boolean; blockId: number | null; gain: number }>({ active: false, blockId: null, gain: 1 });
+  const [soundtrackState, setSoundtrackState] = useState<{ ducking: boolean; gain: number }>({ ducking: false, gain: 0 });
+  const [activeSfxIds, setActiveSfxIds] = useState<number[]>([]);
   const [time, setTime] = useState(0);
   const [lastSeekUs, setLastSeekUs] = useState<number | null>(null);
   const [missingH264] = useState(isLinuxMissingH264);
@@ -106,6 +121,12 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
       }));
   }, [montage]);
   const hasNarration = narrationSegments.length > 0;
+  const activeSfx = useMemo(
+    () => (audioMix?.sfx ?? []).filter(s => !s.outsideClip && s.endUs > s.startUs),
+    [audioMix?.sfx],
+  );
+  const hasSoundtrack = !!(audioMix?.soundtrack && audioMix.soundtrack.playDurationUs > 0);
+  const hasExtraAudio = hasSoundtrack || activeSfx.length > 0;
   const clipDurationUs = useMemo(() => {
     if (montage) return montage.clipDurationUs;
     if (keptSegments && keptSegments.length > 0) return keptSegments[keptSegments.length - 1].outputEndUs;
@@ -180,6 +201,12 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
   const syncNarrationAndDuck = useCallback((dtMs: number, snap: boolean) => {
     const el = video.current;
     if (!el || !proxy || proxy.state !== 'ready') return;
+    const outputUs = tailRef.current.active
+      ? clipDurationUs + tailRef.current.tailUs
+      : sourceToSplicedUs(proxy.windowStartUs + el.currentTime * 1_000_000, keptSegments, effectiveClipStartUs);
+    const forwardPlaying = (!el.paused || tailRef.current.active) && !el.ended && (rate === undefined || rate >= 0);
+    const playbackRate = rate && rate > 0 ? rate : (el.playbackRate || 1);
+
     if (!hasNarration) {
       if (el.volume !== 1) el.volume = 1;
       duckGainRef.current = 1;
@@ -187,40 +214,111 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
         if (!a.paused) a.pause();
       }
       setDuckState(prev => (prev.active || prev.gain !== 1 || prev.blockId !== null ? { active: false, blockId: null, gain: 1 } : prev));
-      return;
-    }
-    const outputUs = tailRef.current.active
-      ? clipDurationUs + tailRef.current.tailUs
-      : sourceToSplicedUs(proxy.windowStartUs + el.currentTime * 1_000_000, keptSegments, effectiveClipStartUs);
-    const activeSeg = activeNarrationAt(narrationSegments, outputUs);
-    const active = activeSeg !== null;
-    const nextGain = snap ? targetDuckGain(active) : stepDuckGain(duckGainRef.current, active, dtMs);
-    duckGainRef.current = nextGain;
-    el.volume = nextGain;
-    const activeBlockId = activeSeg?.blockId ?? null;
-    setDuckState(prev => (
-      prev.active === active && prev.blockId === activeBlockId && Math.abs(prev.gain - nextGain) < 0.001
-        ? prev
-        : { active, blockId: activeBlockId, gain: nextGain }
-    ));
+    } else {
+      const activeSeg = activeNarrationAt(narrationSegments, outputUs);
+      const active = activeSeg !== null;
+      const nextGain = snap ? targetDuckGain(active) : stepDuckGain(duckGainRef.current, active, dtMs);
+      duckGainRef.current = nextGain;
+      el.volume = nextGain;
+      const activeBlockId = activeSeg?.blockId ?? null;
+      setDuckState(prev => (
+        prev.active === active && prev.blockId === activeBlockId && Math.abs(prev.gain - nextGain) < 0.001
+          ? prev
+          : { active, blockId: activeBlockId, gain: nextGain }
+      ));
 
-    const forwardPlaying = (!el.paused || tailRef.current.active) && !el.ended && (rate === undefined || rate >= 0);
-    const playbackRate = rate && rate > 0 ? rate : (el.playbackRate || 1);
-    for (const seg of narrationSegments) {
-      const audioEl = audioRefs.current.get(seg.blockId);
-      if (!audioEl) continue;
-      if (forwardPlaying && activeSeg?.blockId === seg.blockId) {
-        const desiredSec = Math.max(0, (outputUs - seg.startUs) / 1_000_000);
-        if (audioEl.readyState >= 1 && Math.abs(audioEl.currentTime - desiredSec) > 0.08) {
-          audioEl.currentTime = desiredSec;
+      for (const seg of narrationSegments) {
+        const audioEl = audioRefs.current.get(seg.blockId);
+        if (!audioEl) continue;
+        if (forwardPlaying && activeSeg?.blockId === seg.blockId) {
+          const desiredSec = Math.max(0, (outputUs - seg.startUs) / 1_000_000);
+          if (audioEl.readyState >= 1 && Math.abs(audioEl.currentTime - desiredSec) > 0.08) {
+            audioEl.currentTime = desiredSec;
+          }
+          if (audioEl.playbackRate !== playbackRate) audioEl.playbackRate = playbackRate;
+          if (audioEl.paused) void audioEl.play().catch(() => {});
+        } else if (!audioEl.paused) {
+          audioEl.pause();
         }
-        if (audioEl.playbackRate !== playbackRate) audioEl.playbackRate = playbackRate;
-        if (audioEl.paused) void audioEl.play().catch(() => {});
-      } else if (!audioEl.paused) {
-        audioEl.pause();
       }
     }
-  }, [proxy, hasNarration, clipDurationUs, keptSegments, effectiveClipStartUs, narrationSegments, rate]);
+
+    // Trilha sonora importada (#154): ducking por automação nos intervalos de fala + fade + repetição/corte.
+    const st = audioMix?.soundtrack;
+    const stEl = soundtrackRef.current;
+    if (st && st.playDurationUs > 0) {
+      const speechActive = activeSpeechAt(audioMix?.speechIntervals ?? [], outputUs);
+      const nextMusicDuck = snap
+        ? targetDuckGain(speechActive)
+        : stepDuckGain(musicDuckGainRef.current, speechActive, dtMs);
+      musicDuckGainRef.current = nextMusicDuck;
+      const musicPosSec = soundtrackPlaybackSec(
+        outputUs,
+        st.startUs,
+        st.playDurationUs,
+        st.assetDurationUs,
+        st.loopToFit,
+      );
+      const gain = musicPosSec !== null
+        ? computeSoundtrackGain(
+            st.volume,
+            outputUs - st.startUs,
+            st.playDurationUs,
+            st.fadeInUs,
+            st.fadeOutUs,
+            nextMusicDuck,
+          )
+        : 0;
+      if (stEl) {
+        stEl.volume = gain;
+        if (forwardPlaying && musicPosSec !== null) {
+          if (stEl.readyState >= 1 && Math.abs(stEl.currentTime - musicPosSec) > 0.08) {
+            stEl.currentTime = musicPosSec;
+          }
+          if (stEl.playbackRate !== playbackRate) stEl.playbackRate = playbackRate;
+          if (stEl.paused) void stEl.play().catch(() => {});
+        } else if (!stEl.paused) {
+          stEl.pause();
+        }
+      }
+      setSoundtrackState(prev => (
+        prev.ducking === speechActive && Math.abs(prev.gain - gain) < 0.001
+          ? prev
+          : { ducking: speechActive, gain }
+      ));
+    } else {
+      musicDuckGainRef.current = 1;
+      if (stEl && !stEl.paused) stEl.pause();
+      setSoundtrackState(prev => (prev.ducking || prev.gain !== 0 ? { ducking: false, gain: 0 } : prev));
+    }
+
+    // Efeitos sonoros pontuais (#154).
+    const nextActiveSfx: number[] = [];
+    for (const sfx of activeSfx) {
+      const sfxEl = sfxRefs.current.get(sfx.id);
+      const inside = outputUs >= sfx.startUs && outputUs < sfx.endUs;
+      if (inside) nextActiveSfx.push(sfx.id);
+      if (!sfxEl) continue;
+      if (forwardPlaying && inside) {
+        const durUs = sfx.endUs - sfx.startUs;
+        const elapsedUs = outputUs - sfx.startUs;
+        sfxEl.volume = Math.max(0, Math.min(1, sfx.volume * fadeEnvelope(elapsedUs, durUs, sfx.fadeInUs, sfx.fadeOutUs)));
+        const desiredSec = Math.max(0, elapsedUs / 1_000_000);
+        if (sfxEl.readyState >= 1 && Math.abs(sfxEl.currentTime - desiredSec) > 0.08) {
+          sfxEl.currentTime = desiredSec;
+        }
+        if (sfxEl.playbackRate !== playbackRate) sfxEl.playbackRate = playbackRate;
+        if (sfxEl.paused) void sfxEl.play().catch(() => {});
+      } else if (!sfxEl.paused) {
+        sfxEl.pause();
+      }
+    }
+    setActiveSfxIds(prev => (
+      prev.length === nextActiveSfx.length && prev.every((v, i) => v === nextActiveSfx[i])
+        ? prev
+        : nextActiveSfx
+    ));
+  }, [proxy, hasNarration, clipDurationUs, keptSegments, effectiveClipStartUs, narrationSegments, audioMix, activeSfx, rate]);
   const syncNarrationRef = useRef(syncNarrationAndDuck);
   syncNarrationRef.current = syncNarrationAndDuck;
 
@@ -255,9 +353,9 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
     return () => window.clearInterval(timer);
   }, [rate, proxy?.state, proxy?.windowStartUs, proxy?.windowEndUs, syncNarrationAndDuck]);
 
-  // Sincroniza áudio da Narração, envoltória de ducking (-12 dB) e congelamento de cauda (`tpad`).
+  // Sincroniza áudio da Narração, trilha/efeitos (#154), envoltória de ducking (-12 dB) e cauda (`tpad`).
   useEffect(() => {
-    if (!hasNarration || !proxy || proxy.state !== 'ready') return;
+    if ((!hasNarration && !hasExtraAudio) || !proxy || proxy.state !== 'ready') return;
     syncNarrationAndDuck(0, true);
     if (!playing && !tailActive) return;
     let alive = true, raf = 0;
@@ -297,7 +395,7 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
     };
     raf = requestAnimationFrame(tick);
     return () => { alive = false; cancelAnimationFrame(raf); };
-  }, [hasNarration, proxy, playing, tailActive, freezeTailUs, effectiveClipEndUs, rate, onSourceTime, syncNarrationAndDuck]);
+  }, [hasNarration, hasExtraAudio, proxy, playing, tailActive, freezeTailUs, effectiveClipEndUs, rate, onSourceTime, syncNarrationAndDuck]);
 
   // Pula silêncios ativos com latência de quadro enquanto o preview está reproduzindo.
   useEffect(() => {
@@ -492,7 +590,7 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
       }} onEnded={() => { setPlaying(false); syncNarrationAndDuck(0, true); }}
       onError={() => { if (isTauri() && !missingH264) setNotice(t.playError); }} />
   );
-  return <section aria-label={t.title} data-preview-state={proxy?.state ?? (error ? 'error' : 'loading')} data-seek-us={lastSeekUs ?? undefined} data-crop-active={hasCrop ? 'true' : undefined} data-crop-layout={cropPlan?.layout} data-split-ratio={isDual ? splitRatio.toFixed(4) : undefined} data-ducking={hasNarration ? (duckState.active ? 'true' : 'false') : undefined} data-duck-gain={hasNarration ? duckState.gain.toFixed(3) : undefined} data-narration-active-block={duckState.blockId ?? undefined} data-freeze-tail-active={tailActive ? 'true' : undefined} className="flex w-full max-w-[18rem] flex-col gap-2 text-sm">
+  return <section aria-label={t.title} data-preview-state={proxy?.state ?? (error ? 'error' : 'loading')} data-seek-us={lastSeekUs ?? undefined} data-crop-active={hasCrop ? 'true' : undefined} data-crop-layout={cropPlan?.layout} data-split-ratio={isDual ? splitRatio.toFixed(4) : undefined} data-ducking={hasNarration ? (duckState.active ? 'true' : 'false') : undefined} data-duck-gain={hasNarration ? duckState.gain.toFixed(3) : undefined} data-narration-active-block={duckState.blockId ?? undefined} data-soundtrack-ducking={hasSoundtrack ? (soundtrackState.ducking ? 'true' : 'false') : undefined} data-soundtrack-gain={hasSoundtrack ? soundtrackState.gain.toFixed(3) : undefined} data-sfx-active-ids={activeSfx.length > 0 ? activeSfxIds.join(',') : undefined} data-freeze-tail-active={tailActive ? 'true' : undefined} className="flex w-full max-w-[18rem] flex-col gap-2 text-sm">
     {!proxy && !error && <p aria-live="polite" className="text-fg-2">{t.preparing}</p>}
     {error && <p role="alert" className="rounded-md border border-line bg-warning-subtle p-3 text-fg">{t.code[error.code] ?? t.error}</p>}
     {working && proxy && <div className="flex flex-col gap-2" aria-live="polite">
@@ -532,6 +630,29 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
           src={narrationMediaUrl(seg.audioId)}
           preload="auto"
           data-preview-narration-audio={seg.blockId}
+          aria-hidden
+        />
+      ))}
+      {audioMix?.soundtrack && audioMix.soundtrack.playDurationUs > 0 && (
+        <audio
+          key={`st:${audioMix.soundtrack.assetId}`}
+          ref={soundtrackRef}
+          src={audioAssetMediaUrl(audioMix.soundtrack.mediaId)}
+          preload="auto"
+          data-preview-soundtrack-audio={audioMix.soundtrack.assetId}
+          aria-hidden
+        />
+      )}
+      {activeSfx.map(sfx => (
+        <audio
+          key={`sfx:${sfx.id}:${sfx.assetId}`}
+          ref={node => {
+            if (node) sfxRefs.current.set(sfx.id, node);
+            else sfxRefs.current.delete(sfx.id);
+          }}
+          src={audioAssetMediaUrl(sfx.mediaId)}
+          preload="auto"
+          data-preview-sfx-audio={sfx.id}
           aria-hidden
         />
       ))}
