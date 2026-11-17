@@ -173,6 +173,10 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
   const skipRef = useRef(skipIntervals);
   skipRef.current = skipIntervals;
 
+  const publishTime = useCallback((us: number) => {
+    window.dispatchEvent(new CustomEvent<PreviewTimeEvent>(previewTimeEvent, { detail: { source_id: sourceId, us: Math.round(us) } }));
+  }, [sourceId]);
+
   const syncNarrationAndDuck = useCallback((dtMs: number, snap: boolean) => {
     const el = video.current;
     if (!el || !proxy || proxy.state !== 'ready') return;
@@ -311,6 +315,7 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
             el.currentTime = mapped;
             setTime(mapped);
             onSourceTime?.(jumpTo);
+            publishTime(jumpTo);
           }
         }
       }
@@ -318,7 +323,7 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
     };
     frame = requestAnimationFrame(tick);
     return () => { alive = false; cancelAnimationFrame(frame); };
-  }, [playing, proxy, skipIntervals, onSourceTime]);
+  }, [playing, proxy, skipIntervals, onSourceTime, publishTime]);
 
   const windowSeconds = proxy ? (proxy.windowEndUs - proxy.windowStartUs) / 1_000_000 : 0;
   function seekProxy(seconds: number) {
@@ -328,6 +333,7 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
     if (!el || el.readyState < 1) { pending.current = seconds; return; }
     el.currentTime = seconds;
     setTime(seconds);
+    if (proxy) publishTime(proxy.windowStartUs + seconds * 1_000_000);
     syncNarrationRef.current(0, true);
   }
   // Clique numa palavra da Transcrição: mapeia o tempo da Fonte para o do proxy.
@@ -350,6 +356,7 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
     const start = pending.current ?? toProxySeconds(startUs, proxy.windowStartUs, proxy.windowEndUs) ?? 0;
     pending.current = null;
     el.currentTime = start; setTime(start);
+    publishTime(proxy.windowStartUs + start * 1_000_000);
     syncNarrationAndDuck(0, true);
   }
   const isDual = !!(cropPlan && cropPlan.panels.length === 2);
@@ -465,13 +472,24 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
           const jumpTo = skipCutForward(proxy.windowStartUs + curSec * 1_000_000, skipRef.current);
           if (jumpTo !== null) {
             const mapped = toProxySeconds(jumpTo, proxy.windowStartUs, proxy.windowEndUs);
-            if (mapped !== null) { e.currentTarget.currentTime = mapped; setTime(mapped); onSourceTime?.(jumpTo); syncNarrationAndDuck(0, true); return; }
+            if (mapped !== null) { e.currentTarget.currentTime = mapped; setTime(mapped); onSourceTime?.(jumpTo); publishTime(jumpTo); syncNarrationAndDuck(0, true); return; }
           }
         }
         setTime(curSec);
-        if (proxy) onSourceTime?.(proxy.windowStartUs + curSec * 1_000_000);
+        if (proxy) {
+          const us = proxy.windowStartUs + curSec * 1_000_000;
+          onSourceTime?.(us);
+          publishTime(us);
+        }
         if (e.currentTarget.paused && !tailRef.current.active) syncNarrationAndDuck(0, true);
-      }} onPlay={() => setPlaying(true)} onPause={() => { if (!tailRef.current.active) { setPlaying(false); syncNarrationAndDuck(0, true); } }} onEnded={() => { setPlaying(false); syncNarrationAndDuck(0, true); }}
+      }} onSeeked={e => {
+        const curSec = e.currentTarget.currentTime;
+        setTime(curSec);
+        if (proxy) publishTime(proxy.windowStartUs + curSec * 1_000_000);
+      }} onPlay={() => setPlaying(true)} onPause={e => {
+        if (!tailRef.current.active) { setPlaying(false); syncNarrationAndDuck(0, true); }
+        if (proxy) publishTime(proxy.windowStartUs + e.currentTarget.currentTime * 1_000_000);
+      }} onEnded={() => { setPlaying(false); syncNarrationAndDuck(0, true); }}
       onError={() => { if (isTauri() && !missingH264) setNotice(t.playError); }} />
   );
   return <section aria-label={t.title} data-preview-state={proxy?.state ?? (error ? 'error' : 'loading')} data-seek-us={lastSeekUs ?? undefined} data-crop-active={hasCrop ? 'true' : undefined} data-crop-layout={cropPlan?.layout} data-split-ratio={isDual ? splitRatio.toFixed(4) : undefined} data-ducking={hasNarration ? (duckState.active ? 'true' : 'false') : undefined} data-duck-gain={hasNarration ? duckState.gain.toFixed(3) : undefined} data-narration-active-block={duckState.blockId ?? undefined} data-freeze-tail-active={tailActive ? 'true' : undefined} className="flex w-full max-w-[18rem] flex-col gap-2 text-sm">
