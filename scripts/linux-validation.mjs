@@ -211,7 +211,7 @@ try {
       ...process.env,
       CLIPES_DATA_DIR: dataDir,
       CLIPES_FFPROBE: 'ffprobe',
-      GST_DEBUG: 'webkit*:5,2',
+      GST_DEBUG: 'webkitmediaplayer:5,webkitwebsrc:5,*:2',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -597,6 +597,12 @@ try {
     hasRvfc: seekEval.hasRvfc,
     source: formatSeries(seekEval.source),
     proxy: formatSeries(seekEval.proxy),
+    driverLogDuringClipesMedia: driverLogs
+      .join('')
+      .split('\n')
+      .filter(l => l.trim() && !l.includes('paused true'))
+      .slice(-80)
+      .join('\n'),
   };
 
   // Se clipes-media:// falhou no WebKitGTK, testa HTTP loopback para isolar codec vs URI scheme
