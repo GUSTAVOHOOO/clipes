@@ -221,7 +221,7 @@ impl From<PlanError> for CoreError {
             ),
             PlanError::InvalidInput => (
                 "invalid_selection_plan",
-                "Entrada inválida para o planejador de Janelas de seleção.".to_owned(),
+                "Entrada inválida para o planejador de Janelas de seleção: confira se não há tempos negativos ou invertidos, IDs de Frase fora de ordem, duração máxima do Corte não positiva ou razão de tokens inválida.".to_owned(),
             ),
         };
         CoreError {
@@ -244,7 +244,7 @@ fn minute_of(span: &SentenceSpan) -> i64 {
     span.start_us.max(0) / MINUTE_US
 }
 
-fn validate(input: &PlanInput<'_>) -> Result<(), PlanError> {
+fn validate(input: &PlanInput<'_>) -> Result<bool, PlanError> {
     let ratio_ok = input.ratio.high.is_finite()
         && input.ratio.high > 0.0
         && input.ratio.low.is_finite()
@@ -253,22 +253,45 @@ fn validate(input: &PlanInput<'_>) -> Result<(), PlanError> {
     if !ratio_ok || input.max_cut_us <= 0 {
         return Err(PlanError::InvalidInput);
     }
+    let mut needs_normalization = false;
     let mut previous: Option<&SentenceSpan> = None;
     for s in input.sentences {
         if s.start_us < 0 || s.end_us < s.start_us {
             return Err(PlanError::InvalidInput);
         }
-        if previous.is_some_and(|p| s.id <= p.id || s.start_us < p.end_us) {
-            return Err(PlanError::InvalidInput);
+        if s.end_us == s.start_us {
+            needs_normalization = true;
+        }
+        if let Some(p) = previous {
+            if s.id <= p.id {
+                return Err(PlanError::InvalidInput);
+            }
+            if s.start_us < p.end_us {
+                needs_normalization = true;
+            }
         }
         previous = Some(s);
     }
-    Ok(())
+    Ok(needs_normalization)
+}
+
+fn normalized_spans(sentences: &[SentenceSpan]) -> Vec<SentenceSpan> {
+    let mut pairs: Vec<(i64, i64)> = sentences.iter().map(|s| (s.start_us, s.end_us)).collect();
+    let _ = sentences::normalize_spans(&mut pairs, None);
+    sentences
+        .iter()
+        .zip(pairs)
+        .map(|(s, (start_us, end_us))| SentenceSpan {
+            start_us,
+            end_us,
+            ..*s
+        })
+        .collect()
 }
 
 /// Calcula as janelas. Pura: o resultado depende só de `input`.
 pub fn plan(input: &PlanInput<'_>) -> Result<Plan, PlanError> {
-    validate(input)?;
+    let needs_normalization = validate(input)?;
     let overlap = input.max_cut_us;
     if overlap > MAX_CUT_US {
         return Err(PlanError::MaxCutTooLong);
@@ -285,7 +308,12 @@ pub fn plan(input: &PlanInput<'_>) -> Result<Plan, PlanError> {
         context: input.context,
         min_window_us,
     };
-    let spans = input.sentences;
+    let spans: std::borrow::Cow<'_, [SentenceSpan]> = if needs_normalization {
+        std::borrow::Cow::Owned(normalized_spans(input.sentences))
+    } else {
+        std::borrow::Cow::Borrowed(input.sentences)
+    };
+    let spans = spans.as_ref();
     let n = spans.len();
     let mut result = Plan {
         state: PlanState::Full,

@@ -125,3 +125,29 @@ fn planning_ratio_is_point_times_1_2_until_calibrated() {
     let planning = planning_range("p", "m", &request).unwrap();
     assert_eq!(planning, calibrated);
 }
+
+#[test]
+fn overlapping_and_zero_duration_sentences_from_asr_still_plan() {
+    let _guard = ENV.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", dir.path());
+    let schema = json!({"type": "object"});
+    run(
+        "provider.configure",
+        json!({"profileId": "p", "label": "p", "endpoint": "http://127.0.0.1:11434/v1", "kind": "openai", "model": "m", "context": 32768}),
+    )
+    .unwrap();
+    let mut frases = sentences();
+    // Padrão real medido do faster-whisper: uma Frase termina em 391844000 µs e a seguinte
+    // começa 196 ms antes (391648000 µs) após palavra com duração zero / sobreposta.
+    let i = 78;
+    frases[i].start_us = 390_864_000;
+    frases[i].end_us = 391_844_000;
+    frases[i + 1].start_us = 391_648_000;
+    frases[i + 1].end_us = 392_268_000;
+    // Frase inteira com duração zero (4 ocorrências vistas nos bancos reais).
+    frases[109].start_us = 547_764_000;
+    frases[109].end_us = 547_764_000;
+    let plan = plan_for_profile(&request("p", &schema), &frases).unwrap();
+    assert!(!plan.windows.is_empty());
+}

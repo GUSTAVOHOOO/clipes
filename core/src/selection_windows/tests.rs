@@ -251,12 +251,52 @@ fn invalid_input_is_typed() {
     let mut i = input(&spans, 16_384);
     i.ratio.high = 0.0;
     assert_eq!(plan(&i).unwrap_err(), PlanError::InvalidInput);
+    let mut i = input(&spans, 16_384);
+    i.ratio.high = f64::NAN;
+    assert_eq!(plan(&i).unwrap_err(), PlanError::InvalidInput);
     let mut shuffled = spans.clone();
     shuffled.swap(1, 2);
     assert_eq!(
         plan(&input(&shuffled, 16_384)).unwrap_err(),
         PlanError::InvalidInput
     );
+    let mut neg = spans.clone();
+    neg[0].start_us = -1;
+    assert_eq!(
+        plan(&input(&neg, 16_384)).unwrap_err(),
+        PlanError::InvalidInput
+    );
+    let mut inverted = spans.clone();
+    inverted[0].end_us = inverted[0].start_us - 1;
+    let err = plan(&input(&inverted, 16_384)).unwrap_err();
+    assert_eq!(err, PlanError::InvalidInput);
+    let core: CoreError = err.into();
+    assert_eq!(core.code, "invalid_selection_plan");
+    assert!(core.message.contains("tempos negativos"));
+    assert!(core.message.contains("IDs de Frase"));
+}
+
+#[test]
+fn overlapping_and_zero_duration_sentences_normalize_and_plan() {
+    let mut spans = live(40, DENSE);
+    // Sobreposição de 196 ms entre Frases adjacentes (padrão real do faster-whisper).
+    spans[78].start_us = 390_864_000;
+    spans[78].end_us = 391_844_000;
+    spans[79].start_us = 391_648_000;
+    spans[79].end_us = 392_268_000;
+    // Frase inteira com duração zero.
+    spans[109].start_us = 547_764_000;
+    spans[109].end_us = 547_764_000;
+    let p = plan(&input(&spans, 16_384)).unwrap();
+    assert!(!p.windows.is_empty());
+    let mut normalized = spans;
+    let mut pairs: Vec<(i64, i64)> = normalized.iter().map(|s| (s.start_us, s.end_us)).collect();
+    sentences::normalize_spans(&mut pairs, None).unwrap();
+    for (s, (start, end)) in normalized.iter_mut().zip(pairs) {
+        s.start_us = start;
+        s.end_us = end;
+    }
+    check(&normalized, &p, DEFAULT_OVERLAP_US);
 }
 
 #[test]
