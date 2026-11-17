@@ -1117,6 +1117,52 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     document(&context(candidate_arg(&v)?)?)
 }
 
+pub(crate) struct MontageScriptBlock {
+    pub id: i64,
+    pub position: i64,
+    pub title: String,
+    pub refs: Vec<i64>,
+    pub narration: Option<String>,
+}
+
+pub(crate) struct MontageScript {
+    pub blocks: Vec<MontageScriptBlock>,
+    pub approved: bool,
+}
+
+/// Lê os blocos do Roteiro mais recente de um candidato do Vídeo transformado sem enfileirar
+/// jobs nem gravar no banco (seguro para prévias e leitura na timeline).
+pub(crate) fn montage_blocks_readonly(candidate: i64) -> Result<Option<MontageScript>, CoreError> {
+    let cut = crate::selection::approved_cut(candidate)?;
+    let kind: String = projects::with_reader(|c| {
+        c.query_row(
+            "SELECT video_kind FROM selection_runs WHERE id=?1",
+            [cut.run],
+            |r| r.get(0),
+        )
+    })?;
+    if kind != "transformed" {
+        return Ok(None);
+    }
+    let gens = read_generations(cut.run, cut.identity)?;
+    let Some(shown) = latest_with_blocks(&gens) else {
+        return Ok(None);
+    };
+    let approved = gate(&gens).is_ok();
+    let blocks = shown
+        .blocks
+        .iter()
+        .map(|b| MontageScriptBlock {
+            id: b.id,
+            position: b.position,
+            title: b.title(),
+            refs: b.refs(),
+            narration: b.narration().map(str::to_owned),
+        })
+        .collect();
+    Ok(Some(MontageScript { blocks, approved }))
+}
+
 /// Consulta para a escolha de ângulo: materializa respostas já recebidas, mas nunca
 /// continua a cadeia nem enfileira chamadas ao Provedor no caminho da escrita manual.
 pub(crate) fn angle_change_state(
