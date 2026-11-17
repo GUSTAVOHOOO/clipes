@@ -32,7 +32,7 @@ type MockBlockAlignment = {
   spokenText: string | null;
   wordCount: number;
 };
-const narrationGenerated = new Map<number, { blockId: number; voiceId: string; modelId: string; engineId?: string; trimmed?: boolean; durationUs: number; alignment: MockBlockAlignment }[]>();
+const narrationGenerated = new Map<number, { blockId: number; voiceId: string; modelId: string; engineId: string; trimmed?: boolean; durationUs: number; alignment: MockBlockAlignment }[]>();
 const sourceTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('source-test');
 const componentsMissing = typeof location !== 'undefined' && new URLSearchParams(location.search).has('components-missing');
 const budgetTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('budget-test');
@@ -350,7 +350,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
           shortClaimLimitUs: 60_000_000,
           permission: { status: granted ? 'granted' : 'none', grantedCount: granted ? 1 : 0, missingCount: granted ? 0 : 1, totalCount: 1, who: permObj?.who ?? null, where: permObj?.where ?? null, scope: permObj?.scope ?? null },
           script: effectiveTransformed ? { applicable: true, exists: !!scriptView?.current, approved: !!scriptView?.narrationAllowed, pendingBlocks: scriptView?.current?.pending ?? 0, totalBlocks: scriptView?.current?.blocks?.length ?? 0 } : { applicable: false },
-          narration: effectiveTransformed ? (() => { const g = (narrationGenerated.get(a.candidate_id ?? 1) ?? []).filter(x => (x.engineId ?? 'pocket-tts') === 'pocket-tts'); return { applicable: true, hasTts: g.length > 0, generatedBlocks: g.length, totalBlocks: scriptView?.current?.blocks?.length ?? 0, voices: [...new Set(g.map(x => x.voiceId))], freezeTailUs, longFreezeTail: freezeTailUs > 5_000_000 }; })() : { applicable: false },
+          narration: effectiveTransformed ? (() => { const g = (narrationGenerated.get(a.candidate_id ?? 1) ?? []).filter(x => x.engineId !== 'imported' && x.engineId !== 'recorded'); return { applicable: true, hasTts: g.length > 0, generatedBlocks: g.length, totalBlocks: scriptView?.current?.blocks?.length ?? 0, voices: [...new Set(g.map(x => x.voiceId))], freezeTailUs, longFreezeTail: freezeTailUs > 5_000_000 }; })() : { applicable: false },
         } as T;
       }
       const totalCuts = selectionFlag('export-batch-empty') || (scope === 'source' && !selectionMock.run) ? 0 : 2;
@@ -466,7 +466,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       return { id: a.id } as T;
     }
     if (name === 'tts.models.cancel') return {} as T;
-    if (name === 'narration.get' || name === 'narration.generate' || name === 'narration.regenerate_block' || name === 'narration.align' || name === 'narration.align_block' || name === 'narration.review' || name === 'narration.record_block' || name === 'narration.trim_block' || name === 'narration.discard_draft') {
+    if (name === 'narration.get' || name === 'narration.generate' || name === 'narration.regenerate_block' || name === 'narration.import' || name === 'narration.align' || name === 'narration.align_block' || name === 'narration.review' || name === 'narration.record_block' || name === 'narration.trim_block' || name === 'narration.discard_draft') {
       const a = args as { candidate: number; block?: number; voiceId?: string; choice?: 'script' | 'spoken'; audioBase64?: string };
       const s = scriptMockDispatch('script.get', { candidate: a.candidate }) as { narrationAllowed: boolean; current: { blocks: { id: number; position: number; title: string; narration: string | null }[] } | null };
       const recordNoWorker = typeof location !== 'undefined' && new URLSearchParams(location.search).has('record-no-worker');
@@ -549,6 +549,28 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         narrationGenerated.set(a.candidate, next);
         return { job: 790, candidate: a.candidate } as T;
       }
+      if (name === 'narration.import') {
+        if (!s.narrationAllowed) throw { code: 'script_not_approved', message: 'Aprove o Roteiro.' };
+        const imp = args as { candidate: number; block: number; path: string };
+        if (!/\.(wav|mp3|m4a|ogg)$/i.test(imp.path ?? '')) throw { code: 'import_unsupported_format', message: 'Formato inválido.' };
+        const blocks = s.current?.blocks ?? [];
+        const idx = blocks.findIndex(b => b.id === imp.block);
+        if (idx < 0) throw { code: 'block_not_found', message: 'Bloco não encontrado.' };
+        const existing = narrationGenerated.get(imp.candidate) ?? [];
+        const entry = {
+          blockId: imp.block,
+          voiceId: 'imported',
+          modelId: 'external',
+          engineId: 'imported',
+          durationUs: 2_800_000,
+          alignment: defaultAlign(blocks[idx]?.narration ?? null, idx),
+        };
+        const next = existing.some(e => e.blockId === imp.block)
+          ? existing.map(e => e.blockId === imp.block ? entry : e)
+          : [...existing, entry];
+        narrationGenerated.set(imp.candidate, next);
+        return { job: 792, candidate: imp.candidate, blockId: imp.block } as T;
+      }
       if (name === 'narration.align' || name === 'narration.align_block') {
         const blocks = s.current?.blocks ?? [];
         const existing = narrationGenerated.get(a.candidate) ?? [];
@@ -572,14 +594,14 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         const hit = list.find(x => x.blockId === b.id);
         return {
           blockId: b.id, position: b.position, title: b.title, versionId: 1, narrationText: b.narration,
-          audio: hit ? { id: b.id, versionId: 1, voiceId: hit.voiceId, modelId: hit.modelId, engineId: hit.engineId ?? 'pocket-tts', relPath: `narrations/c${a.candidate}/b${b.id}-v1.wav`, durationUs: hit.durationUs, sampleRate: 24000, channels: 1, bytes: 153644, stale: false, trimmed: hit.trimmed ?? true } : null,
+          audio: hit ? { id: b.id, versionId: 1, voiceId: hit.voiceId, modelId: hit.modelId, engineId: hit.engineId, relPath: `narrations/c${a.candidate}/b${b.id}-v1.wav`, durationUs: hit.durationUs, sampleRate: 24000, channels: 1, bytes: 153644, stale: false, trimmed: hit.trimmed ?? true } : null,
           alignment: hit ? hit.alignment : null,
         };
       });
       return {
         candidate: a.candidate, narrationAllowed: s.narrationAllowed, gateReason: s.narrationAllowed ? null : 'pending_blocks',
         language: 'pt', defaultVoiceId: channelProfileMock.narrationVoice ?? '13063', activeModelId: ttsActiveModels.pt,
-        busy: false, job: null, alignBusy: false, alignJob: null, alignPrerequisitesReady: !componentsMissing, vadReady,
+        busy: false, job: null, importBusy: false, importJob: null, alignBusy: false, alignJob: null, alignPrerequisitesReady: !componentsMissing, vadReady,
         blocks, totalDurationUs: blocks.reduce((acc, b) => acc + (b.audio?.durationUs ?? 0), 0),
       } as T;
     }

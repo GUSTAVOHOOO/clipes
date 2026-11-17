@@ -541,6 +541,20 @@ fn ensure_not_busy(c: &Connection, candidate_id: i64) -> rusqlite::Result<Result
             "Já há um alinhamento de Narração em andamento para este Corte.",
         )));
     }
+    let import_busy: bool = c.query_row(
+        "SELECT EXISTS(
+           SELECT 1 FROM narration_import_jobs i JOIN jobs j ON j.id=i.job_id
+           WHERE i.candidate_id=?1 AND j.state IN ('queued','running')
+         )",
+        [candidate_id],
+        |r| r.get(0),
+    )?;
+    if import_busy {
+        return Ok(Err(error(
+            "generation_in_progress",
+            "Já há uma importação de Narração em andamento para este Corte.",
+        )));
+    }
     Ok(Ok(()))
 }
 

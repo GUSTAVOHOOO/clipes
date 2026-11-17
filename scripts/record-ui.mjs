@@ -155,7 +155,7 @@ export async function testTeleprompterRecording(page, url) {
   await rec.getByRole('button', { name: 'Continuar', exact: true }).click();
 
   await rec.locator('[data-record-stop]').click();
-  await narration.getByText('Gravada', { exact: true }).first().waitFor();
+  await narration.getByText('Áudio gravado', { exact: true }).first().waitFor();
   await narration.locator('[data-narration-duration="2400000"]').first().waitFor();
   await narration.locator('[data-narration-align-status="aligned"]').first().waitFor();
 

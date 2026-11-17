@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { open } from '@tauri-apps/plugin-dialog';
 import { coreDispatch } from '@/lib/core';
 import { mediaUrl } from '@/lib/media';
 import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import type { TtsCatalog } from '@/features/components/TtsCatalogCard';
 import { fill } from './selectionFormat';
 import { TeleprompterRecorder } from './TeleprompterRecorder';
@@ -66,6 +68,15 @@ type AlignJob = {
   blockId: number | null;
 };
 
+type ImportJob = {
+  id: number;
+  state: string;
+  progress: number;
+  code: string | null;
+  blockId: number;
+  warning: string | null;
+};
+
 type NarrationDoc = {
   candidate: number;
   narrationAllowed: boolean;
@@ -75,6 +86,8 @@ type NarrationDoc = {
   activeModelId: string;
   busy: boolean;
   job: NarrationJob | null;
+  importBusy?: boolean;
+  importJob?: ImportJob | null;
   alignBusy?: boolean;
   alignJob?: AlignJob | null;
   alignPrerequisitesReady?: boolean;
@@ -113,6 +126,19 @@ const texts = {
     alignBlock: 'Alinhar bloco',
     alignPendingPrereq: 'Alinhamento pendente: instale o Worker Python e um modelo Whisper local em Componentes para gerar legendas da Narração.',
     alignFailed: 'Não foi possível alinhar a Narração.',
+    importAudio: 'Importar áudio',
+    importing: 'Importando áudio…',
+    importProgress: 'Progresso da importação',
+    importFailed: 'Não foi possível importar o áudio.',
+    importMultiStreamWarning: 'O arquivo tinha mais de uma faixa de áudio; apenas a primeira foi usada.',
+    importedAudio: 'Áudio importado',
+    recordedAudio: 'Áudio gravado',
+    audioFilter: 'Áudio',
+    replaceTitle: 'Substituir áudio do bloco?',
+    replaceDescription: 'Este bloco já tem {kind}. Importar um novo arquivo vai substituir o áudio atual e refazer o alinhamento.',
+    replaceKinds: { tts: 'Narração por TTS', imported: 'um áudio importado', recorded: 'uma gravação de voz' },
+    replaceCancel: 'Cancelar',
+    replaceConfirm: 'Escolher arquivo',
     alignStatus: {
       pending: 'Alinhamento pendente',
       aligned: 'Alinhada ({words} palavras)',
@@ -136,6 +162,19 @@ const texts = {
       generation_in_progress: 'Já há uma síntese de Narração em andamento.',
       narration_failed: 'O motor Pocket TTS falhou ao sintetizar um bloco.',
       no_speech_detected: 'Nenhuma fala detectada na gravação.',
+      invalid_audio_path: 'Selecione um arquivo de áudio válido.',
+      import_file_missing: 'Arquivo de áudio não encontrado.',
+      import_unsupported_format: 'Formato de áudio não suportado. Use WAV, MP3, M4A ou OGG.',
+      import_empty_file: 'O arquivo de áudio está vazio.',
+      import_file_too_large: 'O arquivo de áudio ultrapassa o limite de 200 MiB.',
+      import_no_audio_stream: 'O arquivo não contém faixa de áudio.',
+      import_unsupported_codec: 'Codec de áudio não suportado. Use WAV, MP3, M4A ou OGG.',
+      import_invalid_audio: 'Não foi possível ler os metadados ou o áudio do arquivo.',
+      import_duration_too_short: 'O áudio importado deve ter pelo menos 0,3 segundos.',
+      import_duration_too_long: 'O áudio importado ultrapassa o limite de 10 minutos por bloco.',
+      import_failed: 'Não foi possível converter o áudio importado para Narração.',
+      import_in_progress: 'Já há uma importação de áudio em andamento.',
+      ffprobe_missing: 'Instale o Componente FFmpeg (com ffprobe) em Componentes.',
       default: 'Não foi possível concluir a Narração.',
     } as Record<string, string>,
   },
@@ -168,6 +207,19 @@ const texts = {
     alignBlock: 'Align block',
     alignPendingPrereq: 'Alignment pending: install the Python Worker and a local Whisper model in Components to generate Narration captions.',
     alignFailed: 'Could not align Narration.',
+    importAudio: 'Import audio',
+    importing: 'Importing audio…',
+    importProgress: 'Import progress',
+    importFailed: 'Could not import audio.',
+    importMultiStreamWarning: 'The file had multiple audio streams; only the first one was used.',
+    importedAudio: 'Imported audio',
+    recordedAudio: 'Recorded audio',
+    audioFilter: 'Audio',
+    replaceTitle: 'Replace block audio?',
+    replaceDescription: 'This block already has {kind}. Importing a new file will replace the current audio and redo alignment.',
+    replaceKinds: { tts: 'TTS Narration', imported: 'imported audio', recorded: 'a voice recording' },
+    replaceCancel: 'Cancel',
+    replaceConfirm: 'Choose file',
     alignStatus: {
       pending: 'Alignment pending',
       aligned: 'Aligned ({words} words)',
@@ -191,6 +243,19 @@ const texts = {
       generation_in_progress: 'A Narration synthesis is already running.',
       narration_failed: 'Pocket TTS failed while synthesizing a block.',
       no_speech_detected: 'No speech detected in the recording.',
+      invalid_audio_path: 'Choose a valid audio file.',
+      import_file_missing: 'Audio file not found.',
+      import_unsupported_format: 'Unsupported audio format. Use WAV, MP3, M4A, or OGG.',
+      import_empty_file: 'The audio file is empty.',
+      import_file_too_large: 'The audio file exceeds the 200 MiB limit.',
+      import_no_audio_stream: 'The file does not contain an audio stream.',
+      import_unsupported_codec: 'Unsupported audio codec. Use WAV, MP3, M4A, or OGG.',
+      import_invalid_audio: 'Could not read audio metadata or stream from the file.',
+      import_duration_too_short: 'Imported audio must be at least 0.3 seconds long.',
+      import_duration_too_long: 'Imported audio exceeds the 10-minute limit per block.',
+      import_failed: 'Could not convert the imported audio for Narration.',
+      import_in_progress: 'An audio import is already running.',
+      ffprobe_missing: 'Install the FFmpeg Component (with ffprobe) in Components.',
       default: 'Could not complete Narration.',
     } as Record<string, string>,
   },
@@ -208,6 +273,8 @@ export function Narration({ candidate, refreshKey = 0, onChanged }: { candidate:
   const [error, setError] = useState('');
   const [recordNotice, setRecordNotice] = useState('');
   const [recordingBlockId, setRecordingBlockId] = useState<number | null>(null);
+  const [replacePending, setReplacePending] = useState<{ blockId: number; kind: 'tts' | 'imported' | 'recorded' } | null>(null);
+  const importFocusRef = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(async () => {
     const [nextDoc, nextCat] = await Promise.all([
@@ -226,14 +293,15 @@ export function Narration({ candidate, refreshKey = 0, onChanged }: { candidate:
   }, [load, refreshKey, t.errors.default]);
 
   const busy = doc?.busy === true;
+  const importBusy = doc?.importBusy === true;
   const alignBusy = doc?.alignBusy === true;
-  const anyBusy = busy || alignBusy;
+  const anyBusy = busy || importBusy || alignBusy;
   useEffect(() => {
     if (!anyBusy) return;
     const sync = () => {
       coreDispatch<NarrationDoc>('narration.get', { candidate }).then(next => {
         setDoc(next);
-        if (!next.busy && !next.alignBusy) onChanged?.();
+        if (!next.busy && !next.importBusy && !next.alignBusy) onChanged?.();
       }).catch(() => {});
     };
     const timer = window.setInterval(sync, 700);
@@ -270,13 +338,46 @@ export function Narration({ candidate, refreshKey = 0, onChanged }: { candidate:
   }
 
   async function cancelJob() {
-    const id = doc?.busy ? doc.job?.id : doc?.alignJob?.id;
+    const id = doc?.busy ? doc.job?.id : doc?.importBusy ? doc.importJob?.id : doc?.alignJob?.id;
     if (!id) return;
     try {
       await coreDispatch('jobs.cancel', { id });
       setDoc(await coreDispatch<NarrationDoc>('narration.get', { candidate }));
     } catch (e) {
       setError(t.errors[codeOf(e)] ?? t.errors.default);
+    }
+  }
+
+  async function importBlockAudio(blockId: number) {
+    setError('');
+    try {
+      const mock = import.meta.env.VITE_CORE_MOCK === '1' && !isTauri();
+      const chosen = mock
+        ? `/test/narration/block-${blockId}.mp3`
+        : await open({
+            multiple: false,
+            filters: [{ name: t.audioFilter, extensions: ['wav', 'mp3', 'm4a', 'ogg'] }],
+          });
+      if (!chosen || Array.isArray(chosen)) return;
+      await coreDispatch('narration.import', { candidate, block: blockId, path: chosen });
+      setDoc(await coreDispatch<NarrationDoc>('narration.get', { candidate }));
+      onChanged?.();
+    } catch (e) {
+      setError(t.errors[codeOf(e)] ?? t.errors.default);
+    }
+  }
+
+  function requestImportBlock(b: NarrationBlock, btn: HTMLButtonElement) {
+    importFocusRef.current = btn;
+    if (b.audio && !b.audio.stale) {
+      const kind = b.audio.engineId === 'imported'
+        ? 'imported'
+        : b.audio.engineId === 'recorded'
+          ? 'recorded'
+          : 'tts';
+      setReplacePending({ blockId: b.blockId, kind });
+    } else {
+      void importBlockAudio(b.blockId);
     }
   }
 
@@ -336,6 +437,8 @@ export function Narration({ candidate, refreshKey = 0, onChanged }: { candidate:
   const hasAnyAudio = doc.blocks.some(b => b.audio !== null && !b.audio.stale);
   const hasAlignedAudio = doc.blocks.some(b => b.audio && !b.audio.stale && b.alignment && b.alignment.status !== 'pending');
   const jobFailed = doc.job && (doc.job.state === 'failed' || doc.job.state === 'cancelled');
+  const importJobFailed = doc.importJob && (doc.importJob.state === 'failed' || doc.importJob.state === 'cancelled');
+  const importMultiStreamWarn = doc.importJob?.state === 'completed' && doc.importJob.warning === 'multiple_audio_streams';
   const alignJobFailed = doc.alignJob && (doc.alignJob.state === 'failed' || doc.alignJob.state === 'cancelled');
 
   return (
@@ -394,12 +497,23 @@ export function Narration({ candidate, refreshKey = 0, onChanged }: { candidate:
             <Button tamanho="sm" onClick={() => void cancelJob()}>{t.cancel}</Button>
           </>
         )}
+        {importBusy && doc.importJob && (
+          <>
+            <span className="text-xs text-fg-2">{t.importing}</span>
+            <progress max={100} value={doc.importJob.progress} aria-label={t.importProgress} />
+            <Button tamanho="sm" onClick={() => void cancelJob()}>{t.cancel}</Button>
+          </>
+        )}
       </div>
 
       {hasAnyAudio && doc.alignPrerequisitesReady === false && (
         <p className="text-xs text-fg-2" data-narration-align-pending>{t.alignPendingPrereq}</p>
       )}
+      {importMultiStreamWarn && (
+        <p role="note" className="text-xs text-fg-2" data-narration-import-warning>{t.importMultiStreamWarning}</p>
+      )}
       {jobFailed && <p role="alert" className="text-xs text-danger">{t.errors[doc.job?.code ?? ''] ?? t.failed}</p>}
+      {importJobFailed && <p role="alert" className="text-xs text-danger">{t.errors[doc.importJob?.code ?? ''] ?? t.importFailed}</p>}
       {alignJobFailed && <p role="alert" className="text-xs text-danger">{t.errors[doc.alignJob?.code ?? ''] ?? t.alignFailed}</p>}
       {recordNotice && <p role="status" className="text-xs text-warning" data-narration-record-notice>{recordNotice}</p>}
       {error && <p role="alert" className="text-xs text-danger">{error}</p>}
@@ -427,7 +541,13 @@ export function Narration({ candidate, refreshKey = 0, onChanged }: { candidate:
                     {b.audio ? (
                       <>
                         <span data-narration-duration={b.audio.durationUs}>{fill(t.duration, { sec: fmtSeconds(b.audio.durationUs) })}</span>
-                        <span>{b.audio.engineId === 'recorded' ? t.recordedLabel : `${b.audio.voiceId} · ${b.audio.modelId}`}</span>
+                        <span data-narration-source={b.audio.engineId ?? 'pocket-tts'}>
+                          {b.audio.engineId === 'imported'
+                            ? t.importedAudio
+                            : b.audio.engineId === 'recorded'
+                              ? t.recordedAudio
+                              : `${b.audio.voiceId} · ${b.audio.modelId}`}
+                        </span>
                         {b.audio.engineId === 'recorded' && b.audio.trimmed === false && (
                           <span className="text-warning" data-narration-untrimmed>{t.untrimmedLabel}</span>
                         )}
@@ -458,6 +578,13 @@ export function Narration({ candidate, refreshKey = 0, onChanged }: { candidate:
                       onClick={() => setRecordingBlockId(cur => (cur === b.blockId ? null : b.blockId))}
                     >
                       {t.recordBlock}
+                    </Button>
+                    <Button
+                      tamanho="sm"
+                      disabled={!doc.narrationAllowed || anyBusy}
+                      onClick={e => requestImportBlock(b, e.currentTarget)}
+                    >
+                      {t.importAudio}
                     </Button>
                     <Button
                       tamanho="sm"
@@ -506,7 +633,6 @@ export function Narration({ candidate, refreshKey = 0, onChanged }: { candidate:
       {doc.totalDurationUs > 0 && (
         <p className="text-xs text-fg-2" data-narration-total>{fill(t.totalDuration, { sec: fmtSeconds(doc.totalDurationUs) })}</p>
       )}
-
       {recordingBlockId !== null && doc.narrationAllowed && doc.blocks.length > 0 && (
         <TeleprompterRecorder
           candidate={candidate}
@@ -518,6 +644,20 @@ export function Narration({ candidate, refreshKey = 0, onChanged }: { candidate:
           onClose={() => setRecordingBlockId(null)}
         />
       )}
+      <ConfirmDialog
+        open={replacePending !== null}
+        onOpenChange={openState => { if (!openState) setReplacePending(null); }}
+        title={t.replaceTitle}
+        description={replacePending ? fill(t.replaceDescription, { kind: t.replaceKinds[replacePending.kind] }) : ''}
+        cancelLabel={t.replaceCancel}
+        confirmLabel={t.replaceConfirm}
+        finalFocus={importFocusRef}
+        onConfirm={() => {
+          const target = replacePending;
+          setReplacePending(null);
+          if (target) void importBlockAudio(target.blockId);
+        }}
+      />
     </section>
   );
 }

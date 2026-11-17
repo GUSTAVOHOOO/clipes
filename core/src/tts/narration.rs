@@ -365,7 +365,7 @@ pub(crate) fn guardrail_status(candidate_id: i64) -> Result<Option<TtsGuardrailS
             };
             let row: Option<(String, String)> = c
                 .query_row(
-                    "SELECT voice_id, audio_rel_path FROM narration_blocks WHERE block_id=?1 AND version_id=?2 AND engine_id='pocket-tts'",
+                    "SELECT voice_id, audio_rel_path FROM narration_blocks WHERE block_id=?1 AND version_id=?2 AND engine_id NOT IN ('imported', 'recorded')",
                     (b.block_id, ver_id),
                     |r| Ok((r.get(0)?, r.get(1)?)),
                 )
@@ -497,15 +497,27 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .map(str::to_owned);
 
     let cut = crate::selection::approved_cut(candidate_id)?;
-    let (latest, job_busy, job_json, align_busy, align_job_json) = projects::with_reader(|c| {
-        let latest = match read_latest_script_in(c, &cut)? {
-            Ok(s) => s,
-            Err(e) => return Ok(Err(e)),
-        };
-        let (busy, job) = read_job_json(c, candidate_id)?;
-        let (align_busy, align_job) = crate::narration_align::read_align_job_json(c, candidate_id)?;
-        Ok(Ok((latest, busy, job, align_busy, align_job)))
-    })??;
+    let (latest, job_busy, job_json, import_busy, import_job_json, align_busy, align_job_json) =
+        projects::with_reader(|c| {
+            let latest = match read_latest_script_in(c, &cut)? {
+                Ok(s) => s,
+                Err(e) => return Ok(Err(e)),
+            };
+            let (busy, job) = read_job_json(c, candidate_id)?;
+            let (import_busy, import_job) =
+                crate::narration_import::read_import_job_json(c, candidate_id)?;
+            let (align_busy, align_job) =
+                crate::narration_align::read_align_job_json(c, candidate_id)?;
+            Ok(Ok((
+                latest,
+                busy,
+                job,
+                import_busy,
+                import_job,
+                align_busy,
+                align_job,
+            )))
+        })??;
     let align_ready = crate::narration_align::prerequisites_ready();
     let vad_ready = crate::narration_record::vad_ready();
 
@@ -519,6 +531,8 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             "activeModelId": catalog::active_model_id(&crate::components::load_settings()?, "pt"),
             "busy": job_busy,
             "job": job_json,
+            "importBusy": import_busy,
+            "importJob": import_job_json,
             "alignBusy": align_busy,
             "alignJob": align_job_json,
             "alignPrerequisitesReady": align_ready,
@@ -614,6 +628,8 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         "activeModelId": active_model_id,
         "busy": job_busy,
         "job": job_json,
+        "importBusy": import_busy,
+        "importJob": import_job_json,
         "alignBusy": align_busy,
         "alignJob": align_job_json,
         "alignPrerequisitesReady": align_ready,
