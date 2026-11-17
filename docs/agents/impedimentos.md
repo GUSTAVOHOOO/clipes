@@ -86,6 +86,26 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
   Depois, `chromium.connectOverCDP('http://127.0.0.1:9333')`, exporte os cookies para um `cookies.txt` (formato Netscape) fora do repo e passe `--cookies` ao yt-dlp.
 - **Limpeza obrigatória:** apague o `cookies.txt`, feche esse Chrome e apague o perfil `%TEMP%\clipes-yt-chrome`. Cookies e perfis nunca vão para o repo.
 
+### Vídeo com restrição de idade (#194)
+- **Sintoma:** `Sign in to confirm your age` (sem cookies) ou `Sorry, this content is age-restricted. To view this video, please provide more info so we can be sure you're an adult` (com cookies).
+- **Causa:** o portão é a **conta ser adulta e verificada**; cookies, deno e PO Token sozinhos não bastam. A segunda mensagem significa sessão reconhecida, conta não verificada. PO Token (bgutil) não destrava a idade.
+- **Ação:** para detectar sem login, `yt-dlp --skip-download --ignore-no-formats-error --print "%(age_limit)s %(availability)s" -- <url>` (`18` e `needs_auth`). Vídeo +18 embedável baixa só com deno, sem login; não embedável não. Veja `docs/research/2026-11-16-youtube-restricao-idade.md`.
+
+### Sem deno, o yt-dlp perde formatos no YouTube
+- **Sintoma:** `No supported JavaScript runtime could be found` e `n challenge solving failed`.
+- **Ação:** só o deno vem habilitado por padrão; deixe no PATH, ao lado do `yt-dlp.exe`, ou passe `--js-runtimes deno:<caminho>`. Instale só em `%TEMP%\clipes-<n>-*` e apague no fim.
+
+### Cookies exportados logo após o login não têm sessão do YouTube
+- **Sintoma:** `cookies.txt` com `SAPISID`, mas sem `LOGIN_INFO`; o yt-dlp segue pedindo login.
+- **Causa:** o login terminou em `accounts.google.com` e o YouTube ainda não criou a sessão.
+- **Ação:** depois do login, abra `https://www.youtube.com/` no mesmo perfil, confira `LOGIN_INFO` (só o nome, nunca o valor) e então exporte; feche o Chrome logo depois (o YouTube rotaciona cookies de abas abertas).
+
+### Plugin do bgutil não carrega com `yt-dlp.exe` standalone
+- **Ação:** `pip install --target <dir>/bgutil bgutil-ytdlp-pot-provider` e passe `--plugin-dirs <dir>` (a pasta que contém `bgutil/yt_dlp_plugins`). Servidor: clonar o repo, `npm ci`, `npx tsc`, `node build/main.js --port 4416` (escuta em loopback); encerre o PID depois, conferindo a linha de comando.
+
+### Nunca abrir issue ou PR no yt-dlp com texto de agente
+- O yt-dlp tem uma política "NO AI / NO LLM" e bloqueia o autor. Reporte o problema ao dev; ele decide se e como relatar.
+
 ## Ambiente Windows
 
 ### Fixture de vídeo sem rotação no FFmpeg 8
@@ -95,6 +115,11 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Ação:** para gerar o fixture sintético, use `-display_rotation 90` **antes**
   de `-i`, com `-c copy`, e confirme `side_data_list.rotation` via `ffprobe`.
   O harness `export_parity` faz essa confirmação antes de comparar os quadros.
+
+### `-filter_complex_script` removido no FFmpeg 9 (CI Windows)
+- **Sintoma:** `export_loudness` e `export_parity` passam no Ubuntu (FFmpeg 6.x) e localmente no FFmpeg 8.1, mas falham com `export_failed` no CI Windows (`choco install ffmpeg` v9.0.2).
+- **Causa:** o FFmpeg 9.0 removeu `-filter_complex_script` em favor de `-/filter_complex`, enquanto o FFmpeg 6.1 do Ubuntu ainda não tem `-/filter_complex`.
+- **Ação:** passe o grafo diretamente via `-filter_complex <grafo>` (funciona do FFmpeg 6 ao 9 sem depender de sintaxe específica de versão).
 
 ### OpenCode isolado: cota gratuita esgotada
 - **Sintoma:** teste real pendente: cota gratuita do OpenCode esgotada (HTTP 429 `provider.free-limit`, ~22 h), isolamento confirmado com `debug agents` e 3 tentativas fora do adaptador que chegaram ao serviço.

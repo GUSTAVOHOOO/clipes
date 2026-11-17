@@ -40,15 +40,46 @@ Se a Fonte mudou ou ficou offline, o export é bloqueado. A fila verifica de nov
 Fonte, bordas, revisão e texto ao começar. Uma interrupção do app recoloca o job
 local na fila; ele refaz o render inteiro. Não reaproveita MP4 parcial.
 
-O destino deve ser um caminho absoluto `.mp4` em pasta existente. O diálogo do
-sistema pode avisar sobre arquivo existente, mas **o núcleo sempre recusa
-sobrescrita**, inclusive se outro processo criou o arquivo durante o render.
+O destino deve ser um caminho absoluto `.mp4` em pasta existente. No export
+avulso, o diálogo do sistema pode avisar sobre arquivo existente, mas **o núcleo
+sempre recusa sobrescrita** (`persist_noclobber`), inclusive se outro processo
+criou o arquivo durante o render. A única exceção é o **lote de export (#64)**
+quando o usuário confirma explicitamente a substituição dos conflitos listados
+(`confirmed: true` após `confirmation_required`).
 Um temporário exclusivo na mesma pasta só é publicado depois do sucesso de
 FFmpeg/libass; falha, cancelamento e encerramento normal removem os temporários.
 Erros usam códigos/mensagens fixos, sem stderr, Transcrição ou caminhos pessoais
 (ADR-0006): `export_bounds`, `export_candidate`, `export_destination`,
 `export_exists`, `export_timestamps`, `export_ass_missing`, `export_font_missing`,
-`export_failed`, `source_changed`, `component_missing` e `cancelled`.
+`export_glyph_missing` (informa a palavra sem glifo da legenda, o codepoint e a
+Frase, validado no `cmap` antes de chamar o FFmpeg), `export_failed`,
+`source_changed`, `component_missing` e `cancelled`.
+
+## Export em lote (#64)
+
+`export/batch.rs` (migração `0064_001_export_batches`) exporta todos os Cortes
+aprovados de uma Fonte (`{source_id, output_dir}`) ou do Projeto aberto
+(`{project?, output_dir}`), considerando **todas** as `selection_runs` da
+Transcrição ativa (completa) de cada Fonte; Transcrições inativas ficam fora.
+Quando o Corte tem documento editado no #70 (`clip_edits` para
+`candidate:<id>`), o lote usa o `clip_id` (bordas editadas, silêncios e crop);
+senão, usa as bordas aprovadas da revisão.
+
+- O lote não reimplementa o render: enfileira N jobs `export` individuais na fila
+  do #44, preserva o `ProgressEvent` de cada Corte e agrega o progresso total
+  **ponderado pela duração** (`export-batch-<id>`).
+- Os nomes são estáveis e sem colisão na pasta escolhida uma única vez:
+  `<fonte>-<nn>-<início>.mp4`. Se algum nome já existir na pasta, `export.batch.start`
+  recusa antes de renderizar com `confirmation_required` e `usage.conflicts`
+  contendo só os basenames (sem caminhos, ADR-0006). Com `confirmed: true`, cada
+  arquivo é renderizado em temporário na mesma pasta e substituído atomicamente
+  ao concluir com sucesso.
+- `export.batch.cancel {id}` aciona o `CancelToken` do job em andamento e cancela
+  os jobs ainda na fila. Uma falha em um Corte registra o código tipado no item
+  e o lote segue nos demais.
+- Comandos: `export.batch.start`, `export.batch.status {id}`,
+  `export.batch.list {source_id?}` e `export.batch.cancel {id}`. Testes
+  headless com FFmpeg real: `core/tests/export_batch.rs`.
 
 ## Etapas e pontos de extensão
 
@@ -62,7 +93,7 @@ cancelamento ficam em `export/render.rs`. A ordem padrão é:
    `captions.ass` e `fonts` num diretório privado, sem interpolar caminhos de
    usuário em filtergraphs.
 3. `Audio`: passagem da faixa selecionada; AAC no contêiner MP4.
-4. `Encoder`: `libx264`, preset `fast`, CRF 20, yuv420p, sem marca d'água.
+4. `Encoder` / `SelectedEncoder`: `libx264`, preset `fast`, CRF 20, yuv420p, sem marca d'água, ou o encoder de hardware escolhido (seção abaixo).
 
 Para adicionar uma etapa, implemente `Stage` e insira-a na composição de
 `standard()`. `export_pipeline` prova que uma etapa adicional entra entre vídeo
@@ -70,15 +101,93 @@ e legenda sem alterar nenhuma das etapas existentes.
 
 | Trabalho futuro | Encaixe |
 | --- | --- |
-| Encoder de hardware | Outra etapa de encoder substitui `Encoder`, mantendo o plano/runner. |
+| Encoder de hardware | Feito no #62: `SelectedEncoder` substitui `Encoder`, mantendo o plano/runner. |
 | Crop/reenquadramento (#61) | Etapa de vídeo antes de `Subtitle`, produzindo o canvas final 1080×1920. |
-| Loudness (#63) | Etapa que acrescenta filtros de áudio antes do encode. |
-| Silêncios (#82) | Etapa de montagem anterior ao plano audiovisual; deve fornecer **um mapa de tempos compartilhado por vídeo, legenda e áudio**. Não basta acrescentar um filtro só de áudio. |
-| Narração/ducking (#82) | Etapa de áudio com novos inputs e grafo de mixagem; ampliar o plano para inputs/labels e manter o runner gerenciado. |
+| Loudness (#63) | Feito: etapa `Loudness`, última do áudio. As etapas de áudio futuras entram antes dela. |
+| Silêncios (#82) | Feito (#77): `SpliceMap` compartilhado por vídeo, legenda e áudio no editor e no export. |
+| Narração/ducking (#82) | Feito: etapa `Ducking` (`sidechaincompress` + `amix normalize=0` + `tpad` na sobra final), antes de `Loudness`. |
 
 Essas funcionalidades não são implementadas neste ticket. Uma extensão que
 precise de grafo com várias entradas amplia o plano tipado; texto da Transcrição
 jamais vira filtro, argumento de processo ou caminho.
+
+## Encoder do export (#62)
+
+`export/encoder.rs` detecta, guarda e troca o encoder H.264 (ADR-0004). A ordem é
+`h264_nvenc`, `h264_qsv`, `h264_amf`, `h264_videotoolbox` e, por fim, `libx264`, o fallback garantido.
+
+- **Detecção:** `ffmpeg -hide_banner -encoders` lista os candidatos presentes; cada um faz um
+  export real de 1 s (`testsrc2` 1080×1920 a 30 fps, com os mesmos argumentos de qualidade do
+  export) num diretório temporário e o ffprobe confere `h264,1080,1920`. Quem passa entra na lista;
+  o x264 também é testado e sempre fecha a lista. O primeiro da lista é o escolhido. Cada processo
+  tem limite de tempo e respeita o `CancelToken`.
+- **Cache:** `export-encoder.json` na pasta de dados do app (`CLIPES_DATA_DIR`), nunca no Projeto:
+  versão do FFmpeg, nome e driver da GPU (só NVIDIA tem driver legível; AMD e Intel só mudam o
+  cache pela versão do FFmpeg), lista aprovada, encoder escolhido, troca manual e data. Uma versão
+  de FFmpeg ou driver diferente invalida o cache; o próximo export (ou "detectar de novo") refaz o teste.
+- **Quando roda:** na primeira execução de um export (dentro do job, que já é cancelável) e quando
+  o cache invalida. Sem conseguir detectar, o export usa o x264 sem erro.
+- **Qualidade:** os argumentos de cada encoder são constantes nomeadas e comentadas em
+  `encoder.rs`, mirando o ponto do x264 (CRF 20, preset `fast`), que fica exatamente como no #59.
+- **Fallback:** se o encoder escolhido falhar no export (`export_failed`), o job repete a etapa
+  com x264, tira o encoder da lista (o próximo export não repete a falha nem avisa de novo) e grava
+  em `exports` (migração `0062_001_export_encoder`) `encoder`, `fallback_from` e
+  `fallback_reason = "encoder_failed"`. Nunca se guarda stderr nem caminhos (ADR-0006).
+  `export.status` devolve `encoder` e `encoder_fallback {from,reason}`; a UI avisa uma vez.
+  Cancelamento e erros de entrada não disparam fallback.
+- **Comandos:** `export.encoder.status` (cache, sem testar nada), `export.encoder.detect`
+  (detectar de novo, mantém a troca manual se o encoder ainda passa) e
+  `export.encoder.set {encoder}` (`null` volta ao automático; fora da lista: `encoder_invalid`).
+  Preferências tem o seletor e o botão "Detectar de novo".
+- **Testes:** `core/tests/export_encoder.rs` usa o FFmpeg falso `fake-encoders` (lista de encoders e
+  falhas por variável de ambiente); `core/tests/export_encoder_real.rs` usa o FFmpeg do sistema e
+  pula sem encoder de hardware (`cargo test --test export_encoder_real -- --nocapture` mostra o
+  encoder escolhido e os tempos de um export de 30 s).
+
+## Loudness do export (#63)
+
+O áudio sai a **-14 LUFS integrado, true peak ≤ -1 dBTP e LRA 11 LU** (constantes `TARGET_*` em
+`export/pipeline.rs`), com `loudnorm` em duas passagens e saída fixa em 48 kHz.
+
+- **Ordem do áudio** (spec): limpeza da Narração → ducking → trilha → `amix` com `normalize=0` →
+  `loudnorm`. Hoje só existe o áudio da Fonte (`Audio`); a etapa `Loudness` é a última e as etapas
+  futuras (#82, #154, #155) entram **antes** dela em `with_loudness`.
+- **Passagem 1** (`render::measure_loudness`): mede só o trecho do Corte com
+  `loudnorm=I=-14:TP=-1:LRA=11:print_format=json`, sem gravar arquivo (`-vn -f null -`). O `-t` vai
+  **antes de `-i`**: como opção de saída, o `loudnorm` ainda mede áudio depois do Corte. Do stderr
+  só se leem os cinco campos numéricos do JSON (`input_i`, `input_tp`, `input_lra`,
+  `input_thresh`, `target_offset`); o stderr nunca é guardado (ADR-0006).
+- **Passagem 2**: `loudnorm` com `measured_*`, `offset` e `linear=true`, seguido de
+  `aresample=48000` (o `loudnorm` reamostra internamente), antes do AAC.
+- **Áudio mudo** (medição `-inf`): não há o que normalizar; o export segue sem `loudnorm`. Falta
+  total do JSON é `export_failed`.
+- **Progresso**: a passagem 1 ocupa 1–10% da barra e a renderização 10–95%; cancelar vale nas duas.
+- **Harness**: `core/tests/export_loudness.rs` gera áudio sintético (`sine` + `anoisesrc`, trecho
+  baixo e trecho alto), exporta dois Cortes e mede o MP4 com `ebur128`: I = -14 ± 1 LU e
+  true peak ≤ -1 dBTP (+0,1 dB de tolerância).
+
+## Ducking da Narração (#82)
+
+Quando o Corte do Vídeo transformado possui WAVs atuais em `narration_blocks` (#79), o export
+consome `montage::audio_mix_plan` (#204) e insere a etapa `Ducking` antes de `Loudness`:
+
+- **Grafo só com números:** `NarrationMixPlan` guarda apenas `input_index`, `start_us`,
+  `duration_us` e durações totais (`clip_duration_us`, `freeze_tail_us`, `total_duration_us`).
+  Os caminhos dos WAVs entram só nos argumentos `-i`, nunca no filtergraph (ADR-0006).
+- **Ducking (`sidechaincompress`):** os blocos de Narração são normalizados para 48 kHz estéreo,
+  posicionados com `adelay` e somados com `amix normalize=0`. A cópia sidechain atenua o áudio
+  da Fonte em ~**-12 dB** (`DUCKING_TARGET_DB = -12.0`, `threshold = 0.015`, `ratio = 4`,
+  `attack = 40 ms`, `release = 300 ms`, `knee = 4`, `level_sc = 2` em `export/pipeline.rs`),
+  sem reduzir a própria Narração.
+- **Mixagem e `tpad`:** Fonte atenuada e Narração entram em `amix=inputs=2:duration=longest:normalize=0`.
+  Apenas a sobra final (`freeze_tail_us > 0`) aplica `tpad=stop_mode=clone:stop_duration=...` antes
+  de `ass=captions.ass` e estende o áudio com `apad=whole_dur=...`. As duas passagens do `loudnorm`
+  medem e normalizam o resultado já mixado.
+- **Paridade no preview:** `CutPreview` reproduz os áudios `narration/<id>` na posição remapeada
+  pelo `SpliceMap`, aplica o mesmo alvo de `-12 dB` com rampa de `40 ms` / `300 ms` e segura o
+  último quadro durante `freeze_tail_us`.
+- **Harness:** `core/tests/export_ducking.rs` confere atenuação da Fonte, preservação da Narração,
+  congelamento `tpad`, loudness final e fluxo headless `export.start`.
 
 ## ASS e fonte
 
@@ -96,9 +205,11 @@ Pausas usam sílabas invisíveis `\k` e não alongam artificialmente o destaque.
 `PlayResX/Y` são 1080/1920, `ScaledBorderAndShadow: yes`, `WrapStyle: 2`;
 as quebras explícitas `\N` vêm exclusivamente de `layout`.
 
-Texto de Transcrição é não confiável. `{`, `}` e `\` recebem equivalentes visuais
-Unicode sem semântica ASS (`｛`, `｝`, `＼`); controles, quebras e escapes de entrada
-não viram tags. Emoji e seletores de apresentação são removidos antes da quebra.
+Texto de Transcrição é não confiável. `{`, `}` e `\` recebem equivalentes ASCII
+seguros presentes nas fontes empacotadas (`(`, `)` e `/`); controles, quebras e
+escapes de entrada não viram tags. Emoji e seletores de apresentação são removidos
+antes da quebra. A cobertura de glifos das palavras visíveis é validada contra o
+`cmap` das fontes empacotadas antes de chamar o FFmpeg.
 A fonte Noto Sans Bold está empacotada com licença OFL 1.1 e hash fixado em
 `THIRD_PARTY_NOTICES.md`. O núcleo entrega os bytes por `fontsdir` e verifica o
 carregamento/seleção da família pelo libass. Fallback vira erro tipado. Antes do

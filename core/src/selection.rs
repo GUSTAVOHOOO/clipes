@@ -7,16 +7,18 @@
 //! `docs/contribuindo/selecao-de-cortes.md`.
 use crate::{
     ai_task::{self, AiTask, Budget, TaskInput, Violation},
+    chat::{self, ChatMarks},
     energy::{self, EnergyLevel, EnergyMarks},
     jobs::{self, Safety},
     projects, provider, selection_windows,
-    sentences::{self, Sentence},
+    sentences::{self, Marks, Sentence},
     CommandRegistration, CommandResult, CoreError, EventSink,
 };
 use cut::*;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
+pub mod benchmark;
 pub mod cut;
 mod review;
 pub(crate) use review::{approved_cut, ApprovedCut};
@@ -173,9 +175,9 @@ fn no_repeats_and_limit(input: &TaskInput, output: &Value) -> Vec<Violation> {
 inventory::submit! {
     AiTask {
         id: TASK_ID,
-        version: 2,
+        version: 3,
         prompt: PROMPT,
-        prompt_sha256: "8be769b3c853e1dcbbc9650d51c81670b52d901e8c217ac31606b35822878304",
+        prompt_sha256: "e00332d06248cff669ccb8922aae9d50190a7e30715630e566c4943941469b8a",
         wire_schema: WIRE,
         full_schema: FULL,
         verifiers: &[
@@ -199,9 +201,9 @@ const SELECTION_BUDGET: Budget = Budget {
 inventory::submit! {
     AiTask {
         id: TASK_ID_TRANSFORMED,
-        version: 1,
+        version: 2,
         prompt: PROMPT_TRANSFORMED,
-        prompt_sha256: "fb6ef24096c53ac75a22fb97cbe1dc3252e9c4dca5ad55bd2bd6f70fbdc3eaa6",
+        prompt_sha256: "9d02b5dd4589777e97b14c5e69c582444ab40e1af878cfe7dfcc5d56a2d284ec",
         wire_schema: WIRE_TRANSFORMED,
         full_schema: FULL_TRANSFORMED,
         verifiers: &[
@@ -309,21 +311,32 @@ struct Range {
 }
 
 fn parse_range(v: &Value) -> Result<Range, CoreError> {
-    let min_us = v["minUs"].as_i64().unwrap_or(MIN_CUT_US);
-    let max_us = v["maxUs"].as_i64().unwrap_or(MAX_CUT_US);
-    if min_us <= 0 || min_us >= max_us {
-        return Err(error(
+    let defaults = crate::channel_profile::selection_defaults()?;
+    let range_err = || {
+        error(
             "invalid_cut_range",
             "A faixa de duração dos Cortes é inválida: o mínimo precisa ser positivo e menor que o máximo.",
-        ));
+        )
+    };
+    let min_us = match v.get("minUs") {
+        None | Some(Value::Null) => defaults.min_us,
+        Some(n) => n.as_i64().ok_or_else(range_err)?,
+    };
+    let max_us = match v.get("maxUs") {
+        None | Some(Value::Null) => defaults.max_us,
+        Some(n) => n.as_i64().ok_or_else(range_err)?,
+    };
+    if min_us <= 0 || min_us >= max_us {
+        return Err(range_err());
     }
     Ok(Range { min_us, max_us })
 }
 
-/// `videoKind` do pedido: ausente vale Corte direto; qualquer outro valor é recusado.
+/// `videoKind` do pedido: ausente usa o padrão do Perfil de canal (Corte direto sem Perfil
+/// customizado); qualquer outro valor é recusado.
 pub(crate) fn parse_kind(v: &Value) -> Result<VideoKind, CoreError> {
     match v.get("videoKind") {
-        None | Some(Value::Null) => Ok(VideoKind::Direct),
+        None | Some(Value::Null) => Ok(crate::channel_profile::selection_defaults()?.video_kind),
         Some(Value::String(k)) => VideoKind::parse(k).ok_or_else(invalid_kind),
         _ => Err(invalid_kind()),
     }
@@ -346,14 +359,15 @@ fn weights_json(kind: VideoKind) -> Value {
 
 /// O pedido de uma Janela: linha `#JANELA` (escrita pelo núcleo, antes da Transcrição) e as
 /// Frases no formato compacto sobre o texto corrigido (#52, #140).
-fn window_input(frases: &[Sentence], range: &Range, marks: &EnergyMarks) -> TaskInput {
+fn window_input(frases: &[Sentence], range: &Range, marks: &Marks) -> TaskInput {
     let compact = sentences::compact_with_hint_marked(frases, marks);
     let length = frases.last().map_or(0, |s| s.end_us) - frases.first().map_or(0, |s| s.start_us);
     let target = target_candidates(length);
+    let desired_max = PREFERRED_MAX_US.min(range.max_us).max(range.min_us);
     let header = format!(
         "#JANELA max_candidatos={target} duracao_desejada_s={}-{} duracao_maxima_s={}\n",
         range.min_us / SECOND_US,
-        PREFERRED_MAX_US.max(range.min_us) / SECOND_US,
+        desired_max / SECOND_US,
         range.max_us / SECOND_US
     );
     TaskInput {
@@ -386,6 +400,9 @@ struct Setup {
     /// Marcas de energia do áudio (#54): `None` se a energia não foi medida; a execução roda
     /// sem marcas e o resumo diz isso. Decidido uma vez, em `selection.start`.
     marks: Option<EnergyMarks>,
+    /// Marcas do chat da live (#151): `None` se a Fonte não tem chat. Também decidido uma vez,
+    /// em `selection.start`.
+    chat: Option<ChatMarks>,
 }
 
 /// Rota da seleção, com os dois vetos "somente local" (por tarefa e por Projeto) aplicados
@@ -400,8 +417,11 @@ pub(crate) fn route_safety() -> Result<(String, Safety), CoreError> {
 }
 
 impl Setup {
-    fn marks(&self) -> EnergyMarks {
-        self.marks.clone().unwrap_or_default()
+    fn marks(&self) -> Marks {
+        Marks {
+            energy: self.marks.clone().unwrap_or_default(),
+            chat: self.chat.clone().unwrap_or_default(),
+        }
     }
 }
 
@@ -423,6 +443,7 @@ fn prepare(transcript: i64, range: Range, kind: VideoKind) -> Result<Setup, Core
     let (wire, _) = ai_task::check_definition(task_for(kind)).map_err(CoreError::from)?;
     let instruction = ai_task::normalized_prompt(prompt_for(kind));
     let marks = energy::load_marks(transcript)?;
+    let chat = chat::load_marks(transcript, &frases)?;
     let plan = selection_windows::plan_for_profile_marked(
         &selection_windows::ProfileRequest {
             profile_id: None,
@@ -435,7 +456,10 @@ fn prepare(transcript: i64, range: Range, kind: VideoKind) -> Result<Setup, Core
             max_cut_us: range.max_us,
         },
         &frases,
-        &marks.clone().unwrap_or_default(),
+        &Marks {
+            energy: marks.clone().unwrap_or_default(),
+            chat: chat.clone().unwrap_or_default(),
+        },
     )?;
     Ok(Setup {
         transcript,
@@ -446,6 +470,7 @@ fn prepare(transcript: i64, range: Range, kind: VideoKind) -> Result<Setup, Core
         profile,
         plan,
         marks,
+        chat,
     })
 }
 
@@ -471,6 +496,17 @@ fn energy_json(marks: Option<&EnergyMarks>) -> Value {
         Some(m) => {
             let count = |l| m.values().filter(|x| **x == l).count();
             json!({"measured": true, "high": count(EnergyLevel::High), "peak": count(EnergyLevel::Peak)})
+        }
+    }
+}
+
+/// Estado do chat da live numa execução: se a Fonte tem chat e quantos picos viraram marca.
+fn chat_json(marks: Option<&ChatMarks>) -> Value {
+    match marks {
+        None => json!({"available": false}),
+        Some(m) => {
+            let peaks: std::collections::BTreeSet<u32> = m.values().map(|x| x.interval).collect();
+            json!({"available": true, "peaks": peaks.len(), "marked": m.len()})
         }
     }
 }
@@ -532,6 +568,8 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     Ok(json!({
         "paid": matches!(s.safety, Safety::Paid),
         "profile": s.profile,
+        "minUs": s.range.min_us,
+        "maxUs": s.range.max_us,
         "plan": {
             "state": state_label(s.plan.state),
             "windows": windows_json(&s),
@@ -540,6 +578,7 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         "videoKind": s.kind.as_str(),
         "weights": weights_json(s.kind),
         "energy": energy_json(s.marks.as_ref()),
+        "chat": chat_json(s.chat.as_ref()),
         "estimate": estimate_inputs(s.kind, &inputs, s.safety),
     }))
 }
@@ -605,7 +644,7 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let run = projects::with_writer(|c| {
         let tx = c.transaction()?;
         tx.execute(
-            "INSERT INTO selection_runs(transcript_id,task_version,prompt_sha256,profile,state,min_us,max_us,weights,plan_state,windows_total,energy_marks,video_kind) VALUES (?1,?2,?3,?4,'running',?5,?6,?7,?8,?9,?10,?11)",
+            "INSERT INTO selection_runs(transcript_id,task_version,prompt_sha256,profile,state,min_us,max_us,weights,plan_state,windows_total,energy_marks,chat_marks,video_kind) VALUES (?1,?2,?3,?4,'running',?5,?6,?7,?8,?9,?10,?11,?12)",
             (
                 s.transcript,
                 definition.version,
@@ -617,6 +656,7 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                 state_label(s.plan.state),
                 s.plan.windows.len() as i64,
                 s.marks.is_some(),
+                s.chat.is_some(),
                 s.kind.as_str(),
             ),
         )?;
@@ -649,7 +689,7 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         },
     )?;
     Ok(
-        json!({"run": run, "batch": batch_for(run), "videoKind": s.kind.as_str(), "windows": s.plan.windows.len(), "planState": state_label(s.plan.state), "weights": weights_json(s.kind)}),
+        json!({"run": run, "batch": batch_for(run), "videoKind": s.kind.as_str(), "minUs": s.range.min_us, "maxUs": s.range.max_us, "windows": s.plan.windows.len(), "planState": state_label(s.plan.state), "weights": weights_json(s.kind)}),
     )
 }
 
@@ -779,6 +819,11 @@ impl WindowRow {
             .unwrap_or(fallback)
             .to_owned()
     }
+    fn reset_at_ms(&self) -> Option<u64> {
+        matches!(self.outcome(), Outcome::Failed(_))
+            .then(|| self.result.as_ref().and_then(|r| r["resetAtMs"].as_u64()))
+            .flatten()
+    }
 }
 
 fn read_windows(run: i64) -> Result<Vec<WindowRow>, CoreError> {
@@ -817,6 +862,7 @@ struct RunRow {
     completed: i64,
     failed: i64,
     energy_marks: bool,
+    chat_marks: bool,
     revision: i64,
     kind: VideoKind,
 }
@@ -824,7 +870,7 @@ struct RunRow {
 fn read_run(run: i64) -> Result<RunRow, CoreError> {
     projects::with_reader(|c| {
         c.query_row(
-            "SELECT transcript_id,state,min_us,max_us,windows_completed,windows_failed,energy_marks,video_kind,revision FROM selection_runs WHERE id=?1",
+            "SELECT transcript_id,state,min_us,max_us,windows_completed,windows_failed,energy_marks,chat_marks,video_kind,revision FROM selection_runs WHERE id=?1",
             [run],
             |r| {
                 Ok(RunRow {
@@ -835,12 +881,13 @@ fn read_run(run: i64) -> Result<RunRow, CoreError> {
                     completed: r.get(4)?,
                     failed: r.get(5)?,
                     energy_marks: r.get(6)?,
+                    chat_marks: r.get(7)?,
                     kind: r
-                        .get::<_, String>(7)
+                        .get::<_, String>(8)
                         .ok()
                         .and_then(|k| VideoKind::parse(&k))
                         .unwrap_or_default(),
-                    revision: r.get(8)?,
+                    revision: r.get(9)?,
                 })
             },
         )
@@ -867,14 +914,29 @@ fn emit(run: i64, step: &str, percentage: u8, message: &str, error: Option<CoreE
 
 /// Chamado pela fila depois de cada job `ai:selection`.
 pub(crate) fn on_job_settled(job: i64) {
-    let run = projects::with_reader(|c| {
+    let info = projects::with_reader(|c| {
         c.query_row(
-            "SELECT run_id FROM selection_windows WHERE job_id=?1",
+            "SELECT w.run_id, j.state, json_extract(j.result,'$.code') FROM selection_windows w JOIN jobs j ON j.id=w.job_id WHERE w.job_id=?1",
             [job],
-            |r| r.get::<_, i64>(0),
+            |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, Option<String>>(2)?,
+                ))
+            },
         )
     });
-    if let Ok(run) = run {
+    if let Ok((run, state, code)) = info {
+        if state == "failed" && code.as_deref() == Some("provider_daily_limit") {
+            let _ = projects::with_writer(|c| {
+                c.execute(
+                    "UPDATE jobs SET state='cancelled' WHERE state='queued' AND id IN (SELECT job_id FROM selection_windows WHERE run_id=?1 AND job_id IS NOT NULL)",
+                    [run],
+                )?;
+                Ok(())
+            });
+        }
         let _ = advance(run);
     }
 }
@@ -1049,6 +1111,7 @@ fn advance(run: i64) -> Result<(), CoreError> {
     let summary = json!({
         "videoKind": row.kind.as_str(),
         "energy": energy_json(run_marks(&row)?.as_ref()),
+        "chat": chat_json(run_chat(&row, &frases)?.as_ref()),
         "revision": revision,
         "redoFailed": redo_failed,
         "windows": {"total": total, "completed": completed, "failed": failures},
@@ -1060,6 +1123,7 @@ fn advance(run: i64) -> Result<(), CoreError> {
             "discarded": {"tooShort": tally.too_short, "tooLong": tally.too_long, "unknownId": tally.unknown_id},
         },
     });
+    let chat_marks = run_chat(&row, &frases)?.unwrap_or_default();
     let state = if failed == 0 { "completed" } else { "partial" };
     let closed = projects::with_writer(|c| {
         let tx = c.transaction()?;
@@ -1096,7 +1160,7 @@ fn advance(run: i64) -> Result<(), CoreError> {
                     json!({"extendedBefore": p.adjust.extended_before, "extendedAfter": p.adjust.extended_after, "trimmedEnd": p.adjust.trimmed_end}).to_string()
                 });
                 tx.execute(
-                    "INSERT INTO selection_candidates(run_id,rank,start_id,end_id,start_us,end_us,axes,total_centi,title,windows,adjust,revision,profile) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+                    "INSERT INTO selection_candidates(run_id,rank,start_id,end_id,start_us,end_us,axes,total_centi,title,windows,adjust,chat_marks,revision,profile) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
                     (
                         run,
                         rank as i64,
@@ -1109,6 +1173,10 @@ fn advance(run: i64) -> Result<(), CoreError> {
                         &p.title,
                         json!(m.windows).to_string(),
                         adjust,
+                        {
+                            let found = chat::candidate_marks(&chat_marks, &frases, p.start, p.end);
+                            (!found.is_empty()).then(|| Value::Array(found).to_string())
+                        },
                         revision,
                         m.windows
                             .iter()
@@ -1146,6 +1214,17 @@ fn run_marks(row: &RunRow) -> Result<Option<EnergyMarks>, CoreError> {
     ))
 }
 
+/// As marcas de chat que esta execução usou (mesma regra da energia: decididas no início). A
+/// série é gravada por Fonte e não muda quando a execução refaz uma Janela.
+fn run_chat(row: &RunRow, frases: &[Sentence]) -> Result<Option<ChatMarks>, CoreError> {
+    if !row.chat_marks {
+        return Ok(None);
+    }
+    Ok(Some(
+        chat::load_marks(row.transcript, frases)?.unwrap_or_default(),
+    ))
+}
+
 // ---------------------------------------------------------------- retomar e refazer
 
 /// Janelas que um refazer atinge: as pedidas (ou todas as não concluídas) que não estão na
@@ -1161,7 +1240,10 @@ fn redo_inputs(run: i64, v: &Value) -> Result<Vec<(i64, TaskInput)>, CoreError> 
         min_us: row.min_us,
         max_us: row.max_us,
     };
-    let marks = run_marks(&row)?.unwrap_or_default();
+    let marks = Marks {
+        energy: run_marks(&row)?.unwrap_or_default(),
+        chat: run_chat(&row, &frases)?.unwrap_or_default(),
+    };
     let mut out = Vec::new();
     for w in &windows {
         let selected = wanted.as_ref().is_none_or(|ids| ids.contains(&w.idx));
@@ -1394,17 +1476,18 @@ fn run_json(run: i64, revision: Option<i64>) -> Result<Value, CoreError> {
                 Outcome::Failed(code) => Value::String(code),
                 _ => Value::Null,
             };
-            json!({"index": w.idx, "firstId": w.first_id, "lastId": w.last_id, "startUs": w.start_us, "endUs": w.end_us, "jobId": w.job_id, "state": w.state(), "code": code, "profile": w.effective().profile, "redoFailed": w.effective().redo_failed})
+            json!({"index": w.idx, "firstId": w.first_id, "lastId": w.last_id, "startUs": w.start_us, "endUs": w.end_us, "jobId": w.job_id, "state": w.state(), "code": code, "resetAtMs": w.reset_at_ms(), "profile": w.effective().profile, "redoFailed": w.effective().redo_failed})
         })
         .collect();
     let candidates = projects::with_reader(|c| {
         let mut q = c.prepare(
-            "SELECT id,rank,start_id,end_id,start_us,end_us,axes,total_centi,title,windows,adjust,revision,profile FROM selection_candidates WHERE run_id=?1 AND revision=COALESCE(?2,(SELECT revision FROM selection_runs WHERE id=?1)) ORDER BY rank",
+            "SELECT id,rank,start_id,end_id,start_us,end_us,axes,total_centi,title,windows,adjust,chat_marks,revision,profile FROM selection_candidates WHERE run_id=?1 AND revision=COALESCE(?2,(SELECT revision FROM selection_runs WHERE id=?1)) ORDER BY rank",
         )?;
         let rows = q.query_map((run, revision), |r| {
             let axes: String = r.get(6)?;
             let origin: String = r.get(9)?;
             let adjust: Option<String> = r.get(10)?;
+            let chat: Option<String> = r.get(11)?;
             let centi: i64 = r.get(7)?;
             Ok(json!({
                 "id": r.get::<_, i64>(0)?, "rank": r.get::<_, i64>(1)?,
@@ -1414,7 +1497,8 @@ fn run_json(run: i64, revision: Option<i64>) -> Result<Value, CoreError> {
                 "total": centi as f64 / 100.0, "totalCenti": centi,
                 "title": r.get::<_, String>(8)?,
                 "windows": serde_json::from_str::<Value>(&origin).unwrap_or(Value::Null),
-                "revision": r.get::<_, i64>(11)?, "profile": r.get::<_, String>(12)?,
+                "chat": chat.and_then(|t| serde_json::from_str::<Value>(&t).ok()).unwrap_or_else(|| json!([])),
+                "revision": r.get::<_, i64>(12)?, "profile": r.get::<_, String>(13)?,
                 "adjusted": adjust.is_some(),
                 "adjust": adjust.and_then(|t| serde_json::from_str::<Value>(&t).ok()).unwrap_or(Value::Null),
             }))

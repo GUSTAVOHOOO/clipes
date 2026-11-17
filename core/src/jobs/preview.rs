@@ -51,7 +51,7 @@ pub(crate) fn check(id: i64, stop: &AtomicBool) -> Result<(), crate::CoreError> 
 pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
     while !stop.load(Ordering::SeqCst) {
         crate::source_batches::tick();
-        let next = projects::with_reader(|c| c.query_row("SELECT id,COALESCE(source_id,0),kind FROM jobs WHERE ((kind IN ('preview','proxy','export') AND safety='local') OR kind='transcription' OR kind='energy' OR (kind='reframe' AND safety='local') OR kind LIKE 'ai:%') AND state='queued' AND NOT EXISTS (SELECT 1 FROM ai_pauses p WHERE (p.scope='task' AND jobs.kind='ai:'||p.key) OR (p.scope='batch' AND jobs.batch=p.key)) ORDER BY id LIMIT 1", [], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?))).optional()).ok().flatten();
+        let next = projects::with_reader(|c| c.query_row("SELECT id,COALESCE(source_id,0),kind FROM jobs WHERE ((kind IN ('preview','proxy','export','timeline') AND safety='local') OR kind='transcription' OR kind='energy' OR kind='chat' OR kind='narration' OR kind='narration_align' OR kind='narration_import' OR (kind='reframe' AND safety='local') OR kind LIKE 'ai:%') AND state='queued' AND NOT EXISTS (SELECT 1 FROM ai_pauses p WHERE (p.scope='task' AND jobs.kind='ai:'||p.key) OR (p.scope='batch' AND jobs.batch=p.key)) ORDER BY id LIMIT 1", [], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?))).optional()).ok().flatten();
         if let Some((id, source, kind)) = next {
             let Ok(_guard) = projects::start_job() else {
                 break;
@@ -64,6 +64,8 @@ pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
                     ai::execute(id, &stop);
                     if crate::selection::is_job_kind(&kind) {
                         crate::selection::on_job_settled(id);
+                    } else if kind == crate::translation::JOB_KIND {
+                        crate::translation::on_job_settled(id);
                     }
                     continue;
                 }
@@ -71,10 +73,20 @@ pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
                     crate::reframe::run(id, &project, &stop)
                 } else if kind == "transcription" {
                     crate::transcription::run(id, source, &project, &stop)
+                } else if kind == crate::editor::assets::JOB_KIND {
+                    crate::editor::assets::run(id, source, &project, &stop)
                 } else if kind == "proxy" {
                     crate::proxy::run(id, source, &project, &stop)
+                } else if kind == crate::chat::JOB_KIND {
+                    crate::chat::run(id, source, &project, &stop)
                 } else if kind == crate::energy::JOB_KIND {
                     crate::energy::run(id, source, &project, &stop)
+                } else if kind == crate::tts::JOB_KIND {
+                    crate::tts::run(id, &project, &stop)
+                } else if kind == crate::narration_align::JOB_KIND {
+                    crate::narration_align::run(id, &project, &stop)
+                } else if kind == crate::narration_import::JOB_KIND {
+                    crate::narration_import::run(id, &project, &stop)
                 } else if kind == crate::export::JOB_KIND {
                     crate::export::run(id, source, &project, &stop)
                 } else {
@@ -94,6 +106,9 @@ pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
                 } else {
                     let err = result.as_ref().err().cloned();
                     let _ = finish(id, result);
+                    if kind == crate::export::JOB_KIND {
+                        crate::export::batch::on_job_settled(id);
+                    }
                     let _ = progress_event(id, err, &kind);
                 }
             }
@@ -122,8 +137,18 @@ fn progress_event(
             ("reframe", false) => "Sugestão de enquadramento pronta",
             ("transcription", true) => "Transcrição interrompida",
             ("transcription", false) => "Transcrição pronta",
+            ("chat", true) => "Busca do chat interrompida",
+            ("chat", false) => "Chat da live pronto",
+            ("timeline", true) => "Timeline do Corte interrompida",
+            ("timeline", false) => "Timeline do Corte pronta",
             ("energy", true) => "Medição de energia interrompida",
             ("energy", false) => "Energia do áudio medida",
+            ("narration", true) => "Narração interrompida",
+            ("narration", false) => "Narração pronta",
+            ("narration_align", true) => "Alinhamento da Narração interrompido",
+            ("narration_align", false) => "Alinhamento da Narração pronto",
+            ("narration_import", true) => "Importação de áudio da Narração interrompida",
+            ("narration_import", false) => "Áudio da Narração importado",
             ("export", true) => "Export interrompido",
             ("export", false) => "Corte exportado",
             (_, true) => "Prévia interrompida",

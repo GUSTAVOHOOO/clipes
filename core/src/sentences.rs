@@ -10,6 +10,7 @@
 //! e é idempotente: se as Frases gravadas já são as calculadas, nada é escrito.
 
 use crate::{
+    chat,
     energy::{self, EnergyMarks},
     projects, CommandRegistration, CommandResult, CoreError, EventSink,
 };
@@ -20,6 +21,39 @@ use serde_json::{json, Value};
 pub const PAUSE_US: i64 = 700_000;
 /// Duração máxima de uma Frase antes de ser quebrada na maior pausa interna.
 pub const MAX_SENTENCE_US: i64 = 25_000_000;
+/// Duração mínima garantida para palavras e Frases normalizadas (1 µs).
+pub const MIN_SPAN_DURATION_US: i64 = 1;
+
+/// Normaliza intervalos `(start_us, end_us)` em ordem monotônica: cada item começa em
+/// `start_us.max(prev_end)` e termina em `end_us.max(start_us + MIN_SPAN_DURATION_US)`.
+/// Tempos negativos retornam `Err(())` em vez de serem mascarados.
+pub(crate) fn normalize_spans(
+    spans: &mut [(i64, i64)],
+    initial_prev_end_us: Option<i64>,
+) -> Result<bool, ()> {
+    if initial_prev_end_us.is_some_and(|p| p < 0) {
+        return Err(());
+    }
+    let mut prev_end = initial_prev_end_us;
+    let mut changed = false;
+    for (start, end) in spans.iter_mut() {
+        if *start < 0 || *end < 0 {
+            return Err(());
+        }
+        let norm_start = match prev_end {
+            Some(prev) => (*start).max(prev),
+            None => *start,
+        };
+        let norm_end = (*end).max(norm_start.saturating_add(MIN_SPAN_DURATION_US));
+        if norm_start != *start || norm_end != *end {
+            *start = norm_start;
+            *end = norm_end;
+            changed = true;
+        }
+        prev_end = Some(norm_end);
+    }
+    Ok(changed)
+}
 
 inventory::submit! { projects::Migration { id: "0049_001_sentences", sql: "CREATE TABLE sentences (transcript_id INTEGER NOT NULL REFERENCES transcripts(id) ON DELETE CASCADE, id INTEGER NOT NULL, first_position INTEGER NOT NULL, last_position INTEGER NOT NULL, start_us INTEGER NOT NULL, end_us INTEGER NOT NULL, language TEXT, text TEXT NOT NULL, PRIMARY KEY (transcript_id, id)) WITHOUT ROWID; CREATE INDEX sentences_by_time ON sentences(transcript_id, start_us);" } }
 
@@ -153,7 +187,7 @@ pub(crate) fn segment_transcript(transcript: i64) -> Result<(usize, bool), CoreE
         if state.as_deref() != Some("complete") {
             return Ok(None);
         }
-        let words = {
+        let mut words = {
             let mut q = tx.prepare(
                 "SELECT position, text, start_us, end_us, language FROM transcript_words WHERE transcript_id=?1 AND kind='word' ORDER BY position",
             )?;
@@ -168,6 +202,22 @@ pub(crate) fn segment_transcript(transcript: i64) -> Result<(usize, bool), CoreE
             })?;
             rows.collect::<rusqlite::Result<Vec<_>>>()?
         };
+        // Reparo idempotente para palavras já salvas com sobreposição ou duração zero; tempos
+        // negativos permanecem intocados para que a validação devolva erro tipado.
+        let mut word_spans: Vec<(i64, i64)> =
+            words.iter().map(|w| (w.start_us, w.end_us)).collect();
+        if let Ok(true) = normalize_spans(&mut word_spans, None) {
+            let mut update = tx.prepare(
+                "UPDATE transcript_words SET start_us=?3, end_us=?4 WHERE transcript_id=?1 AND position=?2",
+            )?;
+            for (word, &(start, end)) in words.iter_mut().zip(&word_spans) {
+                if word.start_us != start || word.end_us != end {
+                    word.start_us = start;
+                    word.end_us = end;
+                    update.execute((transcript, word.position, start, end))?;
+                }
+            }
+        }
         // Fronteiras e IDs vêm só do texto original do Motor e dos tempos (estáveis por
         // contrato); o texto de cada Frase vem do texto efetivo (com as correções, #52).
         let mut computed = segment(&words);
@@ -367,18 +417,50 @@ inventory::submit! { CommandRegistration { name: "transcription.timeline", execu
 /// Uma linha do formato compacto: `ID texto`, ou `ID [energia alta] texto` quando a Frase tem
 /// marca de energia (#54, [`crate::energy::mark`]). É a **única** função que monta a linha:
 /// o serializador, o planejador de Janelas (#144) e o estimador (#140) contam o mesmo texto.
-pub fn line(sentence: &Sentence, marks: &EnergyMarks) -> String {
-    match marks.get(&sentence.id).copied().and_then(energy::mark) {
-        Some(mark) => format!(
-            "{} {} {}
-",
-            sentence.id, mark, sentence.text
-        ),
-        None => format!(
-            "{} {}
-",
-            sentence.id, sentence.text
-        ),
+pub fn line(sentence: &Sentence, marks: &impl SentenceMarks) -> String {
+    let mut out = sentence.id.to_string();
+    if let Some(mark) = marks.energy_of(sentence.id).and_then(energy::mark) {
+        out.push(' ');
+        out.push_str(mark);
+    }
+    if let Some(mark) = marks.chat_of(sentence.id) {
+        out.push(' ');
+        out.push_str(&chat::mark(mark));
+    }
+    out.push(' ');
+    out.push_str(&sentence.text);
+    out.push('\n');
+    out
+}
+
+/// De onde `line` lê as marcas de uma Frase: energia do áudio (#54) e chat da live (#151).
+/// `EnergyMarks` sozinho continua valendo (sem chat).
+pub trait SentenceMarks {
+    fn energy_of(&self, id: i64) -> Option<energy::EnergyLevel>;
+    fn chat_of(&self, _id: i64) -> Option<&chat::ChatMark> {
+        None
+    }
+}
+
+impl SentenceMarks for EnergyMarks {
+    fn energy_of(&self, id: i64) -> Option<energy::EnergyLevel> {
+        self.get(&id).copied()
+    }
+}
+
+/// Todas as marcas de uma execução de seleção.
+#[derive(Debug, Clone, Default)]
+pub struct Marks {
+    pub energy: EnergyMarks,
+    pub chat: chat::ChatMarks,
+}
+
+impl SentenceMarks for Marks {
+    fn energy_of(&self, id: i64) -> Option<energy::EnergyLevel> {
+        self.energy.get(&id).copied()
+    }
+    fn chat_of(&self, id: i64) -> Option<&chat::ChatMark> {
+        self.chat.get(&id)
     }
 }
 
@@ -389,7 +471,7 @@ pub fn compact(sentences: &[Sentence]) -> String {
 }
 
 /// [`compact`] com as marcas de energia do áudio (#54) nas Frases que as têm.
-pub fn compact_marked(sentences: &[Sentence], marks: &EnergyMarks) -> String {
+pub fn compact_marked(sentences: &[Sentence], marks: &impl SentenceMarks) -> String {
     use std::fmt::Write;
     let mut result = String::new();
     let mut previous = None;
@@ -419,7 +501,10 @@ pub fn compact_with_hint(sentences: &[Sentence]) -> CompactTranscript {
 
 /// [`compact_with_hint`] com as marcas de energia: o texto (e portanto a estimativa de tokens)
 /// inclui as marcas, que são texto enviado.
-pub fn compact_with_hint_marked(sentences: &[Sentence], marks: &EnergyMarks) -> CompactTranscript {
+pub fn compact_with_hint_marked(
+    sentences: &[Sentence],
+    marks: &impl SentenceMarks,
+) -> CompactTranscript {
     let mut counts = std::collections::BTreeMap::<&str, usize>::new();
     for s in sentences {
         *counts

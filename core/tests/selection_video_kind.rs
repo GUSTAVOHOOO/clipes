@@ -244,7 +244,7 @@ fn video_kind_picks_the_six_axis_task_and_leaves_the_direct_cut_unchanged() {
         .unwrap();
     let direct = finished(run_direct, "completed");
     assert_eq!(direct["run"]["videoKind"], "direct");
-    assert_eq!(direct["run"]["taskVersion"], 2);
+    assert_eq!(direct["run"]["taskVersion"], 3);
     assert_eq!(direct["run"]["summary"]["videoKind"], "direct");
     let c = &direct["candidates"][0];
     assert_eq!(
@@ -264,7 +264,7 @@ fn video_kind_picks_the_six_axis_task_and_leaves_the_direct_cut_unchanged() {
     let run_transformed = started["run"].as_i64().unwrap();
     let transformed = finished(run_transformed, "completed");
     assert_eq!(transformed["run"]["videoKind"], "transformed");
-    assert_eq!(transformed["run"]["taskVersion"], 1);
+    assert_eq!(transformed["run"]["taskVersion"], 2);
     assert_ne!(
         transformed["run"]["promptSha256"],
         direct["run"]["promptSha256"]

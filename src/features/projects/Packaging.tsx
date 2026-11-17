@@ -1,16 +1,32 @@
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { coreDispatch } from '@/lib/core';
 import { LanguageContext, useText, type Language } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { AiDisclosureNote } from '@/features/guardrails/GuardrailsPanel';
+import { SOURCE_PERMISSION_UPDATED_EVENT } from './Sources';
 import { fill } from './selectionFormat';
 
 type Limits = { titleChars: number; descriptionBytes: number; tagsChars: number; tags: number; tagChars: number; hashtags: number };
 type Current = { generation: number; language: string; edited: boolean; title: string; description: string; tags: string[]; hashtags: string[]; fullDescription: string };
 type Job = { id: number; state: string | null; code: string | null; violations: string[] };
+type ChapterWarning = { code: string; message: string };
+type ChaptersDoc = {
+  applicable: boolean;
+  canGenerate: boolean;
+  status: string;
+  hasDelimiters: boolean;
+  delimiters: { start: string; end: string };
+  suggested: { startSecs: number; timestamp: string; title: string }[];
+  block: string | null;
+  generationWarning: ChapterWarning | null;
+  editWarnings: ChapterWarning[];
+};
 type Doc = {
+  revision: number;
   detectedLanguage: string | null; languageRequired: boolean; current: Current | null; job: Job | null; limits: Limits;
   credit: { text: string | null; warning: string | null };
+  chapters?: ChaptersDoc;
   generations: { generation: number; taskVersion: number; promptSha256: string; profile: string; edits: unknown[] }[];
 };
 type Estimate = { paid: boolean; language: string; estimate: { kind: string; minMicroUsd: number | null; maxMicroUsd: number | null } };
@@ -18,6 +34,7 @@ type Estimate = { paid: boolean; language: string; estimate: { kind: string; min
 const texts = {
   'pt-BR': {
     title: 'Empacotamento', generate: 'Gerar título, descrição e tags', regenerate: 'Gerar de novo', generating: 'Gerando…', save: 'Salvar edições',
+    refreshChapters: 'Atualizar capítulos', chaptersUpdated: 'Capítulos atualizados.',
     language: 'Idioma do empacotamento', languageHint: 'O idioma deste Corte não é claro. Escolha PT-BR ou EN.',
     fTitle: 'Título', fDescription: 'Descrição', fTags: 'Tags (separadas por vírgula)', fHashtags: 'Hashtags (separadas por espaço)',
     counter: '{used}/{max} {unit}', chars: 'caracteres', bytes: 'bytes', tags: 'tags',
@@ -26,13 +43,34 @@ const texts = {
     free: 'sem custo (modelo local)', unknown: 'custo desconhecido', quota: 'consome a cota do plano', range: 'entre US$ {min} e US$ {max}',
     confirmTitle: 'Usar o Provedor pago?', confirmBody: 'O texto do Corte vai ao Provedor escolhido. Custo estimado: {cost}.', cancel: 'Cancelar', confirm: 'Confirmar e gerar',
     failed: 'Não foi possível gerar: {reason} Você pode gerar de novo ou escrever os campos à mão.',
+    chaptersEditNoticeTitle: 'Aviso sobre os capítulos no YouTube (não impede salvar):',
+    chapterWarnings: {
+      script_not_approved: 'Aprove todos os blocos do Roteiro e gere a Narração para ter capítulos.',
+      narration_required: 'Gere a Narração para ter capítulos.',
+      too_few_chapters: 'O YouTube exige pelo menos 3 capítulos de 10 s cada, começando em 00:00.',
+      first_chapter_not_zero: 'O primeiro capítulo deve começar em 00:00.',
+      chapter_too_short: 'Cada capítulo no YouTube precisa durar pelo menos 10 s.',
+      chapters_not_ordered: 'Os timestamps dos capítulos devem estar em ordem crescente.',
+      invalid_chapter_format: 'Cada linha de capítulo deve ter timestamp (ex.: 00:00) e título.',
+      chapter_past_end: 'Um capítulo começa após o fim do vídeo.',
+    } as Record<string, string>,
     reasons: {
       language_mismatch: 'o texto não veio no idioma pedido.', verification_failed: 'o texto passou de um limite ou tinha formato inválido.', cancelled: 'a geração foi cancelada.', timeout_uncertain: 'o resultado ficou incerto.', default: 'o Provedor não devolveu um texto válido.',
     } as Record<string, string>,
-    errors: { not_approved: 'Aprove o candidato antes de gerar.', language_required: 'Escolha o idioma: PT-BR ou EN.', generation_in_progress: 'Já há uma geração em andamento.', local_only_violation: 'O modo "somente local" impede este Provedor.', edit_invalid: 'A edição passa de um limite do YouTube ou tem formato inválido.', default: 'Não foi possível concluir a operação.' } as Record<string, string>,
+    errors: {
+      not_approved: 'Aprove o candidato antes de gerar.', language_required: 'Escolha o idioma: PT-BR ou EN.', generation_in_progress: 'Já há uma geração em andamento.',
+      local_only_violation: 'O modo "somente local" impede este Provedor.', edit_invalid: 'A edição passa de um limite do YouTube ou tem formato inválido.',
+      chapter_delimiters_missing: 'Os delimitadores de capítulos foram removidos da descrição. Nada foi alterado.',
+      chapters_require_transformed: 'Capítulos automáticos só existem para Vídeo transformado.',
+      script_not_approved: 'Aprove todos os blocos do Roteiro e gere a Narração para ter capítulos.',
+      narration_required: 'Gere a Narração para ter capítulos.',
+      too_few_chapters: 'O YouTube exige pelo menos 3 capítulos de 10 s cada, começando em 00:00.',
+      default: 'Não foi possível concluir a operação.',
+    } as Record<string, string>,
   },
   en: {
     title: 'Packaging', generate: 'Generate title, description and tags', regenerate: 'Generate again', generating: 'Generating…', save: 'Save edits',
+    refreshChapters: 'Update chapters', chaptersUpdated: 'Chapters updated.',
     language: 'Packaging language', languageHint: 'This Clip’s language is unclear. Pick PT-BR or EN.',
     fTitle: 'Title', fDescription: 'Description', fTags: 'Tags (comma separated)', fHashtags: 'Hashtags (space separated)',
     counter: '{used}/{max} {unit}', chars: 'characters', bytes: 'bytes', tags: 'tags',
@@ -41,10 +79,30 @@ const texts = {
     free: 'free (local model)', unknown: 'unknown cost', quota: 'uses the plan quota', range: 'between US$ {min} and US$ {max}',
     confirmTitle: 'Use the paid Provider?', confirmBody: 'The Clip text is sent to the chosen Provider. Estimated cost: {cost}.', cancel: 'Cancel', confirm: 'Confirm and generate',
     failed: 'Could not generate: {reason} You can generate again or write the fields by hand.',
+    chaptersEditNoticeTitle: 'YouTube chapters notice (does not block saving):',
+    chapterWarnings: {
+      script_not_approved: 'Approve all Script blocks and generate Narration to include chapters.',
+      narration_required: 'Generate Narration to include chapters.',
+      too_few_chapters: 'YouTube requires at least 3 chapters of 10s each, starting at 00:00.',
+      first_chapter_not_zero: 'The first chapter must start at 00:00.',
+      chapter_too_short: 'Each YouTube chapter must last at least 10s.',
+      chapters_not_ordered: 'Chapter timestamps must be in ascending order.',
+      invalid_chapter_format: 'Each chapter line must have a timestamp (e.g., 00:00) and a title.',
+      chapter_past_end: 'A chapter starts after the end of the video.',
+    } as Record<string, string>,
     reasons: {
       language_mismatch: 'the text was not in the requested language.', verification_failed: 'the text went over a limit or had an invalid format.', cancelled: 'generation was cancelled.', timeout_uncertain: 'the result is uncertain.', default: 'the Provider did not return valid text.',
     } as Record<string, string>,
-    errors: { not_approved: 'Approve the candidate before generating.', language_required: 'Pick the language: PT-BR or EN.', generation_in_progress: 'A generation is already running.', local_only_violation: '“Local only” blocks this Provider.', edit_invalid: 'The edit goes over a YouTube limit or has an invalid format.', default: 'Could not complete the operation.' } as Record<string, string>,
+    errors: {
+      not_approved: 'Approve the candidate before generating.', language_required: 'Pick the language: PT-BR or EN.', generation_in_progress: 'A generation is already running.',
+      local_only_violation: '“Local only” blocks this Provider.', edit_invalid: 'The edit goes over a YouTube limit or has an invalid format.',
+      chapter_delimiters_missing: 'The chapter delimiters were removed from the description. Nothing was changed.',
+      chapters_require_transformed: 'Automatic chapters are only available for Transformed Videos.',
+      script_not_approved: 'Approve all Script blocks and generate Narration to include chapters.',
+      narration_required: 'Generate Narration to include chapters.',
+      too_few_chapters: 'YouTube requires at least 3 chapters of 10s each, starting at 00:00.',
+      default: 'Could not complete the operation.',
+    } as Record<string, string>,
   },
 };
 
@@ -55,8 +113,8 @@ const splitTags = (text: string) => text.split(',').map(t => t.trim()).filter(Bo
 const splitHashtags = (text: string) => text.split(/\s+/).filter(Boolean);
 const bytesOf = (text: string) => new TextEncoder().encode(text).length;
 
-/** Empacotamento do Corte aprovado (#68): gerar, ver e editar título, descrição, tags e hashtags. */
-export function Packaging({ candidate }: { candidate: number }) {
+/** Empacotamento do Corte aprovado (#68): gerar, ver e editar título, descrição, tags, hashtags e capítulos (#80). */
+export function Packaging({ candidate, refreshKey = 0 }: { candidate: number; refreshKey?: number }) {
   const t = useText(texts);
   const uiLanguage: Language = useContext(LanguageContext);
   const [doc, setDoc] = useState<Doc | null>(null);
@@ -68,20 +126,34 @@ export function Packaging({ candidate }: { candidate: number }) {
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
   const [pending, setPending] = useState<Estimate | null>(null);
+  const lastRevisionRef = useRef<number | null>(null);
 
-  const apply = useCallback((d: Doc) => {
+  const apply = useCallback((d: Doc, forceFields = false) => {
     setDoc(d);
-    if (d.current) { setTitle(d.current.title); setDescription(d.current.description); setTags(d.current.tags.join(', ')); setHashtags(d.current.hashtags.join(' ')); }
+    if (d.current && (forceFields || lastRevisionRef.current !== d.revision)) {
+      lastRevisionRef.current = d.revision;
+      setTitle(d.current.title);
+      setDescription(d.current.description);
+      setTags(d.current.tags.join(', '));
+      setHashtags(d.current.hashtags.join(' '));
+    }
   }, []);
   const generating = doc?.job?.state === 'queued' || doc?.job?.state === 'running';
   useEffect(() => {
+    lastRevisionRef.current = null;
+  }, [candidate]);
+  useEffect(() => {
     let active = true;
     coreDispatch<Doc>('packaging.get', { candidate }).then(d => { if (active) apply(d); }).catch(() => { if (active) setError(t.errors.default); });
-    return () => { active = false; };
-  }, [candidate, apply, t.errors.default]);
+    const onPermission = () => {
+      coreDispatch<Doc>('packaging.get', { candidate }).then(d => { if (active) setDoc(d); }).catch(() => {});
+    };
+    window.addEventListener(SOURCE_PERMISSION_UPDATED_EVENT, onPermission);
+    return () => { active = false; window.removeEventListener(SOURCE_PERMISSION_UPDATED_EVENT, onPermission); };
+  }, [candidate, refreshKey, apply, t.errors.default]);
   useEffect(() => {
     if (!generating) return;
-    const timer = window.setInterval(() => { coreDispatch<Doc>('packaging.get', { candidate }).then(apply).catch(() => {}); }, 800);
+    const timer = window.setInterval(() => { coreDispatch<Doc>('packaging.get', { candidate }).then(d => apply(d)).catch(() => {}); }, 800);
     return () => window.clearInterval(timer);
   }, [generating, candidate, apply]);
 
@@ -90,7 +162,7 @@ export function Packaging({ candidate }: { candidate: number }) {
 
   async function start(confirmed: boolean) {
     setError(''); setNote('');
-    try { await coreDispatch('packaging.generate', args(confirmed ? { confirmed: true } : {})); apply(await coreDispatch<Doc>('packaging.get', { candidate })); }
+    try { await coreDispatch('packaging.generate', args(confirmed ? { confirmed: true } : {})); apply(await coreDispatch<Doc>('packaging.get', { candidate }), true); }
     catch (e) { setError(t.errors[codeOf(e)] ?? t.errors.default); }
   }
   async function generate() {
@@ -102,7 +174,12 @@ export function Packaging({ candidate }: { candidate: number }) {
   }
   async function save() {
     setError(''); setNote('');
-    try { apply(await coreDispatch<Doc>('packaging.edit', { candidate, title, description, tags: splitTags(tags), hashtags: splitHashtags(hashtags) })); setNote(t.saved); }
+    try { apply(await coreDispatch<Doc>('packaging.edit', { candidate, title, description, tags: splitTags(tags), hashtags: splitHashtags(hashtags) }), true); setNote(t.saved); }
+    catch (e) { setError(t.errors[codeOf(e)] ?? t.errors.default); }
+  }
+  async function refreshChapters() {
+    setError(''); setNote('');
+    try { apply(await coreDispatch<Doc>('packaging.refresh_chapters', { candidate, description }), true); setNote(t.chaptersUpdated); }
     catch (e) { setError(t.errors[codeOf(e)] ?? t.errors.default); }
   }
 
@@ -117,6 +194,8 @@ export function Packaging({ candidate }: { candidate: number }) {
   const failedJob = job && (job.state === 'failed' || job.state === 'uncertain' || job.state === 'cancelled');
   const reason = job ? (job.violations.includes('language_mismatch') ? t.reasons.language_mismatch : t.reasons[job.code ?? ''] ?? t.reasons.default) : '';
   const field = 'foco w-full rounded-md border border-line-strong bg-field px-3 py-1.5 text-fg';
+  const chapters = doc.chapters;
+  const editWarnings = chapters?.applicable ? chapters.editWarnings : [];
 
   return <section aria-label={t.title} data-packaging className="flex flex-col gap-2 rounded-md border border-line p-3">
     <h3 className="font-medium">{t.title}</h3>
@@ -130,20 +209,38 @@ export function Packaging({ candidate }: { candidate: number }) {
       <Button variante={doc.current ? 'secundario' : 'primario'} tamanho="sm" disabled={generating} carregando={generating} onClick={() => void generate()}>{generating ? t.generating : doc.current ? t.regenerate : t.generate}</Button>
       {doc.current && <span className="text-xs text-fg-2" data-packaging-version>{fill(t.version, { n: doc.current.generation, total: doc.generations.length, task: doc.generations[doc.current.generation - 1]?.taskVersion ?? '', profile: doc.generations[doc.current.generation - 1]?.profile || '—' })}{doc.current.edited ? ` · ${t.edited}` : ''}</span>}
     </div>
+    {chapters?.applicable && chapters.generationWarning && (
+      <p role="status" data-packaging-chapters-warning={chapters.generationWarning.code} className="rounded-md border border-line bg-warning-subtle px-2.5 py-1.5 text-xs text-fg">
+        {t.chapterWarnings[chapters.generationWarning.code] ?? chapters.generationWarning.message}
+      </p>
+    )}
     {failedJob && <p role="alert" data-packaging-failed className="text-danger">{fill(t.failed, { reason })}</p>}
     {doc.current && <div className="flex flex-col gap-2">
       <label className="flex flex-col gap-1 text-sm"><span className="flex justify-between"><span>{t.fTitle}</span>{count([...title.trim()].length, limits.titleChars, t.chars)}</span>
         <input className={field} value={title} onChange={e => setTitle(e.target.value)} /></label>
       <label className="flex flex-col gap-1 text-sm"><span className="flex justify-between"><span>{t.fDescription}</span>{count(bytesOf(description) + creditBytes, limits.descriptionBytes, t.bytes)}</span>
         <textarea className={field} rows={5} value={description} onChange={e => setDescription(e.target.value)} /></label>
+      {editWarnings.length > 0 && (
+        <div role="note" data-packaging-chapters-edit-warnings className="rounded-md border border-line bg-warning-subtle px-2.5 py-1.5 text-xs text-fg">
+          <p className="font-medium">{t.chaptersEditNoticeTitle}</p>
+          <ul className="mt-1 list-disc pl-4">
+            {editWarnings.map(w => <li key={w.code} data-chapter-edit-warning={w.code}>{t.chapterWarnings[w.code] ?? w.message}</li>)}
+          </ul>
+        </div>
+      )}
       {doc.credit.text && <div data-credit className="flex flex-col gap-1 text-sm"><span className="font-medium">{t.credit}</span><pre className="whitespace-pre-wrap rounded-md border border-line bg-field p-2 text-fg-2">{doc.credit.text}</pre></div>}
       {doc.credit.warning && <p data-credit-warning role="status" className="text-sm text-fg-2">{t.noPermission}</p>}
       <label className="flex flex-col gap-1 text-sm"><span className="flex justify-between"><span>{t.fTags}</span>{count(tagsChars(splitTags(tags)), limits.tagsChars, t.chars)}</span>
         <input className={field} value={tags} onChange={e => setTags(e.target.value)} /></label>
       <label className="flex flex-col gap-1 text-sm"><span className="flex justify-between"><span>{t.fHashtags}</span>{count(splitHashtags(hashtags).length, limits.hashtags, '#')}</span>
         <input className={field} value={hashtags} onChange={e => setHashtags(e.target.value)} /></label>
-      <div className="flex items-center gap-2"><Button variante="primario" tamanho="sm" onClick={() => void save()}>{t.save}</Button>{note && <span role="status" className="text-xs text-fg-2">{note}</span>}</div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variante="primario" tamanho="sm" onClick={() => void save()}>{t.save}</Button>
+        {chapters?.applicable && <Button tamanho="sm" disabled={generating} onClick={() => void refreshChapters()} data-refresh-chapters>{t.refreshChapters}</Button>}
+        {note && <span role="status" className="text-xs text-fg-2">{note}</span>}
+      </div>
     </div>}
+    <AiDisclosureNote />
     {error && <p role="alert" className="text-danger">{error}</p>}
     <ConfirmDialog open={pending !== null} onOpenChange={open => { if (!open) setPending(null); }} title={t.confirmTitle}
       description={pending ? fill(t.confirmBody, { cost: cost(pending.estimate) }) : ''} cancelLabel={t.cancel} confirmLabel={t.confirm}

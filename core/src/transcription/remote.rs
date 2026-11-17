@@ -5,11 +5,8 @@ use std::path::PathBuf;
 inventory::submit! { projects::Migration { id: "0051_001_transcription_calls", sql: "CREATE TABLE transcription_calls (id INTEGER PRIMARY KEY, transcript_id INTEGER REFERENCES transcripts(id) ON DELETE SET NULL, job_id INTEGER NOT NULL REFERENCES jobs(id), start_us INTEGER NOT NULL, end_us INTEGER NOT NULL, state TEXT NOT NULL CHECK(state IN ('pending','completed','failed','uncertain')), estimated_usd REAL); CREATE TABLE transcription_blocks (transcript_id INTEGER NOT NULL REFERENCES transcripts(id) ON DELETE CASCADE, start_us INTEGER NOT NULL, end_us INTEGER NOT NULL, PRIMARY KEY(transcript_id,start_us));" } }
 
 fn consent_path() -> Result<PathBuf, CoreError> {
-    std::env::var_os("CLIPES_DATA_DIR")
-        .map(PathBuf::from)
-        .or_else(|| dirs::config_local_dir().map(|p| p.join("Clipes")))
-        .map(|p| p.join("transcription-consent.json"))
-        .ok_or_else(|| error("settings", "Configurações indisponíveis."))
+    crate::paths::config_file("transcription-consent.json")
+        .map_err(|_| error("settings", "Configurações indisponíveis."))
 }
 
 fn consents() -> Result<Value, CoreError> {
@@ -69,6 +66,7 @@ pub(super) fn begin(
     duration: i64,
     endpoint: &str,
     audio: &[u8],
+    language: Option<&str>,
 ) -> Result<i64, CoreError> {
     guard()?;
     let estimate = groq::estimate_cost(groq::MODEL, duration);
@@ -95,7 +93,7 @@ pub(super) fn begin(
                 groq::host_of(endpoint),
                 groq::MODEL,
                 crate::provider::cost::sha256_hex(audio),
-                (groq::multipart_body(&[]).len() + audio.len()) as i64,
+                (groq::multipart_body(&[], language).len() + audio.len()) as i64,
             ),
         )?;
         tx.execute(

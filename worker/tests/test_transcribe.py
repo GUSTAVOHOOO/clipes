@@ -192,3 +192,188 @@ def test_vad_task_shares_boundaries_and_silences_with_transcription():
     transcript = make(spans).block([0.0] * 160000, False, 1, Ctx())
     assert result == {"covered_us": transcript["covered_us"], "silences": transcript["silences"],
                       "spans": [{"start_us": 1000000, "end_us": 3000000}]}
+
+
+# ---- Agrupar trechos de VAD (#162) ----
+
+SPANS = [{"start": 16000 * i * 2, "end": 16000 * i * 2 + 16000} for i in range(5)]  # 1 s a cada 2 s
+
+
+def grouped(spans=SPANS, languages=None, calls=None, fail=None):
+    languages = iter(languages or ["pt"] * len(spans))
+    calls = calls if calls is not None else []
+
+    def clips(audio, clip_list, language, batch):
+        calls.append((clip_list, language, batch))
+        if fail:
+            raise fail
+        for clip in clip_list:
+            # tempos absolutos no bloco: início do trecho mais 0,25 s
+            yield " x", clip["start"] + 0.25, clip["start"] + 0.5
+
+    return Transcriber(
+        lambda audio: spans,
+        lambda chunk: next(languages),
+        lambda chunk, language, batch: pytest.fail("o caminho agrupado não usa uma chamada por trecho"),
+        transcribe_clips=clips,
+    )
+
+
+def test_grouping_sends_up_to_n_consecutive_spans_per_call_with_absolute_times():
+    calls = []
+    result = grouped(calls=calls).block([0.0] * 160000, True, 1, Ctx(), group_size=2)
+    assert [(len(c[0]), c[2]) for c in calls] == [(2, 2), (2, 2), (1, 2)]
+    assert [c[0][0] for c in calls][:2] == [{"start": 0.0, "end": 1.0}, {"start": 4.0, "end": 5.0}]
+    starts = [w["start_us"] for w in result["words"]]
+    assert starts == [250_000, 2_250_000, 4_250_000, 6_250_000, 8_250_000]
+    assert result["silences"][0] == {"start_us": 1_000_000, "end_us": 2_000_000}
+
+
+def test_a_language_change_ends_the_group_but_language_is_still_detected_per_span():
+    calls = []
+    result = grouped(languages=["pt", "pt", "en", "en", "pt"], calls=calls).block(
+        [0.0] * 160000, True, 1, Ctx(), group_size=8
+    )
+    assert [(len(c[0]), c[1]) for c in calls] == [(2, "pt"), (2, "en"), (1, "pt")]
+    assert [w["language"] for w in result["words"]] == ["pt", "pt", "en", "en", "pt"]
+
+
+def test_group_of_one_keeps_the_one_call_per_span_path():
+    result = make([{"start": 0, "end": 16000}]).block([0.0] * 16000, True, 1, Ctx(), group_size=1)
+    assert len(result["words"]) == 1
+
+
+def test_grouped_result_matches_the_current_path_word_for_word():
+    audio = [0.0] * 160000
+
+    def words(start, end):
+        base = start / 16000
+        return [(" a", base + 0.1, base + 0.3), (" b", base + 0.4, base + 0.6)]
+
+    one = Transcriber(
+        lambda a: SPANS,
+        lambda chunk: "pt",
+        lambda chunk, language, batch: [(t, b - 0.0, e - 0.0) for t, b, e in words(0, 0)],
+    )
+    many = Transcriber(
+        lambda a: SPANS,
+        lambda chunk: "pt",
+        lambda chunk, language, batch: [],
+        transcribe_clips=lambda a, clips, language, batch: [
+            w for c in clips for w in words(round(c["start"] * 16000), 0)
+        ],
+    )
+    current = one.block(audio, True, 1, Ctx())["words"]
+    together = many.block(audio, True, 1, Ctx(), group_size=3)["words"]
+    assert len(together) == 2 * len(SPANS) and len(current) == len(together)
+    assert [w["text"] for w in together] == [w["text"] for w in current]
+
+
+@pytest.mark.parametrize("error", [RuntimeError("CUDA failed with error out of memory"), MemoryError()])
+def test_out_of_memory_in_a_group_is_the_typed_error(error):
+    with pytest.raises(WorkerError) as info:
+        grouped(fail=error).block([0.0] * 160000, True, 1, Ctx(), group_size=4)
+    assert info.value.code == "out_of_memory"
+
+
+def test_other_runtime_errors_are_not_reported_as_memory():
+    with pytest.raises(RuntimeError):
+        grouped(fail=RuntimeError("cuDNN failed")).block([0.0] * 160000, True, 1, Ctx(), group_size=4)
+
+
+def test_group_size_is_forwarded_and_validated():
+    seen = []
+
+    class Fake(Transcriber):
+        def block(self, audio, final, batch_size, ctx, group_size=1):
+            seen.append(group_size)
+            return {"covered_us": 0, "words": [], "silences": []}
+
+    task = transcribe_task(loader=lambda *a: Fake(lambda a: [], lambda c: "pt", None), reader=lambda p: [0.0])
+    base = {"audio": "a.wav", "final": True, "batch_size": 1, "model": MODEL}
+    for group in (None, 4):
+        params = base if group is None else {**base, "group_size": group}
+        run(params, {"transcribe": task})
+    assert seen == [1, 4]
+    for bad in (0, 33, True, "2"):
+        replies = run({**base, "group_size": bad}, {"transcribe": task})
+        assert replies[-1]["code"] == "invalid_message"
+
+
+# ---- Idioma fixo por Fonte (#195) ----
+
+
+def test_fixed_language_skips_detection_one_by_one():
+    seen = []
+
+    def fail_detect(_chunk):
+        pytest.fail("detect_language não deve ser chamado com language fixo")
+
+    def fake_transcribe(_chunk, language, batch):
+        seen.append(language)
+        return [(" olá", 0.0, 0.2), ("mundo", 0.3, 0.5)]
+
+    task = transcribe_task(
+        loader=lambda *_: Transcriber(
+            lambda a: SPANS, fail_detect, fake_transcribe
+        ),
+        reader=lambda p: [0.0] * 160000,
+    )
+    replies = run(
+        {"audio": "a.wav", "final": True, "batch_size": 1, "language": "pt", "model": MODEL},
+        {"transcribe": task},
+    )
+    result = [m for m in replies if m["type"] == "result"][0]["data"]
+    assert seen == ["pt"] * len(SPANS)
+    assert len(result["words"]) == 2 * len(SPANS)
+    assert all(w["language"] == "pt" for w in result["words"])
+
+
+def test_fixed_language_skips_detection_and_batches_without_splitting_when_grouped():
+    calls = []
+
+    def fail_detect(_chunk):
+        pytest.fail("detect_language não deve ser chamado com language fixo")
+
+    def clips(audio, clip_list, language, batch):
+        calls.append((len(clip_list), language, batch))
+        for clip in clip_list:
+            yield " palavra", clip["start"] + 0.1, clip["start"] + 0.3
+
+    task = transcribe_task(
+        loader=lambda *_: Transcriber(
+            lambda a: SPANS,
+            fail_detect,
+            lambda *_: pytest.fail("caminho agrupado não usa chamada por trecho"),
+            transcribe_clips=clips,
+        ),
+        reader=lambda p: [0.0] * 160000,
+    )
+    replies = run(
+        {
+            "audio": "a.wav",
+            "final": True,
+            "batch_size": 1,
+            "group_size": 4,
+            "language": "en",
+            "model": MODEL,
+        },
+        {"transcribe": task},
+    )
+    result = [m for m in replies if m["type"] == "result"][0]["data"]
+    assert calls == [(4, "en", 4), (1, "en", 4)]
+    assert len(result["words"]) == len(SPANS)
+    assert all(w["language"] == "en" for w in result["words"])
+
+
+@pytest.mark.parametrize("bad_lang", ["", "xx", "PT", "pt-BR", 123, True])
+def test_invalid_language_is_rejected_before_loading(bad_lang):
+    task = transcribe_task(
+        loader=lambda *_: pytest.fail("não deve carregar o modelo"),
+        reader=lambda p: [0.0],
+    )
+    replies = run(
+        {"audio": "a.wav", "final": True, "batch_size": 1, "language": bad_lang, "model": MODEL},
+        {"transcribe": task},
+    )
+    assert replies[-1]["code"] == "invalid_message"

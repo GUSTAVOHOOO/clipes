@@ -7,7 +7,7 @@ Obrigado por contribuir! Consulte o [glossário](GLOSSARY.md) e os [ADRs](docs/a
 - Para erros, ideias e propostas de Provedor ou modelo, escolha o formulário em [Issues](https://github.com/GUSTAVOHOOO/clipes/issues/new/choose). Confira se já existe uma issue parecida. Descreva o contexto e revise o texto antes de publicá-lo: issues são públicas.
 - Para dúvidas de uso, use [Discussions](https://github.com/GUSTAVOHOOO/clipes/discussions). Para vulnerabilidades, siga [SECURITY.md](SECURITY.md), sem abrir issue pública.
 - Para contribuir com código, procure uma issue existente ou abra uma para discutir o trabalho. Crie um fork e uma branch a partir de `master`, faça alterações focadas e abra um pull request para `master` explicando o que mudou, a issue relacionada e como testou. Responda à revisão e atualize o PR quando necessário.
-- Consulte os guias de [Provedor](docs/contribuindo/provedor.md), [Motor de transcrição](docs/contribuindo/motor-de-transcricao.md), [Tarefa de IA](docs/contribuindo/tarefa-de-ia.md) e [Janelas de seleção](docs/contribuindo/janelas-de-selecao.md) e [Seleção de Cortes](docs/contribuindo/selecao-de-cortes.md) e [Empacotamento](docs/contribuindo/empacotamento.md) para contribuições nessas áreas.
+- Consulte os guias de [Provedor](docs/contribuindo/provedor.md), [Motor de transcrição](docs/contribuindo/motor-de-transcricao.md), [Tarefa de IA](docs/contribuindo/tarefa-de-ia.md) e [Janelas de seleção](docs/contribuindo/janelas-de-selecao.md) e [Seleção de Cortes](docs/contribuindo/selecao-de-cortes.md) e [Empacotamento](docs/contribuindo/empacotamento.md) [Capa](docs/contribuindo/capa.md) e [Roteiro](docs/contribuindo/roteiro.md) para contribuições nessas áreas.
 
 ## DCO e licença
 
@@ -46,6 +46,10 @@ bun run build
 
 ## Contrato do núcleo
 
+O [ângulo antes do Roteiro](docs/contribuindo/angulos.md) descreve a tarefa `angles`,
+que herda a rota de `script`, os comandos de escolha e os blocos desatualizados ao
+trocar a promessa do Vídeo transformado.
+
 Export local, contrato de entrada do Corte, ASS compartilhado com preview, harness
 de paridade e pontos de extensão do pipeline: [Export](docs/contribuindo/export.md).
 
@@ -55,7 +59,7 @@ O crate `core` não depende do Tauri. A UI chama o único adaptador `core_dispat
 
 O mantenedor gera o par de assinatura uma única vez com `bun run tauri signer generate -- -w "%USERPROFILE%\.tauri\clipes-updater.key"`. Guarde a senha em `%USERPROFILE%\.tauri\clipes-updater.password.txt`, ao lado da chave. Faça backup seguro dos dois arquivos; nunca commite nem compartilhe a chave privada ou a senha. Configure `TAURI_SIGNING_PRIVATE_KEY` com o conteúdo da chave e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` com sua senha nos secrets do repositório GitHub. A chave pública em `src-tauri/tauri.conf.json` pode ser compartilhada. Pull requests compilam sem assinatura; builds de tags usam os secrets para assinar os artefatos de atualização.
 
-Na inicialização, `set_event_emitter` instala uma única vez o receptor compartilhado dos eventos assíncronos da fila; sem receptor, eles são descartados. Eventos da fila identificam o Projeto e o job. O despacho síncrono continua usando seu callback emprestado. Cada Projeto aberto tem um único thread de fila, que executa um job de cada vez; a interface consulta também `jobs.list` para recuperar o estado atual. Jobs `ai:<tarefa>` executam Tarefas de IA (`core/src/jobs/ai.rs`); veja [Tarefa de IA](docs/contribuindo/tarefa-de-ia.md). O job `energy` (#54) mede o volume da Fonte depois da Transcrição; veja [Seleção de Cortes](docs/contribuindo/selecao-de-cortes.md#energia-do-áudio-54).
+Na inicialização, `set_event_emitter` instala uma única vez o receptor compartilhado dos eventos assíncronos da fila; sem receptor, eles são descartados. Eventos da fila identificam o Projeto e o job. O despacho síncrono continua usando seu callback emprestado. Cada Projeto aberto tem um único thread de fila, que executa um job de cada vez; a interface consulta também `jobs.list` para recuperar o estado atual. Jobs `ai:<tarefa>` executam Tarefas de IA (`core/src/jobs/ai.rs`); veja [Tarefa de IA](docs/contribuindo/tarefa-de-ia.md). O job `energy` (#54) mede o volume da Fonte depois da Transcrição; veja [Seleção de Cortes](docs/contribuindo/selecao-de-cortes.md#energia-do-áudio-54). O job `chat` (#151) busca e agrega o replay do chat de uma Fonte importada por URL; veja [Chat da live](docs/contribuindo/selecao-de-cortes.md#chat-da-live-151).
 
 ## Demonstração do design system
 
@@ -113,6 +117,9 @@ As fronteiras e os IDs das Frases são função só do texto original e dos temp
 Desfazer e refazer usam uma pilha por Projeto em `transcript_corrections` (texto antes e depois), persistida no SQLite do Projeto; uma correção nova limpa o refazer. A busca (`transcription.search`) usa a tabela FTS5 `sentence_search` (`unicode61 remove_diacritics 2`, então “acao” acha “ação”) sobre o texto efetivo das Frases de todas as Transcrições do Projeto. Gatilhos em `sentences` mantêm o índice na mesma transação de qualquer gravação de Frases e o limpam na exclusão em cascata. A entrada do usuário nunca vai crua ao `MATCH`: cada termo é citado e o último aceita prefixo.
 
 ## Preview do Corte (#58)
+
+Bordas, documento do Corte, histórico, autosave e snapshots do editor (#70):
+[Editor do Corte](docs/contribuindo/editor-bordas.md).
 
 O preview de um Corte usa um proxy H.264 de GOP curto, só da janela do Corte ±2 min, gerado como job local da fila e guardado num cache **fora do Projeto** (`<cache>/proxies`, LRU por tamanho). Ele é servido pelo protocolo de mídia `clipes-media`, implementado no núcleo (`core::media::serve`, com `Range`) e traduzido pelo adaptador em `src-tauri`. O protocolo só serve um id opaco (`proxy/<chave>` ou `source/<id>`), nunca um caminho vindo da URL. A UI é `CutPreview` (`{ sourceId, startUs, endUs }`), e clicar numa palavra da Transcrição posiciona o preview nela. Fonte offline não gera nada. Detalhes, constantes e testes em [Preview do Corte](docs/contribuindo/preview-do-corte.md).
 

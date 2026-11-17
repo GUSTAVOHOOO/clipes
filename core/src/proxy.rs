@@ -109,11 +109,11 @@ fn limit_for(user_limit: u64) -> u64 {
     user_limit.min(CACHE_MAX_BYTES)
 }
 
-fn proxies_root(cache: &Path) -> PathBuf {
+pub(crate) fn proxies_root(cache: &Path) -> PathBuf {
     cache.join("proxies")
 }
 
-fn ready_file(cache: &Path, key: &str) -> Option<PathBuf> {
+pub(crate) fn ready_file(cache: &Path, key: &str) -> Option<PathBuf> {
     let file = proxies_root(cache).join(key).join(FILE_NAME);
     file.is_file().then_some(file)
 }
@@ -146,9 +146,18 @@ pub(crate) fn evict(root: &Path, limit: u64, keep: &str) -> usize {
         let Ok(meta) = fs::metadata(path.join(FILE_NAME)) else {
             continue;
         };
+        // Miniaturas e onda (#61) moram na pasta do proxy e contam no mesmo total.
+        let extra: u64 = fs::read_dir(&path)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|f| f.file_name() != FILE_NAME)
+            .filter_map(|f| f.metadata().ok())
+            .map(|m| m.len())
+            .sum();
         items.push((
             meta.modified().unwrap_or(SystemTime::UNIX_EPOCH),
-            meta.len(),
+            meta.len() + extra,
             name,
             path,
         ));
@@ -171,7 +180,12 @@ pub(crate) fn evict(root: &Path, limit: u64, keep: &str) -> usize {
     removed
 }
 
-fn project_path() -> Result<PathBuf, CoreError> {
+/// Limpeza LRU depois que a timeline (#61) cresceu a pasta do proxy `keep`.
+pub(crate) fn evict_after_timeline(root: &Path, user_limit: u64, keep: &str) {
+    evict(root, limit_for(user_limit), keep);
+}
+
+pub(crate) fn project_path() -> Result<PathBuf, CoreError> {
     let current = crate::dispatch("projects.current", json!({}), &mut |_| {})?;
     current["path"]
         .as_str()
@@ -193,7 +207,10 @@ fn changed() -> CoreError {
 }
 
 /// Valida a Fonte sem gerar nada: arquivo presente e identidade parcial igual à registrada.
-fn checked_source(id: i64, project: &Path) -> Result<(PathBuf, String, i64, i64), CoreError> {
+pub(crate) fn checked_source(
+    id: i64,
+    project: &Path,
+) -> Result<(PathBuf, String, i64, i64), CoreError> {
     let stored: String = projects::with_reader(|c| {
         c.query_row("SELECT path FROM sources WHERE id=?1", [id], |r| r.get(0))
     })

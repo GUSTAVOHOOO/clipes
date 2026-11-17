@@ -1,13 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { coreDispatch } from '@/lib/core';
-import { useText } from '@/lib/i18n';
+import { LanguageContext, useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { CHANNEL_PROFILE_UPDATED_EVENT, type ChannelProfileData } from './ChannelProfile';
 import { VideoKindBadge, VideoKindPicker, kindOf, type VideoKind } from './videoKind';
 
 type SourceRow = { id: number; path: string; status: string };
-type Item = { position: number; sourceId: number; name: string | null; state: 'pending' | 'transcribing' | 'selecting' | 'completed' | 'paused' | 'cancelled'; error: string | null; progress: number | null };
+type Item = { position: number; sourceId: number; name: string | null; state: 'pending' | 'transcribing' | 'selecting' | 'completed' | 'paused' | 'cancelled'; error: string | null; resetAtMs?: number | null; progress: number | null };
 type Budget = { maxCostMicroUsd: number | null; usage: { microUsd: number; audioMicroUsd?: number; costLabel: string | null } } | null;
 type Batch = { id: number; key: string; videoKind?: VideoKind; status: 'running' | 'paused' | 'budget_paused' | 'attention' | 'completed' | 'cancelled'; pause: string | null; budget: Budget; counts: { total: number; completed: number; paused: number; active: number; pending: number; cancelled: number }; items: Item[] };
 type Pending =
@@ -33,8 +34,8 @@ const texts = {
     itemTitle: 'Repetir esta Fonte?', itemBody: 'Repetir envia de novo só o que não foi concluído e pode gerar nova cobrança. Custo estimado: {cost}.', itemAction: 'Confirmar e repetir',
     costUsd: 'até US$ {max}', costZero: 'zero (modelo local)', costQuota: 'consome a cota do plano', costUnknownEstimate: 'desconhecido',
     uncertainHint: 'Resultado incerto: confira e repita na lista de Tarefas, com o custo.',
-    error: 'Não foi possível atualizar o lote.', code: 'erro',
-    codes: { provider_http: 'o Provedor recusou a chamada', rate_limit: 'limite de taxa do Provedor', network: 'falha de rede', timeout_uncertain: 'resultado incerto', interrupted: 'resultado incerto (app fechado)', cancelled: 'cancelada', verification_failed: 'a resposta não passou na verificação', output_invalid: 'a resposta fugiu do formato', invalid_json: 'a resposta não era JSON válido', context_truncated: 'a Transcrição foi cortada pelo Provedor', groq_key_missing: 'falta a chave do Groq', confirmation_required: 'falta consentimento', local_only_violation: 'bloqueado por "somente local"', source_changed: 'a Fonte está indisponível ou mudou', component_missing: 'falta um Componente', transcription_failed: 'a Transcrição falhou', transcription_incomplete: 'a Transcrição não terminou', transcription_retry_confirmation: 'repetir pede confirmação', context_too_small: 'contexto do modelo pequeno demais' } as Record<string, string>,
+    error: 'Não foi possível atualizar o lote.', code: 'erro', resetAt: ' · reinicia às {time}',
+    codes: { provider_http: 'o Provedor recusou a chamada', rate_limit: 'limite de taxa do Provedor', provider_daily_limit: 'limite diário do Provedor atingido', request_too_large: 'a janela passou do limite de tamanho do Provedor', network: 'falha de rede', timeout_uncertain: 'resultado incerto', interrupted: 'resultado incerto (app fechado)', cancelled: 'cancelada', verification_failed: 'a resposta não passou na verificação', output_invalid: 'a resposta fugiu do formato', invalid_json: 'a resposta não era JSON válido', context_truncated: 'a Transcrição foi cortada pelo Provedor', groq_key_missing: 'falta a chave do Groq', confirmation_required: 'falta consentimento', local_only_violation: 'bloqueado por "somente local"', source_changed: 'a Fonte está indisponível ou mudou', component_missing: 'falta um Componente', transcription_failed: 'a Transcrição falhou', transcription_incomplete: 'a Transcrição não terminou', transcription_retry_confirmation: 'repetir pede confirmação', context_too_small: 'contexto do modelo pequeno demais' } as Record<string, string>,
   },
   en: {
     title: 'Source batch', intro: 'Pick several Sources: the app transcribes and selects Clips for one after the other.',
@@ -53,8 +54,8 @@ const texts = {
     itemTitle: 'Retry this Source?', itemBody: 'Retrying sends again only what did not finish and may incur a new charge. Estimated cost: {cost}.', itemAction: 'Confirm and retry',
     costUsd: 'up to US$ {max}', costZero: 'zero (local model)', costQuota: 'uses your plan quota', costUnknownEstimate: 'unknown',
     uncertainHint: 'Uncertain result: check and retry in the Tasks list, with the cost.',
-    error: 'Could not update the batch.', code: 'error',
-    codes: { provider_http: 'the Provider refused the call', rate_limit: 'Provider rate limit', network: 'network failure', timeout_uncertain: 'uncertain result', interrupted: 'uncertain result (app closed)', cancelled: 'cancelled', verification_failed: 'the answer failed verification', output_invalid: 'the answer did not match the format', invalid_json: 'the answer was not valid JSON', context_truncated: 'the Provider cut the Transcript', groq_key_missing: 'Groq key missing', confirmation_required: 'consent missing', local_only_violation: 'blocked by "local only"', source_changed: 'the Source is unavailable or changed', component_missing: 'a Component is missing', transcription_failed: 'Transcription failed', transcription_incomplete: 'Transcription did not finish', transcription_retry_confirmation: 'retrying needs confirmation', context_too_small: 'model context too small' } as Record<string, string>,
+    error: 'Could not update the batch.', code: 'error', resetAt: ' · resets at {time}',
+    codes: { provider_http: 'the Provider refused the call', rate_limit: 'Provider rate limit', provider_daily_limit: 'Provider daily limit reached', request_too_large: 'the window exceeded the Provider size limit', network: 'network failure', timeout_uncertain: 'uncertain result', interrupted: 'uncertain result (app closed)', cancelled: 'cancelled', verification_failed: 'the answer failed verification', output_invalid: 'the answer did not match the format', invalid_json: 'the answer was not valid JSON', context_truncated: 'the Provider cut the Transcript', groq_key_missing: 'Groq key missing', confirmation_required: 'consent missing', local_only_violation: 'blocked by "local only"', source_changed: 'the Source is unavailable or changed', component_missing: 'a Component is missing', transcription_failed: 'Transcription failed', transcription_incomplete: 'Transcription did not finish', transcription_retry_confirmation: 'retrying needs confirmation', context_too_small: 'model context too small' } as Record<string, string>,
   },
 };
 const fill = (text: string, values: Record<string, string | number>) => text.replace(/\{(\w+)\}/g, (_, k: string) => String(values[k] ?? ''));
@@ -65,6 +66,7 @@ type Fail = { code?: string; message?: string; usage?: { estimate?: { kind: stri
 /** Lote de Fontes (#56): montar, acompanhar por Fonte, pausar, retomar, teto e confirmações. */
 export function SourceBatches({ project, projectId }: { project: string; projectId: string }) {
   const t = useText(texts);
+  const language = useContext(LanguageContext);
   const [sources, setSources] = useState<SourceRow[]>([]);
   const [chosen, setChosen] = useState<number[]>([]);
   const [engine, setEngine] = useState<'local' | 'groq'>('local');
@@ -83,10 +85,16 @@ export function SourceBatches({ project, projectId }: { project: string; project
     let unlisten: (() => void) | undefined;
     const sync = () => { if (active) void refresh().catch(() => { if (active) setError(t.error); }); };
     coreDispatch<SourceRow[]>('sources.list', { project }).then(rows => { if (active) setSources(rows); }).catch(() => {});
+    coreDispatch<ChannelProfileData>('channel_profile.get', {}).then(p => { if (active) setVideoKind(kindOf(p.videoKind)); }).catch(() => {});
+    const onUpdated = (e: Event) => {
+      const next = (e as CustomEvent<ChannelProfileData>).detail;
+      if (next?.videoKind) setVideoKind(kindOf(next.videoKind));
+    };
+    window.addEventListener(CHANNEL_PROFILE_UPDATED_EVENT, onUpdated);
     sync();
     listen<{ project?: string }>('core-progress', event => { if (event.payload.project === projectId) sync(); }).then(fn => { if (active) unlisten = fn; else fn(); }).catch(() => {});
     const timer = window.setInterval(sync, 3000);
-    return () => { active = false; unlisten?.(); window.clearInterval(timer); };
+    return () => { active = false; window.removeEventListener(CHANNEL_PROFILE_UPDATED_EVENT, onUpdated); unlisten?.(); window.clearInterval(timer); };
   }, [project, projectId, t.error]);
 
   const name = (path: string) => path.split(/[\\/]/).pop() ?? path;
@@ -165,11 +173,16 @@ export function SourceBatches({ project, projectId }: { project: string; project
       </div>}
       {b.pause === 'cost_unknown' && <p className="mt-2 text-sm text-fg-2">{t.unknownPaused}</p>}
       {b.pause !== null && b.pause !== 'user' && b.pause !== 'cost_unknown' && <p className="mt-2 text-sm text-fg-2">{t.budgetPaused}</p>}
-      <ul className="mt-3 divide-y divide-line border-y border-line">{b.items.map(i => <li key={i.position} className="flex flex-wrap items-center justify-between gap-3 py-2">
-        <div><p className="text-sm">{i.name ?? `#${i.sourceId}`}</p><p className="text-sm text-fg-2">{t.state[i.state]}{(i.state === 'transcribing' || i.state === 'selecting') && i.progress !== null && ` · ${i.progress}%`}{i.state === 'paused' && i.error && ` · ${t.code}: ${t.codes[i.error] ?? i.error}`}</p>
-          {(i.state === 'transcribing' || i.state === 'selecting') && i.progress !== null && <progress className="mt-1 w-40 max-w-full" value={i.progress} max={100} aria-label={`${t.state[i.state]} ${i.name ?? i.sourceId}`} />}</div>
-        {i.state === 'paused' && <Button disabled={busy} onClick={() => void resumeItem(b.id, i.sourceId)}>{t.itemResume} {i.name ?? i.sourceId}</Button>}
-      </li>)}</ul>
+      <ul className="mt-3 divide-y divide-line border-y border-line">{b.items.map(i => {
+        const reset = i.state === 'paused' && i.error === 'provider_daily_limit' && typeof i.resetAtMs === 'number'
+          ? fill(t.resetAt, { time: new Intl.DateTimeFormat(language, { hour: '2-digit', minute: '2-digit' }).format(new Date(i.resetAtMs)) })
+          : '';
+        return <li key={i.position} className="flex flex-wrap items-center justify-between gap-3 py-2">
+          <div><p className="text-sm">{i.name ?? `#${i.sourceId}`}</p><p className="text-sm text-fg-2">{t.state[i.state]}{(i.state === 'transcribing' || i.state === 'selecting') && i.progress !== null && ` · ${i.progress}%`}{i.state === 'paused' && i.error && ` · ${t.code}: ${t.codes[i.error] ?? i.error}${reset}`}</p>
+            {(i.state === 'transcribing' || i.state === 'selecting') && i.progress !== null && <progress className="mt-1 w-40 max-w-full" value={i.progress} max={100} aria-label={`${t.state[i.state]} ${i.name ?? i.sourceId}`} />}</div>
+          {i.state === 'paused' && <Button disabled={busy} onClick={() => void resumeItem(b.id, i.sourceId)}>{t.itemResume} {i.name ?? i.sourceId}</Button>}
+        </li>;
+      })}</ul>
     </li>)}</ul>
     <ConfirmDialog open={pending?.kind === 'create'} onOpenChange={open => { if (!open) setPending(null); }} title={t.confirmTitle}
       description={[pendingCreate?.selectionPaid ? t.confirmBody : '', pendingCreate?.transcriptionPaid ? t.confirmAudio : '', pendingCreate?.transcriptionPaid ? (typeof pendingCreate.audioEstimateMicroUsd === 'number' ? fill(t.audioEstimate, { cost: usd(pendingCreate.audioEstimateMicroUsd) }) : t.audioUnknown) : '', t.confirmSelection, pendingCreate?.maxCostMicroUsd != null ? fill(t.confirmCap, { cap: usd(pendingCreate.maxCostMicroUsd) }) : t.confirmNoCap, t.confirmConsent].filter(Boolean).join(' ')}

@@ -1,3 +1,4 @@
 worker/** text eol=lf
 worker/src/clipes_worker/data/*.wav binary
 core/assets/fonts/*.ttf binary
+catalog/models.json text eol=lf

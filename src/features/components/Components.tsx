@@ -7,6 +7,10 @@ import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { texts } from './texts';
 import { WorkerCard } from './WorkerCard';
+import { DenoCard } from './DenoCard';
+import { PocketTtsCard } from './PocketTtsCard';
+import { CatalogCard } from './CatalogCard';
+import { TtsCatalogCard } from './TtsCatalogCard';
 import { ModelsCard } from './ModelsCard';
 import { HardwareCard } from './HardwareCard';
 
@@ -23,6 +27,8 @@ export function Components() {
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [incomplete, setIncomplete] = useState(false);
+  const [ttsRefresh, setTtsRefresh] = useState(0);
+  const [catalogRefresh, setCatalogRefresh] = useState(0);
   const [ytVersion,setYtVersion]=useState<string|null>(null); const [confirmUpdate,setConfirmUpdate]=useState(false); const updateFocus=useRef<HTMLButtonElement>(null);
   async function refreshYtdlp(){const result=await coreDispatch<{installed:boolean;version?:string}>('components.ytdlp.status',{});setYtVersion(result.installed ? result.version ?? null : null);}
   async function refreshFfmpegStatus() { const result = await coreDispatch<{incomplete:boolean}>('components.ffmpeg.status', {}); setIncomplete(result.incomplete); }
@@ -38,14 +44,18 @@ export function Components() {
   }, []);
   async function download(id: string) { if (!window.confirm(t.confirm)) return; setBusy(id); setProgress(0); setStatus(''); try { const result = await coreDispatch<{path:string}>('components.download', { id, confirmed: true }); if (id === 'ffmpeg') setSettings(previous => previous && { ...previous, ffmpeg_path: result.path }); await refreshFfmpegStatus(); await refreshYtdlp(); setStatus(t.installed); } catch (e) { setStatus(message(e)); } finally { setBusy(null); } }
   async function updateYtdlp(){setConfirmUpdate(false);setBusy('yt-dlp');setProgress(0);setStatus('');try{await coreDispatch('components.ytdlp.update',{confirmed:true});await refreshYtdlp();setStatus(t.updated);}catch(e){setStatus(message(e));}finally{setBusy(null);}}
-  async function save() { if (!settings) return; try { const updated = await coreDispatch<Settings>('components.settings.set', settings); setSettings(updated); await refreshFfmpegStatus(); setStatus(t.saved); } catch (e) { setStatus(message(e)); } }
+  async function save() { if (!settings) return; try { const updated = await coreDispatch<Settings>('components.settings.set', settings); setSettings(updated); setPath(updated.ffmpeg_path ?? ''); await refreshFfmpegStatus(); setStatus(t.saved); } catch (e) { setStatus(message(e)); } }
   async function useSystem() { try { const result = await coreDispatch<{version:string}>('components.ffmpeg.system', { path: path || 'ffmpeg' }); setStatus(result.version); setSettings(await coreDispatch<Settings>('components.settings.get', {})); await refreshFfmpegStatus(); } catch (e) { setStatus(message(e)); } }
   const input = 'foco mt-2 block w-full rounded-md border border-line-strong bg-field p-2 text-fg';
   return <section className="mx-auto max-w-4xl px-8 py-10"><h1 className="text-xl font-semibold">{t.title}</h1><p className="mt-2 text-fg-2">{t.intro}</p>
     {status && <p className="mt-4" role="status">{status}</p>}
-    <div className="mt-6 space-y-4">{items.map(item => <article key={item.id} className="rounded-md border border-line p-4"><h2 className="font-semibold">{item.id} <span className="font-normal text-fg-2">{item.id === 'yt-dlp' && ytVersion ? ytVersion : item.version}</span></h2>{item.id === 'ffmpeg' && incomplete && <p role="alert" className="mt-2 text-danger">{t.incomplete}</p>}<p className="mt-2">{(item.size / 1_000_000).toFixed(1)} MB · {item.license} · <a className="underline" href={item.source_url} target="_blank" rel="noreferrer">{t.source}</a>{item.build_source_url && <> · <a className="underline" href={item.build_source_url} target="_blank" rel="noreferrer">{t.buildSource}</a></>}</p><div className="mt-3 flex items-center gap-3"><Button disabled={!!busy} onClick={() => download(item.id)}>{item.id === 'ffmpeg' && incomplete ? t.reinstall : t.download}</Button>{item.id === 'yt-dlp' && ytVersion && <Button ref={updateFocus} disabled={!!busy} onClick={()=>setConfirmUpdate(true)}>{t.update}</Button>}{busy === item.id && <><progress max={100} value={progress} aria-label={t.progress} /><Button onClick={() => { void coreDispatch('components.cancel', { id:item.id }); }}>{t.cancel}</Button></>}</div></article>)}</div>
+    <div className="mt-6 space-y-4">{items.filter(item => item.id !== 'deno' && item.id !== 'pocket-tts').map(item => <article key={item.id} className="rounded-md border border-line p-4"><h2 className="font-semibold">{item.id} <span className="font-normal text-fg-2">{item.id === 'yt-dlp' && ytVersion ? ytVersion : item.version}</span></h2>{item.id === 'ffmpeg' && incomplete && <p role="alert" className="mt-2 text-danger">{t.incomplete}</p>}<p className="mt-2">{(item.size / 1_000_000).toFixed(1)} MB · {item.license} · <a className="underline" href={item.source_url} target="_blank" rel="noreferrer">{t.source}</a>{item.build_source_url && <> · <a className="underline" href={item.build_source_url} target="_blank" rel="noreferrer">{t.buildSource}</a></>}</p><div className="mt-3 flex items-center gap-3"><Button disabled={!!busy} onClick={() => download(item.id)}>{item.id === 'ffmpeg' && incomplete ? t.reinstall : t.download}</Button>{item.id === 'yt-dlp' && ytVersion && <Button ref={updateFocus} disabled={!!busy} onClick={()=>setConfirmUpdate(true)}>{t.update}</Button>}{busy === item.id && <><progress max={100} value={progress} aria-label={t.progress} /><Button onClick={() => { void coreDispatch('components.cancel', { id:item.id }); }}>{t.cancel}</Button></>}</div></article>)}</div>
+    <DenoCard item={items.find(item => item.id === 'deno')} />
+    <PocketTtsCard item={items.find(item => item.id === 'pocket-tts')} onChanged={() => setTtsRefresh(n => n + 1)} />
+    <CatalogCard onUpdated={() => setCatalogRefresh(n => n + 1)} />
+    <TtsCatalogCard refreshKey={ttsRefresh + catalogRefresh} />
     <WorkerCard />
-    <ModelsCard />
+    <ModelsCard refreshKey={catalogRefresh} />
     <HardwareCard />
     <ConfirmDialog open={confirmUpdate} onOpenChange={setConfirmUpdate} title={t.updateTitle} description={t.updateDescription.replace('{version}',ytVersion ?? '')} cancelLabel={t.cancel} confirmLabel={t.updateConfirm} finalFocus={updateFocus} onConfirm={()=>void updateYtdlp()}/>
     <div className="mt-8"><h2 className="font-semibold">{t.system}</h2><label className="mt-2 block">{t.ffmpegPath}<input className={input} value={path} onChange={e => setPath(e.target.value)} placeholder="ffmpeg" /></label><Button onClick={useSystem}>{t.validate}</Button></div>

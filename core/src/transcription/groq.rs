@@ -117,7 +117,15 @@ impl TranscriptionEngine for GroqEngine {
         let token = crate::provider::CancelToken::new();
         let finished = AtomicBool::new(false);
         let mut response_sha256 = None;
-        let call = remote::begin(job, transcript, resume, covered, &self.endpoint, &audio)?;
+        let call = remote::begin(
+            job,
+            transcript,
+            resume,
+            covered,
+            &self.endpoint,
+            &audio,
+            input.language,
+        )?;
         progress(0);
         let result = std::thread::scope(|scope| {
             scope.spawn(|| {
@@ -133,6 +141,7 @@ impl TranscriptionEngine for GroqEngine {
                 &self.endpoint,
                 &self.key,
                 &audio,
+                input.language,
                 &token,
                 self.timeout,
                 &mut response_sha256,
@@ -264,14 +273,18 @@ inventory::submit! { CommandRegistration { name: "transcription.groq.key.test", 
 const BOUNDARY: &str = "clipes-transcription-boundary";
 
 /// O corpo multipart exato enviado ao Groq (a trilha de auditoria, #125, conta seus bytes).
-pub(super) fn multipart_body(audio: &[u8]) -> Vec<u8> {
+pub(super) fn multipart_body(audio: &[u8], language: Option<&str>) -> Vec<u8> {
     let boundary = BOUNDARY;
     let mut body = Vec::with_capacity(audio.len() + 1024);
-    for (name, value) in [
+    let mut fields = vec![
         ("model", "whisper-large-v3-turbo"),
         ("response_format", "verbose_json"),
         ("timestamp_granularities[]", "word"),
-    ] {
+    ];
+    if let Some(lang) = language {
+        fields.push(("language", lang));
+    }
+    for (name, value) in fields {
         body.extend_from_slice(
             format!(
                 "--{boundary}
@@ -322,7 +335,19 @@ pub(super) fn request(
     cancel: &crate::provider::CancelToken,
     timeout: Duration,
 ) -> Result<Vec<Word>, CoreError> {
-    request_audited(endpoint, key, audio, cancel, timeout, &mut None)
+    request_audited(endpoint, key, audio, None, cancel, timeout, &mut None)
+}
+
+#[cfg(test)]
+pub(super) fn request_with_language(
+    endpoint: &str,
+    key: &str,
+    audio: &[u8],
+    language: Option<&str>,
+    cancel: &crate::provider::CancelToken,
+    timeout: Duration,
+) -> Result<Vec<Word>, CoreError> {
+    request_audited(endpoint, key, audio, language, cancel, timeout, &mut None)
 }
 
 /// Como `request`, e guarda em `response_sha256` o SHA-256 do último corpo de resposta
@@ -331,6 +356,7 @@ pub(super) fn request_audited(
     endpoint: &str,
     key: &str,
     audio: &[u8],
+    language: Option<&str>,
     cancel: &crate::provider::CancelToken,
     timeout: Duration,
     response_sha256: &mut Option<String>,
@@ -346,7 +372,7 @@ pub(super) fn request_audited(
         ));
     }
     let boundary = BOUNDARY;
-    let body = multipart_body(audio);
+    let body = multipart_body(audio, language);
     let client = reqwest::blocking::Client::builder()
         .timeout(timeout)
         .redirect(reqwest::redirect::Policy::none())
@@ -488,9 +514,8 @@ pub(super) fn request_audited(
                                 .into(),
                             start_us,
                             end_us,
-                            language: value["language"]
-                                .as_str()
-                                .and_then(language_code)
+                            language: language
+                                .or_else(|| value["language"].as_str().and_then(language_code))
                                 .map(str::to_owned),
                         })
                     })
@@ -502,111 +527,8 @@ pub(super) fn request_audited(
     unreachable!()
 }
 
-// Whisper tokenizer LANGUAGES, excluding the three-letter `yue`, which is not ISO-639-1.
-// https://github.com/openai/whisper/blob/main/whisper/tokenizer.py
-const LANGUAGES: &[(&str, &str)] = &[
-    ("en", "english"),
-    ("zh", "chinese"),
-    ("de", "german"),
-    ("es", "spanish"),
-    ("ru", "russian"),
-    ("ko", "korean"),
-    ("fr", "french"),
-    ("ja", "japanese"),
-    ("pt", "portuguese"),
-    ("tr", "turkish"),
-    ("pl", "polish"),
-    ("ca", "catalan"),
-    ("nl", "dutch"),
-    ("ar", "arabic"),
-    ("sv", "swedish"),
-    ("it", "italian"),
-    ("id", "indonesian"),
-    ("hi", "hindi"),
-    ("fi", "finnish"),
-    ("vi", "vietnamese"),
-    ("he", "hebrew"),
-    ("uk", "ukrainian"),
-    ("el", "greek"),
-    ("ms", "malay"),
-    ("cs", "czech"),
-    ("ro", "romanian"),
-    ("da", "danish"),
-    ("hu", "hungarian"),
-    ("ta", "tamil"),
-    ("no", "norwegian"),
-    ("th", "thai"),
-    ("ur", "urdu"),
-    ("hr", "croatian"),
-    ("bg", "bulgarian"),
-    ("lt", "lithuanian"),
-    ("la", "latin"),
-    ("mi", "maori"),
-    ("ml", "malayalam"),
-    ("cy", "welsh"),
-    ("sk", "slovak"),
-    ("te", "telugu"),
-    ("fa", "persian"),
-    ("lv", "latvian"),
-    ("bn", "bengali"),
-    ("sr", "serbian"),
-    ("az", "azerbaijani"),
-    ("sl", "slovenian"),
-    ("kn", "kannada"),
-    ("et", "estonian"),
-    ("mk", "macedonian"),
-    ("br", "breton"),
-    ("eu", "basque"),
-    ("is", "icelandic"),
-    ("hy", "armenian"),
-    ("ne", "nepali"),
-    ("mn", "mongolian"),
-    ("bs", "bosnian"),
-    ("kk", "kazakh"),
-    ("sq", "albanian"),
-    ("sw", "swahili"),
-    ("gl", "galician"),
-    ("mr", "marathi"),
-    ("pa", "punjabi"),
-    ("si", "sinhala"),
-    ("km", "khmer"),
-    ("sn", "shona"),
-    ("yo", "yoruba"),
-    ("so", "somali"),
-    ("af", "afrikaans"),
-    ("oc", "occitan"),
-    ("ka", "georgian"),
-    ("be", "belarusian"),
-    ("tg", "tajik"),
-    ("sd", "sindhi"),
-    ("gu", "gujarati"),
-    ("am", "amharic"),
-    ("yi", "yiddish"),
-    ("lo", "lao"),
-    ("uz", "uzbek"),
-    ("fo", "faroese"),
-    ("ht", "haitian creole"),
-    ("ps", "pashto"),
-    ("tk", "turkmen"),
-    ("nn", "nynorsk"),
-    ("mt", "maltese"),
-    ("sa", "sanskrit"),
-    ("lb", "luxembourgish"),
-    ("my", "myanmar"),
-    ("bo", "tibetan"),
-    ("tl", "tagalog"),
-    ("mg", "malagasy"),
-    ("as", "assamese"),
-    ("tt", "tatar"),
-    ("ln", "lingala"),
-    ("ha", "hausa"),
-    ("ba", "bashkir"),
-    ("jw", "javanese"),
-    ("su", "sundanese"),
-];
-
-pub(super) fn language_code(input: &str) -> Option<&'static str> {
-    LANGUAGES
+pub fn language_code(input: &str) -> Option<&'static str> {
+    super::SUPPORTED_LANGUAGES
         .iter()
         .find(|(code, name)| input.eq_ignore_ascii_case(code) || input.eq_ignore_ascii_case(name))
         .map(|(code, _)| *code)

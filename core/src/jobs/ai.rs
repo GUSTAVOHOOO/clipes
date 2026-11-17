@@ -204,7 +204,7 @@ impl Provider for Probe<'_> {
                     estimate[field] = corrected[field].clone();
                 }
             }
-            let pending = pending_usage(&route.0, entries)?;
+            let pending = pending_usage(&route.0, &route.1, entries)?;
             if let Some((code, message)) = job_limit(task, &estimate) {
                 return Err(error(code, message));
             }
@@ -508,18 +508,21 @@ fn job_limit(task: &AiTask, estimate: &Value) -> Option<(&'static str, &'static 
 }
 
 /// Metadata of the calls already completed in this request, not written again until it settles.
-fn pending_usage(target: &Target, entries: &[Value]) -> Result<Value, CoreError> {
+fn pending_usage(target: &Target, profile: &str, entries: &[Value]) -> Result<Value, CoreError> {
     let mut calls = 0_u64;
     let mut input = 0_u64;
     let mut output = 0_u64;
     let mut micro = 0_u64;
     let mut duration = 0_u64;
+    let profile_opt = (!profile.is_empty()).then_some(profile);
     for entry in entries {
         calls = calls.saturating_add(entry["calls"].as_u64().unwrap_or(1));
         input = input.saturating_add(entry["usage"]["inputTokens"].as_u64().unwrap_or(0));
         output = output.saturating_add(entry["usage"]["outputTokens"].as_u64().unwrap_or(0));
         duration = duration.saturating_add(entry["durationMs"].as_u64().unwrap_or(0));
-        if let cost::Cost::Usd { micro_usd, .. } = cost::actual(target, &entry["usage"])? {
+        if let cost::Cost::Usd { micro_usd, .. } =
+            cost::actual_for(profile_opt, target, &entry["usage"])?
+        {
             micro = micro.saturating_add(micro_usd);
         }
     }
@@ -549,6 +552,8 @@ fn reached_provider(code: &str) -> bool {
             | "budget_cost"
             | "budget_tokens"
             | "rate_limit"
+            | "provider_daily_limit"
+            | "request_too_large"
             | "cli_free_limit"
             | "provider_http"
             | "network"
@@ -591,10 +596,10 @@ fn record_calls(
         } else {
             entry["usage"].clone()
         };
-        let Ok(cost) = cost::actual(&route.0, &usage) else {
+        let profile = (!route.1.is_empty()).then_some(route.1.as_str());
+        let Ok(cost) = cost::actual_for(profile, &route.0, &usage) else {
             continue;
         };
-        let profile = (!route.1.is_empty()).then_some(route.1.as_str());
         let _ = cost::record_call(&cost::CallRow {
             profile,
             target: &route.0,
@@ -813,14 +818,26 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
                 );
             }
             let unknown = how == Settle::Uncertain && unit.paid;
+            let has_usage = e
+                .usage
+                .as_ref()
+                .is_some_and(|u| u.get("usage").is_some_and(|inner| !inner.is_null()));
             let core: CoreError = e.clone().into();
-            let result = json!({
+            let mut result = json!({
                 "outcome": match how { Settle::Uncertain => "uncertain", Settle::Cancelled => "cancelled", _ => "failed" },
                 "code": e.code,
                 "violations": e.violations,
                 "usage": e.usage,
-                "cost": cost_of(unit.paid, e.usage.is_some(), unknown),
+                "cost": cost_of(unit.paid, has_usage, unknown),
             });
+            if let Some(reset) = e
+                .usage
+                .as_ref()
+                .and_then(|u| u.get("resetAtMs"))
+                .filter(|v| !v.is_null())
+            {
+                result["resetAtMs"] = reset.clone();
+            }
             let (state, message) = match how {
                 Settle::Requeue => unreachable!("handled above"),
                 Settle::Uncertain => ("uncertain", "Resultado da chamada incerto"),

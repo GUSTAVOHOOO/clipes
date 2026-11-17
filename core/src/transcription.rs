@@ -10,7 +10,7 @@
 //! worker Python (faster-whisper). Um Motor remoto implementaria a mesma interface.
 
 use crate::{
-    components::{models, worker::start_worker},
+    components::{hardware, models, worker::start_worker},
     jobs::{self, preview},
     projects,
     worker::{WorkerClient, WorkerEvent},
@@ -33,6 +33,12 @@ inventory::submit! { projects::Migration { id: "0048_001_transcripts", sql: "CRE
 // Dispositivo e precisão de cada bloco (#50): podem mudar entre blocos (queda da cadeia, nova
 // sonda); o modelo da Transcrição não.
 inventory::submit! { projects::Migration { id: "0050_001_transcription_block_config", sql: "CREATE TABLE transcription_block_config (transcript_id INTEGER NOT NULL REFERENCES transcripts(id) ON DELETE CASCADE, start_us INTEGER NOT NULL, device TEXT NOT NULL, compute_type TEXT NOT NULL, PRIMARY KEY(transcript_id,start_us)) WITHOUT ROWID;" } }
+
+// Reparo idempotente (#233) para Transcrições já salvas com palavras sobrepostas ou de duração
+// zero (padrão do faster-whisper). Aplica a mesma regra de `sentences::normalize_spans`: ordem
+// monotônica por `position`, início limitado ao fim da palavra anterior e duração mínima de 1 µs.
+// Transcrições com tempos negativos ficam intocadas para o planejador devolver erro tipado.
+inventory::submit! { projects::Migration { id: "0233_001_normalize_transcript_timestamps", sql: "CREATE TEMP TABLE _norm_words_src (transcript_id INTEGER NOT NULL, rn INTEGER NOT NULL, position INTEGER NOT NULL, start_us INTEGER NOT NULL, end_us INTEGER NOT NULL, PRIMARY KEY (transcript_id, rn)) WITHOUT ROWID; INSERT INTO _norm_words_src(transcript_id, rn, position, start_us, end_us) SELECT transcript_id, ROW_NUMBER() OVER (PARTITION BY transcript_id ORDER BY position), position, start_us, end_us FROM transcript_words WHERE kind = 'word' AND NOT EXISTS (SELECT 1 FROM transcript_words w2 WHERE w2.transcript_id = transcript_words.transcript_id AND (w2.start_us < 0 OR w2.end_us < 0)); WITH RECURSIVE fixed(transcript_id, rn, position, start_us, end_us) AS (SELECT transcript_id, rn, position, start_us, MAX(end_us, start_us + 1) FROM _norm_words_src WHERE rn = 1 UNION ALL SELECT s.transcript_id, s.rn, s.position, MAX(s.start_us, f.end_us), MAX(s.end_us, MAX(s.start_us, f.end_us) + 1) FROM _norm_words_src s JOIN fixed f ON f.transcript_id = s.transcript_id AND s.rn = f.rn + 1) UPDATE transcript_words SET start_us = f.start_us, end_us = f.end_us FROM fixed f WHERE transcript_words.transcript_id = f.transcript_id AND transcript_words.position = f.position AND (transcript_words.start_us != f.start_us OR transcript_words.end_us != f.end_us); DROP TABLE _norm_words_src; UPDATE sentences SET start_us = COALESCE((SELECT MIN(w.start_us) FROM transcript_words w WHERE w.transcript_id = sentences.transcript_id AND w.kind = 'word' AND w.position BETWEEN sentences.first_position AND sentences.last_position), start_us), end_us = COALESCE((SELECT MAX(w.end_us) FROM transcript_words w WHERE w.transcript_id = sentences.transcript_id AND w.kind = 'word' AND w.position BETWEEN sentences.first_position AND sentences.last_position), end_us) WHERE NOT EXISTS (SELECT 1 FROM transcript_words w2 WHERE w2.transcript_id = sentences.transcript_id AND (w2.start_us < 0 OR w2.end_us < 0));" } }
 
 /// Duração de cada bloco de áudio. `CLIPES_TRANSCRIBE_BLOCK_SECONDS` existe só para os testes.
 const BLOCK_US: i64 = 600_000_000;
@@ -87,6 +93,8 @@ pub struct BlockRequest<'a> {
     pub audio: &'a Path,
     /// Último bloco da Fonte: não há bloco seguinte para receber uma fala cortada.
     pub final_block: bool,
+    /// Idioma fixo da Fonte (código ISO-639-1), quando definido.
+    pub language: Option<&'a str>,
 }
 
 /// O que produz a Transcrição (GLOSSARY: Motor de transcrição). Trocável: o local usa o
@@ -111,6 +119,8 @@ pub struct LocalEngine {
     client: WorkerClient,
     model: Value,
     batch_size: u32,
+    /// Trechos de VAD por chamada (#162); só cai, por falta de memória, durante a vida do Motor.
+    group_cap: Option<u32>,
     /// O modelo da Transcrição: nunca muda; a precisão e o dispositivo podem mudar entre blocos.
     model_id: String,
 }
@@ -124,6 +134,7 @@ impl LocalEngine {
             model_id: model["id"].as_str().unwrap_or_default().to_owned(),
             model,
             batch_size,
+            group_cap: None,
         }
     }
 
@@ -140,6 +151,7 @@ impl LocalEngine {
                 "compute_type": selection.config.compute_type,
             }),
             batch_size: selection.config.batch_size(),
+            group_cap: None,
             model_id: model_id.to_owned(),
         })
     }
@@ -159,24 +171,47 @@ impl TranscriptionEngine for LocalEngine {
         progress: &mut dyn FnMut(u8),
     ) -> Result<BlockResult, CoreError> {
         // A precisão e o dispositivo valem para este bloco: uma nova sonda ou escolha manual entra aqui.
+        let mut group = 1;
+        let mut config = None;
         if let Ok(selection) = models::selection_for(&self.model_id) {
             self.model = json!({"id": selection.spec.id, "dir": selection.dir, "device": selection.config.device, "compute_type": selection.config.compute_type});
             self.batch_size = selection.config.batch_size();
+            group = hardware::current_group_size(&selection.config);
+            config = Some(selection.config);
         }
-        let params = json!({
-            "audio": request.audio,
-            "final": request.final_block,
-            "batch_size": self.batch_size,
-            "model": self.model,
-        });
-        let data = self
-            .client
-            .run("transcribe", params, cancel, &mut |event| {
+        group = group.min(self.group_cap.unwrap_or(u32::MAX));
+        loop {
+            let mut params = json!({
+                "audio": request.audio,
+                "final": request.final_block,
+                "batch_size": self.batch_size,
+                "model": self.model,
+            });
+            if group > 1 {
+                params["group_size"] = json!(group);
+            }
+            if let Some(language) = request.language {
+                params["language"] = json!(language);
+            }
+            let result = self.client.run("transcribe", params, cancel, &mut |event| {
                 if let WorkerEvent::Progress { percentage, .. } = event {
                     progress(percentage);
                 }
-            })?;
-        parse_block(&data)
+            });
+            match result {
+                // Falta de memória com lote > 1: cai pela metade e refaz só este bloco (o áudio e o
+                // checkpoint não mudaram); a medição da sonda (#50) passa a valer o novo lote.
+                Err(e) if e.code == "out_of_memory" && group > 1 => {
+                    let next = group / 2;
+                    if let Some(config) = &config {
+                        hardware::record_batch_oom(config, group, next);
+                    }
+                    self.group_cap = Some(next);
+                    group = next;
+                }
+                other => return parse_block(&other?),
+            }
+        }
     }
 }
 
@@ -328,14 +363,56 @@ pub(crate) fn run(
     stop: &AtomicBool,
 ) -> Result<(), CoreError> {
     preview::check(id, stop)?;
-    let (engine, model) = projects::with_reader(|c| {
+    let (transcript_id, engine, mut model, resume_us, project_id) = projects::with_reader(|c| {
+        let project_id: String =
+            c.query_row("SELECT id FROM queue_project_identity", [], |r| r.get(0))?;
         c.query_row(
-        "SELECT t.engine,t.model FROM transcripts t JOIN sources s ON t.source_id=s.id AND t.audio_track=s.audio_track WHERE s.id=?1",[source_id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))
+            "SELECT t.id,t.engine,t.model,t.resume_us FROM transcripts t JOIN sources s ON t.source_id=s.id AND t.audio_track=s.audio_track WHERE s.id=?1",
+            [source_id],
+            |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, i64>(3)?,
+                    project_id,
+                ))
+            },
+        )
     })?;
     if engine == "groq" {
         let mut engine = groq::GroqEngine::start()?;
         run_with(&mut engine, id, source_id, project, stop)
     } else if engine == "local" {
+        if let Some(chosen) = hardware::auto_probe_before_transcription(
+            stop,
+            || is_cancelled(id),
+            |stage, percentage, message| {
+                crate::emit_background(crate::ProgressEvent {
+                    job: id.to_string(),
+                    project: Some(project_id.clone()),
+                    stage: stage.into(),
+                    percentage,
+                    message: message.into(),
+                    error: None,
+                });
+            },
+        )? {
+            if resume_us == 0 {
+                if let Ok(settings) = crate::components::load_settings() {
+                    if let Some(spec) = chosen.spec(&settings) {
+                        projects::with_writer(|c| {
+                            c.execute(
+                                "UPDATE transcripts SET model=?2, revision=?3, compute_type=?4 WHERE id=?1 AND resume_us=0",
+                                (transcript_id, spec.id.as_str(), spec.revision.as_str(), &chosen.compute_type),
+                            )?;
+                            Ok(())
+                        })?;
+                        model = spec.id;
+                    }
+                }
+            }
+        }
         let mut engine = LocalEngine::start_for(&model)?;
         run_with(&mut engine, id, source_id, project, stop)
     } else {
@@ -373,6 +450,13 @@ pub fn run_with(
             "A Fonte está indisponível ou foi alterada.",
         ));
     }
+    let language: String = projects::with_reader(|c| {
+        c.query_row(
+            "SELECT language FROM sources WHERE id=?1",
+            [source_id],
+            |r| r.get(0),
+        )
+    })?;
     let wav = work.join(format!("job-{id}.wav"));
     let mut last_percentage = u8::MAX;
     loop {
@@ -418,6 +502,7 @@ pub fn run_with(
                 &BlockRequest {
                     audio: &wav,
                     final_block,
+                    language: Some(&language),
                 },
                 &flag,
                 &mut |percent| {
@@ -448,6 +533,11 @@ pub fn run_with(
         commit(id, transcript, step, duration_us, block, config)?;
     }
     crate::sentences::segment_transcript(transcript)?;
+    projects::with_writer(|c| {
+        let tx = c.transaction()?;
+        crate::caption_style::store::finish_remap(&tx, transcript)?;
+        tx.commit()
+    })?;
     // A energia do áudio (#54) é medida sozinha; falhar em enfileirar não afeta a Transcrição.
     crate::energy::enqueue_after_transcription(source_id);
     Ok(())
@@ -483,27 +573,14 @@ fn commit(
     } else {
         block.covered_us.min(len)
     };
+    if block
+        .words
+        .iter()
+        .any(|w| w.start_us < 0 || w.end_us < 0 || resume + w.start_us < 0 || resume + w.end_us < 0)
+    {
+        return Err(bad_result());
+    }
     let next = resume + covered;
-    // (ordem no mesmo instante, tipo, texto, início, fim, idioma)
-    type Row<'a> = (i64, &'a str, &'a str, i64, i64, Option<&'a str>);
-    let mut rows: Vec<Row<'_>> = Vec::new();
-    for (start, end) in &block.silences {
-        let (start, end) = (resume + start, resume + (*end).max(*start));
-        if end > start {
-            rows.push((0, "silence", "", start, end, None));
-        }
-    }
-    for w in &block.words {
-        rows.push((
-            1,
-            "word",
-            &w.text,
-            resume + w.start_us,
-            resume + w.end_us,
-            w.language.as_deref(),
-        ));
-    }
-    rows.sort_by_key(|r| (r.3, r.0));
     let complete = next >= duration_us;
     projects::with_writer(|conn| {
         let tx = conn.transaction()?;
@@ -512,6 +589,36 @@ fn commit(
             tx.execute("INSERT OR REPLACE INTO transcription_block_config(transcript_id,start_us,device,compute_type) VALUES (?1,?2,?3,?4)", (transcript, resume, device, compute_type))?;
         }
         tx.execute("UPDATE transcription_calls SET state='completed' WHERE transcript_id=?1 AND job_id=?2 AND start_us=?3 AND state='pending'",(transcript,job,resume))?;
+        let prev_word_end: Option<i64> = tx
+            .query_row(
+                "SELECT end_us FROM transcript_words WHERE transcript_id=?1 AND kind='word' ORDER BY position DESC LIMIT 1",
+                [transcript],
+                |r| r.get(0),
+            )
+            .optional()?;
+        // Normaliza os tempos das palavras no ponto único de gravação (#233): ordem monotônica,
+        // início limitado ao fim da palavra anterior (inclusive entre blocos) e duração mínima de 1 µs.
+        let mut word_spans: Vec<(i64, i64)> = block
+            .words
+            .iter()
+            .map(|w| (resume + w.start_us, resume + w.end_us))
+            .collect();
+        if crate::sentences::normalize_spans(&mut word_spans, prev_word_end).is_err() {
+            return Ok(Err(bad_result()));
+        }
+        // (ordem no mesmo instante, tipo, texto, início, fim, idioma)
+        type Row<'a> = (i64, &'a str, &'a str, i64, i64, Option<&'a str>);
+        let mut rows: Vec<Row<'_>> = Vec::new();
+        for (start, end) in &block.silences {
+            let (start, end) = (resume + start, resume + (*end).max(*start));
+            if end > start {
+                rows.push((0, "silence", "", start, end, None));
+            }
+        }
+        for (w, (start, end)) in block.words.iter().zip(word_spans) {
+            rows.push((1, "word", &w.text, start, end, w.language.as_deref()));
+        }
+        rows.sort_by_key(|r| (r.3, r.0));
         let mut position: i64 = tx.query_row(
             "SELECT COALESCE(MAX(position)+1, 0) FROM transcript_words WHERE transcript_id=?1",
             [transcript],
@@ -566,8 +673,9 @@ fn commit(
                 (next * 100 / duration_us.max(1)).clamp(0, 99),
             ),
         )?;
-        tx.commit()
-    })
+        tx.commit()?;
+        Ok(Ok(()))
+    })?
 }
 
 fn project_job(v: &Value) -> Result<projects::ProjectJob, CoreError> {
@@ -598,7 +706,7 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         preview::source(source, Path::new(v["project"].as_str().unwrap_or_default()))?;
     let existing = projects::with_reader(|c| {
         c.query_row(
-            "SELECT id,state,engine,model FROM transcripts WHERE source_id=?1 AND audio_track=?2",
+            "SELECT id,state,engine,model,resume_us FROM transcripts WHERE source_id=?1 AND audio_track=?2",
             (source, track),
             |r| {
                 Ok((
@@ -606,11 +714,26 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                     r.get::<_, String>(1)?,
                     r.get::<_, String>(2)?,
                     r.get::<_, String>(3)?,
+                    r.get::<_, i64>(4)?,
                 ))
             },
         )
         .optional()
     })?;
+    let requested_language = match v.get("language") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(
+            groq::language_code(s.trim())
+                .ok_or_else(|| error("invalid_language", "Selecione um idioma válido."))?,
+        ),
+        _ => return Err(error("invalid_language", "Selecione um idioma válido.")),
+    };
+    let current_language: String = projects::with_reader(|c| {
+        c.query_row("SELECT language FROM sources WHERE id=?1", [source], |r| {
+            r.get(0)
+        })
+    })?;
+    let language_change = requested_language.filter(|&lang| lang != current_language);
     let engine = match v.get("engine") {
         None | Some(Value::Null) => existing.as_ref().map_or("local", |t| t.2.as_str()),
         Some(Value::String(e)) if e == "local" || e == "groq" => e.as_str(),
@@ -639,6 +762,12 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             "Uma Transcrição completa não permite trocar o Motor.",
         ));
     }
+    if language_change.is_some() && existing.as_ref().is_some_and(|t| t.1 == "complete") {
+        return Err(error(
+            "transcript_complete",
+            "Uma Transcrição completa não permite alterar o idioma.",
+        ));
+    }
     if existing.as_ref().is_some_and(|t| t.1 == "complete") {
         return Ok(
             json!({"transcript_id":existing.as_ref().unwrap().0,"state":"complete","job_id":null}),
@@ -651,10 +780,20 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         c.query_row(
         "SELECT id,state FROM jobs WHERE kind='transcription' AND source_id=?1 AND state IN ('queued','running','uncertain') ORDER BY id DESC LIMIT 1",[source],|r|Ok((r.get(0)?,r.get(1)?))).optional()
     })?;
-    if switching && active.is_some() {
+    if (switching || language_change.is_some()) && active.is_some() {
         return Err(error(
             "transcription_busy",
-            "Encerre a tarefa antes de trocar o Motor.",
+            if language_change.is_some() && !switching {
+                "Encerre a tarefa antes de alterar o idioma."
+            } else {
+                "Encerre a tarefa antes de trocar o Motor."
+            },
+        ));
+    }
+    if language_change.is_some() && existing.as_ref().is_some_and(|t| t.4 > 0) {
+        return Err(error(
+            "transcript_partial",
+            "Não é possível alterar o idioma após iniciar a Transcrição.",
         ));
     }
     if active.as_ref().is_some_and(|j| j.1 == "uncertain") {
@@ -671,7 +810,7 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         e.usage = Some(loss(existing.as_ref().unwrap().0)?);
         return Err(e);
     }
-    if let Some((transcript, _, _, _)) = existing
+    if let Some((transcript, _, _, _, _)) = existing
         .as_ref()
         .filter(|_| !switching && active.is_none() && v["retry_confirmed"] != true)
     {
@@ -706,8 +845,8 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     };
     let (model, revision, compute) = if let Some(selection) = &selection {
         (
-            selection.spec.id,
-            selection.spec.revision,
+            selection.spec.id.as_str(),
+            selection.spec.revision.as_str(),
             selection.config.compute_type.as_str(),
         )
     } else {
@@ -715,7 +854,11 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     };
     let (transcript, state, job) = projects::with_writer(|conn| {
         let tx = conn.transaction()?;
+        if let Some(lang) = language_change {
+            tx.execute("UPDATE sources SET language=?1 WHERE id=?2", (lang, source))?;
+        }
         if switching {
+            crate::caption_style::store::stage_remap(&tx, existing.as_ref().unwrap().0)?;
             tx.execute(
                 "DELETE FROM transcripts WHERE id=?1",
                 [existing.as_ref().unwrap().0],
@@ -762,6 +905,11 @@ fn loss(transcript: i64) -> Result<Value, CoreError> {
 fn status(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let source = source_id(&v)?;
     projects::with_reader(|c| {
+        let language: Option<String> = c
+            .query_row("SELECT language FROM sources WHERE id=?1", [source], |r| {
+                r.get(0)
+            })
+            .optional()?;
         let transcript = c
             .query_row(
                 "SELECT t.id, t.state, t.resume_us, t.duration_us, t.model, t.engine, (SELECT COUNT(*) FROM transcript_words w WHERE w.transcript_id=t.id AND w.kind='word') FROM transcripts t WHERE t.source_id=?1 ORDER BY t.id LIMIT 1",
@@ -773,12 +921,12 @@ fn status(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             .optional()?;
         let job = c
             .query_row(
-                "SELECT id, state, progress FROM jobs WHERE kind='transcription' AND source_id=?1 ORDER BY id DESC LIMIT 1",
+                "SELECT id, state, progress, json_extract(result, '$.code') FROM jobs WHERE kind='transcription' AND source_id=?1 ORDER BY id DESC LIMIT 1",
                 [source],
-                |r| Ok(json!({"id": r.get::<_, i64>(0)?, "state": r.get::<_, String>(1)?, "progress": r.get::<_, i64>(2)?})),
+                |r| Ok(json!({"id": r.get::<_, i64>(0)?, "state": r.get::<_, String>(1)?, "progress": r.get::<_, i64>(2)?, "code": r.get::<_, Option<String>>(3)?})),
             )
             .optional()?;
-        Ok(json!({"transcript": transcript, "job": job}))
+        Ok(json!({"language": language, "transcript": transcript, "job": job}))
     })
 }
 
@@ -824,7 +972,117 @@ mod groq_tests;
 
 mod estimate;
 mod groq;
+pub use groq::language_code;
 pub use groq::GroqEngine;
+
+/// Códigos ISO-639-1 (duas letras minúsculas) aceitos pela transcrição (Whisper tokenizer,
+/// sem `yue`, que tem três letras). Compartilhado entre Perfil de canal (#72), transcrição
+/// (#195) e Groq.
+pub const SUPPORTED_LANGUAGES: &[(&str, &str)] = &[
+    ("en", "english"),
+    ("zh", "chinese"),
+    ("de", "german"),
+    ("es", "spanish"),
+    ("ru", "russian"),
+    ("ko", "korean"),
+    ("fr", "french"),
+    ("ja", "japanese"),
+    ("pt", "portuguese"),
+    ("tr", "turkish"),
+    ("pl", "polish"),
+    ("ca", "catalan"),
+    ("nl", "dutch"),
+    ("ar", "arabic"),
+    ("sv", "swedish"),
+    ("it", "italian"),
+    ("id", "indonesian"),
+    ("hi", "hindi"),
+    ("fi", "finnish"),
+    ("vi", "vietnamese"),
+    ("he", "hebrew"),
+    ("uk", "ukrainian"),
+    ("el", "greek"),
+    ("ms", "malay"),
+    ("cs", "czech"),
+    ("ro", "romanian"),
+    ("da", "danish"),
+    ("hu", "hungarian"),
+    ("ta", "tamil"),
+    ("no", "norwegian"),
+    ("th", "thai"),
+    ("ur", "urdu"),
+    ("hr", "croatian"),
+    ("bg", "bulgarian"),
+    ("lt", "lithuanian"),
+    ("la", "latin"),
+    ("mi", "maori"),
+    ("ml", "malayalam"),
+    ("cy", "welsh"),
+    ("sk", "slovak"),
+    ("te", "telugu"),
+    ("fa", "persian"),
+    ("lv", "latvian"),
+    ("bn", "bengali"),
+    ("sr", "serbian"),
+    ("az", "azerbaijani"),
+    ("sl", "slovenian"),
+    ("kn", "kannada"),
+    ("et", "estonian"),
+    ("mk", "macedonian"),
+    ("br", "breton"),
+    ("eu", "basque"),
+    ("is", "icelandic"),
+    ("hy", "armenian"),
+    ("ne", "nepali"),
+    ("mn", "mongolian"),
+    ("bs", "bosnian"),
+    ("kk", "kazakh"),
+    ("sq", "albanian"),
+    ("sw", "swahili"),
+    ("gl", "galician"),
+    ("mr", "marathi"),
+    ("pa", "punjabi"),
+    ("si", "sinhala"),
+    ("km", "khmer"),
+    ("sn", "shona"),
+    ("yo", "yoruba"),
+    ("so", "somali"),
+    ("af", "afrikaans"),
+    ("oc", "occitan"),
+    ("ka", "georgian"),
+    ("be", "belarusian"),
+    ("tg", "tajik"),
+    ("sd", "sindhi"),
+    ("gu", "gujarati"),
+    ("am", "amharic"),
+    ("yi", "yiddish"),
+    ("lo", "lao"),
+    ("uz", "uzbek"),
+    ("fo", "faroese"),
+    ("ht", "haitian creole"),
+    ("ps", "pashto"),
+    ("tk", "turkmen"),
+    ("nn", "nynorsk"),
+    ("mt", "maltese"),
+    ("sa", "sanskrit"),
+    ("lb", "luxembourgish"),
+    ("my", "myanmar"),
+    ("bo", "tibetan"),
+    ("tl", "tagalog"),
+    ("mg", "malagasy"),
+    ("as", "assamese"),
+    ("tt", "tatar"),
+    ("ln", "lingala"),
+    ("ha", "hausa"),
+    ("ba", "bashkir"),
+    ("jw", "javanese"),
+    ("su", "sundanese"),
+];
+
+/// Valida se `code` é exatamente um código ISO-639-1 em minúsculas presente em [`SUPPORTED_LANGUAGES`].
+pub fn is_supported_language(code: &str) -> bool {
+    SUPPORTED_LANGUAGES.iter().any(|(c, _)| *c == code)
+}
 
 mod remote;
 pub(crate) use remote::job_estimate;

@@ -45,8 +45,12 @@ const MINUTE_US: i64 = 60_000_000;
 pub const WINDOW_MAX_US: i64 = 15 * MINUTE_US;
 /// Sobreposição padrão: o maior Corte permitido enquanto não há Perfil de canal (#72).
 pub const DEFAULT_OVERLAP_US: i64 = 3 * MINUTE_US;
-/// A janela mínima é este múltiplo da sobreposição, para não reprocessar mais de 1/3 dela.
+/// A janela mínima é este múltiplo da sobreposição quando o limitante é o contexto, para não
+/// reprocessar mais de 1/3 dela.
 pub const MIN_WINDOW_FACTOR: i64 = 3;
+/// Quando o limitante é o limite por requisição ou por minuto (ex.: Groq free tier), a janela
+/// mínima cai para 2× a sobreposição, garantindo que todo Corte caiba inteiro em alguma janela.
+pub const MIN_REQUEST_LIMITED_WINDOW_FACTOR: i64 = 2;
 /// Maior Corte aceito hoje (5 min): o mínimo planejado (3 × Corte) não pode passar do teto.
 /// O Perfil de canal (#72) limita a duração máxima do Corte a este valor.
 pub const MAX_CUT_US: i64 = WINDOW_MAX_US / MIN_WINDOW_FACTOR;
@@ -134,6 +138,10 @@ pub struct PlanInput<'a> {
     pub max_cut_us: i64,
     /// Menor `above_input_tokens` do modelo; `None` quando o preço não tem faixas.
     pub price_threshold: Option<u64>,
+    /// Limite de tokens por requisição do Perfil/catálogo; `None` quando não informado.
+    pub tokens_per_request: Option<u64>,
+    /// Limite de tokens por minuto (TPM) do Perfil/catálogo; `None` quando não informado.
+    pub tokens_per_minute: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -171,10 +179,11 @@ pub struct Plan {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PlanError {
-    /// Nem a janela mínima (ou uma Frase) cabe no contexto efetivo.
+    /// Nem a janela mínima (ou uma Frase) cabe no contexto efetivo ou no limite por requisição.
     ContextTooSmall {
         context: EffectiveContext,
         min_window_us: i64,
+        request_limit: Option<u64>,
     },
     /// O maior Corte permitido faz o mínimo (3 × sobreposição) passar do teto de 15 min.
     MaxCutTooLong,
@@ -203,14 +212,23 @@ impl From<PlanError> for CoreError {
             PlanError::ContextTooSmall {
                 context,
                 min_window_us,
+                request_limit,
             } => (
                 "context_too_small",
-                format!(
-                    "Contexto efetivo de {} tokens ({}): não cabe a janela mínima de seleção de {} min. Aumente o contexto no Perfil de Provedor ou escolha outro perfil para a seleção.",
-                    context.tokens,
-                    context.origin.label(),
-                    minutes(min_window_us)
-                ),
+                if let Some(limit) = request_limit {
+                    format!(
+                        "Limite por requisição/minuto de {} tokens: não cabe a janela mínima de seleção de {} min. Aumente o limite no Perfil de Provedor ou escolha outro perfil para a seleção.",
+                        limit,
+                        minutes(min_window_us)
+                    )
+                } else {
+                    format!(
+                        "Contexto efetivo de {} tokens ({}): não cabe a janela mínima de seleção de {} min. Aumente o contexto no Perfil de Provedor ou escolha outro perfil para a seleção.",
+                        context.tokens,
+                        context.origin.label(),
+                        minutes(min_window_us)
+                    )
+                },
             ),
             PlanError::MaxCutTooLong => (
                 "max_cut_too_long",
@@ -221,7 +239,7 @@ impl From<PlanError> for CoreError {
             ),
             PlanError::InvalidInput => (
                 "invalid_selection_plan",
-                "Entrada inválida para o planejador de Janelas de seleção.".to_owned(),
+                "Entrada inválida para o planejador de Janelas de seleção: confira se não há tempos negativos ou invertidos, IDs de Frase fora de ordem, duração máxima do Corte não positiva ou razão de tokens inválida.".to_owned(),
             ),
         };
         CoreError {
@@ -244,39 +262,83 @@ fn minute_of(span: &SentenceSpan) -> i64 {
     span.start_us.max(0) / MINUTE_US
 }
 
-fn validate(input: &PlanInput<'_>) -> Result<(), PlanError> {
+fn validate(input: &PlanInput<'_>) -> Result<bool, PlanError> {
     let ratio_ok = input.ratio.high.is_finite()
         && input.ratio.high > 0.0
         && input.ratio.low.is_finite()
         && input.ratio.low > 0.0
         && input.ratio.low <= input.ratio.high;
-    if !ratio_ok || input.max_cut_us <= 0 {
+    if !ratio_ok
+        || input.max_cut_us <= 0
+        || input.tokens_per_request == Some(0)
+        || input.tokens_per_minute == Some(0)
+    {
         return Err(PlanError::InvalidInput);
     }
+    let mut needs_normalization = false;
     let mut previous: Option<&SentenceSpan> = None;
     for s in input.sentences {
         if s.start_us < 0 || s.end_us < s.start_us {
             return Err(PlanError::InvalidInput);
         }
-        if previous.is_some_and(|p| s.id <= p.id || s.start_us < p.end_us) {
-            return Err(PlanError::InvalidInput);
+        if s.end_us == s.start_us {
+            needs_normalization = true;
+        }
+        if let Some(p) = previous {
+            if s.id <= p.id {
+                return Err(PlanError::InvalidInput);
+            }
+            if s.start_us < p.end_us {
+                needs_normalization = true;
+            }
         }
         previous = Some(s);
     }
-    Ok(())
+    Ok(needs_normalization)
+}
+
+fn normalized_spans(sentences: &[SentenceSpan]) -> Vec<SentenceSpan> {
+    let mut pairs: Vec<(i64, i64)> = sentences.iter().map(|s| (s.start_us, s.end_us)).collect();
+    let _ = sentences::normalize_spans(&mut pairs, None);
+    sentences
+        .iter()
+        .zip(pairs)
+        .map(|(s, (start_us, end_us))| SentenceSpan {
+            start_us,
+            end_us,
+            ..*s
+        })
+        .collect()
 }
 
 /// Calcula as janelas. Pura: o resultado depende só de `input`.
 pub fn plan(input: &PlanInput<'_>) -> Result<Plan, PlanError> {
-    validate(input)?;
+    let needs_normalization = validate(input)?;
     let overlap = input.max_cut_us;
     if overlap > MAX_CUT_US {
         return Err(PlanError::MaxCutTooLong);
     }
-    let min_window_us = overlap * MIN_WINDOW_FACTOR;
+    let reserve = input.output_reserve.saturating_add(input.reasoning_reserve);
+    let context_limit =
+        percent(input.context.tokens, CONTEXT_USABLE_PERCENT).saturating_sub(reserve);
+    let request_cap = [input.tokens_per_request, input.tokens_per_minute]
+        .into_iter()
+        .flatten()
+        .min();
+    let request_limit =
+        request_cap.map(|cap| percent(cap, CONTEXT_USABLE_PERCENT).saturating_sub(reserve));
+    let limited_by_request = request_limit.is_some_and(|limit| limit < context_limit);
+    let min_window_us = overlap
+        * if limited_by_request {
+            MIN_REQUEST_LIMITED_WINDOW_FACTOR
+        } else {
+            MIN_WINDOW_FACTOR
+        };
 
-    let mut input_limit = percent(input.context.tokens, CONTEXT_USABLE_PERCENT)
-        .saturating_sub(input.output_reserve.saturating_add(input.reasoning_reserve));
+    let mut input_limit = match request_limit {
+        Some(limit) => context_limit.min(limit),
+        None => context_limit,
+    };
     if let Some(threshold) = input.price_threshold {
         input_limit = input_limit.min(percent(threshold, PRICE_THRESHOLD_PERCENT));
     }
@@ -284,8 +346,14 @@ pub fn plan(input: &PlanInput<'_>) -> Result<Plan, PlanError> {
     let blocked = PlanError::ContextTooSmall {
         context: input.context,
         min_window_us,
+        request_limit: limited_by_request.then_some(request_cap).flatten(),
     };
-    let spans = input.sentences;
+    let spans: std::borrow::Cow<'_, [SentenceSpan]> = if needs_normalization {
+        std::borrow::Cow::Owned(normalized_spans(input.sentences))
+    } else {
+        std::borrow::Cow::Borrowed(input.sentences)
+    };
+    let spans = spans.as_ref();
     let n = spans.len();
     let mut result = Plan {
         state: PlanState::Full,
@@ -426,7 +494,7 @@ pub fn plan_for_profile(
 pub fn plan_for_profile_marked(
     request: &ProfileRequest<'_>,
     frases: &[Sentence],
-    marks: &EnergyMarks,
+    marks: &impl sentences::SentenceMarks,
 ) -> Result<Plan, CoreError> {
     let profile = provider::effective_cached(request.task, request.profile_id)?;
     // A reserva de saída é a da chamada (#147): o pedido, cortado pelo limite do Perfil e do
@@ -480,8 +548,9 @@ pub fn plan_for_profile_marked(
         })
         .collect();
 
-    let price_threshold = cost::price_for(&profile.kind, &profile.model)?
-        .and_then(|(price, _)| price.tiers.iter().map(|t| t.above_input_tokens).min());
+    let price_threshold =
+        cost::price_for_endpoint(&profile.kind, &profile.endpoint, &profile.model)?
+            .and_then(|(price, _)| price.tiers.iter().map(|t| t.above_input_tokens).min());
     plan(&PlanInput {
         sentences: &spans,
         header_chars,
@@ -495,6 +564,8 @@ pub fn plan_for_profile_marked(
         reasoning_reserve: request.reasoning_reserve,
         max_cut_us: request.max_cut_us,
         price_threshold,
+        tokens_per_request: profile.tokens_per_request,
+        tokens_per_minute: profile.tokens_per_minute,
     })
     .map_err(CoreError::from)
 }

@@ -5,8 +5,10 @@ import { Button } from '@/components/ui/Button';
 import { useText } from '@/lib/i18n';
 import { Sources } from './Sources';
 import { Backups } from './Backups';
+import { ChannelProfile } from './ChannelProfile';
 import { Jobs } from './Jobs';
 import { SourceBatches } from './SourceBatches';
+import { BatchExport } from '@/features/export/BatchExport';
 import { ProjectPrivacy } from './ProjectPrivacy';
 import { TranscriptSearch } from './TranscriptSearch';
 
@@ -35,8 +37,10 @@ export function Projects() {
       <Button disabled={busy} onClick={() => perform(async () => { const path = await choose(); return path ? coreDispatch<Project>('projects.open', {path}) : null; })}>{t.opening}</Button></div>
     {error && <p role="alert" className="mt-4 text-danger">{t.error} {error}</p>}
     {current && <p className="mt-6 text-sm">{t.current}: <strong>{current.name}</strong></p>}
+    {current && <ChannelProfile key={`profile-${current.id}`} projectId={current.id} />}
     {current && <Sources project={current.path} />}
     {current && <SourceBatches key={`batches-${current.id}`} project={current.path} projectId={current.id} />}
+    {current && <BatchExport key={`export-batch-${current.id}`} scope="project" project={current.path} projectId={current.id} />}
     {current && <TranscriptSearch projectId={current.id} />}
     {current && <Jobs key={current.id} projectId={current.id} />}
     {current && <ProjectPrivacy projectId={current.id} />}

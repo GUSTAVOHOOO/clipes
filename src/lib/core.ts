@@ -1,18 +1,79 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import { editorEditsMock } from './editorEditsMock';
+import { captionsMock, getDefaultCaptionStyleMock, setDefaultCaptionStyleMock } from './captionsMock';
 import { version } from '../../package.json';
 import { exportMock } from '@/features/export/mock';
 
 /** Contrato do Corte para export, compartilhado pela revisão e pelo editor (#61).
  * `export.start` recebe estes campos mais `output` (caminho MP4 escolhido no diálogo).
  */
-export type ExportRequest = { source_id: number; start_id: number; end_id: number; candidate_id?: number };
+export type ExportRequest = { source_id: number; start_id: number; end_id: number; candidate_id?: number; clip_id?: number };
 import { batchMockDispatch } from './batchMock';
-import { packagingMockDispatch } from './packagingMock';
+import { packagingMockDispatch, setPackagingMockPermission } from './packagingMock';
+import { thumbnailMockDispatch } from './thumbnailMock';
+import { scriptMockDispatch } from './scriptMock';
+import { translationMockDispatch, setTranslationMockPermission } from './translationMock';
 
 const groqRetryTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('groq-retry-test');
+const denoMock = { installed: false };
+const pocketTtsMock = { installed: false };
+const ttsActiveModels: Record<string, string> = { pt: 'portuguese_24l', en: 'english' };
+const ttsInstalledModels = new Set<string>();
+const ttsInstalledRevs = new Map<string, string>();
+const catalogScenario = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('catalog-test') : null;
+const catalogMock = {
+  version: 1,
+  embeddedVersion: 1,
+  source: 'embedded' as 'embedded' | 'remote',
+  warning: catalogScenario === 'tampered-cache' ? 'Assinatura do catálogo em cache inválida; usando o catálogo embutido.' : null as string | null,
+  warningCode: catalogScenario === 'tampered-cache' ? 'catalog_signature_invalid' : null as string | null,
+};
+const MODEL_REV_V1 = {
+  'whisper-turbo': '0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf',
+  'whisper-small': '536b0662742c02347bc0e980a01041f333bce120',
+  yunet: '48b10fa505aeb51fbd127fc60a5c660040e823b7',
+};
+const MODEL_REV_V2 = {
+  'whisper-turbo': '0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf',
+  'whisper-small': '2222222222222222222222222222222222222222',
+  yunet: '48b10fa505aeb51fbd127fc60a5c660040e823b7',
+};
+const TTS_REV_V1 = 'a7056f505a4a8ca72d8b5fb1440071d6f1a35739';
+const TTS_REV_V2 = '3333333333333333333333333333333333333333';
+const modelInstalledRevs = new Map<string, string>(
+  typeof location !== 'undefined' && new URLSearchParams(location.search).has('components-missing')
+    ? []
+    : [['whisper-small', MODEL_REV_V1['whisper-small']]],
+);
+type MockBlockAlignment = {
+  status: 'pending' | 'aligned' | 'needs_review' | 'approved' | 'failed';
+  choice: 'script' | 'spoken' | null;
+  activeTrack: 'script' | 'spoken' | null;
+  substitutions: number;
+  insertions: number;
+  deletions: number;
+  maxConsecutiveInsertions: number;
+  errorCode: string | null;
+  modelId: string;
+  spokenText: string | null;
+  wordCount: number;
+};
+type MockCleanupInfo = {
+  applicable: boolean;
+  enabled: boolean;
+  ready: boolean;
+  noiseFloorDb: number | null;
+  noiseFloorSource: 'pending' | 'vad' | 'default';
+  warningCode: string | null;
+  warning: string | null;
+};
+const narrationGenerated = new Map<number, { blockId: number; voiceId: string; modelId: string; engineId: string; trimmed?: boolean; cleanupEnabled?: boolean; cleanupReady?: boolean; durationUs: number; alignment: MockBlockAlignment }[]>();
 const sourceTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('source-test');
+const componentsMissing = typeof location !== 'undefined' && new URLSearchParams(location.search).has('components-missing');
 const budgetTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('budget-test');
 const transcriptTest = sourceTest && typeof location !== 'undefined' && new URLSearchParams(location.search).has('transcript-test');
+const hardwareCpuMode = typeof location !== 'undefined' && new URLSearchParams(location.search).has('hardware-cpu');
+const hardwareProbeFallbackMode = typeof location !== 'undefined' && new URLSearchParams(location.search).has('hardware-probe-fallback');
 // Transcrição simulada: a Frase n tem as palavras n*10 (“Frase”) e n*10+1 (“n”); correções, desfazer e refazer valem por Fonte e posição.
 let mockProxyPolls = 0;
 const mockCorrected = new Map<string, string>();
@@ -24,9 +85,9 @@ function mockWords(source: number, id: number) { return [0, 1].map(k => { const 
 function mockApply(source: number, position: number, value: string | null) { if (value === null) mockCorrected.delete(source + ':' + position); else mockCorrected.set(source + ':' + position, value); }
 function mockStep(source: number, position: number, changed: boolean) { const value = mockCorrected.get(source + ':' + position); return { changed, source_id: source, transcript_id: 1, position, sentence_id: Math.floor(position / 10), text: ' ' + (value ?? mockOriginal(position)), corrected: value !== undefined, can_undo: mockDone.length > 0, can_redo: mockUndone.length > 0 }; }
 let sourceItems = [
-  { id: 1, path: '/test/changed.mp4', status: 'changed', available: false, verified: false, permission: {status:'none'} },
-  { id: 2, path: '/test/offline.mp4', status: 'offline', available: false, verified: false, permission: {status:'none'} },
-  { id: 3, path: '/test/mismatch.mp4', status: 'changed', available: false, verified: true, permission: {status:'none'} },
+  { id: 1, path: '/test/changed.mp4', status: 'changed', available: false, verified: false, language: 'pt', permission: {status:'none'} },
+  { id: 2, path: '/test/offline.mp4', status: 'offline', available: false, verified: false, language: 'pt', permission: {status:'none'} },
+  { id: 3, path: '/test/mismatch.mp4', status: 'changed', available: false, verified: true, language: 'pt', permission: {status:'none'} },
 ];
 let urlSettingsMock = {terms_accepted:false, download_dir:'/test/downloads'};
 let jobItems = [
@@ -39,15 +100,29 @@ let jobItems = [
   ] : []),
 ];
 let transcribeMock: { transcript: object | null; job: object | null } = groqRetryTest ? {transcript:{id:1,engine:'groq',state:'running',resume_us:4e6,duration_us:10e6,words:1},job:{id:99,state:'cancelled',progress:40}} : { transcript: null, job: null };
-if (groqRetryTest || (typeof location !== 'undefined' && new URLSearchParams(location.search).has('hardware-cpu'))) sourceItems.push({id:4,path:'/test/downloaded.mp4',status:'available',available:true,verified:true,permission:{status:'none'}});
+if (groqRetryTest || componentsMissing || hardwareCpuMode || hardwareProbeFallbackMode) sourceItems.push({id:4,path:'/test/downloaded.mp4',status:'available',available:true,verified:true,language:'pt',permission:{status:'none'}});
 let providerMock = { kind: 'openai', endpoint: '', model: '', nativeSchema: false, context: null as number | null, keyLastFour: null as string | null, remote: false, confirmed: false, confirmedEndpoints: [] as string[] };
-type ProfileMock = { id: string; label: string; kind: string; endpoint: string; model: string; nativeSchema: boolean; ownKey: boolean; context: number | null; maxOutput?: number | null; timeoutSecs?: number | null; keyLastFour: string | null };
+type ProfileMock = { id: string; label: string; kind: string; endpoint: string; model: string; nativeSchema: boolean; ownKey: boolean; context: number | null; maxOutput?: number | null; timeoutSecs?: number | null; tokensPerRequest?: number | null; tokensPerMinute?: number | null; tokensPerDay?: number | null; keyLastFour: string | null };
 let profileMocks: ProfileMock[] = [];
 const isLocalHost = (endpoint: string) => ['localhost', '127.0.0.1', '[::1]'].includes(new URL(endpoint).hostname);
 let priceOverrides: { provider: string; model: string; inputPerMillion: number; outputPerMillion: number }[] = [];
 const assistantTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('assistant-test');
 let assistantMock = { completed: !assistantTest, skipped: false, needsSetup: assistantTest, default: '', tasks: { selection: '', packaging: '', script: '', translation: '' } as Record<string, string>, localOnly: { selection: false, packaging: false, script: false, translation: false } as Record<string, boolean> };
 let projectVetoMock = false;
+let channelProfileMock = {
+  videoKind: 'direct',
+  language: 'pt',
+  minUs: 20_000_000,
+  maxUs: 60_000_000,
+  allowedSources: [] as { label: string; url?: string | null; note?: string | null }[],
+  narrationVoice: null as string | null,
+  directMonetizationAck: false,
+};
+const channelProfileView = () => ({
+  ...channelProfileMock,
+  captionStyle: getDefaultCaptionStyleMock(),
+  limits: { defaultMinUs: 20_000_000, defaultMaxUs: 60_000_000, maxUs: 180_000_000, technicalMaxUs: 300_000_000 },
+});
 const knownProfile = (id: string) => (id === 'legacy' ? !!providerMock.endpoint : profileMocks.some(p => p.id === id));
 const staleProfile = (choice: string) => choice.startsWith('profile:') && !knownProfile(choice.slice(8));
 const assistantView = () => {
@@ -81,11 +156,11 @@ let groqConsent = groqRetryTest;
 let groqUncertain = groqRetryTest;
 let providerCliMock = { selected: '', codexConfirmed: false, claudeConfirmed: false, opencodeConfirmed: false, opencodeModel: '' };
 // Mock do hardware da Transcrição (#50): GPU NVIDIA por padrão, CPU com `?hardware-cpu=1`.
-const hardwareCpuMode = typeof location !== 'undefined' && new URLSearchParams(location.search).has('hardware-cpu');
 const GIB = 1024 ** 3;
-const hardwareMock = { manual: null as { model: string; device: string; compute_type: string } | null, probed: false };
+const hardwareMock = { manual: null as { model: string; device: string; compute_type: string } | null, probed: false, groupingEnabled: false };
 function hardwareMockDispatch(name: string, args: object): unknown {
-  const auto = hardwareCpuMode ? { model: 'whisper-small', device: 'cpu', compute_type: 'int8' } : { model: 'whisper-turbo', device: 'cuda', compute_type: 'int8_float16' };
+  const fallbackCpu = hardwareProbeFallbackMode && !hardwareMock.manual;
+  const auto = hardwareCpuMode || fallbackCpu ? { model: 'whisper-small', device: 'cpu', compute_type: 'int8' } : { model: 'whisper-turbo', device: 'cuda', compute_type: 'int8_float16' };
   const effective = hardwareMock.manual ?? auto;
   const cpu = effective.device === 'cpu';
   if (name === 'transcription.hardware.choose') {
@@ -95,20 +170,32 @@ function hardwareMockDispatch(name: string, args: object): unknown {
     return hardwareMockDispatch('transcription.hardware.status', {});
   }
   if (name === 'transcription.hardware.probe') { hardwareMock.probed = true; return { chosen: auto, verified: true, measured_at: 1790000000, attempts: [] }; }
+  if (name === 'transcription.grouping') {
+    const a = args as { enabled?: unknown };
+    if ('enabled' in a && a.enabled !== undefined) {
+      if (typeof a.enabled !== 'boolean') throw { code: 'invalid_grouping', message: 'Opção de agrupamento inválida.' };
+      hardwareMock.groupingEnabled = a.enabled;
+    }
+    const measured_size = cpu ? null : hardwareMock.probed ? 8 : null;
+    const size = hardwareMock.groupingEnabled ? (cpu ? 8 : (measured_size ?? 1)) : 1;
+    return { enabled: hardwareMock.groupingEnabled, size, measured_size };
+  }
   if (name === 'transcription.estimate') {
     const rate = cpu ? (effective.model === 'whisper-turbo' ? 4.1 : 2.57) : 0.386;
     const seconds = 5 + rate * 36000;
     return { ...effective, load_s: 5, rate, estimate_s: seconds, low_s: seconds * 0.7, high_s: seconds * 1.5, sample_start_us: 9e9, sample_us: 30e6, cached: false, measured_at: 1790000000, cpu, warnings: effective.model === 'whisper-turbo' && cpu ? ['low_ram'] : [] };
   }
-  const options = [['whisper-turbo', 'cuda', 'int8_float16'], ['whisper-turbo', 'cuda', 'float16'], ['whisper-turbo', 'cuda', 'int8'], ['whisper-turbo', 'cpu', 'int8'], ['whisper-small', 'cpu', 'int8']].map(([model, device, compute_type]) => ({ model, device, compute_type, installed: true, enabled: !(hardwareCpuMode && device === 'cuda'), reason: hardwareCpuMode && device === 'cuda' ? 'no_cuda' : null }));
-  return {
-    gpu: hardwareCpuMode ? null : { name: 'NVIDIA GeForce RTX 3050 Laptop GPU', driver: '616.92', total_mib: 4096, free_mib: 3962 },
-    ram: { total: 16 * GIB, available: 9 * GIB }, cuda: !hardwareCpuMode, no_compatible_gpu: cpu, effective, manual: hardwareMock.manual !== null,
-    probe: hardwareMock.probed ? { measured_at: 1790000000, verified: true, chosen: auto } : null, options, worker_installed: true,
-  };
+        const options = [['whisper-turbo', 'cuda', 'int8_float16'], ['whisper-turbo', 'cuda', 'float16'], ['whisper-turbo', 'cuda', 'int8'], ['whisper-turbo', 'cpu', 'int8'], ['whisper-small', 'cpu', 'int8']].map(([model, device, compute_type]) => ({ model, device, compute_type, installed: !componentsMissing, enabled: !(hardwareCpuMode && device === 'cuda'), reason: hardwareCpuMode && device === 'cuda' ? 'no_cuda' : null }));
+        return {
+          gpu: hardwareCpuMode ? null : { name: 'NVIDIA GeForce RTX 3050 Laptop GPU', driver: '616.92', total_mib: 4096, free_mib: 3962 },
+          ram: { total: 16 * GIB, available: 9 * GIB }, cuda: !hardwareCpuMode, no_compatible_gpu: cpu, effective, manual: hardwareMock.manual !== null,
+          fallback_reason: fallbackCpu ? 'gpu_probe_failed' : null,
+          probe: hardwareMock.probed ? { measured_at: 1790000000, verified: true, chosen: auto } : null, options, worker_installed: !componentsMissing,
+        };
 }
 
 // Seleção de Cortes simulada (#53): quatro Janelas; a terceira falha até ser refeita. `selection-paid` simula Provedor pago e `selection-blocked` o contexto pequeno demais.
+const chatMock = { fetched: false };
 const selectionFlag = (name: string) => typeof location !== 'undefined' && new URLSearchParams(location.search).has(name);
 const selectionWeightsDirect = [{key:'hook',weight:0.3},{key:'selfContained',weight:0.2},{key:'energy',weight:0.2},{key:'value',weight:0.15},{key:'closing',weight:0.15}];
 // Vídeo transformado (#67): 6º eixo `commentary` e os pesos da decisão de 15/11/2026.
@@ -171,6 +258,14 @@ function selectionMockDispatch(name: string, args: object): unknown {
     return { run: 1, windows: asked.windows ?? [], profile: { id: asked.profileId } };
   }
   const estimate = { kind: paid ? 'usd' : 'zero', windows: 4, inputTokens: 40000, minMicroUsd: paid ? 1200 : 0, maxMicroUsd: paid ? 5400 : 0 };
+  if (name === 'energy.status') {
+    if (selectionFlag('selection-energy-queued')) return { measured: false, marks: { high: 0, peak: 0 }, job: { id: 1, state: 'queued', progress: 0 } };
+    if (selectionFlag('selection-energy-running')) return { measured: false, marks: { high: 0, peak: 0 }, job: { id: 1, state: 'running', progress: 45 } };
+    if (selectionFlag('selection-energy')) return { measured: true, marks: { high: 4, peak: 2 }, job: { id: 1, state: 'completed', progress: 100 } };
+    return { measured: false, marks: { high: 0, peak: 0 }, job: null };
+  }
+  if (name === 'chat.status') return { state: chatMock.fetched ? 'available' : 'none', canFetch: !selectionFlag('chat-local'), peaks: chatMock.fetched ? 3 : 0, job: null };
+  if (name === 'chat.fetch') { chatMock.fetched = true; return { state: 'queued', job: 1 }; }
   if (name === 'selection.estimate') {
     if (selectionFlag('selection-blocked')) throw { code: 'context_too_small', message: 'O contexto efetivo de 4096 tokens (definido por você no perfil) não comporta a janela mínima. Aumente o contexto no Perfil de Provedor ou escolha outro perfil.' };
     const kind = (args as { videoKind?: string }).videoKind ?? 'direct';
@@ -200,19 +295,20 @@ function selectionMockDispatch(name: string, args: object): unknown {
     const made = (w: number[]) => (run.redoProfile && w.includes(0) ? run.redoProfile : 'legacy');
     const windows = states.map((state, index) => ({ index, firstId: index * 90 + 1, lastId: index * 90 + 90, startUs: index * 720_000_000, endUs: index * 720_000_000 + 900_000_000, jobId: index + 1, state, code: state === 'cancelled' ? 'cancelled' : state === 'failed' ? 'verification_failed' : null }));
     const done = states.filter(s => s === 'completed').length;
+    const withChat = selectionFlag('selection-chat');
     const candidates = run.ticks === 1 && !run.cancelled ? [] : [
-      { id: 1, rank: 0, startId: 10, endId: 14, startUs: 90_000_000, endUs: 140_000_000, axes: selectionAxes([9, 8, 7, 9, 8], run.videoKind), total: 8.35, title: 'A virada do jogo', windows: [0, 1], adjusted: false, adjust: null, profile: made([0, 1]), revision: run.revision ?? 1 },
-      { id: 2, rank: 1, startId: 40, endId: 41, startUs: 390_000_000, endUs: 410_000_000, axes: selectionAxes([8, 6, 7, 9, 5], run.videoKind), total: 7.1, title: '', windows: [0], adjusted: true, adjust: { extendedAfter: 1 }, profile: made([0]), revision: run.revision ?? 1 },
-      { id: 3, rank: 2, startId: 200, endId: 203, startUs: 1_990_000_000, endUs: 2_030_000_000, axes: selectionAxes([4, 4, 4, 4, 4], run.videoKind), total: 4, title: 'Piada longa', windows: [2], adjusted: true, adjust: { trimmedEnd: 3 }, profile: made([2]), revision: run.revision ?? 1 },
+      { id: 1, rank: 0, startId: 10, endId: 14, startUs: 90_000_000, endUs: 140_000_000, axes: selectionAxes([9, 8, 7, 9, 8], run.videoKind), total: 8.35, title: 'A virada do jogo', windows: [0, 1], adjusted: false, adjust: null, chat: withChat ? [{ ratio: 3.1, reaction: 'laugh', atUs: 95_000_000 }] : [], profile: made([0, 1]), revision: run.revision ?? 1 },
+      { id: 2, rank: 1, startId: 40, endId: 41, startUs: 390_000_000, endUs: 410_000_000, axes: selectionAxes([8, 6, 7, 9, 5], run.videoKind), total: 7.1, title: '', windows: [0], adjusted: true, adjust: { extendedAfter: 1 }, chat: withChat ? [{ ratio: 2.4, reaction: null, atUs: 395_000_000 }] : [], profile: made([0]), revision: run.revision ?? 1 },
+      { id: 3, rank: 2, startId: 200, endId: 203, startUs: 1_990_000_000, endUs: 2_030_000_000, axes: selectionAxes([4, 4, 4, 4, 4], run.videoKind), total: 4, title: 'Piada longa', windows: [2], adjusted: true, adjust: { trimmedEnd: 3 }, chat: [], profile: made([2]), revision: run.revision ?? 1 },
     ];
-    return { run: { id: 1, state: run.state, videoKind: run.videoKind, summary: { energy: selectionFlag('selection-energy') ? { measured: true, high: 4, peak: 2 } : { measured: false } }, weights: weightsOf(run.videoKind), budgetPause: null, createdAt: '2026-11-15T12:00:00Z', counts: { windows: 4, completed: done, failed: states.filter(s => s === 'failed' || s === 'cancelled').length, kept: candidates.length, discarded: 0, merged: 1 } }, windows, candidates };
+    return { run: { id: 1, state: run.state, videoKind: run.videoKind, summary: { energy: selectionFlag('selection-energy') ? { measured: true, high: 4, peak: 2 } : { measured: false }, chat: selectionFlag('selection-chat') ? { available: true, peaks: 3 } : { available: false } }, weights: weightsOf(run.videoKind), budgetPause: null, createdAt: '2026-11-15T12:00:00Z', counts: { windows: 4, completed: done, failed: states.filter(s => s === 'failed' || s === 'cancelled').length, kept: candidates.length, discarded: 0, merged: 1 } }, windows, candidates };
   }
   throw { code: 'run_not_found', message: 'Execução de seleção não encontrada.' };
 }
 
 export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   if (import.meta.env.VITE_CORE_MOCK === '1' && !isTauri()) {
-    if (name.startsWith('export.') || (name === 'jobs.cancel' && (args as {id: number}).id >= 5900)) return exportMock(name, args) as T;
+    if ((name.startsWith('export.') && name !== 'export.captions') || (name === 'jobs.cancel' && (args as {id: number}).id >= 5900)) return exportMock(name, args, (source, pos) => mockCorrected.has(`${source}:${pos}`)) as T;
     if (name === 'transcription.groq.info') return {endpoint:'https://api.groq.com/openai/v1/audio/transcriptions',configured:groqKeyConfigured,confirmed:groqConsent,local_only:projectVetoMock} as T;
     if (name === 'transcription.groq.estimate') return {kind:'usd',usd:0.00012,hourly_usd:0.04,checked:'2026-11-15',source:'https://console.groq.com/docs/speech-to-text'} as T;
     if (name === 'transcription.groq.confirm') { groqConsent = true; return {confirmed:true} as T; }
@@ -225,8 +321,124 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'projects.current') return (sourceTest ? { name:'Teste', path:'/test/Teste.clipes', id:'test-project' } : null) as T;
     if (name === 'projects.local_only.get') return { open: sourceTest, enabled: sourceTest && projectVetoMock } as T;
     if (name === 'projects.local_only.set') { projectVetoMock = (args as { enabled: boolean }).enabled; return { open: true, enabled: projectVetoMock } as T; }
+    if (name === 'channel_profile.languages') return [{ code: 'pt', name: 'portuguese' }, { code: 'en', name: 'english' }, { code: 'es', name: 'spanish' }] as T;
+    if (name === 'channel_profile.get') return channelProfileView() as T;
+    if (name === 'channel_profile.set') {
+      const a = args as Partial<typeof channelProfileMock> & { captionStyle?: ReturnType<typeof getDefaultCaptionStyleMock> };
+      const minUs = a.minUs ?? channelProfileMock.minUs;
+      const maxUs = a.maxUs ?? channelProfileMock.maxUs;
+      if (minUs <= 0 || minUs >= maxUs || maxUs > 180_000_000) throw { code: 'invalid_cut_range', message: 'A faixa de duração dos Cortes é inválida.' };
+      if (a.narrationVoice && !['13063', 'alba', 'marius'].includes(a.narrationVoice)) throw { code: 'channel_profile_invalid', message: 'Voz inválida.' };
+      channelProfileMock = {
+        videoKind: a.videoKind ?? channelProfileMock.videoKind,
+        language: a.language ?? channelProfileMock.language,
+        minUs,
+        maxUs,
+        allowedSources: a.allowedSources ?? channelProfileMock.allowedSources,
+        narrationVoice: a.narrationVoice === undefined ? channelProfileMock.narrationVoice : a.narrationVoice,
+        directMonetizationAck: channelProfileMock.directMonetizationAck,
+      };
+      if (a.captionStyle) setDefaultCaptionStyleMock(a.captionStyle);
+      return channelProfileView() as T;
+    }
+    if (name === 'guardrails.ack_direct_notice') {
+      channelProfileMock = { ...channelProfileMock, directMonetizationAck: true };
+      return { directMonetizationAck: true } as T;
+    }
+    if (name === 'guardrails.check') {
+      const a = args as { scope?: string; source_id?: number; candidate_id?: number; start_id?: number; end_id?: number };
+      const scope = a.scope ?? 'single';
+      const ack = channelProfileMock.directMonetizationAck;
+      const videoKind = selectionMock.run?.videoKind ?? channelProfileMock.videoKind;
+      const hasDirect = videoKind === 'direct';
+      const hasTransformed = videoKind === 'transformed';
+      if (scope === 'single') {
+        const src = sourceItems.find(s => s.id === (a.source_id ?? 1)) ?? sourceItems[0];
+        const granted = src?.permission?.status === 'granted';
+        const permObj = src?.permission as { who?: string; where?: string; scope?: string } | undefined;
+        let durationUs = 50_000_000;
+        if (typeof a.start_id === 'number' && typeof a.end_id === 'number' && a.end_id >= a.start_id) {
+          durationUs = (a.end_id - a.start_id + 1) * 10_000_000;
+        } else if (typeof a.candidate_id === 'number') {
+          const r = reviewMock.items.get(a.candidate_id);
+          if (r) durationUs = (r.end - r.start + 1) * 10_000_000;
+        }
+        const over60s = durationUs > 60_000_000;
+        const montageInfo = typeof (a as { clip_id?: number }).clip_id === 'number'
+          ? (editorEditsMock('editor.montage.get', { clip_id: (a as { clip_id?: number }).clip_id }) as { montage?: { freezeTailUs?: number } | null } | undefined)
+          : undefined;
+        const freezeTailUs = montageInfo?.montage?.freezeTailUs ?? 0;
+        const effectiveTransformed = hasTransformed || freezeTailUs > 0 || !!montageInfo?.montage;
+        const effectiveKind = effectiveTransformed ? 'transformed' : videoKind;
+        const scriptView = effectiveTransformed ? (scriptMockDispatch('script.get', { candidate: a.candidate_id ?? 1 }) as { current?: { blocks?: unknown[]; pending?: number } | null; narrationAllowed?: boolean }) : null;
+        const audioInfo = typeof (a as { clip_id?: number }).clip_id === 'number'
+          ? (editorEditsMock('editor.audio.get', { clip_id: (a as { clip_id?: number }).clip_id }) as { audioMix?: { soundtrack?: { assetId: number; licenseVerified: boolean } | null; sfx: { assetId: number; licenseVerified: boolean }[]; unverifiedCount: number } } | undefined)?.audioMix
+          : undefined;
+        const usedIds = new Set<number>();
+        if (audioInfo?.soundtrack) usedIds.add(audioInfo.soundtrack.assetId);
+        for (const item of audioInfo?.sfx ?? []) usedIds.add(item.assetId);
+        return {
+          scope: 'single',
+          directMonetizationAck: ack,
+          needsDirectNotice: !ack && effectiveKind === 'direct',
+          videoKind: effectiveKind,
+          hasDirect: effectiveKind === 'direct',
+          hasTransformed: effectiveTransformed,
+          totalCuts: 1,
+          durationUs,
+          over60s,
+          over60sCount: over60s ? 1 : 0,
+          shortClaimLimitUs: 60_000_000,
+          permission: { status: granted ? 'granted' : 'none', grantedCount: granted ? 1 : 0, missingCount: granted ? 0 : 1, totalCount: 1, who: permObj?.who ?? null, where: permObj?.where ?? null, scope: permObj?.scope ?? null },
+          script: effectiveTransformed ? { applicable: true, exists: !!scriptView?.current, approved: !!scriptView?.narrationAllowed, pendingBlocks: scriptView?.current?.pending ?? 0, totalBlocks: scriptView?.current?.blocks?.length ?? 0 } : { applicable: false },
+          narration: effectiveTransformed ? (() => { const g = (narrationGenerated.get(a.candidate_id ?? 1) ?? []).filter(x => x.engineId !== 'imported' && x.engineId !== 'recorded'); return { applicable: true, hasTts: g.length > 0, generatedBlocks: g.length, totalBlocks: scriptView?.current?.blocks?.length ?? 0, voices: [...new Set(g.map(x => x.voiceId))], freezeTailUs, longFreezeTail: freezeTailUs > 5_000_000 }; })() : { applicable: false },
+          audio: { hasAudio: usedIds.size > 0, assetCount: usedIds.size, unverifiedCount: audioInfo?.unverifiedCount ?? 0 },
+        } as T;
+      }
+      const totalCuts = selectionFlag('export-batch-empty') || (scope === 'source' && !selectionMock.run) ? 0 : 2;
+      const batchSrc = sourceItems.find(s => s.id === (a.source_id ?? 1)) ?? sourceItems[0];
+      const batchGranted = batchSrc?.permission?.status === 'granted';
+      return {
+        scope,
+        directMonetizationAck: ack,
+        needsDirectNotice: !ack && totalCuts > 0 && hasDirect,
+        videoKind,
+        hasDirect: totalCuts > 0 && hasDirect,
+        hasTransformed: totalCuts > 0 && hasTransformed,
+        totalCuts,
+        durationUs: totalCuts > 0 ? 50_000_000 : 0,
+        over60s: false,
+        over60sCount: 0,
+        shortClaimLimitUs: 60_000_000,
+        permission: totalCuts === 0
+          ? { status: 'none', grantedCount: 0, missingCount: 0, totalCount: 0 }
+          : { status: batchGranted ? 'granted' : 'none', grantedCount: batchGranted ? totalCuts : 0, missingCount: batchGranted ? 0 : totalCuts, totalCount: totalCuts },
+        script: hasTransformed && totalCuts > 0 ? { applicable: true, transformedCount: totalCuts, approvedCount: 0, unapprovedCount: totalCuts } : { applicable: false },
+        narration: hasTransformed && totalCuts > 0 ? { applicable: true, hasTts: false, ttsCutCount: 0, transformedCount: totalCuts } : { applicable: false },
+        audio: { applicable: totalCuts > 0, cutsWithAudio: 0, cutsWithUnverifiedAudio: 0, totalUnverified: 0 },
+      } as T;
+    }
     if (sourceTest && new URLSearchParams(location.search).has('batch-test')) { const handled = batchMockDispatch(name, args); if (handled !== undefined) return handled as T; }
-    if (name.startsWith('packaging.')) { const handled = packagingMockDispatch(name, args); if (handled !== undefined) return handled as T; }
+    if (name.startsWith('thumbnail.')) { const handled = thumbnailMockDispatch(name, args); if (handled !== undefined) return handled as T; }
+    if (name.startsWith('script.') || name.startsWith('angles.')) { const handled = scriptMockDispatch(name, args); if (handled !== undefined) return handled as T; }
+    if (name.startsWith('packaging.')) {
+      const candidate = (args as { candidate?: number }).candidate ?? 1;
+      const scriptDoc = scriptMockDispatch('script.get', { candidate }) as { narrationAllowed: boolean; current: { blocks: { id: number; position: number; title: string }[] } | null };
+      const generated = narrationGenerated.get(candidate) ?? [];
+      const blocks = (scriptDoc.current?.blocks ?? []).map(b => ({
+        id: b.id,
+        position: b.position,
+        title: b.title,
+        durationUs: generated.find(g => g.blockId === b.id)?.durationUs ?? null,
+      }));
+      const kind = selectionMock.run?.videoKind ?? channelProfileMock.videoKind;
+      const handled = packagingMockDispatch(name, args, {
+        videoKind: kind === 'transformed' ? 'transformed' : 'direct',
+        scriptAllowed: scriptDoc.narrationAllowed,
+        blocks,
+      });
+      if (handled !== undefined) return handled as T;
+    }
     if (name === 'jobs.list') return (sourceTest ? jobItems : []) as T;
     if (name === 'jobs.cancel' && (args as { id: number }).id === 99) { transcribeMock = { ...transcribeMock, job: { id: 99, state: 'cancelled', progress: 40 } }; return null as T; }
     if (sourceTest && name === 'jobs.estimate') return { safety: 'paid', estimate: { kind: 'unknown' } } as T;
@@ -241,9 +453,24 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'sources.url.settings.get') return urlSettingsMock as T;
     if (name === 'sources.url.settings.set') { urlSettingsMock = {...urlSettingsMock, ...(args as typeof urlSettingsMock)}; return urlSettingsMock as T; }
     if (sourceTest && name === 'sources.list') return sourceItems as T;
-    if (sourceTest && name === 'sources.url.download') return {path:'/test/downloaded.mp4',url:(args as {url:string}).url} as T;
+    if (sourceTest && name === 'sources.url.download') { const url=(args as {url:string}).url; if(url.endsWith('/age-test')) throw {code:'age_restricted',message:'test'}; if(url.endsWith('/js-test') && !denoMock.installed) throw {code:'js_runtime_missing',message:'test'}; return {path:'/test/downloaded.mp4',url} as T; }
     if (sourceTest && name === 'sources.inspect') return {format:{duration:'12'},streams:[{index:0,codec_type:'audio',codec_name:'aac'}]} as T;
-    if (sourceTest && name === 'sources.import') { const a=args as {path:string;permission:{status:string};origin_url?:string}; const item={id:4,path:a.path,status:'available',available:true,verified:true,permission:a.permission}; sourceItems.push(item); return {...item,origin_url:a.origin_url} as T; }
+    if (sourceTest && name === 'sources.import') { const a=args as {path:string;permission:{status:string};origin_url?:string;language?:string}; const item={id:4,path:a.path,status:'available',available:true,verified:true,language:a.language??channelProfileMock.language,permission:a.permission}; sourceItems.push(item); return {...item,origin_url:a.origin_url} as T; }
+    if (sourceTest && name === 'sources.language.set') { const { id, language } = args as { id: number; language: string }; sourceItems = sourceItems.map(item => item.id === id ? { ...item, language } : item); return sourceItems.find(item => item.id === id) as T; }
+    if (sourceTest && name === 'sources.permission.set') {
+      const { id, permission } = args as { id: number; permission: { status: string; who?: string; where?: string; scope?: string } };
+      if (permission?.status !== 'none' && !(permission?.status === 'granted' && permission.who?.trim() && permission.where?.trim() && permission.scope?.trim())) {
+        throw { code: 'invalid_permission', message: 'Registre a Permissão ou informe que não há permissão' };
+      }
+      const normalized = permission.status === 'none'
+        ? { status: 'none' }
+        : { status: 'granted', who: permission.who!.trim(), where: permission.where!.trim(), scope: permission.scope!.trim() };
+      if (!sourceItems.some(item => item.id === id)) throw { code: 'source_missing', message: 'Fonte não encontrada' };
+      sourceItems = sourceItems.map(item => item.id === id ? { ...item, permission: normalized } : item);
+      setPackagingMockPermission(normalized);
+      setTranslationMockPermission(id, normalized);
+      return sourceItems.find(item => item.id === id) as T;
+    }
 
     if (sourceTest && (name === 'sources.hash' || name === 'sources.relocate')) {
       const { id, confirmed } = args as { id: number; confirmed?: boolean };
@@ -252,15 +479,243 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       return {} as T;
     }
     if (name === 'app.version') return { version } as T;
+    if (name === 'components.deno.status') return { installed: denoMock.installed, version: denoMock.installed ? '2.9.8' : null, pinned: '2.9.8', outdated: false } as T;
+    if (name === 'components.download' && (args as { id?: string }).id === 'deno') { denoMock.installed = true; return { path: '/test/components/deno' } as T; }
+    if (name === 'components.pocket_tts.status') return { installed: pocketTtsMock.installed, version: pocketTtsMock.installed ? '3.3.0' : null, pinned: '3.3.0', outdated: false } as T;
+    if (name === 'components.download' && (args as { id?: string }).id === 'pocket-tts') { pocketTtsMock.installed = true; return { path: '/test/components/pocket-tts' } as T; }
+    if (name === 'tts.catalog' || name === 'tts.models.choose') {
+      if (name === 'tts.models.choose') { const a = args as { language: string; modelId: string }; ttsActiveModels[a.language] = a.modelId; }
+      const pt24Rev = catalogMock.version > 1 ? TTS_REV_V2 : TTS_REV_V1;
+      const revFor = (id: string) => (id === 'portuguese_24l' ? pt24Rev : TTS_REV_V1);
+      const installedRev = (id: string) => (ttsInstalledModels.has(id) ? (ttsInstalledRevs.get(id) ?? TTS_REV_V1) : null);
+      return {
+        catalogVersion: catalogMock.version,
+        catalogSource: catalogMock.source,
+        catalogWarning: catalogMock.warning,
+        componentInstalled: pocketTtsMock.installed,
+        activeModels: { ...ttsActiveModels },
+        engines: [{ id: 'pocket-tts', label: 'Pocket TTS (Kyutai)', componentId: 'pocket-tts', codeLicense: 'MIT', sourceUrl: 'https://github.com/kyutai-labs/pocket-tts/tree/v4.0.1', prohibitedUse: { textEn: 'Prohibited use: Use of our model must comply with all applicable laws and regulations and must not result in, involve, or facilitate any illegal, harmful, deceptive, fraudulent, or unauthorized activity.', summaryPt: 'Uso proibido pelo autor do modelo (Kyutai): sem imitação ou clonagem de voz sem consentimento explícito e legal.', version: 'mock' } }],
+        models: [
+          { id: 'portuguese_24l', engineId: 'pocket-tts', language: 'pt', label: 'Pocket TTS PT-BR (24 camadas · padrão)', description: 'Qualidade superior em PT-BR.', defaultForLanguage: true, lightweight: false, active: ttsActiveModels.pt === 'portuguese_24l', installed: ttsInstalledModels.has('portuguese_24l'), installedRevision: installedRev('portuguese_24l'), updateAvailable: ttsInstalledModels.has('portuguese_24l') && installedRev('portuguese_24l') !== revFor('portuguese_24l'), termsAccepted: ttsInstalledModels.has('portuguese_24l'), repo: 'kyutai/pocket-tts-without-voice-cloning', revision: revFor('portuguese_24l'), license: 'CC-BY-4.0', sourceUrl: `https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/tree/${revFor('portuguese_24l')}`, size: 701332218 },
+          { id: 'portuguese', engineId: 'pocket-tts', language: 'pt', label: 'Pocket TTS PT-BR (6 camadas · leve)', description: 'Variante destilada mais rápida.', defaultForLanguage: false, lightweight: true, active: ttsActiveModels.pt === 'portuguese', installed: ttsInstalledModels.has('portuguese'), installedRevision: installedRev('portuguese'), updateAvailable: false, termsAccepted: ttsInstalledModels.has('portuguese'), repo: 'kyutai/pocket-tts-without-voice-cloning', revision: TTS_REV_V1, license: 'CC-BY-4.0', sourceUrl: 'https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/tree/a7056f505a4a8ca72d8b5fb1440071d6f1a35739', size: 226502826 },
+          { id: 'english', engineId: 'pocket-tts', language: 'en', label: 'Pocket TTS EN (6 camadas · padrão)', description: 'Modelo oficial em inglês.', defaultForLanguage: true, lightweight: true, active: ttsActiveModels.en === 'english', installed: ttsInstalledModels.has('english'), installedRevision: installedRev('english'), updateAvailable: false, termsAccepted: ttsInstalledModels.has('english'), repo: 'kyutai/pocket-tts-without-voice-cloning', revision: TTS_REV_V1, license: 'CC-BY-4.0', sourceUrl: 'https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/tree/a7056f505a4a8ca72d8b5fb1440071d6f1a35739', size: 231761368 },
+        ],
+        voices: [
+          { id: '13063', engineId: 'pocket-tts', language: 'pt', gender: 'male', label: 'Narrador PT-BR 13063 (masculina)', defaultForLanguage: true, license: 'CC-BY-4.0', attribution: 'BRSpeech-TTS / CML-TTS (CC-BY 4.0)', sourceUrl: 'https://huggingface.co/datasets/freds0/BRSpeech-TTS', models: ['portuguese_24l', 'portuguese'], installedModels: [] },
+          { id: 'alba', engineId: 'pocket-tts', language: 'en', gender: 'female', label: 'Alba (EN, feminina)', defaultForLanguage: true, license: 'CC-BY-4.0', attribution: 'Alba MacKenna (CC-BY 4.0)', sourceUrl: 'https://huggingface.co/kyutai/tts-voices/tree/323332d33f997de8394f24a193e1a76df720e01a/alba-mackenna', models: ['english'], installedModels: [] },
+          { id: 'marius', engineId: 'pocket-tts', language: 'en', gender: 'male', label: 'Marius (EN, masculina)', defaultForLanguage: false, license: 'CC0-1.0', attribution: 'Unmute Voice Donation Project (CC0 1.0)', sourceUrl: 'https://huggingface.co/kyutai/tts-voices/tree/323332d33f997de8394f24a193e1a76df720e01a/voice-donations', models: ['english'], installedModels: [] },
+        ],
+      } as T;
+    }
+    if (name === 'tts.models.download') {
+      const a = args as { id: string; confirmed?: boolean; termsAccepted?: boolean };
+      if (!a.confirmed) throw { code: 'confirmation_required', message: 'Confirmação obrigatória.' };
+      if (!a.termsAccepted) throw { code: 'terms_acceptance_required', message: 'Aceite o termo.' };
+      ttsInstalledModels.add(a.id);
+      ttsInstalledRevs.set(a.id, a.id === 'portuguese_24l' && catalogMock.version > 1 ? TTS_REV_V2 : TTS_REV_V1);
+      return { id: a.id } as T;
+    }
+    if (name === 'tts.models.cancel') return {} as T;
+    if (name === 'narration.get' || name === 'narration.generate' || name === 'narration.regenerate_block' || name === 'narration.import' || name === 'narration.align' || name === 'narration.align_block' || name === 'narration.review' || name === 'narration.record_block' || name === 'narration.trim_block' || name === 'narration.discard_draft' || name === 'narration.cleanup.set' || name === 'narration.cleanup.prepare') {
+      const a = args as { candidate: number; block?: number; voiceId?: string; choice?: 'script' | 'spoken'; audioBase64?: string; enabled?: boolean };
+      const s = scriptMockDispatch('script.get', { candidate: a.candidate }) as { narrationAllowed: boolean; current: { blocks: { id: number; position: number; title: string; narration: string | null }[] } | null };
+      const recordNoWorker = typeof location !== 'undefined' && new URLSearchParams(location.search).has('record-no-worker');
+      const recordNoSpeech = typeof location !== 'undefined' && new URLSearchParams(location.search).has('record-no-speech');
+      const vadReady = !componentsMissing && !recordNoWorker;
+      const defaultAlign = (text: string | null, idx: number): MockBlockAlignment => {
+        const deviationMode = typeof location !== 'undefined' && new URLSearchParams(location.search).has('narration-deviation');
+        const wordCount = (text ?? '').trim().split(/\s+/).filter(Boolean).length || 4;
+        if (deviationMode && idx === 0) {
+          return { status: 'needs_review', choice: null, activeTrack: null, substitutions: 0, insertions: 2, deletions: 0, maxConsecutiveInsertions: 2, errorCode: null, modelId: 'whisper-turbo', spokenText: `${text ?? 'Bloco'} extra improviso`, wordCount: wordCount + 2 };
+        }
+        return { status: 'aligned', choice: null, activeTrack: 'script', substitutions: 0, insertions: 0, deletions: 0, maxConsecutiveInsertions: 0, errorCode: null, modelId: 'whisper-turbo', spokenText: null, wordCount };
+      };
+      if (name === 'narration.discard_draft') {
+        return { candidate: a.candidate, blockId: a.block ?? 0, discarded: true } as T;
+      }
+      if (name === 'narration.record_block') {
+        if (!s.narrationAllowed) throw { code: 'script_not_approved', message: 'Aprove o Roteiro.' };
+        if (recordNoSpeech) throw { code: 'no_speech_detected', message: 'Nenhuma fala detectada na gravação.', usage: { hasDraft: true, durationUs: 1_500_000 } };
+        const blocks = s.current?.blocks ?? [];
+        const idx = blocks.findIndex(b => b.id === a.block);
+        const target = blocks[idx];
+        if (!target) throw { code: 'block_not_found', message: 'Bloco não encontrado.' };
+        const existing = narrationGenerated.get(a.candidate) ?? [];
+        const trimmed = vadReady;
+        const durationUs = trimmed ? 2_400_000 : 3_500_000;
+        const entry = {
+          blockId: target.id,
+          voiceId: 'recorded',
+          modelId: trimmed ? 'silero-vad' : 'untrimmed',
+          engineId: 'recorded',
+          trimmed,
+          cleanupEnabled: true,
+          cleanupReady: false,
+          durationUs,
+          alignment: vadReady ? defaultAlign(target.narration, idx) : { status: 'pending' as const, choice: null, activeTrack: null, substitutions: 0, insertions: 0, deletions: 0, maxConsecutiveInsertions: 0, errorCode: null, modelId: '', spokenText: null, wordCount: 0 },
+        };
+        const next = existing.some(e => e.blockId === target.id)
+          ? existing.map(e => (e.blockId === target.id ? entry : e))
+          : [...existing, entry];
+        narrationGenerated.set(a.candidate, next);
+        return {
+          candidate: a.candidate,
+          blockId: target.id,
+          narrationId: target.id,
+          versionId: 1,
+          engineId: 'recorded',
+          voiceId: 'recorded',
+          modelId: entry.modelId,
+          relPath: `narrations/c${a.candidate}/b${target.id}-v1.wav`,
+          durationUs,
+          sampleRate: 24000,
+          channels: 1,
+          bytes: 115244,
+          trimmed,
+          warningCode: trimmed ? null : 'vad_unavailable',
+          warning: trimmed ? null : 'Aparo de silêncio indisponível: instale o worker.',
+        } as T;
+      }
+      if (name === 'narration.trim_block') {
+        if (!vadReady) throw { code: 'worker_missing', message: 'Instale o worker.' };
+        const blocks = s.current?.blocks ?? [];
+        const idx = blocks.findIndex(b => b.id === a.block);
+        const target = blocks[idx];
+        const existing = narrationGenerated.get(a.candidate) ?? [];
+        const hit = existing.find(e => e.blockId === a.block);
+        if (!hit || !target) throw { code: 'narration_missing', message: 'Gravação não encontrada.' };
+        const updated = { ...hit, modelId: 'silero-vad', trimmed: true, durationUs: 2_400_000, alignment: defaultAlign(target.narration, idx) };
+        narrationGenerated.set(a.candidate, existing.map(e => (e.blockId === a.block ? updated : e)));
+        return { candidate: a.candidate, blockId: target.id, trimmed: true, durationUs: 2_400_000 } as T;
+      }
+      if (name === 'narration.generate' || name === 'narration.regenerate_block') {
+        if (!s.narrationAllowed) throw { code: 'script_not_approved', message: 'Aprove o Roteiro.' };
+        const voiceId = a.voiceId ?? channelProfileMock.narrationVoice ?? '13063';
+        const modelId = ttsActiveModels.pt;
+        const blocks = s.current?.blocks ?? [];
+        const existing = narrationGenerated.get(a.candidate) ?? [];
+        const blockDurationUs = selectionFlag('packaging-chapters') ? 12_000_000 : 3_200_000;
+        const next = blocks.map((b, idx) => (a.block === undefined || b.id === a.block)
+          ? { blockId: b.id, voiceId, modelId, engineId: 'pocket-tts', trimmed: true, durationUs: blockDurationUs, alignment: defaultAlign(b.narration, idx) }
+          : (existing.find(e => e.blockId === b.id) ?? { blockId: b.id, voiceId, modelId, engineId: 'pocket-tts', trimmed: true, durationUs: blockDurationUs, alignment: defaultAlign(b.narration, idx) }));
+        narrationGenerated.set(a.candidate, next);
+        return { job: 790, candidate: a.candidate } as T;
+      }
+      if (name === 'narration.import') {
+        if (!s.narrationAllowed) throw { code: 'script_not_approved', message: 'Aprove o Roteiro.' };
+        const imp = args as { candidate: number; block: number; path: string };
+        if (!/\.(wav|mp3|m4a|ogg)$/i.test(imp.path ?? '')) throw { code: 'import_unsupported_format', message: 'Formato inválido.' };
+        const blocks = s.current?.blocks ?? [];
+        const idx = blocks.findIndex(b => b.id === imp.block);
+        if (idx < 0) throw { code: 'block_not_found', message: 'Bloco não encontrado.' };
+        const existing = narrationGenerated.get(imp.candidate) ?? [];
+        const entry = {
+          blockId: imp.block,
+          voiceId: 'imported',
+          modelId: 'external',
+          engineId: 'imported',
+          cleanupEnabled: true,
+          cleanupReady: false,
+          durationUs: 2_800_000,
+          alignment: defaultAlign(blocks[idx]?.narration ?? null, idx),
+        };
+        const next = existing.some(e => e.blockId === imp.block)
+          ? existing.map(e => e.blockId === imp.block ? entry : e)
+          : [...existing, entry];
+        narrationGenerated.set(imp.candidate, next);
+        return { job: 792, candidate: imp.candidate, blockId: imp.block } as T;
+      }
+      if (name === 'narration.align' || name === 'narration.align_block') {
+        const blocks = s.current?.blocks ?? [];
+        const existing = narrationGenerated.get(a.candidate) ?? [];
+        const next = existing.map((e, idx) => (a.block === undefined || e.blockId === a.block)
+          ? { ...e, alignment: defaultAlign(blocks.find(b => b.id === e.blockId)?.narration ?? null, idx) }
+          : e);
+        narrationGenerated.set(a.candidate, next);
+        return { job: 791, candidate: a.candidate, block: a.block ?? null } as T;
+      }
+      if (name === 'narration.review') {
+        const existing = narrationGenerated.get(a.candidate) ?? [];
+        const next = existing.map(e => e.blockId === a.block
+          ? { ...e, alignment: { ...e.alignment, status: 'approved' as const, choice: a.choice ?? 'script', activeTrack: a.choice ?? 'script' } }
+          : e);
+        narrationGenerated.set(a.candidate, next);
+        const updated = next.find(e => e.blockId === a.block);
+        return { candidate: a.candidate, block: a.block, alignment: updated?.alignment ?? null } as T;
+      }
+      const cleanupFor = (hit: { engineId: string; cleanupEnabled?: boolean; cleanupReady?: boolean }): MockCleanupInfo | null => {
+        if (hit.engineId !== 'recorded' && hit.engineId !== 'imported') return null;
+        return {
+          applicable: true,
+          enabled: hit.cleanupEnabled ?? true,
+          ready: hit.cleanupReady ?? false,
+          noiseFloorDb: vadReady ? -44 : -50,
+          noiseFloorSource: vadReady ? 'vad' : 'default',
+          warningCode: vadReady ? null : 'vad_unavailable',
+          warning: vadReady ? null : 'Piso de ruído padrão usado: instale o worker para medir o ruído da gravação.',
+        };
+      };
+      if (name === 'narration.cleanup.set') {
+        const existing = narrationGenerated.get(a.candidate) ?? [];
+        const hit = existing.find(e => e.blockId === a.block);
+        if (!hit) throw { code: 'narration_missing', message: 'Este bloco ainda não tem áudio.' };
+        if (hit.engineId !== 'recorded' && hit.engineId !== 'imported') {
+          throw { code: 'cleanup_not_applicable', message: 'A limpeza de voz só se aplica a Narração gravada ou importada.' };
+        }
+        const updated = { ...hit, cleanupEnabled: Boolean(a.enabled) };
+        narrationGenerated.set(a.candidate, existing.map(e => (e.blockId === a.block ? updated : e)));
+        return { candidate: a.candidate, blockId: a.block, narrationId: a.block, cleanup: cleanupFor(updated) } as T;
+      }
+      if (name === 'narration.cleanup.prepare') {
+        if (componentsMissing) throw { code: 'ffmpeg_missing', message: 'Instale o Componente FFmpeg para limpar o áudio.' };
+        const existing = narrationGenerated.get(a.candidate) ?? [];
+        const hit = existing.find(e => e.blockId === a.block);
+        if (!hit) throw { code: 'narration_missing', message: 'Este bloco ainda não tem áudio.' };
+        if (hit.engineId !== 'recorded' && hit.engineId !== 'imported') {
+          throw { code: 'cleanup_not_applicable', message: 'A limpeza de voz só se aplica a Narração gravada ou importada.' };
+        }
+        const updated = { ...hit, cleanupReady: true };
+        narrationGenerated.set(a.candidate, existing.map(e => (e.blockId === a.block ? updated : e)));
+        const info = cleanupFor(updated)!;
+        return {
+          candidate: a.candidate,
+          blockId: a.block,
+          narrationId: a.block,
+          enabled: info.enabled,
+          ready: true,
+          cleanRelPath: `narrations/c${a.candidate}/b${a.block}-v1.clean.wav`,
+          durationUs: updated.durationUs,
+          noiseFloorDb: info.noiseFloorDb,
+          noiseFloorSource: info.noiseFloorSource,
+          warningCode: info.warningCode,
+          warning: info.warning,
+        } as T;
+      }
+      const list = narrationGenerated.get(a.candidate) ?? [];
+      const blocks = (s.current?.blocks ?? []).map(b => {
+        const hit = list.find(x => x.blockId === b.id);
+        return {
+          blockId: b.id, position: b.position, title: b.title, versionId: 1, narrationText: b.narration,
+          audio: hit ? { id: b.id, versionId: 1, voiceId: hit.voiceId, modelId: hit.modelId, engineId: hit.engineId, relPath: `narrations/c${a.candidate}/b${b.id}-v1.wav`, durationUs: hit.durationUs, sampleRate: 24000, channels: 1, bytes: 153644, stale: false, trimmed: hit.trimmed ?? true, cleanup: cleanupFor(hit) } : null,
+          alignment: hit ? hit.alignment : null,
+        };
+      });
+      return {
+        candidate: a.candidate, narrationAllowed: s.narrationAllowed, gateReason: s.narrationAllowed ? null : 'pending_blocks',
+        language: 'pt', defaultVoiceId: channelProfileMock.narrationVoice ?? '13063', activeModelId: ttsActiveModels.pt,
+        busy: false, job: null, importBusy: false, importJob: null, alignBusy: false, alignJob: null, alignPrerequisitesReady: !componentsMissing, vadReady,
+        blocks, totalDurationUs: blocks.reduce((acc, b) => acc + (b.audio?.durationUs ?? 0), 0),
+      } as T;
+    }
     if (name === 'components.ytdlp.status') return {installed:true,version:'test'} as T;
     if (name === 'components.ytdlp.update') return {version:'test'} as T;
-    if (name === 'components.worker.status') return { installed: true, outdated: false, cuda: false, gpu: true, uv: '0.13.8', handshake: { protocol: 1, worker: '0.1.0', python: '3.12.16', libs: { 'faster-whisper': '1.2.1', onnxruntime: '1.32.0', numpy: '2.4.6', 'opencv-python-headless': null } } } as T;
+    if (name === 'components.worker.status') return (componentsMissing ? { installed: false, gpu: true } : { installed: true, outdated: false, cuda: false, gpu: true, uv: '0.13.8', handshake: { protocol: 1, worker: '0.1.0', python: '3.12.16', libs: { 'faster-whisper': '1.2.1', onnxruntime: '1.32.0', numpy: '2.4.6', 'opencv-python-headless': null } } }) as T;
     if (name === 'components.worker.install') return { handshake: null } as T;
-    if (name === 'components.ffmpeg.status') return { incomplete: false } as T;
+    if (name === 'components.ffmpeg.status') return { incomplete: false, installed: !componentsMissing } as T;
     if (name === 'assistant.status') return assistantView() as T;
     if (name === 'assistant.tasks') return assistantTasks() as T;
     if (name === 'assistant.local_only.set') { const { task, enabled } = args as { task: string; enabled: boolean }; assistantMock.localOnly[task] = enabled; return assistantView() as T; }
-    if (name === 'assistant.detect') return { ollama: { found: true, endpoint: 'http://127.0.0.1:11434/v1', models: ['llama3:8b', 'qwen3'] }, lmStudio: { found: false, endpoint: null, models: [] }, llamaCpp: { found: false, endpoint: null, models: [] }, codex: { found: true }, claude: { found: false }, opencode: { found: true } } as T;
+    if (name === 'assistant.detect') return { ollama: { found: true, endpoint: 'http://127.0.0.1:11434', models: ['llama3:8b', 'qwen3'] }, lmStudio: { found: false, endpoint: null, models: [] }, llamaCpp: { found: false, endpoint: null, models: [] }, codex: { found: true }, claude: { found: false }, opencode: { found: true } } as T;
     if (name === 'assistant.default.set' || name === 'assistant.task.set') {
       const { choice, task } = args as { choice: string; task?: string };
       if ((choice === 'codex' && !providerCliMock.codexConfirmed) || (choice === 'claude' && !providerCliMock.claudeConfirmed) || (choice === 'opencode' && !providerCliMock.opencodeConfirmed)) throw { code: 'confirmation_required', message: 'confirmation required' };
@@ -274,8 +729,16 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         providerMock = { ...providerMock, endpoint: 'http://127.0.0.1:11434/v1', model: 'llama3', kind: 'openai' };
         profileMocks = [{ id: 'forte', label: 'Forte remoto', kind: 'openai', endpoint: 'https://api.example.test/v1', model: 'forte-1', nativeSchema: false, ownKey: true, context: null, keyLastFour: '1234' }, { id: 'leve', label: 'Leve local', kind: 'openai', endpoint: 'http://127.0.0.1:11435/v1', model: 'leve-1', nativeSchema: false, ownKey: false, context: null, keyLastFour: null }];
       }
-      const limits = (p: ProfileMock) => ({ maxOutput: { value: p.maxOutput ?? 4096, source: p.maxOutput ? 'profile' : 'fallback' }, timeout: { seconds: p.timeoutSecs ?? (isLocalHost(p.endpoint) ? 300 : 60), source: p.timeoutSecs ? 'profile' : 'default' }, timeoutMsPer1kInputTokens: 1000, minUsefulOutput: 512 });
-      const view = (p: ProfileMock) => ({ ...p, maxOutput: p.maxOutput ?? null, timeoutSecs: p.timeoutSecs ?? null, limits: limits(p), keyLastFour: p.ownKey || p.endpoint !== providerMock.endpoint ? p.keyLastFour : providerMock.keyLastFour, local: isLocalHost(p.endpoint), confirmed: providerMock.confirmedEndpoints.includes(p.endpoint), price: null, cli: false });
+      const limits = (p: ProfileMock) => ({
+        maxOutput: { value: p.maxOutput ?? 4096, source: p.maxOutput ? 'profile' : 'fallback' },
+        timeout: { seconds: p.timeoutSecs ?? (isLocalHost(p.endpoint) ? 300 : 60), source: p.timeoutSecs ? 'profile' : 'default' },
+        timeoutMsPer1kInputTokens: 1000,
+        minUsefulOutput: 512,
+        tokensPerRequest: p.tokensPerRequest ? { value: p.tokensPerRequest, source: 'profile' } : null,
+        tokensPerMinute: p.tokensPerMinute ? { value: p.tokensPerMinute, source: 'profile' } : null,
+        tokensPerDay: p.tokensPerDay ? { value: p.tokensPerDay, source: 'profile' } : null,
+      });
+      const view = (p: ProfileMock) => ({ ...p, maxOutput: p.maxOutput ?? null, timeoutSecs: p.timeoutSecs ?? null, tokensPerRequest: p.tokensPerRequest ?? null, tokensPerMinute: p.tokensPerMinute ?? null, tokensPerDay: p.tokensPerDay ?? null, limits: limits(p), keyLastFour: p.ownKey || p.endpoint !== providerMock.endpoint ? p.keyLastFour : providerMock.keyLastFour, local: isLocalHost(p.endpoint), confirmed: providerMock.confirmedEndpoints.includes(p.endpoint), price: null, cli: false });
       const main = providerMock.endpoint ? [view({ id: 'legacy', label: 'Principal', kind: providerMock.kind, endpoint: providerMock.endpoint, model: providerMock.model, nativeSchema: providerMock.nativeSchema, context: providerMock.context, ownKey: false, keyLastFour: providerMock.keyLastFour })] : [];
       const cli = (kind: string, label: string, confirmed: boolean) => ({ id: kind, label, kind, endpoint: null, model: null, nativeSchema: false, ownKey: false, keyLastFour: null, local: false, confirmed, active: providerCliMock.selected === kind, price: null, cli: true, experimental: true });
       return { profiles: [...main, ...profileMocks.map(view), cli('codex', 'Codex CLI', providerCliMock.codexConfirmed), cli('claude', 'Claude Code CLI', providerCliMock.claudeConfirmed), {...cli('opencode', 'OpenCode CLI', providerCliMock.opencodeConfirmed), model:providerCliMock.opencodeModel, cost:{kind:providerCliMock.opencodeModel === 'opencode/big-pickle' ? 'zero' : 'unknown'}}] } as T;
@@ -306,9 +769,9 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'provider.cli.configure') { providerCliMock.selected = (args as { kind: string }).kind; if ('model' in args) providerCliMock.opencodeModel = (args as {model:string}).model; return {} as T; }
     if (name === 'provider.cli.confirm') { if (providerCliMock.selected === 'codex') providerCliMock.codexConfirmed = true; else if (providerCliMock.selected === 'opencode') providerCliMock.opencodeConfirmed = true; else providerCliMock.claudeConfirmed = true; return {} as T; }
     if (name === 'provider.configure' && (args as { profileId?: string }).profileId) {
-      const a = args as { profileId: string; label: string; kind: string; endpoint: string; model: string; nativeSchema: boolean; ownKey?: boolean; context?: number | null; maxOutput?: number | null; timeoutSecs?: number | null };
+      const a = args as { profileId: string; label: string; kind: string; endpoint: string; model: string; nativeSchema: boolean; ownKey?: boolean; context?: number | null; maxOutput?: number | null; timeoutSecs?: number | null; tokensPerRequest?: number | null; tokensPerMinute?: number | null; tokensPerDay?: number | null };
       const old = profileMocks.find(p => p.id === a.profileId);
-      const next = { id: a.profileId, label: a.label, kind: a.kind, endpoint: a.endpoint, model: a.model, nativeSchema: a.nativeSchema, context: a.context ?? null, maxOutput: 'maxOutput' in a ? a.maxOutput : old?.maxOutput ?? null, timeoutSecs: 'timeoutSecs' in a ? a.timeoutSecs : old?.timeoutSecs ?? null, ownKey: a.ownKey ?? old?.ownKey ?? false, keyLastFour: old?.keyLastFour ?? null };
+      const next = { id: a.profileId, label: a.label, kind: a.kind, endpoint: a.endpoint, model: a.model, nativeSchema: a.nativeSchema, context: a.context ?? null, maxOutput: 'maxOutput' in a ? a.maxOutput : old?.maxOutput ?? null, timeoutSecs: 'timeoutSecs' in a ? a.timeoutSecs : old?.timeoutSecs ?? null, tokensPerRequest: 'tokensPerRequest' in a ? a.tokensPerRequest : old?.tokensPerRequest ?? null, tokensPerMinute: 'tokensPerMinute' in a ? a.tokensPerMinute : old?.tokensPerMinute ?? null, tokensPerDay: 'tokensPerDay' in a ? a.tokensPerDay : old?.tokensPerDay ?? null, ownKey: a.ownKey ?? old?.ownKey ?? false, keyLastFour: old?.keyLastFour ?? null };
       profileMocks = old ? profileMocks.map(p => p.id === a.profileId ? next : p) : [...profileMocks, next];
       return { profileId: a.profileId } as T;
     }
@@ -347,29 +810,66 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'components.manifest') return [
       { id: 'ffmpeg', version: 'test', size: 2000000, license: 'GPL-3.0-or-later', source_url: 'https://github.com/FFmpeg/FFmpeg' },
       { id: 'yt-dlp', version: 'test', size: 1000000, license: 'Unlicense', source_url: 'https://github.com/yt-dlp/yt-dlp' },
+      { id: 'deno', version: '2.9.8', size: 42917472, license: 'MIT', source_url: 'https://github.com/denoland/deno/tree/v2.9.8' },
+      { id: 'pocket-tts', version: '3.3.0', size: 7914990, license: 'MIT', source_url: 'https://github.com/kyutai-labs/pocket-tts/tree/v4.0.1' },
       { id: 'uv', version: '0.13.8', size: 15000000, license: 'Apache-2.0', source_url: 'https://github.com/astral-sh/uv' },
     ] as T;
-    if (name === 'components.models.manifest') return [
-      { worker_installed: true, id: 'whisper-turbo', label: 'Whisper large-v3-turbo (GPU NVIDIA)', repo: 'dropbox-dash/faster-whisper-large-v3-turbo', revision: '0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf', license: 'MIT', source_url: 'https://huggingface.co/dropbox-dash/faster-whisper-large-v3-turbo/tree/0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf', size: 1621666000, installed: false, recommended: true },
-      { worker_installed: true, id: 'whisper-small', label: 'Whisper small (CPU)', repo: 'Systran/faster-whisper-small', revision: '536b0662742c02347bc0e980a01041f333bce120', license: 'MIT', source_url: 'https://huggingface.co/Systran/faster-whisper-small/tree/536b0662742c02347bc0e980a01041f333bce120', size: 486212372, installed: true, recommended: false },
-      { worker_installed: true, id: 'yunet', label: 'YuNet (reenquadramento)', repo: 'opencv/opencv_zoo', revision: '48b10fa505aeb51fbd127fc60a5c660040e823b7', license: 'MIT', source_url: 'https://github.com/opencv/opencv_zoo/tree/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/face_detection_yunet', size: 232589, installed: false, recommended: false },
-    ] as T;
-    if (name.startsWith('transcription.hardware.') || name === 'transcription.estimate') return hardwareMockDispatch(name, args) as T;
-    if (name === 'components.models.download') return { id: (args as { id: string }).id } as T;
+    if (name === 'components.catalog.status') return { ...catalogMock } as T;
+    if (name === 'components.catalog.check') {
+      if (catalogScenario === 'invalid-signature') {
+        throw { code: 'catalog_signature_invalid', message: 'Assinatura do catálogo remoto inválida; usando o catálogo embutido.' };
+      }
+      if (catalogScenario === 'offline') {
+        throw { code: 'catalog_network', message: 'Não foi possível consultar o catálogo remoto de modelos.' };
+      }
+      if (catalogScenario === 'update' && catalogMock.version === 1) {
+        catalogMock.version = 2;
+        catalogMock.source = 'remote';
+        catalogMock.warning = null;
+        catalogMock.warningCode = null;
+        return { ...catalogMock, previousVersion: 1, updated: true, upToDate: false } as T;
+      }
+      return { ...catalogMock, previousVersion: catalogMock.version, updated: false, upToDate: true } as T;
+    }
+    if (name === 'components.models.manifest') {
+      const revs = catalogMock.version > 1 ? MODEL_REV_V2 : MODEL_REV_V1;
+      const smallInstalled = modelInstalledRevs.get('whisper-small') ?? null;
+      const turboInstalled = modelInstalledRevs.get('whisper-turbo') ?? null;
+      const yunetInstalled = modelInstalledRevs.get('yunet') ?? null;
+      return [
+        { worker_installed: !componentsMissing, id: 'whisper-turbo', label: 'Whisper large-v3-turbo (GPU NVIDIA)', repo: 'dropbox-dash/faster-whisper-large-v3-turbo', revision: revs['whisper-turbo'], license: 'MIT', source_url: `https://huggingface.co/dropbox-dash/faster-whisper-large-v3-turbo/tree/${revs['whisper-turbo']}`, size: 1621666000, installed: turboInstalled !== null, installed_revision: turboInstalled, update_available: turboInstalled !== null && turboInstalled !== revs['whisper-turbo'], recommended: true, catalog_version: catalogMock.version, catalog_source: catalogMock.source },
+        { worker_installed: !componentsMissing, id: 'whisper-small', label: 'Whisper small (CPU)', repo: 'Systran/faster-whisper-small', revision: revs['whisper-small'], license: 'MIT', source_url: `https://huggingface.co/Systran/faster-whisper-small/tree/${revs['whisper-small']}`, size: 486212372, installed: smallInstalled !== null, installed_revision: smallInstalled, update_available: smallInstalled !== null && smallInstalled !== revs['whisper-small'], recommended: false, catalog_version: catalogMock.version, catalog_source: catalogMock.source },
+        { worker_installed: !componentsMissing, id: 'yunet', label: 'YuNet (reenquadramento)', repo: 'opencv/opencv_zoo', revision: revs.yunet, license: 'MIT', source_url: `https://github.com/opencv/opencv_zoo/tree/${revs.yunet}/models/face_detection_yunet`, size: 232589, installed: yunetInstalled !== null, installed_revision: yunetInstalled, update_available: yunetInstalled !== null && yunetInstalled !== revs.yunet, recommended: false, catalog_version: catalogMock.version, catalog_source: catalogMock.source },
+      ] as T;
+    }
+    if (name.startsWith('transcription.hardware.') || name === 'transcription.estimate' || name === 'transcription.grouping') return hardwareMockDispatch(name, args) as T;
+    if (name === 'components.models.download') {
+      const a = args as { id: string; confirmed?: boolean };
+      if (!a.confirmed) throw { code: 'confirmation_required', message: 'Confirme o download antes de iniciar' };
+      const revs = catalogMock.version > 1 ? MODEL_REV_V2 : MODEL_REV_V1;
+      const rev = revs[a.id as keyof typeof revs] ?? MODEL_REV_V1['whisper-small'];
+      modelInstalledRevs.set(a.id, rev);
+      return { id: a.id } as T;
+    }
     if (sourceTest && new URLSearchParams(location.search).has('transcript-test') && name === 'transcription.segment') return {} as T;
     // Preview do Corte simulado (#58): a Fonte 2 está offline; a primeira consulta de um Corte gera (40%), a seguinte já está pronta.
+    if (editorTest && (name.startsWith('editor.') || name.startsWith('audio.') || name.startsWith('captions.') || name.startsWith('reframe.') || name === 'export.captions')) return editorMock(name, args as Record<string, number>) as T;
+    const translated = translationMockDispatch(name, args);
+    if (translated !== undefined) return translated as T;
     if (transcriptTest && name === 'proxy.request') { const a = args as {source_id:number; start_us:number; end_us:number}; if (a.source_id === 2) throw {code:'source_offline', message:'A Fonte está offline: reconecte ou relocalize a Fonte para ver o preview.'}; const key = 'ab'.repeat(32); mockProxyPolls = 0; return {state:'running', key, job:7, progress:40, error:null, windowStartUs:Math.max(0, a.start_us - 120_000_000), windowEndUs:a.end_us + 120_000_000} as T; }
     if (transcriptTest && name === 'proxy.status') { mockProxyPolls += 1; return {state:mockProxyPolls > 1 ? 'ready' : 'running', key:(args as {key:string}).key, job:7, progress:mockProxyPolls > 1 ? 100 : 60, error:null} as T; }
-    if (transcriptTest && name.startsWith('selection.')) return selectionMockDispatch(name, args) as T;
+    if (transcriptTest && (name.startsWith('selection.') || name.startsWith('chat.') || name.startsWith('energy.'))) return selectionMockDispatch(name, args) as T;
     if (transcriptTest && name === 'transcription.timeline') { const {source_id, offset, limit} = args as {source_id:number; offset:number; limit:number}; const total=30001; return {total, items:Array.from({length:Math.min(limit,total-offset)}, (_, n) => { const i=offset+n; if (i===1) return {type:'silence',start_us:1000000,end_us:2000000}; const id=i===0?1:i; const words=mockWords(source_id,id); return {type:'sentence',id,start_us:i*1000000,end_us:(i+1)*1000000,language:'pt',text:words.map(w=>w.text).join(' '),first_position:id*10,last_position:id*10+1,words}; })} as T; }
     if (transcriptTest && name === 'transcription.correct') { const {source_id, position, text} = args as {source_id:number; position:number; text:string}; const value=text.normalize('NFC').trim(); if (!value) throw {code:'invalid_correction',message:'O texto da correção é inválido.'}; const key=source_id+':'+position; const before=mockCorrected.get(key) ?? null; const after=value===mockOriginal(position) ? null : value; if ((after ?? mockOriginal(position)) === (before ?? mockOriginal(position))) return mockStep(source_id, position, false) as T; mockUndone = []; mockDone.push({source:source_id, position, before, after}); mockApply(source_id, position, after); return mockStep(source_id, position, true) as T; }
     if (transcriptTest && (name === 'transcription.undo' || name === 'transcription.redo')) { const undo=name==='transcription.undo'; const entry=undo ? mockDone.pop() : mockUndone.pop(); if (!entry) throw {code:undo?'nothing_to_undo':'nothing_to_redo',message:'Nada a fazer.'}; (undo ? mockUndone : mockDone).push(entry); mockApply(entry.source, entry.position, undo ? entry.before : entry.after); return mockStep(entry.source, entry.position, true) as T; }
     if (transcriptTest && name === 'transcription.corrections') return {can_undo:mockDone.length>0, can_redo:mockUndone.length>0} as T;
     if (transcriptTest && name === 'transcription.search') { const q=mockFold(String((args as {query:string}).query)).trim(); const hits:object[]=[]; const row=(id:number)=>id<=1?0:id; for (const [key,value] of mockCorrected) { const [source,position]=key.split(':').map(Number); const id=Math.floor(position/10); const text=mockWords(source,id).map(w=>w.text).join(' '); if (q && mockFold(value).includes(q)) hits.push({transcript_id:1,source_id:source,source:'changed.mp4',sentence_id:id,start_us:id*1000000,end_us:(id+1)*1000000,row:row(id),snippet:text.split(value).flatMap((part,k,all)=>k<all.length-1?[{text:part,match:false},{text:value,match:true}]:[{text:part,match:false}]).filter(p=>p.text)}); } const m=/^frase\s*(\d+)$/.exec(q); if (m) { const id=Number(m[1]); hits.push({transcript_id:1,source_id:1,source:'changed.mp4',sentence_id:id,start_us:id*1000000,end_us:(id+1)*1000000,row:row(id),snippet:[{text:'Frase '+id,match:true}]}); } return hits as T; }
-    if (sourceTest && new URLSearchParams(location.search).has('transcript-test') && name === 'transcription.status') return {transcript:{id:1,state:'complete',resume_us:36000000000,duration_us:36000000000,words:30000},job:null} as T;
-    if (name === 'transcription.status') return { transcript: transcribeMock.transcript, job: transcribeMock.job } as T;
+    if (sourceTest && new URLSearchParams(location.search).has('transcript-test') && name === 'transcription.status') return {language:'pt',transcript:{id:1,state:'complete',resume_us:36000000000,duration_us:36000000000,words:30000},job:null} as T;
+    if (name === 'transcription.status') { const sid = (args as { source_id?: number }).source_id; const src = sourceItems.find(s => s.id === sid); return { language: src?.language ?? 'pt', transcript: transcribeMock.transcript, job: transcribeMock.job } as T; }
     if (name === 'transcription.start') {
-      const {engine = 'local', replace_confirmed, retry_confirmed} = args as {engine?:string;replace_confirmed?:boolean;retry_confirmed?:boolean};
+      if (componentsMissing) throw { code: 'component_missing', message: 'Instale o Componente FFmpeg.' };
+      const {source_id, language, engine = 'local', replace_confirmed, retry_confirmed} = args as {source_id?:number;language?:string;engine?:string;replace_confirmed?:boolean;retry_confirmed?:boolean};
+      if (language && source_id) sourceItems = sourceItems.map(item => item.id === source_id ? { ...item, language } : item);
       if (engine === 'groq' && groqUncertain && !retry_confirmed) throw {code:'transcription_retry_confirmation',usage:{estimate:{kind:'usd',usd:0.00012}}};
       groqUncertain = false;
       const previous = transcribeMock.transcript as {engine?:string;state?:string} | null;
@@ -383,3 +883,30 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   return invoke<T>('core_dispatch', { name, arguments: args });
 }
 
+
+// Editor simulado (#61): a Frase n ocupa [(n-1)*10 s, n*10 s]; o Corte vale de 20 a 180 s; a janela do proxy é o Corte ±2 min.
+const editorTest = transcriptTest && typeof location !== 'undefined' && new URLSearchParams(location.search).has('editor-test');
+const editorKey = 'ab'.repeat(32);
+function editorMock(name: string, a: Record<string, number>) {
+  const edited = editorEditsMock(name, a);
+  if (edited !== undefined) return edited;
+  const captioned = captionsMock(name, a as Record<string, any>, p => mockCorrected.get('1:' + p) ?? mockOriginal(p));
+  if (captioned !== undefined) return captioned;
+  const fail = (code: string, message: string) => { throw { code, message }; };
+  const range = () => {
+    if (!(a.start_id >= 1 && a.start_id <= 720 && a.end_id >= 1 && a.end_id <= 720)) fail('unknown_sentence_id', 'Frase desconhecida.');
+    if (a.end_id < a.start_id) fail('adjust_empty', 'O Corte precisa manter ao menos uma Frase.');
+    const startUs = (a.start_id - 1) * 10_000_000, endUs = a.end_id * 10_000_000;
+    if (endUs - startUs < 20_000_000) fail('adjust_too_short', 'O Corte ficaria abaixo da duração mínima.');
+    if (endUs - startUs > 180_000_000) fail('adjust_too_long', 'O Corte ficaria acima da duração máxima.');
+    return { startUs, endUs };
+  };
+  if (name === 'editor.range') return { request: a, ...range() };
+  if (name === 'editor.sentences') {
+    const first = Math.max(a.after_id + 1, Math.ceil(a.start_us / 10_000_000) + 1), last = Math.min(Math.floor(a.end_us / 10_000_000), 720);
+    return Array.from({ length: Math.max(0, Math.min(a.limit, last - first + 1)) }, (_, n) => { const id = first + n; return { id, startUs: (id - 1) * 10_000_000, endUs: id * 10_000_000, text: `Frase ${id}` }; });
+  }
+  if (name === 'editor.timeline' || name === 'editor.timeline_status') return { state: 'ready', key: editorKey, job: null, progress: 100, error: null, thumbs: { id: `thumbs/${editorKey}`, count: 150, intervalUs: 2_000_000, width: 96, height: 54, columns: 20 } };
+  if (name === 'editor.wave') return { blockUs: 100_000, values: Array.from({ length: 3000 }, (_, i) => 40 + Math.round(120 * Math.abs(Math.sin(i / 7)))) };
+  throw new Error(`Unknown core command: ${name}`);
+}

@@ -125,3 +125,73 @@ fn planning_ratio_is_point_times_1_2_until_calibrated() {
     let planning = planning_range("p", "m", &request).unwrap();
     assert_eq!(planning, calibrated);
 }
+
+#[test]
+fn overlapping_and_zero_duration_sentences_from_asr_still_plan() {
+    let _guard = ENV.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", dir.path());
+    let schema = json!({"type": "object"});
+    run(
+        "provider.configure",
+        json!({"profileId": "p", "label": "p", "endpoint": "http://127.0.0.1:11434/v1", "kind": "openai", "model": "m", "context": 32768}),
+    )
+    .unwrap();
+    let mut frases = sentences();
+    // Padrão real medido do faster-whisper: uma Frase termina em 391844000 µs e a seguinte
+    // começa 196 ms antes (391648000 µs) após palavra com duração zero / sobreposta.
+    let i = 78;
+    frases[i].start_us = 390_864_000;
+    frases[i].end_us = 391_844_000;
+    frases[i + 1].start_us = 391_648_000;
+    frases[i + 1].end_us = 392_268_000;
+    // Frase inteira com duração zero (4 ocorrências vistas nos bancos reais).
+    frases[109].start_us = 547_764_000;
+    frases[109].end_us = 547_764_000;
+    let plan = plan_for_profile(&request("p", &schema), &frases).unwrap();
+    assert!(!plan.windows.is_empty());
+}
+
+#[test]
+fn groq_catalog_free_tier_limits_split_windows_and_profile_overrides_beat_catalog() {
+    let _guard = ENV.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", dir.path());
+    let schema = json!({"type": "object"});
+    let frases = sentences();
+
+    // Groq free tier: endpoint api.groq.com + openai/gpt-oss-120b (context 131 072, TPM/req 8 000).
+    run(
+        "provider.configure",
+        json!({"profileId": "groq-free", "label": "Groq", "endpoint": "https://api.groq.com/openai/v1", "kind": "openai", "model": "openai/gpt-oss-120b"}),
+    )
+    .unwrap();
+    let mut req = request("groq-free", &schema);
+    req.output_reserve = 2_000;
+    let groq_plan = plan_for_profile(&req, &frases).unwrap();
+    assert_eq!(groq_plan.context.tokens, 131_072);
+    assert_eq!(groq_plan.input_limit_tokens, 4_800);
+    assert_eq!(groq_plan.state, PlanState::Reduced);
+    assert_eq!(groq_plan.min_window_us, 2 * 3 * 60_000_000);
+    assert!(groq_plan.windows.iter().all(|w| w.tokens_high <= 4_800));
+
+    // Profile override wins over the catalog (e.g. paid Groq tier with higher TPM/request limit).
+    run(
+        "provider.configure",
+        json!({"profileId": "groq-free", "label": "Groq", "endpoint": "https://api.groq.com/openai/v1", "kind": "openai", "model": "openai/gpt-oss-120b", "tokensPerRequest": 60_000, "tokensPerMinute": 60_000, "tokensPerDay": 1_000_000}),
+    )
+    .unwrap();
+    let raised = plan_for_profile(&req, &frases).unwrap();
+    assert_eq!(raised.state, PlanState::Full);
+    assert!(raised.windows.len() < groq_plan.windows.len());
+
+    // Clearing profile overrides restores the catalog limits.
+    run(
+        "provider.configure",
+        json!({"profileId": "groq-free", "label": "Groq", "endpoint": "https://api.groq.com/openai/v1", "kind": "openai", "model": "openai/gpt-oss-120b", "tokensPerRequest": null, "tokensPerMinute": null, "tokensPerDay": null}),
+    )
+    .unwrap();
+    let restored = plan_for_profile(&req, &frases).unwrap();
+    assert_eq!(restored.input_limit_tokens, 4_800);
+    assert_eq!(restored.state, PlanState::Reduced);
+}

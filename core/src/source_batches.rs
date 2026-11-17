@@ -224,6 +224,22 @@ fn existing_run(key: &str, source: i64) -> Option<i64> {
     .flatten()
 }
 
+/// Jobs locais pós-Transcrição (`energy` e `chat`) que a seleção congela na largada: o lote
+/// aguarda eles saírem de `queued`/`running` (concluindo ou falhando) antes de `selection.start`.
+fn pending_local_signals(source: i64) -> bool {
+    projects::with_reader(|c| {
+        c.query_row(
+            "SELECT 1 FROM jobs WHERE source_id=?1 AND kind IN ('energy','chat') AND state IN ('queued','running') LIMIT 1",
+            [source],
+            |_| Ok(()),
+        )
+        .optional()
+    })
+    .ok()
+    .flatten()
+    .is_some()
+}
+
 /// Estado de uma execução: o código do primeiro job que falhou e se o Provedor falhou.
 struct RunFacts {
     state: String,
@@ -308,7 +324,7 @@ fn derive(item: &Item) -> Derived {
     }
     if transcript_complete(item.source_id) {
         // Uma Fonte pausada sem execução (a seleção foi recusada) espera o usuário.
-        return if item.state == "paused" {
+        return if item.state == "paused" || pending_local_signals(item.source_id) {
             Derived::Same
         } else {
             Derived::ReadyToSelect
@@ -365,6 +381,12 @@ fn start_item(batch: &Batch, item: &Item, user_confirmed: bool) -> Result<(), Co
         let run = match existing_run(&batch.key, item.source_id) {
             Some(run) => run,
             None => {
+                if pending_local_signals(item.source_id) {
+                    if from == "paused" {
+                        set_item(batch.id, item.position, from, "pending", None, None, None);
+                    }
+                    return Ok(());
+                }
                 let mut args = json!({"source_id": item.source_id, "confirmed": true, "batch": batch.key, "videoKind": batch.video_kind});
                 if let Some(min) = batch.min_us {
                     args["minUs"] = json!(min);
@@ -566,9 +588,36 @@ fn item_json(batch: &Batch, item: &Item) -> Value {
         .ok(),
         _ => None,
     };
+    let reset_at_ms = (item.state == "paused" && item.error.as_deref() == Some("provider_daily_limit"))
+        .then(|| {
+            projects::with_reader(|c| {
+                if let Some(run) = item.run {
+                    c.query_row(
+                        "SELECT json_extract(j.result,'$.resetAtMs') FROM selection_windows w JOIN jobs j ON j.id=w.job_id WHERE w.run_id=?1 AND json_extract(j.result,'$.code')='provider_daily_limit' AND json_extract(j.result,'$.resetAtMs') IS NOT NULL ORDER BY w.idx LIMIT 1",
+                        [run],
+                        |r| r.get::<_, Option<i64>>(0),
+                    )
+                    .optional()
+                } else if let Some(job) = item.job {
+                    c.query_row(
+                        "SELECT json_extract(result,'$.resetAtMs') FROM jobs WHERE id=?1",
+                        [job],
+                        |r| r.get::<_, Option<i64>>(0),
+                    )
+                    .optional()
+                } else {
+                    Ok(None)
+                }
+            })
+            .ok()
+            .flatten()
+            .flatten()
+            .and_then(|v| u64::try_from(v).ok())
+        })
+        .flatten();
     json!({
         "position": item.position, "sourceId": item.source_id, "name": name,
-        "state": item.state, "error": item.error, "transcriptionJob": item.job,
+        "state": item.state, "error": item.error, "resetAtMs": reset_at_ms, "transcriptionJob": item.job,
         "selectionRun": item.run, "progress": progress, "engine": batch.engine,
     })
 }
@@ -665,17 +714,23 @@ fn cmd_create(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                 .ok_or_else(|| error("invalid_budget", "Orçamento inválido."))?,
         ),
     };
-    let range = |name: &str| -> Result<Option<i64>, CoreError> {
+    let defaults = crate::channel_profile::selection_defaults()?;
+    let range = |name: &str, fallback: i64| -> Result<i64, CoreError> {
         match v.get(name) {
-            None | Some(Value::Null) => Ok(None),
+            None | Some(Value::Null) => Ok(fallback),
             Some(n) => n
                 .as_i64()
                 .filter(|n| *n > 0)
-                .map(Some)
                 .ok_or_else(|| error("invalid_batch", "Faixa de Corte inválida.")),
         }
     };
-    let (min_us, max_us) = (range("minUs")?, range("maxUs")?);
+    let (min_us, max_us) = (
+        range("minUs", defaults.min_us)?,
+        range("maxUs", defaults.max_us)?,
+    );
+    if min_us >= max_us {
+        return Err(error("invalid_batch", "Faixa de Corte inválida."));
+    }
     let kind = crate::selection::parse_kind(&v)?;
     let (profile, safety) = crate::selection::route_safety()?;
     if engine == "groq" && projects::project_local_only()? {

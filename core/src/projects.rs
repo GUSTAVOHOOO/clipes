@@ -35,12 +35,8 @@ struct Recent {
     path: PathBuf,
 }
 fn library() -> Result<PathBuf, CoreError> {
-    if let Some(dir) = std::env::var_os("CLIPES_DATA_DIR") {
-        return Ok(PathBuf::from(dir).join("projects.json"));
-    }
-    Ok(dirs::data_local_dir()
-        .ok_or_else(|| error("library", "Diretório de dados indisponível"))?
-        .join("Clipes/projects.json"))
+    crate::paths::data_file("projects.json")
+        .map_err(|_| error("library", "Diretório de dados indisponível"))
 }
 fn read_library(path: &Path) -> Result<Vec<Recent>, CoreError> {
     match fs::read(path) {
@@ -158,7 +154,7 @@ fn open(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .ok()
         .and_then(|v| v["path"].as_str().map(PathBuf::from));
     crate::jobs::stop_worker();
-    let name = match backups::open_session(path.clone()) {
+    let name = match crate::editor::edits::project_change(|| backups::open_session(path.clone())) {
         Ok(name) => name,
         Err(err) => {
             if let Some(previous) = previous {
@@ -240,7 +236,7 @@ fn validate_envelope(doc: &Value) -> Result<(), CoreError> {
     Ok(())
 }
 inventory::submit! { DocumentType { name:"clip", current_version:1, validate:validate_envelope } }
-inventory::submit! { DocumentType { name:"style", current_version:1, validate:validate_envelope } }
+inventory::submit! { DocumentType { name:"style", current_version:1, validate:crate::caption_style::validate_document } }
 inventory::submit! { DocumentType { name:"script", current_version:1, validate:validate_envelope } }
 inventory::submit! { DocumentType { name:"packaging", current_version:1, validate:validate_envelope } }
 fn document(v: Value, _: &mut EventSink<'_>) -> CommandResult {

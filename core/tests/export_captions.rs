@@ -1,4 +1,10 @@
-use clipes_core::export::captions::{ass, escape_text, layout, sanitize, CaptionWord, MIN_WORD_US};
+use clipes_core::export::{
+    captions::{
+        ass, escape_text, font_has_glyph, layout, missing_glyphs, sanitize, CaptionWord,
+        MIN_WORD_US,
+    },
+    render::{FONT_BYTES, SERIF_FONT_BYTES},
+};
 
 fn word(text: &str, start_us: i64, end_us: i64) -> CaptionWord {
     CaptionWord {
@@ -15,6 +21,7 @@ fn the_editor_can_build_the_shared_request_without_knowing_the_destination() {
         start_id: 2,
         end_id: 3,
         candidate_id: None,
+        clip_id: None,
     };
     let json = serde_json::to_value(request).unwrap();
     assert_eq!(
@@ -72,7 +79,54 @@ fn untrusted_text_cannot_inject_ass_tags_linebreaks_or_color_emoji() {
     assert!(!escaped.contains('🎉'));
     assert!(!escaped.contains('❤'));
     assert!(escaped.contains("texto"));
-    assert!(escaped.contains('｛') && escaped.contains('｝') && escaped.contains('＼'));
+    assert!(escaped.contains('(') && escaped.contains(')') && escaped.contains('/'));
+    for font in [FONT_BYTES, SERIF_FONT_BYTES] {
+        for ch in escape_text(r"{a}\b").chars() {
+            assert!(font_has_glyph(font, ch), "missing glyph for {ch:?}");
+        }
+    }
+}
+
+#[test]
+fn latin_greek_and_cyrillic_pass_while_cjk_kana_and_hangul_report_details() {
+    let supported = vec![
+        word("Ação", 0, 200_000),
+        word("Ωμέγα", 200_000, 400_000),
+        word("Привет", 400_000, 600_000),
+        word("Т", 600_000, 800_000),
+        word("😀", 800_000, 900_000),
+        word(r"{a}\b", 900_000, 1_100_000),
+    ];
+    for font in [FONT_BYTES, SERIF_FONT_BYTES] {
+        assert!(missing_glyphs(&supported, font).is_empty());
+    }
+
+    let unsupported = vec![
+        word("来", 100_000, 300_000),
+        word("エ", 400_000, 600_000),
+        word("돼", 700_000, 900_000),
+    ];
+    for font in [FONT_BYTES, SERIF_FONT_BYTES] {
+        let missing = missing_glyphs(&unsupported, font);
+        assert_eq!(missing.len(), 3);
+        assert_eq!(missing[0].position, 0);
+        assert_eq!(missing[0].word, "来");
+        assert_eq!(missing[0].char, "来");
+        assert_eq!(missing[0].codepoint, "U+6765");
+        assert_eq!(missing[0].start_us, 100_000);
+
+        assert_eq!(missing[1].position, 1);
+        assert_eq!(missing[1].word, "エ");
+        assert_eq!(missing[1].char, "エ");
+        assert_eq!(missing[1].codepoint, "U+30A8");
+        assert_eq!(missing[1].start_us, 400_000);
+
+        assert_eq!(missing[2].position, 2);
+        assert_eq!(missing[2].word, "돼");
+        assert_eq!(missing[2].char, "돼");
+        assert_eq!(missing[2].codepoint, "U+B3FC");
+        assert_eq!(missing[2].start_us, 700_000);
+    }
 }
 
 #[test]

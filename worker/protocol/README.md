@@ -11,7 +11,7 @@ Núcleo → worker:
 | `type` | Campos | Efeito |
 | --- | --- | --- |
 | `hello` | `protocol` | Primeira mensagem. O worker responde `handshake`, ou `error` `protocol_mismatch` e encerra. |
-| `request` | `id`, `task`, `params` | Pede uma tarefa (`transcribe`, `vad`, `probe`, `reframe` ou `tts`). O `id` é texto único por pedido. |
+| `request` | `id`, `task`, `params` | Pede uma tarefa (`transcribe`, `align`, `vad`, `probe`, `reframe` ou `tts`). O `id` é texto único por pedido. |
 | `cancel` | `id` | Cancela o pedido `id`, em andamento ou ainda na fila. |
 | `shutdown` | — | O worker libera o modelo e encerra. |
 
@@ -35,11 +35,21 @@ Os pedidos rodam um de cada vez, na ordem de chegada. O `cancel` é lido enquant
 
 Um pedido transcreve **um bloco** de áudio; o núcleo corta o áudio da faixa de microfone escolhida na Fonte (WAV PCM 16 bits, 16 kHz, mono) e mantém o worker vivo entre os blocos.
 
-`params`: `audio` (caminho do WAV do bloco), `final` (`true` no último bloco da Fonte), `batch_size` (1 a 32) e `model` (`id`, `dir` com o diretório local do modelo, `device` `cuda` ou `cpu`, `compute_type` `int8_float16` ou `int8`). Os parâmetros são validados antes de carregar o modelo; o modelo vem sempre de `dir`, nunca do Hub.
+`params`: `audio` (caminho do WAV do bloco), `final` (`true` no último bloco da Fonte), `batch_size` (1 a 32), `group_size` (opcional, 1 a 32; padrão 1), `language` (opcional, código ISO-639-1 da Fonte; quando informado, pula a detecção por trecho e fixa o idioma em todo o bloco) e `model` (`id`, `dir` com o diretório local do modelo, `device` `cuda` ou `cpu`, `compute_type` `int8_float16` ou `int8`). Os parâmetros são validados antes de carregar o modelo; o modelo vem sempre de `dir`, nunca do Hub.
+
+Com `group_size` > 1 (#162), trechos consecutivos de VAD vão juntos, até `group_size` por chamada, com `clip_timestamps` sobre o áudio do bloco inteiro e `batch_size` igual ao grupo; os tempos de palavra saem absolutos no bloco, no mesmo formato. Com `language` fixo (#195), todos os trechos usam o mesmo idioma e os lotes não são quebrados por troca falsa de idioma. Falta de memória (CUDA ou RAM) responde `out_of_memory`, e o núcleo refaz o bloco com a metade do grupo.
 
 `result.data`: `covered_us` (até onde o bloco foi coberto, em µs desde o início do bloco), `words` (`text`, `start_us`, `end_us`, `language`, tempos relativos ao início do bloco) e `silences` (`start_us`, `end_us`). Se a última fala encosta no fim de um bloco que não é o `final`, ela fica de fora e `covered_us` termina onde ela começa: o núcleo começa o bloco seguinte ali, sem cortar palavra. O núcleo grava tudo; o worker só entrega.
 
 Parâmetros do Motor, do benchmark #32: VAD Silero com limiar 0,75 e silêncio mínimo de 200 ms, idioma detectado em cada trecho de VAD, `BatchedInferencePipeline`, beam 5, `word_timestamps=True`, tarefa `transcribe` (nunca traduz) e timestamps de palavra nativos, sem alinhamento (#102). Desvio do benchmark: `max_speech_duration_s=30`, porque o pipeline com `vad_filter=False` levanta `RuntimeError` num trecho de 30 s ou mais.
+
+### Tarefa `align`
+
+Alinha por palavra um WAV de Narração (PCM 16 bits, 16 kHz, mono) contra o texto do Roteiro (#81).
+
+`params`: `audio` (caminho do WAV 16 kHz mono), `text` (texto não vazio do bloco do Roteiro), `language` (código ISO-639-1 obrigatório), `batch_size` (1 a 32, padrão 1) e `model` (como em `transcribe`).
+
+`result.data`: `spoken_words` (`text`, `start_us`, `end_us` obtidos de `transcribe` com `word_timestamps=True`, para o núcleo detectar desvios contra o Roteiro), `script_words` (`text`, `start_us`, `end_us`, `probability` obtidos por alinhamento forçado `find_alignment` em janelas de até 30 s) e `silences` (`start_us`, `end_us`).
 
 ### Tarefa `vad`
 
@@ -70,6 +80,7 @@ O worker mantém no máximo um modelo carregado. Ao trocar de modelo, libera o a
 | `protocol-mismatch.jsonl` | `hello` com protocolo desconhecido (lado do worker). |
 | `vad-block.jsonl` | Fronteiras e silêncios da tarefa `vad`. |
 | `transcribe-block.jsonl` | Dois blocos de `transcribe`: o primeiro deixa a fala final para o segundo (`covered_us` menor que o bloco). |
+| `align-block.jsonl` | Alinhamento de Narração (`align`) devolvendo `spoken_words`, `script_words` e `silences`. |
 
 Para mudar o protocolo, aumente `PROTOCOL_VERSION` nos dois lados, atualize os exemplos e esta página.
 

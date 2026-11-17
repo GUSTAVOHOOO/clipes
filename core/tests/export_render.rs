@@ -23,6 +23,7 @@ fn input(source: &Path, output: &Path) -> RenderInput {
             start_us: 0,
             end_us: 800_000,
         }],
+        crop: Vec::new(),
     }
 }
 fn files(path: &Path) -> Vec<PathBuf> {
@@ -32,29 +33,59 @@ fn files(path: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
+struct FakeFfmpeg {
+    _dir: tempfile::TempDir,
+    bin: PathBuf,
+    conf: PathBuf,
+}
+
+impl FakeFfmpeg {
+    /// Copia o binário falso para um diretório isolado do teste, evitando corrida por variáveis globais.
+    fn new() -> Self {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir
+            .path()
+            .join(format!("fake-export{}", std::env::consts::EXE_SUFFIX));
+        fs::copy(env!("CARGO_BIN_EXE_fake-export"), &bin).unwrap();
+        let conf = dir.path().join("fake-export.conf");
+        fs::write(&conf, "").unwrap();
+        Self {
+            _dir: dir,
+            bin,
+            conf,
+        }
+    }
+
+    fn path(&self) -> &Path {
+        &self.bin
+    }
+
+    fn set(&self, content: &str) {
+        fs::write(&self.conf, content).unwrap();
+    }
+}
+
 #[test]
 fn missing_ass_failures_cancellation_and_existing_destinations_never_leave_partials() {
     let root = tempfile::tempdir().unwrap();
     let source = root.path().join("original.mp4");
     fs::write(&source, b"source").unwrap();
     let output = root.path().join("corte.mp4");
-    let ffmpeg = Path::new(env!("CARGO_BIN_EXE_fake-export"));
+    let ffmpeg = FakeFfmpeg::new();
     let token = CancelToken::new();
-    std::env::set_var("CLIPES_FAKE_NO_ASS", "1");
-    let error = render(ffmpeg, &input(&source, &output), &token, &mut |_| {}).unwrap_err();
+    ffmpeg.set("NO_ASS=1\n");
+    let error = render(ffmpeg.path(), &input(&source, &output), &token, &mut |_| {}).unwrap_err();
     assert_eq!(error.code, "export_ass_missing");
     assert_eq!(files(root.path()), vec![source.clone()]);
-    std::env::remove_var("CLIPES_FAKE_NO_ASS");
-    std::env::set_var("CLIPES_FAKE_EXPORT_FAIL", "1");
+    ffmpeg.set("EXPORT_FAIL=1\n");
     assert_eq!(
-        render(ffmpeg, &input(&source, &output), &token, &mut |_| {})
+        render(ffmpeg.path(), &input(&source, &output), &token, &mut |_| {})
             .unwrap_err()
             .code,
         "export_failed"
     );
     assert_eq!(files(root.path()), vec![source.clone()]);
-    std::env::remove_var("CLIPES_FAKE_EXPORT_FAIL");
-    std::env::set_var("CLIPES_FAKE_EXPORT_STATE", root.path());
+    ffmpeg.set(&format!("EXPORT_STATE={}\n", root.path().to_str().unwrap()));
     let cancel = token.clone();
     let started = root.path().join("started");
     std::thread::scope(|scope| {
@@ -67,19 +98,19 @@ fn missing_ass_failures_cancellation_and_existing_destinations_never_leave_parti
             cancel.cancel();
         });
         assert_eq!(
-            render(ffmpeg, &input(&source, &output), &token, &mut |_| {})
+            render(ffmpeg.path(), &input(&source, &output), &token, &mut |_| {})
                 .unwrap_err()
                 .code,
             "cancelled"
         );
     });
-    std::env::remove_var("CLIPES_FAKE_EXPORT_STATE");
+    ffmpeg.set("");
     fs::remove_file(started).unwrap();
     assert_eq!(files(root.path()), vec![source.clone()]);
     fs::write(&output, b"keep").unwrap();
     assert_eq!(
         render(
-            ffmpeg,
+            ffmpeg.path(),
             &input(&source, &output),
             &CancelToken::new(),
             &mut |_| {}
@@ -89,4 +120,22 @@ fn missing_ass_failures_cancellation_and_existing_destinations_never_leave_parti
         "export_exists"
     );
     assert_eq!(fs::read(output).unwrap(), b"keep");
+}
+
+#[test]
+fn missing_glyph_fails_before_invoking_ffmpeg() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("original.mp4");
+    fs::write(&source, b"source").unwrap();
+    let output = root.path().join("corte.mp4");
+    let ffmpeg = FakeFfmpeg::new();
+    let mut bad = input(&source, &output);
+    bad.words[0].text = "来".into();
+    ffmpeg.set("NO_ASS=1\n");
+    let error = render(ffmpeg.path(), &bad, &CancelToken::new(), &mut |_| {}).unwrap_err();
+    assert_eq!(error.code, "export_glyph_missing");
+    let usage = error.usage.expect("usage details");
+    assert_eq!(usage["missing_glyphs"][0]["word"], "来");
+    assert_eq!(usage["missing_glyphs"][0]["codepoint"], "U+6765");
+    assert_eq!(files(root.path()), vec![source]);
 }

@@ -45,6 +45,14 @@ SHA-256: `c976e4b1b99edc88775377fcc21692ca4bfa46b6d6ca6522bfda505b28ff9d6a`.
 O núcleo inclui os bytes no executável e os entrega ao libass por `fontsdir`;
 nenhuma fonte do sistema é exigida.
 
+`core/assets/fonts/NotoSerif-Bold.ttf`: Noto Serif Bold, Copyright 2018 The Noto
+Project Authors, SIL Open Font License 1.1, texto integral em
+`core/assets/fonts/NotoSerif-LICENSE.txt`. Origem: [notofonts/noto-fonts,
+revisão ffebf8c1ee449e544955a7e813c54f9b73848eac](https://github.com/notofonts/noto-fonts/tree/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSerif).
+SHA-256: `3b2086a869bcded2aeb4416fc281ceec9d6ce3c06756cda19f8f763636204e7d`.
+O preview importa esses mesmos arquivos TTF; o export usa os bytes incorporados
+em `fontsdir`. Não há CDN nem seleção de fontes do sistema.
+
 ## Quadros de demonstração
 
 Tears of Steel, © Blender Foundation, 2012. Filme original: [mango.blender.org](https://mango.blender.org/). Licença [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/). Os arquivos em `design-system/src/data/img/` são quadros reduzidos e recortados do filme, usados apenas na demonstração do editor; o áudio e as falas derivam do mesmo filme.
@@ -60,7 +68,15 @@ Os dois foram convertidos para WAV PCM 16 bits, mono, 16 kHz.
 
 ## Componentes sob demanda
 
-O catálogo apresenta FFmpeg, Whisper e Kokoro como exemplos de interface. Nenhum executável ou peso desses projetos é distribuído neste repositório. As licenças e fontes de cada build/modelo devem acompanhar o download real no app desktop, conforme ADR-0003.
+O catálogo apresenta FFmpeg, Whisper e Pocket TTS como Componentes sob demanda. Nenhum executável ou peso desses projetos é distribuído neste repositório. As licenças e fontes de cada build/modelo acompanham o download no app desktop, conforme ADR-0003.
+
+O app desktop baixa, só com confirmação, o **Pocket TTS** 3.3.0 (release `v4.0.1`, Componente executável da Kyutai) para síntese local da Narração: código sob licença **MIT** em [github.com/kyutai-labs/pocket-tts](https://github.com/kyutai-labs/pocket-tts/tree/v4.0.1), pesos dos modelos (`portuguese_24l`, `portuguese` 6L e `english`) sob licença **CC-BY-4.0** no mirror sem gate [`kyutai/pocket-tts-without-voice-cloning`](https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/tree/a7056f505a4a8ca72d8b5fb1440071d6f1a35739) (revisão `a7056f505a4a8ca72d8b5fb1440071d6f1a35739`), sujeitos ao termo de uso proibido exibido na tela de Componentes antes do download. Atribuição das vozes pré-computadas:
+
+- **Voz PT-BR 13063:** derivada do dataset **BRSpeech-TTS** ([`freds0/BRSpeech-TTS`](https://huggingface.co/datasets/freds0/BRSpeech-TTS), CEIA/UFG, **CC-BY-4.0**) e **CML-TTS** ([`ylacombe/cml-tts`](https://huggingface.co/datasets/ylacombe/cml-tts), OpenSLR 146, **CC-BY-4.0**), a partir de leitura voluntária do LibriVox em domínio público.
+- **Voz EN `alba`:** Alba MacKenna ([`kyutai/tts-voices/alba-mackenna/casual.wav`](https://huggingface.co/kyutai/tts-voices/blob/323332d33f997de8394f24a193e1a76df720e01a/README.md), revisão `323332d33f997de8394f24a193e1a76df720e01a`), licença **CC-BY-4.0**.
+- **Voz EN `marius`:** Unmute Voice Donation Project ([`kyutai/tts-voices/voice-donations/Selfie.wav`](https://huggingface.co/kyutai/tts-voices/blob/323332d33f997de8394f24a193e1a76df720e01a/README.md), revisão `323332d33f997de8394f24a193e1a76df720e01a`), licença **CC0-1.0**.
+
+O app desktop baixa, só com confirmação, o **deno** 2.9.8 (Componente), usado pelo yt-dlp como ambiente JavaScript para resolver os desafios do YouTube: licença MIT, código em [github.com/denoland/deno](https://github.com/denoland/deno/tree/v2.9.8), executável dos .zip oficiais da release com SHA-256 fixo por plataforma. Nenhum executável do deno é distribuído neste repositório.
 
 O app desktop também baixa, ao instalar o worker de ML:
 
