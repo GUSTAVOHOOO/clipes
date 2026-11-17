@@ -38,7 +38,7 @@ Soma prefixada de caracteres e busca binária: uma live de 11 h (dezenas de milh
 
 A mensagem é fixa e traz o contexto efetivo, a origem (usuário, carregado, servidor, catálogo, padrão, medido) e as saídas: aumentar o contexto no Perfil de Provedor ou escolher outro perfil. Não oferece forçar nem trocar sozinho.
 
-Outros erros tipados: `max_cut_too_long` (Corte acima de `MAX_CUT_US`; o teto não cresce por configuração) e `invalid_selection_plan` (Frases fora de ordem, razão ou Corte inválidos).
+Outros erros tipados: `max_cut_too_long` (Corte acima de `MAX_CUT_US`; o teto não cresce por configuração) e `invalid_selection_plan` (tempos negativos ou invertidos, IDs de Frase fora de ordem, razão ou Corte inválidos; a mensagem detalha o que corrigir). Sobreposições pequenas e duração zero oriundas do ASR são normalizadas pela regra única `sentences::normalize_spans` (na gravação da Transcrição, na migração `0233_001_normalize_transcript_timestamps` e na entrada do planejador quando recebidas diretamente).
 
 Testes: unitários em `core/src/selection_windows/tests.rs` (4096, 8192, 16384, 32768 e 1 M; lives de 1, 4 e 11 h; raciocínio; durações de Corte; silêncio; Fonte curta) e `core/tests/selection_windows.rs` (wrapper com perfis, origem e limiar de preço, sem rede).
 
