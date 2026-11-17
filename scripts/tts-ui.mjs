@@ -57,6 +57,11 @@ export async function testTtsNarrationLocked(kindReview) {
     true,
     'trava a Narração até aprovar todos os blocos do Roteiro',
   );
+  assert.equal(
+    await narration.getByRole('button', { name: 'Importar áudio', exact: true }).first().isDisabled(),
+    true,
+    'trava a importação de áudio até aprovar todos os blocos do Roteiro',
+  );
 }
 
 export async function testTtsNarrationUnlocked(page, kindReview) {
@@ -73,6 +78,19 @@ export async function testTtsNarrationUnlocked(page, kindReview) {
   assert.equal(await narration.locator('[data-narration-align-status="aligned"]').count(), 3);
   await narration.getByRole('button', { name: 'Realinhar Narração', exact: true }).click();
   assert.equal(await narration.locator('[data-narration-align-status="aligned"]').count(), 3);
+
+  // Importação de áudio externo por bloco (#84): exige confirmação quando já há áudio e substitui mantendo alinhamento.
+  const firstBlock = narration.locator('[data-narration-block]').first();
+  await firstBlock.getByRole('button', { name: 'Importar áudio', exact: true }).click();
+  const replaceDialog = page.getByRole('alertdialog', { name: 'Substituir áudio do bloco?' });
+  await replaceDialog.waitFor();
+  assert.match(await replaceDialog.innerText(), /Narração por TTS/);
+  await replaceDialog.getByRole('button', { name: 'Escolher arquivo', exact: true }).click();
+  await replaceDialog.waitFor({ state: 'hidden' });
+  await firstBlock.locator('[data-narration-source="imported"]').waitFor();
+  assert.match(await firstBlock.innerText(), /Áudio importado/);
+  assert.match(await narration.locator('[data-narration-total]').innerText(), /9\.20 s/);
+  assert.equal(await firstBlock.locator('[data-narration-align-status="aligned"]').count(), 1);
 
   await narration.screenshot({ path: 'shots/narration-pt-BR.png' });
 }
