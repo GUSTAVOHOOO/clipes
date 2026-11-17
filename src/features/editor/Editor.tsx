@@ -8,6 +8,7 @@ import { useComandos } from '@/lib/comandos';
 import { Button } from '@/components/ui/Button';
 import { Kbd } from '@/components/ui/Kbd';
 import { ExportButton } from '@/features/export/ExportButton';
+import { GuardrailsChecklist } from '@/features/guardrails/GuardrailsPanel';
 import { CabecalhoGaveta, GavetaBorda, Puxador, ZonaBorda, useGaveta } from '@/components/shell/Gaveta';
 import { CutPreview, previewSeekEvent, type PreviewProxyInfo, type PreviewSeekEvent } from '@/features/projects/CutPreview';
 import { clock, fill } from '@/features/projects/selectionFormat';
@@ -433,6 +434,17 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
           <li className="flex items-center gap-1.5"><Kbd teclas={['↑', '↓']} /> {t.hintSentence}</li>
           <li className="flex items-center gap-1.5"><Kbd teclas={['[', ']']} /> {t.hintDrawers}</li>
         </ul>}
+        {opened && (
+          <GuardrailsChecklist
+            scope="single"
+            sourceId={request.source_id}
+            candidateId={request.candidate_id}
+            clipId={opened.clipId}
+            startId={startId}
+            endId={endId}
+            refreshKey={`${startId}-${endId}-${silencesView.removedUs}`}
+          />
+        )}
       </div>
       </div>
 

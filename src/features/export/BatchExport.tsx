@@ -4,6 +4,12 @@ import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import {
+  ackDirectMonetizationNotice,
+  checkGuardrails,
+  DirectMonetizationDialog,
+  GuardrailsChecklist,
+} from '@/features/guardrails/GuardrailsPanel';
 import { coreDispatch } from '@/lib/core';
 import { useText } from '@/lib/i18n';
 
@@ -150,6 +156,7 @@ export function BatchExport(props: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [pending, setPending] = useState<ConflictPending | null>(null);
+  const [directNoticeOpen, setDirectNoticeOpen] = useState(false);
   const focus = useRef<HTMLButtonElement>(null);
   const alive = useRef(true);
   useEffect(() => {
@@ -225,6 +232,20 @@ export function BatchExport(props: Props) {
     }
   }
 
+  async function requestBatchExport() {
+    const guardrails = await checkGuardrails(
+      props.scope === 'source'
+        ? { scope: 'source', source_id: props.sourceId }
+        : { scope: 'project' },
+    );
+    if (!alive.current) return;
+    if (guardrails?.needsDirectNotice) {
+      setDirectNoticeOpen(true);
+      return;
+    }
+    await pickAndStart();
+  }
+
   async function cancelBatch(id: number) {
     setBusy(true);
     setError('');
@@ -240,8 +261,13 @@ export function BatchExport(props: Props) {
 
   const content = (
     <div className="flex flex-col gap-3" data-export-batch={props.scope}>
+      <GuardrailsChecklist
+        scope={props.scope}
+        sourceId={props.scope === 'source' ? props.sourceId : undefined}
+        refreshKey={batches.length}
+      />
       <div className="flex flex-wrap items-center gap-3">
-        <Button ref={focus} tamanho={props.scope === 'source' ? 'sm' : 'md'} disabled={busy} carregando={busy} onClick={() => void pickAndStart()}>
+        <Button ref={focus} tamanho={props.scope === 'source' ? 'sm' : 'md'} disabled={busy} carregando={busy} onClick={() => void requestBatchExport()}>
           {t.exportApproved}
         </Button>
       </div>
@@ -314,6 +340,17 @@ export function BatchExport(props: Props) {
           </ul>
         )}
       </ConfirmDialog>
+      <DirectMonetizationDialog
+        open={directNoticeOpen}
+        onOpenChange={setDirectNoticeOpen}
+        finalFocus={focus}
+        onConfirm={() => {
+          setDirectNoticeOpen(false);
+          void ackDirectMonetizationNotice().then(() => {
+            if (alive.current) void pickAndStart();
+          });
+        }}
+      />
     </div>
   );
 

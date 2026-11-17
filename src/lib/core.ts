@@ -60,6 +60,7 @@ let channelProfileMock = {
   maxUs: 60_000_000,
   allowedSources: [] as { label: string; url?: string | null; note?: string | null }[],
   narrationVoice: null as string | null,
+  directMonetizationAck: false,
 };
 const channelProfileView = () => ({
   ...channelProfileMock,
@@ -260,9 +261,67 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         maxUs,
         allowedSources: a.allowedSources ?? channelProfileMock.allowedSources,
         narrationVoice: null,
+        directMonetizationAck: channelProfileMock.directMonetizationAck,
       };
       if (a.captionStyle) setDefaultCaptionStyleMock(a.captionStyle);
       return channelProfileView() as T;
+    }
+    if (name === 'guardrails.ack_direct_notice') {
+      channelProfileMock = { ...channelProfileMock, directMonetizationAck: true };
+      return { directMonetizationAck: true } as T;
+    }
+    if (name === 'guardrails.check') {
+      const a = args as { scope?: string; source_id?: number; candidate_id?: number; start_id?: number; end_id?: number };
+      const scope = a.scope ?? 'single';
+      const ack = channelProfileMock.directMonetizationAck;
+      const videoKind = selectionMock.run?.videoKind ?? channelProfileMock.videoKind;
+      const hasDirect = videoKind === 'direct';
+      const hasTransformed = videoKind === 'transformed';
+      if (scope === 'single') {
+        const src = sourceItems.find(s => s.id === (a.source_id ?? 1)) ?? sourceItems[0];
+        const granted = src?.permission?.status === 'granted';
+        const permObj = src?.permission as { who?: string; where?: string; scope?: string } | undefined;
+        let durationUs = 50_000_000;
+        if (typeof a.start_id === 'number' && typeof a.end_id === 'number' && a.end_id >= a.start_id) {
+          durationUs = (a.end_id - a.start_id + 1) * 10_000_000;
+        } else if (typeof a.candidate_id === 'number') {
+          const r = reviewMock.items.get(a.candidate_id);
+          if (r) durationUs = (r.end - r.start + 1) * 10_000_000;
+        }
+        const over60s = durationUs > 60_000_000;
+        const scriptView = hasTransformed ? (scriptMockDispatch('script.get', { candidate: a.candidate_id ?? 1 }) as { current?: { blocks?: unknown[]; pending?: number } | null; narrationAllowed?: boolean }) : null;
+        return {
+          scope: 'single',
+          directMonetizationAck: ack,
+          needsDirectNotice: !ack && hasDirect,
+          videoKind,
+          hasDirect,
+          hasTransformed,
+          totalCuts: 1,
+          durationUs,
+          over60s,
+          over60sCount: over60s ? 1 : 0,
+          shortClaimLimitUs: 60_000_000,
+          permission: { status: granted ? 'granted' : 'none', grantedCount: granted ? 1 : 0, missingCount: granted ? 0 : 1, totalCount: 1, who: permObj?.who ?? null, where: permObj?.where ?? null, scope: permObj?.scope ?? null },
+          script: hasTransformed ? { applicable: true, exists: !!scriptView?.current, approved: !!scriptView?.narrationAllowed, pendingBlocks: scriptView?.current?.pending ?? 0, totalBlocks: scriptView?.current?.blocks?.length ?? 0 } : { applicable: false },
+        } as T;
+      }
+      const totalCuts = selectionFlag('export-batch-empty') || (scope === 'source' && !selectionMock.run) ? 0 : 2;
+      return {
+        scope,
+        directMonetizationAck: ack,
+        needsDirectNotice: !ack && totalCuts > 0 && hasDirect,
+        videoKind,
+        hasDirect: totalCuts > 0 && hasDirect,
+        hasTransformed: totalCuts > 0 && hasTransformed,
+        totalCuts,
+        durationUs: totalCuts > 0 ? 50_000_000 : 0,
+        over60s: false,
+        over60sCount: 0,
+        shortClaimLimitUs: 60_000_000,
+        permission: { status: 'none', grantedCount: 0, missingCount: totalCuts, totalCount: totalCuts },
+        script: hasTransformed && totalCuts > 0 ? { applicable: true, transformedCount: totalCuts, approvedCount: 0, unapprovedCount: totalCuts } : { applicable: false },
+      } as T;
     }
     if (sourceTest && new URLSearchParams(location.search).has('batch-test')) { const handled = batchMockDispatch(name, args); if (handled !== undefined) return handled as T; }
     if (name.startsWith('thumbnail.')) { const handled = thumbnailMockDispatch(name, args); if (handled !== undefined) return handled as T; }

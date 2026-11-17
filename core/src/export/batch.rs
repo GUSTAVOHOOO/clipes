@@ -39,16 +39,16 @@ CREATE TABLE export_batch_items (
 
 const MAX_STEM_CHARS: usize = 60;
 
-struct PlannedCut {
-    source_id: i64,
+pub(crate) struct PlannedCut {
+    pub(crate) source_id: i64,
     source_path: String,
-    run_id: i64,
-    candidate_id: i64,
-    clip_id: Option<i64>,
+    pub(crate) run_id: i64,
+    pub(crate) candidate_id: i64,
+    pub(crate) clip_id: Option<i64>,
     start_id: i64,
     end_id: i64,
     start_us: i64,
-    duration_us: i64,
+    pub(crate) duration_us: i64,
     title: String,
     initial_error: Option<CoreError>,
 }
@@ -196,7 +196,7 @@ pub(crate) fn weighted_progress(items: &[(i64, &str, u8)]) -> u8 {
     (done / total).clamp(0, 100) as u8
 }
 
-fn collect_cuts(scope_source: Option<i64>) -> Result<Vec<PlannedCut>, CoreError> {
+pub(crate) fn collect_cuts(scope_source: Option<i64>) -> Result<Vec<PlannedCut>, CoreError> {
     let sources: Vec<(i64, String)> = projects::with_reader(|c| {
         if let Some(sid) = scope_source {
             let found = c
