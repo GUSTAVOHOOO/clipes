@@ -48,12 +48,14 @@ inventory::collect!(DiagnosticField);
 pub enum DiagnosticEvent {
     ComponentFailure,
     InvalidEstimateHint,
+    CatalogVerificationFailed,
 }
 impl DiagnosticEvent {
     fn code(self) -> &'static str {
         match self {
             Self::ComponentFailure => "component_failure",
             Self::InvalidEstimateHint => "invalid_estimate_hint",
+            Self::CatalogVerificationFailed => "catalog_verification_failed",
         }
     }
 }
@@ -81,6 +83,9 @@ fn log_lines(path: &Path) -> Vec<&'static str> {
             let message = match line.as_str() {
                 "component_failure" => Some("Erro: falha em componente"),
                 "invalid_estimate_hint" => Some("Metadados de estimativa inválidos"),
+                "catalog_verification_failed" => {
+                    Some("Aviso: falha na verificação do catálogo remoto de modelos")
+                }
                 _ => None,
             };
             if let Some(message) = message {

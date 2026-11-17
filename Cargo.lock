@@ -783,6 +783,7 @@ version = "0.1.0"
 dependencies = [
  "directories",
  "dirs 6.0.0",
+ "ed25519-dalek",
  "flate2",
  "httpdate",
  "inventory",

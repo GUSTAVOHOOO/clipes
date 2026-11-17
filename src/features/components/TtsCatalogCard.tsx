@@ -25,6 +25,8 @@ export type TtsModel = {
   lightweight: boolean;
   active: boolean;
   installed: boolean;
+  installedRevision?: string | null;
+  updateAvailable?: boolean;
   termsAccepted: boolean;
   repo: string;
   revision: string;
@@ -63,17 +65,23 @@ const texts = {
     intro: 'Modelos locais baixados sem login nem token do Hugging Face, com revisão e SHA-256 fixados.',
     installed: 'Instalado',
     missing: 'Não instalado',
+    updateAvailable: 'atualização disponível',
+    outdatedNotice: 'Há uma revisão mais nova deste modelo no catálogo.',
     active: 'Em uso como padrão',
     setActive: 'Usar como padrão',
     download: 'Baixar modelo TTS',
+    update: 'Atualizar modelo TTS',
     reinstall: 'Baixar de novo',
     cancel: 'Cancelar',
     progress: 'Progresso do download do modelo TTS',
     done: 'Modelo TTS instalado.',
+    updated: 'Modelo TTS atualizado.',
     source: 'Fonte e licença do modelo',
     voicesTitle: 'Vozes incluídas (uso comercial permitido)',
     confirmTitle: 'Baixar modelo TTS?',
+    confirmUpdateTitle: 'Atualizar modelo TTS?',
     confirmDescription: '{label}: o download tem {size} e inclui os embeddings de voz prontos.',
+    confirmUpdateDescription: '{label}: a atualização tem {size} e substituirá o modelo instalado após conferir o SHA-256.',
     details: 'Detalhes e licenças',
     codeLicense: 'Licença do motor',
     weightsLicense: 'Licença dos pesos',
@@ -84,23 +92,30 @@ const texts = {
     acceptTerms: 'Li e aceito o termo de uso proibido do modelo',
     cancelDialog: 'Cancelar',
     confirm: 'Baixar modelo',
+    confirmUpdate: 'Atualizar modelo',
   },
   en: {
     title: 'Narration TTS models and voices',
     intro: 'Local models downloaded without Hugging Face login or token, with pinned revision and SHA-256.',
     installed: 'Installed',
     missing: 'Not installed',
+    updateAvailable: 'update available',
+    outdatedNotice: 'There is a newer revision of this model in the catalog.',
     active: 'Active default',
     setActive: 'Use as default',
     download: 'Download TTS model',
+    update: 'Update TTS model',
     reinstall: 'Download again',
     cancel: 'Cancel',
     progress: 'TTS model download progress',
     done: 'TTS model installed.',
+    updated: 'TTS model updated.',
     source: 'Model source and license',
     voicesTitle: 'Included voices (commercial use permitted)',
     confirmTitle: 'Download TTS model?',
+    confirmUpdateTitle: 'Update TTS model?',
     confirmDescription: '{label}: the download is {size} and includes ready-to-use voice embeddings.',
+    confirmUpdateDescription: '{label}: the update is {size} and will replace the installed model after checking SHA-256.',
     details: 'Details and licenses',
     codeLicense: 'Engine license',
     weightsLicense: 'Weights license',
@@ -111,6 +126,7 @@ const texts = {
     acceptTerms: 'I have read and accept the model prohibited-use terms',
     cancelDialog: 'Cancel',
     confirm: 'Download model',
+    confirmUpdate: 'Update model',
   },
 } as const;
 
@@ -152,13 +168,14 @@ export function TtsCatalogCard({ refreshKey }: { refreshKey?: number }) {
   }, []);
 
   async function download(model: TtsModel) {
+    const updating = model.installed && !!model.updateAvailable;
     setConfirming(null);
     setBusy(model.id);
     setProgress(0);
     setNote('');
     try {
       await coreDispatch('tts.models.download', { id: model.id, confirmed: true, termsAccepted: true });
-      setNote(t.done);
+      setNote(updating ? t.updated : t.done);
     } catch (e) {
       setNote(message(e));
     } finally {
@@ -189,15 +206,17 @@ export function TtsCatalogCard({ refreshKey }: { refreshKey?: number }) {
         {catalog.models.map(model => {
           const engine = catalog.engines.find(e => e.id === model.engineId);
           const voices = catalog.voices.filter(v => v.models.includes(model.id));
+          const updating = model.installed && !!model.updateAvailable;
           return (
             <article key={model.id} className="rounded-md border border-line p-4" aria-label={model.label} data-tts-model={model.id}>
               <h3 className="font-semibold">
                 {model.label}{' '}
                 <span className="font-normal text-fg-2">
-                  {model.installed ? t.installed : t.missing}
+                  {model.installed ? (updating ? `${t.installed} · ${t.updateAvailable}` : t.installed) : t.missing}
                   {model.active ? ` · ${t.active}` : ''}
                 </span>
               </h3>
+              {updating && <p className="mt-1 text-sm text-fg-2">{t.outdatedNotice}</p>}
               <p className="mt-1 text-sm text-fg-2">{model.description}</p>
               <p className="mt-2 text-sm">
                 {formatSize(model.size)} · {engine?.label ?? model.engineId} ({engine?.codeLicense ?? 'MIT'}) · {model.license} ·{' '}
@@ -223,7 +242,7 @@ export function TtsCatalogCard({ refreshKey }: { refreshKey?: number }) {
                     setConfirming(model);
                   }}
                 >
-                  {model.installed ? t.reinstall : t.download}
+                  {updating ? t.update : model.installed ? t.reinstall : t.download}
                 </Button>
                 {!model.active && (
                   <Button disabled={!!busy} onClick={() => void chooseActive(model)}>
@@ -245,10 +264,10 @@ export function TtsCatalogCard({ refreshKey }: { refreshKey?: number }) {
       <ConfirmDialog
         open={confirming !== null}
         onOpenChange={open => { if (!open) setConfirming(null); }}
-        title={t.confirmTitle}
-        description={confirming ? t.confirmDescription.replace('{size}', formatSize(confirming.size)).replace('{label}', confirming.label) : ''}
+        title={confirming?.installed && confirming?.updateAvailable ? t.confirmUpdateTitle : t.confirmTitle}
+        description={confirming ? (confirming.installed && confirming.updateAvailable ? t.confirmUpdateDescription : t.confirmDescription).replace('{size}', formatSize(confirming.size)).replace('{label}', confirming.label) : ''}
         cancelLabel={t.cancelDialog}
-        confirmLabel={t.confirm}
+        confirmLabel={confirming?.installed && confirming?.updateAvailable ? t.confirmUpdate : t.confirm}
         confirmDisabled={!accepted}
         finalFocus={focus}
         onConfirm={() => { if (confirming && accepted) void download(confirming); }}

@@ -18,7 +18,7 @@
 //! Resultado, escolha manual e taxas medidas ficam em `transcription-hardware.json` nos
 //! dados do app (`CLIPES_DATA_DIR`), nunca no Projeto.
 
-use super::models::{ModelSpec, SMALL, TURBO};
+use super::models::{find_model, small_spec, turbo_spec, ModelSpec, SMALL_ID, TURBO_ID};
 use super::*;
 use crate::worker::WorkerEvent;
 use std::time::{Duration, Instant, SystemTime};
@@ -160,20 +160,18 @@ pub(crate) struct Config {
 }
 
 impl Config {
-    fn new(spec: &ModelSpec, device: &str, compute_type: &str) -> Config {
+    fn new(model_id: &str, device: &str, compute_type: &str) -> Config {
         Config {
-            model: spec.id.into(),
+            model: model_id.into(),
             device: device.into(),
             compute_type: compute_type.into(),
         }
     }
-    pub(crate) fn spec(&self) -> Option<&'static ModelSpec> {
-        super::models::MODELS
-            .into_iter()
-            .find(|m| m.id == self.model)
+    pub(crate) fn spec(&self, settings: &Settings) -> Option<ModelSpec> {
+        find_model(settings, &self.model)
     }
     pub(crate) fn is_turbo_cpu(&self) -> bool {
-        self.model == TURBO.id && self.device == "cpu"
+        self.model == TURBO_ID && self.device == "cpu"
     }
     /// O Motor local usa lote 1 na GPU e até 8 em CPU, como no benchmark #32.
     pub(crate) fn batch_size(&self) -> u32 {
@@ -258,9 +256,9 @@ pub(crate) fn record_batch_oom(config: &Config, failed: u32, safe: u32) {
 /// A configuração de fábrica: turbo `int8_float16` com o worker CUDA, `small` INT8 em CPU.
 fn default_config(settings: &Settings) -> Config {
     if super::worker::cuda_installed(settings) {
-        Config::new(&TURBO, "cuda", "int8_float16")
+        Config::new(TURBO_ID, "cuda", "int8_float16")
     } else {
-        Config::new(&SMALL, "cpu", "int8")
+        Config::new(SMALL_ID, "cpu", "int8")
     }
 }
 
@@ -278,19 +276,21 @@ pub(crate) fn candidates(settings: &Settings, ram: Option<Ram>) -> Vec<Candidate
     let mut all = Vec::new();
     for precision in GPU_PRECISIONS {
         all.push((
-            Config::new(&TURBO, "cuda", precision),
+            Config::new(TURBO_ID, "cuda", precision),
             (!cuda).then_some("no_cuda"),
         ));
     }
     all.push((
-        Config::new(&TURBO, "cpu", "int8"),
+        Config::new(TURBO_ID, "cpu", "int8"),
         ram.filter(|r| r.total < TURBO_CPU_MIN_TOTAL_RAM)
             .map(|_| "ram_insufficient"),
     ));
-    all.push((Config::new(&SMALL, "cpu", "int8"), None));
+    all.push((Config::new(SMALL_ID, "cpu", "int8"), None));
     all.into_iter()
         .map(|(config, reason)| Candidate {
-            installed: config.spec().is_some_and(|s| s.installed(settings)),
+            installed: config
+                .spec(settings)
+                .is_some_and(|s| s.is_installed_on_disk(settings)),
             enabled: reason.is_none(),
             reason,
             config,
@@ -566,13 +566,15 @@ pub(crate) struct Context {
     settings: Settings,
     pub config: Config,
     pub gpu: Option<Gpu>,
-    pub spec: &'static ModelSpec,
+    pub spec: ModelSpec,
 }
 
 pub(crate) fn context() -> Result<Context, CoreError> {
     let settings = load_settings()?;
     let config = effective(&settings);
-    let spec = config.spec().unwrap_or(&SMALL);
+    let spec = config
+        .spec(&settings)
+        .unwrap_or_else(|| small_spec(&settings));
     Ok(Context {
         gpu: detect_gpu(),
         spec,
@@ -583,11 +585,11 @@ pub(crate) fn context() -> Result<Context, CoreError> {
 
 impl Context {
     pub(crate) fn model_ready(&self) -> bool {
-        self.spec.installed(&self.settings)
+        self.spec.is_installed_on_disk(&self.settings)
     }
     pub(crate) fn model_params(&self) -> Value {
         model_params(
-            self.spec,
+            &self.spec,
             &self.settings,
             &self.config.device,
             &self.config.compute_type,
@@ -671,10 +673,12 @@ fn run_chain(
     let mut attempts = Vec::new();
     let mut chosen: Option<(Config, bool)> = None;
     let mut batch = None;
-    let mut model = SMALL.id;
+    let turbo = turbo_spec(settings);
+    let small = small_spec(settings);
+    let mut model = SMALL_ID;
     if use_gpu {
-        model = TURBO.id;
-        if !TURBO.installed(settings) {
+        model = TURBO_ID;
+        if !turbo.is_installed_on_disk(settings) {
             return Err(error(
                 "model_missing",
                 "O modelo de transcrição não está instalado; baixe-o em Componentes.",
@@ -690,11 +694,11 @@ fn run_chain(
                 (10 + index as u8 * 80 / total).min(90),
                 &format!("Testando {precision} na GPU"),
             );
-            let attempt = clip_attempt(&TURBO, settings, "cuda", precision, 1, cancel)?;
+            let attempt = clip_attempt(&turbo, settings, "cuda", precision, 1, cancel)?;
             let ok = attempt.ok;
             attempts.push(attempt);
             if ok {
-                chosen = Some((Config::new(&TURBO, "cuda", precision), true));
+                chosen = Some((Config::new(TURBO_ID, "cuda", precision), true));
                 break;
             }
         }
@@ -704,7 +708,7 @@ fn run_chain(
             for size in BATCH_LADDER {
                 step(events, 70, &format!("Medindo o lote seguro ({size})"));
                 let attempt =
-                    clip_attempt(&TURBO, settings, "cuda", &config.compute_type, size, cancel)?;
+                    clip_attempt(&turbo, settings, "cuda", &config.compute_type, size, cancel)?;
                 let ok = attempt.ok;
                 attempts.push(attempt);
                 tested.push((size, ok));
@@ -723,11 +727,11 @@ fn run_chain(
         }
     }
     if chosen.is_none() {
-        model = SMALL.id;
-        let config = Config::new(&SMALL, "cpu", "int8");
-        if SMALL.installed(settings) {
+        model = SMALL_ID;
+        let config = Config::new(SMALL_ID, "cpu", "int8");
+        if small.is_installed_on_disk(settings) {
             step(events, 80, "Testando a CPU");
-            let attempt = clip_attempt(&SMALL, settings, "cpu", "int8", 1, cancel)?;
+            let attempt = clip_attempt(&small, settings, "cpu", "int8", 1, cancel)?;
             let ok = attempt.ok;
             attempts.push(attempt);
             chosen = Some((config, ok));
@@ -950,7 +954,7 @@ mod tests {
 
     #[test]
     fn real_batch_is_one_on_gpu_and_up_to_eight_on_cpu() {
-        assert_eq!(Config::new(&TURBO, "cuda", "int8").batch_size(), 1);
-        assert_eq!(Config::new(&SMALL, "cpu", "int8").batch_size(), 8);
+        assert_eq!(Config::new(TURBO_ID, "cuda", "int8").batch_size(), 1);
+        assert_eq!(Config::new(SMALL_ID, "cpu", "int8").batch_size(), 8);
     }
 }

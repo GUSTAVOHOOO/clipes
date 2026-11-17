@@ -803,8 +803,8 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     };
     let (model, revision, compute) = if let Some(selection) = &selection {
         (
-            selection.spec.id,
-            selection.spec.revision,
+            selection.spec.id.as_str(),
+            selection.spec.revision.as_str(),
             selection.config.compute_type.as_str(),
         )
     } else {
