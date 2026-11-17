@@ -3,6 +3,7 @@
 //! `project_change`, que impede autosave tardio em outro Projeto.
 use super::silences::{self, SilenceConfig, SilenceStatus, SpliceMap, DEFAULT_MIN_SILENCE_US};
 use super::*;
+use crate::montage;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -39,6 +40,8 @@ pub(crate) struct EditSnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crop_edits: Option<Vec<crop::CropKeyframe>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub narration_starts: Option<BTreeMap<i64, i64>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crop_layout: Option<crop::CropLayout>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crop_split_ratio: Option<f64>,
@@ -62,6 +65,8 @@ impl EditSnapshot {
             end_us: doc.range.end_us,
             silences: doc.silences.clone(),
             crop_edits: (!doc.crop.edits.is_empty()).then(|| doc.crop.edits.clone()),
+            narration_starts: (!doc.narration_starts.is_empty())
+                .then(|| doc.narration_starts.clone()),
             crop_layout: doc.crop.layout,
             crop_split_ratio: doc.crop.split_ratio,
             gameplay_webcam_edits: Self::dual_edits(doc.crop.gameplay_webcam.as_ref()),
@@ -100,6 +105,8 @@ pub(crate) struct Document {
     redo: Vec<EditSnapshot>,
     #[serde(default)]
     pub crop: crop::CropTimeline,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub narration_starts: BTreeMap<i64, i64>,
 }
 impl Document {
     pub(crate) fn active_silences(&self) -> Vec<(i64, i64)> {
@@ -152,6 +159,7 @@ fn decode(encoded: &str) -> Result<Document, CoreError> {
                 end_us: b.end_us,
                 silences: None,
                 crop_edits: None,
+                narration_starts: None,
                 crop_layout: None,
                 crop_split_ratio: None,
                 gameplay_webcam_edits: None,
@@ -166,6 +174,7 @@ fn decode(encoded: &str) -> Result<Document, CoreError> {
                 undo: v1.undo.into_iter().map(to_snapshot).collect(),
                 redo: v1.redo.into_iter().map(to_snapshot).collect(),
                 crop: crop::CropTimeline::default(),
+                narration_starts: BTreeMap::new(),
             }
         }
         SCHEMA_VERSION => serde_json::from_value(raw).map_err(|_| invalid())?,
@@ -175,6 +184,12 @@ fn decode(encoded: &str) -> Result<Document, CoreError> {
         || doc.undo.len() + doc.redo.len() > 100
         || doc.revision == u64::MAX
         || doc.original.clip_id.is_some()
+        || doc.narration_starts.values().any(|&t| t < 0)
+        || doc.undo.iter().chain(&doc.redo).any(|s| {
+            s.narration_starts
+                .as_ref()
+                .is_some_and(|m| m.values().any(|&t| t < 0))
+        })
     {
         return Err(invalid());
     }
@@ -195,6 +210,62 @@ fn load(s: &mut State, id: i64) -> Result<&mut Entry, CoreError> {
         entry.insert(Entry { doc, dirty: None });
     }
     s.entries.get_mut(&id).ok_or_else(invalid)
+}
+struct ResolvedDocMontage {
+    plan: montage::MontagePlan,
+    script_approved: bool,
+    sentences: Vec<montage::MontageSentence>,
+    splice: SpliceMap,
+}
+fn resolve_doc_montage(doc: &Document) -> Result<Option<ResolvedDocMontage>, CoreError> {
+    let Some(candidate_id) = doc.original.candidate_id else {
+        return Ok(None);
+    };
+    let Ok(Some(script_doc)) = crate::script::montage_blocks_readonly(candidate_id) else {
+        return Ok(None);
+    };
+    let Some(transcript_id) = montage::transcript_id_for_source(doc.original.source_id)? else {
+        return Ok(None);
+    };
+    let sentences = montage::load_transcript_sentences(transcript_id)?;
+    let splice = SpliceMap::new(doc.range.start_us, doc.range.end_us, &doc.active_silences());
+    let blocks: Vec<montage::MontageBlockInput> = script_doc
+        .blocks
+        .into_iter()
+        .map(|b| montage::MontageBlockInput {
+            block_id: b.id,
+            position: b.position,
+            title: b.title,
+            refs: b.refs,
+            duration_us: b
+                .narration
+                .as_deref()
+                .map_or(0, montage::estimate_block_duration_us),
+            estimated: true,
+        })
+        .collect();
+    let plan = montage::resolve(&montage::MontageInput {
+        blocks: &blocks,
+        sentences: &sentences,
+        splice: &splice,
+        manual_starts: &doc.narration_starts,
+    })?;
+    Ok(Some(ResolvedDocMontage {
+        plan,
+        script_approved: script_doc.approved,
+        sentences,
+        splice,
+    }))
+}
+fn montage_view(doc: &Document) -> Value {
+    let Ok(Some(resolved)) = resolve_doc_montage(doc) else {
+        return Value::Null;
+    };
+    let mut value = serde_json::to_value(resolved.plan).unwrap_or(Value::Null);
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert("scriptApproved".into(), json!(resolved.script_approved));
+    }
+    value
 }
 fn doc_aspect(doc: &Document) -> f64 {
     source_info(doc.original.source_id)
@@ -235,7 +306,8 @@ fn answer(id: i64, doc: &Document) -> Value {
         "request":{"source_id":doc.original.source_id,"candidate_id":doc.original.candidate_id,"start_id":r.start_id,"end_id":r.end_id},
         "startUs":r.start_us,"endUs":r.end_us,"undoCount":doc.undo.len(),"redoCount":doc.redo.len(),
         "silences":{"enabled":doc.silences.is_some(),"thresholdUs":threshold_us,"intervals":intervals,"segments":splice.segments,"removedUs":splice.removed_us,"effectiveDurationUs":splice.output_duration_us},
-        "crop":crop_view(&doc.crop, r, aspect)})
+        "crop":crop_view(&doc.crop, r, aspect),
+        "montage":montage_view(doc)})
 }
 fn save(s: &mut State, due_only: bool) -> Result<(), CoreError> {
     let ids: Vec<_> = s
@@ -359,6 +431,7 @@ pub(super) fn open(request: &Request, start: i64, end: i64) -> Result<Value, Cor
             undo: vec![],
             redo: vec![],
             crop: crop::CropTimeline::default(),
+            narration_starts: BTreeMap::new(),
         };
         let encoded = serde_json::to_string(&doc).map_err(|_| invalid())?;
         projects::with_writer(|c| {
@@ -581,12 +654,16 @@ fn history(v: Value, redo: bool) -> CommandResult {
     if let Some(next) = next.cloned() {
         let next_range = next.borders();
         let next_crop_edits = next.crop_edits.unwrap_or_default();
+        let next_narration_starts = next.narration_starts.unwrap_or_default();
         let next_gw_edits = next.gameplay_webcam_edits.unwrap_or_default();
         let next_tp_edits = next.two_people_edits.unwrap_or_default();
         validate(&entry.doc, &next_range)?;
         validate_silences(&next_range, next.silences.as_ref())?;
         crop::validate_split_ratio(next.crop_layout, next.crop_split_ratio)?;
         crop::validate_edits(&next_crop_edits)?;
+        if next_narration_starts.values().any(|&t| t < 0) {
+            return Err(invalid());
+        }
         crop::validate_edits(&next_gw_edits.0)?;
         crop::validate_edits(&next_gw_edits.1)?;
         crop::validate_edits(&next_tp_edits.0)?;
@@ -603,6 +680,7 @@ fn history(v: Value, redo: bool) -> CommandResult {
         entry.doc.crop.layout = next.crop_layout;
         entry.doc.crop.split_ratio = next.crop_split_ratio;
         entry.doc.crop.edits = next_crop_edits;
+        entry.doc.narration_starts = next_narration_starts;
         let apply_dual =
             |slot: &mut Option<crop::DualCropPanels>,
              (top, bot): (Vec<crop::CropKeyframe>, Vec<crop::CropKeyframe>)| {
@@ -1043,6 +1121,117 @@ fn crop_example(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     entry.dirty = Some(Instant::now());
     Ok(crop_answer(id, &entry.doc))
 }
+fn montage_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let id = id(&v)?;
+    let mut s = lock()?;
+    let entry = load(&mut s, id)?;
+    Ok(json!({
+        "clipId": id,
+        "schemaVersion": entry.doc.schema_version,
+        "revision": entry.doc.revision,
+        "undoCount": entry.doc.undo.len(),
+        "redoCount": entry.doc.redo.len(),
+        "montage": montage_view(&entry.doc),
+    }))
+}
+fn montage_set_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let id = id(&v)?;
+    let block_id = v["block_id"]
+        .as_i64()
+        .ok_or_else(|| error("block_not_found", "Bloco não encontrado."))?;
+    let mut s = lock()?;
+    let entry = load(&mut s, id)?;
+    let Some(ResolvedDocMontage {
+        plan,
+        sentences,
+        splice,
+        ..
+    }) = resolve_doc_montage(&entry.doc)?
+    else {
+        return Err(error("block_not_found", "Bloco não encontrado."));
+    };
+    let Some(block_idx) = plan.blocks.iter().position(|b| b.block_id == block_id) else {
+        return Err(error("block_not_found", "Bloco não encontrado."));
+    };
+    let mut next_starts = entry.doc.narration_starts.clone();
+    match v.get("time_us") {
+        None | Some(Value::Null) => {
+            next_starts.remove(&block_id);
+        }
+        Some(raw) => {
+            let requested = raw
+                .as_i64()
+                .ok_or_else(|| error("invalid_montage", "Início manual inválido."))?
+                .clamp(entry.doc.range.start_us, entry.doc.range.end_us);
+            let (_, fps) = source_row(entry.doc.original.source_id)?;
+            let free = v["free"].as_bool().unwrap_or(false);
+            let min_output_start = if block_idx == 0 {
+                0
+            } else {
+                plan.blocks[block_idx - 1].end_us + montage::BLOCK_GAP_US
+            };
+            let in_clip: Vec<&montage::MontageSentence> = sentences
+                .iter()
+                .filter(|sent| {
+                    sent.start_us >= entry.doc.range.start_us
+                        && sent.start_us <= entry.doc.range.end_us
+                })
+                .collect();
+            let snapped = if free {
+                let frame = ((requested as f64 * fps / 1_000_000.0).round() * 1_000_000.0 / fps)
+                    .round()
+                    .clamp(
+                        entry.doc.range.start_us as f64,
+                        entry.doc.range.end_us as f64,
+                    ) as i64;
+                if splice.source_to_output(frame) < min_output_start {
+                    if min_output_start >= splice.output_duration_us {
+                        entry.doc.range.end_us
+                    } else {
+                        splice
+                            .output_to_source(min_output_start)
+                            .clamp(entry.doc.range.start_us, entry.doc.range.end_us)
+                    }
+                } else {
+                    frame
+                }
+            } else {
+                let candidate = in_clip
+                    .iter()
+                    .min_by_key(|sent| ((sent.start_us - requested).abs(), sent.start_us))
+                    .map_or(entry.doc.range.start_us, |sent| sent.start_us);
+                if splice.source_to_output(candidate) < min_output_start {
+                    in_clip
+                        .iter()
+                        .find(|sent| splice.source_to_output(sent.start_us) >= min_output_start)
+                        .map(|sent| sent.start_us)
+                        .unwrap_or_else(|| {
+                            if min_output_start >= splice.output_duration_us {
+                                entry.doc.range.end_us
+                            } else {
+                                splice
+                                    .output_to_source(min_output_start)
+                                    .clamp(entry.doc.range.start_us, entry.doc.range.end_us)
+                            }
+                        })
+                } else {
+                    candidate
+                }
+            };
+            next_starts.insert(block_id, snapped);
+        }
+    }
+    if v["preview"].as_bool().unwrap_or(false) {
+        let mut doc = entry.doc.clone();
+        doc.narration_starts = next_starts;
+        return Ok(answer(id, &doc));
+    }
+    if next_starts != entry.doc.narration_starts {
+        push_history(entry);
+        entry.doc.narration_starts = next_starts;
+    }
+    Ok(answer(id, &entry.doc))
+}
 inventory::submit! {CommandRegistration {name:"editor.adjust",execute:adjust}}
 inventory::submit! {CommandRegistration {name:"editor.undo",execute:undo}}
 inventory::submit! {CommandRegistration {name:"editor.redo",execute:redo}}
@@ -1058,6 +1247,8 @@ inventory::submit! {CommandRegistration {name:"editor.crop.set_suggested",execut
 inventory::submit! {CommandRegistration {name:"editor.crop.set_edits",execute:crop_set_edits}}
 inventory::submit! {CommandRegistration {name:"editor.crop.evaluate",execute:crop_evaluate}}
 inventory::submit! {CommandRegistration {name:"editor.crop.example",execute:crop_example}}
+inventory::submit! {CommandRegistration {name:"editor.montage.get",execute:montage_get}}
+inventory::submit! {CommandRegistration {name:"editor.montage.set_start",execute:montage_set_start}}
 
 #[cfg(test)]
 mod tests {
@@ -1087,5 +1278,26 @@ mod tests {
         let encoded = serde_json::to_string(&doc).unwrap();
         let reloaded = decode(&encoded).unwrap();
         assert_eq!(reloaded.silences, doc.silences);
+    }
+
+    #[test]
+    fn document_with_narration_starts_round_trips_without_bumping_schema_version() {
+        let v2_without = r#"{"schemaVersion":2,"revision":3,"original":{"source_id":1,"start_id":1,"end_id":4,"candidate_id":null},"range":{"startId":1,"endId":4,"startUs":0,"endUs":40000000},"undo":[{"startId":1,"endId":4,"startUs":0,"endUs":40000000}],"redo":[]}"#;
+        let doc = decode(v2_without).unwrap();
+        assert!(doc.narration_starts.is_empty());
+        assert!(!serde_json::to_string(&doc)
+            .unwrap()
+            .contains("narrationStarts"));
+
+        let v2_with = r#"{"schemaVersion":2,"revision":4,"original":{"source_id":1,"start_id":1,"end_id":4,"candidate_id":null},"range":{"startId":1,"endId":4,"startUs":0,"endUs":40000000},"undo":[],"redo":[],"narrationStarts":{"10":12000000}}"#;
+        let doc = decode(v2_with).unwrap();
+        assert_eq!(doc.schema_version, 2);
+        assert_eq!(doc.narration_starts.get(&10), Some(&12_000_000));
+        let encoded = serde_json::to_string(&doc).unwrap();
+        let reloaded = decode(&encoded).unwrap();
+        assert_eq!(reloaded.narration_starts, doc.narration_starts);
+
+        let negative = r#"{"schemaVersion":2,"revision":4,"original":{"source_id":1,"start_id":1,"end_id":4,"candidate_id":null},"range":{"startId":1,"endId":4,"startUs":0,"endUs":40000000},"undo":[],"redo":[],"narrationStarts":{"10":-1}}"#;
+        assert!(decode(negative).is_err());
     }
 }

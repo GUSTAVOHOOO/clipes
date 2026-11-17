@@ -16,6 +16,44 @@ export type SilencesState = {
   effectiveDurationUs: number;
 };
 
+export type MontageBlock = {
+  blockId: number;
+  position: number;
+  title: string;
+  mode: 'automatic' | 'manual';
+  anchorSentenceId: number | null;
+  manualSourceStartUs: number | null;
+  autoStartUs: number;
+  desiredStartUs: number;
+  startUs: number;
+  endUs: number;
+  durationUs: number;
+  estimated: boolean;
+  pushedUs: number;
+  overflowUs: number;
+  sourceStartUs: number;
+};
+
+export type MontageWarning = {
+  code: string;
+  message: string;
+  blockId?: number | null;
+  amountUs?: number | null;
+};
+
+export type MontageState = {
+  schemaVersion: number;
+  blocks: MontageBlock[];
+  clipDurationUs: number;
+  narrationEndUs: number;
+  freezeTailUs: number;
+  totalDurationUs: number;
+  totalPushedUs: number;
+  usesEstimatedDurations: boolean;
+  scriptApproved?: boolean;
+  warnings: MontageWarning[];
+};
+
 /** Mapeia um tempo absoluto da Fonte (µs) para o tempo relativo no Corte emendado (µs),
  * espelhando `SpliceMap::source_to_output` do núcleo (#77). */
 export function sourceToSplicedUs(sourceUs: number, segments: KeptSegment[] | undefined, fallbackStartUs: number): number {
@@ -26,6 +64,27 @@ export function sourceToSplicedUs(sourceUs: number, segments: KeptSegment[] | un
     if (sourceUs <= seg.sourceEndUs) return seg.outputStartUs + (sourceUs - seg.sourceStartUs);
   }
   return segments[segments.length - 1].outputEndUs;
+}
+
+/** Mapeia um tempo do vídeo montado (µs) para o eixo da Fonte na timeline; sobra após o fim
+ * do Corte estende além de `clipEndUs` para mostrar a cauda congelada (`tpad`). */
+export function splicedToSourceUs(
+  outputUs: number,
+  segments: KeptSegment[] | undefined,
+  clipStartUs: number,
+  clipEndUs: number,
+): number {
+  if (!segments || segments.length === 0) {
+    return clipStartUs + Math.max(0, outputUs);
+  }
+  if (outputUs <= 0) return segments[0].sourceStartUs;
+  for (const seg of segments) {
+    if (outputUs <= seg.outputEndUs) {
+      return seg.sourceStartUs + (outputUs - seg.outputStartUs);
+    }
+  }
+  const last = segments[segments.length - 1];
+  return clipEndUs + (outputUs - last.outputEndUs);
 }
 
 export const usToPx = (us: number, windowStartUs: number) => ((us - windowStartUs) / 1_000_000) * PX_PER_SEC;

@@ -7,6 +7,7 @@ import { mkdir } from 'node:fs/promises';
 import { testEditorBorders } from './editor-borders.mjs';
 import { testEditorSilencesPanel, testEditorSilencesPreview } from './editor-silences.mjs';
 import { testEditorCrop } from './editor-crop.mjs';
+import { testEditorMontage } from './editor-montage.mjs';
 import { testTranslation, testTranslationBlocked } from './translation-ui.mjs';
 import { testTtsComponents, testTtsNarrationLocked, testTtsNarrationUnlocked } from './tts-ui.mjs';
 const socket = createServer();
@@ -1249,6 +1250,7 @@ try {
   await testEditorBorders(page, url);
   await testEditorSilencesPreview(page, url);
   await testEditorCrop(page, url);
+  await testEditorMontage(page, url);
   // Export em lote (#64): por Fonte na Seleção e por Projeto, progresso ponderado, cancelamento, sobrescrita e falha isolada.
   await page.goto(`${url}?source-test=1&transcript-test=1`);
   const batchSel = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
