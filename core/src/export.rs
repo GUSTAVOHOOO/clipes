@@ -794,11 +794,7 @@ fn cmd_status(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 }
 
 fn settings_path() -> Result<PathBuf, CoreError> {
-    std::env::var_os("CLIPES_DATA_DIR")
-        .map(PathBuf::from)
-        .or_else(|| dirs::data_local_dir().map(|p| p.join("Clipes")))
-        .map(|p| p.join("export-settings.json"))
-        .ok_or_else(failed)
+    crate::paths::config_file("export-settings.json").map_err(|_| failed())
 }
 pub(crate) fn save_directory(path: &Path) -> Result<(), CoreError> {
     let target = settings_path()?;
