@@ -191,6 +191,22 @@ pub(crate) fn selection_defaults() -> Result<SelectionDefaults, CoreError> {
     }
 }
 
+/// Idioma padrão do Perfil de canal aberto; sem Projeto aberto ou linha gravada, devolve
+/// `DEFAULT_LANGUAGE`.
+pub(crate) fn default_language() -> Result<String, CoreError> {
+    match projects::with_reader(|c| {
+        c.query_row("SELECT language FROM channel_profile WHERE id=1", [], |r| {
+            r.get::<_, String>(0)
+        })
+        .optional()
+    }) {
+        Ok(Some(lang)) if is_supported_language(&lang) => Ok(lang),
+        Ok(_) => Ok(DEFAULT_LANGUAGE.to_owned()),
+        Err(e) if e.code == "project_not_open" => Ok(DEFAULT_LANGUAGE.to_owned()),
+        Err(e) => Err(e),
+    }
+}
+
 fn read_in(c: &Connection) -> rusqlite::Result<Result<ChannelProfile, CoreError>> {
     let row = c
         .query_row(

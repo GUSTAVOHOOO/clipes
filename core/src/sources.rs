@@ -1,5 +1,5 @@
 use crate::{projects, CommandRegistration, CommandResult, CoreError, EventSink, ProgressEvent};
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
@@ -16,6 +16,7 @@ use std::{
 inventory::submit! { projects::Migration { id:"0041_001_sources", sql:"CREATE TABLE sources (id INTEGER PRIMARY KEY, path TEXT NOT NULL, size INTEGER NOT NULL, duration_us INTEGER NOT NULL, partial_hash TEXT NOT NULL, full_hash TEXT, metadata TEXT NOT NULL, permission TEXT NOT NULL, audio_track INTEGER NOT NULL);" } }
 inventory::submit! { projects::Migration { id:"0041_002_source_mtime", sql:"ALTER TABLE sources ADD COLUMN modified TEXT;" } }
 inventory::submit! { projects::Migration { id:"0045_001_source_origin_url", sql:"ALTER TABLE sources ADD COLUMN origin_url TEXT;" } }
+inventory::submit! { projects::Migration { id:"0195_001_source_language", sql:"ALTER TABLE sources ADD COLUMN language TEXT NOT NULL DEFAULT 'pt';" } }
 fn err(code: &str, message: &str) -> CoreError {
     CoreError {
         code: code.into(),
@@ -219,9 +220,25 @@ fn inspect(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     );
     probe(&path)
 }
+fn parse_language(value: &Value) -> Result<&'static str, CoreError> {
+    value
+        .as_str()
+        .map(str::trim)
+        .and_then(crate::transcription::language_code)
+        .ok_or_else(|| err("invalid_language", "Selecione um idioma válido"))
+}
+
+fn parse_optional_language(value: Option<&Value>) -> Result<String, CoreError> {
+    match value {
+        None | Some(Value::Null) => crate::channel_profile::default_language(),
+        Some(other) => parse_language(other).map(str::to_owned),
+    }
+}
+
 fn import(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     let _job = project_job(&v)?;
     permission(&v["permission"])?;
+    let language = parse_optional_language(v.get("language"))?;
     let origin_url = match v.get("origin_url") {
         None | Some(Value::Null) => None,
         Some(Value::String(url)) => {
@@ -305,7 +322,7 @@ fn import(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     let modified = modified(&resolve_path(&v, &path.to_string_lossy())?)?;
     let id = projects::with_writer(|conn| {
         let tx = conn.transaction()?;
-        tx.execute("INSERT INTO sources(path,size,duration_us,partial_hash,full_hash,metadata,permission,audio_track,modified,origin_url) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",params![path.to_string_lossy(),size as i64,dur,part,full_hash,metadata.to_string(),v["permission"].to_string(),audio,modified,origin_url])?;
+        tx.execute("INSERT INTO sources(path,size,duration_us,partial_hash,full_hash,metadata,permission,audio_track,modified,origin_url,language) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",params![path.to_string_lossy(),size as i64,dur,part,full_hash,metadata.to_string(),v["permission"].to_string(),audio,modified,origin_url,language])?;
         let id = tx.last_insert_rowid();
         tx.execute(
             "INSERT INTO jobs(kind,safety,state,source_id) VALUES ('preview','local','queued',?1)",
@@ -320,21 +337,54 @@ fn import(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     })?;
     get(&v, id)
 }
+struct SourceRow {
+    path: String,
+    metadata: String,
+    permission: String,
+    audio_track: i64,
+    full_hash: Option<String>,
+    size: i64,
+    partial_hash: String,
+    modified: Option<String>,
+    origin_url: Option<String>,
+    language: String,
+}
+
 fn get(v: &Value, id: i64) -> CommandResult {
-    let (path,metadata,permission,audio,hash,size,partial_hash,mtime,origin_url):(String,String,String,i64,Option<String>,i64,String,Option<String>,Option<String>)=projects::with_reader(|conn| conn.query_row("SELECT path,metadata,permission,audio_track,full_hash,size,partial_hash,modified,origin_url FROM sources WHERE id=?1",[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?,r.get(7)?,r.get(8)?)))).map_err(|_|err("source_missing","Fonte não encontrada"))?;
-    let resolved = resolve_path(v, &path)?;
+    let row = projects::with_reader(|conn| {
+        conn.query_row(
+            "SELECT path,metadata,permission,audio_track,full_hash,size,partial_hash,modified,origin_url,language FROM sources WHERE id=?1",
+            [id],
+            |r| {
+                Ok(SourceRow {
+                    path: r.get(0)?,
+                    metadata: r.get(1)?,
+                    permission: r.get(2)?,
+                    audio_track: r.get(3)?,
+                    full_hash: r.get(4)?,
+                    size: r.get(5)?,
+                    partial_hash: r.get(6)?,
+                    modified: r.get(7)?,
+                    origin_url: r.get(8)?,
+                    language: r.get(9)?,
+                })
+            },
+        )
+    })
+    .map_err(|_| err("source_missing", "Fonte não encontrada"))?;
+    let resolved = resolve_path(v, &row.path)?;
     let state = if !resolved.is_file() {
         "offline"
-    } else if partial(&resolved).is_ok_and(|f| f == (size as u64, partial_hash))
-        && modified(&resolved).ok().as_ref() == mtime.as_ref()
-        && mtime.is_some()
+    } else if partial(&resolved).is_ok_and(|f| f == (row.size as u64, row.partial_hash.clone()))
+        && modified(&resolved).ok().as_ref() == row.modified.as_ref()
+        && row.modified.is_some()
     {
         "available"
     } else {
         "changed"
     };
     Ok(
-        json!({"id":id,"status":state,"available":state=="available","path":resolved,"metadata":serde_json::from_str::<Value>(&metadata).unwrap_or(Value::Null),"permission":serde_json::from_str::<Value>(&permission).unwrap_or(Value::Null),"audio_track":audio,"verified":hash.is_some(),"origin_url":origin_url}),
+        json!({"id":id,"status":state,"available":state=="available","path":resolved,"metadata":serde_json::from_str::<Value>(&row.metadata).unwrap_or(Value::Null),"permission":serde_json::from_str::<Value>(&row.permission).unwrap_or(Value::Null),"audio_track":row.audio_track,"verified":row.full_hash.is_some(),"origin_url":row.origin_url,"language":row.language}),
     )
 }
 fn list(v: Value, _: &mut EventSink<'_>) -> CommandResult {
@@ -469,9 +519,69 @@ fn relocate(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     })?;
     get(&v, id)
 }
+fn set_language(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let _job = project_job(&v)?;
+    let id = v["id"]
+        .as_i64()
+        .ok_or_else(|| err("source_missing", "Fonte não encontrada"))?;
+    let language = parse_language(&v["language"])?;
+    let outcome: Result<(), CoreError> = projects::with_writer(|conn| {
+        let Some(track) = conn
+            .query_row("SELECT audio_track FROM sources WHERE id=?1", [id], |r| {
+                r.get::<_, i64>(0)
+            })
+            .optional()?
+        else {
+            return Ok(Err(err("source_missing", "Fonte não encontrada")));
+        };
+        let active: Option<i64> = conn
+            .query_row(
+                "SELECT id FROM jobs WHERE kind='transcription' AND source_id=?1 AND state IN ('queued','running','uncertain') LIMIT 1",
+                [id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        if active.is_some() {
+            return Ok(Err(err(
+                "transcription_busy",
+                "Encerre a tarefa antes de alterar o idioma.",
+            )));
+        }
+        let transcript: Option<(String, i64)> = conn
+            .query_row(
+                "SELECT state, resume_us FROM transcripts WHERE source_id=?1 AND audio_track=?2",
+                (id, track),
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        if let Some((state, resume_us)) = transcript {
+            if state == "complete" {
+                return Ok(Err(err(
+                    "transcript_complete",
+                    "Uma Transcrição completa não permite alterar o idioma.",
+                )));
+            }
+            if resume_us > 0 {
+                return Ok(Err(err(
+                    "transcript_partial",
+                    "Não é possível alterar o idioma após iniciar a Transcrição.",
+                )));
+            }
+        }
+        conn.execute(
+            "UPDATE sources SET language=?1 WHERE id=?2",
+            params![language, id],
+        )?;
+        Ok(Ok(()))
+    })?;
+    outcome?;
+    get(&v, id)
+}
+
 inventory::submit! {CommandRegistration{name:"sources.import",execute:import}}
 inventory::submit! {CommandRegistration{name:"sources.inspect",execute:inspect}}
 inventory::submit! {CommandRegistration{name:"sources.list",execute:list}}
 inventory::submit! {CommandRegistration{name:"sources.hash",execute:hash_source}}
 inventory::submit! {CommandRegistration{name:"sources.relocate",execute:relocate}}
 inventory::submit! {CommandRegistration{name:"sources.cancel",execute:cancel}}
+inventory::submit! {CommandRegistration{name:"sources.language.set",execute:set_language}}

@@ -417,6 +417,7 @@ fn local_engine_follows_the_shared_transcribe_block_example() {
             &BlockRequest {
                 audio,
                 final_block: false,
+                language: None,
             },
             &idle(),
             &mut |p| percentages.push(p),
@@ -446,6 +447,7 @@ fn local_engine_follows_the_shared_transcribe_block_example() {
             &BlockRequest {
                 audio,
                 final_block: true,
+                language: None,
             },
             &idle(),
             &mut |p| percentages.push(p),

@@ -3,7 +3,7 @@ import { getMockClipSplice } from './editorEditsMock';
 import { sourceToSplicedUs } from '@/features/editor/timelineMath';
 
 type Style = { schemaVersion: 1; revision: number; preset: string; font: string; fontSize: number; color: string; activeColor: string; dimColor: string; outlineColor: string; outline: number; shadow: number; x: number; y: number; highlight: boolean };
-type Override = { color?: string; activeColor?: string; highlight?: boolean };
+type Override = { color?: string; activeColor?: string; highlight?: boolean; hidden?: boolean };
 const base = (preset: string): Style => ({ schemaVersion: 1, revision: 0, preset, font: preset === 'cinema' ? 'Noto Serif' : 'Noto Sans', fontSize: preset === 'vertical' ? 64 : 56, color: '#FFFFFF', activeColor: '#FACC15', dimColor: '#FFFFFF', outlineColor: '#101010', outline: preset === 'cinema' ? 3 : 6, shadow: 0, x: 540, y: 1440, highlight: preset !== 'simple' });
 let projectDefault: Style | null = null;
 export function getDefaultCaptionStyleMock(): Style {
@@ -48,7 +48,7 @@ export function captionsMock(name: string, a: Record<string, any>, textOf: (posi
       overrides: overrides.get(p) ?? {},
     };
   });
-  const missingGlyphs = rawWords.flatMap(w => {
+  const missingGlyphs = rawWords.filter(w => !w.overrides.hidden).flatMap(w => {
     const visible = w.text.replace(/\p{Extended_Pictographic}/gu, '').trim();
     const match = unsupportedGlyph.exec(visible);
     if (!match) return [];
@@ -56,7 +56,7 @@ export function captionsMock(name: string, a: Record<string, any>, textOf: (posi
     return [{ position: w.position, sentence_id: 1, word: visible, char: ch, codepoint: `U+${ch.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`, start_us: w.sourceStartUs }];
   });
   const words = rawWords.map(w => ({ ...w, missingGlyph: missingGlyphs.find(m => m.position === w.position) ?? null }));
-  const visible = words.map(w => ({ ...w, text: w.text.replace(/\p{Extended_Pictographic}/gu, '').trim(), color: w.overrides.color ?? style.color, activeColor: w.overrides.activeColor ?? style.activeColor, highlight: style.highlight && (w.overrides.highlight ?? true) }));
-  const cues = [0, 3, 6].map(i => ({ startUs: visible[i].startUs, endUs: visible[i + 2].endUs, lines: [visible.slice(i, i + 3)] }));
+  const visible = words.filter(w => !w.overrides.hidden).map(w => ({ ...w, text: w.text.replace(/\p{Extended_Pictographic}/gu, '').trim(), color: w.overrides.color ?? style.color, activeColor: w.overrides.activeColor ?? style.activeColor, highlight: style.highlight && (w.overrides.highlight ?? true) }));
+  const cues = Array.from({ length: Math.ceil(visible.length / 3) }, (_, k) => visible.slice(k * 3, k * 3 + 3)).map(line => ({ startUs: line[0].startUs, endUs: line[line.length - 1].endUs, lines: [line] }));
   return { ass: '', style, cues, emojiRemoved: words.filter(w => emoji.test(w.text)).length, words, transcriptId: 1, start_us: startBase, end_us: endBase, durationUs: splice.effectiveDurationUs, segments: splice.segments, lines: [], missingGlyphs };
 }

@@ -123,3 +123,98 @@ fn style_is_per_clip_new_clips_copy_the_project_default_and_stale_revisions_conf
     assert_eq!(left, 0, "estilo some com o Corte (ON DELETE CASCADE)");
     call("projects.close", json!({}));
 }
+
+#[test]
+fn hidden_override_persists_across_presets_preserves_transcript_and_can_be_reverted() {
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let root = tempfile::tempdir().unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", root.path().join("data"));
+    let project = call(
+        "projects.create",
+        json!({"parent":root.path(),"name":"Ocultas"}),
+    );
+    let (source, transcript, candidate) = with_writer(|c| {
+        c.execute("INSERT INTO sources(path,size,duration_us,partial_hash,metadata,permission,audio_track) VALUES ('missing',1,30000000,'h','{}','{}',0)",[])?;
+        let source = c.last_insert_rowid();
+        c.execute("INSERT INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,state,duration_us) VALUES (?1,0,'local','m','r','c','complete',30000000)",[source])?;
+        let t = c.last_insert_rowid();
+        for (p, text, start) in [(0, " Olá", 0), (1, " intruso", 1_000_000), (2, " mundo", 2_000_000)] {
+            c.execute("INSERT INTO transcript_words(transcript_id,position,kind,text,start_us,end_us) VALUES (?1,?2,'word',?3,?4,?4+200000)", (t, p, text, start))?;
+        }
+        c.execute("INSERT INTO sentences(transcript_id,id,first_position,last_position,start_us,end_us,text) VALUES (?1,1,0,2,0,25000000,'Olá intruso mundo')", [t])?;
+        c.execute("INSERT INTO selection_runs(transcript_id,task_version,prompt_sha256,state,min_us,max_us,weights,plan_state,windows_total) VALUES (?1,1,'h','completed',20000000,180000000,'[]','ready',0)", [t])?;
+        let run = c.last_insert_rowid();
+        c.execute("INSERT INTO selection_candidates(run_id,rank,start_id,end_id,start_us,end_us,axes,total_centi,windows) VALUES (?1,1,1,1,0,25000000,'{}',500,'[]')", [run])?;
+        let candidate = c.last_insert_rowid();
+        Ok((source, t, candidate))
+    })
+    .unwrap();
+    call(
+        "selection.decide",
+        json!({"candidate":candidate,"decision":"approved"}),
+    );
+    let clip = call(
+        "editor.open",
+        json!({"source_id":source,"start_id":1,"end_id":1,"candidate_id":candidate}),
+    )["clipId"]
+        .as_i64()
+        .unwrap();
+
+    call(
+        "captions.override",
+        json!({"transcript_id":transcript,"position":1,"overrides":{"hidden":true}}),
+    );
+    let (word_count, sentence_text): (i64, String) = with_writer(|c| {
+        Ok((
+            c.query_row(
+                "SELECT COUNT(*) FROM transcript_words WHERE transcript_id=?1 AND kind='word'",
+                [transcript],
+                |r| r.get(0),
+            )?,
+            c.query_row(
+                "SELECT text FROM sentences WHERE transcript_id=?1 AND id=1",
+                [transcript],
+                |r| r.get(0),
+            )?,
+        ))
+    })
+    .unwrap();
+    assert_eq!(word_count, 3);
+    assert_eq!(sentence_text, "Olá intruso mundo");
+
+    let style = call("captions.style.get", json!({"clip_id":clip}));
+    call(
+        "captions.style.preset",
+        json!({"clip_id":clip,"preset":"cinema","revision":style["revision"]}),
+    );
+
+    call("projects.close", json!({}));
+    call("projects.open", json!({"path":project["path"]}));
+
+    let cap = call(
+        "export.captions",
+        json!({"source_id":source,"start_id":1,"end_id":1,"candidate_id":candidate,"clip_id":clip}),
+    );
+    assert!(!cap["ass"].as_str().unwrap().contains("intruso"));
+    let cue_words: Vec<_> = cap["cues"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|c| c["lines"].as_array().unwrap())
+        .flat_map(|l| l.as_array().unwrap())
+        .map(|w| w["text"].as_str().unwrap())
+        .collect();
+    assert_eq!(cue_words, ["Olá", "mundo"]);
+    assert_eq!(cap["words"][1]["overrides"]["hidden"], true);
+
+    call(
+        "captions.override",
+        json!({"transcript_id":transcript,"position":1,"overrides":{}}),
+    );
+    let restored = call(
+        "export.captions",
+        json!({"source_id":source,"start_id":1,"end_id":1,"candidate_id":candidate,"clip_id":clip}),
+    );
+    assert!(restored["ass"].as_str().unwrap().contains("intruso"));
+    call("projects.close", json!({}));
+}
