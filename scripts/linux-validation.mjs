@@ -211,6 +211,7 @@ try {
       ...process.env,
       CLIPES_DATA_DIR: dataDir,
       CLIPES_FFPROBE: 'ffprobe',
+      GST_DEBUG: 'webkit*:5,2',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -428,6 +429,32 @@ try {
   report.steps.uiCutPreview = uiPreview;
 
   // 5. Medir busca (seek) em Source e Proxy no WebKitGTK (mesmo protocolo do #58)
+  const mediaFetchDiag = await wd.execAsync(
+    async ({ proxyUrl }) => {
+      const probeFetch = async (url, headers = {}) => {
+        try {
+          const res = await fetch(url, { headers });
+          const buf = await res.arrayBuffer();
+          return {
+            ok: res.ok,
+            status: res.status,
+            headers: Object.fromEntries(res.headers.entries()),
+            bytes: buf.byteLength,
+          };
+        } catch (e) {
+          return { ok: false, error: e instanceof Error ? e.message : String(e) };
+        }
+      };
+      return {
+        whole: await probeFetch(proxyUrl),
+        range0: await probeFetch(proxyUrl, { Range: 'bytes=0-1023' }),
+        plainPath: await probeFetch(proxyUrl.replace('%2F', '/')),
+      };
+    },
+    [{ proxyUrl: setupRes.proxyUrl }],
+  );
+  report.steps.mediaFetchDiag = mediaFetchDiag;
+
   const seekEval = await wd.execAsync(
     async ({ proxyUrl, sourceUrl, windowStartUs }) => {
       const probe = document.createElement('video');
@@ -571,6 +598,113 @@ try {
     source: formatSeries(seekEval.source),
     proxy: formatSeries(seekEval.proxy),
   };
+
+  // Se clipes-media:// falhou no WebKitGTK, testa HTTP loopback para isolar codec vs URI scheme
+  if (!seekEval.proxy.playable) {
+    const http = await import('node:http');
+    const fsSync = await import('node:fs');
+    const proxyKey = setupRes.proxy.key;
+    const proxyFile = join(cacheDir, 'proxies', proxyKey, 'proxy.mp4');
+    const stat = fsSync.statSync(proxyFile);
+    const srv = http.createServer((req, res) => {
+      const range = req.headers.range;
+      if (range && range.startsWith('bytes=')) {
+        const [sStr, eStr] = range.slice(6).split('-');
+        const start = Number(sStr || 0);
+        const end = eStr ? Math.min(Number(eStr), stat.size - 1) : stat.size - 1;
+        res.writeHead(206, {
+          'Content-Type': 'video/mp4',
+          'Accept-Ranges': 'bytes',
+          'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+          'Content-Length': end - start + 1,
+          'Access-Control-Allow-Origin': '*',
+        });
+        fsSync.createReadStream(proxyFile, { start, end }).pipe(res);
+      } else {
+        res.writeHead(200, {
+          'Content-Type': 'video/mp4',
+          'Accept-Ranges': 'bytes',
+          'Content-Length': stat.size,
+          'Access-Control-Allow-Origin': '*',
+        });
+        fsSync.createReadStream(proxyFile).pipe(res);
+      }
+    });
+    await new Promise(resolve => srv.listen(0, '127.0.0.1', resolve));
+    const httpPort = srv.address().port;
+    try {
+      const httpSeek = await wd.execAsync(
+        async ({ url }) => {
+          document.body.replaceChildren();
+          const video = document.createElement('video');
+          video.muted = true;
+          video.preload = 'auto';
+          video.playsInline = true;
+          video.src = url;
+          document.body.append(video);
+          const loaded = await new Promise(resolve => {
+            const timer = setTimeout(() => resolve({ ok: false, reason: 'timeout' }), 15_000);
+            video.onloadeddata = () => { clearTimeout(timer); resolve({ ok: true, videoWidth: video.videoWidth, videoHeight: video.videoHeight, duration: video.duration }); };
+            video.onerror = () => { clearTimeout(timer); resolve({ ok: false, reason: 'error', errorCode: video.error?.code ?? null, networkState: video.networkState }); };
+          });
+          if (!loaded.ok) return { playable: false, ...loaded };
+          await video.play();
+          await new Promise(r => setTimeout(r, 100));
+          video.pause();
+          const hasRvfc = typeof video.requestVideoFrameCallback === 'function';
+          let seed = 58;
+          const targets = Array.from({ length: 100 }, () => {
+            seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+            return 1 + (seed / 4294967296) * 247;
+          });
+          const seekOne = target => new Promise((resolve, reject) => {
+            const started = performance.now();
+            let seekedMs = null;
+            let rvfcHandle = null;
+            let done = false;
+            const finish = payload => {
+              if (done) return;
+              done = true;
+              clearTimeout(timer);
+              if (rvfcHandle !== null && hasRvfc) video.cancelVideoFrameCallback(rvfcHandle);
+              video.removeEventListener('seeked', onSeeked);
+              resolve(payload);
+            };
+            const timer = setTimeout(() => reject(new Error(`Timeout seek ${target}`)), 10_000);
+            const onSeeked = () => { seekedMs = performance.now() - started; };
+            video.addEventListener('seeked', onSeeked, { once: true });
+            const observe = (_, info) => {
+              if (Math.abs(info.mediaTime - target) <= 0.05) {
+                finish({ targetSeconds: target, mediaTime: info.mediaTime, seekedMs, rvfcMs: performance.now() - started });
+              } else {
+                rvfcHandle = video.requestVideoFrameCallback(observe);
+              }
+            };
+            rvfcHandle = video.requestVideoFrameCallback(observe);
+            video.currentTime = target;
+          });
+          await seekOne(0.5);
+          const samples = [];
+          for (const t of targets) samples.push(await seekOne(t));
+          return { playable: true, ...loaded, samples };
+        },
+        [{ url: `http://127.0.0.1:${httpPort}/proxy.mp4` }],
+      );
+      report.steps.webkitHttpLoopbackDiag = httpSeek.playable
+        ? {
+            playable: true,
+            videoWidth: httpSeek.videoWidth,
+            videoHeight: httpSeek.videoHeight,
+            duration: httpSeek.duration,
+            n: httpSeek.samples.length,
+            seeked: summarizeSamples(httpSeek.samples, 'seekedMs'),
+            rvfc: summarizeSamples(httpSeek.samples, 'rvfcMs'),
+          }
+        : httpSeek;
+    } finally {
+      srv.close();
+    }
+  }
 
   // 6. Export de Corte com legenda + detecção de encoder (deve escolher libx264 sem NVENC)
   const encoderBefore = await wd.execAsync(async () => {
