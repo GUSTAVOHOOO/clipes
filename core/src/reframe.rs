@@ -107,14 +107,15 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     if start < 0 || end <= start || end > duration {
         return Err(invalid());
     }
+    let force = v["force"].as_bool().unwrap_or(false);
     let id = projects::with_writer(|c| {
         let tx = c.transaction()?;
         if let Some((id, job, state)) = tx.query_row(
             "SELECT r.id,r.job_id,j.state FROM reframe_suggestions r JOIN jobs j ON j.id=r.job_id WHERE r.source_id=?1 AND r.start_us=?2 AND r.end_us=?3",
             (source,start,end), |r| Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?))).optional()? {
-            if matches!(state.as_str(), "failed"|"cancelled") {
-                tx.execute("UPDATE jobs SET state='queued',cancel_requested=0,progress=0 WHERE id=?1", [job])?;
-                tx.execute("UPDATE reframe_suggestions SET error_code=NULL WHERE id=?1", [id])?;
+            if matches!(state.as_str(), "failed"|"cancelled") || (force && state == "completed") {
+                tx.execute("UPDATE jobs SET state='queued',cancel_requested=0,progress=0,checkpoint=NULL WHERE id=?1", [job])?;
+                tx.execute("UPDATE reframe_suggestions SET timeline=NULL,error_code=NULL WHERE id=?1", [id])?;
             }
             tx.commit()?;
             return Ok(id);

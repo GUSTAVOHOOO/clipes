@@ -1,47 +1,38 @@
-// Fixture determinística do contrato #70/#77/#66, só usada com VITE_CORE_MOCK + editor-test.
+// Fixture determinística do contrato #70/#77/#66/#71, só usada com VITE_CORE_MOCK + editor-test.
 import type { ExportRequest } from './core';
 import type { KeptSegment, SilenceInterval, SilencesState } from '@/features/editor/timelineMath';
-import { interpolateCrop, type CropKeyframe, type CropSegment } from '@/features/editor/cropMath';
+import { interpolateCrop, resolveCrop, type CropKeyframe, type SuggestedCrop } from '@/features/editor/cropMath';
 
 type Range = { startUs: number; endUs: number };
 type MockSilences = { thresholdUs: number; intervals: SilenceInterval[] };
-type Snapshot = { range: Range; silences: MockSilences | null };
-type Suggested = { schemaVersion: number; revision: number; status: string; segments: CropSegment[] };
-type CropDoc = { suggested: Suggested | null; edits: CropKeyframe[] };
+type Snapshot = { range: Range; silences: MockSilences | null; cropEdits: CropKeyframe[] };
+type CropDoc = { suggested: SuggestedCrop | null; edits: CropKeyframe[] };
 type Clip = { id: number; request: ExportRequest; range: Range; silences: MockSilences | null; undo: Snapshot[]; redo: Snapshot[]; revision: number; crop: CropDoc };
+type ReframeJob = { id: number; job: number; source: number; startUs: number; endUs: number; polls: number; revision: number; timeline: SuggestedCrop | null };
 
 const clips = new Map<string, Clip>();
+const reframeJobs = new Map<number, ReframeJob>();
+let nextReframeId = 1;
 const fail = (code: string) => { throw { code }; };
 const ids = (r: Range) => ({ start_id: Math.floor(r.startUs / 10_000_000) + 1, end_id: Math.ceil(r.endUs / 10_000_000) });
 const cloneSilences = (s: MockSilences | null): MockSilences | null => s ? { thresholdUs: s.thresholdUs, intervals: s.intervals.map(i => ({ ...i })) } : null;
+const cloneEdits = (edits: CropKeyframe[]): CropKeyframe[] => edits.map(k => ({ ...k }));
 const cropTest = () => typeof location !== 'undefined' && new URLSearchParams(location.search).has('crop-test');
 
-function exampleCrop(startUs: number, endUs: number): Suggested {
+function exampleCrop(startUs: number, endUs: number, revision = 1): SuggestedCrop {
   const w = 9 / 16 / (16 / 9);
   const mid = startUs + Math.floor((endUs - startUs) / 2);
   const panEnd = startUs + Math.floor(((endUs - startUs) * 2) / 5);
+  const secondX = revision > 1 ? (1 - w) * 0.75 : 1 - w;
   return {
-    schemaVersion: 1, revision: 1, status: 'suggestion',
+    schemaVersion: 1, revision, status: 'suggestion',
     segments: [
       { startUs, endUs: mid, reason: 'start', keyframes: [{ timeUs: startUs, x: 0, y: 0, width: w, height: 1, confidence: 0.95 }, { timeUs: panEnd, x: (1 - w) * 0.5, y: 0, width: w, height: 1, confidence: 0.95 }] },
-      { startUs: mid, endUs, reason: 'scene', keyframes: [{ timeUs: mid, x: 1 - w, y: 0, width: w, height: 1, confidence: 0.9 }] },
+      { startUs: mid, endUs, reason: 'scene', keyframes: [{ timeUs: mid, x: secondX, y: 0, width: w, height: 1, confidence: 0.9 }] },
     ],
   };
 }
-function resolveCrop(crop: CropDoc): CropSegment[] {
-  const sug = crop.suggested;
-  if (!sug || sug.segments.length === 0) {
-    if (crop.edits.length === 0) return [];
-    return [{ startUs: crop.edits[0].timeUs, endUs: crop.edits[crop.edits.length - 1].timeUs + 1, reason: 'start', keyframes: crop.edits }];
-  }
-  return sug.segments.flatMap((seg, i) => {
-    const low = i === 0 ? -Infinity : seg.startUs;
-    const high = i + 1 === sug.segments.length ? Infinity : seg.endUs;
-    const edited = crop.edits.filter(k => k.timeUs >= low && k.timeUs < high);
-    return edited.length === 0 ? [seg] : [{ startUs: Math.min(seg.startUs, edited[0].timeUs), endUs: Math.max(seg.endUs, edited[edited.length - 1].timeUs + 1), reason: seg.reason, keyframes: edited }];
-  });
-}
-const cropView = (crop: CropDoc) => { const resolved = resolveCrop(crop); return { suggested: crop.suggested, edits: crop.edits, resolved, hasCrop: resolved.length > 0 }; };
+const cropView = (crop: CropDoc) => { const resolved = resolveCrop(crop.suggested, crop.edits); return { suggested: crop.suggested, edits: crop.edits, resolved, hasCrop: resolved.length > 0 }; };
 
 export function buildMockSplice(range: Range, silences: MockSilences | null): { segments: KeptSegment[]; removedUs: number; effectiveDurationUs: number } {
   const active = (silences?.intervals ?? [])
@@ -130,31 +121,77 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
     }
     return { ...answer(c), windowStartUs: Math.max(0, c.range.startUs - 120_000_000), windowEndUs: c.range.endUs + 120_000_000, fps: 24 };
   }
+  if (name === 'reframe.start') {
+    const source = Number(a.source ?? 1);
+    const startUs = Number(a.startUs ?? 0);
+    const endUs = Number(a.endUs ?? 0);
+    const force = Boolean(a.force);
+    let existing = [...reframeJobs.values()].find(j => j.source === source && j.startUs === startUs && j.endUs === endUs);
+    if (!existing) {
+      const id = nextReframeId++;
+      existing = { id, job: 6000 + id, source, startUs, endUs, polls: 0, revision: force ? 2 : 1, timeline: null };
+      reframeJobs.set(id, existing);
+    } else if (force) {
+      existing.polls = 0;
+      existing.revision += 1;
+      existing.timeline = null;
+    }
+    return { id: existing.id, job: existing.job, source: existing.source, startUs: existing.startUs, endUs: existing.endUs, timeline: existing.timeline, error: null, state: existing.timeline ? 'completed' : 'queued', progress: existing.timeline ? 100 : 0 };
+  }
+  if (name === 'reframe.status') {
+    const item = reframeJobs.get(Number(a.id));
+    if (!item) return fail('reframe_not_found');
+    item.polls += 1;
+    if (!item.timeline && item.polls >= 1) {
+      item.timeline = exampleCrop(item.startUs, item.endUs, item.revision);
+    }
+    return { id: item.id, job: item.job, source: item.source, startUs: item.startUs, endUs: item.endUs, timeline: item.timeline, error: null, state: item.timeline ? 'completed' : 'running', progress: item.timeline ? 100 : 50 };
+  }
   if (name.startsWith('editor.crop.')) {
     const c = [...clips.values()].find(item => item.id === a.clip_id);
     if (!c) return fail('invalid_clip');
-    if (name === 'editor.crop.get') return { clipId: c.id, schemaVersion: 2, revision: c.revision, ...cropView(c.crop) };
-    if (name === 'editor.crop.evaluate') return { clipId: c.id, timeUs: Number(a.time_us), rect: interpolateCrop(resolveCrop(c.crop), Number(a.time_us)) };
-    if (name === 'editor.crop.set_suggested') { c.crop.suggested = (a.suggested as Suggested | null) ?? null; c.revision++; return { clipId: c.id, schemaVersion: 2, revision: c.revision, ...cropView(c.crop) }; }
-    if (name === 'editor.crop.set_edits') { c.crop.edits = (a.edits as CropKeyframe[]) ?? []; c.revision++; return { clipId: c.id, schemaVersion: 2, revision: c.revision, ...cropView(c.crop) }; }
-    if (name === 'editor.crop.example') { c.crop.suggested = exampleCrop(c.range.startUs, c.range.endUs); c.revision++; return { clipId: c.id, schemaVersion: 2, revision: c.revision, ...cropView(c.crop) }; }
+    const cropReply = (crop = c.crop) => ({ clipId: c.id, schemaVersion: 2, revision: c.revision, undoCount: c.undo.length, redoCount: c.redo.length, ...cropView(crop) });
+    if (name === 'editor.crop.get') return cropReply();
+    if (name === 'editor.crop.evaluate') return { clipId: c.id, timeUs: Number(a.time_us), rect: interpolateCrop(resolveCrop(c.crop.suggested, c.crop.edits), Number(a.time_us)) };
+    if (name === 'editor.crop.set_suggested') {
+      const reframeId = typeof a.reframe_id === 'number' ? a.reframe_id : null;
+      const nextSuggested = reframeId !== null ? (reframeJobs.get(reframeId)?.timeline ?? fail('invalid_crop')) : ((a.suggested as SuggestedCrop | null) ?? null);
+      c.crop.suggested = nextSuggested; c.revision++;
+      return cropReply();
+    }
+    if (name === 'editor.crop.set_edits') {
+      const nextEdits = cloneEdits((a.edits as CropKeyframe[]) ?? []);
+      if (a.preview) return cropReply({ suggested: c.crop.suggested, edits: nextEdits });
+      if (JSON.stringify(c.crop.edits) !== JSON.stringify(nextEdits)) {
+        c.undo.push({ range: c.range, silences: cloneSilences(c.silences), cropEdits: cloneEdits(c.crop.edits) });
+        if (c.undo.length > 100) c.undo.shift();
+        c.redo = [];
+        c.crop.edits = nextEdits;
+        c.revision++;
+      }
+      return cropReply();
+    }
+    if (name === 'editor.crop.example') { c.crop.suggested = exampleCrop(c.range.startUs, c.range.endUs); c.revision++; return cropReply(); }
   }
   if (!['editor.adjust', 'editor.undo', 'editor.redo', 'editor.silences.detect', 'editor.silences.toggle', 'editor.silences.revert_all', 'editor.silences.apply_all'].includes(name)) return undefined;
   const c = [...clips.values()].find(c => c.id === a.clip_id);
   if (!c) return fail('invalid_clip');
+  const pushUndo = () => {
+    c.undo.push({ range: c.range, silences: cloneSilences(c.silences), cropEdits: cloneEdits(c.crop.edits) });
+    if (c.undo.length > 100) c.undo.shift();
+    c.redo = [];
+  };
   if (name === 'editor.undo' || name === 'editor.redo') {
     const from = name === 'editor.undo' ? c.undo : c.redo, to = name === 'editor.undo' ? c.redo : c.undo;
     const next = from.pop();
-    if (next) { to.push({ range: c.range, silences: cloneSilences(c.silences) }); c.range = next.range; c.silences = next.silences; c.revision++; }
+    if (next) { to.push({ range: c.range, silences: cloneSilences(c.silences), cropEdits: cloneEdits(c.crop.edits) }); c.range = next.range; c.silences = next.silences; c.crop.edits = cloneEdits(next.cropEdits); c.revision++; }
     return answer(c);
   }
   if (name === 'editor.silences.detect') {
     const thresholdUs = typeof a.threshold_us === 'number' ? a.threshold_us : (c.silences?.thresholdUs ?? 600_000);
     const next = detectMockSilences(c.range, thresholdUs);
     if (a.preview) return answer(c, c.range, next);
-    c.undo.push({ range: c.range, silences: cloneSilences(c.silences) });
-    if (c.undo.length > 100) c.undo.shift();
-    c.redo = [];
+    pushUndo();
     c.silences = next;
     c.revision++;
     return answer(c);
@@ -167,9 +204,7 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
     const targetStatus = a.status === 'active' || a.status === 'reverted' ? a.status : (item.status === 'active' ? 'reverted' : 'active');
     if (item.status !== targetStatus) {
       item.status = targetStatus;
-      c.undo.push({ range: c.range, silences: cloneSilences(c.silences) });
-      if (c.undo.length > 100) c.undo.shift();
-      c.redo = [];
+      pushUndo();
       c.silences = next;
       c.revision++;
     }
@@ -181,9 +216,7 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
       if (c.silences.intervals.some(i => i.status !== targetStatus)) {
         const next = cloneSilences(c.silences)!;
         for (const item of next.intervals) item.status = targetStatus;
-        c.undo.push({ range: c.range, silences: cloneSilences(c.silences) });
-        if (c.undo.length > 100) c.undo.shift();
-        c.redo = [];
+        pushUndo();
         c.silences = next;
         c.revision++;
       }
@@ -210,7 +243,7 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
   const clipped = c.silences ? { thresholdUs: c.silences.thresholdUs, intervals: c.silences.intervals.filter(i => i.gapStartUs >= next.startUs && i.gapEndUs <= next.endUs) } : null;
   if (a.preview) return answer(c, next, clipped);
   if (next.startUs !== c.range.startUs || next.endUs !== c.range.endUs) {
-    c.undo.push({ range: c.range, silences: cloneSilences(c.silences) }); if (c.undo.length > 100) c.undo.shift(); c.redo = []; c.range = next; c.silences = clipped; c.revision++;
+    pushUndo(); c.range = next; c.silences = clipped; c.revision++;
   }
   return answer(c);
 }

@@ -838,3 +838,88 @@ fn real_ffmpeg_slow_pan_matches_preview_smoothly_without_even_pixel_steps() {
         "erro RMS de suavidade alto demais: {rms_step_err:.3}"
     );
 }
+
+#[test]
+fn real_ffmpeg_manual_crop_edits_without_suggested_match_preview_and_hard_cut() {
+    use clipes_core::editor::crop::{resolve, CropTimeline};
+
+    let root = tempfile::tempdir().unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", root.path().join("data"));
+    let program = std::env::var("CLIPES_TEST_FFMPEG").unwrap_or("ffmpeg".into());
+    let source = root.path().join("manual-src169.mp4");
+    ffmpeg(&[
+        "-v",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc2=size=640x360:rate=30:duration=3",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=440:duration=3",
+        "-c:v",
+        "libx264",
+        "-threads",
+        "2",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-y",
+        source.to_str().unwrap(),
+    ]);
+    let w_full = 9.0 / 16.0 / (16.0 / 9.0);
+    let timeline = CropTimeline {
+        suggested: None,
+        edits: vec![
+            kf(1_000_000, 0.05, 0.0, w_full, 1.0),
+            kf(1_800_000, 0.35, 0.0, w_full, 1.0),
+            CropKeyframe {
+                cut: true,
+                ..kf(2_000_000, 0.65, 0.0, w_full, 1.0)
+            },
+        ],
+    };
+    let resolved = resolve(&timeline);
+    let output = root.path().join("manual-crop-export.mp4");
+    let input = RenderInput {
+        source: source.clone(),
+        output: output.clone(),
+        start_us: 500_000,
+        end_us: 2_800_000,
+        audio_track: 1,
+        words: vec![],
+        crop: resolved.clone(),
+    };
+    render(
+        Path::new(&program),
+        &input,
+        &CancelToken::new(),
+        &mut |_| {},
+    )
+    .unwrap();
+
+    for clip_t in [0.1_f64, 0.4, 0.9, 1.4, 1.6, 2.0] {
+        let source_t = 0.5 + clip_t;
+        let rect = interpolate(&resolved, (source_t * 1_000_000.0).round() as i64).unwrap();
+        let actual = frame(&output, clip_t, "scale=270:480");
+        let ref_filter = format!(
+            "scale=w='2*ceil(1080/{:.9}/2)':h='2*ceil(1920/{:.9}/2)':flags=lanczos,setsar=1,crop=1080:1920:x='min(iw-1080,max(0,{:.9}*iw))':y='min(ih-1920,max(0,{:.9}*ih))':exact=1,scale=270:480",
+            rect.width, rect.height, rect.x, rect.y
+        );
+        let expected = frame(&source, source_t, &ref_filter);
+        let diff = mean_rgb_diff(&actual, &expected);
+        assert!(
+            diff < 5.0,
+            "divergência preview vs export manual em clip_t={clip_t}: diff={diff:.2}"
+        );
+    }
+
+    let before_manual_cut = frame(&output, 1.4, "scale=270:480");
+    let after_manual_cut = frame(&output, 1.6, "scale=270:480");
+    assert!(
+        mean_rgb_diff(&before_manual_cut, &after_manual_cut) > 15.0,
+        "corte seco manual não mudou o enquadramento"
+    );
+}

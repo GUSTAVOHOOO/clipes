@@ -54,9 +54,11 @@ export function skipCutForward(sourceUs: number, intervals?: SkipInterval[]): nu
   return null;
 }
 
+export type PreviewProxyInfo = { state: Proxy['state']; key: string; windowStartUs: number; windowEndUs: number };
+
 /** Preview 9:16 em Fit (barras, sem corte) de um Corte, sobre o proxy de GOP curto gerado pelo núcleo. */
 /** `rate` (editor, #61): 0 pausa, >0 toca nessa velocidade, <0 volta por passos. `onSourceTime` informa o tempo da Fonte a cada atualização. */
-export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, captions, skipIntervals, crop }: { sourceId: number; startUs: number; endUs: number; rate?: number; onSourceTime?: (sourceUs: number) => void; captions?: CaptionData | null; skipIntervals?: SkipInterval[]; crop?: CropSegment[] | null }) {
+export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onProxyChange, captions, skipIntervals, crop }: { sourceId: number; startUs: number; endUs: number; rate?: number; onSourceTime?: (sourceUs: number) => void; onProxyChange?: (proxy: PreviewProxyInfo | null) => void; captions?: CaptionData | null; skipIntervals?: SkipInterval[]; crop?: CropSegment[] | null }) {
   const t = useText(texts);
   const frame = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
@@ -83,6 +85,10 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, capti
     void request(() => alive);
     return () => { alive = false; };
   }, [request]);
+
+  useEffect(() => {
+    onProxyChange?.(proxy ? { state: proxy.state, key: proxy.key, windowStartUs: proxy.windowStartUs, windowEndUs: proxy.windowEndUs } : null);
+  }, [proxy?.state, proxy?.key, proxy?.windowStartUs, proxy?.windowEndUs, onProxyChange]);
 
   // Acompanha o job enquanto gera: evento do núcleo e uma checagem periódica de reserva.
   const working = proxy?.state === 'queued' || proxy?.state === 'running';
