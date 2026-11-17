@@ -21,6 +21,7 @@ use std::collections::BTreeMap;
 pub mod benchmark;
 pub mod cut;
 mod review;
+pub mod routing_benchmark;
 pub(crate) use review::{approved_cut, ApprovedCut};
 
 pub const TASK_ID: &str = "selection";
