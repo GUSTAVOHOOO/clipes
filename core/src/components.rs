@@ -369,7 +369,17 @@ pub(crate) fn ffprobe_executable(ffmpeg: Option<&Path>) -> Result<PathBuf, CoreE
     ))
 }
 fn ffmpeg_status(_: Value, _: &mut EventSink<'_>) -> CommandResult {
-    Ok(json!({"incomplete":managed_incomplete(&load_settings()?)}))
+    let settings = load_settings()?;
+    let incomplete = managed_incomplete(&settings);
+    let installed = !incomplete
+        && settings.ffmpeg_path.as_ref().is_some_and(|p| {
+            if p.is_absolute() || p.components().count() > 1 {
+                p.is_file()
+            } else {
+                true
+            }
+        });
+    Ok(json!({"incomplete": incomplete, "installed": installed}))
 }
 fn save_settings(s: &Settings) -> Result<(), CoreError> {
     let p = settings_path()?;
