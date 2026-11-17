@@ -73,6 +73,7 @@ pub mod guardrails;
 pub mod jobs;
 pub mod media;
 pub mod packaging;
+pub mod paths;
 pub mod process;
 pub mod projects;
 pub mod provider;

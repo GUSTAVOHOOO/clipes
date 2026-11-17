@@ -35,12 +35,8 @@ struct Recent {
     path: PathBuf,
 }
 fn library() -> Result<PathBuf, CoreError> {
-    if let Some(dir) = std::env::var_os("CLIPES_DATA_DIR") {
-        return Ok(PathBuf::from(dir).join("projects.json"));
-    }
-    Ok(dirs::data_local_dir()
-        .ok_or_else(|| error("library", "Diretório de dados indisponível"))?
-        .join("Clipes/projects.json"))
+    crate::paths::data_file("projects.json")
+        .map_err(|_| error("library", "Diretório de dados indisponível"))
 }
 fn read_library(path: &Path) -> Result<Vec<Recent>, CoreError> {
     match fs::read(path) {

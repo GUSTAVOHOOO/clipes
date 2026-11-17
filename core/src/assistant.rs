@@ -52,17 +52,8 @@ struct Settings {
 }
 
 fn path() -> Result<PathBuf, CoreError> {
-    if let Some(dir) = std::env::var_os("CLIPES_DATA_DIR") {
-        return Ok(PathBuf::from(dir).join("assistant.json"));
-    }
-    #[cfg(test)]
-    return Ok(
-        std::env::temp_dir().join(format!("clipes-assistant-test-{}.json", std::process::id()))
-    );
-    #[cfg(not(test))]
-    directories::ProjectDirs::from("io", "github.gustavohooo", "clipes")
-        .map(|p| p.config_dir().join("assistant.json"))
-        .ok_or_else(|| error("settings", "Could not locate settings directory"))
+    crate::paths::config_file("assistant.json")
+        .map_err(|_| error("settings", "Could not locate settings directory"))
 }
 
 fn read() -> Result<Settings, CoreError> {
