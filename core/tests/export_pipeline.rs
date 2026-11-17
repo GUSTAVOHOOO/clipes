@@ -207,3 +207,83 @@ fn crop_layout_stage_builds_fit_single_and_dual_stacked_plans() {
     let graph = pipeline::build_dual_filter_complex(&gw_export);
     assert!(graph.contains("vstack=inputs=2,ass=filename=captions.ass:fontsdir=fonts[vout]"));
 }
+
+#[test]
+fn ducking_stage_enters_before_loudness_and_builds_numeric_graph() {
+    use clipes_core::editor::silences::KeptSegment;
+    use clipes_core::export::pipeline::{Measured, NarrationMixPlan, NarrationMixSegment};
+
+    let mix = NarrationMixPlan {
+        segments: vec![
+            NarrationMixSegment {
+                input_index: 1,
+                start_us: 500_000,
+                duration_us: 2_000_000,
+            },
+            NarrationMixSegment {
+                input_index: 2,
+                start_us: 4_500_000,
+                duration_us: 3_000_000,
+            },
+        ],
+        clip_duration_us: 6_000_000,
+        freeze_tail_us: 1_500_000,
+        total_duration_us: 7_500_000,
+    };
+    let measured = Measured {
+        input_i: -18.0,
+        input_tp: -3.0,
+        input_lra: 6.0,
+        input_thresh: -28.0,
+        target_offset: 0.4,
+    };
+    let plan = pipeline::with_narration("libx264", Some(measured), None, Some(&mix));
+    assert_eq!(plan.narration_mix.as_ref(), Some(&mix));
+    assert!(plan.audio_filters[1].starts_with("loudnorm="));
+    assert_eq!(plan.audio_filters[2], "aresample=48000");
+
+    let graph = pipeline::build_narration_filter_complex(1, &plan);
+    assert!(graph.contains("sidechaincompress="));
+    assert!(graph.contains("amix=inputs=2:duration=longest:normalize=0"));
+    assert!(graph.contains("adelay=delays=500.000:all=1"));
+    assert!(graph.contains("adelay=delays=4500.000:all=1"));
+    assert!(graph.contains("tpad=stop_mode=clone:stop_duration=1.500000,ass=filename=captions.ass"));
+    // Loudnorm entra após a mixagem.
+    let amix_pos = graph
+        .rfind("amix=inputs=2:duration=longest:normalize=0")
+        .unwrap();
+    let loudnorm_pos = graph.find("loudnorm=").unwrap();
+    assert!(loudnorm_pos > amix_pos);
+
+    // Também funciona com trechos emendados (silêncios cortados, #77).
+    let spliced_segs = vec![
+        KeptSegment {
+            source_start_us: 0,
+            source_end_us: 3_000_000,
+            output_start_us: 0,
+            output_end_us: 3_000_000,
+        },
+        KeptSegment {
+            source_start_us: 4_000_000,
+            source_end_us: 7_000_000,
+            output_start_us: 3_000_000,
+            output_end_us: 6_000_000,
+        },
+    ];
+    let spliced_graph = pipeline::build_spliced_filter_complex(1, 0, &spliced_segs, &plan);
+    assert!(spliced_graph.contains("concat=n=2:v=1:a=1[vc][ac]"));
+    assert!(spliced_graph
+        .contains("tpad=stop_mode=clone:stop_duration=1.500000,ass=filename=captions.ass"));
+    assert!(spliced_graph.contains("sidechaincompress="));
+    assert!(spliced_graph.contains("amix=inputs=2:duration=longest:normalize=0"));
+
+    // Sem sobra final, não há `tpad`.
+    let no_tail = NarrationMixPlan {
+        freeze_tail_us: 0,
+        total_duration_us: 6_000_000,
+        ..mix
+    };
+    let no_tail_plan = pipeline::with_narration("libx264", None, None, Some(&no_tail));
+    let no_tail_graph = pipeline::build_narration_filter_complex(1, &no_tail_plan);
+    assert!(!no_tail_graph.contains("tpad="));
+}

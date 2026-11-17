@@ -270,9 +270,26 @@ fn montage_view(doc: &Document) -> Value {
     let Ok(Some(resolved)) = resolve_doc_montage(doc) else {
         return Value::Null;
     };
+    let audio_map = doc
+        .original
+        .candidate_id
+        .and_then(|cid| crate::tts::block_audio_for_candidate(cid).ok())
+        .unwrap_or_default();
     let mut value = serde_json::to_value(resolved.plan).unwrap_or(Value::Null);
     if let Some(obj) = value.as_object_mut() {
         obj.insert("scriptApproved".into(), json!(resolved.script_approved));
+        if let Some(blocks) = obj.get_mut("blocks").and_then(Value::as_array_mut) {
+            for block in blocks {
+                let audio_id = block
+                    .get("blockId")
+                    .and_then(Value::as_i64)
+                    .and_then(|id| audio_map.get(&id))
+                    .map(|a| a.narration_id);
+                if let Some(block_obj) = block.as_object_mut() {
+                    block_obj.insert("audioId".into(), json!(audio_id));
+                }
+            }
+        }
     }
     value
 }

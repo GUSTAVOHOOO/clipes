@@ -6,5 +6,5 @@ pub mod catalog;
 pub mod narration;
 
 pub use catalog::is_valid_voice;
-pub(crate) use narration::guardrail_status;
+pub(crate) use narration::{block_audio_for_candidate, guardrail_status};
 pub use narration::{block_durations_for_candidate, run, JOB_KIND};
