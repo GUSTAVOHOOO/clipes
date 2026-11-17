@@ -203,6 +203,26 @@ fn quality_profiles_are_named_per_encoder_and_unknown_names_fall_back() {
         plan.encoder_args,
         ["-preset", "fast", "-crf", "20", "-pix_fmt", "yuv420p"]
     );
+    // O NVENC usa o CQ calibrado contra o x264 CRF 20 (#232).
+    assert_eq!(encoder::NVENC_CQ, "25");
+    let nvenc = clipes_core::export::pipeline::with_encoder("h264_nvenc");
+    assert_eq!(
+        nvenc.encoder_args,
+        [
+            "-preset",
+            "p5",
+            "-tune",
+            "hq",
+            "-rc",
+            "vbr",
+            "-cq",
+            encoder::NVENC_CQ,
+            "-b:v",
+            "0",
+            "-pix_fmt",
+            "yuv420p",
+        ]
+    );
     assert_eq!(
         encoder::listed(" V....D h264_amf  x\n A....D h264_nvenc  y\n V....D h264_nvenc z\n"),
         ["h264_nvenc", "h264_amf"]
