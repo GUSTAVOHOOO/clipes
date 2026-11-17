@@ -50,6 +50,13 @@ export type GuardrailsState = {
     longFreezeTailCount?: number;
     maxFreezeTailUs?: number;
   };
+  audio?: {
+    hasAudio: boolean;
+    assetCount?: number;
+    unverifiedCount: number;
+    cutsWithAudio?: number;
+    cutsWithUnverifiedAudio?: number;
+  };
 };
 
 export const guardrailsTexts = {
@@ -89,7 +96,11 @@ export const guardrailsTexts = {
       narrationLongFreezeTailSingle: 'Sobra final longa da Narração: ultrapassa o Corte em {sec} s (> 5 s) e congelará o último quadro.',
       narrationFreezeTailBatch: 'Sobra final da Narração: {count} Vídeo(s) transformado(s) congelarão o último quadro (até {sec} s).',
       transformationRule: 'Legenda, crop e filtros não contam como Transformação.',
+      audioNoTransformation: 'Trilha sonora e efeitos importados também não contam como Transformação.',
       musicFixed: 'Música com claim: verifique se há música de fundo ou trilha de jogo na Fonte; músicas protegidas podem gerar claim no Content ID mesmo com Permissão.',
+      musicUnverifiedSingle: 'Música/áudio importado sem origem ou licença registrada: risco de claim no Content ID.',
+      musicUnverifiedBatch: '{count} Corte(s) com música/áudio importado sem origem ou licença registrada: risco de claim no Content ID.',
+      musicVerifiedSingle: 'Música/áudio importado: origem/licença registrada ({count} arquivo(s)).',
       musicOver60Single: 'Corte acima de 60 s: Shorts com mais de 1 minuto que contenham música com claim são bloqueados e ficam inelegíveis para monetização.',
       musicOver60Batch: '{count} Corte(s) acima de 60 s: Shorts com mais de 1 minuto que contenham música com claim são bloqueados e ficam inelegíveis para monetização.',
     },
@@ -130,7 +141,11 @@ export const guardrailsTexts = {
       narrationLongFreezeTailSingle: 'Long Narration tail overflow: exceeds the Clip by {sec} s (> 5 s) and will freeze the last frame.',
       narrationFreezeTailBatch: 'Narration tail overflow: {count} Transformed Video(s) will freeze the last frame (up to {sec} s).',
       transformationRule: 'Captions, crop, and filters do not count as Transformation.',
+      audioNoTransformation: 'Imported soundtrack and sound effects also do not count as Transformation.',
       musicFixed: 'Claimed music: check for background music or game soundtracks in the Source; copyrighted music can trigger a Content ID claim even with Permission.',
+      musicUnverifiedSingle: 'Imported music/audio without a recorded origin or license: risk of Content ID claim.',
+      musicUnverifiedBatch: '{count} Clip(s) with imported music/audio without a recorded origin or license: risk of Content ID claim.',
+      musicVerifiedSingle: 'Imported music/audio: origin/license recorded ({count} file(s)).',
       musicOver60Single: 'Clip over 60 s: Shorts longer than 1 minute containing claimed music are blocked and ineligible for monetization.',
       musicOver60Batch: '{count} Clip(s) over 60 s: Shorts longer than 1 minute containing claimed music are blocked and ineligible for monetization.',
     },
@@ -353,7 +368,25 @@ export function GuardrailsChecklist(props: ChecklistProps) {
             </li>
           )}
           <li data-guardrails-item="transformation">{t.transformationRule}</li>
+          {state?.audio?.hasAudio && (
+            <li data-guardrails-item="audio-transformation">{t.audioNoTransformation}</li>
+          )}
           <li data-guardrails-item="music">{t.musicFixed}</li>
+          {state?.audio && state.audio.unverifiedCount > 0 && (
+            <li
+              data-guardrails-music-unverified
+              className="rounded-sm bg-warning-subtle px-2 py-1 text-fg"
+            >
+              {state.scope === 'single'
+                ? t.musicUnverifiedSingle
+                : fill(t.musicUnverifiedBatch, { count: state.audio.cutsWithUnverifiedAudio ?? state.audio.unverifiedCount })}
+            </li>
+          )}
+          {state?.audio?.hasAudio && state.audio.unverifiedCount === 0 && state.scope === 'single' && (
+            <li data-guardrails-music-verified>
+              {fill(t.musicVerifiedSingle, { count: state.audio.assetCount ?? 1 })}
+            </li>
+          )}
           {state?.over60s && (
             <li
               data-guardrails-over60s

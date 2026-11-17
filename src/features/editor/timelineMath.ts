@@ -55,6 +55,84 @@ export type MontageState = {
   warnings: MontageWarning[];
 };
 
+export type AudioKind = 'music' | 'sfx';
+export type LicenseKind = 'unknown' | 'youtube_audio_library' | 'cc0' | 'cc_by' | 'purchased' | 'original';
+
+export type AudioAsset = {
+  id: number;
+  kind: AudioKind;
+  name: string;
+  durationUs: number;
+  sampleRate: number;
+  channels: number;
+  bytes: number;
+  sha256: string;
+  licenseKind: LicenseKind;
+  licenseAttribution: string;
+  licenseVerified: boolean;
+  mediaId: string;
+  createdAt: string;
+};
+
+export type SfxAnchor =
+  | { kind: 'moment'; sourceUs: number }
+  | { kind: 'word'; track: 'original' | 'narration'; position: number; blockId?: number | null; offsetUs: number };
+
+export type ResolvedSoundtrack = {
+  assetId: number;
+  name: string;
+  mediaId: string;
+  assetDurationUs: number;
+  startUs: number;
+  playDurationUs: number;
+  endUs: number;
+  volume: number;
+  fadeInUs: number;
+  fadeOutUs: number;
+  loopToFit: boolean;
+  licenseKind: LicenseKind;
+  licenseAttribution: string;
+  licenseVerified: boolean;
+};
+
+export type ResolvedSfx = {
+  id: number;
+  assetId: number;
+  name: string;
+  mediaId: string;
+  assetDurationUs: number;
+  anchor: SfxAnchor;
+  wordText?: string | null;
+  startUs: number;
+  endUs: number;
+  sourceStartUs: number;
+  volume: number;
+  fadeInUs: number;
+  fadeOutUs: number;
+  outsideClip: boolean;
+  licenseKind: LicenseKind;
+  licenseAttribution: string;
+  licenseVerified: boolean;
+};
+
+export type SpeechInterval = { startUs: number; endUs: number };
+
+export type AudioMixWarning = {
+  code: string;
+  message: string;
+  sfxId?: number | null;
+  assetId?: number | null;
+};
+
+export type AudioMixState = {
+  soundtrack: ResolvedSoundtrack | null;
+  sfx: ResolvedSfx[];
+  speechIntervals: SpeechInterval[];
+  totalDurationUs: number;
+  unverifiedCount: number;
+  warnings: AudioMixWarning[];
+};
+
 /** Mapeia um tempo absoluto da Fonte (µs) para o tempo relativo no Corte emendado (µs),
  * espelhando `SpliceMap::source_to_output` do núcleo (#77). */
 export function sourceToSplicedUs(sourceUs: number, segments: KeptSegment[] | undefined, fallbackStartUs: number): number {

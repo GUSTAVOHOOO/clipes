@@ -336,6 +336,12 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         const effectiveTransformed = hasTransformed || freezeTailUs > 0 || !!montageInfo?.montage;
         const effectiveKind = effectiveTransformed ? 'transformed' : videoKind;
         const scriptView = effectiveTransformed ? (scriptMockDispatch('script.get', { candidate: a.candidate_id ?? 1 }) as { current?: { blocks?: unknown[]; pending?: number } | null; narrationAllowed?: boolean }) : null;
+        const audioInfo = typeof (a as { clip_id?: number }).clip_id === 'number'
+          ? (editorEditsMock('editor.audio.get', { clip_id: (a as { clip_id?: number }).clip_id }) as { audioMix?: { soundtrack?: { assetId: number; licenseVerified: boolean } | null; sfx: { assetId: number; licenseVerified: boolean }[]; unverifiedCount: number } } | undefined)?.audioMix
+          : undefined;
+        const usedIds = new Set<number>();
+        if (audioInfo?.soundtrack) usedIds.add(audioInfo.soundtrack.assetId);
+        for (const item of audioInfo?.sfx ?? []) usedIds.add(item.assetId);
         return {
           scope: 'single',
           directMonetizationAck: ack,
@@ -351,6 +357,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
           permission: { status: granted ? 'granted' : 'none', grantedCount: granted ? 1 : 0, missingCount: granted ? 0 : 1, totalCount: 1, who: permObj?.who ?? null, where: permObj?.where ?? null, scope: permObj?.scope ?? null },
           script: effectiveTransformed ? { applicable: true, exists: !!scriptView?.current, approved: !!scriptView?.narrationAllowed, pendingBlocks: scriptView?.current?.pending ?? 0, totalBlocks: scriptView?.current?.blocks?.length ?? 0 } : { applicable: false },
           narration: effectiveTransformed ? (() => { const g = narrationGenerated.get(a.candidate_id ?? 1) ?? []; return { applicable: true, hasTts: g.length > 0, generatedBlocks: g.length, totalBlocks: scriptView?.current?.blocks?.length ?? 0, voices: [...new Set(g.map(x => x.voiceId))], freezeTailUs, longFreezeTail: freezeTailUs > 5_000_000 }; })() : { applicable: false },
+          audio: { hasAudio: usedIds.size > 0, assetCount: usedIds.size, unverifiedCount: audioInfo?.unverifiedCount ?? 0 },
         } as T;
       }
       const totalCuts = selectionFlag('export-batch-empty') || (scope === 'source' && !selectionMock.run) ? 0 : 2;
@@ -373,6 +380,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
           : { status: batchGranted ? 'granted' : 'none', grantedCount: batchGranted ? totalCuts : 0, missingCount: batchGranted ? 0 : totalCuts, totalCount: totalCuts },
         script: hasTransformed && totalCuts > 0 ? { applicable: true, transformedCount: totalCuts, approvedCount: 0, unapprovedCount: totalCuts } : { applicable: false },
         narration: hasTransformed && totalCuts > 0 ? { applicable: true, hasTts: false, ttsCutCount: 0, transformedCount: totalCuts } : { applicable: false },
+        audio: { applicable: totalCuts > 0, cutsWithAudio: 0, cutsWithUnverifiedAudio: 0, totalUnverified: 0 },
       } as T;
     }
     if (sourceTest && new URLSearchParams(location.search).has('batch-test')) { const handled = batchMockDispatch(name, args); if (handled !== undefined) return handled as T; }
@@ -632,7 +640,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'components.models.download') return { id: (args as { id: string }).id } as T;
     if (sourceTest && new URLSearchParams(location.search).has('transcript-test') && name === 'transcription.segment') return {} as T;
     // Preview do Corte simulado (#58): a Fonte 2 está offline; a primeira consulta de um Corte gera (40%), a seguinte já está pronta.
-    if (editorTest && (name.startsWith('editor.') || name.startsWith('captions.') || name.startsWith('reframe.') || name === 'export.captions')) return editorMock(name, args as Record<string, number>) as T;
+    if (editorTest && (name.startsWith('editor.') || name.startsWith('audio.') || name.startsWith('captions.') || name.startsWith('reframe.') || name === 'export.captions')) return editorMock(name, args as Record<string, number>) as T;
     const translated = translationMockDispatch(name, args);
     if (translated !== undefined) return translated as T;
     if (transcriptTest && name === 'proxy.request') { const a = args as {source_id:number; start_us:number; end_us:number}; if (a.source_id === 2) throw {code:'source_offline', message:'A Fonte está offline: reconecte ou relocalize a Fonte para ver o preview.'}; const key = 'ab'.repeat(32); mockProxyPolls = 0; return {state:'running', key, job:7, progress:40, error:null, windowStartUs:Math.max(0, a.start_us - 120_000_000), windowEndUs:a.end_us + 120_000_000} as T; }

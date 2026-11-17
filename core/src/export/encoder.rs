@@ -452,11 +452,32 @@ pub(crate) fn render_styled_spliced_crop_plan_narration_with_fallback_overwrite(
     cancel: &CancelToken,
     progress: &mut dyn FnMut(u8),
 ) -> Result<Outcome, CoreError> {
+    render_styled_spliced_crop_plan_narration_audio_with_fallback_overwrite(
+        ffmpeg, input, segments, prepared, preferred, overwrite, crop_plan, narration, None,
+        cancel, progress,
+    )
+}
+
+/// Variante interna usada pelo export com plano de layout (#78), Narração (#82) e trilha/efeitos (#154).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn render_styled_spliced_crop_plan_narration_audio_with_fallback_overwrite(
+    ffmpeg: &Path,
+    input: &RenderInput,
+    segments: &[crate::editor::silences::KeptSegment],
+    prepared: &crate::caption_style::Prepared,
+    preferred: &str,
+    overwrite: bool,
+    crop_plan: Option<&crate::editor::crop::ResolvedCropPlan>,
+    narration: Option<&render::NarrationRenderInput>,
+    audio: Option<&render::AudioMixRenderInput>,
+    cancel: &CancelToken,
+    progress: &mut dyn FnMut(u8),
+) -> Result<Outcome, CoreError> {
     with_fallback(
         preferred,
         |encoder, progress| {
-            render::render_styled_spliced_crop_plan_narration_with_overwrite(
-                ffmpeg, input, segments, prepared, encoder, overwrite, crop_plan, narration,
+            render::render_styled_spliced_crop_plan_narration_audio_with_overwrite(
+                ffmpeg, input, segments, prepared, encoder, overwrite, crop_plan, narration, audio,
                 cancel, progress,
             )
         },

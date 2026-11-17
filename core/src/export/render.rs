@@ -58,6 +58,40 @@ pub struct NarrationRenderInput {
     pub freeze_tail_us: i64,
     pub total_duration_us: i64,
 }
+
+/// Trilha sonora importada entregue ao render (#154).
+#[derive(Clone, Debug)]
+pub struct SoundtrackRenderInput {
+    pub path: PathBuf,
+    pub asset_duration_us: i64,
+    pub start_us: i64,
+    pub play_duration_us: i64,
+    pub volume: f64,
+    pub fade_in_us: i64,
+    pub fade_out_us: i64,
+    pub loop_to_fit: bool,
+}
+
+/// Efeito sonoro importado entregue ao render (#154).
+#[derive(Clone, Debug)]
+pub struct SfxRenderInput {
+    pub path: PathBuf,
+    pub start_us: i64,
+    pub play_duration_us: i64,
+    pub volume: f64,
+    pub fade_in_us: i64,
+    pub fade_out_us: i64,
+}
+
+/// Plano de trilha, efeitos e intervalos de fala entregue ao render (#154).
+#[derive(Clone, Debug)]
+pub struct AudioMixRenderInput {
+    pub soundtrack: Option<SoundtrackRenderInput>,
+    pub sfx: Vec<SfxRenderInput>,
+    pub speech_intervals: Vec<crate::audio::SpeechInterval>,
+    pub clip_duration_us: i64,
+    pub total_duration_us: i64,
+}
 #[derive(Default)]
 struct Report {
     measured: [Option<f64>; 5],
@@ -380,7 +414,40 @@ pub fn render_with_narration(
         font_bytes: FONT_BYTES,
     };
     render_ass_spliced_plan(
-        ffmpeg, input, segments, &doc, encoder, false, None, narration, cancel, progress,
+        ffmpeg, input, segments, &doc, encoder, false, None, narration, None, cancel, progress,
+    )
+}
+
+/// Exporta aplicando os trechos mantidos (#77), Narração (#82) e trilha sonora / efeitos (#154).
+#[allow(clippy::too_many_arguments)]
+pub fn render_with_audio(
+    ffmpeg: &Path,
+    input: &RenderInput,
+    segments: &[KeptSegment],
+    narration: Option<&NarrationRenderInput>,
+    audio: Option<&AudioMixRenderInput>,
+    encoder: &str,
+    cancel: &CancelToken,
+    progress: &mut dyn FnMut(u8),
+) -> Result<(), CoreError> {
+    let base_dur = if segments.len() > 1 {
+        segments
+            .last()
+            .map_or(input.end_us - input.start_us, |s| s.output_end_us)
+    } else {
+        input.end_us - input.start_us
+    };
+    let duration = narration
+        .map_or(base_dur, |n| n.total_duration_us.max(base_dur))
+        .max(audio.map_or(0, |a| a.total_duration_us));
+    let ass = captions::ass(&input.words, duration)?;
+    let doc = AssDoc {
+        ass: &ass,
+        font_file: "NotoSans-Bold.ttf",
+        font_bytes: FONT_BYTES,
+    };
+    render_ass_spliced_plan(
+        ffmpeg, input, segments, &doc, encoder, false, None, narration, audio, cancel, progress,
     )
 }
 
@@ -471,6 +538,7 @@ pub fn render_crop_plan(
         false,
         Some(crop_plan),
         None,
+        None,
         cancel,
         progress,
     )
@@ -489,14 +557,15 @@ pub(crate) fn render_styled_spliced_crop_plan_with_overwrite(
     cancel: &CancelToken,
     progress: &mut dyn FnMut(u8),
 ) -> Result<(), CoreError> {
-    render_styled_spliced_crop_plan_narration_with_overwrite(
-        ffmpeg, input, segments, prepared, encoder, overwrite, crop_plan, None, cancel, progress,
+    render_styled_spliced_crop_plan_narration_audio_with_overwrite(
+        ffmpeg, input, segments, prepared, encoder, overwrite, crop_plan, None, None, cancel,
+        progress,
     )
 }
 
-/// Variante interna usada pelo export com layout (#78) e Narração/ducking (#82).
+/// Variante interna usada pelo export com layout (#78), Narração (#82) e trilha/efeitos (#154).
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn render_styled_spliced_crop_plan_narration_with_overwrite(
+pub(crate) fn render_styled_spliced_crop_plan_narration_audio_with_overwrite(
     ffmpeg: &Path,
     input: &RenderInput,
     segments: &[KeptSegment],
@@ -505,6 +574,7 @@ pub(crate) fn render_styled_spliced_crop_plan_narration_with_overwrite(
     overwrite: bool,
     crop_plan: Option<&crate::editor::crop::ResolvedCropPlan>,
     narration: Option<&NarrationRenderInput>,
+    audio: Option<&AudioMixRenderInput>,
     cancel: &CancelToken,
     progress: &mut dyn FnMut(u8),
 ) -> Result<(), CoreError> {
@@ -515,7 +585,8 @@ pub(crate) fn render_styled_spliced_crop_plan_narration_with_overwrite(
         font_bytes: prepared.style.font_bytes(),
     };
     render_ass_spliced_plan(
-        ffmpeg, input, segments, &doc, encoder, overwrite, crop_plan, narration, cancel, progress,
+        ffmpeg, input, segments, &doc, encoder, overwrite, crop_plan, narration, audio, cancel,
+        progress,
     )
 }
 
@@ -523,6 +594,11 @@ struct AssDoc<'a> {
     ass: &'a str,
     font_file: &'static str,
     font_bytes: &'a [u8],
+}
+
+struct ExtraInputFile {
+    path: PathBuf,
+    stream_loop: bool,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -535,6 +611,7 @@ fn render_ass_spliced_plan(
     overwrite: bool,
     crop_plan: Option<&crate::editor::crop::ResolvedCropPlan>,
     narration: Option<&NarrationRenderInput>,
+    audio: Option<&AudioMixRenderInput>,
     cancel: &CancelToken,
     progress: &mut dyn FnMut(u8),
 ) -> Result<(), CoreError> {
@@ -549,12 +626,13 @@ fn render_ass_spliced_plan(
     } else {
         duration
     };
-    let (narration_mix, narration_files): (Option<pipeline::NarrationMixPlan>, Vec<PathBuf>) =
+    let mut next_input_idx = 1usize;
+    let mut extra_inputs: Vec<ExtraInputFile> = Vec::new();
+    let narration_mix: Option<pipeline::NarrationMixPlan> =
         match narration.filter(|n| !n.tracks.is_empty()) {
             Some(nr) => {
                 let mut mix_segments = Vec::with_capacity(nr.tracks.len());
-                let mut files = Vec::with_capacity(nr.tracks.len());
-                for (idx, track) in nr.tracks.iter().enumerate() {
+                for track in &nr.tracks {
                     let canonical = track.path.canonicalize().map_err(|_| {
                         error(
                             "narration_failed",
@@ -568,30 +646,125 @@ fn render_ass_spliced_plan(
                         ));
                     }
                     mix_segments.push(pipeline::NarrationMixSegment {
-                        input_index: idx + 1,
+                        input_index: next_input_idx,
                         start_us: track.start_us.max(0),
                         duration_us: track.duration_us.max(1),
                     });
-                    files.push(canonical);
+                    next_input_idx += 1;
+                    extra_inputs.push(ExtraInputFile {
+                        path: canonical,
+                        stream_loop: false,
+                    });
                 }
                 let clip_dur = nr.clip_duration_us.max(output_duration);
                 let tail = nr.freeze_tail_us.max(0);
                 let total = nr.total_duration_us.max(clip_dur + tail);
-                (
-                    Some(pipeline::NarrationMixPlan {
-                        segments: mix_segments,
-                        clip_duration_us: clip_dur,
-                        freeze_tail_us: tail,
-                        total_duration_us: total,
-                    }),
-                    files,
-                )
+                Some(pipeline::NarrationMixPlan {
+                    segments: mix_segments,
+                    clip_duration_us: clip_dur,
+                    freeze_tail_us: tail,
+                    total_duration_us: total,
+                })
             }
-            None => (None, Vec::new()),
+            None => None,
         };
     let total_output_duration = narration_mix
         .as_ref()
         .map_or(output_duration, |m| m.total_duration_us);
+    let extra_audio: Option<pipeline::ExtraAudioMixPlan> = match audio {
+        Some(au) if au.soundtrack.is_some() || !au.sfx.is_empty() => {
+            let clip_dur = au.clip_duration_us.max(output_duration);
+            let total_dur = au.total_duration_us.max(total_output_duration);
+            let soundtrack_plan = if let Some(st) = &au.soundtrack {
+                let start_us = st.start_us.clamp(0, total_dur);
+                let remaining = (total_dur - start_us).max(0);
+                let play_dur = if st.loop_to_fit {
+                    remaining
+                } else {
+                    remaining.min(st.play_duration_us).min(st.asset_duration_us)
+                };
+                if play_dur > 0 {
+                    let canonical = st.path.canonicalize().map_err(|_| {
+                        error(
+                            "audio_asset_missing",
+                            "Trilha sonora não foi encontrada para exportar.",
+                        )
+                    })?;
+                    if !canonical.is_file() {
+                        return Err(error(
+                            "audio_asset_missing",
+                            "Trilha sonora não foi encontrada para exportar.",
+                        ));
+                    }
+                    let idx = next_input_idx;
+                    next_input_idx += 1;
+                    extra_inputs.push(ExtraInputFile {
+                        path: canonical,
+                        stream_loop: st.loop_to_fit && st.asset_duration_us < play_dur,
+                    });
+                    Some(pipeline::SoundtrackMixPlan {
+                        input_index: idx,
+                        start_us,
+                        play_duration_us: play_dur,
+                        volume: st.volume,
+                        fade_in_us: st.fade_in_us,
+                        fade_out_us: st.fade_out_us,
+                        loop_to_fit: st.loop_to_fit,
+                        asset_duration_us: st.asset_duration_us,
+                    })
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            let mut sfx_plans = Vec::with_capacity(au.sfx.len());
+            for sfx in &au.sfx {
+                let start_us = sfx.start_us.max(0);
+                let play_dur = sfx.play_duration_us.min((total_dur - start_us).max(0));
+                if play_dur <= 0 {
+                    continue;
+                }
+                let canonical = sfx.path.canonicalize().map_err(|_| {
+                    error(
+                        "audio_asset_missing",
+                        "Efeito sonoro não foi encontrado para exportar.",
+                    )
+                })?;
+                if !canonical.is_file() {
+                    return Err(error(
+                        "audio_asset_missing",
+                        "Efeito sonoro não foi encontrado para exportar.",
+                    ));
+                }
+                let idx = next_input_idx;
+                next_input_idx += 1;
+                extra_inputs.push(ExtraInputFile {
+                    path: canonical,
+                    stream_loop: false,
+                });
+                sfx_plans.push(pipeline::SfxMixSegment {
+                    input_index: idx,
+                    start_us,
+                    play_duration_us: play_dur,
+                    volume: sfx.volume,
+                    fade_in_us: sfx.fade_in_us,
+                    fade_out_us: sfx.fade_out_us,
+                });
+            }
+
+            let plan = pipeline::ExtraAudioMixPlan {
+                soundtrack: soundtrack_plan,
+                sfx: sfx_plans,
+                speech_intervals: au.speech_intervals.clone(),
+                clip_duration_us: clip_dur,
+                total_duration_us: total_dur,
+            };
+            (!plan.is_empty()).then_some(plan)
+        }
+        _ => None,
+    };
     let missing =
         captions::missing_glyphs_in_duration(&input.words, doc.font_bytes, output_duration);
     if !missing.is_empty() {
@@ -629,14 +802,15 @@ fn render_ass_spliced_plan(
         segments,
         total_output_duration,
         narration_mix.as_ref(),
-        &narration_files,
+        extra_audio.as_ref(),
+        &extra_inputs,
         work.path(),
         cancel,
         &mut tracker,
         progress,
     )?;
     let plan = if let Some(cp) = crop_plan {
-        pipeline::with_crop_plan_and_narration(
+        pipeline::with_crop_plan_narration_and_audio(
             encoder,
             measured,
             Some(pipeline::CropLayoutStage {
@@ -645,6 +819,7 @@ fn render_ass_spliced_plan(
                 end_us: input.end_us,
             }),
             narration_mix.as_ref(),
+            extra_audio.as_ref(),
         )
     } else {
         let crop = (!input.crop.is_empty()).then_some(pipeline::Crop {
@@ -652,7 +827,13 @@ fn render_ass_spliced_plan(
             start_us: input.start_us,
             end_us: input.end_us,
         });
-        pipeline::with_narration(encoder, measured, crop, narration_mix.as_ref())
+        pipeline::with_narration_and_audio(
+            encoder,
+            measured,
+            crop,
+            narration_mix.as_ref(),
+            extra_audio.as_ref(),
+        )
     };
     for (name, commands) in &plan.crop_files {
         fs::write(work.path().join(name), commands).map_err(|_| failed())?;
@@ -667,16 +848,20 @@ fn render_ass_spliced_plan(
         "-ss".into(),
         seconds(input.start_us).into(),
     ];
-    if narration_mix.is_some() {
-        // Com Narração/`tpad`, `-t` limita apenas a leitura da Fonte sem cortar o `tpad` final.
+    let has_extra_audio_inputs = !extra_inputs.is_empty();
+    if has_extra_audio_inputs {
+        // Com Narração/`tpad` ou trilha/efeitos, `-t` limita apenas a leitura da Fonte.
         args.extend([
             "-t".into(),
             seconds(duration).into(),
             "-i".into(),
             source.into_os_string(),
         ]);
-        for wav in &narration_files {
-            args.extend(["-i".into(), wav.as_os_str().to_owned()]);
+        for extra in &extra_inputs {
+            if extra.stream_loop {
+                args.extend(["-stream_loop".into(), "-1".into()]);
+            }
+            args.extend(["-i".into(), extra.path.as_os_str().to_owned()]);
         }
     } else {
         args.extend([
@@ -701,7 +886,7 @@ fn render_ass_spliced_plan(
             "-map".into(),
             "[aout]".into(),
         ]);
-    } else if plan.narration_mix.is_some() {
+    } else if plan.narration_mix.is_some() || plan.extra_audio.is_some() {
         let graph = pipeline::build_narration_filter_complex(input.audio_track, &plan);
         args.extend([
             "-filter_complex".into(),
@@ -818,7 +1003,8 @@ fn measure_loudness(
     segments: &[KeptSegment],
     output_duration: i64,
     narration_mix: Option<&pipeline::NarrationMixPlan>,
-    narration_files: &[PathBuf],
+    extra_audio: Option<&pipeline::ExtraAudioMixPlan>,
+    extra_inputs: &[ExtraInputFile],
     work: &Path,
     cancel: &CancelToken,
     tracker: &mut ProgressNormalizer,
@@ -837,16 +1023,20 @@ fn measure_loudness(
         "-i".into(),
         source.as_os_str().to_owned(),
     ];
-    for wav in narration_files {
-        args.extend(["-i".into(), wav.as_os_str().to_owned()]);
+    for extra in extra_inputs {
+        if extra.stream_loop {
+            args.extend(["-stream_loop".into(), "-1".into()]);
+        }
+        args.extend(["-i".into(), extra.path.as_os_str().to_owned()]);
     }
     args.push("-vn".into());
-    if segments.len() > 1 || narration_mix.is_some() {
-        let graph = pipeline::build_measure_filter_complex_with_narration(
+    if segments.len() > 1 || narration_mix.is_some() || extra_audio.is_some() {
+        let graph = pipeline::build_measure_filter_complex_with_audio(
             input.audio_track,
             input.start_us,
             segments,
             narration_mix,
+            extra_audio,
         );
         args.extend([
             "-filter_complex".into(),
