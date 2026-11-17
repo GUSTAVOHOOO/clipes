@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import type { TtsCatalog } from '@/features/components/TtsCatalogCard';
 import { fill } from './selectionFormat';
+import { TeleprompterRecorder } from './TeleprompterRecorder';
 
 type AudioInfo = {
   id: number;
@@ -22,6 +23,7 @@ type AudioInfo = {
   channels: number;
   bytes: number;
   stale: boolean;
+  trimmed?: boolean;
 };
 
 type BlockAlignment = {
@@ -89,6 +91,7 @@ type NarrationDoc = {
   alignBusy?: boolean;
   alignJob?: AlignJob | null;
   alignPrerequisitesReady?: boolean;
+  vadReady?: boolean;
   blocks: NarrationBlock[];
   totalDurationUs: number;
 };
@@ -105,6 +108,11 @@ const texts = {
     cancel: 'Cancelar',
     block: 'Bloco {n}',
     regenerateBlock: 'Regenerar bloco',
+    recordBlock: 'Gravar bloco',
+    recordedLabel: 'Gravada',
+    untrimmedLabel: 'não aparada (aparo de silêncio indisponível: instale o worker)',
+    trimNow: 'Aparar agora',
+    trimSuccess: 'Silêncios da gravação aparados.',
     duration: 'Duração real: {sec} s',
     stale: 'desatualizada (Roteiro editado)',
     noAudio: 'Ainda sem áudio gerado.',
@@ -153,6 +161,7 @@ const texts = {
       narration_align_in_progress: 'Já há um alinhamento de Narração em andamento.',
       generation_in_progress: 'Já há uma síntese de Narração em andamento.',
       narration_failed: 'O motor Pocket TTS falhou ao sintetizar um bloco.',
+      no_speech_detected: 'Nenhuma fala detectada na gravação.',
       invalid_audio_path: 'Selecione um arquivo de áudio válido.',
       import_file_missing: 'Arquivo de áudio não encontrado.',
       import_unsupported_format: 'Formato de áudio não suportado. Use WAV, MP3, M4A ou OGG.',
@@ -180,6 +189,11 @@ const texts = {
     cancel: 'Cancel',
     block: 'Block {n}',
     regenerateBlock: 'Regenerate block',
+    recordBlock: 'Record block',
+    recordedLabel: 'Recorded',
+    untrimmedLabel: 'untrimmed (silence trimming unavailable: install the worker)',
+    trimNow: 'Trim now',
+    trimSuccess: 'Recording silences trimmed.',
     duration: 'Real duration: {sec} s',
     stale: 'outdated (Script edited)',
     noAudio: 'No audio generated yet.',
@@ -228,6 +242,7 @@ const texts = {
       narration_align_in_progress: 'A Narration alignment is already running.',
       generation_in_progress: 'A Narration synthesis is already running.',
       narration_failed: 'Pocket TTS failed while synthesizing a block.',
+      no_speech_detected: 'No speech detected in the recording.',
       invalid_audio_path: 'Choose a valid audio file.',
       import_file_missing: 'Audio file not found.',
       import_unsupported_format: 'Unsupported audio format. Use WAV, MP3, M4A, or OGG.',
@@ -256,6 +271,8 @@ export function Narration({ candidate, refreshKey = 0, onChanged }: { candidate:
   const [catalog, setCatalog] = useState<TtsCatalog | null>(null);
   const [voiceId, setVoiceId] = useState('');
   const [error, setError] = useState('');
+  const [recordNotice, setRecordNotice] = useState('');
+  const [recordingBlockId, setRecordingBlockId] = useState<number | null>(null);
   const [replacePending, setReplacePending] = useState<{ blockId: number; kind: 'tts' | 'imported' | 'recorded' } | null>(null);
   const importFocusRef = useRef<HTMLButtonElement>(null);
 
@@ -394,6 +411,26 @@ export function Narration({ candidate, refreshKey = 0, onChanged }: { candidate:
     }
   }
 
+  async function trimBlock(block: number) {
+    setError('');
+    setRecordNotice('');
+    try {
+      await coreDispatch('narration.trim_block', { candidate, block });
+      setDoc(await coreDispatch<NarrationDoc>('narration.get', { candidate }));
+      setRecordNotice(t.trimSuccess);
+      onChanged?.();
+    } catch (e) {
+      setError(t.errors[codeOf(e)] ?? t.errors.default);
+    }
+  }
+
+  async function handleRecordedSaved(warning?: string) {
+    setError('');
+    setRecordNotice(warning ?? '');
+    setDoc(await coreDispatch<NarrationDoc>('narration.get', { candidate }));
+    onChanged?.();
+  }
+
   if (!doc) return error ? <p role="alert" className="text-danger">{error}</p> : null;
 
   const voices = (catalog?.voices ?? []).filter(v => v.language === doc.language);
@@ -478,6 +515,7 @@ export function Narration({ candidate, refreshKey = 0, onChanged }: { candidate:
       {jobFailed && <p role="alert" className="text-xs text-danger">{t.errors[doc.job?.code ?? ''] ?? t.failed}</p>}
       {importJobFailed && <p role="alert" className="text-xs text-danger">{t.errors[doc.importJob?.code ?? ''] ?? t.importFailed}</p>}
       {alignJobFailed && <p role="alert" className="text-xs text-danger">{t.errors[doc.alignJob?.code ?? ''] ?? t.alignFailed}</p>}
+      {recordNotice && <p role="status" className="text-xs text-warning" data-narration-record-notice>{recordNotice}</p>}
       {error && <p role="alert" className="text-xs text-danger">{error}</p>}
 
       {doc.blocks.length > 0 && (
@@ -510,6 +548,9 @@ export function Narration({ candidate, refreshKey = 0, onChanged }: { candidate:
                               ? t.recordedAudio
                               : `${b.audio.voiceId} · ${b.audio.modelId}`}
                         </span>
+                        {b.audio.engineId === 'recorded' && b.audio.trimmed === false && (
+                          <span className="text-warning" data-narration-untrimmed>{t.untrimmedLabel}</span>
+                        )}
                         {b.audio.stale && <span className="text-danger">{t.stale}</span>}
                         {alignLabel && (
                           <span data-narration-align-status={al?.status} className={al?.status === 'needs_review' || al?.status === 'failed' ? 'text-danger font-medium' : ''}>
@@ -520,11 +561,24 @@ export function Narration({ candidate, refreshKey = 0, onChanged }: { candidate:
                     ) : (
                       <span>{t.noAudio}</span>
                     )}
+                    {b.audio && !b.audio.stale && b.audio.engineId === 'recorded' && b.audio.trimmed === false && doc.vadReady !== false && (
+                      <Button tamanho="sm" disabled={anyBusy} data-trim-block={b.blockId} onClick={() => void trimBlock(b.blockId)}>
+                        {t.trimNow}
+                      </Button>
+                    )}
                     {b.audio && !b.audio.stale && (
                       <Button tamanho="sm" disabled={anyBusy} onClick={() => void alignBlock(b.blockId)}>
                         {t.alignBlock}
                       </Button>
                     )}
+                    <Button
+                      tamanho="sm"
+                      disabled={!doc.narrationAllowed || anyBusy}
+                      data-record-block={b.blockId}
+                      onClick={() => setRecordingBlockId(cur => (cur === b.blockId ? null : b.blockId))}
+                    >
+                      {t.recordBlock}
+                    </Button>
                     <Button
                       tamanho="sm"
                       disabled={!doc.narrationAllowed || anyBusy}
@@ -578,6 +632,17 @@ export function Narration({ candidate, refreshKey = 0, onChanged }: { candidate:
 
       {doc.totalDurationUs > 0 && (
         <p className="text-xs text-fg-2" data-narration-total>{fill(t.totalDuration, { sec: fmtSeconds(doc.totalDurationUs) })}</p>
+      )}
+      {recordingBlockId !== null && doc.narrationAllowed && doc.blocks.length > 0 && (
+        <TeleprompterRecorder
+          candidate={candidate}
+          blocks={doc.blocks}
+          selectedBlockId={recordingBlockId}
+          onSelectBlock={setRecordingBlockId}
+          disabled={anyBusy}
+          onSaved={handleRecordedSaved}
+          onClose={() => setRecordingBlockId(null)}
+        />
       )}
       <ConfirmDialog
         open={replacePending !== null}

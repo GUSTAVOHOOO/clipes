@@ -242,6 +242,48 @@ fn transcribe_worker() {
                     align_reply(&mut out, &id, params);
                     continue;
                 }
+                if message["task"] == "vad" {
+                    if let Some(wav_seconds) = params["audio"]
+                        .as_str()
+                        .and_then(|p| fs::read(p).ok())
+                        .and_then(|b| wav_duration_info(&b))
+                    {
+                        let (sr, ch, dur_us) = wav_seconds;
+                        if let Some(log) = std::env::var_os("CLIPES_FAKE_VAD_LOG") {
+                            let mut file = fs::OpenOptions::new()
+                                .create(true)
+                                .append(true)
+                                .open(log)
+                                .unwrap();
+                            writeln!(file, "{sr} {ch} {dur_us}").unwrap();
+                        }
+                        if std::env::var("CLIPES_FAKE_VAD_EMPTY").as_deref() == Ok("1") {
+                            send(
+                                &mut out,
+                                serde_json::json!({"v":1,"type":"result","id":id,"data":{"covered_us":dur_us,"spans":[],"silences":[{"start_us":0,"end_us":dur_us}]}}),
+                            );
+                            continue;
+                        }
+                        if let Ok(trim) = std::env::var("CLIPES_FAKE_VAD_TRIM_US") {
+                            if let Some((a, b)) = trim.split_once(',') {
+                                if let (Ok(s_us), Ok(e_us)) =
+                                    (a.trim().parse::<i64>(), b.trim().parse::<i64>())
+                                {
+                                    send(
+                                        &mut out,
+                                        serde_json::json!({"v":1,"type":"result","id":id,"data":{"covered_us":dur_us,"spans":[{"start_us":s_us,"end_us":e_us}],"silences":[]}}),
+                                    );
+                                    continue;
+                                }
+                            }
+                        }
+                        send(
+                            &mut out,
+                            serde_json::json!({"v":1,"type":"result","id":id,"data":{"covered_us":dur_us,"spans":[{"start_us":0,"end_us":dur_us}],"silences":[]}}),
+                        );
+                        continue;
+                    }
+                }
                 let seconds: f64 = params["audio"]
                     .as_str()
                     .and_then(|p| fs::read_to_string(p).ok())
@@ -365,6 +407,29 @@ fn main() {
         .map(|i| args[i + 1].as_str())
         .unwrap_or("handshake");
     worker(scenario);
+}
+
+fn wav_duration_info(bytes: &[u8]) -> Option<(u32, u16, i64)> {
+    if bytes.len() < 44 || &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WAVE" {
+        return None;
+    }
+    let channels = u16::from_le_bytes([bytes[22], bytes[23]]);
+    let sample_rate = u32::from_le_bytes([bytes[24], bytes[25], bytes[26], bytes[27]]);
+    let byte_rate = u32::from_le_bytes([bytes[28], bytes[29], bytes[30], bytes[31]]);
+    if channels == 0 || sample_rate == 0 || byte_rate == 0 {
+        return None;
+    }
+    let mut pos = 12usize;
+    while pos + 8 <= bytes.len() {
+        let id = &bytes[pos..pos + 4];
+        let size = u32::from_le_bytes(bytes[pos + 4..pos + 8].try_into().ok()?) as usize;
+        if id == b"data" {
+            let dur_us = ((u128::from(size as u32) * 1_000_000) / u128::from(byte_rate)) as i64;
+            return Some((sample_rate, channels, dur_us.max(1)));
+        }
+        pos = pos + 8 + size + (size & 1);
+    }
+    None
 }
 
 /// Tarefa `align` (#81): valida que recebeu WAV 16 kHz mono e devolve `spoken_words` + `script_words`.

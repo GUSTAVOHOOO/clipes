@@ -1,6 +1,23 @@
 // Fixture determinística do contrato #70/#77/#66/#71/#78/#204, só usada com VITE_CORE_MOCK + editor-test.
 import type { ExportRequest } from './core';
-import { sourceToSplicedUs, splicedToSourceUs, type KeptSegment, type MontageBlock, type MontageState, type MontageWarning, type SilenceInterval, type SilencesState } from '@/features/editor/timelineMath';
+import {
+  sourceToSplicedUs,
+  splicedToSourceUs,
+  type AudioAsset,
+  type AudioKind,
+  type AudioMixState,
+  type KeptSegment,
+  type LicenseKind,
+  type MontageBlock,
+  type MontageState,
+  type MontageWarning,
+  type ResolvedSfx,
+  type ResolvedSoundtrack,
+  type SfxAnchor,
+  type SilenceInterval,
+  type SilencesState,
+  type SpeechInterval,
+} from '@/features/editor/timelineMath';
 import {
   defaultPanelRect,
   interpolateCrop,
@@ -24,6 +41,8 @@ type CropDoc = {
   gameplayWebcam: DualCropPanels | null;
   twoPeople: DualCropPanels | null;
 };
+type MockSoundtrackEdit = { assetId: number; startUs: number; volume: number; fadeInUs: number; fadeOutUs: number; loopToFit: boolean };
+type MockSfxEdit = { id: number; assetId: number; anchor: SfxAnchor; volume: number; fadeInUs: number; fadeOutUs: number };
 type Snapshot = {
   range: Range;
   silences: MockSilences | null;
@@ -33,8 +52,10 @@ type Snapshot = {
   gameplayWebcamEdits: [CropKeyframe[], CropKeyframe[]] | null;
   twoPeopleEdits: [CropKeyframe[], CropKeyframe[]] | null;
   narrationStarts: Record<number, number>;
+  soundtrack: MockSoundtrackEdit | null;
+  sfx: MockSfxEdit[];
 };
-type Clip = { id: number; request: ExportRequest; range: Range; silences: MockSilences | null; undo: Snapshot[]; redo: Snapshot[]; revision: number; crop: CropDoc; narrationStarts: Record<number, number> };
+type Clip = { id: number; request: ExportRequest; range: Range; silences: MockSilences | null; undo: Snapshot[]; redo: Snapshot[]; revision: number; crop: CropDoc; narrationStarts: Record<number, number>; soundtrack: MockSoundtrackEdit | null; sfx: MockSfxEdit[]; nextSfxId: number };
 type ReframeJob = {
   id: number;
   job: number;
@@ -50,6 +71,8 @@ type ReframeJob = {
 };
 
 const clips = new Map<string, Clip>();
+const audioAssets = new Map<number, AudioAsset>();
+let nextAudioAssetId = 1;
 const reframeJobs = new Map<number, ReframeJob>();
 let nextReframeId = 1;
 const fail = (code: string) => { throw { code }; };
@@ -57,6 +80,8 @@ const ids = (r: Range) => ({ start_id: Math.floor(r.startUs / 10_000_000) + 1, e
 const cloneSilences = (s: MockSilences | null): MockSilences | null => s ? { thresholdUs: s.thresholdUs, intervals: s.intervals.map(i => ({ ...i })) } : null;
 const cloneEdits = (edits: CropKeyframe[]): CropKeyframe[] => edits.map(k => ({ ...k }));
 const cloneStarts = (starts: Record<number, number>): Record<number, number> => ({ ...starts });
+const cloneSoundtrack = (st: MockSoundtrackEdit | null): MockSoundtrackEdit | null => st ? { ...st } : null;
+const cloneSfx = (list: MockSfxEdit[]): MockSfxEdit[] => list.map(s => ({ ...s, anchor: { ...s.anchor } }));
 const cloneDual = (d: DualCropPanels | null): DualCropPanels | null => d ? { top: { suggested: d.top.suggested, edits: cloneEdits(d.top.edits) }, bottom: { suggested: d.bottom.suggested, edits: cloneEdits(d.bottom.edits) } } : null;
 const cropTest = () => typeof location !== 'undefined' && new URLSearchParams(location.search).has('crop-test');
 const montageTest = () => typeof location !== 'undefined' && new URLSearchParams(location.search).has('montage-test');
@@ -266,6 +291,142 @@ export function getMockClipSplice(clipId: number | undefined, startUs: number, e
   return buildMockSplice(c.range, c.silences);
 }
 
+function mergeMockSpeech(raw: SpeechInterval[]): SpeechInterval[] {
+  const valid = raw.filter(i => i.endUs > i.startUs).sort((a, b) => a.startUs - b.startUs || a.endUs - b.endUs);
+  const out: SpeechInterval[] = [];
+  for (const next of valid) {
+    const prev = out[out.length - 1];
+    if (prev && next.startUs <= prev.endUs + 300_000) prev.endUs = Math.max(prev.endUs, next.endUs);
+    else out.push({ ...next });
+  }
+  return out;
+}
+
+function resolveMockAudioMix(
+  r: Range,
+  s: MockSilences | null,
+  starts: Record<number, number>,
+  st: MockSoundtrackEdit | null,
+  sfxList: MockSfxEdit[],
+): AudioMixState {
+  const splice = buildMockSplice(r, s);
+  const montage = resolveMockMontage(r, s, starts);
+  const totalDurationUs = montage ? montage.totalDurationUs : splice.effectiveDurationUs;
+
+  const rawSpeech: SpeechInterval[] = [];
+  const firstS = Math.floor(r.startUs / 10_000_000);
+  const lastS = Math.ceil(r.endUs / 10_000_000);
+  for (let idx = firstS; idx < lastS; idx++) {
+    const base = idx * 10_000_000;
+    for (const [sa, sb] of [[base, base + 4_000_000], [base + 6_000_000, base + 9_500_000]]) {
+      for (const seg of splice.segments) {
+        const a = Math.max(sa, seg.sourceStartUs);
+        const b = Math.min(sb, seg.sourceEndUs);
+        if (b > a) {
+          rawSpeech.push({
+            startUs: seg.outputStartUs + (a - seg.sourceStartUs),
+            endUs: seg.outputStartUs + (b - seg.sourceStartUs),
+          });
+        }
+      }
+    }
+  }
+  if (montage) {
+    for (const blk of montage.blocks) {
+      rawSpeech.push({ startUs: blk.startUs, endUs: blk.endUs });
+    }
+  }
+  const speechIntervals = mergeMockSpeech(rawSpeech);
+  const unverified = new Set<number>();
+
+  let soundtrack: ResolvedSoundtrack | null = null;
+  if (st) {
+    const asset = audioAssets.get(st.assetId);
+    if (asset) {
+      if (!asset.licenseVerified) unverified.add(asset.id);
+      const startUs = Math.max(0, Math.min(totalDurationUs, st.startUs));
+      const remaining = Math.max(0, totalDurationUs - startUs);
+      const playDurationUs = st.loopToFit ? remaining : Math.min(remaining, asset.durationUs);
+      soundtrack = {
+        assetId: asset.id,
+        name: asset.name,
+        mediaId: asset.mediaId,
+        assetDurationUs: asset.durationUs,
+        startUs,
+        playDurationUs,
+        endUs: startUs + playDurationUs,
+        volume: st.volume,
+        fadeInUs: Math.min(playDurationUs, Math.max(0, st.fadeInUs)),
+        fadeOutUs: Math.min(playDurationUs, Math.max(0, st.fadeOutUs)),
+        loopToFit: st.loopToFit,
+        licenseKind: asset.licenseKind,
+        licenseAttribution: asset.licenseAttribution,
+        licenseVerified: asset.licenseVerified,
+      };
+    }
+  }
+
+  const sfx: ResolvedSfx[] = [];
+  for (const item of sfxList) {
+    const asset = audioAssets.get(item.assetId);
+    if (!asset) continue;
+    if (!asset.licenseVerified) unverified.add(asset.id);
+    let sourceStartUs = r.startUs;
+    let startUs = 0;
+    let wordText: string | null = null;
+    let outsideClip = false;
+    const anchor = item.anchor;
+    if (anchor.kind === 'moment') {
+      sourceStartUs = Math.max(r.startUs, Math.min(r.endUs, anchor.sourceUs));
+      startUs = sourceToSplicedUs(sourceStartUs, splice.segments, r.startUs);
+    } else if (anchor.track === 'narration' && montage) {
+      const blk = montage.blocks.find(b => b.blockId === anchor.blockId);
+      if (!blk) outsideClip = true;
+      else {
+        startUs = Math.max(0, blk.startUs + anchor.position * 500_000 + (anchor.offsetUs ?? 0));
+        sourceStartUs = splicedToSourceUs(startUs, splice.segments, r.startUs, r.endUs);
+        wordText = `Nar${anchor.position}`;
+      }
+    } else {
+      const wordSrcUs = r.startUs + anchor.position * 500_000;
+      const kept = splice.segments.find(seg => wordSrcUs >= seg.sourceStartUs && wordSrcUs <= seg.sourceEndUs);
+      wordText = `Palavra${anchor.position}`;
+      sourceStartUs = wordSrcUs;
+      if (!kept) outsideClip = true;
+      else startUs = Math.max(0, kept.outputStartUs + (wordSrcUs - kept.sourceStartUs) + (anchor.offsetUs ?? 0));
+    }
+    const playDur = outsideClip ? 0 : Math.min(asset.durationUs, Math.max(0, totalDurationUs - startUs));
+    sfx.push({
+      id: item.id,
+      assetId: asset.id,
+      name: asset.name,
+      mediaId: asset.mediaId,
+      assetDurationUs: asset.durationUs,
+      anchor: item.anchor,
+      wordText,
+      startUs,
+      endUs: startUs + playDur,
+      sourceStartUs,
+      volume: item.volume,
+      fadeInUs: Math.min(playDur, Math.max(0, item.fadeInUs)),
+      fadeOutUs: Math.min(playDur, Math.max(0, item.fadeOutUs)),
+      outsideClip,
+      licenseKind: asset.licenseKind,
+      licenseAttribution: asset.licenseAttribution,
+      licenseVerified: asset.licenseVerified,
+    });
+  }
+
+  return {
+    soundtrack,
+    sfx,
+    speechIntervals,
+    totalDurationUs,
+    unverifiedCount: unverified.size,
+    warnings: [],
+  };
+}
+
 const snapshotOf = (c: Clip): Snapshot => ({
   range: c.range,
   silences: cloneSilences(c.silences),
@@ -275,9 +436,11 @@ const snapshotOf = (c: Clip): Snapshot => ({
   gameplayWebcamEdits: c.crop.gameplayWebcam ? [cloneEdits(c.crop.gameplayWebcam.top.edits), cloneEdits(c.crop.gameplayWebcam.bottom.edits)] : null,
   twoPeopleEdits: c.crop.twoPeople ? [cloneEdits(c.crop.twoPeople.top.edits), cloneEdits(c.crop.twoPeople.bottom.edits)] : null,
   narrationStarts: cloneStarts(c.narrationStarts),
+  soundtrack: cloneSoundtrack(c.soundtrack),
+  sfx: cloneSfx(c.sfx),
 });
 
-const answer = (c: Clip, r = c.range, s = c.silences, crop = c.crop, ns = c.narrationStarts) => ({
+const answer = (c: Clip, r = c.range, s = c.silences, crop = c.crop, ns = c.narrationStarts, st = c.soundtrack, sfx = c.sfx) => ({
   clipId: c.id,
   schemaVersion: 2,
   request: { ...c.request, ...ids(r) },
@@ -288,6 +451,7 @@ const answer = (c: Clip, r = c.range, s = c.silences, crop = c.crop, ns = c.narr
   silences: silencesView(r, s),
   crop: cropView(crop, r),
   montage: resolveMockMontage(r, s, ns),
+  audioMix: resolveMockAudioMix(r, s, ns, st, sfx),
 });
 
 export function editorEditsMock(name: string, a: Record<string, unknown>): unknown {
@@ -315,6 +479,9 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
           twoPeople: null,
         },
         narrationStarts: {},
+        soundtrack: null,
+        sfx: [],
+        nextSfxId: 1,
       };
       clips.set(key, c);
     }
@@ -486,6 +653,163 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
     }
     return answer(c);
   }
+  if (name === 'audio.import') {
+    const kind = a.kind as AudioKind;
+    if (kind !== 'music' && kind !== 'sfx') return fail('invalid_audio_kind');
+    const pathStr = String(a.path ?? '').trim();
+    if (!pathStr) return fail('invalid_audio');
+    const lk = ((a.license_kind as LicenseKind | undefined) ?? 'unknown');
+    const attr = String(a.license_attribution ?? '').trim();
+    if (lk === 'cc_by' && !attr) return fail('attribution_required');
+    const existing = [...audioAssets.values()].find(item => item.kind === kind && item.sha256 === `mock:${pathStr}`);
+    if (existing) {
+      if (a.license_kind !== undefined) {
+        const next: AudioAsset = { ...existing, licenseKind: lk, licenseAttribution: lk === 'cc_by' ? attr : '', licenseVerified: lk !== 'unknown' };
+        audioAssets.set(existing.id, next);
+        return next;
+      }
+      return existing;
+    }
+    const id = nextAudioAssetId++;
+    const baseName = pathStr.split(/[/\\]/).pop()?.replace(/\.[^.]+$/, '') || 'audio';
+    const created: AudioAsset = {
+      id,
+      kind,
+      name: String(a.name ?? baseName),
+      durationUs: kind === 'music' ? 12_000_000 : 1_200_000,
+      sampleRate: 48_000,
+      channels: 2,
+      bytes: 65_536,
+      sha256: `mock:${pathStr}`,
+      licenseKind: lk,
+      licenseAttribution: lk === 'cc_by' ? attr : '',
+      licenseVerified: lk !== 'unknown',
+      mediaId: `audio/${id}`,
+      createdAt: '2026-11-17T11:00:00Z',
+    };
+    audioAssets.set(id, created);
+    return created;
+  }
+  if (name === 'audio.list') {
+    const k = a.kind as AudioKind | undefined;
+    return [...audioAssets.values()].filter(x => !k || x.kind === k).reverse();
+  }
+  if (name === 'audio.license.set') {
+    const item = audioAssets.get(Number(a.id));
+    if (!item) return fail('audio_asset_missing');
+    const lk = ((a.license_kind as LicenseKind | undefined) ?? 'unknown');
+    const attr = String(a.license_attribution ?? '').trim();
+    if (lk === 'cc_by' && !attr) return fail('attribution_required');
+    const next: AudioAsset = { ...item, licenseKind: lk, licenseAttribution: lk === 'cc_by' ? attr : '', licenseVerified: lk !== 'unknown' };
+    audioAssets.set(item.id, next);
+    return next;
+  }
+  if (name === 'audio.delete') {
+    const id = Number(a.id);
+    audioAssets.delete(id);
+    return { deleted: true, id };
+  }
+  if (name.startsWith('editor.audio.')) {
+    const c = [...clips.values()].find(item => item.id === a.clip_id);
+    if (!c) return fail('invalid_clip');
+    const pushUndo = () => {
+      c.undo.push(snapshotOf(c));
+      if (c.undo.length > 100) c.undo.shift();
+      c.redo = [];
+    };
+    if (name === 'editor.audio.get') {
+      return {
+        clipId: c.id,
+        schemaVersion: 2,
+        revision: c.revision,
+        undoCount: c.undo.length,
+        redoCount: c.redo.length,
+        audioMix: resolveMockAudioMix(c.range, c.silences, c.narrationStarts, c.soundtrack, c.sfx),
+      };
+    }
+    if (name === 'editor.audio.soundtrack.clear') {
+      if (a.preview) return answer(c, c.range, c.silences, c.crop, c.narrationStarts, null, c.sfx);
+      if (c.soundtrack) {
+        pushUndo();
+        c.soundtrack = null;
+        c.revision++;
+      }
+      return answer(c);
+    }
+    if (name === 'editor.audio.soundtrack.set') {
+      const hasAsset = Object.prototype.hasOwnProperty.call(a, 'asset_id');
+      let nextSt: MockSoundtrackEdit | null;
+      if (hasAsset && a.asset_id === null) {
+        nextSt = null;
+      } else {
+        const assetId = hasAsset ? Number(a.asset_id) : c.soundtrack?.assetId;
+        if (!assetId || !audioAssets.get(assetId)) return fail('audio_asset_missing');
+        const prev = c.soundtrack?.assetId === assetId ? c.soundtrack : null;
+        nextSt = {
+          assetId,
+          startUs: typeof a.start_us === 'number' ? Math.max(0, a.start_us) : (prev?.startUs ?? 0),
+          volume: typeof a.volume === 'number' ? a.volume : (prev?.volume ?? 0.25),
+          fadeInUs: typeof a.fade_in_us === 'number' ? Math.max(0, a.fade_in_us) : (prev?.fadeInUs ?? 500_000),
+          fadeOutUs: typeof a.fade_out_us === 'number' ? Math.max(0, a.fade_out_us) : (prev?.fadeOutUs ?? 800_000),
+          loopToFit: typeof a.loop_to_fit === 'boolean' ? a.loop_to_fit : (prev?.loopToFit ?? true),
+        };
+      }
+      if (a.preview) return answer(c, c.range, c.silences, c.crop, c.narrationStarts, nextSt, c.sfx);
+      pushUndo();
+      c.soundtrack = nextSt;
+      c.revision++;
+      return answer(c);
+    }
+    if (name === 'editor.audio.sfx.add') {
+      const assetId = Number(a.asset_id);
+      if (!audioAssets.get(assetId)) return fail('audio_asset_missing');
+      const anchor = a.anchor as SfxAnchor;
+      const item: MockSfxEdit = {
+        id: c.nextSfxId++,
+        assetId,
+        anchor,
+        volume: typeof a.volume === 'number' ? a.volume : 0.85,
+        fadeInUs: typeof a.fade_in_us === 'number' ? a.fade_in_us : 0,
+        fadeOutUs: typeof a.fade_out_us === 'number' ? a.fade_out_us : 0,
+      };
+      const nextSfx = [...cloneSfx(c.sfx), item];
+      if (a.preview) return answer(c, c.range, c.silences, c.crop, c.narrationStarts, c.soundtrack, nextSfx);
+      pushUndo();
+      c.sfx = nextSfx;
+      c.revision++;
+      return answer(c);
+    }
+    if (name === 'editor.audio.sfx.update') {
+      const sfxId = Number(a.id);
+      const pos = c.sfx.findIndex(s => s.id === sfxId);
+      if (pos < 0) return fail('sfx_not_found');
+      const nextList = cloneSfx(c.sfx);
+      const item = nextList[pos];
+      if (typeof a.time_us === 'number') {
+        const clamped = Math.max(c.range.startUs, Math.min(c.range.endUs, a.time_us));
+        item.anchor = { kind: 'moment', sourceUs: clamped };
+      } else if (a.anchor) {
+        item.anchor = a.anchor as SfxAnchor;
+      }
+      if (typeof a.volume === 'number') item.volume = a.volume;
+      if (typeof a.fade_in_us === 'number') item.fadeInUs = a.fade_in_us;
+      if (typeof a.fade_out_us === 'number') item.fadeOutUs = a.fade_out_us;
+      if (a.preview) return answer(c, c.range, c.silences, c.crop, c.narrationStarts, c.soundtrack, nextList);
+      pushUndo();
+      c.sfx = nextList;
+      c.revision++;
+      return answer(c);
+    }
+    if (name === 'editor.audio.sfx.remove') {
+      const sfxId = Number(a.id);
+      const nextList = cloneSfx(c.sfx).filter(s => s.id !== sfxId);
+      if (a.preview) return answer(c, c.range, c.silences, c.crop, c.narrationStarts, c.soundtrack, nextList);
+      pushUndo();
+      c.sfx = nextList;
+      c.revision++;
+      return answer(c);
+    }
+  }
   if (!['editor.adjust', 'editor.undo', 'editor.redo', 'editor.silences.detect', 'editor.silences.toggle', 'editor.silences.revert_all', 'editor.silences.apply_all'].includes(name)) return undefined;
   const c = [...clips.values()].find(c => c.id === a.clip_id);
   if (!c) return fail('invalid_clip');
@@ -512,6 +836,8 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
       c.crop.gameplayWebcam = applyDual(c.crop.gameplayWebcam, next.gameplayWebcamEdits);
       c.crop.twoPeople = applyDual(c.crop.twoPeople, next.twoPeopleEdits);
       c.narrationStarts = cloneStarts(next.narrationStarts);
+      c.soundtrack = cloneSoundtrack(next.soundtrack);
+      c.sfx = cloneSfx(next.sfx);
       c.revision++;
     }
     return answer(c);

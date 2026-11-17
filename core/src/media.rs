@@ -32,10 +32,12 @@ pub(crate) enum Resource {
     Source(i64),
     /// Áudio WAV da Narração por bloco (#79), dentro da pasta do Projeto.
     Narration(i64),
+    /// Trilha sonora ou efeito sonoro importado pelo usuário (#154), dentro da pasta `audio/` do Projeto.
+    Audio(i64),
 }
 
-/// Aceita só `proxy/<64 hex minúsculo>`, `thumbs/<64 hex>`, `source/<dígitos>` e
-/// `narration/<dígitos>`; `%2F` (como o WebView codifica a barra com `convertFileSrc`) vale como `/`.
+/// Aceita só `proxy/<64 hex minúsculo>`, `thumbs/<64 hex>`, `source/<dígitos>`,
+/// `narration/<dígitos>` e `audio/<dígitos>`; `%2F` (como o WebView codifica a barra com `convertFileSrc`) vale como `/`.
 pub(crate) fn parse_resource(raw: &str) -> Option<Resource> {
     let raw = raw.strip_prefix('/').unwrap_or(raw);
     let decoded = raw.replace("%2F", "/").replace("%2f", "/");
@@ -56,6 +58,9 @@ pub(crate) fn parse_resource(raw: &str) -> Option<Resource> {
             if !id.is_empty() && id.len() <= 18 && id.bytes().all(|b| b.is_ascii_digit()) =>
         {
             id.parse().ok().map(Resource::Narration)
+        }
+        "audio" if !id.is_empty() && id.len() <= 18 && id.bytes().all(|b| b.is_ascii_digit()) => {
+            id.parse().ok().map(Resource::Audio)
         }
         _ => None,
     }
@@ -134,6 +139,10 @@ fn content_type(path: &Path) -> &'static str {
         Some("mkv") => "video/x-matroska",
         Some("mov") => "video/quicktime",
         Some("wav") => "audio/wav",
+        Some("mp3") => "audio/mpeg",
+        Some("m4a" | "aac") => "audio/mp4",
+        Some("ogg" | "opus") => "audio/ogg",
+        Some("flac") => "audio/flac",
         _ => "application/octet-stream",
     }
 }
@@ -218,6 +227,7 @@ pub fn resolve(resource: &str) -> Option<ResolvedMedia> {
         Some(Resource::Thumbs(key)) => (thumbs_path(&key), true),
         Some(Resource::Source(id)) => (source_path(id), false),
         Some(Resource::Narration(id)) => (crate::tts::narration::media_audio_path(id), false),
+        Some(Resource::Audio(id)) => (crate::audio::media_audio_path(id), false),
         None => (None, false),
     };
     let path = path?;

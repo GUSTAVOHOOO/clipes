@@ -59,6 +59,7 @@ pub fn dispatch(name: &str, arguments: Value, events: &mut EventSink<'_>) -> Com
 pub mod ai_task;
 pub mod angles;
 mod assistant;
+pub mod audio;
 mod audit;
 pub mod caption_style;
 pub mod channel_profile;
@@ -75,6 +76,7 @@ pub mod media;
 pub mod montage;
 pub mod narration_align;
 pub mod narration_import;
+pub mod narration_record;
 pub mod packaging;
 pub mod paths;
 pub mod process;
