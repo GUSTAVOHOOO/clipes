@@ -197,3 +197,23 @@ def test_align_out_of_memory_is_reported_as_typed_error():
     with pytest.raises(WorkerError) as info:
         aligner.align([0.0] * SAMPLE_RATE, "olá", "pt", 1, Ctx())
     assert info.value.code == "out_of_memory"
+
+
+def test_refine_word_silences_strips_cross_pause_bleed():
+    import numpy as np
+    from clipes_worker.align import refine_word_silences
+
+    audio = np.zeros(SAMPLE_RATE * 2, dtype="float32")
+    # Palavra 1: 0.05..0.25s; silêncio 0.25..0.75s; palavra 2: 0.75..1.05s
+    audio[int(0.05 * SAMPLE_RATE) : int(0.25 * SAMPLE_RATE)] = 0.08
+    audio[int(0.75 * SAMPLE_RATE) : int(1.05 * SAMPLE_RATE)] = 0.08
+    # DTW sangrou a primeira palavra até 0.55s e a segunda começou cedo em 0.20s (cobrindo silêncio)
+    items = [
+        {"text": "My", "start": 0.00, "end": 0.55, "probability": 0.9},
+        {"text": "name", "start": 0.20, "end": 1.15, "probability": 0.9},
+    ]
+    refined = refine_word_silences(items, audio)
+    assert abs(refined[0]["start"] - 0.05) <= 0.02
+    assert abs(refined[0]["end"] - 0.25) <= 0.02
+    assert abs(refined[1]["start"] - 0.75) <= 0.02
+    assert abs(refined[1]["end"] - 1.05) <= 0.02

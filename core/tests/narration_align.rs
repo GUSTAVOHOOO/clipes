@@ -258,10 +258,15 @@ fn wait_narration_settled(candidate: i64, align_too: bool) -> Value {
 }
 
 fn wait_align_settled(candidate: i64) -> Value {
-    let deadline = Instant::now() + Duration::from_secs(30);
+    wait_align_settled_for(candidate, Duration::from_secs(30), None)
+}
+
+fn wait_align_settled_for(candidate: i64, max_wait: Duration, expected_job: Option<i64>) -> Value {
+    let deadline = Instant::now() + max_wait;
     loop {
         let doc = call("narration.get", json!({"candidate": candidate}));
-        if doc["alignBusy"] == false && doc["alignJob"].is_object() {
+        let job_match = expected_job.is_none_or(|id| doc["alignJob"]["id"] == id);
+        if doc["alignBusy"] == false && doc["alignJob"].is_object() && job_match {
             return doc;
         }
         assert!(Instant::now() < deadline, "align timeout: {doc}");
@@ -606,4 +611,213 @@ fn headless_deviation_rule_blocks_captions_until_user_reviews_and_supports_custo
             .unwrap()
             >= 3
     );
+}
+
+#[test]
+#[ignore = "requer modelo whisper-turbo local (CLIPES_ALIGN_TEST_MODEL_DIR) e Python worker local (CLIPES_ALIGN_TEST_PYTHON)"]
+fn real_whisper_sample_precision_stays_within_target() {
+    let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let model_src = std::env::var("CLIPES_ALIGN_TEST_MODEL_DIR")
+        .expect("defina CLIPES_ALIGN_TEST_MODEL_DIR com a pasta do whisper-turbo local");
+    let python_exe = std::env::var("CLIPES_ALIGN_TEST_PYTHON").unwrap_or_else(|_| {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let venv = if cfg!(windows) {
+            root.join("worker/.venv/Scripts/python.exe")
+        } else {
+            root.join("worker/.venv/bin/python")
+        };
+        assert!(
+            venv.is_file(),
+            "defina CLIPES_ALIGN_TEST_PYTHON com o python do worker (.venv com clipes-worker)"
+        );
+        venv.to_string_lossy().into_owned()
+    });
+
+    let root = tempfile::tempdir().unwrap();
+    let data_dir = root.path().join("data");
+    std::env::set_var("CLIPES_DATA_DIR", &data_dir);
+
+    // Worker offline real: shim que delega para `CLIPES_ALIGN_TEST_PYTHON -m clipes_worker`.
+    let worker_dir = data_dir.join("worker");
+    let venv_dir = worker_dir.join("venv");
+    fs::create_dir_all(venv_dir.join(if cfg!(windows) { "Scripts" } else { "bin" })).unwrap();
+    let venv_py = venv_dir
+        .join(if cfg!(windows) { "Scripts" } else { "bin" })
+        .join(exe("python"));
+    if cfg!(windows) {
+        let shim_src = root.path().join("py_shim.rs");
+        fs::write(
+            &shim_src,
+            format!(
+                r#"fn main() {{
+    let mut cmd = std::process::Command::new({:?});
+    cmd.env("PYTHONPATH", {:?});
+    cmd.args(std::env::args_os().skip(1));
+    let code = cmd.status().expect("spawn real python").code().unwrap_or(1);
+    std::process::exit(code);
+}}"#,
+                python_exe,
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .parent()
+                    .unwrap()
+                    .join("worker/src")
+                    .to_string_lossy()
+            ),
+        )
+        .unwrap();
+        let rustc = std::env::var_os("RUSTC")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(
+                    std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).unwrap(),
+                )
+                .join(".cargo/bin")
+                .join(exe("rustc"))
+            });
+        assert!(std::process::Command::new(rustc)
+            .arg(&shim_src)
+            .arg("-o")
+            .arg(&venv_py)
+            .status()
+            .unwrap()
+            .success());
+    } else {
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&python_exe, &venv_py).unwrap();
+    }
+    fs::write(
+        worker_dir.join("worker.state.json"),
+        json!({"version": "0.1.0", "cuda": false}).to_string(),
+    )
+    .unwrap();
+
+    // Copia/vincula o modelo para dentro do CLIPES_DATA_DIR isolado e seleciona whisper-turbo na CPU.
+    let target_model = data_dir.join("models/whisper-turbo");
+    fs::create_dir_all(&target_model).unwrap();
+    for entry in fs::read_dir(&model_src).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_file() {
+            let dst = target_model.join(entry.file_name());
+            if fs::hard_link(entry.path(), &dst).is_err() {
+                fs::copy(entry.path(), &dst).unwrap();
+            }
+        }
+    }
+    call(
+        "transcription.hardware.choose",
+        json!({"model": "whisper-turbo", "device": "cpu", "compute_type": "int8"}),
+    );
+
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+    let ref_doc: Value = serde_json::from_str(
+        &fs::read_to_string(repo_root.join("benchmarks/narration/sample_reference.json")).unwrap(),
+    )
+    .unwrap();
+    let sample_blocks = ref_doc["blocks"].as_array().unwrap();
+
+    let proj = call(
+        "projects.create",
+        json!({"parent": root.path(), "name": "PrecisionSample"}),
+    );
+    let proj_path = PathBuf::from(proj["path"].as_str().unwrap());
+    let media = root.path().join("source.mp4");
+    let (source_id, candidate, block_ids) = seed_transformed_cut_with_words(&media);
+    assert_eq!(sample_blocks.len(), 2);
+
+    // Atualiza os dois blocos do Roteiro e registra os 2 WAVs de amostra offline (PT e EN).
+    for (idx, sb) in sample_blocks.iter().enumerate() {
+        let block_id = block_ids[idx];
+        let text = sb["script_text"].as_str().unwrap().to_owned();
+        let lang = sb["language"].as_str().unwrap().to_owned();
+        let rel = format!("narrations/c{candidate}/sample_{idx}.wav");
+        let dst = proj_path.join(&rel);
+        fs::create_dir_all(dst.parent().unwrap()).unwrap();
+        fs::copy(repo_root.join(sb["audio"].as_str().unwrap()), &dst).unwrap();
+        let bytes = fs::read(&dst).unwrap();
+        let sha = format!("{:x}", Sha256::digest(&bytes));
+        with_writer(|c| {
+            let gen_lang = if lang == "pt" { "pt-BR" } else { lang.as_str() };
+            c.execute(
+                "INSERT INTO script_block_versions(block_id,kind,title,narration,refs,angle_revision) VALUES (?1,'edit',?2,?3,'[1]',0)",
+                (block_id, format!("Sample {idx}"), &text),
+            )?;
+            let ver = c.last_insert_rowid();
+            c.execute(
+                "INSERT INTO script_approvals(block_id,version_id,angle_revision) VALUES (?1,?2,0)",
+                (block_id, ver),
+            )?;
+            c.execute(
+                "INSERT INTO narration_blocks(block_id,version_id,voice_id,model_id,audio_rel_path,duration_us,sample_rate,channels,bytes,sha256)
+                 VALUES (?1,?2,'sample','sample',?3,9000000,16000,1,?4,?5)",
+                (block_id, ver, &rel, bytes.len() as i64, &sha),
+            )?;
+            c.execute(
+                "UPDATE script_generations SET language=?1",
+                [gen_lang],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+        let resp = call(
+            "narration.align_block",
+            json!({"candidate": candidate, "block": block_id}),
+        );
+        let job_id = resp["job"].as_i64();
+        let doc = wait_align_settled_for(candidate, Duration::from_secs(300), job_id);
+        assert_eq!(doc["alignJob"]["state"], "completed");
+    }
+    let _ = source_id;
+
+    let mut errors_ms = Vec::new();
+    let mut annotated_words = 0usize;
+    for (idx, sb) in sample_blocks.iter().enumerate() {
+        let block_id = block_ids[idx];
+        let aligned_words: Vec<(i64, i64)> = clipes_core::projects::with_reader(|c| {
+            let mut q = c.prepare(
+                "SELECT w.start_us, w.end_us
+                 FROM narration_aligned_words w
+                 JOIN narration_blocks nb ON nb.id=w.narration_id
+                 WHERE nb.block_id=?1 AND w.track='script'
+                 ORDER BY w.position",
+            )?;
+            let rows = q
+                .query_map([block_id], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            Ok(rows)
+        })
+        .unwrap();
+
+        for rw in sb["reference_words"].as_array().unwrap() {
+            annotated_words += 1;
+            let w_idx = rw["index"].as_u64().unwrap() as usize;
+            let (hs, he) = aligned_words[w_idx];
+            if let Some(rs) = rw["start_s"].as_f64() {
+                errors_ms.push((hs as f64 / 1000.0 - rs * 1000.0).abs());
+            }
+            if let Some(re) = rw["end_s"].as_f64() {
+                errors_ms.push((he as f64 / 1000.0 - re * 1000.0).abs());
+            }
+        }
+    }
+
+    errors_ms.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let pct = |q: f64| -> f64 {
+        let pos = (errors_ms.len() - 1) as f64 * q;
+        let lo = pos.floor() as usize;
+        let hi = pos.ceil() as usize;
+        if lo == hi {
+            errors_ms[lo]
+        } else {
+            errors_ms[lo] + (errors_ms[hi] - errors_ms[lo]) * (pos - lo as f64)
+        }
+    };
+    let median_ms = pct(0.5);
+    let p90_ms = pct(0.9);
+    eprintln!(
+        "Amostra real PT+EN: {annotated_words} palavras, {} bordas -> mediana={median_ms:.1} ms, p90={p90_ms:.1} ms",
+        errors_ms.len()
+    );
+    assert!(annotated_words >= 20);
+    assert!(median_ms <= 80.0, "mediana {median_ms:.1} ms > 80 ms");
+    assert!(p90_ms <= 200.0, "p90 {p90_ms:.1} ms > 200 ms");
 }

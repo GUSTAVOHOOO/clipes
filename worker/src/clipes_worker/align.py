@@ -214,6 +214,60 @@ def map_aligned_to_script_words(script_words, aligned_items, fallback_start_s, f
     return out
 
 
+def refine_word_silences(items, audio, frame_ms=10, rms_thresh=0.0055, min_pause_ms=130):
+    """Ajusta bordas de palavra removendo silêncio acústico (>130 ms) absorvido pelo DTW."""
+    import numpy as np
+
+    samples = np.asarray(audio, dtype="float32")
+    step = SAMPLE_RATE * frame_ms // 1000
+    n_frames = len(samples) // step
+    if n_frames <= 0 or not items:
+        return items
+    trimmed = samples[: n_frames * step].reshape(n_frames, step)
+    rms = np.sqrt(np.mean(trimmed * trimmed, axis=1))
+    if float(rms.max()) < rms_thresh:
+        return items
+
+    active = rms >= rms_thresh
+    bridge_limit = max(1, (min_pause_ms // frame_ms) - 1)
+    out = []
+    for word_idx, item in enumerate(items):
+        s_idx = max(0, min(n_frames - 1, int(float(item["start"]) * 1000 // frame_ms)))
+        e_idx = max(s_idx + 1, min(n_frames, int(-(-float(item["end"]) * 1000 // frame_ms))))
+        islands = []
+        i = s_idx
+        while i < e_idx:
+            if active[i]:
+                start = i
+                end = i + 1
+                j = i + 1
+                while j < e_idx:
+                    if active[j]:
+                        end = j + 1
+                        j += 1
+                    elif j + 1 < e_idx and any(active[j : min(e_idx, j + bridge_limit)]):
+                        j += 1
+                    else:
+                        break
+                islands.append((start, end))
+                i = end
+            else:
+                i += 1
+        updated = dict(item)
+        if islands:
+            if word_idx == 0 and (islands[0][1] - islands[0][0]) >= 6:
+                chosen = islands[0]
+            else:
+                chosen = max(islands, key=lambda ab: float(rms[ab[0] : ab[1]].sum()))
+            ns = max(float(item["start"]), chosen[0] * frame_ms / 1000.0)
+            ne = min(float(item["end"]), chosen[1] * frame_ms / 1000.0)
+            if ne > ns + 0.02:
+                updated["start"] = ns
+                updated["end"] = ne
+        out.append(updated)
+    return out
+
+
 def _to_us(seconds):
     return max(0, round(float(seconds) * 1_000_000))
 
@@ -280,6 +334,7 @@ class Aligner:
                 win_dur = max(0.01, (win["end"] - win["start"]) / SAMPLE_RATE)
                 aligned_items = self._force_align(chunk, " ".join(words_slice), language)
                 mapped = map_aligned_to_script_words(words_slice, aligned_items, 0.0, win_dur)
+                mapped = refine_word_silences(mapped, chunk)
                 for item in mapped:
                     w_start = _to_us(offset + item["start"])
                     w_end = max(w_start + 10_000, _to_us(offset + item["end"]))
