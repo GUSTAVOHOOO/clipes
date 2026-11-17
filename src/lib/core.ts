@@ -16,6 +16,10 @@ import { translationMockDispatch } from './translationMock';
 
 const groqRetryTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('groq-retry-test');
 const denoMock = { installed: false };
+const pocketTtsMock = { installed: false };
+const ttsActiveModels: Record<string, string> = { pt: 'portuguese_24l', en: 'english' };
+const ttsInstalledModels = new Set<string>();
+const narrationGenerated = new Map<number, { blockId: number; voiceId: string; modelId: string; durationUs: number }[]>();
 const sourceTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('source-test');
 const budgetTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('budget-test');
 const transcriptTest = sourceTest && typeof location !== 'undefined' && new URLSearchParams(location.search).has('transcript-test');
@@ -255,13 +259,14 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       const minUs = a.minUs ?? channelProfileMock.minUs;
       const maxUs = a.maxUs ?? channelProfileMock.maxUs;
       if (minUs <= 0 || minUs >= maxUs || maxUs > 180_000_000) throw { code: 'invalid_cut_range', message: 'A faixa de duração dos Cortes é inválida.' };
+      if (a.narrationVoice && !['13063', 'alba', 'marius'].includes(a.narrationVoice)) throw { code: 'channel_profile_invalid', message: 'Voz inválida.' };
       channelProfileMock = {
         videoKind: a.videoKind ?? channelProfileMock.videoKind,
         language: a.language ?? channelProfileMock.language,
         minUs,
         maxUs,
         allowedSources: a.allowedSources ?? channelProfileMock.allowedSources,
-        narrationVoice: null,
+        narrationVoice: a.narrationVoice === undefined ? channelProfileMock.narrationVoice : a.narrationVoice,
         directMonetizationAck: channelProfileMock.directMonetizationAck,
       };
       if (a.captionStyle) setDefaultCaptionStyleMock(a.captionStyle);
@@ -305,6 +310,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
           shortClaimLimitUs: 60_000_000,
           permission: { status: granted ? 'granted' : 'none', grantedCount: granted ? 1 : 0, missingCount: granted ? 0 : 1, totalCount: 1, who: permObj?.who ?? null, where: permObj?.where ?? null, scope: permObj?.scope ?? null },
           script: hasTransformed ? { applicable: true, exists: !!scriptView?.current, approved: !!scriptView?.narrationAllowed, pendingBlocks: scriptView?.current?.pending ?? 0, totalBlocks: scriptView?.current?.blocks?.length ?? 0 } : { applicable: false },
+          narration: hasTransformed ? (() => { const g = narrationGenerated.get(a.candidate_id ?? 1) ?? []; return { applicable: true, hasTts: g.length > 0, generatedBlocks: g.length, totalBlocks: scriptView?.current?.blocks?.length ?? 0, voices: [...new Set(g.map(x => x.voiceId))] }; })() : { applicable: false },
         } as T;
       }
       const totalCuts = selectionFlag('export-batch-empty') || (scope === 'source' && !selectionMock.run) ? 0 : 2;
@@ -322,6 +328,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         shortClaimLimitUs: 60_000_000,
         permission: { status: 'none', grantedCount: 0, missingCount: totalCuts, totalCount: totalCuts },
         script: hasTransformed && totalCuts > 0 ? { applicable: true, transformedCount: totalCuts, approvedCount: 0, unapprovedCount: totalCuts } : { applicable: false },
+        narration: hasTransformed && totalCuts > 0 ? { applicable: true, hasTts: false, ttsCutCount: 0, transformedCount: totalCuts } : { applicable: false },
       } as T;
     }
     if (sourceTest && new URLSearchParams(location.search).has('batch-test')) { const handled = batchMockDispatch(name, args); if (handled !== undefined) return handled as T; }
@@ -356,6 +363,63 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'app.version') return { version } as T;
     if (name === 'components.deno.status') return { installed: denoMock.installed, version: denoMock.installed ? '2.9.8' : null, pinned: '2.9.8', outdated: false } as T;
     if (name === 'components.download' && (args as { id?: string }).id === 'deno') { denoMock.installed = true; return { path: '/test/components/deno' } as T; }
+    if (name === 'components.pocket_tts.status') return { installed: pocketTtsMock.installed, version: pocketTtsMock.installed ? '3.3.0' : null, pinned: '3.3.0', outdated: false } as T;
+    if (name === 'components.download' && (args as { id?: string }).id === 'pocket-tts') { pocketTtsMock.installed = true; return { path: '/test/components/pocket-tts' } as T; }
+    if (name === 'tts.catalog' || name === 'tts.models.choose') {
+      if (name === 'tts.models.choose') { const a = args as { language: string; modelId: string }; ttsActiveModels[a.language] = a.modelId; }
+      return {
+        componentInstalled: pocketTtsMock.installed,
+        activeModels: { ...ttsActiveModels },
+        engines: [{ id: 'pocket-tts', label: 'Pocket TTS (Kyutai)', componentId: 'pocket-tts', codeLicense: 'MIT', sourceUrl: 'https://github.com/kyutai-labs/pocket-tts/tree/v4.0.1', prohibitedUse: { textEn: 'Prohibited use: Use of our model must comply with all applicable laws and regulations and must not result in, involve, or facilitate any illegal, harmful, deceptive, fraudulent, or unauthorized activity.', summaryPt: 'Uso proibido pelo autor do modelo (Kyutai): sem imitação ou clonagem de voz sem consentimento explícito e legal.', version: 'mock' } }],
+        models: [
+          { id: 'portuguese_24l', engineId: 'pocket-tts', language: 'pt', label: 'Pocket TTS PT-BR (24 camadas · padrão)', description: 'Qualidade superior em PT-BR.', defaultForLanguage: true, lightweight: false, active: ttsActiveModels.pt === 'portuguese_24l', installed: ttsInstalledModels.has('portuguese_24l'), termsAccepted: ttsInstalledModels.has('portuguese_24l'), repo: 'kyutai/pocket-tts-without-voice-cloning', revision: 'a7056f505a4a8ca72d8b5fb1440071d6f1a35739', license: 'CC-BY-4.0', sourceUrl: 'https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/tree/a7056f505a4a8ca72d8b5fb1440071d6f1a35739', size: 701332218 },
+          { id: 'portuguese', engineId: 'pocket-tts', language: 'pt', label: 'Pocket TTS PT-BR (6 camadas · leve)', description: 'Variante destilada mais rápida.', defaultForLanguage: false, lightweight: true, active: ttsActiveModels.pt === 'portuguese', installed: ttsInstalledModels.has('portuguese'), termsAccepted: ttsInstalledModels.has('portuguese'), repo: 'kyutai/pocket-tts-without-voice-cloning', revision: 'a7056f505a4a8ca72d8b5fb1440071d6f1a35739', license: 'CC-BY-4.0', sourceUrl: 'https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/tree/a7056f505a4a8ca72d8b5fb1440071d6f1a35739', size: 226502826 },
+          { id: 'english', engineId: 'pocket-tts', language: 'en', label: 'Pocket TTS EN (6 camadas · padrão)', description: 'Modelo oficial em inglês.', defaultForLanguage: true, lightweight: true, active: ttsActiveModels.en === 'english', installed: ttsInstalledModels.has('english'), termsAccepted: ttsInstalledModels.has('english'), repo: 'kyutai/pocket-tts-without-voice-cloning', revision: 'a7056f505a4a8ca72d8b5fb1440071d6f1a35739', license: 'CC-BY-4.0', sourceUrl: 'https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/tree/a7056f505a4a8ca72d8b5fb1440071d6f1a35739', size: 231761368 },
+        ],
+        voices: [
+          { id: '13063', engineId: 'pocket-tts', language: 'pt', gender: 'male', label: 'Narrador PT-BR 13063 (masculina)', defaultForLanguage: true, license: 'CC-BY-4.0', attribution: 'BRSpeech-TTS / CML-TTS (CC-BY 4.0)', sourceUrl: 'https://huggingface.co/datasets/freds0/BRSpeech-TTS', models: ['portuguese_24l', 'portuguese'], installedModels: [] },
+          { id: 'alba', engineId: 'pocket-tts', language: 'en', gender: 'female', label: 'Alba (EN, feminina)', defaultForLanguage: true, license: 'CC-BY-4.0', attribution: 'Alba MacKenna (CC-BY 4.0)', sourceUrl: 'https://huggingface.co/kyutai/tts-voices/tree/323332d33f997de8394f24a193e1a76df720e01a/alba-mackenna', models: ['english'], installedModels: [] },
+          { id: 'marius', engineId: 'pocket-tts', language: 'en', gender: 'male', label: 'Marius (EN, masculina)', defaultForLanguage: false, license: 'CC0-1.0', attribution: 'Unmute Voice Donation Project (CC0 1.0)', sourceUrl: 'https://huggingface.co/kyutai/tts-voices/tree/323332d33f997de8394f24a193e1a76df720e01a/voice-donations', models: ['english'], installedModels: [] },
+        ],
+      } as T;
+    }
+    if (name === 'tts.models.download') {
+      const a = args as { id: string; confirmed?: boolean; termsAccepted?: boolean };
+      if (!a.confirmed) throw { code: 'confirmation_required', message: 'Confirmação obrigatória.' };
+      if (!a.termsAccepted) throw { code: 'terms_acceptance_required', message: 'Aceite o termo.' };
+      ttsInstalledModels.add(a.id);
+      return { id: a.id } as T;
+    }
+    if (name === 'tts.models.cancel') return {} as T;
+    if (name === 'narration.get' || name === 'narration.generate' || name === 'narration.regenerate_block') {
+      const a = args as { candidate: number; block?: number; voiceId?: string };
+      const s = scriptMockDispatch('script.get', { candidate: a.candidate }) as { narrationAllowed: boolean; current: { blocks: { id: number; position: number; title: string; narration: string | null }[] } | null };
+      if (name !== 'narration.get') {
+        if (!s.narrationAllowed) throw { code: 'script_not_approved', message: 'Aprove o Roteiro.' };
+        const voiceId = a.voiceId ?? channelProfileMock.narrationVoice ?? '13063';
+        const modelId = ttsActiveModels.pt;
+        const blocks = s.current?.blocks ?? [];
+        const existing = narrationGenerated.get(a.candidate) ?? [];
+        const next = blocks.map(b => (a.block === undefined || b.id === a.block)
+          ? { blockId: b.id, voiceId, modelId, durationUs: 3_200_000 }
+          : (existing.find(e => e.blockId === b.id) ?? { blockId: b.id, voiceId, modelId, durationUs: 3_200_000 }));
+        narrationGenerated.set(a.candidate, next);
+        return { job: 790, candidate: a.candidate } as T;
+      }
+      const list = narrationGenerated.get(a.candidate) ?? [];
+      const blocks = (s.current?.blocks ?? []).map(b => {
+        const hit = list.find(x => x.blockId === b.id);
+        return {
+          blockId: b.id, position: b.position, title: b.title, versionId: 1, narrationText: b.narration,
+          audio: hit ? { id: b.id, versionId: 1, voiceId: hit.voiceId, modelId: hit.modelId, relPath: `narrations/c${a.candidate}/b${b.id}-v1.wav`, durationUs: hit.durationUs, sampleRate: 24000, channels: 1, bytes: 153644, stale: false } : null,
+        };
+      });
+      return {
+        candidate: a.candidate, narrationAllowed: s.narrationAllowed, gateReason: s.narrationAllowed ? null : 'pending_blocks',
+        language: 'pt', defaultVoiceId: channelProfileMock.narrationVoice ?? '13063', activeModelId: ttsActiveModels.pt,
+        busy: false, job: null, blocks, totalDurationUs: blocks.reduce((acc, b) => acc + (b.audio?.durationUs ?? 0), 0),
+      } as T;
+    }
     if (name === 'components.ytdlp.status') return {installed:true,version:'test'} as T;
     if (name === 'components.ytdlp.update') return {version:'test'} as T;
     if (name === 'components.worker.status') return { installed: true, outdated: false, cuda: false, gpu: true, uv: '0.13.8', handshake: { protocol: 1, worker: '0.1.0', python: '3.12.16', libs: { 'faster-whisper': '1.2.1', onnxruntime: '1.32.0', numpy: '2.4.6', 'opencv-python-headless': null } } } as T;
@@ -452,6 +516,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       { id: 'ffmpeg', version: 'test', size: 2000000, license: 'GPL-3.0-or-later', source_url: 'https://github.com/FFmpeg/FFmpeg' },
       { id: 'yt-dlp', version: 'test', size: 1000000, license: 'Unlicense', source_url: 'https://github.com/yt-dlp/yt-dlp' },
       { id: 'deno', version: '2.9.8', size: 42917472, license: 'MIT', source_url: 'https://github.com/denoland/deno/tree/v2.9.8' },
+      { id: 'pocket-tts', version: '3.3.0', size: 7914990, license: 'MIT', source_url: 'https://github.com/kyutai-labs/pocket-tts/tree/v4.0.1' },
       { id: 'uv', version: '0.13.8', size: 15000000, license: 'Apache-2.0', source_url: 'https://github.com/astral-sh/uv' },
     ] as T;
     if (name === 'components.models.manifest') return [

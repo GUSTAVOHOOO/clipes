@@ -9,11 +9,12 @@ type Props = {
   description: string;
   cancelLabel: string;
   confirmLabel: string;
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   finalFocus?: RefObject<HTMLElement | null>;
   children?: ReactNode;
 };
-export function ConfirmDialog({open,onOpenChange,title,description,cancelLabel,confirmLabel,onConfirm,finalFocus,children}: Props) {
+export function ConfirmDialog({open,onOpenChange,title,description,cancelLabel,confirmLabel,confirmDisabled,onConfirm,finalFocus,children}: Props) {
   const cancelButton = useRef<HTMLButtonElement>(null);
   return <AD.Root open={open} onOpenChange={onOpenChange}>
     <AD.Portal>
@@ -23,7 +24,7 @@ export function ConfirmDialog({open,onOpenChange,title,description,cancelLabel,c
         {children}
         <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">
           <AD.Close render={<Button ref={cancelButton} />}>{cancelLabel}</AD.Close>
-          <Button variante="primario" onClick={onConfirm}>{confirmLabel}</Button>
+          <Button variante="primario" disabled={confirmDisabled} onClick={onConfirm}>{confirmLabel}</Button>
         </div>
       </AD.Popup>
     </AD.Portal>

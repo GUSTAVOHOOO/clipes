@@ -8,6 +8,7 @@ import { VideoKindBadge, type VideoKind } from './videoKind';
 import { Packaging } from './Packaging';
 import { Thumbnail } from './Thumbnail';
 import { Script } from './Script';
+import { Narration } from './Narration';
 import { ExportButton } from '@/features/export/ExportButton';
 import { RedoWithProfile, useProfiles, type Blocked } from './RedoWithProfile';
 
@@ -64,6 +65,7 @@ export function CandidateReview({ sourceId, run, videoKind = 'direct', candidate
   const [items, setItems] = useState<Record<number, Review>>({});
   const [canUndo, setCanUndo] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
+  const [scriptTick, setScriptTick] = useState(0);
   const [error, setError] = useState('');
   const root = useRef<HTMLDivElement>(null);
   const signature = candidates.map(c => c.id).join(',');
@@ -193,7 +195,8 @@ export function CandidateReview({ sourceId, run, videoKind = 'direct', candidate
           <Button aria-pressed={review?.status === 'rejected'} onClick={() => decide('rejected')} atalho="R">{t.reject}</Button>
           <ExportButton key={`${sourceId}-${current.id}`} sourceId={sourceId} candidateId={current.id} title={current.title} startId={review?.startId} endId={review?.endId} approved={review?.status === 'approved'} />
         </div>
-        {review?.status === 'approved' && videoKind === 'transformed' && <Script key={`script-${current.id}`} candidate={current.id} />}
+        {review?.status === 'approved' && videoKind === 'transformed' && <Script key={`script-${current.id}`} candidate={current.id} onChanged={() => setScriptTick(n => n + 1)} />}
+        {review?.status === 'approved' && videoKind === 'transformed' && <Narration key={`narration-${current.id}`} candidate={current.id} refreshKey={scriptTick} />}
         {onRedoStarted && <RedoWithProfile key={`redo-${current.id}`} run={run} windows={current.windows} currentProfile={current.profile ?? ''} profiles={profiles} onStarted={onRedoStarted}
           blocked={blockedOf(current.windows, windowStates)} />}
         {review?.status === 'approved' && <Packaging key={current.id} candidate={current.id} />}
