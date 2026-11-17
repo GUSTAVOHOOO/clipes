@@ -51,7 +51,9 @@ jobs:
         run: cargo install tauri-driver --locked
       - run: bun install --frozen-lockfile
       - name: Compilar pacote .deb
-        run: bun run tauri build --bundles deb --config '{"bundle":{"createUpdaterArtifacts":false},"plugins":{"updater":{"endpoints":["http://127.0.0.1:1/latest.json"]}}}'
+        env:
+          VITE_UPDATER_MOCK: available
+        run: bun run tauri build --bundles deb --config '{"bundle":{"createUpdaterArtifacts":false}}'
       - name: Inspecionar e instalar o pacote .deb
         run: |
           DEB_FILE=$(ls target/release/bundle/deb/*.deb | head -n 1)

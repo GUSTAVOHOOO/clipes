@@ -235,6 +235,9 @@ try {
     const invoke = (name, args = {}) => window.__TAURI_INTERNALS__.invoke('core_dispatch', { name, arguments: args });
     const version = await invoke('app.version');
     await invoke('assistant.complete', { skipped: true });
+    for (const btn of document.querySelectorAll('button')) {
+      if (btn.textContent?.trim() === 'Agora não') btn.click();
+    }
     return {
       version,
       userAgent: navigator.userAgent,
