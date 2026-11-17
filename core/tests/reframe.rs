@@ -174,6 +174,7 @@ fn chosen_interval_runs_locally_persists_and_cancels_without_partial_suggestion(
     assert_eq!(bad["state"], "failed");
     assert_eq!(bad["error"]["code"], "worker_protocol");
     assert!(bad["timeline"].is_null());
+    std::env::remove_var("CLIPES_FAKE_REFRAME_INVALID");
 
     // Layouts multi-painel (gameplay_webcam e two_people) passam layout/split_ratio ao worker e gravam secondaryTimeline.
     let gw = call(

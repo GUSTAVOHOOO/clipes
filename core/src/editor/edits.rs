@@ -822,7 +822,7 @@ fn crop_set_layout(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let raw_ratio = v
         .get("split_ratio")
         .or_else(|| v.get("splitRatio"))
-        .and_then(|val| if val.is_null() { None } else { Some(val) })
+        .filter(|val| !val.is_null())
         .map(|val| val.as_f64().ok_or_else(crop::invalid_crop))
         .transpose()?;
     let next_ratio = if let Some((def, _, _)) = crop::split_bounds(layout) {
@@ -861,15 +861,15 @@ fn crop_set_suggested(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let mut s = lock()?;
     let entry = load(&mut s, id)?;
     if let Some(reframe_id) = v["reframe_id"].as_i64() {
-        let row: Option<(Option<String>, String, Option<f64>, Option<String>)> =
-            projects::with_reader(|c| {
-                c.query_row(
+        type ReframeSuggestionRow = (Option<String>, String, Option<f64>, Option<String>);
+        let row: Option<ReframeSuggestionRow> = projects::with_reader(|c| {
+            c.query_row(
                     "SELECT timeline, layout, split_ratio, secondary_timeline FROM reframe_suggestions WHERE id=?1 AND source_id=?2",
                     (reframe_id, entry.doc.original.source_id),
                     |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
                 )
                 .optional()
-            })?;
+        })?;
         let (raw, layout_str, split_ratio, raw_sec) = row.ok_or_else(crop::invalid_crop)?;
         let text = raw.ok_or_else(crop::invalid_crop)?;
         let primary: crop::SuggestedCrop =
