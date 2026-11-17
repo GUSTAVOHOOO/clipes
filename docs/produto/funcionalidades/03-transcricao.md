@@ -99,15 +99,18 @@ Quando a Transcrição termina, o núcleo segmenta as palavras em Frases com IDs
 ### `transcription.grouping`
 - **O que faz:** Consulta ou altera a opção global de agrupar múltiplos trechos consecutivos de fala do VAD (até `group_size` trechos do mesmo idioma) numa mesma chamada ao `faster-whisper`.
 - **Entrada:**
-  - `enabled: boolean` (opcional) — se omitido, apenas consulta o estado atual; se presente, grava a preferência em `transcription-hardware.json`.
-- **Saída:** `{ enabled: boolean, size: number, measured_size: number | null }` (`size` é o lote efetivo: `1` se desligado, `8` em CPU ou `measured_size ?? 1` na GPU; `measured_size` é o lote seguro medido pela sonda na GPU para a precisão atual).
-- **Erros:** `settings`, `invalid_grouping` (`enabled` presente e não booleano), `hardware_store`.
+  - `enabled: boolean` (opcional) — escolha manual, gravada em `transcription-hardware.json`.
+  - `auto: true` (opcional) — volta ao automático (ligado na CPU, desligado na GPU). Não combina com `enabled`.
+  - Sem argumentos, apenas consulta o estado atual.
+- **Saída:** `{ enabled: boolean, mode: "auto" | "manual", size: number, measured_size: number | null }` (`enabled` é o valor efetivo; `size` é o lote efetivo: `1` se desligado, `8` em CPU ou `measured_size ?? 1` na GPU; `measured_size` é o lote seguro medido pela sonda na GPU para a precisão atual).
+- **Erros:** `settings`, `invalid_grouping` (`enabled` não booleano, `auto` diferente de `true` ou os dois juntos), `hardware_store`.
 - **Eventos e jobs:** nenhum.
 - **Pré-condições:** nenhuma.
 - **Tela hoje:** `src/features/components/HardwareCard.tsx`, `src/features/projects/EngineChoice.tsx`.
 - **Mock TS:** sim, `src/lib/core.ts` (`hardwareMockDispatch`).
 - **US (#26):** US-10, US-11.
 - **Código:** `core/src/components/hardware.rs:1089`
+- **Mudança decidida, ainda não implementada (#279):** o agrupamento passa a ter modo automático e manual. No automático, fica ligado na CPU e desligado na GPU. A tela de hardware do front v2 precisa de um aviso curto explicando o motivo: na CPU o agrupamento acelera a Transcrição em ~18%; na GPU usa ~1 GB a mais de VRAM sem ganho medido (benchmark do #162). A entrada e a saída deste comando vão mudar com o #279; confira o código antes de implementar a tela.
 
 ### `transcription.hardware.diagnostic`
 - **O que faz:** Devolve o registro técnico bruto mais recente da sonda de hardware (incluindo tentativas de lote seguro `batch`, `vram_free_mib` e `ct2_version`) para fins de diagnóstico.
@@ -547,7 +550,7 @@ Quando a Transcrição termina, o núcleo segmenta as palavras em Frases com IDs
 
 | Preferência / Dado | Onde vive | Quem lê / grava |
 | :--- | :--- | :--- |
-| Configuração manual (`manual`), histórico de sondas (`probes`), taxas de estimativa por hardware (`rates`) e agrupamento de VAD (`group_vad`) | `<settings.data_dir>/transcription-hardware.json` (caminho base definido em `components.settings.set`; padrão em `AppDirs::data_dir`, ou `CLIPES_DATA_DIR` quando isolado) | Lê: `transcription.hardware.status`, `transcription.hardware.diagnostic`, `transcription.estimate`, `transcription.grouping`, `transcription.start` (job local). Grava: `transcription.hardware.probe`, `transcription.hardware.choose`, `transcription.grouping`, `transcription.estimate` (cache de taxa) e atualização automática em OOM (`record_batch_oom`) |
+| Configuração manual (`manual`), histórico de sondas (`probes`), taxas de estimativa por hardware (`rates`) e escolha manual do agrupamento de VAD (`group_vad_choice`, `null` = automático) | `<settings.data_dir>/transcription-hardware.json` (caminho base definido em `components.settings.set`; padrão em `AppDirs::data_dir`, ou `CLIPES_DATA_DIR` quando isolado) | Lê: `transcription.hardware.status`, `transcription.hardware.diagnostic`, `transcription.estimate`, `transcription.grouping`, `transcription.start` (job local). Grava: `transcription.hardware.probe`, `transcription.hardware.choose`, `transcription.grouping`, `transcription.estimate` (cache de taxa) e atualização automática em OOM (`record_batch_oom`) |
 | Consentimento de envio de áudio para o endpoint do Groq | `<config_dir>/transcription-consent.json` (`paths::config_file`, sempre em `AppDirs::config_dir` / `CLIPES_DATA_DIR`, não movido por `settings.data_dir`) | Lê: `transcription.groq.info`, `transcription.start` (`engine: "groq"`). Grava: `transcription.groq.confirm` |
 | Chave de API do Groq | **Cofre do sistema** (Keyring / Credential Manager), serviço `"io.github.gustavohooo.clipes.transcription"`, conta `"groq"` | Lê: `transcription.groq.key.status`, `transcription.groq.key.test`, `transcription.groq.info`, `transcription.start` (`engine: "groq"`). Grava/Remove: `transcription.groq.key.set`, `transcription.groq.key.remove` |
 | Tabela de preços de referência do Groq | Embutida no binário (`core/src/transcription/groq-prices.json`) | Lê: `transcription.groq.info`, `transcription.groq.estimate`, `transcription.start` |

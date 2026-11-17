@@ -51,6 +51,8 @@ CPU, `small` INT8, 120 s de áudio, grupo 8 contra o atual (lote 8 em uma chamad
 - **Velocidade em CPU:** cerca de 1,18× com a amostra reduzida de 120 s, sem repetição.
 - **Recomendação:** manter **desligado por padrão**. Na GPU o ganho não passa do ruído e custa 1 GB de VRAM, numa placa de 4 GB onde o OOM é a falha real; em CPU o ganho aparece mas a medição é pequena. Reavaliar com amostras maiores, repetições e mais GPUs (a decisão de ligar é do dev).
 
+> **Decisão de 17/11/2026 (#279):** o agrupamento fica **ligado por padrão na CPU** e **desligado por padrão na GPU**, com escolha manual (ligar, desligar) e volta ao automático. A recomendação acima de manter desligado vale agora só para a GPU.
+
 ## Limitações
 
 Uma execução por configuração na GPU e uma amostra de 120 s na CPU, com a máquina compartilhada; só PT e EN de leitura de audiolivro (fala contínua, trechos longos de VAD); sem texto de referência, então a qualidade é um limite superior da degradação contra a execução atual, não um WER absoluto.

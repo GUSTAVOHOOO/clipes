@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { open } from '@tauri-apps/plugin-dialog';
 import { coreDispatch } from '@/lib/core';
+import { openDialog } from '@/lib/desktop';
 import { Button } from '@/components/ui/Button';
 import { useText } from '@/lib/i18n';
 import { Sources } from './Sources';
@@ -29,7 +29,7 @@ export function Projects() {
     catch (e) { setError(String((e as {message?: string})?.message ?? e)); }
     finally { setBusy(false); }
   }
-  async function choose() { return await open({ directory:true, multiple:false }); }
+  async function choose() { return await openDialog({ directory:true }); }
   return <section className="mx-auto max-w-4xl px-8 py-10">
     <h1 className="text-xl font-semibold">{t.title}</h1><p className="mt-2 text-fg-2">{t.intro}</p>
     <div className="mt-6 flex flex-wrap items-end gap-3"><label className="flex flex-col gap-1 text-sm">{t.name}<input className="foco h-8 rounded-md border border-line-strong bg-field px-3 text-fg" value={name} onChange={e => setName(e.target.value)} /></label>

@@ -188,20 +188,11 @@ impl TranscriptionEngine for GroqEngine {
 static KEY: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
 #[cfg(not(test))]
-fn entry() -> Result<keyring::Entry, CoreError> {
-    keyring::Entry::new("io.github.gustavohooo.clipes.transcription", "groq")
-        .map_err(|_| error("vault", "Não foi possível acessar o cofre do sistema."))
-}
+const VAULT_SERVICE: &str = "io.github.gustavohooo.clipes.transcription";
 #[cfg(not(test))]
 pub(super) fn get_key() -> Result<Option<String>, CoreError> {
-    match entry()?.get_password() {
-        Ok(key) => Ok(Some(key)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(_) => Err(error(
-            "vault",
-            "Não foi possível acessar o cofre do sistema.",
-        )),
-    }
+    crate::vault::get(VAULT_SERVICE, "groq")
+        .map_err(|_| error("vault", "Não foi possível acessar o cofre do sistema."))
 }
 #[cfg(test)]
 pub(super) fn get_key() -> Result<Option<String>, CoreError> {
@@ -218,8 +209,7 @@ fn set(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .filter(|s| !s.is_empty())
         .ok_or_else(|| error("invalid_key", "Informe a chave do Groq."))?;
     #[cfg(not(test))]
-    entry()?
-        .set_password(key)
+    crate::vault::set(VAULT_SERVICE, "groq", key)
         .map_err(|_| error("vault", "Não foi possível salvar a chave no cofre."))?;
     #[cfg(test)]
     {
@@ -229,10 +219,8 @@ fn set(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 }
 fn remove(_: Value, _: &mut EventSink<'_>) -> CommandResult {
     #[cfg(not(test))]
-    match entry()?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => (),
-        Err(_) => return Err(error("vault", "Não foi possível remover a chave do cofre.")),
-    }
+    crate::vault::remove(VAULT_SERVICE, "groq")
+        .map_err(|_| error("vault", "Não foi possível remover a chave do cofre."))?;
     #[cfg(test)]
     {
         *KEY.lock().unwrap() = None;

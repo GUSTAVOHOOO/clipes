@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { coreDispatch } from '@/lib/core';
+import { confirmAction } from '@/lib/desktop';
 import { Button } from '@/components/ui/Button';
 import { useText } from '@/lib/i18n';
 
@@ -22,6 +23,6 @@ export function Backups({ projectPath, onRestored }: { projectPath: string; onRe
     {warning && <p role="alert" className="mt-3 text-danger">{warning}</p>}{error && <p role="alert" className="mt-3 text-danger">{t.failed} {error}</p>}{notice && <p role="status" className="mt-3">{notice}</p>}
     <div className="mt-4 flex flex-wrap items-end gap-3"><label className="flex flex-col gap-1 text-sm">{t.interval}<input className="foco h-8 w-32 rounded-md border border-line-strong bg-field px-3 text-fg" type="number" min="1" step="1" value={minutes} onChange={e => setMinutes(e.target.value)} /></label><label className="flex flex-col gap-1 text-sm">{t.copies}<input className="foco h-8 w-32 rounded-md border border-line-strong bg-field px-3 text-fg" type="number" min="1" step="1" value={copies} onChange={e => setCopies(e.target.value)} /></label>
       <Button disabled={busy || !Number.isSafeInteger(intervalSeconds) || intervalSeconds < 60 || !Number.isSafeInteger(copyCount) || copyCount < 1} onClick={() => perform(() => coreDispatch('backups.settings.set', {interval_seconds: intervalSeconds, copies: copyCount}), t.saved)}>{t.save}</Button><Button disabled={busy} onClick={() => perform(() => coreDispatch('backups.create', {}))}>{t.create}</Button></div>
-    {items.length === 0 ? <p className="mt-4 text-sm text-fg-2">{t.empty}</p> : <ul className="mt-4 divide-y divide-line border-y border-line">{items.map(item => <li key={item.id} className="flex items-center justify-between gap-3 py-3"><span><time dateTime={new Date(item.created_at * 1000).toISOString()}>{new Date(item.created_at * 1000).toLocaleString()}</time>{item.before_restore && <> · {t.preserved}</>}</span><Button disabled={busy} onClick={() => { if (window.confirm(t.confirm)) void perform(async () => { await coreDispatch('backups.restore', {id: item.id}); await onRestored(); }); }}>{t.restore}</Button></li>)}</ul>}
+    {items.length === 0 ? <p className="mt-4 text-sm text-fg-2">{t.empty}</p> : <ul className="mt-4 divide-y divide-line border-y border-line">{items.map(item => <li key={item.id} className="flex items-center justify-between gap-3 py-3"><span><time dateTime={new Date(item.created_at * 1000).toISOString()}>{new Date(item.created_at * 1000).toLocaleString()}</time>{item.before_restore && <> · {t.preserved}</>}</span><Button disabled={busy} onClick={() => { if (confirmAction(t.confirm)) void perform(async () => { await coreDispatch('backups.restore', {id: item.id}); await onRestored(); }); }}>{t.restore}</Button></li>)}</ul>}
   </section>;
 }

@@ -12,6 +12,7 @@ reference/
 core/target/
 src-tauri/gen/
 /shots/
+/shots-e2e/
 
 # Mídia local do dataset de benchmarks e cache de testes Python
 benchmarks/dataset/local/

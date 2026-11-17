@@ -157,7 +157,7 @@ let groqUncertain = groqRetryTest;
 let providerCliMock = { selected: '', codexConfirmed: false, claudeConfirmed: false, opencodeConfirmed: false, opencodeModel: '' };
 // Mock do hardware da Transcrição (#50): GPU NVIDIA por padrão, CPU com `?hardware-cpu=1`.
 const GIB = 1024 ** 3;
-const hardwareMock = { manual: null as { model: string; device: string; compute_type: string } | null, probed: false, groupingEnabled: false };
+const hardwareMock = { manual: null as { model: string; device: string; compute_type: string } | null, probed: false, groupingChoice: null as boolean | null };
 function hardwareMockDispatch(name: string, args: object): unknown {
   const fallbackCpu = hardwareProbeFallbackMode && !hardwareMock.manual;
   const auto = hardwareCpuMode || fallbackCpu ? { model: 'whisper-small', device: 'cpu', compute_type: 'int8' } : { model: 'whisper-turbo', device: 'cuda', compute_type: 'int8_float16' };
@@ -171,14 +171,23 @@ function hardwareMockDispatch(name: string, args: object): unknown {
   }
   if (name === 'transcription.hardware.probe') { hardwareMock.probed = true; return { chosen: auto, verified: true, measured_at: 1790000000, attempts: [] }; }
   if (name === 'transcription.grouping') {
-    const a = args as { enabled?: unknown };
-    if ('enabled' in a && a.enabled !== undefined) {
-      if (typeof a.enabled !== 'boolean') throw { code: 'invalid_grouping', message: 'Opção de agrupamento inválida.' };
-      hardwareMock.groupingEnabled = a.enabled;
+    const a = args as { enabled?: unknown; auto?: unknown };
+    const hasEnabled = a.enabled !== undefined, hasAuto = a.auto !== undefined;
+    if (hasEnabled || hasAuto) {
+      if (hasEnabled && hasAuto) throw { code: 'invalid_grouping', message: 'Opção de agrupamento inválida.' };
+      if (hasEnabled) {
+        if (typeof a.enabled !== 'boolean') throw { code: 'invalid_grouping', message: 'Opção de agrupamento inválida.' };
+        hardwareMock.groupingChoice = a.enabled;
+      } else {
+        if (a.auto !== true) throw { code: 'invalid_grouping', message: 'Opção de agrupamento inválida.' };
+        hardwareMock.groupingChoice = null;
+      }
     }
+    // Automático (#279): ligado na CPU, desligado na GPU; a escolha manual vence.
+    const enabled = hardwareMock.groupingChoice ?? cpu;
     const measured_size = cpu ? null : hardwareMock.probed ? 8 : null;
-    const size = hardwareMock.groupingEnabled ? (cpu ? 8 : (measured_size ?? 1)) : 1;
-    return { enabled: hardwareMock.groupingEnabled, size, measured_size };
+    const size = enabled ? (cpu ? 8 : (measured_size ?? 1)) : 1;
+    return { enabled, mode: hardwareMock.groupingChoice === null ? 'auto' : 'manual', size, measured_size };
   }
   if (name === 'transcription.estimate') {
     const rate = cpu ? (effective.model === 'whisper-turbo' ? 4.1 : 2.57) : 0.386;
