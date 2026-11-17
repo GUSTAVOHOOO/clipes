@@ -202,6 +202,11 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Causa:** num executável compilado (`clipes`), `#[cfg(test)]` está desligado e o núcleo chamaria `keyring::Entry` real.
 - **Ação:** em builds de depuração (`#[cfg(debug_assertions)]`), passe `CLIPES_TEST_VAULT_FILE` apontando para um JSON temporário (`core/src/vault.rs`). Não habilite esse caminho fora de `debug_assertions`.
 
+### `e2e (windows-latest)` falha no `POST /session` com WebView2 150+ em runner elevado (#282)
+- **Sintoma:** no GitHub Actions (`windows-latest`, `runneradmin` elevado, WebView2 `156.0.4314.58`), `tauri-driver` + `msedgedriver` expira no `POST /session` (ou falha com `DevToolsActivePort file doesn't exist`), enquanto localmente em usuário padrão e no `ubuntu-latest` a suíte passa.
+- **Causa:** a partir do WebView2 v150+, processos elevados ignoram `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` e demais variáveis `WEBVIEW2_*`.
+- **Ação:** o job `e2e` do `ci.yml` roda só em `ubuntu-latest`, e no Windows a E2E roda localmente sem elevação; as saídas possíveis para o runner Windows estão registradas na issue [#282](https://github.com/GUSTAVOHOOO/clipes/issues/282).
+
 ## Disco
 
 ### Disco C: cheio com vários worktrees compilando

@@ -594,9 +594,6 @@ async function withTauriSession(config, callback) {
   } else {
     delete childEnv.CLIPES_FAKE_WORKER_MODE;
   }
-  if (config.webview2UserDataDir) {
-    childEnv.WEBVIEW2_USER_DATA_FOLDER = config.webview2UserDataDir;
-  }
 
   const driverLogs = [];
   const driverProc = spawn(config.tauriDriverPath, args, {
@@ -1158,15 +1155,9 @@ async function main() {
       ...fixtures,
     };
 
-    await withTauriSession(
-      { ...sharedConfig, workerMode: '', webview2UserDataDir: path.join(tempRoot, 'webview2-1') },
-      ui => runSession1(ui, ctx),
-    );
+    await withTauriSession({ ...sharedConfig, workerMode: '' }, ui => runSession1(ui, ctx));
     await stageModelsInstalled(dataDir);
-    await withTauriSession(
-      { ...sharedConfig, workerMode: 'transcribe', webview2UserDataDir: path.join(tempRoot, 'webview2-2') },
-      ui => runSession2(ui, ctx),
-    );
+    await withTauriSession({ ...sharedConfig, workerMode: 'transcribe' }, ui => runSession2(ui, ctx));
 
     logStep('Suíte E2E Tauri (Sessões 1 e 2) concluída com sucesso: OK');
   } finally {

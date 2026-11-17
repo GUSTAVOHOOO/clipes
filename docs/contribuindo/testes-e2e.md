@@ -48,6 +48,8 @@ Para executar a suíte completa no Windows:
 bun run test:e2e
 ```
 
+> **Limitação no CI (`windows-latest`, [#282](https://github.com/GUSTAVOHOOO/clipes/issues/282)):** no GitHub Actions, o runner `windows-latest` executa os passos como administrador elevado (`runneradmin`), e a partir do WebView2 Runtime v150+ processos elevados ignoram variáveis `WEBVIEW2_*` (incluindo `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` usada pelo `tauri-driver`). Por isso, no CI o job `e2e` em [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) roda apenas em `ubuntu-latest`, enquanto no Windows a suíte E2E é executada localmente com usuário padrão (não elevado).
+
 ### Linux (Ubuntu/Debian e CI)
 
 1. Além dos pacotes de compilação do Tauri, instale `webkit2gtk-driver`, `xvfb` e `ffmpeg`:
