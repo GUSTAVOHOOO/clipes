@@ -6,6 +6,7 @@
 
 use crate::chat::{self, Interval, Peak};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Intervalo de um Corte humano de referência (em µs na Fonte).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -278,6 +279,45 @@ fn median_u32(values: &mut [u32]) -> f64 {
     }
 }
 
+fn compute_baselines(series: &[Interval], params: &ChatCalibrationParams) -> Vec<f64> {
+    let half = ((params.median_window_us / params.interval_us.max(1)) / 2).max(1) as usize;
+    let mut window: Vec<u32> = Vec::with_capacity(half * 2 + 1);
+    (0..series.len())
+        .map(|i| {
+            window.clear();
+            window.extend(
+                series[i.saturating_sub(half)..(i + half + 1).min(series.len())]
+                    .iter()
+                    .map(|x| x.people),
+            );
+            median_u32(&mut window).max(params.baseline_floor)
+        })
+        .collect()
+}
+
+fn peaks_from_baselines(
+    series: &[Interval],
+    baselines: &[f64],
+    params: &ChatCalibrationParams,
+) -> Vec<Peak> {
+    let mut out = Vec::new();
+    for (i, (interval, &baseline)) in series.iter().zip(baselines.iter()).enumerate() {
+        if interval.people < params.min_peak_people {
+            continue;
+        }
+        let ratio = f64::from(interval.people) / baseline;
+        if ratio >= params.peak_ratio {
+            out.push(Peak {
+                interval: i,
+                people: interval.people,
+                ratio_tenths: (ratio * 10.0).round() as u32,
+                reaction: interval.dominant(),
+            });
+        }
+    }
+    out
+}
+
 /// Espelha a lógica de `chat::peaks` com parâmetros configuráveis, para calibração offline sem
 /// alterar as constantes de `core/src/chat.rs`.
 pub fn peaks_with(series: &[Interval], params: &ChatCalibrationParams) -> Vec<Peak> {
@@ -325,15 +365,12 @@ pub struct ChatSignalEvaluation {
     pub f1: f64,
 }
 
-/// Avalia quantos Cortes humanos recebem pelo menos um pico de chat deslocado pelo atraso de
-/// reação (`[início - atraso, fim - atraso)`) e quantos picos caem fora de todo Corte humano.
-pub fn evaluate_chat_signal(
-    series: &[Interval],
+fn evaluate_chat_peaks(
+    peaks: &[Peak],
     clips: &[GroundTruthClip],
     params: &ChatCalibrationParams,
     tolerance_us: i64,
 ) -> ChatSignalEvaluation {
-    let peaks = peaks_with(series, params);
     let peak_spans: Vec<(i64, i64)> = peaks
         .iter()
         .map(|p| {
@@ -383,6 +420,18 @@ pub fn evaluate_chat_signal(
     }
 }
 
+/// Avalia quantos Cortes humanos recebem pelo menos um pico de chat deslocado pelo atraso de
+/// reação (`[início - atraso, fim - atraso)`) e quantos picos caem fora de todo Corte humano.
+pub fn evaluate_chat_signal(
+    series: &[Interval],
+    clips: &[GroundTruthClip],
+    params: &ChatCalibrationParams,
+    tolerance_us: i64,
+) -> ChatSignalEvaluation {
+    let peaks = peaks_with(series, params);
+    evaluate_chat_peaks(&peaks, clips, params, tolerance_us)
+}
+
 /// Linha da busca em grade sobre múltiplas Fontes com replay de chat, incluindo a variância
 /// entre Fontes (mínimo e máximo do recall por Fonte).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -399,15 +448,47 @@ pub fn grid_search_chat(
     grid: &[ChatCalibrationParams],
     tolerance_us: i64,
 ) -> Vec<ChatGridRow> {
+    type BaselineKey = (i64, i64, u64);
+    type PeakKey = (i64, i64, u64, u64, u32);
+    // Cache de baselines (medianas) e de picos por parâmetro que não depende de `reaction_delay_us`.
+    let mut baseline_cache: HashMap<BaselineKey, Vec<Vec<f64>>> = HashMap::new();
+    let mut peak_cache: HashMap<PeakKey, Vec<Vec<Peak>>> = HashMap::new();
+
     let mut rows = Vec::with_capacity(grid.len());
     for params in grid {
+        let base_key = (
+            params.interval_us,
+            params.median_window_us,
+            params.baseline_floor.to_bits(),
+        );
+        let peak_key = (
+            params.interval_us,
+            params.median_window_us,
+            params.baseline_floor.to_bits(),
+            params.peak_ratio.to_bits(),
+            params.min_peak_people,
+        );
+        let per_source_peaks = peak_cache.entry(peak_key).or_insert_with(|| {
+            let baselines = baseline_cache.entry(base_key).or_insert_with(|| {
+                sources
+                    .iter()
+                    .map(|(series, _)| compute_baselines(series, params))
+                    .collect()
+            });
+            sources
+                .iter()
+                .zip(baselines.iter())
+                .map(|((series, _), base)| peaks_from_baselines(series, base, params))
+                .collect()
+        });
+
         let mut total_clips = 0;
         let mut clips_hit = 0;
         let mut total_peaks = 0;
         let mut signal_peaks = 0;
         let mut per_source_recalls = Vec::with_capacity(sources.len());
-        for (series, clips) in sources {
-            let ev = evaluate_chat_signal(series, clips, params, tolerance_us);
+        for ((_, clips), peaks) in sources.iter().zip(per_source_peaks.iter()) {
+            let ev = evaluate_chat_peaks(peaks, clips, params, tolerance_us);
             total_clips += ev.total_clips;
             clips_hit += ev.clips_hit;
             total_peaks += ev.total_peaks;
@@ -506,4 +587,22 @@ impl ProviderCostTiming {
             usd_per_hour: if hours > 0.0 { usd / hours } else { 0.0 },
         }
     }
+}
+
+/// Intervalo de confiança de Wilson (95%, z = 1.96) para uma proporção `hits / total`.
+pub fn wilson_ci95(hits: usize, total: usize) -> (f64, f64) {
+    if total == 0 {
+        return (0.0, 0.0);
+    }
+    let n = total as f64;
+    let p = hits as f64 / n;
+    let z = 1.96_f64;
+    let z2 = z * z;
+    let denom = 1.0 + z2 / n;
+    let center = (p + z2 / (2.0 * n)) / denom;
+    let half = (z * ((p * (1.0 - p) + z2 / (4.0 * n)) / n).sqrt()) / denom;
+    (
+        (center - half).clamp(0.0, 1.0),
+        (center + half).clamp(0.0, 1.0),
+    )
 }

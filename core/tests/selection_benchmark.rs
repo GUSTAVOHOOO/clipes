@@ -6,7 +6,7 @@ use clipes_core::{
     provider::{cost::Target, CancelToken, Provider, StructuredRequest},
     selection::benchmark::{
         aggregate_metrics, evaluate_chat_signal, evaluate_source, grid_search_chat,
-        merge_overlapping_scenes, mid_sentence_boundary_count, CandidateSpan,
+        merge_overlapping_scenes, mid_sentence_boundary_count, wilson_ci95, CandidateSpan,
         ChatCalibrationParams, CostCounts, GroundTruthClip, ProviderCostTiming, SentenceSpan,
     },
     CoreError,
@@ -162,6 +162,11 @@ fn provider_cost_and_timing_normalizes_per_hour() {
     assert!((stats.hours - 0.5).abs() < 1e-9);
     assert!((stats.secs_per_hour - 60.0).abs() < 1e-6);
     assert!((stats.usd_per_hour - 0.50).abs() < 1e-6);
+
+    let (lo, hi) = wilson_ci95(5, 34);
+    assert!(lo > 0.06 && lo < 0.07);
+    assert!(hi > 0.29 && hi < 0.31);
+    assert_eq!(wilson_ci95(0, 0), (0.0, 0.0));
 }
 
 struct FakeBenchProvider {
