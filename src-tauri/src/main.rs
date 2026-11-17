@@ -67,6 +67,7 @@ fn main() {
             });
         })
         .setup(|app| {
+            let _ = clipes_core::paths::ensure_migrated();
             let handle = app.handle().clone();
             let _ = clipes_core::set_event_emitter(std::sync::Arc::new(move |event| {
                 let _ = handle.emit("core-progress", event);

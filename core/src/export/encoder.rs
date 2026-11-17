@@ -241,11 +241,7 @@ impl Cache {
 static LOCK: Mutex<()> = Mutex::new(());
 
 fn cache_path() -> Result<PathBuf, CoreError> {
-    std::env::var_os("CLIPES_DATA_DIR")
-        .map(PathBuf::from)
-        .or_else(|| dirs::data_local_dir().map(|p| p.join("Clipes")))
-        .map(|p| p.join("export-encoder.json"))
-        .ok_or_else(failed)
+    crate::paths::data_file("export-encoder.json").map_err(|_| failed())
 }
 
 fn read_cache() -> Option<Cache> {
