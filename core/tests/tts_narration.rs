@@ -8,6 +8,7 @@
 use clipes_core::{
     dispatch,
     media::serve,
+    montage,
     projects::with_writer,
     tts::block_durations_for_candidate,
     CoreError,
@@ -334,10 +335,28 @@ fn headless_narration_gate_synthesis_durations_edit_invalidation_and_guardrails(
     assert_eq!(after_regen["blocks"][0]["audio"]["modelId"], "portuguese_24l");
     assert_eq!(block_durations_for_candidate(candidate).unwrap().len(), 3);
 
-    // Persiste ao fechar e reabrir o Projeto.
+    // Persiste ao fechar e reabrir o Projeto, e alimenta a montagem (#204) com durações reais.
     call("projects.close", json!({}));
     call("projects.open", json!({"path": project["path"]}));
-    assert_eq!(block_durations_for_candidate(candidate).unwrap().len(), 3);
+    let reopened_durations = block_durations_for_candidate(candidate).unwrap();
+    assert_eq!(reopened_durations.len(), 3);
+    let plan = montage::plan_for_clip(None, candidate, &[]).unwrap().unwrap();
+    assert!(!plan.uses_estimated_durations);
+    assert_eq!(plan.blocks.len(), 3);
+    for (idx, b) in plan.blocks.iter().enumerate() {
+        assert!(!b.estimated);
+        assert_eq!(
+            b.duration_us,
+            after_regen["blocks"][idx]["audio"]["durationUs"]
+                .as_i64()
+                .unwrap()
+        );
+    }
+    let opened_ed = call(
+        "editor.open",
+        json!({"source_id": source_id, "start_id": 1, "end_id": 6, "candidate_id": candidate}),
+    );
+    assert_eq!(opened_ed["montage"]["usesEstimatedDurations"], false);
     assert_eq!(
         call("channel_profile.get", json!({}))["narrationVoice"],
         "13063"

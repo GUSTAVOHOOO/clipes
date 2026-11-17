@@ -409,7 +409,9 @@ pub fn plan_for_clip(
         }
     };
 
-    let durations_by_block: BTreeMap<i64, i64> = durations.iter().copied().collect();
+    let mut durations_by_block =
+        crate::tts::block_durations_for_candidate(candidate_id).unwrap_or_default();
+    durations_by_block.extend(durations.iter().copied());
     let sentences = load_transcript_sentences(cut.transcript)?;
     let splice = SpliceMap::new(clip_start_us, clip_end_us, &active_silences);
     let blocks: Vec<MontageBlockInput> = script_doc
