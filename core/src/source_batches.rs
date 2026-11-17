@@ -224,6 +224,22 @@ fn existing_run(key: &str, source: i64) -> Option<i64> {
     .flatten()
 }
 
+/// Jobs locais pós-Transcrição (`energy` e `chat`) que a seleção congela na largada: o lote
+/// aguarda eles saírem de `queued`/`running` (concluindo ou falhando) antes de `selection.start`.
+fn pending_local_signals(source: i64) -> bool {
+    projects::with_reader(|c| {
+        c.query_row(
+            "SELECT 1 FROM jobs WHERE source_id=?1 AND kind IN ('energy','chat') AND state IN ('queued','running') LIMIT 1",
+            [source],
+            |_| Ok(()),
+        )
+        .optional()
+    })
+    .ok()
+    .flatten()
+    .is_some()
+}
+
 /// Estado de uma execução: o código do primeiro job que falhou e se o Provedor falhou.
 struct RunFacts {
     state: String,
@@ -308,7 +324,7 @@ fn derive(item: &Item) -> Derived {
     }
     if transcript_complete(item.source_id) {
         // Uma Fonte pausada sem execução (a seleção foi recusada) espera o usuário.
-        return if item.state == "paused" {
+        return if item.state == "paused" || pending_local_signals(item.source_id) {
             Derived::Same
         } else {
             Derived::ReadyToSelect
@@ -365,6 +381,12 @@ fn start_item(batch: &Batch, item: &Item, user_confirmed: bool) -> Result<(), Co
         let run = match existing_run(&batch.key, item.source_id) {
             Some(run) => run,
             None => {
+                if pending_local_signals(item.source_id) {
+                    if from == "paused" {
+                        set_item(batch.id, item.position, from, "pending", None, None, None);
+                    }
+                    return Ok(());
+                }
                 let mut args = json!({"source_id": item.source_id, "confirmed": true, "batch": batch.key, "videoKind": batch.video_kind});
                 if let Some(min) = batch.min_us {
                     args["minUs"] = json!(min);

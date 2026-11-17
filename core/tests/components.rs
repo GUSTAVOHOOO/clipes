@@ -161,3 +161,39 @@ fn transcription_models_are_pinned_licensed_and_need_consent_and_the_worker() {
     .unwrap_err();
     assert_eq!(error.code, "unknown_component");
 }
+
+#[test]
+fn ffmpeg_status_reports_missing_until_configured() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = EnvGuard::set(tmp.path());
+    let initial = dispatch("components.ffmpeg.status", json!({}), &mut |_| {}).unwrap();
+    assert_eq!(initial["installed"], false);
+    assert_eq!(initial["incomplete"], false);
+
+    let exe_dir = tmp.path().join("components");
+    std::fs::create_dir_all(&exe_dir).unwrap();
+    let ffmpeg = exe_dir.join(if cfg!(windows) {
+        "ffmpeg.exe"
+    } else {
+        "ffmpeg"
+    });
+    let ffprobe = exe_dir.join(if cfg!(windows) {
+        "ffprobe.exe"
+    } else {
+        "ffprobe"
+    });
+    std::fs::write(&ffmpeg, b"ffmpeg").unwrap();
+    let settings = dispatch("components.settings.get", json!({}), &mut |_| {}).unwrap();
+    let mut updated = settings.clone();
+    updated["ffmpeg_path"] = json!(ffmpeg);
+    dispatch("components.settings.set", updated, &mut |_| {}).unwrap();
+
+    let incomplete = dispatch("components.ffmpeg.status", json!({}), &mut |_| {}).unwrap();
+    assert_eq!(incomplete["incomplete"], true);
+    assert_eq!(incomplete["installed"], false);
+
+    std::fs::write(&ffprobe, b"ffprobe").unwrap();
+    let ready = dispatch("components.ffmpeg.status", json!({}), &mut |_| {}).unwrap();
+    assert_eq!(ready["incomplete"], false);
+    assert_eq!(ready["installed"], true);
+}

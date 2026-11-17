@@ -273,6 +273,37 @@ fn guardrails_track_one_time_direct_ack_checklist_over60s_and_never_block() {
     );
     assert_eq!(check_t_approved["script"]["approved"], true);
     assert_eq!(check_t_approved["script"]["pendingBlocks"], 0);
+    assert_eq!(check_t_approved["narration"]["freezeTailUs"], 0);
+    assert_eq!(check_t_approved["narration"]["longFreezeTail"], false);
+
+    // Quando a Narração ultrapassa o fim do Corte, o checklist pré-export expõe `freezeTailUs` (> 0).
+    let long_text = "a".repeat(1500); // ~100 s em 15 chars/s -> sobra além de 80 s (> 5 s)
+    with_writer(|c| {
+        c.execute(
+            "INSERT INTO script_block_versions(block_id,kind,title,narration,refs,angle_revision) VALUES (?1,'edit','B2',?2,'[8]',0)",
+            (block2_id, &long_text),
+        )?;
+        let ver3 = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO script_approvals(block_id,version_id,angle_revision) VALUES (?1,?2,0)",
+            (block2_id, ver3),
+        )?;
+        Ok(())
+    })
+    .unwrap();
+
+    let check_t_freeze = call(
+        "guardrails.check",
+        json!({"source_id": s2, "candidate_id": cand_t}),
+    );
+    let tail_us = check_t_freeze["narration"]["freezeTailUs"]
+        .as_i64()
+        .unwrap();
+    assert!(
+        tail_us > 5_000_000,
+        "esperava sobra > 5 s, obtida {tail_us}"
+    );
+    assert_eq!(check_t_freeze["narration"]["longFreezeTail"], true);
 
     // Lote por Projeto agrega direto + transformado, permissões parciais e Cortes > 60 s.
     let project_batch = call("guardrails.check", json!({"scope": "project"}));
@@ -290,6 +321,9 @@ fn guardrails_track_one_time_direct_ack_checklist_over60s_and_never_block() {
     assert_eq!(project_batch["script"]["transformedCount"], 1);
     assert_eq!(project_batch["script"]["approvedCount"], 1);
     assert_eq!(project_batch["script"]["unapprovedCount"], 0);
+    assert_eq!(project_batch["narration"]["freezeTailCount"], 1);
+    assert_eq!(project_batch["narration"]["longFreezeTailCount"], 1);
+    assert_eq!(project_batch["narration"]["maxFreezeTailUs"], tail_us);
 
     // Escopo inválido retorna erro tipado sem caminho pessoal.
     assert_eq!(

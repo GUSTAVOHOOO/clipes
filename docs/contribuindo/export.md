@@ -104,8 +104,8 @@ e legenda sem alterar nenhuma das etapas existentes.
 | Encoder de hardware | Feito no #62: `SelectedEncoder` substitui `Encoder`, mantendo o plano/runner. |
 | Crop/reenquadramento (#61) | Etapa de vídeo antes de `Subtitle`, produzindo o canvas final 1080×1920. |
 | Loudness (#63) | Feito: etapa `Loudness`, última do áudio. As etapas de áudio futuras entram antes dela. |
-| Silêncios (#82) | Etapa de montagem anterior ao plano audiovisual; deve fornecer **um mapa de tempos compartilhado por vídeo, legenda e áudio**. Não basta acrescentar um filtro só de áudio. |
-| Narração/ducking (#82) | Etapa de áudio com novos inputs e grafo de mixagem; ampliar o plano para inputs/labels e manter o runner gerenciado. |
+| Silêncios (#82) | Feito (#77): `SpliceMap` compartilhado por vídeo, legenda e áudio no editor e no export. |
+| Narração/ducking (#82) | Feito: etapa `Ducking` (`sidechaincompress` + `amix normalize=0` + `tpad` na sobra final), antes de `Loudness`. |
 
 Essas funcionalidades não são implementadas neste ticket. Uma extensão que
 precise de grafo com várias entradas amplia o plano tipado; texto da Transcrição
@@ -165,6 +165,29 @@ O áudio sai a **-14 LUFS integrado, true peak ≤ -1 dBTP e LRA 11 LU** (consta
 - **Harness**: `core/tests/export_loudness.rs` gera áudio sintético (`sine` + `anoisesrc`, trecho
   baixo e trecho alto), exporta dois Cortes e mede o MP4 com `ebur128`: I = -14 ± 1 LU e
   true peak ≤ -1 dBTP (+0,1 dB de tolerância).
+
+## Ducking da Narração (#82)
+
+Quando o Corte do Vídeo transformado possui WAVs atuais em `narration_blocks` (#79), o export
+consome `montage::audio_mix_plan` (#204) e insere a etapa `Ducking` antes de `Loudness`:
+
+- **Grafo só com números:** `NarrationMixPlan` guarda apenas `input_index`, `start_us`,
+  `duration_us` e durações totais (`clip_duration_us`, `freeze_tail_us`, `total_duration_us`).
+  Os caminhos dos WAVs entram só nos argumentos `-i`, nunca no filtergraph (ADR-0006).
+- **Ducking (`sidechaincompress`):** os blocos de Narração são normalizados para 48 kHz estéreo,
+  posicionados com `adelay` e somados com `amix normalize=0`. A cópia sidechain atenua o áudio
+  da Fonte em ~**-12 dB** (`DUCKING_TARGET_DB = -12.0`, `threshold = 0.015`, `ratio = 4`,
+  `attack = 40 ms`, `release = 300 ms`, `knee = 4`, `level_sc = 2` em `export/pipeline.rs`),
+  sem reduzir a própria Narração.
+- **Mixagem e `tpad`:** Fonte atenuada e Narração entram em `amix=inputs=2:duration=longest:normalize=0`.
+  Apenas a sobra final (`freeze_tail_us > 0`) aplica `tpad=stop_mode=clone:stop_duration=...` antes
+  de `ass=captions.ass` e estende o áudio com `apad=whole_dur=...`. As duas passagens do `loudnorm`
+  medem e normalizam o resultado já mixado.
+- **Paridade no preview:** `CutPreview` reproduz os áudios `narration/<id>` na posição remapeada
+  pelo `SpliceMap`, aplica o mesmo alvo de `-12 dB` com rampa de `40 ms` / `300 ms` e segura o
+  último quadro durante `freeze_tail_us`.
+- **Harness:** `core/tests/export_ducking.rs` confere atenuação da Fonte, preservação da Narração,
+  congelamento `tpad`, loudness final e fluxo headless `export.start`.
 
 ## ASS e fonte
 
