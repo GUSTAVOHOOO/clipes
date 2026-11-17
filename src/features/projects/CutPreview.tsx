@@ -112,6 +112,10 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
   const skipRef = useRef(skipIntervals);
   skipRef.current = skipIntervals;
 
+  const publishTime = useCallback((us: number) => {
+    window.dispatchEvent(new CustomEvent<PreviewTimeEvent>(previewTimeEvent, { detail: { source_id: sourceId, us: Math.round(us) } }));
+  }, [sourceId]);
+
   // Velocidade pedida pelo editor. Para trás o `<video>` não toca: volta em passos de 100 ms.
   useEffect(() => {
     const el = video.current;
@@ -149,6 +153,7 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
             el.currentTime = mapped;
             setTime(mapped);
             onSourceTime?.(jumpTo);
+            publishTime(jumpTo);
           }
         }
       }
@@ -156,7 +161,7 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
     };
     frame = requestAnimationFrame(tick);
     return () => { alive = false; cancelAnimationFrame(frame); };
-  }, [playing, proxy, skipIntervals, onSourceTime]);
+  }, [playing, proxy, skipIntervals, onSourceTime, publishTime]);
 
   const windowSeconds = proxy ? (proxy.windowEndUs - proxy.windowStartUs) / 1_000_000 : 0;
   function seekProxy(seconds: number) {
@@ -164,6 +169,7 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
     if (!el || el.readyState < 1) { pending.current = seconds; return; }
     el.currentTime = seconds;
     setTime(seconds);
+    if (proxy) publishTime(proxy.windowStartUs + seconds * 1_000_000);
   }
   // Clique numa palavra da Transcrição: mapeia o tempo da Fonte para o do proxy.
   useEffect(() => {
@@ -185,6 +191,7 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
     const start = pending.current ?? toProxySeconds(startUs, proxy.windowStartUs, proxy.windowEndUs) ?? 0;
     pending.current = null;
     el.currentTime = start; setTime(start);
+    publishTime(proxy.windowStartUs + start * 1_000_000);
   }
   const isDual = !!(cropPlan && cropPlan.panels.length === 2);
   const effectiveSingleSegments = cropPlan && cropPlan.panels.length === 1 ? cropPlan.panels[0].segments : crop;
@@ -292,12 +299,23 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
           const jumpTo = skipCutForward(proxy.windowStartUs + curSec * 1_000_000, skipRef.current);
           if (jumpTo !== null) {
             const mapped = toProxySeconds(jumpTo, proxy.windowStartUs, proxy.windowEndUs);
-            if (mapped !== null) { e.currentTarget.currentTime = mapped; setTime(mapped); onSourceTime?.(jumpTo); return; }
+            if (mapped !== null) { e.currentTarget.currentTime = mapped; setTime(mapped); onSourceTime?.(jumpTo); publishTime(jumpTo); return; }
           }
         }
         setTime(curSec);
-        if (proxy) onSourceTime?.(proxy.windowStartUs + curSec * 1_000_000);
-      }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
+        if (proxy) {
+          const us = proxy.windowStartUs + curSec * 1_000_000;
+          onSourceTime?.(us);
+          publishTime(us);
+        }
+      }} onSeeked={e => {
+        const curSec = e.currentTarget.currentTime;
+        setTime(curSec);
+        if (proxy) publishTime(proxy.windowStartUs + curSec * 1_000_000);
+      }} onPlay={() => setPlaying(true)} onPause={e => {
+        setPlaying(false);
+        if (proxy) publishTime(proxy.windowStartUs + e.currentTarget.currentTime * 1_000_000);
+      }} onEnded={() => setPlaying(false)}
       onError={() => { if (isTauri()) setNotice(t.playError); }} />
   );
   return <section aria-label={t.title} data-preview-state={proxy?.state ?? (error ? 'error' : 'loading')} data-seek-us={lastSeekUs ?? undefined} data-crop-active={hasCrop ? 'true' : undefined} data-crop-layout={cropPlan?.layout} data-split-ratio={isDual ? splitRatio.toFixed(4) : undefined} className="flex w-full max-w-[18rem] flex-col gap-2 text-sm">
