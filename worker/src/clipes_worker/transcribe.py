@@ -26,6 +26,16 @@ VAD_MAX_SPEECH_S = 30
 BEAM_SIZE = 5
 DEVICES = ("cuda", "cpu")
 COMPUTE_TYPES = ("int8_float16", "float16", "int8")
+# Códigos ISO-639-1 do tokenizador Whisper (mesma lista de `core/src/transcription/groq.rs`).
+LANGUAGES = frozenset({
+    "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr", "pl", "ca", "nl", "ar",
+    "sv", "it", "id", "hi", "fi", "vi", "he", "uk", "el", "ms", "cs", "ro", "da", "hu",
+    "ta", "no", "th", "ur", "hr", "bg", "lt", "la", "mi", "ml", "cy", "sk", "te", "fa",
+    "lv", "bn", "sr", "az", "sl", "kn", "et", "mk", "br", "eu", "is", "hy", "ne", "mn",
+    "bs", "kk", "sq", "sw", "gl", "mr", "pa", "si", "km", "sn", "yo", "so", "af", "oc",
+    "ka", "be", "tg", "sd", "gu", "am", "yi", "lo", "uz", "fo", "ht", "ps", "tk", "nn",
+    "mt", "sa", "lb", "my", "bo", "tl", "mg", "as", "tt", "ln", "ha", "ba", "jw", "su",
+})
 
 
 def read_wav(path):
@@ -111,14 +121,14 @@ class Transcriber:
         if self._close:
             self._close()
 
-    def block(self, audio, final, batch_size, ctx, group_size=1):
+    def block(self, audio, final, batch_size, ctx, group_size=1, language=None):
         spans, covered = speech_boundaries(audio, final, self._spans)
         words, silences = [], silences_for(spans, covered)
         try:
             if group_size > 1 and self._clips:
-                self._grouped(audio, spans, group_size, ctx, words)
+                self._grouped(audio, spans, group_size, ctx, words, language=language)
             else:
-                self._one_by_one(audio, spans, batch_size, ctx, words)
+                self._one_by_one(audio, spans, batch_size, ctx, words, language=language)
         except (RuntimeError, MemoryError) as error:
             if _out_of_memory(error):
                 raise WorkerError("out_of_memory") from None
@@ -126,21 +136,33 @@ class Transcriber:
         ctx.progress("transcribing", 100, "Transcrevendo")
         return {"covered_us": _us(covered), "words": words, "silences": silences}
 
-    def _one_by_one(self, audio, spans, batch_size, ctx, words):
+    def _one_by_one(self, audio, spans, batch_size, ctx, words, language=None):
         for index, span in enumerate(spans):
             ctx.progress("transcribing", 100 * index // max(1, len(spans)), "Transcrevendo")
             chunk = audio[span["start"] : span["end"]]
-            language = self._language(chunk)
+            lang = language if language is not None else self._language(chunk)
             offset = span["start"] / SAMPLE_RATE
-            for text, begin, end in self._transcribe(chunk, language, batch_size):
-                _add_word(words, text, offset + begin, offset + end, language)
+            for text, begin, end in self._transcribe(chunk, lang, batch_size):
+                _add_word(words, text, offset + begin, offset + end, lang)
 
-    def _grouped(self, audio, spans, group_size, ctx, words):
+    def _grouped(self, audio, spans, group_size, ctx, words, language=None):
         """Agrupa trechos consecutivos do mesmo idioma, até `group_size` por chamada.
 
-        O idioma continua detectado em cada trecho; só a inferência junta os trechos. Os
+        Quando `language` é informado (#195), pula a detecção por trecho e envia sempre o idioma
+        fixo sem quebrar os lotes por troca falsa. Sem `language`, detecta em cada trecho. Os
         tempos de palavra saem absolutos no bloco, sem somar o início de cada trecho.
         """
+        if language is not None:
+            start = 0
+            while start < len(spans):
+                ctx.checkpoint()
+                ctx.progress("transcribing", 100 * start // max(1, len(spans)), "Transcrevendo")
+                end = min(len(spans), start + group_size)
+                clips = [{"start": s["start"] / SAMPLE_RATE, "end": s["end"] / SAMPLE_RATE} for s in spans[start:end]]
+                for text, begin, finish in self._clips(audio, clips, language, group_size):
+                    _add_word(words, text, begin, finish, language)
+                start = end
+            return
         languages = []
         for span in spans:
             ctx.checkpoint()
@@ -234,6 +256,7 @@ def _check_params(params):
     model_id, directory = model.get("id"), model.get("dir")
     audio, final, batch_size = params.get("audio"), params.get("final"), params.get("batch_size")
     group = params.get("group_size", 1)
+    language = params.get("language")
     if (
         not isinstance(model_id, str)
         or not isinstance(directory, str)
@@ -247,6 +270,7 @@ def _check_params(params):
         or not isinstance(group, int)
         or isinstance(group, bool)
         or not 1 <= group <= 32
+        or (language is not None and (not isinstance(language, str) or language not in LANGUAGES))
     ):
         raise WorkerError("invalid_message")
     return model_id, directory, model["device"], model["compute_type"]
@@ -261,8 +285,14 @@ def transcribe_task(loader=load_faster_whisper, reader=read_wav):
         return f"faster-whisper:{model_id}:{device}:{compute_type}", lambda: loader(directory, device, compute_type)
 
     def run(transcriber, params, ctx):
+        kwargs = {"language": params["language"]} if params.get("language") is not None else {}
         return transcriber.block(
-            reader(params["audio"]), params["final"], params["batch_size"], ctx, params.get("group_size", 1)
+            reader(params["audio"]),
+            params["final"],
+            params["batch_size"],
+            ctx,
+            params.get("group_size", 1),
+            **kwargs,
         )
 
     return Task("faster-whisper", lambda: None, run, resolve)

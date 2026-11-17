@@ -1,4 +1,4 @@
-use super::groq::{language_code, request};
+use super::groq::{language_code, request, request_with_language};
 use super::*;
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -311,6 +311,7 @@ fn batch_budget_checks_each_audio_call_and_counts_it_after_reset() {
         10_000_000,
         super::groq::ENDPOINT,
         b"fake",
+        None,
     )
     .unwrap_err();
     assert_eq!(err.code, "budget_cost");
@@ -332,6 +333,7 @@ fn batch_budget_checks_each_audio_call_and_counts_it_after_reset() {
         10_000_000,
         super::groq::ENDPOINT,
         b"fake",
+        None,
     )
     .unwrap();
     let budget = call(
@@ -345,4 +347,61 @@ fn batch_budget_checks_each_audio_call_and_counts_it_after_reset() {
             > 0
     );
     call("projects.close", json!({}));
+}
+
+#[test]
+fn fixed_language_is_sent_in_multipart_body_and_applied_to_words() {
+    let server = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", server.local_addr().unwrap());
+    let thread = std::thread::spawn(move || {
+        let (mut socket, _) = server.accept().unwrap();
+        socket.set_nonblocking(false).unwrap();
+        socket
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        let mut request = Vec::new();
+        let mut buffer = [0u8; 4096];
+        loop {
+            let n = socket.read(&mut buffer).unwrap();
+            request.extend_from_slice(&buffer[..n]);
+            if let Some(end) = request.windows(4).position(|w| w == b"\r\n\r\n") {
+                let headers = String::from_utf8_lossy(&request[..end]);
+                let len: usize = headers
+                    .lines()
+                    .find_map(|line| {
+                        line.to_ascii_lowercase()
+                            .strip_prefix("content-length: ")
+                            .and_then(|v| v.parse().ok())
+                    })
+                    .unwrap();
+                if request.len() >= end + 4 + len {
+                    break;
+                }
+            }
+        }
+        let body_text = String::from_utf8_lossy(&request);
+        assert!(
+            body_text.contains("name=\"language\"\r\n\r\npt\r\n")
+                || body_text.contains("name=\"language\"\n\npt\n")
+        );
+        let body = r#"{"words":[{"word":"olá","start":0.1,"end":0.5}]}"#;
+        write!(
+            socket,
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .unwrap();
+    });
+    let result = request_with_language(
+        &url,
+        "fake-key",
+        b"audio",
+        Some("pt"),
+        &crate::provider::CancelToken::new(),
+        Duration::from_secs(5),
+    )
+    .unwrap();
+    assert_eq!(result[0].language.as_deref(), Some("pt"));
+    thread.join().unwrap();
 }

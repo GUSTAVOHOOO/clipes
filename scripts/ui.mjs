@@ -405,12 +405,16 @@ try {
   await page.getByText('deno instalado. Baixe o vídeo novamente.').waitFor();
   await page.getByRole('button', {name:'Instalar deno'}).waitFor({state:'detached'});
   await page.getByLabel('URL do vídeo').fill('https://example.com/video');
+  await page.getByLabel('Idioma da Fonte').first().selectOption('es');
   await page.getByLabel('Permissão').selectOption('none');
   await page.getByRole('button', {name:'Importar Fonte'}).click();
   await page.getByRole('button', {name:'Baixar por URL'}).click();
   await page.getByText('/test/downloaded.mp4').first().waitFor();
   assert.equal(await terms.count(), 0);
   const downloadedRow = page.locator('li').filter({hasText:'/test/downloaded.mp4'}).first();
+  assert.equal(await downloadedRow.getByLabel('Idioma da Fonte').inputValue(), 'es');
+  await downloadedRow.getByLabel('Idioma da Fonte').selectOption('en');
+  assert.equal(await downloadedRow.getByLabel('Idioma da Fonte').inputValue(), 'en');
   await downloadedRow.getByRole('button', {name:'Estimar tempo'}).click();
   await downloadedRow.getByText(/Estimativa: cerca de 3 h 52 min/).waitFor();
   assert.match(await downloadedRow.innerText(), /É uma estimativa, não uma garantia/);
@@ -419,6 +423,8 @@ try {
   await downloadedRow.getByText('Transcrevendo: 40%').waitFor();
   await downloadedRow.getByRole('button', {name:'Cancelar transcrição'}).click();
   await downloadedRow.getByText(/Transcrição interrompida · 40%/).waitFor();
+  assert.equal(await downloadedRow.getByLabel('Idioma da Fonte').inputValue(), 'en');
+  assert.equal(await downloadedRow.getByLabel('Idioma da Fonte').isDisabled(), true);
   await downloadedRow.getByRole('button', {name:'Retomar'}).click();
   await downloadedRow.getByText('Transcrevendo: 40%').waitFor();
   await downloadedRow.getByRole('button', {name:'Cancelar transcrição'}).click();

@@ -23,7 +23,7 @@ pub struct Cue {
     pub end_us: i64,
     pub lines: Vec<Vec<VisibleWord>>,
 }
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Prepared {
     pub ass: String,
@@ -58,7 +58,11 @@ pub fn prepare(
     for w in input {
         w.overrides.validate()?;
     }
-    let raw: Vec<CaptionWord> = input.iter().map(|w| w.word.clone()).collect();
+    let visible: Vec<&StyledWord> = input
+        .iter()
+        .filter(|w| !w.overrides.hidden.unwrap_or(false))
+        .collect();
+    let raw: Vec<CaptionWord> = visible.iter().map(|w| w.word.clone()).collect();
     let clean = captions::sanitize(&raw)?;
     let words: Vec<_> = clean
         .iter()
@@ -67,7 +71,7 @@ pub fn prepare(
             if text.is_empty() || word.start_us >= duration_us {
                 return None;
             }
-            let original = input
+            let original = visible
                 .iter()
                 .find(|w| w.word.start_us >= word.start_us && w.word.start_us < word.end_us)?;
             Some(VisibleWord {
@@ -133,7 +137,7 @@ pub fn prepare(
         ass,
         cues,
         style: style.clone(),
-        emoji_removed: input.iter().filter(|w| has_emoji(&w.word.text)).count(),
+        emoji_removed: visible.iter().filter(|w| has_emoji(&w.word.text)).count(),
     })
 }
 fn color(c: &str) -> String {

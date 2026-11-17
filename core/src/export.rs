@@ -125,7 +125,10 @@ impl Target {
             self.styled
                 .iter()
                 .zip(self.source_starts.iter().zip(&self.sentence_ids))
-                .filter(|(w, _)| w.word.start_us < self.output_duration_us)
+                .filter(|(w, _)| {
+                    w.word.start_us < self.output_duration_us
+                        && !w.overrides.hidden.unwrap_or(false)
+                })
                 .map(
                     |(w, (&source_start_us, &sentence_id))| captions::GlyphWord {
                         position: w.position,
@@ -439,7 +442,11 @@ pub(crate) fn target(
             .as_ref()
             .map(|doc| crop::resolve(&doc.crop))
             .unwrap_or_default();
-        let words = styled.iter().map(|w| w.word.clone()).collect();
+        let words = styled
+            .iter()
+            .filter(|w| !w.overrides.hidden.unwrap_or(false))
+            .map(|w| w.word.clone())
+            .collect();
         Ok(Ok(Target {
             start_us,
             end_us,
