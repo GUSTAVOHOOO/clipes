@@ -810,6 +810,13 @@ try {
   assert.equal(await offline.locator('video').count(), 0, 'Fonte offline: nada é gerado nem tocado');
   assert.equal(await offline.getByRole('progressbar').count(), 0);
   assert.match(await selection.innerText(), /Energia do áudio não medida/);
+  await page.goto(`${url}?source-test=1&transcript-test=1&selection-energy-queued=1`);
+  const queuedEnergy = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
+  await queuedEnergy.getByText(/Energia do áudio na fila/).waitFor();
+  assert.equal(await queuedEnergy.getByRole('button', { name: 'Selecionar Cortes' }).isDisabled(), false);
+  await page.goto(`${url}?source-test=1&transcript-test=1&selection-energy-running=1`);
+  const runningEnergy = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
+  await runningEnergy.getByText(/Medindo a energia do áudio \(45%\)/).waitFor();
   await page.goto(`${url}?source-test=1&transcript-test=1&selection-energy=1`);
   const energySelection = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
   await energySelection.getByRole('button', { name: 'Selecionar Cortes' }).click();
@@ -1174,8 +1181,8 @@ try {
   }
   // Editor do Corte (#61): teclado, sincronização com o preview, virtualização e capturas, PT e EN, com o núcleo simulado.
   for (const L of [
-    { lang: 'pt-BR', title: 'Editor do Corte', close: 'Fechar editor', timeline: 'Timeline do Corte', transcript: 'Transcrição do editor', borders: 'Bordas do Corte', error: 'O Corte ficaria abaixo da duração mínima.', hint: 'voltar · pausar · avançar' },
-    { lang: 'en', title: 'Clip editor', close: 'Close editor', timeline: 'Clip timeline', transcript: 'Editor Transcript', borders: 'Clip borders', error: 'The Clip would fall below the minimum duration.', hint: 'reverse · pause · forward' },
+    { lang: 'pt-BR', title: 'Editor do Corte', close: 'Fechar editor', timeline: 'Timeline do Corte', transcript: 'Transcrição do editor', borders: 'Bordas do Corte', captions: 'Legenda', silences: 'Silêncios', crop: 'Enquadrar', translation: 'Tradução', play: 'Reproduzir', pause: 'Pausar', back: 'Voltar', forward: 'Avançar', markIn: 'Marcar entrada', markOut: 'Marcar saída', export: 'Exportar', palette: 'Paleta de comandos', error: 'O Corte ficaria abaixo da duração mínima.', hint: 'voltar · pausar · avançar' },
+    { lang: 'en', title: 'Clip editor', close: 'Close editor', timeline: 'Clip timeline', transcript: 'Editor Transcript', borders: 'Clip borders', captions: 'Captions', silences: 'Silences', crop: 'Framing', translation: 'Translation', play: 'Play', pause: 'Pause', back: 'Reverse', forward: 'Forward', markIn: 'Mark in', markOut: 'Mark out', export: 'Export', palette: 'Command palette', error: 'The Clip would fall below the minimum duration.', hint: 'reverse · pause · forward' },
   ]) {
     await page.evaluate(lang => localStorage.setItem('clipes.language', lang), L.lang);
     await page.goto(`${url}?source-test=1&transcript-test=1&editor-test=1`);
@@ -1248,7 +1255,31 @@ try {
     await testTranslation(page, editor, L.lang);
     assert.match(await editor.innerText(), new RegExp(L.hint), 'atalhos visíveis junto dos controles');
     for (const key of ['J', 'K', 'L', 'I', 'O']) assert.ok((await editor.locator('kbd', { hasText: new RegExp(`^${key}$`) }).count()) > 0, `tecla ${key} visível`);
-    await editor.getByRole('button', { name: L.close, exact: true }).click();
+    // Paleta Ctrl+K dentro do Editor (#248): gavetas, transporte, entrada/saída, exportar e fechar.
+    await page.keyboard.press('Control+k');
+    const editorPalette = page.getByRole('dialog', { name: L.palette });
+    await editorPalette.waitFor();
+    for (const label of [L.transcript, L.borders, L.captions, L.silences, L.crop, L.translation, L.play, L.back, L.forward, L.markIn, L.markOut, L.export, L.close]) {
+      assert.ok((await editorPalette.getByRole('option', { name: new RegExp(label) }).count()) > 0, `comando ${label} presente no Ctrl+K`);
+    }
+    await editorPalette.getByRole('option', { name: new RegExp(`^${L.play}`) }).click();
+    await editorPalette.waitFor({ state: 'hidden' });
+    await page.waitForFunction(() => document.querySelector('[data-rate="1"]'));
+    await page.keyboard.press('Control+k');
+    await editorPalette.waitFor();
+    await editorPalette.getByRole('option', { name: new RegExp(`^${L.pause}`) }).click();
+    await editorPalette.waitFor({ state: 'hidden' });
+    await page.waitForFunction(() => document.querySelector('[data-rate="0"]'));
+    await page.keyboard.press('Control+k');
+    await editorPalette.waitFor();
+    await editorPalette.getByRole('option', { name: new RegExp(`^${L.captions}`) }).click();
+    const paletteCaptions = editor.getByRole('dialog', { name: L.captions, exact: true });
+    await paletteCaptions.waitFor();
+    await page.keyboard.press('Escape');
+    await paletteCaptions.waitFor({ state: 'hidden' });
+    await page.keyboard.press('Control+k');
+    await editorPalette.waitFor();
+    await editorPalette.getByRole('option', { name: new RegExp(`^${L.close}`) }).click();
     await editor.waitFor({ state: 'detached' });
   }
   await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
@@ -1339,6 +1370,49 @@ try {
   } finally {
     await okCodecPage.close();
   }
+
+  // Ticket #251: Ollama nativo no Assistente, "Usar chave de API" -> Preferências (Provedor) e atalho para Componentes.
+  await page.goto(`${url}?assistant-test=1`);
+  const ollamaWizard = page.getByRole('dialog', { name: 'Escolha como o Clipes vai usar IA' });
+  await ollamaWizard.waitFor();
+  await ollamaWizard.getByRole('button', { name: 'Usar Ollama' }).click();
+  await ollamaWizard.getByText('Provedor padrão escolhido: API ou modelo local configurado').waitFor();
+  await ollamaWizard.getByRole('button', { name: 'Concluir' }).click();
+  await ollamaWizard.waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: 'Preferências' }).click();
+  const providerSection = page.locator('section[aria-labelledby="provider-title"]');
+  await providerSection.waitFor();
+  assert.equal(await providerSection.getByLabel('Tipo de provedor').inputValue(), 'ollama');
+  assert.equal(await providerSection.getByLabel('Endereço da API').inputValue(), 'http://127.0.0.1:11434');
+  assert.equal(await providerSection.getByLabel('Modelo', { exact: true }).inputValue(), 'llama3:8b');
+  const mainProfile = page.locator('section[aria-labelledby="profiles-title"]').getByRole('article', { name: 'Principal' });
+  await mainProfile.waitFor();
+  assert.match(await mainProfile.innerText(), /ollama · llama3:8b/);
+  assert.match(await mainProfile.innerText(), /http:\/\/127\.0\.0\.1:11434(?!\/v1)/);
+
+  await page.goto(`${url}?assistant-test=1`);
+  const apiWizard = page.getByRole('dialog', { name: 'Escolha como o Clipes vai usar IA' });
+  await apiWizard.waitFor();
+  await apiWizard.getByRole('button', { name: 'Usar chave de API' }).click();
+  await apiWizard.waitFor({ state: 'hidden' });
+  await page.getByRole('heading', { name: 'Preferências' }).waitFor();
+  await page.locator('#provider-title').waitFor();
+  assert.equal(await page.getByLabel('Padrão para todas as tarefas').inputValue(), 'endpoint');
+  const providerVisible = await page.locator('#provider-title').evaluate(el => {
+    const r = el.getBoundingClientRect();
+    return r.top >= 0 && r.bottom <= window.innerHeight;
+  });
+  assert.equal(providerVisible, true, 'Provedor section should be scrolled into view');
+
+  await page.goto(`${url}?source-test=1&components-missing=1`);
+  await page.getByText(/FFmpeg e o Motor de transcrição local ainda não estão instalados/).waitFor();
+  const downloadedMissing = page.locator('li').filter({ hasText: '/test/downloaded.mp4' });
+  await downloadedMissing.getByText(/FFmpeg e o Motor de transcrição local não estão instalados/).waitFor();
+  await downloadedMissing.getByRole('button', { name: 'Transcrever' }).click();
+  await downloadedMissing.getByRole('alert').getByText(/Instale o Componente FFmpeg/).waitFor();
+  await downloadedMissing.getByRole('button', { name: 'Abrir Componentes' }).first().click();
+  await page.getByRole('heading', { name: 'Componentes' }).waitFor();
+
   assert.deepEqual(errors, []);
   console.log('UI keyboard, preferences, about, drawer and screenshots: OK');
 } finally { await browser?.close(); server.kill(); }
