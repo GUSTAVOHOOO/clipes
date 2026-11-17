@@ -652,16 +652,88 @@ fn create_cancelled_selection_run(source_id: i64) -> Result<(i64, String), Strin
     Ok((run, batch))
 }
 
+struct GroqProfileArgs<'a> {
+    profile_id: &'a str,
+    model: &'a str,
+    api_key: &'a str,
+    tpr: Option<u64>,
+    tpm: Option<u64>,
+    tpd: Option<u64>,
+    prices: Option<(f64, f64)>,
+}
+
+fn configure_groq_profile(cfg: GroqProfileArgs<'_>) -> Result<(), String> {
+    let mut profile = json!({
+        "profileId": cfg.profile_id,
+        "kind": "openai",
+        "endpoint": "https://api.groq.com/openai/v1",
+        "model": cfg.model,
+        "nativeSchema": true,
+        "ownKey": true,
+        "context": 131072,
+        "maxOutput": 2000,
+        "timeoutSecs": 120
+    });
+    if let Some(v) = cfg.tpr {
+        profile["tokensPerRequest"] = json!(v);
+    }
+    if let Some(v) = cfg.tpm {
+        profile["tokensPerMinute"] = json!(v);
+    }
+    if let Some(v) = cfg.tpd {
+        profile["tokensPerDay"] = json!(v);
+    }
+    call("provider.configure", profile)?;
+    call(
+        "provider.confirm",
+        json!({"profileId": cfg.profile_id, "endpoint": "https://api.groq.com/openai/v1", "confirmed": true}),
+    )?;
+    call(
+        "provider.key.set",
+        json!({"profileId": cfg.profile_id, "key": cfg.api_key}),
+    )?;
+    if let Some((in_price, out_price)) = cfg.prices {
+        // `catalog_provider("openai", "https://api.groq.com/openai/v1")` resolve para "groq"
+        // e herda tokensPerRequest/Minute/Day do catálogo embutido (#269).
+        call(
+            "provider.prices.set",
+            json!({
+                "provider": "groq",
+                "model": cfg.model,
+                "inputPerMillion": in_price,
+                "outputPerMillion": out_price,
+                "contextWindow": 131072,
+                "maxOutput": 65536
+            }),
+        )?;
+    }
+    call(
+        "assistant.task.set",
+        json!({"task": "selection", "choice": format!("profile:{}", cfg.profile_id)}),
+    )?;
+    Ok(())
+}
+
 fn cmd_plan_sample(args: &[String]) -> Result<(), String> {
-    if !(2..=3).contains(&args.len()) {
-        return Err("Uso: plan-sample <manifest.json> <bench-dir> [out.json]".into());
+    if args.len() < 2 {
+        return Err(
+            "Uso: plan-sample <manifest.json> <bench-dir> [out.json] [--tpr <n>] [--tpm <n>]"
+                .into(),
+        );
     }
     let manifest_path = PathBuf::from(&args[0]);
     let bench_dir = PathBuf::from(&args[1]);
     let out_path = args
         .get(2)
+        .filter(|a| !a.starts_with("--"))
         .map(PathBuf::from)
         .unwrap_or_else(|| bench_dir.join("sample_plan.json"));
+    let tpr: Option<u64> = flag_value_opt(args, "--tpr")
+        .map(|s| s.parse().map_err(|_| "tpr inválido"))
+        .transpose()?;
+    let tpm: Option<u64> = flag_value_opt(args, "--tpm")
+        .map(|s| s.parse().map_err(|_| "tpm inválido"))
+        .transpose()?;
 
     let data_dir = bench_dir.join("data-plan");
     setup_env(&data_dir, None)?;
@@ -676,43 +748,15 @@ fn cmd_plan_sample(args: &[String]) -> Result<(), String> {
     let _cleanup = KeyCleanup {
         profile_id: profile_id.clone(),
     };
-    call(
-        "provider.configure",
-        json!({
-            "profileId": profile_id,
-            "kind": "openai",
-            "endpoint": "https://api.groq.com/openai/v1",
-            "model": "openai/gpt-oss-120b",
-            "nativeSchema": true,
-            "ownKey": true,
-            "context": 131072,
-            "maxOutput": 2000,
-            "timeoutSecs": 120
-        }),
-    )?;
-    call(
-        "provider.confirm",
-        json!({"profileId": profile_id, "endpoint": "https://api.groq.com/openai/v1", "confirmed": true}),
-    )?;
-    call(
-        "provider.key.set",
-        json!({"profileId": profile_id, "key": "offline-estimation-only"}),
-    )?;
-    call(
-        "provider.prices.set",
-        json!({
-            "provider": "openai",
-            "model": "openai/gpt-oss-120b",
-            "inputPerMillion": 0.15,
-            "outputPerMillion": 0.60,
-            "contextWindow": 131072,
-            "maxOutput": 65536
-        }),
-    )?;
-    call(
-        "assistant.task.set",
-        json!({"task": "selection", "choice": format!("profile:{profile_id}")}),
-    )?;
+    configure_groq_profile(GroqProfileArgs {
+        profile_id: &profile_id,
+        model: "openai/gpt-oss-120b",
+        api_key: "offline-estimation-only",
+        tpr,
+        tpm,
+        tpd: None,
+        prices: None,
+    })?;
 
     call("projects.open", json!({"path": work_project}))?;
     let lives = load_lives(&manifest_path)?;
@@ -1070,7 +1114,7 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
 
 fn cmd_run_selection(args: &[String]) -> Result<(), String> {
     if args.len() < 4 {
-        return Err("Uso: run-selection <manifest.json> <bench-dir> --model <id> --in-price <usd> --out-price <usd> --chat <on|off> --max-budget-usd <usd> --out <json> [--sample <sample_plan.json>] [--pace-tpm <8000>] [--max-tpd <190000>]".into());
+        return Err("Uso: run-selection <manifest.json> <bench-dir> --model <id> --in-price <usd> --out-price <usd> --chat <on|off> --max-budget-usd <usd> --out <json> [--sample <sample_plan.json>] [--pace-tpm <0>] [--max-tpd <190000>] [--tpr <n>] [--tpm <n>] [--tpd <n>]".into());
     }
     let manifest_path = PathBuf::from(&args[0]);
     let bench_dir = PathBuf::from(&args[1]);
@@ -1100,11 +1144,20 @@ fn cmd_run_selection(args: &[String]) -> Result<(), String> {
     let pace_tpm_limit: u64 = flag_value_opt(args, "--pace-tpm")
         .map(|s| s.parse().map_err(|_| "pace-tpm inválido"))
         .transpose()?
-        .unwrap_or(if sample_plan.is_some() { 8000 } else { 0 });
+        .unwrap_or(0);
     let max_tpd_tokens: u64 = flag_value_opt(args, "--max-tpd")
         .map(|s| s.parse().map_err(|_| "max-tpd inválido"))
         .transpose()?
         .unwrap_or(190_000);
+    let tpr: Option<u64> = flag_value_opt(args, "--tpr")
+        .map(|s| s.parse().map_err(|_| "tpr inválido"))
+        .transpose()?;
+    let tpm: Option<u64> = flag_value_opt(args, "--tpm")
+        .map(|s| s.parse().map_err(|_| "tpm inválido"))
+        .transpose()?;
+    let tpd: Option<u64> = flag_value_opt(args, "--tpd")
+        .map(|s| s.parse().map_err(|_| "tpd inválido"))
+        .transpose()?;
 
     let key_file = std::env::var("CLIPES_GROQ_KEY_FILE")
         .map_err(|_| "defina CLIPES_GROQ_KEY_FILE apontando para o arquivo da chave Groq")?;
@@ -1136,44 +1189,16 @@ fn cmd_run_selection(args: &[String]) -> Result<(), String> {
         profile_id: profile_id.clone(),
     };
 
-    call(
-        "provider.configure",
-        json!({
-            "profileId": profile_id,
-            "kind": "openai",
-            "endpoint": "https://api.groq.com/openai/v1",
-            "model": model,
-            "nativeSchema": true,
-            "ownKey": true,
-            "context": 131072,
-            "maxOutput": 2000,
-            "timeoutSecs": 120
-        }),
-    )?;
-    call(
-        "provider.confirm",
-        json!({"profileId": profile_id, "endpoint": "https://api.groq.com/openai/v1", "confirmed": true}),
-    )?;
-    call(
-        "provider.key.set",
-        json!({"profileId": profile_id, "key": api_key}),
-    )?;
+    configure_groq_profile(GroqProfileArgs {
+        profile_id: &profile_id,
+        model,
+        api_key: &api_key,
+        tpr,
+        tpm,
+        tpd,
+        prices: Some((in_price, out_price)),
+    })?;
     drop(api_key);
-    call(
-        "provider.prices.set",
-        json!({
-            "provider": "openai",
-            "model": model,
-            "inputPerMillion": in_price,
-            "outputPerMillion": out_price,
-            "contextWindow": 131072,
-            "maxOutput": 65536
-        }),
-    )?;
-    call(
-        "assistant.task.set",
-        json!({"task": "selection", "choice": format!("profile:{profile_id}")}),
-    )?;
 
     call("projects.open", json!({"path": work_project}))?;
     let lives = load_lives(&manifest_path)?;
@@ -1257,7 +1282,7 @@ fn cmd_run_selection(args: &[String]) -> Result<(), String> {
                 attempted_windows.push(w.clone());
 
                 let mut window_retries = 0_u8;
-                let (w_state, w_code) = loop {
+                let (w_state, w_code, w_reset_ms) = loop {
                     call(
                         "selection.redo",
                         json!({"run": run, "windows": [w.window_index], "confirmed": true}),
@@ -1283,14 +1308,15 @@ fn cmd_run_selection(args: &[String]) -> Result<(), String> {
                     if cd.as_deref() == Some("rate_limit") && window_retries == 0 {
                         window_retries += 1;
                         println!(
-                            "  [{model}] rate_limit em source_{idx} w={} ; aguardando 65s uma única vez...",
-                            w.window_index
+                            "  [{model}] rate_limit residual em source_{idx} w={} (resetAtMs={:?}); aguardando 65s uma única vez...",
+                            w.window_index,
+                            win_obj["resetAtMs"].as_u64()
                         );
                         recent_calls.push((Instant::now(), est_tokens));
                         std::thread::sleep(Duration::from_secs(65));
                         continue;
                     }
-                    break (st, cd);
+                    break (st, cd, win_obj["resetAtMs"].as_u64());
                 };
 
                 let all_costs = call("provider.cost.list", json!({"batch": batch}))?
@@ -1320,7 +1346,10 @@ fn cmd_run_selection(args: &[String]) -> Result<(), String> {
                 let actual_toks = w_in.saturating_add(w_out);
                 let accounted_toks = if actual_toks > 0 {
                     actual_toks
-                } else if w_code.as_deref() == Some("provider_http") {
+                } else if matches!(
+                    w_code.as_deref(),
+                    Some("provider_http" | "request_too_large")
+                ) {
                     // HTTP 413 / 400 pode consumir parte ou nada do TPD; conserva contagem prudente.
                     w.est_input_tokens
                 } else {
@@ -1361,10 +1390,15 @@ fn cmd_run_selection(args: &[String]) -> Result<(), String> {
                     duration_ms: w_dur,
                 });
 
-                if w_code.as_deref() == Some("rate_limit") {
+                if matches!(
+                    w_code.as_deref(),
+                    Some("provider_daily_limit" | "rate_limit")
+                ) {
                     let msg = format!(
-                        "rate_limit_persisted_after_wait: provável TPD esgotado em source_{idx} w={}",
-                        w.window_index
+                        "{}: source_{idx} w={} (resetAtMs={:?})",
+                        w_code.as_deref().unwrap_or("rate_limit"),
+                        w.window_index,
+                        w_reset_ms
                     );
                     stopped_early_reason = Some(msg.clone());
                     stopped_globally = Some(msg);
@@ -1401,13 +1435,21 @@ fn cmd_run_selection(args: &[String]) -> Result<(), String> {
                     .as_array()
                     .map(|w| w.iter().filter(|x| !x["code"].is_null()).cloned().collect())
                     .unwrap_or_default();
+                let hit_daily = failed_windows
+                    .iter()
+                    .any(|w| w["code"].as_str() == Some("provider_daily_limit"));
+                if hit_daily {
+                    stopped_early_reason = Some(format!("provider_daily_limit em source_{idx}"));
+                    stopped_globally = stopped_early_reason.clone();
+                    break g;
+                }
                 let has_rate_limit = failed_windows
                     .iter()
                     .any(|w| w["code"].as_str() == Some("rate_limit"));
-                if state == "partial" && has_rate_limit && retries < 5 {
+                if state == "partial" && has_rate_limit && retries < 2 {
                     retries += 1;
-                    println!("[{model}] rate_limit em source_{idx}; aguardando 25s para retomar ({retries}/5)...");
-                    std::thread::sleep(Duration::from_secs(25));
+                    println!("[{model}] rate_limit residual em source_{idx}; aguardando 65s para retomar ({retries}/2)...");
+                    std::thread::sleep(Duration::from_secs(65));
                     call("selection.resume", json!({"run": run, "confirmed": true}))?;
                     continue;
                 }

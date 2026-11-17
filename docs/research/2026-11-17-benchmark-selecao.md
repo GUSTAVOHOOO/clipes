@@ -152,8 +152,8 @@ Avaliamos diretamente `peaks_with` (`core/src/chat.rs`) nas 2 Fontes com chat re
 
 1. **Meta de bordas (`0%` no meio de Frase):** atingida (**0 / 102** candidatos somando todas as execuções).
 2. **Qualidade de seleção vs gabarito:** `openai/gpt-oss-120b` liderou (`14,7%` `min50` / `17,2%` por cena / `8,8% IoU>=0,30`), superando `qwen/qwen3.8-27b` (`0,0%`, excessivamente conservador com `15/24` janelas vazias), com `gpt-oss-20b` alcançando `21,4%` em PT na rodada inicial antes de esgotar o TPD. Parte estrutural da queda em `IoU` decorre de `39,5%` dos Cortes humanos serem mais curtos (`< 20 s`) que o mínimo atual (`20 s`).
-3. **Ações recomendadas em produto (novos tickets):**
-   - Dimensionamento de janelas e adaptação/tratamento de teto TPM/requisição por Provedor (evitar `413` nas janelas > 8k e classificar `413` como `rate_limit` ou código específico em `adapters.rs`);
-   - Reservar `max_output_tokens > 2.000` (ou separar orçamento de raciocínio) para modelos *reasoning* sob `json_schema` estrito, evitando `HTTP 400 json_validate_failed`;
-   - Separar contagem de `max_calls` das retentativas de `429` e respeitar `Retry-After > 30 s` / espaçamento TPM em fila paga;
-   - Avaliar LLM local e `>= 6` lives com chat em máquina/tier sem gargalo de `8k TPM` / `200k TPD` para consolidar recalibração de `chat.rs` e comparar `--chat on` vs `--chat off` em todos os modelos.
+3. **Ações recomendadas e status após `#269` (#272):**
+   - **Já corrigido no núcleo após o merge de `#272` (`#269`):** o planejador (`selection_windows.rs`) agora aplica `min(contexto, tokensPerRequest, tokensPerMinute)` (com catálogo Groq `8.000 TPM / 8.000 TPR / 200.000 TPD` em `provider/prices.json`), `adapters.rs` faz *backoff* de `413/429` até `90 s` separando `provider_daily_limit` e `request_too_large`, e `control.rs` exclui retentativas de *rate limit* da contagem de `max_calls`. As medições deste relatório foram obtidas imediatamente antes desse ajuste, preservando as janelas originais (`112`) para quantificar o problema.
+   - **Próximos passos em aberto:**
+     - Reservar `max_output_tokens > 2.000` (ou separar orçamento de raciocínio) para modelos *reasoning* sob `json_schema` estrito, evitando `HTTP 400 json_validate_failed`;
+     - Avaliar LLM local e `>= 6` lives com chat em máquina/tier sem gargalo de `200k TPD` para consolidar recalibração de `chat.rs` e comparar `--chat on` vs `--chat off` em todos os modelos.
