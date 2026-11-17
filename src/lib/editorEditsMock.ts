@@ -1,13 +1,13 @@
-// Fixture determinística do contrato #70/#77/#66/#71, só usada com VITE_CORE_MOCK + editor-test.
+// Fixture determinística do contrato #70/#77/#66/#71/#204, só usada com VITE_CORE_MOCK + editor-test.
 import type { ExportRequest } from './core';
-import type { KeptSegment, SilenceInterval, SilencesState } from '@/features/editor/timelineMath';
+import { sourceToSplicedUs, splicedToSourceUs, type KeptSegment, type MontageBlock, type MontageState, type MontageWarning, type SilenceInterval, type SilencesState } from '@/features/editor/timelineMath';
 import { interpolateCrop, resolveCrop, type CropKeyframe, type SuggestedCrop } from '@/features/editor/cropMath';
 
 type Range = { startUs: number; endUs: number };
 type MockSilences = { thresholdUs: number; intervals: SilenceInterval[] };
-type Snapshot = { range: Range; silences: MockSilences | null; cropEdits: CropKeyframe[] };
+type Snapshot = { range: Range; silences: MockSilences | null; cropEdits: CropKeyframe[]; narrationStarts: Record<number, number> };
 type CropDoc = { suggested: SuggestedCrop | null; edits: CropKeyframe[] };
-type Clip = { id: number; request: ExportRequest; range: Range; silences: MockSilences | null; undo: Snapshot[]; redo: Snapshot[]; revision: number; crop: CropDoc };
+type Clip = { id: number; request: ExportRequest; range: Range; silences: MockSilences | null; undo: Snapshot[]; redo: Snapshot[]; revision: number; crop: CropDoc; narrationStarts: Record<number, number> };
 type ReframeJob = { id: number; job: number; source: number; startUs: number; endUs: number; polls: number; revision: number; timeline: SuggestedCrop | null };
 
 const clips = new Map<string, Clip>();
@@ -17,7 +17,79 @@ const fail = (code: string) => { throw { code }; };
 const ids = (r: Range) => ({ start_id: Math.floor(r.startUs / 10_000_000) + 1, end_id: Math.ceil(r.endUs / 10_000_000) });
 const cloneSilences = (s: MockSilences | null): MockSilences | null => s ? { thresholdUs: s.thresholdUs, intervals: s.intervals.map(i => ({ ...i })) } : null;
 const cloneEdits = (edits: CropKeyframe[]): CropKeyframe[] => edits.map(k => ({ ...k }));
+const cloneStarts = (starts: Record<number, number>): Record<number, number> => ({ ...starts });
 const cropTest = () => typeof location !== 'undefined' && new URLSearchParams(location.search).has('crop-test');
+const montageTest = () => typeof location !== 'undefined' && new URLSearchParams(location.search).has('montage-test');
+
+const MOCK_BLOCK_GAP_US = 300_000;
+const MOCK_LONG_FREEZE_US = 5_000_000;
+const MOCK_SCRIPT_BLOCKS = [
+  { blockId: 101, position: 1, title: 'Gancho', refs: [361], durationUs: 12_000_000 },
+  { blockId: 102, position: 2, title: 'Contexto', refs: [362], durationUs: 10_000_000 },
+  { blockId: 103, position: 3, title: 'Fecho', refs: [], durationUs: 15_000_000 },
+];
+
+function resolveMockMontage(r: Range, s: MockSilences | null, starts: Record<number, number>): MontageState | null {
+  if (!montageTest()) return null;
+  const splice = buildMockSplice(r, s);
+  const blocks: MontageBlock[] = [];
+  const warnings: MontageWarning[] = [];
+  let prevEnd: number | null = null;
+  for (const b of MOCK_SCRIPT_BLOCKS) {
+    const minStart = prevEnd === null ? 0 : prevEnd + MOCK_BLOCK_GAP_US;
+    const anchorId = b.refs.find(id => (id - 1) * 10_000_000 < r.endUs && id * 10_000_000 > r.startUs) ?? null;
+    const autoStart = anchorId !== null
+      ? sourceToSplicedUs(Math.max(r.startUs, (anchorId - 1) * 10_000_000), splice.segments, r.startUs)
+      : minStart;
+    const manual = starts[b.blockId];
+    const mode = manual !== undefined ? 'manual' : 'automatic';
+    const desiredStart = manual !== undefined
+      ? sourceToSplicedUs(Math.min(r.endUs, Math.max(r.startUs, manual)), splice.segments, r.startUs)
+      : autoStart;
+    const startUs = Math.max(desiredStart, minStart);
+    const pushedUs = startUs - desiredStart;
+    if (pushedUs > 0) warnings.push({ code: 'block_pushed', message: 'Bloco empurrado.', blockId: b.blockId, amountUs: pushedUs });
+    const endUs = startUs + b.durationUs;
+    const overflowUs = Math.max(0, endUs - splice.effectiveDurationUs);
+    const sourceStartUs = startUs <= splice.effectiveDurationUs
+      ? splicedToSourceUs(startUs, splice.segments, r.startUs, r.endUs)
+      : r.endUs;
+    prevEnd = endUs;
+    blocks.push({
+      blockId: b.blockId,
+      position: b.position,
+      title: b.title,
+      mode,
+      anchorSentenceId: anchorId,
+      manualSourceStartUs: manual ?? null,
+      autoStartUs: autoStart,
+      desiredStartUs: desiredStart,
+      startUs,
+      endUs,
+      durationUs: b.durationUs,
+      estimated: true,
+      pushedUs,
+      overflowUs,
+      sourceStartUs,
+    });
+  }
+  const narrationEndUs = prevEnd ?? 0;
+  const freezeTailUs = Math.max(0, narrationEndUs - splice.effectiveDurationUs);
+  if (freezeTailUs > MOCK_LONG_FREEZE_US) warnings.push({ code: 'long_freeze_tail', message: 'Sobra > 5 s.', amountUs: freezeTailUs });
+  else if (freezeTailUs > 0) warnings.push({ code: 'freeze_tail', message: 'Último quadro congelado.', amountUs: freezeTailUs });
+  return {
+    schemaVersion: 1,
+    blocks,
+    clipDurationUs: splice.effectiveDurationUs,
+    narrationEndUs,
+    freezeTailUs,
+    totalDurationUs: splice.effectiveDurationUs + freezeTailUs,
+    totalPushedUs: blocks.reduce((acc, item) => acc + item.pushedUs, 0),
+    usesEstimatedDurations: true,
+    scriptApproved: true,
+    warnings,
+  };
+}
 
 function exampleCrop(startUs: number, endUs: number, revision = 1): SuggestedCrop {
   const w = 9 / 16 / (16 / 9);
@@ -96,7 +168,7 @@ export function getMockClipSplice(clipId: number | undefined, startUs: number, e
   return buildMockSplice(c.range, c.silences);
 }
 
-const answer = (c: Clip, r = c.range, s = c.silences) => ({
+const answer = (c: Clip, r = c.range, s = c.silences, ns = c.narrationStarts) => ({
   clipId: c.id,
   schemaVersion: 2,
   request: { ...c.request, ...ids(r) },
@@ -106,6 +178,7 @@ const answer = (c: Clip, r = c.range, s = c.silences) => ({
   redoCount: c.redo.length,
   silences: silencesView(r, s),
   crop: cropView(c.crop),
+  montage: resolveMockMontage(r, s, ns),
 });
 
 export function editorEditsMock(name: string, a: Record<string, unknown>): unknown {
@@ -116,7 +189,7 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
     let c = clips.get(key);
     if (!c) {
       const startUs = (request.start_id - 1) * 10_000_000, endUs = request.end_id * 10_000_000;
-      c = { id: clips.size + 1, request, range: { startUs, endUs }, silences: null, undo: [], redo: [], revision: 0, crop: { suggested: cropTest() ? exampleCrop(startUs, endUs) : null, edits: [] } };
+      c = { id: clips.size + 1, request, range: { startUs, endUs }, silences: null, undo: [], redo: [], revision: 0, crop: { suggested: cropTest() ? exampleCrop(startUs, endUs) : null, edits: [] }, narrationStarts: {} };
       clips.set(key, c);
     }
     return { ...answer(c), windowStartUs: Math.max(0, c.range.startUs - 120_000_000), windowEndUs: c.range.endUs + 120_000_000, fps: 24 };
@@ -163,7 +236,7 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
       const nextEdits = cloneEdits((a.edits as CropKeyframe[]) ?? []);
       if (a.preview) return cropReply({ suggested: c.crop.suggested, edits: nextEdits });
       if (JSON.stringify(c.crop.edits) !== JSON.stringify(nextEdits)) {
-        c.undo.push({ range: c.range, silences: cloneSilences(c.silences), cropEdits: cloneEdits(c.crop.edits) });
+        c.undo.push({ range: c.range, silences: cloneSilences(c.silences), cropEdits: cloneEdits(c.crop.edits), narrationStarts: cloneStarts(c.narrationStarts) });
         if (c.undo.length > 100) c.undo.shift();
         c.redo = [];
         c.crop.edits = nextEdits;
@@ -173,18 +246,53 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
     }
     if (name === 'editor.crop.example') { c.crop.suggested = exampleCrop(c.range.startUs, c.range.endUs); c.revision++; return cropReply(); }
   }
+  if (name === 'editor.montage.get' || name === 'editor.montage.set_start') {
+    const c = [...clips.values()].find(item => item.id === a.clip_id);
+    if (!c) return fail('invalid_clip');
+    if (name === 'editor.montage.get') {
+      return { clipId: c.id, schemaVersion: 2, revision: c.revision, undoCount: c.undo.length, redoCount: c.redo.length, montage: resolveMockMontage(c.range, c.silences, c.narrationStarts) };
+    }
+    const currentMontage = resolveMockMontage(c.range, c.silences, c.narrationStarts);
+    const blockId = Number(a.block_id);
+    const idx = currentMontage?.blocks.findIndex(b => b.blockId === blockId) ?? -1;
+    if (!currentMontage || idx < 0) return fail('block_not_found');
+    const nextStarts = cloneStarts(c.narrationStarts);
+    if (a.time_us === null || a.time_us === undefined) {
+      delete nextStarts[blockId];
+    } else {
+      const requested = Math.max(c.range.startUs, Math.min(c.range.endUs, Number(a.time_us)));
+      const splice = buildMockSplice(c.range, c.silences);
+      const minOut = idx === 0 ? 0 : currentMontage.blocks[idx - 1].endUs + MOCK_BLOCK_GAP_US;
+      let snapped = a.free
+        ? Math.round((Math.round((requested * 24) / 1_000_000) * 1_000_000) / 24)
+        : Math.max(c.range.startUs, Math.min(c.range.endUs, Math.floor((requested + 4_999_999) / 10_000_000) * 10_000_000));
+      if (sourceToSplicedUs(snapped, splice.segments, c.range.startUs) < minOut) {
+        snapped = Math.min(c.range.endUs, splicedToSourceUs(minOut, splice.segments, c.range.startUs, c.range.endUs));
+      }
+      nextStarts[blockId] = snapped;
+    }
+    if (a.preview) return answer(c, c.range, c.silences, nextStarts);
+    if (JSON.stringify(nextStarts) !== JSON.stringify(c.narrationStarts)) {
+      c.undo.push({ range: c.range, silences: cloneSilences(c.silences), cropEdits: cloneEdits(c.crop.edits), narrationStarts: cloneStarts(c.narrationStarts) });
+      if (c.undo.length > 100) c.undo.shift();
+      c.redo = [];
+      c.narrationStarts = nextStarts;
+      c.revision++;
+    }
+    return answer(c);
+  }
   if (!['editor.adjust', 'editor.undo', 'editor.redo', 'editor.silences.detect', 'editor.silences.toggle', 'editor.silences.revert_all', 'editor.silences.apply_all'].includes(name)) return undefined;
   const c = [...clips.values()].find(c => c.id === a.clip_id);
   if (!c) return fail('invalid_clip');
   const pushUndo = () => {
-    c.undo.push({ range: c.range, silences: cloneSilences(c.silences), cropEdits: cloneEdits(c.crop.edits) });
+    c.undo.push({ range: c.range, silences: cloneSilences(c.silences), cropEdits: cloneEdits(c.crop.edits), narrationStarts: cloneStarts(c.narrationStarts) });
     if (c.undo.length > 100) c.undo.shift();
     c.redo = [];
   };
   if (name === 'editor.undo' || name === 'editor.redo') {
     const from = name === 'editor.undo' ? c.undo : c.redo, to = name === 'editor.undo' ? c.redo : c.undo;
     const next = from.pop();
-    if (next) { to.push({ range: c.range, silences: cloneSilences(c.silences), cropEdits: cloneEdits(c.crop.edits) }); c.range = next.range; c.silences = next.silences; c.crop.edits = cloneEdits(next.cropEdits); c.revision++; }
+    if (next) { to.push({ range: c.range, silences: cloneSilences(c.silences), cropEdits: cloneEdits(c.crop.edits), narrationStarts: cloneStarts(c.narrationStarts) }); c.range = next.range; c.silences = next.silences; c.crop.edits = cloneEdits(next.cropEdits); c.narrationStarts = cloneStarts(next.narrationStarts); c.revision++; }
     return answer(c);
   }
   if (name === 'editor.silences.detect') {
