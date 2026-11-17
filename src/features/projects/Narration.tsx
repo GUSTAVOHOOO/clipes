@@ -112,7 +112,7 @@ const codeOf = (e: unknown) => (typeof e === 'object' && e !== null && 'code' in
 const fmtSeconds = (us: number) => (us / 1_000_000).toFixed(2);
 
 /** Painel de síntese da Narração por bloco do Roteiro aprovado (#79). */
-export function Narration({ candidate, refreshKey = 0 }: { candidate: number; refreshKey?: number }) {
+export function Narration({ candidate, refreshKey = 0, onChanged }: { candidate: number; refreshKey?: number; onChanged?: () => void }) {
   const t = useText(texts);
   const [doc, setDoc] = useState<NarrationDoc | null>(null);
   const [catalog, setCatalog] = useState<TtsCatalog | null>(null);
@@ -138,26 +138,29 @@ export function Narration({ candidate, refreshKey = 0 }: { candidate: number; re
   const busy = doc?.busy === true;
   useEffect(() => {
     if (!busy) return;
-    const timer = window.setInterval(() => {
-      coreDispatch<NarrationDoc>('narration.get', { candidate }).then(setDoc).catch(() => {});
-    }, 700);
+    const sync = () => {
+      coreDispatch<NarrationDoc>('narration.get', { candidate }).then(next => {
+        setDoc(next);
+        if (!next.busy) onChanged?.();
+      }).catch(() => {});
+    };
+    const timer = window.setInterval(sync, 700);
     let unlisten: (() => void) | undefined;
     if (isTauri()) {
-      listen('core-progress', () => {
-        coreDispatch<NarrationDoc>('narration.get', { candidate }).then(setDoc).catch(() => {});
-      }).then(fn => { unlisten = fn; });
+      listen('core-progress', sync).then(fn => { unlisten = fn; });
     }
     return () => {
       window.clearInterval(timer);
       unlisten?.();
     };
-  }, [busy, candidate]);
+  }, [busy, candidate, onChanged]);
 
   async function generateAll() {
     setError('');
     try {
       await coreDispatch('narration.generate', { candidate, ...(voiceId ? { voiceId } : {}) });
       setDoc(await coreDispatch<NarrationDoc>('narration.get', { candidate }));
+      onChanged?.();
     } catch (e) {
       setError(t.errors[codeOf(e)] ?? t.errors.default);
     }
@@ -168,6 +171,7 @@ export function Narration({ candidate, refreshKey = 0 }: { candidate: number; re
     try {
       await coreDispatch('narration.regenerate_block', { candidate, block, ...(voiceId ? { voiceId } : {}) });
       setDoc(await coreDispatch<NarrationDoc>('narration.get', { candidate }));
+      onChanged?.();
     } catch (e) {
       setError(t.errors[codeOf(e)] ?? t.errors.default);
     }
