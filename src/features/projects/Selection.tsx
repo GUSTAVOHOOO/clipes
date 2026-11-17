@@ -20,6 +20,7 @@ type Axis = { score: number; why: string };
 type Candidate = { id: number; rank: number; startId: number; endId: number; startUs: number; endUs: number; axes: Record<string, Axis>; total: number; title: string; windows: number[]; adjusted: boolean; adjust: { extendedBefore?: number; extendedAfter?: number; trimmedEnd?: number } | null; profile?: string; revision?: number };
 type Win = { index: number; startUs: number; endUs: number; state: string; code: string | null };
 type ChatStatus = { state: 'none' | 'available' | 'absent'; canFetch: boolean; peaks: number; job: { state: string } | null };
+type EnergyStatus = { measured: boolean; marks: { high: number; peak: number }; job: { id?: number; state: string; progress?: number } | null };
 type Run = { videoKind?: VideoKind; summary?: { energy?: { measured: boolean; high?: number; peak?: number }; chat?: { available: boolean; peaks?: number } } | null; id: number; state: 'running' | 'completed' | 'partial'; weights: Weight[]; budgetPause: string | null; counts: { windows: number; completed: number; failed: number; kept: number; discarded: number; merged: number }; createdAt: string };
 type Detail = { run: Run; windows: Win[]; candidates: Candidate[] };
 type Pending = { kind: 'start' } | { kind: 'redo'; windows?: number[] };
@@ -34,6 +35,8 @@ const texts = {
     done: 'Seleção concluída', partial: 'Seleção com janelas pendentes', running: 'Selecionando',
     summary: '{kept} candidatos · {merged} juntados · {discarded} descartados',
     energyOn: 'Energia do áudio: {high} Frases com energia alta e {peak} com pico entraram na seleção.', energyOff: 'Energia do áudio não medida: a seleção rodou sem as marcas de energia.',
+    energyQueued: 'Energia do áudio na fila: aguarde concluir para incluir as marcas na seleção.',
+    energyRunning: 'Medindo a energia do áudio ({progress}%)… aguarde concluir para incluir as marcas na seleção.',
     chatOn: 'Chat da live: {peaks} picos entraram na seleção como indício, não como prova.', chatOff: 'Sem chat da live: a seleção rodou sem as marcas de chat.',
     chatFetch: 'Buscar o chat da live', chatFetching: 'Buscando o chat da live…', chatAvailable: 'Chat da live disponível ({peaks} picos).', chatAbsent: 'Esta Fonte não tem replay de chat.', chatFailed: 'Não foi possível buscar o chat da live.',
     minScore: 'Nota mínima', none: 'Nenhum candidato nesta seleção: o modelo não achou Cortes que valessem a pena.', noneFilter: 'Nenhum candidato com essa Nota.',
@@ -50,6 +53,8 @@ const texts = {
     done: 'Selection finished', partial: 'Selection with pending windows', running: 'Selecting',
     summary: '{kept} candidates · {merged} merged · {discarded} discarded',
     energyOn: 'Audio energy: {high} high-energy and {peak} peak sentences were part of the selection.', energyOff: 'Audio energy not measured: the selection ran without energy marks.',
+    energyQueued: 'Audio energy queued: wait for it to finish to include energy marks in selection.',
+    energyRunning: 'Measuring audio energy ({progress}%)… wait for it to finish to include energy marks in selection.',
     chatOn: 'Live chat: {peaks} peaks were part of the selection as a hint, not as proof.', chatOff: 'No live chat: the selection ran without chat marks.',
     chatFetch: 'Fetch the live chat', chatFetching: 'Fetching the live chat…', chatAvailable: 'Live chat available ({peaks} peaks).', chatAbsent: 'This Source has no chat replay.', chatFailed: 'Could not fetch the live chat.',
     minScore: 'Minimum score', none: 'No candidates in this selection: the model found no Clips worth keeping.', noneFilter: 'No candidate with this score.',
@@ -77,8 +82,12 @@ export function Selection({ sourceId }: { sourceId: number }) {
   const [redoPaid, setRedoPaid] = useState<Preview | null>(null);
   const focus = useRef<HTMLButtonElement>(null);
   const [chat, setChat] = useState<ChatStatus | null>(null);
+  const [energy, setEnergy] = useState<EnergyStatus | null>(null);
+  const [energyVersion, setEnergyVersion] = useState(0);
   const loadChat = useCallback(async () => { setChat(await coreDispatch<ChatStatus>('chat.status', { source_id: sourceId })); }, [sourceId]);
+  const loadEnergy = useCallback(async () => { setEnergy(await coreDispatch<EnergyStatus>('energy.status', { source_id: sourceId })); }, [sourceId]);
   useEffect(() => { loadChat().catch(() => setChat(null)); }, [loadChat]);
+  useEffect(() => { loadEnergy().catch(() => setEnergy(null)); }, [loadEnergy]);
   useEffect(() => {
     let active = true;
     coreDispatch<ChannelProfileData>('channel_profile.get', {})
@@ -93,11 +102,29 @@ export function Selection({ sourceId }: { sourceId: number }) {
     return () => { active = false; window.removeEventListener(CHANNEL_PROFILE_UPDATED_EVENT, onUpdated); };
   }, [sourceId]);
   const fetching = chat?.job?.state === 'queued' || chat?.job?.state === 'running';
+  const measuringEnergy = !energy?.measured && (energy?.job?.state === 'queued' || energy?.job?.state === 'running');
+  const wasMeasuringEnergy = useRef(false);
+  useEffect(() => {
+    if (measuringEnergy) {
+      wasMeasuringEnergy.current = true;
+    } else if (wasMeasuringEnergy.current) {
+      wasMeasuringEnergy.current = false;
+      if (energy?.measured) setEnergyVersion(v => v + 1);
+    }
+  }, [measuringEnergy, energy?.measured]);
   useEffect(() => {
     if (!fetching) return;
     const timer = window.setInterval(() => { void loadChat().catch(() => {}); }, 2000);
     return () => window.clearInterval(timer);
   }, [fetching, loadChat]);
+  useEffect(() => {
+    if (!measuringEnergy) return;
+    let unlisten: (() => void) | undefined;
+    const sync = () => { void loadEnergy().catch(() => {}); };
+    if (isTauri()) listen('core-progress', sync).then(fn => { unlisten = fn; }).catch(() => {});
+    const timer = window.setInterval(sync, 2000);
+    return () => { unlisten?.(); window.clearInterval(timer); };
+  }, [measuringEnergy, loadEnergy]);
   async function fetchChat() { setError(''); try { await coreDispatch('chat.fetch', { source_id: sourceId }); await loadChat(); } catch (e) { setError(message(e)); } }
 
   const loadRuns = useCallback(async () => {
@@ -111,7 +138,7 @@ export function Selection({ sourceId }: { sourceId: number }) {
     setBlocked(''); setPreview(null);
     coreDispatch<Preview>('selection.estimate', { source_id: sourceId, videoKind }).then(p => { if (active) setPreview(p); }).catch(e => { if (active) setBlocked(message(e)); });
     return () => { active = false; };
-  }, [sourceId, videoKind, profileVersion]);
+  }, [sourceId, videoKind, profileVersion, energyVersion]);
   useEffect(() => {
     let active = true;
     loadRuns().catch(() => { if (active) setError(t.error); });
@@ -190,6 +217,13 @@ export function Selection({ sourceId }: { sourceId: number }) {
       {chat?.job?.state === 'failed' && chat.state === 'none' && <span role="alert" className="text-danger">{t.chatFailed}</span>}
       {runs.length > 1 && <label className="flex items-center gap-2">{t.run}<select className="h-8 rounded-md border border-line-strong bg-field px-2" value={current ?? ''} onChange={e => { setDetail(null); setCurrent(Number(e.target.value)); }}>{runs.map(r => <option key={r.id} value={r.id}>#{r.id} · {r.createdAt.slice(0, 16).replace('T', ' ')}</option>)}</select></label>}
     </div>
+    {measuringEnergy && (
+      <p role="status" className="text-fg-2" data-energy-status={energy.job?.state}>
+        {energy.job?.state === 'queued'
+          ? t.energyQueued
+          : fill(t.energyRunning, { progress: energy.job?.progress ?? 0 })}
+      </p>
+    )}
     {blocked && <p id={reasonId} role="alert" className="rounded-md border border-line bg-warning-subtle p-3 text-fg">{blocked}</p>}
     {head && <div className="flex flex-col gap-2" aria-live="polite">
       <div className="flex flex-wrap items-center gap-3">

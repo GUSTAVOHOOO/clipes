@@ -810,6 +810,13 @@ try {
   assert.equal(await offline.locator('video').count(), 0, 'Fonte offline: nada é gerado nem tocado');
   assert.equal(await offline.getByRole('progressbar').count(), 0);
   assert.match(await selection.innerText(), /Energia do áudio não medida/);
+  await page.goto(`${url}?source-test=1&transcript-test=1&selection-energy-queued=1`);
+  const queuedEnergy = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
+  await queuedEnergy.getByText(/Energia do áudio na fila/).waitFor();
+  assert.equal(await queuedEnergy.getByRole('button', { name: 'Selecionar Cortes' }).isDisabled(), false);
+  await page.goto(`${url}?source-test=1&transcript-test=1&selection-energy-running=1`);
+  const runningEnergy = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
+  await runningEnergy.getByText(/Medindo a energia do áudio \(45%\)/).waitFor();
   await page.goto(`${url}?source-test=1&transcript-test=1&selection-energy=1`);
   const energySelection = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
   await energySelection.getByRole('button', { name: 'Selecionar Cortes' }).click();
