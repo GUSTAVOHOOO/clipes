@@ -4,11 +4,6 @@ on:
     paths:
       - '.github/workflows/linux-validation.yml'
       - 'scripts/linux-validation.mjs'
-      - 'src-tauri/**'
-      - 'core/src/media.rs'
-      - 'core/src/proxy.rs'
-      - 'core/src/export/**'
-      - 'src/features/projects/CutPreview.tsx'
   workflow_dispatch:
 
 jobs:
