@@ -59,6 +59,24 @@ fn fill(value: &mut Value) {
     }
 }
 
+fn audio_duration_seconds(path: &str) -> Option<f64> {
+    let bytes = fs::read(path).ok()?;
+    if bytes.starts_with(b"RIFF") {
+        let mut cursor = 12usize;
+        while cursor + 8 <= bytes.len() {
+            let id = &bytes[cursor..cursor + 4];
+            let size = u32::from_le_bytes(bytes[cursor + 4..cursor + 8].try_into().ok()?) as usize;
+            if id == b"data" {
+                let pcm_bytes = size.min(bytes.len().saturating_sub(cursor + 8));
+                return Some(pcm_bytes as f64 / 32_000.0);
+            }
+            cursor = cursor.saturating_add(8).saturating_add(size + (size & 1));
+        }
+        return Some(bytes.len().saturating_sub(44) as f64 / 32_000.0);
+    }
+    std::str::from_utf8(&bytes).ok()?.trim().parse().ok()
+}
+
 fn worker(scenario: &str) {
     let text = EXAMPLES
         .iter()
@@ -133,7 +151,11 @@ fn transcribe_worker() {
                 }
                 let hold = std::env::var_os("CLIPES_FAKE_WORKER_HOLD").map(PathBuf::from);
                 let mut cancelled = false;
-                while hold.as_ref().is_some_and(|h| h.exists()) {
+                while hold.as_ref().is_some_and(|h| {
+                    h.exists()
+                        && (requests > 1
+                            || fs::read_to_string(h).ok().as_deref() != Some("after-first"))
+                }) {
                     if let Ok(m) = rx.recv_timeout(std::time::Duration::from_millis(20)) {
                         cancelled |= m["type"] == "cancel";
                     }
@@ -151,8 +173,7 @@ fn transcribe_worker() {
                 let params = &message["params"];
                 let seconds: f64 = params["audio"]
                     .as_str()
-                    .and_then(|p| fs::read_to_string(p).ok())
-                    .and_then(|t| t.trim().parse().ok())
+                    .and_then(audio_duration_seconds)
                     .unwrap_or(-1.0);
                 if seconds < 0.0 || !matches!(message["task"].as_str(), Some("transcribe" | "vad"))
                 {

@@ -68,6 +68,8 @@ fn yt_dlp_update_requires_confirmation() {
 
 #[test]
 fn transcription_models_are_pinned_licensed_and_need_consent_and_the_worker() {
+    let temp = tempfile::tempdir().unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", temp.path());
     let models = dispatch("components.models.manifest", json!({}), &mut |_| {}).unwrap();
     let models = models.as_array().unwrap();
     assert_eq!(models.len(), 2);

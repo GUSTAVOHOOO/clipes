@@ -131,3 +131,30 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Sintoma:** MFA 3.4.3 instalado em um caminho com espaços falha na checagem do Kaldi, mesmo com o executável presente.
 - **Causa:** `thirdparty_binary` acrescenta aspas ao caminho e as passa como parte do nome para `subprocess` no Windows.
 - **Ação:** antes de executar o MFA, anteponha ao `PATH` o caminho curto 8.3 da pasta `Library\bin` do ambiente conda. Exemplo: `$short = cmd /c 'for %I in ("%TEMP%\clipes-mfa-env") do @echo %~sI'; $env:PATH="$short\Library\bin;$short\Scripts;$short;$env:PATH"`; execute `& "$short\python.exe" -m montreal_forced_aligner ...`. Mantenha o ambiente e `MFA_ROOT_DIR` no TEMP.
+
+## Testes E2E Tauri (WebDriver)
+
+### `tauri-driver --version` falha como se não estivesse instalado
+- **Sintoma:** checar `tauri-driver --version` termina com erro de argumento desconhecido e código de saída diferente de zero.
+- **Causa:** `tauri-driver` 2.1.0 usa `pico-args` e aceita apenas `--help`, `--port`, `--native-port` e `--native-driver`, rejeitando `--version`.
+- **Ação:** valide a presença do executável com `tauri-driver --help` (como faz `scripts/setup-webdriver.mjs`), nunca com `--version`.
+
+### `msedgedriver` incompatível com a WebView2 ou `LATEST_RELEASE_*` ilegível no Windows
+- **Sintoma:** `tauri-driver` recusa abrir a sessão por divergência de versão com a WebView, ou a leitura de `LATEST_RELEASE_<major>_WINDOWS` retorna caracteres corrompidos/inválidos.
+- **Causa:** o Tauri usa o **Microsoft Edge WebView2 Runtime** (`EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}`), cuja versão `pv` pode divergir do navegador Edge instalado; além disso, o endpoint `LATEST_RELEASE_*` responde codificado em **UTF-16LE com BOM (`0xFF 0xFE`)**, não UTF-8.
+- **Ação:** execute `bun run e2e:setup` (`scripts/setup-webdriver.mjs`), que lê `pv` do WebView2 Runtime no registro, baixa o `msedgedriver.exe` correspondente em `%TEMP%\clipes-webdriver\<versao>\` e decodifica `utf-16le` quando recorre ao fallback `LATEST_RELEASE_<major>_WINDOWS`.
+
+### `TypeError` ao tentar interceptar `window.__TAURI_INTERNALS__.invoke` no Tauri v2
+- **Sintoma:** tentar substituir `window.__TAURI_INTERNALS__.invoke` via `browser.execute` para simular diálogos nativos ou plugins lança `TypeError` na WebView real.
+- **Causa:** no Tauri v2, `__TAURI_INTERNALS__.invoke` é definida com `writable: false` e `configurable: false`.
+- **Ação:** mantenha os efeitos nativos de SO (seletores de arquivo, abertura de URL externa, área de transferência, `confirm` e modo do updater) centralizados em `src/lib/desktop.ts`, que expõe `window.__CLIPES_E2E__` somente quando compilado com `VITE_E2E=1` (removido por tree-shaking em produção).
+
+### WebdriverIO falha ao iniciar sessão no `tauri-driver` por WebDriver BiDi
+- **Sintoma:** `remote()` do WebdriverIO v9/v10 falha ao negociar sessão com `tauri-driver` / `WebKitWebDriver`.
+- **Causa:** o WebdriverIO solicita WebDriver BiDi (`webSocketUrl: true`) por padrão, que `tauri-driver` e `WebKitWebDriver` rejeitam.
+- **Ação:** defina `'wdio:enforceWebDriverClassic': true` ao lado de `browserName: 'wry'` nas `capabilities` de `remote()`.
+
+### Testes E2E em binário real acessam o keyring do host ou falham no Linux sem sessão Secret Service
+- **Sintoma:** salvar/remover chaves em Preferências durante o E2E sobrescreve credenciais reais no Windows Credential Manager ou retorna erro `vault` em runners Linux headless.
+- **Causa:** num executável compilado (`clipes`), `#[cfg(test)]` está desligado e o núcleo chamaria `keyring::Entry` real.
+- **Ação:** em builds de depuração (`#[cfg(debug_assertions)]`), passe `CLIPES_TEST_VAULT_FILE` apontando para um JSON temporário (`core/src/vault.rs`). Não habilite esse caminho fora de `debug_assertions`.

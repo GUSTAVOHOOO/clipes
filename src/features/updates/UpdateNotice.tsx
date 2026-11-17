@@ -5,6 +5,7 @@ import { Dialog as D } from '@base-ui/react/dialog';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { check, type Update } from '@tauri-apps/plugin-updater';
 import { Button } from '@/components/ui/Button';
+import { getUpdaterBehavior, shouldMockUpdater } from '@/lib/desktop';
 import { useText } from '@/lib/i18n';
 import { textos } from './texts';
 
@@ -16,12 +17,11 @@ type Estado =
   | { kind: 'installed' }
   | { kind: 'error'; message: string };
 
-const mock = import.meta.env.VITE_UPDATER_MOCK === 'available';
-
 async function verificar(): Promise<{ update: Update | null; currentVersion: string }> {
-  if (!mock && !isTauri()) return { update: null, currentVersion: '' };
-  const currentVersion = mock ? '0.1.0' : await getVersion();
-  if (mock) {
+  const behavior = getUpdaterBehavior();
+  if (behavior === 'off') return { update: null, currentVersion: '' };
+  const currentVersion = isTauri() ? await getVersion() : '0.1.0';
+  if (behavior === 'mock-available') {
     if (sessionStorage.getItem('clipes.mock-update-installed') === '1') return { update: null, currentVersion };
     return {
       currentVersion,
@@ -64,7 +64,7 @@ export function UpdateNotice() {
     setEstado({ kind: 'installing' });
     try {
       await estado.update.downloadAndInstall();
-      if (mock) {
+      if (shouldMockUpdater()) {
         sessionStorage.setItem('clipes.mock-update-installed', '1');
         setEstado({ kind: 'installed' });
       }

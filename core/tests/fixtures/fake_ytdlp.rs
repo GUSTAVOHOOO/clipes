@@ -23,7 +23,11 @@ fn main() {
     let end = args.iter().position(|a| a == "--").unwrap();
     let url = &args[end + 1];
     let target = args[i + 1].replace("%(id)s", "video123").replace("%(ext)s", "mp4");
-    fs::write(&target, b"media").unwrap();
+    if let Some(fixture) = env::var_os("CLIPES_FAKE_YTDLP_MEDIA") {
+        fs::copy(fixture, &target).unwrap();
+    } else {
+        fs::write(&target, b"media").unwrap();
+    }
     if url.ends_with("hang-child") {
         let marker = std::path::Path::new(&target).parent().unwrap().parent().unwrap().join("child-survived");
         std::process::Command::new(&args[0]).arg("--child").arg(marker).spawn().unwrap();

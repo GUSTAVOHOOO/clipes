@@ -68,6 +68,7 @@ pub mod sentences;
 mod sources;
 pub mod transcription;
 mod url_import;
+pub(crate) mod vault;
 mod version;
 pub mod worker;
 
