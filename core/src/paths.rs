@@ -684,7 +684,7 @@ mod tests {
         assert!(!win.isolated);
         assert_eq!(
             win.data_dir,
-            PathBuf::from(r"C:\Users\Dev\AppData\Local\io.github.gustavohooo.clipes")
+            PathBuf::from(r"C:\Users\Dev\AppData\Local").join(APP_IDENTIFIER)
         );
         assert_eq!(win.config_dir, win.data_dir);
         assert_eq!(win.cache_dir, win.data_dir.join("cache"));
