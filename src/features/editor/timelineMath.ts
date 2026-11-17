@@ -32,6 +32,7 @@ export type MontageBlock = {
   pushedUs: number;
   overflowUs: number;
   sourceStartUs: number;
+  audioId?: number | null;
 };
 
 export type MontageWarning = {

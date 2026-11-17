@@ -60,6 +60,7 @@ const cloneStarts = (starts: Record<number, number>): Record<number, number> => 
 const cloneDual = (d: DualCropPanels | null): DualCropPanels | null => d ? { top: { suggested: d.top.suggested, edits: cloneEdits(d.top.edits) }, bottom: { suggested: d.bottom.suggested, edits: cloneEdits(d.bottom.edits) } } : null;
 const cropTest = () => typeof location !== 'undefined' && new URLSearchParams(location.search).has('crop-test');
 const montageTest = () => typeof location !== 'undefined' && new URLSearchParams(location.search).has('montage-test');
+const duckTest = () => typeof location !== 'undefined' && new URLSearchParams(location.search).has('duck-test');
 
 const MOCK_BLOCK_GAP_US = 300_000;
 const MOCK_LONG_FREEZE_US = 5_000_000;
@@ -111,6 +112,7 @@ function resolveMockMontage(r: Range, s: MockSilences | null, starts: Record<num
       pushedUs,
       overflowUs,
       sourceStartUs,
+      audioId: duckTest() ? b.blockId : null,
     });
   }
   const narrationEndUs = prevEnd ?? 0;
