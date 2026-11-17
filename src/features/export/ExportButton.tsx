@@ -183,7 +183,7 @@ export function ExportButton({ sourceId, candidateId, clipId, title, startId, en
       : t.errors[rawError.code] ?? t.errors.default)
     : '';
   return <div className="flex flex-wrap items-center gap-2" data-export>
-    <Button ref={exportTrigger} tamanho="sm" disabled={!approved || !startId || !endId || active} carregando={busy} title={approved ? undefined : t.pending} onClick={() => void start()}>{t.export}</Button>
+    <Button ref={exportTrigger} data-export-trigger tamanho="sm" disabled={!approved || !startId || !endId || active} carregando={busy} title={approved ? undefined : t.pending} onClick={() => void start()}>{t.export}</Button>
     {active && <Button tamanho="sm" disabled={busy} onClick={() => void cancel()}>{t.cancel}</Button>}
     {status && <span role="status" className="text-sm text-fg-2">{status.state === 'running' ? `${t.running} · ${status.progress}%` : status.state === 'failed' ? '' : t[status.state]}</span>}
     {active && <progress value={status?.progress ?? 0} max={100} aria-label={t.running} className="w-28 max-w-full" />}

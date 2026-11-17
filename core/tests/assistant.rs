@@ -91,8 +91,10 @@ fn detects_everything_installed() {
     .unwrap();
     assert_eq!(found["ollama"]["found"], true);
     assert_eq!(found["ollama"]["models"], json!(["llama3:8b", "qwen3"]));
-    assert_eq!(found["ollama"]["endpoint"], format!("{ollama}/v1"));
+    assert_eq!(found["ollama"]["endpoint"], ollama);
+    assert_eq!(found["lmStudio"]["endpoint"], format!("{lmstudio}/v1"));
     assert_eq!(found["lmStudio"]["models"], json!(["gemma-3"]));
+    assert_eq!(found["llamaCpp"]["endpoint"], format!("{llamacpp}/v1"));
     assert_eq!(found["llamaCpp"]["models"], json!(["model.gguf"]));
     assert_eq!(found["codex"]["found"], true);
     assert_eq!(found["claude"]["found"], true);
@@ -165,9 +167,12 @@ fn compile_fake(dir: &Path, name: &str) {
         .success());
 }
 
+static DATA_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// Settings, first-run state and per-task routing share one data dir, so they run in order.
 #[test]
 fn settings_and_routing() {
+    let _guard = DATA_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let root = env::temp_dir().join(format!("clipes-assistant-it-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
     env::set_var("CLIPES_DATA_DIR", &root);
@@ -279,4 +284,135 @@ fn settings_and_routing() {
     // The data lives only in CLIPES_DATA_DIR, never in a Project.
     assert!(root.join("assistant.json").exists());
     fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn ollama_detected_by_assistant_uses_native_context_and_num_ctx() {
+    let _guard = DATA_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let root = env::temp_dir().join(format!("clipes-assistant-ollama-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    env::set_var("CLIPES_DATA_DIR", &root);
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let calls = std::sync::Arc::new(std::sync::Mutex::new(Vec::<(String, Value)>::new()));
+    let seen = calls.clone();
+    thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { break };
+            stream.set_nonblocking(false).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            let mut bytes = Vec::new();
+            let head_end = loop {
+                if let Some(pos) = bytes.windows(4).position(|w| w == b"\r\n\r\n") {
+                    break Some(pos);
+                }
+                let mut chunk = [0; 1024];
+                match stream.read(&mut chunk) {
+                    Ok(0) | Err(_) => break None,
+                    Ok(n) => bytes.extend_from_slice(&chunk[..n]),
+                }
+            };
+            let Some(head_end) = head_end else { continue };
+            let headers = String::from_utf8_lossy(&bytes[..head_end]).to_string();
+            let content_len: usize = headers
+                .lines()
+                .find_map(|line| {
+                    line.split_once(':')
+                        .filter(|(k, _)| k.eq_ignore_ascii_case("content-length"))
+                        .and_then(|(_, v)| v.trim().parse().ok())
+                })
+                .unwrap_or(0);
+            while bytes.len() < head_end + 4 + content_len {
+                let mut chunk = [0; 1024];
+                match stream.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => bytes.extend_from_slice(&chunk[..n]),
+                }
+            }
+            let target = headers.split_whitespace().nth(1).unwrap_or("").to_owned();
+            let req_body = if content_len > 0 {
+                serde_json::from_slice(&bytes[head_end + 4..head_end + 4 + content_len])
+                    .unwrap_or(Value::Null)
+            } else {
+                Value::Null
+            };
+            seen.lock().unwrap().push((target.clone(), req_body));
+            let (status, body) = match target.as_str() {
+                "/api/tags" => ("200 OK", r#"{"models":[{"name":"llama3:8b"}]}"#),
+                "/api/show" => (
+                    "200 OK",
+                    r#"{"model_info":{"general.architecture":"llama","llama.context_length":131072}}"#,
+                ),
+                "/api/ps" => (
+                    "200 OK",
+                    r#"{"models":[{"name":"llama3:8b","model":"llama3:8b","context_length":32768}]}"#,
+                ),
+                "/api/chat" => (
+                    "200 OK",
+                    r#"{"message":{"role":"assistant","content":"{\"schemaVersion\":1}"},"done":true,"prompt_eval_count":12,"eval_count":4}"#,
+                ),
+                _ => ("404 Not Found", "{}"),
+            };
+            let _ = write!(
+                stream,
+                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+        }
+    });
+
+    let (_dir, path) = fake_path(&[]);
+    let found = run(
+        "assistant.detect",
+        json!({"ollama":base,"lmStudio":closed_port(),"llamaCpp":closed_port(),"path":path}),
+    )
+    .unwrap();
+    assert_eq!(found["ollama"]["found"], true);
+    assert_eq!(found["ollama"]["endpoint"], base);
+    let model = found["ollama"]["models"][0].as_str().unwrap();
+
+    run(
+        "provider.configure",
+        json!({"kind":"ollama","endpoint":found["ollama"]["endpoint"],"model":model,"nativeSchema":false}),
+    )
+    .unwrap();
+    run("assistant.default.set", json!({"choice":"endpoint"})).unwrap();
+
+    let status = run("provider.status", json!({})).unwrap();
+    assert_eq!(status["kind"], "ollama");
+    assert_eq!(status["endpoint"], base);
+
+    let context = run("provider.context.get", json!({})).unwrap();
+    assert_eq!(context["kind"], "ollama");
+    assert_eq!(context["value"], 32768);
+    assert_eq!(context["source"], "loaded");
+    assert_eq!(context["maxContext"]["value"], 131072);
+
+    let reply = run(
+        "provider.structured",
+        json!({
+            "instruction": "Return data",
+            "transcript": "hello",
+            "schema": {"type":"object","properties":{"schemaVersion":{"const":1}},"required":["schemaVersion"],"additionalProperties":false},
+            "nativeSchema": false
+        }),
+    )
+    .unwrap();
+    assert_eq!(reply["data"]["schemaVersion"], 1);
+
+    let recorded = calls.lock().unwrap();
+    assert!(recorded.iter().any(|(p, _)| p == "/api/show"));
+    assert!(recorded.iter().any(|(p, _)| p == "/api/ps"));
+    let chat = recorded
+        .iter()
+        .find(|(p, _)| p == "/api/chat")
+        .expect("expected /api/chat call");
+    assert_eq!(chat.1["options"]["num_ctx"], 32768);
+    assert_eq!(chat.1["model"], "llama3:8b");
+
+    let _ = fs::remove_dir_all(root);
 }
