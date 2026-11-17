@@ -335,7 +335,24 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (sourceTest && new URLSearchParams(location.search).has('batch-test')) { const handled = batchMockDispatch(name, args); if (handled !== undefined) return handled as T; }
     if (name.startsWith('thumbnail.')) { const handled = thumbnailMockDispatch(name, args); if (handled !== undefined) return handled as T; }
     if (name.startsWith('script.') || name.startsWith('angles.')) { const handled = scriptMockDispatch(name, args); if (handled !== undefined) return handled as T; }
-    if (name.startsWith('packaging.')) { const handled = packagingMockDispatch(name, args); if (handled !== undefined) return handled as T; }
+    if (name.startsWith('packaging.')) {
+      const candidate = (args as { candidate?: number }).candidate ?? 1;
+      const scriptDoc = scriptMockDispatch('script.get', { candidate }) as { narrationAllowed: boolean; current: { blocks: { id: number; position: number; title: string }[] } | null };
+      const generated = narrationGenerated.get(candidate) ?? [];
+      const blocks = (scriptDoc.current?.blocks ?? []).map(b => ({
+        id: b.id,
+        position: b.position,
+        title: b.title,
+        durationUs: generated.find(g => g.blockId === b.id)?.durationUs ?? null,
+      }));
+      const kind = selectionMock.run?.videoKind ?? channelProfileMock.videoKind;
+      const handled = packagingMockDispatch(name, args, {
+        videoKind: kind === 'transformed' ? 'transformed' : 'direct',
+        scriptAllowed: scriptDoc.narrationAllowed,
+        blocks,
+      });
+      if (handled !== undefined) return handled as T;
+    }
     if (name === 'jobs.list') return (sourceTest ? jobItems : []) as T;
     if (name === 'jobs.cancel' && (args as { id: number }).id === 99) { transcribeMock = { ...transcribeMock, job: { id: 99, state: 'cancelled', progress: 40 } }; return null as T; }
     if (sourceTest && name === 'jobs.estimate') return { safety: 'paid', estimate: { kind: 'unknown' } } as T;
@@ -401,9 +418,10 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         const modelId = ttsActiveModels.pt;
         const blocks = s.current?.blocks ?? [];
         const existing = narrationGenerated.get(a.candidate) ?? [];
+        const blockDurationUs = selectionFlag('packaging-chapters') ? 12_000_000 : 3_200_000;
         const next = blocks.map(b => (a.block === undefined || b.id === a.block)
-          ? { blockId: b.id, voiceId, modelId, durationUs: 3_200_000 }
-          : (existing.find(e => e.blockId === b.id) ?? { blockId: b.id, voiceId, modelId, durationUs: 3_200_000 }));
+          ? { blockId: b.id, voiceId, modelId, durationUs: blockDurationUs }
+          : (existing.find(e => e.blockId === b.id) ?? { blockId: b.id, voiceId, modelId, durationUs: blockDurationUs }));
         narrationGenerated.set(a.candidate, next);
         return { job: 790, candidate: a.candidate } as T;
       }

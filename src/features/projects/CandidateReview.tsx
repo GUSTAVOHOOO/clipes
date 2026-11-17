@@ -196,10 +196,10 @@ export function CandidateReview({ sourceId, run, videoKind = 'direct', candidate
           <ExportButton key={`${sourceId}-${current.id}`} sourceId={sourceId} candidateId={current.id} title={current.title} startId={review?.startId} endId={review?.endId} approved={review?.status === 'approved'} />
         </div>
         {review?.status === 'approved' && videoKind === 'transformed' && <Script key={`script-${current.id}`} candidate={current.id} onChanged={() => setScriptTick(n => n + 1)} />}
-        {review?.status === 'approved' && videoKind === 'transformed' && <Narration key={`narration-${current.id}`} candidate={current.id} refreshKey={scriptTick} />}
+        {review?.status === 'approved' && videoKind === 'transformed' && <Narration key={`narration-${current.id}`} candidate={current.id} refreshKey={scriptTick} onChanged={() => setScriptTick(n => n + 1)} />}
         {onRedoStarted && <RedoWithProfile key={`redo-${current.id}`} run={run} windows={current.windows} currentProfile={current.profile ?? ''} profiles={profiles} onStarted={onRedoStarted}
           blocked={blockedOf(current.windows, windowStates)} />}
-        {review?.status === 'approved' && <Packaging key={current.id} candidate={current.id} />}
+        {review?.status === 'approved' && <Packaging key={current.id} candidate={current.id} refreshKey={scriptTick} />}
         {review?.status === 'approved' && <Thumbnail key={`thumbnail-${current.id}`} candidate={current.id} />}
       </section>}
     </div>
