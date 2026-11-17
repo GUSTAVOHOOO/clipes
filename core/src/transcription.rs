@@ -363,14 +363,54 @@ pub(crate) fn run(
     stop: &AtomicBool,
 ) -> Result<(), CoreError> {
     preview::check(id, stop)?;
-    let (engine, model) = projects::with_reader(|c| {
+    let (transcript_id, engine, mut model, resume_us, project_id) = projects::with_reader(|c| {
+        let project_id: String =
+            c.query_row("SELECT id FROM queue_project_identity", [], |r| r.get(0))?;
         c.query_row(
-        "SELECT t.engine,t.model FROM transcripts t JOIN sources s ON t.source_id=s.id AND t.audio_track=s.audio_track WHERE s.id=?1",[source_id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))
+            "SELECT t.id,t.engine,t.model,t.resume_us FROM transcripts t JOIN sources s ON t.source_id=s.id AND t.audio_track=s.audio_track WHERE s.id=?1",
+            [source_id],
+            |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, i64>(3)?,
+                    project_id,
+                ))
+            },
+        )
     })?;
     if engine == "groq" {
         let mut engine = groq::GroqEngine::start()?;
         run_with(&mut engine, id, source_id, project, stop)
     } else if engine == "local" {
+        if let Some(chosen) = hardware::auto_probe_before_transcription(
+            stop,
+            || is_cancelled(id),
+            |stage, percentage, message| {
+                crate::emit_background(crate::ProgressEvent {
+                    job: id.to_string(),
+                    project: Some(project_id.clone()),
+                    stage: stage.into(),
+                    percentage,
+                    message: message.into(),
+                    error: None,
+                });
+            },
+        )? {
+            if resume_us == 0 {
+                if let Some(spec) = chosen.spec() {
+                    projects::with_writer(|c| {
+                        c.execute(
+                            "UPDATE transcripts SET model=?2, revision=?3, compute_type=?4 WHERE id=?1 AND resume_us=0",
+                            (transcript_id, spec.id, spec.revision, &chosen.compute_type),
+                        )?;
+                        Ok(())
+                    })?;
+                    model = spec.id.to_owned();
+                }
+            }
+        }
         let mut engine = LocalEngine::start_for(&model)?;
         run_with(&mut engine, id, source_id, project, stop)
     } else {
@@ -879,9 +919,9 @@ fn status(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             .optional()?;
         let job = c
             .query_row(
-                "SELECT id, state, progress FROM jobs WHERE kind='transcription' AND source_id=?1 ORDER BY id DESC LIMIT 1",
+                "SELECT id, state, progress, json_extract(result, '$.code') FROM jobs WHERE kind='transcription' AND source_id=?1 ORDER BY id DESC LIMIT 1",
                 [source],
-                |r| Ok(json!({"id": r.get::<_, i64>(0)?, "state": r.get::<_, String>(1)?, "progress": r.get::<_, i64>(2)?})),
+                |r| Ok(json!({"id": r.get::<_, i64>(0)?, "state": r.get::<_, String>(1)?, "progress": r.get::<_, i64>(2)?, "code": r.get::<_, Option<String>>(3)?})),
             )
             .optional()?;
         Ok(json!({"language": language, "transcript": transcript, "job": job}))

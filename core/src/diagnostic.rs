@@ -49,6 +49,7 @@ pub enum DiagnosticEvent {
     ComponentFailure,
     InvalidEstimateHint,
     CatalogVerificationFailed,
+    GpuProbeFallback,
 }
 impl DiagnosticEvent {
     fn code(self) -> &'static str {
@@ -56,6 +57,7 @@ impl DiagnosticEvent {
             Self::ComponentFailure => "component_failure",
             Self::InvalidEstimateHint => "invalid_estimate_hint",
             Self::CatalogVerificationFailed => "catalog_verification_failed",
+            Self::GpuProbeFallback => "gpu_probe_fallback",
         }
     }
 }
@@ -86,6 +88,7 @@ fn log_lines(path: &Path) -> Vec<&'static str> {
                 "catalog_verification_failed" => {
                     Some("Aviso: falha na verificação do catálogo remoto de modelos")
                 }
+                "gpu_probe_fallback" => Some("Aviso: sonda da GPU falhou; transcrição em CPU"),
                 _ => None,
             };
             if let Some(message) = message {

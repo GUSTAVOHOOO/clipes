@@ -111,6 +111,7 @@ fn media_protocol_serves_ranges_and_refuses_everything_else() {
     assert_eq!(header(&whole, "Accept-Ranges"), Some("bytes"));
     assert_eq!(header(&whole, "Content-Type"), Some("video/mp4"));
     assert_eq!(header(&whole, "Content-Length"), Some("10240"));
+    assert_eq!(header(&whole, "Access-Control-Allow-Origin"), None);
 
     // Início.
     let first = media::serve(&id, Some("bytes=0-99"));
@@ -204,6 +205,15 @@ fn media_protocol_serves_ranges_and_refuses_everything_else() {
     assert_eq!(capped.body.len() as u64, media::MAX_RESPONSE_BYTES);
     let expected = format!("bytes 0-{}/{big_len}", media::MAX_RESPONSE_BYTES - 1);
     assert_eq!(header(&capped, "Content-Range"), Some(expected.as_str()));
+
+    #[cfg(unix)]
+    {
+        let link_key = "12".repeat(32);
+        let link_dir = root.join("cache/proxies").join(&link_key);
+        fs::create_dir_all(&link_dir).unwrap();
+        std::os::unix::fs::symlink(root.join("secret.txt"), link_dir.join("proxy.mp4")).unwrap();
+        assert_eq!(media::serve(&format!("proxy/{link_key}"), None).status, 404);
+    }
 }
 
 #[test]

@@ -125,6 +125,12 @@ Atualizado em 15/11/2026. O plano completo vive na issue [#26](https://github.co
 
 Baixe o instalador para seu sistema na página de [releases](https://github.com/GUSTAVOHOOO/clipes/releases). No Windows, o instalador NSIS instala o Clipes para o usuário atual, sem exigir administrador, e baixa o bootstrapper do WebView2 se necessário. No Linux estão disponíveis AppImage e `.deb`. Os instaladores não incluem FFmpeg, Python ou modelos: os componentes são obtidos separadamente pela tela de Componentes.
 
+No Linux, o pacote `.deb` já declara as dependências GStreamer para o preview (`gstreamer1.0-plugins-good`, `gstreamer1.0-plugins-bad` e `gstreamer1.0-libav`). O **AppImage** não embute GStreamer nem `libav` (`bundleMediaFramework: false`, conforme o [ADR-0003](docs/adr/0003-licenca-apache-ffmpeg-sob-demanda-e-politica-de-modelos.md)) e depende dos codecs do sistema hospedeiro; em Debian/Ubuntu sem esses pacotes, instale:
+
+```sh
+sudo apt install gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav
+```
+
 O beta do Windows ainda não tem assinatura de código. Por isso, o Microsoft Defender SmartScreen pode avisar que o aplicativo é desconhecido. Confira a origem e o SHA-256 do arquivo com o `SHA256SUMS.txt` publicado na release; se confiar no arquivo, escolha **Mais informações** e depois **Executar assim mesmo** no aviso. No PowerShell, calcule o hash com `Get-FileHash .\<instalador.exe> -Algorithm SHA256`.
 
 ## Desenvolvimento

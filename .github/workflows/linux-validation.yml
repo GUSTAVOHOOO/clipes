@@ -4,6 +4,8 @@ on:
     paths:
       - '.github/workflows/linux-validation.yml'
       - 'scripts/linux-validation.mjs'
+      - 'src-tauri/tauri.conf.json'
+      - 'src/features/projects/CutPreview.tsx'
   workflow_dispatch:
 
 jobs:
@@ -15,7 +17,7 @@ jobs:
         with:
           bun-version: '1.3.12'
       - uses: dtolnay/rust-toolchain@stable
-      - name: Instalar dependências de build e runtime Linux
+      - name: Instalar dependências de build e WebDriver (sem codecs GStreamer extras)
         run: |
           sudo apt-get update
           if apt-cache show webkitgtk-webdriver >/dev/null 2>&1; then
@@ -31,10 +33,13 @@ jobs:
             "$DRIVER_PKG" \
             xvfb \
             ffmpeg \
-            gstreamer1.0-tools \
-            gstreamer1.0-libav \
-            gstreamer1.0-plugins-bad
+            gstreamer1.0-tools
           which WebKitWebDriver || dpkg -L "$DRIVER_PKG" | grep -E 'WebKitWebDriver|bin/' || true
+          echo "=== Codecs antes do .deb (Ubuntu limpo) ==="
+          dpkg-query -W -f='${Package} ${Version}\n' '*gstreamer*' 2>/dev/null || true
+          for elem in qtdemux h264parse avdec_h264 openh264dec faad avdec_aac; do
+            echo "$elem: $(gst-inspect-1.0 "$elem" >/dev/null 2>&1 && echo true || echo false)"
+          done
       - name: Verificar libass no FFmpeg
         run: ffmpeg -hide_banner -h filter=ass
       - name: Cachear tauri-driver
@@ -47,16 +52,83 @@ jobs:
         if: steps.cache-tauri-driver.outputs.cache-hit != 'true'
         run: cargo install tauri-driver --locked
       - run: bun install --frozen-lockfile
-      - name: Compilar pacote .deb
+      - name: Compilar pacotes .deb e AppImage
         env:
           VITE_UPDATER_MOCK: available
-        run: bun run tauri build --bundles deb --config '{"bundle":{"createUpdaterArtifacts":false}}'
+        run: bun run tauri build --bundles deb,appimage --config '{"bundle":{"createUpdaterArtifacts":false}}'
+      - name: Conferir AppImage em Ubuntu limpo (sem codecs GStreamer extras)
+        run: |
+          mkdir -p linux-validation-artifacts
+          APPIMAGE_FILE=$(ls target/release/bundle/appimage/*.AppImage | head -n 1)
+          chmod +x "$APPIMAGE_FILE"
+          rm -rf /tmp/clipes-appimage-extract
+          mkdir -p /tmp/clipes-appimage-extract
+          (cd /tmp/clipes-appimage-extract && "$GITHUB_WORKSPACE/$APPIMAGE_FILE" --appimage-extract >/dev/null)
+          find /tmp/clipes-appimage-extract/squashfs-root -iname '*gst*' -o -iname '*libav*' | sort | tee linux-validation-artifacts/appimage-gst-files.txt
+          APPIMAGE_NAME="$(basename "$APPIMAGE_FILE")" xvfb-run -a -s "-screen 0 1366x768x24" bun -e '
+            import { spawn } from "node:child_process";
+            import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+            import { createServer } from "node:net";
+            import { tmpdir } from "node:os";
+            import { join } from "node:path";
+            const freePort = () => new Promise(res => { const s = createServer(); s.listen(0, "127.0.0.1", () => { const p = s.address().port; s.close(() => res(p)); }); });
+            const port = await freePort();
+            const nativePort = await freePort();
+            const dataDir = mkdtempSync(join(tmpdir(), "clipes-appimage-data-"));
+            const drv = spawn("tauri-driver", ["--port", String(port), "--native-port", String(nativePort)], {
+              env: { ...process.env, CLIPES_DATA_DIR: dataDir },
+              stdio: "ignore",
+            });
+            let sid = null;
+            try {
+              for (let i = 0; i < 100; i++) {
+                try { if ((await fetch(`http://127.0.0.1:${port}/status`)).ok) break; } catch {}
+                await new Promise(r => setTimeout(r, 200));
+              }
+              const sRes = await fetch(`http://127.0.0.1:${port}/session`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ capabilities: { alwaysMatch: { "tauri:options": { application: "/tmp/clipes-appimage-extract/squashfs-root/AppRun" } } } }),
+              });
+              const sJson = await sRes.json();
+              sid = sJson.value?.sessionId || sJson.sessionId;
+              if (!sid) throw new Error(`Sem sessionId no AppImage: ${JSON.stringify(sJson)}`);
+              for (let i = 0; i < 100; i++) {
+                const r = await fetch(`http://127.0.0.1:${port}/session/${sid}/execute/sync`, {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ script: "return Boolean(window.__TAURI_INTERNALS__?.invoke && document.querySelector(\"header\"))", args: [] }),
+                });
+                const j = await r.json();
+                if (j.value) break;
+                await new Promise(r => setTimeout(r, 200));
+              }
+              const pRes = await fetch(`http://127.0.0.1:${port}/session/${sid}/execute/sync`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  script: "const v = document.createElement(\"video\"); return { canPlayH264Full: v.canPlayType(\"video/mp4; codecs=\\\"avc1.42E01E, mp4a.40.2\\\"\"), canPlayH264Video: v.canPlayType(\"video/mp4; codecs=\\\"avc1.42E01E\\\"\"), platform: navigator.platform };",
+                  args: [],
+                }),
+              });
+              const pJson = await pRes.json();
+              const out = { appimage: process.env.APPIMAGE_NAME || "AppImage", ...pJson.value };
+              writeFileSync("linux-validation-artifacts/appimage-check.json", JSON.stringify(out, null, 2));
+              console.log("AppImage clean Ubuntu check:", JSON.stringify(out));
+            } finally {
+              if (sid) await fetch(`http://127.0.0.1:${port}/session/${sid}`, { method: "DELETE" }).catch(() => {});
+              drv.kill();
+              rmSync(dataDir, { recursive: true, force: true });
+            }
+          '
+          rm -rf /tmp/clipes-appimage-extract
       - name: Inspecionar e instalar o pacote .deb
         run: |
           DEB_FILE=$(ls target/release/bundle/deb/*.deb | head -n 1)
           dpkg-deb -I "$DEB_FILE"
           sudo apt-get install -y "./$DEB_FILE"
           which clipes
+          dpkg -s clipes
       - name: Executar validação ponta a ponta sob Xvfb + tauri-driver
         run: |
           mkdir -p linux-validation-artifacts
@@ -64,6 +136,16 @@ jobs:
             bun scripts/linux-validation.mjs \
               --out linux-validation-artifacts/result.json \
               --screenshot linux-validation-artifacts
+          bun -e '
+            import { readFileSync } from "node:fs";
+            import assert from "node:assert/strict";
+            const r = JSON.parse(readFileSync("linux-validation-artifacts/result.json", "utf8"));
+            assert.equal(r.passed, true, "linux-validation deve passar");
+            assert.equal(r.steps.webkitPreviewBenchmark?.canPlayH264, "probably", "canPlayH264 deve ser probably após instalar o .deb");
+            for (const elem of ["qtdemux", "h264parse", "avdec_h264", "faad", "avdec_aac"]) {
+              assert.equal(r.environment.gstreamerInspect?.[elem], true, `GStreamer element ${elem} deve estar disponível`);
+            }
+          '
       - name: Publicar relatório e capturas
         if: always()
         uses: actions/upload-artifact@v4

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
-import { isTauri, convertFileSrc } from '@tauri-apps/api/core';
 import { Plus, RefreshCw, RotateCcw, Scissors, Sparkles, Trash2 } from 'lucide-react';
 import { coreDispatch } from '@/lib/core';
+import { mediaUrl as buildMediaUrl } from '@/lib/media';
 import { useText } from '@/lib/i18n';
 import { Button, IconButton } from '@/components/ui/Button';
 import { clock, fill } from '@/features/projects/selectionFormat';
@@ -163,7 +163,7 @@ const texts = {
   },
 };
 
-const mediaUrl = (key: string) => (isTauri() ? convertFileSrc(`proxy/${key}`, 'clipes-media') : `/__clipes-media__/proxy/${key}`);
+const mediaUrl = (key: string) => buildMediaUrl(`proxy/${key}`);
 const msClock = (us: number) => `${clock(us)}.${String(Math.floor(Math.max(0, us % 1_000_000) / 1000)).padStart(3, '0')}`;
 const errorCode = (e: unknown) => (typeof e === 'object' && e !== null && 'code' in e ? String(e.code) : '');
 

@@ -70,6 +70,60 @@ export async function testTtsNarrationUnlocked(page, kindReview) {
   assert.equal(await narration.locator('[data-narration-duration]').count(), 3);
   assert.match(await narration.locator('[data-narration-total]').innerText(), /9\.60 s/);
   assert.equal(await narration.locator('audio').count(), 3);
+  assert.equal(await narration.locator('[data-narration-align-status="aligned"]').count(), 3);
+  await narration.getByRole('button', { name: 'Realinhar Narração', exact: true }).click();
+  assert.equal(await narration.locator('[data-narration-align-status="aligned"]').count(), 3);
 
   await narration.screenshot({ path: 'shots/narration-pt-BR.png' });
+}
+
+export async function testNarrationDeviationAndTrack(page, url) {
+  // Desvio do Roteiro (>= 2 inserções seguidas): painel de revisão libera legenda só após escolha (#81).
+  await page.goto(`${url}/?source-test=1&transcript-test=1&narration-deviation=1`);
+  const sel = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
+  await sel.getByRole('group', { name: 'Tipo de vídeo' }).getByRole('radio', { name: /Vídeo transformado/ }).check();
+  await sel.getByRole('button', { name: 'Selecionar Cortes' }).click();
+  await sel.getByText(/Seleção com janelas pendentes/).waitFor({ timeout: 15000 });
+  const review = sel.getByRole('group', { name: 'Revisão dos candidatos' });
+  await review.focus();
+  await page.keyboard.press('a');
+  const script = review.locator('[data-script]');
+  const angles = script.locator('[data-angles]');
+  await angles.getByRole('button', { name: 'Sugerir ângulos', exact: true }).click();
+  await angles.getByRole('button', { name: 'Escolher Custo da escolha', exact: true }).click();
+  await script.getByRole('button', { name: 'Sugerir Roteiro' }).click();
+  const blocks = script.locator('[data-script-block]');
+  await blocks.nth(0).waitFor();
+  for (let i = 0; i < 3; i++) {
+    await blocks.nth(i).getByRole('button', { name: 'Aprovar bloco' }).click();
+  }
+  const narration = review.locator('[data-narration]');
+  await narration.getByRole('button', { name: 'Gerar Narração', exact: true }).click();
+  await narration.locator('[data-narration-align-status="needs_review"]').waitFor();
+  const revBox = narration.locator('[data-narration-review]').first();
+  await revBox.waitFor();
+  await revBox.getByRole('button', { name: 'Usar texto falado', exact: true }).click();
+  await narration.locator('[data-narration-align-status="approved"]').waitFor();
+
+  // Alternância de faixa de legenda no Editor (#81): Narração <-> Original + palavra somente leitura.
+  await page.goto(`${url}/?source-test=1&transcript-test=1&editor-test=1&narration-captions=1`);
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('clipes-editor-open', { detail: { source_id: 1, start_id: 361, end_id: 366 } })));
+  const editor = page.getByRole('region', { name: 'Editor do Corte', exact: true });
+  await editor.waitFor({ timeout: 10000 });
+  await editor.getByRole('button', { name: /^Legenda/ }).click();
+  const panel = editor.getByRole('dialog', { name: 'Legenda', exact: true });
+  await panel.waitFor();
+  const trackSel = panel.locator('[data-captions-track-selector] select');
+  await trackSel.waitFor();
+  assert.equal(await trackSel.inputValue(), 'narration');
+  await panel.getByRole('button', { name: 'Texto', exact: true }).click();
+  await panel.locator('[data-captions-readonly-word]').waitFor();
+  await trackSel.selectOption('original');
+  await panel.getByText('Salvo', { exact: true }).waitFor();
+  await panel.getByRole('button', { name: /Frase/ }).first().click();
+  await panel.getByLabel('Texto da palavra').waitFor();
+  await page.keyboard.press('Escape');
+  await panel.waitFor({ state: 'hidden' });
+  await editor.getByRole('button', { name: 'Fechar editor', exact: true }).click();
+  await editor.waitFor({ state: 'detached' });
 }

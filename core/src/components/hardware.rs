@@ -186,6 +186,45 @@ impl Config {
 /// Teto do grupo, o mesmo do protocolo do worker.
 const MAX_GROUP: u32 = 32;
 
+fn matching_probe<'a>(store: &'a Store, gpu: &Option<Gpu>) -> Option<&'a ProbeRecord> {
+    store.probes.iter().rev().find(|p| {
+        p.key.gpu == gpu_label(gpu)
+            && p.key.driver == gpu_driver(gpu)
+            && p.key.app_version == env!("CARGO_PKG_VERSION")
+    })
+}
+
+fn sanitize_fallback_reason(reason: Option<&str>) -> Option<&'static str> {
+    match reason? {
+        "probe_timeout" => Some("probe_timeout"),
+        "gpu_probe_failed" => Some("gpu_probe_failed"),
+        _ => None,
+    }
+}
+
+fn fallback_message(reason: &str) -> &'static str {
+    match reason {
+        "probe_timeout" => {
+            "A verificação automática da GPU excedeu o tempo limite; continuando na CPU."
+        }
+        _ => "A verificação automática da GPU falhou; continuando na CPU.",
+    }
+}
+
+/// Lote seguro medido pela sonda na GPU para a precisão em uso, se houver.
+pub(crate) fn measured_group_size(settings: &Settings, config: &Config) -> Option<u32> {
+    if config.device == "cpu" {
+        return None;
+    }
+    let gpu = detect_gpu();
+    let store = read_store(settings);
+    matching_probe(&store, &gpu)
+        .and_then(|p| p.batch.as_ref())
+        .filter(|b| b.compute_type == config.compute_type)
+        .and_then(|b| b.max_safe)
+        .map(|n| n.clamp(1, MAX_GROUP))
+}
+
 /// Quantos trechos de VAD vão numa chamada de transcrição (#162).
 ///
 /// 1 (um trecho por chamada, o comportamento anterior) com a opção desligada. Ligada, na GPU é
@@ -199,20 +238,7 @@ pub(crate) fn group_size(settings: &Settings, config: &Config) -> u32 {
     if config.device == "cpu" {
         return config.batch_size();
     }
-    let gpu = detect_gpu();
-    store
-        .probes
-        .iter()
-        .rev()
-        .find(|p| {
-            p.key.gpu == gpu_label(&gpu)
-                && p.key.driver == gpu_driver(&gpu)
-                && p.key.app_version == env!("CARGO_PKG_VERSION")
-        })
-        .and_then(|p| p.batch.as_ref())
-        .filter(|b| b.compute_type == config.compute_type)
-        .and_then(|b| b.max_safe)
-        .map_or(1, |n| n.clamp(1, MAX_GROUP))
+    measured_group_size(settings, config).unwrap_or(1)
 }
 
 /// `group_size` com as configurações do app.
@@ -391,6 +417,8 @@ pub(crate) struct ProbeRecord {
     pub batch: Option<BatchMeasure>,
     pub vram_free_mib: Option<u64>,
     pub measured_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback_reason: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -639,6 +667,29 @@ fn step(events: &mut EventSink<'_>, percentage: u8, message: &str) {
     });
 }
 
+fn has_gpu_probe_cache(store: &Store, gpu: &Gpu) -> bool {
+    store.probes.iter().any(|p| {
+        p.key.gpu == gpu.name
+            && p.key.driver == gpu.driver
+            && p.key.app_version == env!("CARGO_PKG_VERSION")
+            && (p.key.model == TURBO_ID
+                || p.attempts.iter().any(|a| a.device == "cuda")
+                || p.fallback_reason.is_some())
+    })
+}
+
+fn cpu_fallback_config(settings: &Settings, ram: Option<Ram>) -> (Config, &'static str, bool) {
+    if small_spec(settings).is_installed_on_disk(settings) {
+        (Config::new(SMALL_ID, "cpu", "int8"), SMALL_ID, true)
+    } else if turbo_spec(settings).is_installed_on_disk(settings)
+        && ram.is_none_or(|r| r.total >= TURBO_CPU_MIN_TOTAL_RAM)
+    {
+        (Config::new(TURBO_ID, "cpu", "int8"), TURBO_ID, true)
+    } else {
+        (Config::new(SMALL_ID, "cpu", "int8"), SMALL_ID, false)
+    }
+}
+
 fn probe(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     let settings = load_settings()?;
     if !super::worker::installed(&settings) {
@@ -648,19 +699,130 @@ fn probe(v: Value, events: &mut EventSink<'_>) -> CommandResult {
         ));
     }
     let _ = v;
-    with_cancel(PROBE_JOB, |flag| run_chain(&settings, flag, events))
+    with_cancel(PROBE_JOB, |flag| {
+        run_chain(&settings, flag, events).map(|r| summary(&r))
+    })
+}
+
+/// Executa a sonda automática em GPU NVIDIA uma única vez antes da 1ª Transcrição local (#253).
+/// Cancelável por `jobs.cancel` (`is_job_cancelled`), encerramento (`stop`) e `components.cancel`.
+/// Em falha da sonda (não cancelada), grava o fallback para CPU e retorna a configuração utilizável
+/// ou `Err("model_missing")` se nenhum modelo utilizável em CPU estiver instalado.
+pub(crate) fn auto_probe_before_transcription(
+    stop: &AtomicBool,
+    is_job_cancelled: impl Fn() -> bool + Sync,
+    mut on_stage: impl FnMut(&str, u8, &str) + Send,
+) -> Result<Option<Config>, CoreError> {
+    let settings = load_settings()?;
+    let Some(gpu) = detect_gpu() else {
+        return Ok(None);
+    };
+    if !super::worker::installed(&settings)
+        || !super::worker::cuda_installed(&settings)
+        || !TURBO.installed(&settings)
+    {
+        return Ok(None);
+    }
+    loop {
+        let store = read_store(&settings);
+        if store.manual.as_ref().is_some_and(|c| c.device != "cuda") {
+            return Ok(None);
+        }
+        if has_gpu_probe_cache(&store, &gpu) {
+            return Ok(None);
+        }
+        on_stage("probe", 0, "Verificando a compatibilidade da GPU");
+        let combined = AtomicBool::new(false);
+        let stopped = AtomicBool::new(false);
+        let attempt = with_cancel(PROBE_JOB, |probe_cancel| {
+            let finished = AtomicBool::new(false);
+            std::thread::scope(|scope| {
+                scope.spawn(|| {
+                    while !finished.load(Ordering::SeqCst) {
+                        if stop.load(Ordering::SeqCst) {
+                            stopped.store(true, Ordering::SeqCst);
+                            combined.store(true, Ordering::SeqCst);
+                            break;
+                        }
+                        if is_job_cancelled() || probe_cancel.load(Ordering::SeqCst) {
+                            combined.store(true, Ordering::SeqCst);
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_millis(25));
+                    }
+                });
+                let result = run_chain(&settings, &combined, &mut |ev| {
+                    on_stage("probe", ev.percentage.min(99), &ev.message);
+                });
+                finished.store(true, Ordering::SeqCst);
+                result
+            })
+        });
+        match attempt {
+            Err(e) if e.code == "already_running" => {
+                while jobs().lock().unwrap().contains_key(PROBE_JOB) {
+                    if stop.load(Ordering::SeqCst) {
+                        return Err(error("interrupted", "A tarefa foi interrompida."));
+                    }
+                    if is_job_cancelled() {
+                        return Err(error("cancelled", "Tarefa cancelada."));
+                    }
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                continue;
+            }
+            Err(e) if e.code == "cancelled" => {
+                return Err(if stopped.load(Ordering::SeqCst) {
+                    error("interrupted", "A tarefa foi interrompida.")
+                } else {
+                    e
+                });
+            }
+            Err(e) => return Err(e),
+            Ok(record) => {
+                if let Some(reason) = sanitize_fallback_reason(record.fallback_reason.as_deref()) {
+                    on_stage("gpu_probe_fallback", 0, fallback_message(reason));
+                    let (_, _, usable) = cpu_fallback_config(&settings, detect_ram());
+                    if !usable {
+                        return Err(error(
+                            "model_missing",
+                            "A GPU não pôde ser usada e o modelo de CPU (Whisper small) não está instalado; baixe-o em Componentes.",
+                        ));
+                    }
+                }
+                return Ok(Some(record.chosen));
+            }
+        }
+    }
 }
 
 fn run_chain(
     settings: &Settings,
     cancel: &AtomicBool,
     events: &mut EventSink<'_>,
-) -> CommandResult {
+) -> Result<ProbeRecord, CoreError> {
     step(events, 0, "Verificando o CTranslate2");
-    let info = run_probe_task(json!({"mode": "info"}), cancel, &mut |_| {})?;
-    let ct2_version = info["ct2_version"].as_str().unwrap_or("").to_owned();
-    let cuda_types: Vec<String> = info["cuda_compute_types"]
-        .as_array()
+    let mut info_failure: Option<&'static str> = None;
+    let info = match run_probe_task(json!({"mode": "info"}), cancel, &mut |_| {}) {
+        Ok(data) => Some(data),
+        Err(e) if e.code == "cancelled" || e.code == "worker_missing" => return Err(e),
+        Err(e) => {
+            info_failure = Some(if e.code == "probe_timeout" {
+                "probe_timeout"
+            } else {
+                "gpu_probe_failed"
+            });
+            None
+        }
+    };
+    let ct2_version = info
+        .as_ref()
+        .and_then(|v| v["ct2_version"].as_str())
+        .unwrap_or("")
+        .to_owned();
+    let cuda_types: Vec<String> = info
+        .as_ref()
+        .and_then(|v| v["cuda_compute_types"].as_array())
         .map(|a| {
             a.iter()
                 .filter_map(|t| t.as_str().map(str::to_owned))
@@ -668,14 +830,14 @@ fn run_chain(
         })
         .unwrap_or_default();
     let gpu = detect_gpu();
-    let use_gpu =
-        gpu.is_some() && super::worker::cuda_installed(settings) && !cuda_types.is_empty();
+    let intended_gpu = gpu.is_some() && super::worker::cuda_installed(settings);
+    let use_gpu = intended_gpu && !cuda_types.is_empty();
     let mut attempts = Vec::new();
     let mut chosen: Option<(Config, bool)> = None;
     let mut batch = None;
     let turbo = turbo_spec(settings);
-    let small = small_spec(settings);
     let mut model = SMALL_ID;
+    let mut fallback_reason: Option<&'static str> = None;
     if use_gpu {
         model = TURBO_ID;
         if !turbo.is_installed_on_disk(settings) {
@@ -727,16 +889,33 @@ fn run_chain(
         }
     }
     if chosen.is_none() {
-        model = SMALL_ID;
-        let config = Config::new(SMALL_ID, "cpu", "int8");
-        if small.is_installed_on_disk(settings) {
+        if intended_gpu {
+            fallback_reason = Some(if let Some(reason) = info_failure {
+                reason
+            } else if !attempts.is_empty()
+                && attempts
+                    .iter()
+                    .all(|a| a.error.as_deref() == Some("probe_timeout"))
+            {
+                "probe_timeout"
+            } else {
+                "gpu_probe_failed"
+            });
+        }
+        let (fallback_cfg, fallback_model, has_installed) =
+            cpu_fallback_config(settings, detect_ram());
+        model = fallback_model;
+        if has_installed && info_failure.is_none() {
             step(events, 80, "Testando a CPU");
-            let attempt = clip_attempt(&small, settings, "cpu", "int8", 1, cancel)?;
+            let spec = fallback_cfg
+                .spec(settings)
+                .unwrap_or_else(|| small_spec(settings));
+            let attempt = clip_attempt(&spec, settings, "cpu", "int8", 1, cancel)?;
             let ok = attempt.ok;
             attempts.push(attempt);
-            chosen = Some((config, ok));
+            chosen = Some((fallback_cfg, ok));
         } else {
-            chosen = Some((config, false));
+            chosen = Some((fallback_cfg, false));
         }
     }
     let (config, verified) = chosen.unwrap();
@@ -754,6 +933,7 @@ fn run_chain(
         batch,
         vram_free_mib: gpu.as_ref().map(|g| g.free_mib),
         measured_at: now(),
+        fallback_reason: fallback_reason.map(str::to_owned),
     };
     let mut store = read_store(settings);
     store.probes.retain(|p| {
@@ -765,8 +945,11 @@ fn run_chain(
     });
     store.probes.push(record.clone());
     write_store(settings, &mut store)?;
+    if fallback_reason.is_some() {
+        crate::diagnostic::record(crate::diagnostic::DiagnosticEvent::GpuProbeFallback);
+    }
     step(events, 100, "Sonda concluída");
-    Ok(summary(&record))
+    Ok(record)
 }
 
 fn summary(record: &ProbeRecord) -> Value {
@@ -787,16 +970,13 @@ fn status(_: Value, _: &mut EventSink<'_>) -> CommandResult {
     let store = read_store(&settings);
     let config = effective(&settings);
     let manual = store.manual.as_ref() == Some(&config);
-    let probe = store
-        .probes
-        .iter()
-        .rev()
-        .find(|p| {
-            p.key.gpu == gpu_label(&gpu)
-                && p.key.driver == gpu_driver(&gpu)
-                && p.key.app_version == env!("CARGO_PKG_VERSION")
-        })
-        .map(summary);
+    let probe_record = matching_probe(&store, &gpu);
+    let probe = probe_record.map(summary);
+    let fallback_reason = if !manual && config.device == "cpu" {
+        probe_record.and_then(|p| sanitize_fallback_reason(p.fallback_reason.as_deref()))
+    } else {
+        None
+    };
     let cuda = super::worker::cuda_installed(&settings) && gpu.is_some();
     Ok(json!({
         "gpu": gpu,
@@ -805,6 +985,7 @@ fn status(_: Value, _: &mut EventSink<'_>) -> CommandResult {
         "no_compatible_gpu": !cuda || config.device == "cpu",
         "effective": config,
         "manual": manual,
+        "fallback_reason": fallback_reason,
         "probe": probe,
         "options": candidates(&settings, ram),
         "worker_installed": super::worker::installed(&settings),
@@ -860,6 +1041,13 @@ fn diagnostic_text() -> String {
     };
     let store = read_store(&settings);
     let gpu = detect_gpu();
+    let fallback = matching_probe(&store, &gpu)
+        .and_then(|p| sanitize_fallback_reason(p.fallback_reason.as_deref()))
+        .map(|r| match r {
+            "probe_timeout" => "; fallback CPU (tempo limite da sonda)",
+            _ => "; fallback CPU (falha na sonda da GPU)",
+        })
+        .unwrap_or("");
     let vram = gpu.map_or("sem GPU NVIDIA".to_string(), |g| {
         format!("{} MiB livres de {} MiB", g.free_mib, g.total_mib)
     });
@@ -874,7 +1062,7 @@ fn diagnostic_text() -> String {
             )
         },
     );
-    format!("{vram}; {batch}")
+    format!("{vram}; {batch}{fallback}")
 }
 
 inventory::submit! { CommandRegistration { name: "transcription.hardware.status", execute: status } }
@@ -891,7 +1079,11 @@ fn grouping(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         write_store(&settings, &mut store)?;
     }
     let config = effective(&settings);
-    Ok(json!({"enabled": store.group_vad, "size": group_size(&settings, &config)}))
+    Ok(json!({
+        "enabled": store.group_vad,
+        "size": group_size(&settings, &config),
+        "measured_size": measured_group_size(&settings, &config),
+    }))
 }
 
 inventory::submit! { CommandRegistration { name: "transcription.grouping", execute: grouping } }
@@ -915,8 +1107,21 @@ pub(crate) fn config_for_model(settings: &Settings, model: &str) -> Option<Confi
     if current.model == model {
         return Some(current);
     }
-    candidates(settings, detect_ram())
-        .into_iter()
+    let gpu = detect_gpu();
+    let store = read_store(settings);
+    let gpu_failed = matching_probe(&store, &gpu)
+        .and_then(|p| sanitize_fallback_reason(p.fallback_reason.as_deref()))
+        .is_some();
+    let all = candidates(settings, detect_ram());
+    if gpu_failed {
+        if let Some(cpu) = all
+            .iter()
+            .find(|c| c.enabled && c.config.model == model && c.config.device == "cpu")
+        {
+            return Some(cpu.config.clone());
+        }
+    }
+    all.into_iter()
         .find(|c| c.enabled && c.config.model == model)
         .map(|c| c.config)
 }

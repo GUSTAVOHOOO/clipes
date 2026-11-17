@@ -7,8 +7,8 @@ import { previewSeekEvent } from '@/features/projects/CutPreview';
 import type { CaptionData, CaptionStyle, MissingGlyph, WordOverride } from './types';
 
 export const captionTexts = {
-  'pt-BR': { title: 'Legenda', loading: 'Carregando legenda…', error: 'Não foi possível salvar a legenda. Reabra a gaveta e tente de novo.', loadError: 'Não foi possível carregar a legenda.', saved: 'Salvo', saving: 'Salvando…', defaultSaved: 'Padrão salvo', preset: 'Preset', vertical: 'Vertical', cinema: 'Cinema', simple: 'Simples · sem destaque', font: 'Fonte', fontSize: 'Tamanho da fonte', color: 'Cor normal', activeColor: 'Cor ativa', dimColor: 'Cor esmaecida', outlineColor: 'Cor do contorno', outline: 'Contorno', shadow: 'Sombra', x: 'Posição horizontal', y: 'Posição vertical', highlight: 'Destaque karaokê', default: 'Usar como padrão', words: 'Palavras da legenda', text: 'Texto da palavra', saveText: 'Salvar palavra', wordHidden: 'Ocultar na legenda', wordHighlight: 'Destacar esta palavra', wordColor: 'Cor desta palavra', wordActive: 'Cor ativa desta palavra', resetWord: 'Remover estilo desta palavra', emoji: 'Emoji colorido não aparece no libass e será removido do preview e do export.', discarded: 'Estilos de palavras descartados após nova Transcrição: ', hint: 'Escolha uma palavra para corrigir o texto, ocultar ou mudar seu destaque. Trocar o preset mantém as edições por palavra.', style: 'Estilo do Corte', word: 'Palavra selecionada', retry: 'Tentar de novo', missingGlyphsTitle: 'Palavras sem glifo na fonte (bloqueiam o export):', fixGlyph: 'Corrigir', sentence: 'Frase' },
-  en: { title: 'Captions', loading: 'Loading captions…', error: 'Could not save captions. Reopen the drawer and try again.', loadError: 'Could not load captions.', saved: 'Saved', saving: 'Saving…', defaultSaved: 'Default saved', preset: 'Preset', vertical: 'Vertical', cinema: 'Cinema', simple: 'Simple · no highlight', font: 'Font', fontSize: 'Font size', color: 'Normal color', activeColor: 'Active color', dimColor: 'Dim color', outlineColor: 'Outline color', outline: 'Outline', shadow: 'Shadow', x: 'Horizontal position', y: 'Vertical position', highlight: 'Karaoke highlight', default: 'Use as default', words: 'Caption words', text: 'Word text', saveText: 'Save word', wordHidden: 'Hide in captions', wordHighlight: 'Highlight this word', wordColor: 'This word’s color', wordActive: 'This word’s active color', resetWord: 'Remove this word’s style', emoji: 'Color emoji cannot appear in libass and will be removed from preview and export.', discarded: 'Word styles discarded after retranscription: ', hint: 'Choose a word to correct its text, hide it, or change its highlight. Switching presets keeps word edits.', style: 'Clip style', word: 'Selected word', retry: 'Try again', missingGlyphsTitle: 'Words missing font glyphs (block export):', fixGlyph: 'Correct', sentence: 'Sentence' },
+  'pt-BR': { title: 'Legenda', loading: 'Carregando legenda…', error: 'Não foi possível salvar a legenda. Reabra a gaveta e tente de novo.', loadError: 'Não foi possível carregar a legenda.', saved: 'Salvo', saving: 'Salvando…', defaultSaved: 'Padrão salvo', preset: 'Preset', vertical: 'Vertical', cinema: 'Cinema', simple: 'Simples · sem destaque', font: 'Fonte', fontSize: 'Tamanho da fonte', color: 'Cor normal', activeColor: 'Cor ativa', dimColor: 'Cor esmaecida', outlineColor: 'Cor do contorno', outline: 'Contorno', shadow: 'Sombra', x: 'Posição horizontal', y: 'Posição vertical', highlight: 'Destaque karaokê', default: 'Usar como padrão', words: 'Palavras da legenda', text: 'Texto da palavra', saveText: 'Salvar palavra', wordHidden: 'Ocultar na legenda', wordHighlight: 'Destacar esta palavra', wordColor: 'Cor desta palavra', wordActive: 'Cor ativa desta palavra', resetWord: 'Remover estilo desta palavra', emoji: 'Emoji colorido não aparece no libass e será removido do preview e do export.', discarded: 'Estilos de palavras descartados após nova Transcrição: ', hint: 'Escolha uma palavra para corrigir o texto, ocultar ou mudar seu destaque. Trocar o preset mantém as edições por palavra.', style: 'Estilo do Corte', word: 'Palavra selecionada', retry: 'Tentar de novo', missingGlyphsTitle: 'Palavras sem glifo na fonte (bloqueiam o export):', fixGlyph: 'Corrigir', sentence: 'Frase', trackLabel: 'Faixa da legenda', trackNarration: 'Narração', trackOriginal: 'Original', trackTranslated: 'Traduzida', narrationBlockedNote: 'Blocos da Narração pendentes ou em revisão não geram legenda até serem alinhados ou aprovados.', readonlyTrackWord: 'Palavra da faixa Narração/Traduzida: ajuste o texto no Roteiro/revisão ou na Tradução.' },
+  en: { title: 'Captions', loading: 'Loading captions…', error: 'Could not save captions. Reopen the drawer and try again.', loadError: 'Could not load captions.', saved: 'Saved', saving: 'Saving…', defaultSaved: 'Default saved', preset: 'Preset', vertical: 'Vertical', cinema: 'Cinema', simple: 'Simple · no highlight', font: 'Font', fontSize: 'Font size', color: 'Normal color', activeColor: 'Active color', dimColor: 'Dim color', outlineColor: 'Outline color', outline: 'Outline', shadow: 'Shadow', x: 'Horizontal position', y: 'Vertical position', highlight: 'Karaoke highlight', default: 'Use as default', words: 'Caption words', text: 'Word text', saveText: 'Save word', wordHidden: 'Hide in captions', wordHighlight: 'Highlight this word', wordColor: 'This word’s color', wordActive: 'This word’s active color', resetWord: 'Remove this word’s style', emoji: 'Color emoji cannot appear in libass and will be removed from preview and export.', discarded: 'Word styles discarded after retranscription: ', hint: 'Choose a word to correct its text, hide it, or change its highlight. Switching presets keeps word edits.', style: 'Clip style', word: 'Selected word', retry: 'Try again', missingGlyphsTitle: 'Words missing font glyphs (block export):', fixGlyph: 'Correct', sentence: 'Sentence', trackLabel: 'Caption track', trackNarration: 'Narration', trackOriginal: 'Original', trackTranslated: 'Translated', narrationBlockedNote: 'Narration blocks pending alignment or review do not emit captions until aligned or approved.', readonlyTrackWord: 'Narration/Translated track word: edit its text in the Script/review panel or Translation panel.' },
 };
 const field = 'foco h-8 w-full rounded-md border border-line-strong bg-field px-2 text-fg disabled:opacity-50';
 const hasEmoji = (text: string) => /[\u200d\ufe0e\ufe0f\u20e3\u00a9\u00ae\u2300-\u23ff\u2600-\u27ff\u{1f000}-\u{1faff}\u{e0020}-\u{e007f}]/u.test(text);
@@ -20,7 +20,7 @@ function clock(us: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
 
-export function CaptionPanel({ data, clipId, sourceId, refresh, loadError }: { data: CaptionData | null; clipId: number; sourceId: number; refresh: () => Promise<void>; loadError: boolean }) {
+export function CaptionPanel({ data, clipId, sourceId, candidateId, refresh, loadError }: { data: CaptionData | null; clipId: number; sourceId: number; candidateId?: number | null; refresh: () => Promise<void>; loadError: boolean }) {
   const t = useText(captionTexts);
   const [draft, setDraft] = useState<CaptionStyle | null>(data?.style ?? null);
   const [position, setPosition] = useState<number | null>(null);
@@ -60,7 +60,28 @@ export function CaptionPanel({ data, clipId, sourceId, refresh, loadError }: { d
   };
   if (!data || !draft) return <div className="p-3 text-sm"><p role={loadError ? 'alert' : 'status'}>{loadError ? t.loadError : t.loading}</p>{loadError && <Button tamanho="sm" onClick={() => void refresh().catch(() => {})}>{t.retry}</Button>}</div>;
   const missingGlyphs = data.missingGlyphs ?? [];
+  const availableTracks = data.availableTracks ?? [];
+  const trackNames = { narration: t.trackNarration, original: t.trackOriginal, translated: t.trackTranslated };
+  const narrationSummary = data.narrationSummary;
+  const wordEditable = word && word.position >= 0;
   return <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-3 text-sm">
+    {availableTracks.length > 1 && (
+      <fieldset disabled={busy} className="flex flex-col gap-1" data-captions-track-selector>
+        <label className="flex flex-col gap-1 font-semibold">
+          {t.trackLabel}
+          <select
+            className={field}
+            value={data.track ?? 'original'}
+            onChange={e => void save(() => coreDispatch('captions.track.set', { clip_id: clipId, candidate_id: candidateId ?? null, track: e.target.value }))}
+          >
+            {availableTracks.map(tr => <option key={tr} value={tr}>{trackNames[tr]}</option>)}
+          </select>
+        </label>
+        {data.track === 'narration' && narrationSummary && (narrationSummary.pendingBlocks > 0 || narrationSummary.needsReviewBlocks > 0) && (
+          <p role="status" className="text-xs text-fg-2" data-captions-narration-note>{t.narrationBlockedNote}</p>
+        )}
+      </fieldset>
+    )}
     {missingGlyphs.length > 0 && (
       <div role="alert" className="flex flex-col gap-2 rounded-md border border-danger bg-danger-subtle p-2 text-xs text-danger" data-captions-missing-glyphs>
         <p className="font-semibold">{t.missingGlyphsTitle}</p>
@@ -85,14 +106,14 @@ export function CaptionPanel({ data, clipId, sourceId, refresh, loadError }: { d
     <section aria-label={t.words} className="flex flex-col gap-2"><h4 className="font-semibold">{t.words}</h4><p className="text-xs text-fg-2">{t.hint}</p>
       <div className="flex max-h-40 flex-wrap gap-1 overflow-y-auto">{data.words.map(w => <button type="button" key={w.position} aria-pressed={w.position === position} className={`foco rounded-md border px-2 py-1 ${w.position === position ? 'border-accent-line bg-accent-subtle' : w.missingGlyph ? 'border-danger text-danger bg-field' : 'border-line bg-field'} ${w.overrides.hidden ? 'line-through opacity-50' : ''}`} onClick={() => { setPosition(w.position); window.dispatchEvent(new CustomEvent(previewSeekEvent, { detail: { source_id: sourceId, us: w.sourceStartUs ?? (data.start_us + w.startUs) } })); }}>{w.text.trim()}</button>)}</div>
     </section>
-    {word && <fieldset disabled={busy} className="flex flex-col gap-2"><legend className="mb-2 font-semibold">{t.word}</legend>
+    {word && (wordEditable ? <fieldset disabled={busy} className="flex flex-col gap-2"><legend className="mb-2 font-semibold">{t.word}</legend>
       <form onSubmit={e => { e.preventDefault(); correct(); }} className="flex flex-col gap-2"><label className="flex flex-col gap-1">{t.text}<input ref={wordInput} className={field} maxLength={200} value={text} onChange={e => setText(e.target.value)} /></label><Button tamanho="sm" type="submit">{t.saveText}</Button></form>
       <label className="flex items-center gap-2"><input type="checkbox" className="foco" checked={word.overrides.hidden ?? false} onChange={e => override({ hidden: e.target.checked })} />{t.wordHidden}</label>
       <label className="flex items-center gap-2"><input type="checkbox" className="foco" checked={word.overrides.highlight ?? true} onChange={e => override({ highlight: e.target.checked })} />{t.wordHighlight}</label>
       <label>{t.wordColor}<input aria-label={t.wordColor} className={`${field} p-1`} type="color" value={word.overrides.color ?? draft.color} onChange={e => override({ color: e.target.value })} /></label>
       <label>{t.wordActive}<input aria-label={t.wordActive} className={`${field} p-1`} type="color" value={word.overrides.activeColor ?? draft.activeColor} onChange={e => override({ activeColor: e.target.value })} /></label>
       <Button tamanho="sm" variante="fantasma" onClick={() => void save(() => coreDispatch('captions.override', { transcript_id: data.transcriptId, position: word.position, overrides: {} }))}>{t.resetWord}</Button>
-    </fieldset>}
+    </fieldset> : <p className="text-xs text-fg-2" data-captions-readonly-word>{t.readonlyTrackWord}</p>)}
     {(data.emojiRemoved > 0 || hasEmoji(text)) && <p role="status" className="text-fg-2">{t.emoji}</p>}
     {discarded > 0 && <p role="status" className="text-fg-2">{t.discarded}{discarded}</p>}
     {error && <p role="alert" className="text-danger">{t.error}</p>}

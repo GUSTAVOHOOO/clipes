@@ -9,7 +9,7 @@ import { testEditorSilencesPanel, testEditorSilencesPreview } from './editor-sil
 import { testEditorCrop } from './editor-crop.mjs';
 import { testEditorMontage, testEditorDucking } from './editor-montage.mjs';
 import { testTranslation, testTranslationBlocked } from './translation-ui.mjs';
-import { testTtsComponents, testTtsNarrationLocked, testTtsNarrationUnlocked } from './tts-ui.mjs';
+import { testTtsComponents, testTtsNarrationLocked, testTtsNarrationUnlocked, testNarrationDeviationAndTrack } from './tts-ui.mjs';
 import { testCatalogComponents } from './catalog-ui.mjs';
 import { testPackagingChapters } from './packaging-chapters-ui.mjs';
 const socket = createServer();
@@ -112,8 +112,18 @@ try {
   await page.screenshot({ path: 'shots/hardware.png', fullPage: true });
   await hardwareCard.getByRole('button', { name: 'Voltar ao automático' }).click();
   await hardwareCard.getByText(/\(automática\)/).waitFor();
+  await hardwareCard.getByText('Lote seguro medido na GPU: ainda não medido (padrão 1).').waitFor();
+  const groupingSwitch = hardwareCard.getByRole('switch', { name: /Agrupar trechos de VAD/ });
+  assert.equal(await groupingSwitch.isChecked(), false);
+  await hardwareCard.getByText(/ganho típico de 0% a 10%/).waitFor();
   await hardwareCard.getByRole('button', { name: 'Medir hardware' }).click();
   await hardwareCard.getByText('Medição concluída.').waitFor();
+  await hardwareCard.getByText('Lote seguro medido na GPU: 8 trechos.').waitFor();
+  await groupingSwitch.check();
+  assert.equal(await groupingSwitch.isChecked(), true);
+  await hardwareCard.getByText(/Agrupa até 8 trechos consecutivos/).waitFor();
+  await groupingSwitch.uncheck();
+  assert.equal(await groupingSwitch.isChecked(), false);
 
   await testTtsComponents(page);
 
@@ -428,6 +438,8 @@ try {
   await downloadedRow.getByText(/Estimativa: cerca de 3 h 52 min/).waitFor();
   assert.match(await downloadedRow.innerText(), /É uma estimativa, não uma garantia/);
   assert.equal(await downloadedRow.getByText('Sem GPU compatível, a Transcrição pode demorar.').count(), 0);
+  await downloadedRow.getByText('Agrupamento por VAD: desligado (ajuste em Componentes).').waitFor();
+  assert.equal(await downloadedRow.getByRole('switch').count(), 0);
   await downloadedRow.getByRole('button', {name:'Transcrever'}).click();
   await downloadedRow.getByText('Transcrevendo: 40%').waitFor();
   await downloadedRow.getByRole('button', {name:'Cancelar transcrição'}).click();
@@ -1127,6 +1139,8 @@ try {
   await page.screenshot({path:'shots/estimate-cpu.png',fullPage:true});
   await cpuRow.getByRole('button',{name:'Usar o Motor Groq'}).click();
   assert.equal(await cpuRow.getByLabel('Motor de transcrição').inputValue(), 'groq');
+  await page.goto(`${url}?source-test=1&hardware-probe-fallback=1`);
+  await page.locator('li').filter({hasText:'/test/downloaded.mp4'}).first().getByText('A verificação automática da GPU falhou; a Transcrição local caiu para a CPU.').waitFor();
   // Estado do perfil para a seleção de Cortes (#146): três estados, em PT-BR e EN, só informativo.
   for (const L of [
     { lang: 'pt-BR', prefs: 'Preferências', add: 'Adicionar perfil', name: 'Nome do perfil', endpoint: 'Endereço da API', model: 'Modelo', ctx: 'Contexto em tokens (opcional)', save: 'Salvar perfil', edit: 'Editar',
@@ -1312,6 +1326,7 @@ try {
   }
   await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
   await testTranslationBlocked(page, url);
+  await testNarrationDeviationAndTrack(page, url);
   await testEditorBorders(page, url);
   await testEditorSilencesPreview(page, url);
   await testEditorCrop(page, url);
@@ -1359,6 +1374,45 @@ try {
   await conflictBatch.getByText(/Concluído com falhas · 100%/).waitFor({ timeout: 10000 });
   assert.match(await conflictBatch.innerText(), /1 de 2 Cortes exportados · 1 com falha/);
   assert.match(await conflictBatch.innerText(), /Não foi possível exportar o Corte\./);
+  // Aviso de codecs GStreamer ausentes no Linux (#247): checa canPlayType vazio e exibe comando apt fixo.
+  const codecPage = await browser.newPage();
+  codecPage.on('pageerror', err => errors.push(err.message));
+  codecPage.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+  try {
+    await codecPage.addInitScript(() => {
+      Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
+      HTMLMediaElement.prototype.canPlayType = type => (type.includes('avc1.42E01E') ? '' : 'maybe');
+    });
+    await codecPage.goto(`${url}?source-test=1&transcript-test=1`);
+    await codecPage.getByRole('dialog', { name: 'Atualização disponível' }).getByRole('button', { name: 'Agora não' }).click();
+    await codecPage.getByText(/Transcrição pronta/).first().waitFor({ timeout: 10000 });
+    await codecPage.evaluate(() => window.dispatchEvent(new CustomEvent('clipes-preview-open', { detail: { sourceId: 1, startUs: 1_000_000, endUs: 2_000_000 } })));
+    const missingPreview = codecPage.getByRole('region', { name: 'Preview do Corte' });
+    await missingPreview.getByRole('button', { name: 'Reproduzir' }).waitFor({ timeout: 10000 });
+    await missingPreview.locator('[data-missing-h264-codec]').waitFor({ timeout: 10000 });
+    const missingText = await missingPreview.locator('[data-missing-h264-codec]').innerText();
+    assert.match(missingText, /sudo apt install gstreamer1\.0-plugins-good gstreamer1\.0-plugins-bad gstreamer1\.0-libav/);
+  } finally {
+    await codecPage.close();
+  }
+  const okCodecPage = await browser.newPage();
+  okCodecPage.on('pageerror', err => errors.push(err.message));
+  okCodecPage.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+  try {
+    await okCodecPage.addInitScript(() => {
+      Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
+      HTMLMediaElement.prototype.canPlayType = type => (type.includes('avc1.42E01E') ? 'probably' : '');
+    });
+    await okCodecPage.goto(`${url}?source-test=1&transcript-test=1`);
+    await okCodecPage.getByRole('dialog', { name: 'Atualização disponível' }).getByRole('button', { name: 'Agora não' }).click();
+    await okCodecPage.getByText(/Transcrição pronta/).first().waitFor({ timeout: 10000 });
+    await okCodecPage.evaluate(() => window.dispatchEvent(new CustomEvent('clipes-preview-open', { detail: { sourceId: 1, startUs: 1_000_000, endUs: 2_000_000 } })));
+    const readyPreview = okCodecPage.getByRole('region', { name: 'Preview do Corte' });
+    await readyPreview.getByRole('button', { name: 'Reproduzir' }).waitFor({ timeout: 10000 });
+    assert.equal(await readyPreview.locator('[data-missing-h264-codec]').count(), 0);
+  } finally {
+    await okCodecPage.close();
+  }
   // Permissão após importação (#254): registrar/editar na Fonte reflete imediatamente no Empacotamento, Tradução e Guarda-corpos.
   await page.goto(`${url}?source-test=1&transcript-test=1&editor-test=1&packaging-nopermission=1&translation-nopermission=1`);
   const permSel = page.getByRole('region', { name: 'Seleção de Cortes' }).first();

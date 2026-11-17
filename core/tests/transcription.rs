@@ -91,6 +91,10 @@ impl Env {
         std::env::remove_var("CLIPES_FAKE_LANGUAGE_LOG");
         std::env::remove_var("CLIPES_FAKE_SILENT_BLOCKS");
         std::env::remove_var("CLIPES_FAKE_GROUP_OOM");
+        std::env::remove_var("CLIPES_FAKE_PROBE_FAIL");
+        std::env::remove_var("CLIPES_FAKE_PROBE_LOG");
+        std::env::remove_var("CLIPES_FAKE_CUDA_TYPES");
+        std::env::remove_var("CLIPES_PROBE_TIMEOUT_SECONDS");
         run("components.settings.set", json!({"data_dir":data,"cache_dir":root.path().join("cache"),"cache_limit_bytes":1_000_000,"ffmpeg_path":fake})).unwrap();
 
         // uv falso, como se o Componente já tivesse sido baixado, e worker falso instalado por ele.
@@ -124,13 +128,17 @@ impl Env {
     }
 
     fn install_models(&self) {
+        self.install_only_models(&["whisper-turbo", "whisper-small", "yunet"]);
+    }
+
+    fn install_only_models(&self, ids: &[&str]) {
         let models = run("components.models.manifest", json!({})).unwrap();
         for model in models.as_array().unwrap() {
-            let dir = self
-                .root
-                .path()
-                .join("data/models")
-                .join(model["id"].as_str().unwrap());
+            let id = model["id"].as_str().unwrap();
+            if !ids.contains(&id) {
+                continue;
+            }
+            let dir = self.root.path().join("data/models").join(id);
             fs::create_dir_all(&dir).unwrap();
             fs::write(
                 dir.join("model.state.json"),
@@ -1010,7 +1018,10 @@ fn grouping_is_off_by_default_and_one_span_is_sent_per_call() {
     env.install_models();
     gpu_with_measured_batch(&env, 4);
     let state = run("transcription.grouping", json!({})).unwrap();
-    assert_eq!(state, json!({"enabled": false, "size": 1}));
+    assert_eq!(
+        state,
+        json!({"enabled": false, "size": 1, "measured_size": 4})
+    );
     transcribe_to_the_end(&env);
     assert!(groups(&env).iter().all(|g| g == "1"), "{:?}", groups(&env));
 }
@@ -1021,12 +1032,29 @@ fn enabled_grouping_uses_the_measured_safe_batch_and_keeps_blocks_unchanged() {
     env.install_models();
     gpu_with_measured_batch(&env, 4);
     let state = run("transcription.grouping", json!({"enabled": true})).unwrap();
-    assert_eq!(state, json!({"enabled": true, "size": 4}));
+    assert_eq!(
+        state,
+        json!({"enabled": true, "size": 4, "measured_size": 4})
+    );
+    // Persiste em disco e pode ser alternado de volta para desligado.
+    assert_eq!(
+        run("transcription.grouping", json!({})).unwrap(),
+        json!({"enabled": true, "size": 4, "measured_size": 4})
+    );
     let source = transcribe_to_the_end(&env);
     assert!(groups(&env).iter().all(|g| g == "4"), "{:?}", groups(&env));
     // Mesmo formato de bloco e checkpoint: um bloco por 8 s de Fonte, como sem agrupar.
     assert_eq!(env.status(source)["transcript"]["resume_us"], 25_000_000);
     assert!(run("transcription.grouping", json!({"enabled": "sim"})).is_err());
+    assert_eq!(
+        run("transcription.grouping", json!({"enabled": false})).unwrap(),
+        json!({"enabled": false, "size": 1, "measured_size": 4})
+    );
+    let store: Value = serde_json::from_slice(
+        &fs::read(env.root.path().join("data/transcription-hardware.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(store["group_vad"], false);
 }
 
 #[test]
@@ -1455,4 +1483,161 @@ fn commit_normalizes_overlapping_and_zero_duration_words_across_blocks() {
     assert_eq!(list.len(), 2);
     assert!(list[0]["end_us"].as_i64().unwrap() <= list[1]["start_us"].as_i64().unwrap());
     assert!(list[0]["end_us"].as_i64().unwrap() > list[0]["start_us"].as_i64().unwrap());
+}
+
+// ---- Sonda automática em GPU NVIDIA (#253) ----
+
+fn probe_log(env: &Env) -> Vec<String> {
+    fs::read_to_string(env.root.path().join("probe.log"))
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn auto_probe_runs_once_before_first_local_transcription_and_caches_result() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_models();
+    std::env::set_var("CLIPES_FAKE_PROBE_LOG", env.root.path().join("probe.log"));
+    std::env::set_var(
+        "CLIPES_FAKE_TRANSCRIBE_LOG",
+        env.root.path().join("transcribe.log"),
+    );
+    assert_eq!(
+        run("transcription.grouping", json!({})).unwrap(),
+        json!({"enabled": false, "size": 1, "measured_size": null})
+    );
+    let source1 = env.import(0);
+    env.start(source1).unwrap();
+    wait("primeira transcrição concluída", || {
+        env.status(source1)["transcript"]["state"] == "complete"
+    });
+    let first_probe_count = probe_log(&env).len();
+    assert!(
+        first_probe_count >= 5,
+        "sonda deveria ter rodado: {first_probe_count}"
+    );
+    assert_eq!(
+        run("transcription.grouping", json!({})).unwrap(),
+        json!({"enabled": false, "size": 1, "measured_size": 8})
+    );
+    let hw = run("transcription.hardware.status", json!({})).unwrap();
+    assert_eq!(hw["effective"]["compute_type"], "int8_float16");
+    assert!(hw["fallback_reason"].is_null());
+    assert!(!hw.to_string().contains("max_safe"));
+
+    // Segunda transcrição na mesma GPU/driver/modelo não dispara a sonda de novo.
+    let source2 = env.import(0);
+    env.start(source2).unwrap();
+    wait("segunda transcrição concluída", || {
+        env.status(source2)["transcript"]["state"] == "complete"
+    });
+    assert_eq!(probe_log(&env).len(), first_probe_count);
+}
+
+#[test]
+fn auto_probe_is_cancellable_via_jobs_cancel_and_does_not_cache() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_models();
+    std::env::set_var("CLIPES_FAKE_PROBE_LOG", env.root.path().join("probe.log"));
+    std::env::set_var("CLIPES_FAKE_PROBE_FAIL", "hang:int8_float16");
+    let source = env.import(0);
+    let started = env.start(source).unwrap();
+    let job_id = started["job_id"].as_i64().unwrap();
+    wait("sonda iniciada", || !probe_log(&env).is_empty());
+    run("jobs.cancel", json!({"id": job_id})).unwrap();
+    env.wait_transcribe("cancelled");
+    assert!(!env
+        .root
+        .path()
+        .join("data/transcription-hardware.json")
+        .exists());
+}
+
+#[test]
+fn auto_probe_failure_falls_back_to_cpu_small_with_warning_and_diagnostic() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_models();
+    std::env::set_var("CLIPES_FAKE_PROBE_LOG", env.root.path().join("probe.log"));
+    std::env::set_var(
+        "CLIPES_FAKE_TRANSCRIBE_LOG",
+        env.root.path().join("transcribe.log"),
+    );
+    std::env::set_var(
+        "CLIPES_FAKE_PROBE_FAIL",
+        "fail:int8_float16,fail:float16,fail:int8",
+    );
+    let source = env.import(0);
+    env.start(source).unwrap();
+    wait("transcrição em fallback CPU concluída", || {
+        env.status(source)["transcript"]["state"] == "complete"
+    });
+    assert_eq!(env.status(source)["transcript"]["model"], "whisper-small");
+    assert!(transcribe_log(&env)
+        .iter()
+        .all(|l| l.starts_with("whisper-small cpu int8")));
+    let hw = run("transcription.hardware.status", json!({})).unwrap();
+    assert_eq!(hw["effective"]["model"], "whisper-small");
+    assert_eq!(hw["effective"]["device"], "cpu");
+    assert_eq!(hw["no_compatible_gpu"], true);
+    assert_eq!(hw["fallback_reason"], "gpu_probe_failed");
+    let diag = run("diagnostic.get", json!({})).unwrap()["text"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        diag.contains("Aviso: sonda da GPU falhou; transcrição em CPU"),
+        "{diag}"
+    );
+    assert!(diag.contains("fallback CPU"), "{diag}");
+
+    // Cache gravado: segunda transcrição não repete a sonda falhada.
+    let before = probe_log(&env).len();
+    let source2 = env.import(0);
+    env.start(source2).unwrap();
+    wait("segunda transcrição concluída", || {
+        env.status(source2)["transcript"]["state"] == "complete"
+    });
+    assert_eq!(probe_log(&env).len(), before);
+}
+
+#[test]
+fn auto_probe_failure_falls_back_to_turbo_on_cpu_when_small_missing_and_ram_sufficient() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_only_models(&["whisper-turbo"]);
+    std::env::set_var(
+        "CLIPES_FAKE_TRANSCRIBE_LOG",
+        env.root.path().join("transcribe.log"),
+    );
+    std::env::set_var("CLIPES_FAKE_PROBE_FAIL", "fail:info");
+    let source = env.import(0);
+    env.start(source).unwrap();
+    wait("transcrição com turbo em CPU concluída", || {
+        env.status(source)["transcript"]["state"] == "complete"
+    });
+    assert_eq!(env.status(source)["transcript"]["model"], "whisper-turbo");
+    assert!(transcribe_log(&env)
+        .iter()
+        .all(|l| l.starts_with("whisper-turbo cpu int8")));
+    let hw = run("transcription.hardware.status", json!({})).unwrap();
+    assert_eq!(hw["effective"]["model"], "whisper-turbo");
+    assert_eq!(hw["effective"]["device"], "cpu");
+    assert_eq!(hw["fallback_reason"], "gpu_probe_failed");
+}
+
+#[test]
+fn auto_probe_failure_without_usable_cpu_model_fails_with_model_missing() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_only_models(&["whisper-turbo"]);
+    std::env::set_var("CLIPES_FAKE_RAM", format!("{},{}", 4 * GIB, 3 * GIB));
+    std::env::set_var(
+        "CLIPES_FAKE_PROBE_FAIL",
+        "fail:int8_float16,fail:float16,fail:int8",
+    );
+    let source = env.import(0);
+    env.start(source).unwrap();
+    env.wait_transcribe("failed");
+    let st = env.status(source);
+    assert_eq!(st["job"]["code"], "model_missing");
 }

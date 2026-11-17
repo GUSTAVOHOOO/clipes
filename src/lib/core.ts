@@ -45,11 +45,26 @@ const modelInstalledRevs = new Map<string, string>(
     ? []
     : [['whisper-small', MODEL_REV_V1['whisper-small']]],
 );
-const narrationGenerated = new Map<number, { blockId: number; voiceId: string; modelId: string; durationUs: number }[]>();
+type MockBlockAlignment = {
+  status: 'pending' | 'aligned' | 'needs_review' | 'approved' | 'failed';
+  choice: 'script' | 'spoken' | null;
+  activeTrack: 'script' | 'spoken' | null;
+  substitutions: number;
+  insertions: number;
+  deletions: number;
+  maxConsecutiveInsertions: number;
+  errorCode: string | null;
+  modelId: string;
+  spokenText: string | null;
+  wordCount: number;
+};
+const narrationGenerated = new Map<number, { blockId: number; voiceId: string; modelId: string; durationUs: number; alignment: MockBlockAlignment }[]>();
 const sourceTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('source-test');
 const componentsMissing = typeof location !== 'undefined' && new URLSearchParams(location.search).has('components-missing');
 const budgetTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('budget-test');
 const transcriptTest = sourceTest && typeof location !== 'undefined' && new URLSearchParams(location.search).has('transcript-test');
+const hardwareCpuMode = typeof location !== 'undefined' && new URLSearchParams(location.search).has('hardware-cpu');
+const hardwareProbeFallbackMode = typeof location !== 'undefined' && new URLSearchParams(location.search).has('hardware-probe-fallback');
 // Transcrição simulada: a Frase n tem as palavras n*10 (“Frase”) e n*10+1 (“n”); correções, desfazer e refazer valem por Fonte e posição.
 let mockProxyPolls = 0;
 const mockCorrected = new Map<string, string>();
@@ -76,7 +91,7 @@ let jobItems = [
   ] : []),
 ];
 let transcribeMock: { transcript: object | null; job: object | null } = groqRetryTest ? {transcript:{id:1,engine:'groq',state:'running',resume_us:4e6,duration_us:10e6,words:1},job:{id:99,state:'cancelled',progress:40}} : { transcript: null, job: null };
-if (groqRetryTest || componentsMissing || (typeof location !== 'undefined' && new URLSearchParams(location.search).has('hardware-cpu'))) sourceItems.push({id:4,path:'/test/downloaded.mp4',status:'available',available:true,verified:true,language:'pt',permission:{status:'none'}});
+if (groqRetryTest || componentsMissing || hardwareCpuMode || hardwareProbeFallbackMode) sourceItems.push({id:4,path:'/test/downloaded.mp4',status:'available',available:true,verified:true,language:'pt',permission:{status:'none'}});
 let providerMock = { kind: 'openai', endpoint: '', model: '', nativeSchema: false, context: null as number | null, keyLastFour: null as string | null, remote: false, confirmed: false, confirmedEndpoints: [] as string[] };
 type ProfileMock = { id: string; label: string; kind: string; endpoint: string; model: string; nativeSchema: boolean; ownKey: boolean; context: number | null; maxOutput?: number | null; timeoutSecs?: number | null; keyLastFour: string | null };
 let profileMocks: ProfileMock[] = [];
@@ -132,11 +147,11 @@ let groqConsent = groqRetryTest;
 let groqUncertain = groqRetryTest;
 let providerCliMock = { selected: '', codexConfirmed: false, claudeConfirmed: false, opencodeConfirmed: false, opencodeModel: '' };
 // Mock do hardware da Transcrição (#50): GPU NVIDIA por padrão, CPU com `?hardware-cpu=1`.
-const hardwareCpuMode = typeof location !== 'undefined' && new URLSearchParams(location.search).has('hardware-cpu');
 const GIB = 1024 ** 3;
-const hardwareMock = { manual: null as { model: string; device: string; compute_type: string } | null, probed: false };
+const hardwareMock = { manual: null as { model: string; device: string; compute_type: string } | null, probed: false, groupingEnabled: false };
 function hardwareMockDispatch(name: string, args: object): unknown {
-  const auto = hardwareCpuMode ? { model: 'whisper-small', device: 'cpu', compute_type: 'int8' } : { model: 'whisper-turbo', device: 'cuda', compute_type: 'int8_float16' };
+  const fallbackCpu = hardwareProbeFallbackMode && !hardwareMock.manual;
+  const auto = hardwareCpuMode || fallbackCpu ? { model: 'whisper-small', device: 'cpu', compute_type: 'int8' } : { model: 'whisper-turbo', device: 'cuda', compute_type: 'int8_float16' };
   const effective = hardwareMock.manual ?? auto;
   const cpu = effective.device === 'cpu';
   if (name === 'transcription.hardware.choose') {
@@ -146,6 +161,16 @@ function hardwareMockDispatch(name: string, args: object): unknown {
     return hardwareMockDispatch('transcription.hardware.status', {});
   }
   if (name === 'transcription.hardware.probe') { hardwareMock.probed = true; return { chosen: auto, verified: true, measured_at: 1790000000, attempts: [] }; }
+  if (name === 'transcription.grouping') {
+    const a = args as { enabled?: unknown };
+    if ('enabled' in a && a.enabled !== undefined) {
+      if (typeof a.enabled !== 'boolean') throw { code: 'invalid_grouping', message: 'Opção de agrupamento inválida.' };
+      hardwareMock.groupingEnabled = a.enabled;
+    }
+    const measured_size = cpu ? null : hardwareMock.probed ? 8 : null;
+    const size = hardwareMock.groupingEnabled ? (cpu ? 8 : (measured_size ?? 1)) : 1;
+    return { enabled: hardwareMock.groupingEnabled, size, measured_size };
+  }
   if (name === 'transcription.estimate') {
     const rate = cpu ? (effective.model === 'whisper-turbo' ? 4.1 : 2.57) : 0.386;
     const seconds = 5 + rate * 36000;
@@ -155,6 +180,7 @@ function hardwareMockDispatch(name: string, args: object): unknown {
         return {
           gpu: hardwareCpuMode ? null : { name: 'NVIDIA GeForce RTX 3050 Laptop GPU', driver: '616.92', total_mib: 4096, free_mib: 3962 },
           ram: { total: 16 * GIB, available: 9 * GIB }, cuda: !hardwareCpuMode, no_compatible_gpu: cpu, effective, manual: hardwareMock.manual !== null,
+          fallback_reason: fallbackCpu ? 'gpu_probe_failed' : null,
           probe: hardwareMock.probed ? { measured_at: 1790000000, verified: true, chosen: auto } : null, options, worker_installed: !componentsMissing,
         };
 }
@@ -473,21 +499,47 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       return { id: a.id } as T;
     }
     if (name === 'tts.models.cancel') return {} as T;
-    if (name === 'narration.get' || name === 'narration.generate' || name === 'narration.regenerate_block') {
-      const a = args as { candidate: number; block?: number; voiceId?: string };
+    if (name === 'narration.get' || name === 'narration.generate' || name === 'narration.regenerate_block' || name === 'narration.align' || name === 'narration.align_block' || name === 'narration.review') {
+      const a = args as { candidate: number; block?: number; voiceId?: string; choice?: 'script' | 'spoken' };
       const s = scriptMockDispatch('script.get', { candidate: a.candidate }) as { narrationAllowed: boolean; current: { blocks: { id: number; position: number; title: string; narration: string | null }[] } | null };
-      if (name !== 'narration.get') {
+      const defaultAlign = (text: string | null, idx: number): MockBlockAlignment => {
+        const deviationMode = typeof location !== 'undefined' && new URLSearchParams(location.search).has('narration-deviation');
+        const wordCount = (text ?? '').trim().split(/\s+/).filter(Boolean).length || 4;
+        if (deviationMode && idx === 0) {
+          return { status: 'needs_review', choice: null, activeTrack: null, substitutions: 0, insertions: 2, deletions: 0, maxConsecutiveInsertions: 2, errorCode: null, modelId: 'whisper-turbo', spokenText: `${text ?? 'Bloco'} extra improviso`, wordCount: wordCount + 2 };
+        }
+        return { status: 'aligned', choice: null, activeTrack: 'script', substitutions: 0, insertions: 0, deletions: 0, maxConsecutiveInsertions: 0, errorCode: null, modelId: 'whisper-turbo', spokenText: null, wordCount };
+      };
+      if (name === 'narration.generate' || name === 'narration.regenerate_block') {
         if (!s.narrationAllowed) throw { code: 'script_not_approved', message: 'Aprove o Roteiro.' };
         const voiceId = a.voiceId ?? channelProfileMock.narrationVoice ?? '13063';
         const modelId = ttsActiveModels.pt;
         const blocks = s.current?.blocks ?? [];
         const existing = narrationGenerated.get(a.candidate) ?? [];
         const blockDurationUs = selectionFlag('packaging-chapters') ? 12_000_000 : 3_200_000;
-        const next = blocks.map(b => (a.block === undefined || b.id === a.block)
-          ? { blockId: b.id, voiceId, modelId, durationUs: blockDurationUs }
-          : (existing.find(e => e.blockId === b.id) ?? { blockId: b.id, voiceId, modelId, durationUs: blockDurationUs }));
+        const next = blocks.map((b, idx) => (a.block === undefined || b.id === a.block)
+          ? { blockId: b.id, voiceId, modelId, durationUs: blockDurationUs, alignment: defaultAlign(b.narration, idx) }
+          : (existing.find(e => e.blockId === b.id) ?? { blockId: b.id, voiceId, modelId, durationUs: blockDurationUs, alignment: defaultAlign(b.narration, idx) }));
         narrationGenerated.set(a.candidate, next);
         return { job: 790, candidate: a.candidate } as T;
+      }
+      if (name === 'narration.align' || name === 'narration.align_block') {
+        const blocks = s.current?.blocks ?? [];
+        const existing = narrationGenerated.get(a.candidate) ?? [];
+        const next = existing.map((e, idx) => (a.block === undefined || e.blockId === a.block)
+          ? { ...e, alignment: defaultAlign(blocks.find(b => b.id === e.blockId)?.narration ?? null, idx) }
+          : e);
+        narrationGenerated.set(a.candidate, next);
+        return { job: 791, candidate: a.candidate, block: a.block ?? null } as T;
+      }
+      if (name === 'narration.review') {
+        const existing = narrationGenerated.get(a.candidate) ?? [];
+        const next = existing.map(e => e.blockId === a.block
+          ? { ...e, alignment: { ...e.alignment, status: 'approved' as const, choice: a.choice ?? 'script', activeTrack: a.choice ?? 'script' } }
+          : e);
+        narrationGenerated.set(a.candidate, next);
+        const updated = next.find(e => e.blockId === a.block);
+        return { candidate: a.candidate, block: a.block, alignment: updated?.alignment ?? null } as T;
       }
       const list = narrationGenerated.get(a.candidate) ?? [];
       const blocks = (s.current?.blocks ?? []).map(b => {
@@ -495,12 +547,14 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         return {
           blockId: b.id, position: b.position, title: b.title, versionId: 1, narrationText: b.narration,
           audio: hit ? { id: b.id, versionId: 1, voiceId: hit.voiceId, modelId: hit.modelId, relPath: `narrations/c${a.candidate}/b${b.id}-v1.wav`, durationUs: hit.durationUs, sampleRate: 24000, channels: 1, bytes: 153644, stale: false } : null,
+          alignment: hit ? hit.alignment : null,
         };
       });
       return {
         candidate: a.candidate, narrationAllowed: s.narrationAllowed, gateReason: s.narrationAllowed ? null : 'pending_blocks',
         language: 'pt', defaultVoiceId: channelProfileMock.narrationVoice ?? '13063', activeModelId: ttsActiveModels.pt,
-        busy: false, job: null, blocks, totalDurationUs: blocks.reduce((acc, b) => acc + (b.audio?.durationUs ?? 0), 0),
+        busy: false, job: null, alignBusy: false, alignJob: null, alignPrerequisitesReady: true,
+        blocks, totalDurationUs: blocks.reduce((acc, b) => acc + (b.audio?.durationUs ?? 0), 0),
       } as T;
     }
     if (name === 'components.ytdlp.status') return {installed:true,version:'test'} as T;
@@ -630,7 +684,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         { worker_installed: !componentsMissing, id: 'yunet', label: 'YuNet (reenquadramento)', repo: 'opencv/opencv_zoo', revision: revs.yunet, license: 'MIT', source_url: `https://github.com/opencv/opencv_zoo/tree/${revs.yunet}/models/face_detection_yunet`, size: 232589, installed: yunetInstalled !== null, installed_revision: yunetInstalled, update_available: yunetInstalled !== null && yunetInstalled !== revs.yunet, recommended: false, catalog_version: catalogMock.version, catalog_source: catalogMock.source },
       ] as T;
     }
-    if (name.startsWith('transcription.hardware.') || name === 'transcription.estimate') return hardwareMockDispatch(name, args) as T;
+    if (name.startsWith('transcription.hardware.') || name === 'transcription.estimate' || name === 'transcription.grouping') return hardwareMockDispatch(name, args) as T;
     if (name === 'components.models.download') {
       const a = args as { id: string; confirmed?: boolean };
       if (!a.confirmed) throw { code: 'confirmation_required', message: 'Confirme o download antes de iniciar' };

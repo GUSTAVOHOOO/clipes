@@ -1,0 +1,47 @@
+{
+  "description": "Referência acústica offline de amostra própria (#81) construída a partir dos dois áudios locais do repositório (PT e EN), sem dataset do #28 e sem rede.",
+  "blocks": [
+    {
+      "id": "pt-alienista",
+      "language": "pt",
+      "audio": "worker/src/clipes_worker/data/probe-pt.wav",
+      "script_text": "remotos, viver ali um certo médico, o doutor Simão Bacamarte, filho da nobreza da terra e o maior dos médicos do Brasil.",
+      "reference_words": [
+        { "index": 0, "word": "remotos,", "start_s": 0.06, "end_s": 0.83 },
+        { "index": 1, "word": "viver", "start_s": 1.19, "end_s": null },
+        { "index": 5, "word": "médico,", "start_s": 2.26, "end_s": 2.64 },
+        { "index": 6, "word": "o", "start_s": 3.29, "end_s": null },
+        { "index": 9, "word": "Bacamarte,", "start_s": null, "end_s": 4.87 },
+        { "index": 10, "word": "filho", "start_s": 5.48, "end_s": null },
+        { "index": 13, "word": "da", "start_s": null, "end_s": 6.35 },
+        { "index": 14, "word": "terra", "start_s": 6.46, "end_s": 6.78 },
+        { "index": 15, "word": "e", "start_s": 7.21, "end_s": null },
+        { "index": 19, "word": "médicos", "start_s": null, "end_s": 8.23 },
+        { "index": 20, "word": "do", "start_s": 8.33, "end_s": null },
+        { "index": 21, "word": "Brasil.", "start_s": null, "end_s": 8.89 }
+      ]
+    },
+    {
+      "id": "en-intro",
+      "language": "en",
+      "audio": "worker/src/clipes_worker/data/probe-en.wav",
+      "script_text": "My name is Richard Rogers. I'm Professor of New Media and Digital Culture at Media Studies at the University of Amsterdam, and I received my PhD.",
+      "reference_words": [
+        { "index": 0, "word": "My", "start_s": 0.00, "end_s": 0.18 },
+        { "index": 1, "word": "name", "start_s": 0.44, "end_s": null },
+        { "index": 6, "word": "Professor", "start_s": 2.02, "end_s": null },
+        { "index": 11, "word": "Digital", "start_s": null, "end_s": 3.41 },
+        { "index": 13, "word": "at", "start_s": 3.70, "end_s": 3.98 },
+        { "index": 14, "word": "Media", "start_s": 4.24, "end_s": null },
+        { "index": 15, "word": "Studies", "start_s": 4.73, "end_s": null },
+        { "index": 16, "word": "at", "start_s": null, "end_s": 5.10 },
+        { "index": 17, "word": "the", "start_s": 5.21, "end_s": null },
+        { "index": 19, "word": "of", "start_s": null, "end_s": 5.80 },
+        { "index": 20, "word": "Amsterdam,", "start_s": 5.85, "end_s": 6.43 },
+        { "index": 21, "word": "and", "start_s": 7.03, "end_s": null },
+        { "index": 24, "word": "my", "start_s": null, "end_s": 8.16 },
+        { "index": 25, "word": "PhD.", "start_s": 8.27, "end_s": null }
+      ]
+    }
+  ]
+}

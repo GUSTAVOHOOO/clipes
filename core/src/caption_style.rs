@@ -2,7 +2,7 @@
 mod layout;
 pub mod store;
 use crate::{export::captions::CaptionWord, CoreError};
-pub use layout::{prepare, Cue, Prepared, VisibleWord};
+pub use layout::{prepare, prepare_with_sentences, Cue, Prepared, VisibleWord};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
