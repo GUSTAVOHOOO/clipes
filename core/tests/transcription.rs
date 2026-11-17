@@ -86,6 +86,7 @@ impl Env {
         std::env::set_var("CLIPES_FAKE_WORKER_MODE", "transcribe");
         std::env::remove_var("CLIPES_FAKE_WORKER_CRASH");
         std::env::remove_var("CLIPES_FAKE_WORKER_HOLD");
+        std::env::remove_var("CLIPES_FAKE_WORKER_HELD");
         std::env::remove_var("CLIPES_FAKE_TRANSCRIBE_LOG");
         std::env::remove_var("CLIPES_FAKE_LANGUAGE_LOG");
         std::env::remove_var("CLIPES_FAKE_SILENT_BLOCKS");
@@ -1190,17 +1191,21 @@ fn source_language_is_editable_before_start_and_locked_after_progress() {
     assert_eq!(env.status(source)["language"], "fr");
 
     let hold = env.root.path().join("hold");
+    let held = env.root.path().join("held");
     fs::write(&hold, b"1").unwrap();
     std::env::set_var("CLIPES_FAKE_WORKER_HOLD", &hold);
+    std::env::set_var("CLIPES_FAKE_WORKER_HELD", &held);
     let started = run(
         "transcription.start",
         json!({"project":env.project,"source_id":source,"language":"de"}),
     )
     .unwrap();
     assert_eq!(env.status(source)["language"], "de");
-    wait("transcrição em andamento", || {
-        env.job_state("transcription")
-            .is_some_and(|(s, _)| s == "running")
+    wait("worker falso segurou a transcrição", || {
+        held.exists()
+            && env
+                .job_state("transcription")
+                .is_some_and(|(s, _)| s == "running")
     });
     assert_eq!(
         run(
@@ -1211,12 +1216,13 @@ fn source_language_is_editable_before_start_and_locked_after_progress() {
         .code,
         "transcription_busy"
     );
-    let crash = env.root.path().join("crash");
-    fs::write(&crash, b"1").unwrap();
-    std::env::set_var("CLIPES_FAKE_WORKER_CRASH", &crash);
     run("jobs.cancel", json!({"id":started["job_id"]})).unwrap();
-    fs::remove_file(&hold).unwrap();
+    // Só solta o worker depois de confirmar o cancelamento, para não concluir o 1º bloco antes do sinal chegar.
     env.wait_transcribe("cancelled");
+    fs::remove_file(&hold).unwrap();
+    let _ = fs::remove_file(&held);
+    std::env::remove_var("CLIPES_FAKE_WORKER_HOLD");
+    std::env::remove_var("CLIPES_FAKE_WORKER_HELD");
 
     // 0 blocos gravados: ainda permite editar antes de retomar com blocos.
     assert_eq!(env.status(source)["transcript"]["resume_us"], 0);
@@ -1228,6 +1234,9 @@ fn source_language_is_editable_before_start_and_locked_after_progress() {
     assert_eq!(env.status(source)["language"], "it");
 
     // Após gravar o 1º bloco, trava o idioma como fixo da Fonte.
+    let crash = env.root.path().join("crash");
+    fs::write(&crash, b"1").unwrap();
+    std::env::set_var("CLIPES_FAKE_WORKER_CRASH", &crash);
     env.start(source).unwrap();
     env.wait_transcribe("failed");
     assert_eq!(env.status(source)["transcript"]["resume_us"], 8_000_000);
