@@ -155,6 +155,7 @@ fn transcribe_worker() {
                     }
                     let start = params["start_us"].as_i64().unwrap();
                     let end = params["end_us"].as_i64().unwrap();
+                    let layout = params["layout"].as_str().unwrap_or("face");
                     let x = if std::env::var_os("CLIPES_FAKE_REFRAME_INVALID").is_some() {
                         5.0
                     } else {
@@ -164,12 +165,24 @@ fn transcribe_worker() {
                         &mut out,
                         serde_json::json!({"v":1,"type":"progress","id":id,"stage":"reframe_faces","percentage":50,"message":"Analisando"}),
                     );
-                    send(
-                        &mut out,
-                        serde_json::json!({"v":1,"type":"result","id":id,"data":{
+                    let mut data = serde_json::json!({
                         "schemaVersion":1,"revision":1,"status":"suggestion",
                         "segments":[{"startUs":start,"endUs":end,"reason":"start","keyframes":[{"timeUs":start,"x":x,"y":0.0,"width":0.31640625,"height":1.0,"confidence":0.9}]}],
-                        "metrics":{"device":"cpu","frames":1,"elapsedMs":1}}}),
+                        "metrics":{"device":"cpu","frames":1,"elapsedMs":1}
+                    });
+                    if matches!(layout, "gameplay_webcam" | "two_people") {
+                        data["segments"][0]["keyframes"][0]["confidence"] = serde_json::json!(0.45);
+                        data["secondarySegments"] = serde_json::json!([
+                            {"startUs":start,"endUs":end,"reason":"start","keyframes":[{"timeUs":start,"x":0.40,"y":0.0,"width":0.45,"height":1.0,"confidence":0.5}]}
+                        ]);
+                        if layout == "gameplay_webcam" {
+                            data["metrics"]["webcamDetected"] = serde_json::json!(true);
+                            data["metrics"]["webcamConfidence"] = serde_json::json!(0.45);
+                        }
+                    }
+                    send(
+                        &mut out,
+                        serde_json::json!({"v":1,"type":"result","id":id,"data":data}),
                     );
                     continue;
                 }

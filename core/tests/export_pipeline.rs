@@ -1,6 +1,8 @@
-use clipes_core::editor::crop::{CropKeyframe, CropSegment};
+use clipes_core::editor::crop::{
+    resolve_plan, CropKeyframe, CropLayout, CropPanelDoc, CropSegment, CropTimeline, DualCropPanels,
+};
 use clipes_core::export::pipeline::{
-    self, Audio, Crop, Encoder, ExportPlan, Stage, Subtitle, Video,
+    self, Audio, Crop, CropLayoutStage, Encoder, ExportPlan, Stage, Subtitle, Video,
 };
 
 #[test]
@@ -116,4 +118,92 @@ fn crop_stage_uses_exact_1_and_scales_before_crop_only_when_animated() {
     assert!(pan_plan.video_filters[1].contains("flags=lanczos"));
     assert!(pan_plan.video_filters[3].starts_with("crop@c="));
     assert!(pan_plan.video_filters[3].contains(":exact=1"));
+}
+
+#[test]
+fn crop_layout_stage_builds_fit_single_and_dual_stacked_plans() {
+    let fit_plan = resolve_plan(
+        &CropTimeline {
+            layout: Some(CropLayout::Fit),
+            ..Default::default()
+        },
+        16.0 / 9.0,
+        0,
+        2_000_000,
+    );
+    let fit_export = pipeline::with_crop_plan(
+        "libx264",
+        None,
+        Some(CropLayoutStage {
+            crop_plan: &fit_plan,
+            start_us: 0,
+            end_us: 2_000_000,
+        }),
+    );
+    assert!(fit_export.dual_video.is_none());
+    assert!(fit_export.video_filters[0].starts_with("scale="));
+    assert!(fit_export
+        .video_filters
+        .iter()
+        .any(|f| f.starts_with("pad=1080:1920")));
+
+    let gw_plan = resolve_plan(
+        &CropTimeline {
+            layout: Some(CropLayout::GameplayWebcam),
+            split_ratio: Some(0.30),
+            gameplay_webcam: Some(DualCropPanels {
+                top: CropPanelDoc {
+                    suggested: None,
+                    edits: vec![
+                        CropKeyframe {
+                            time_us: 0,
+                            x: 0.02,
+                            y: 0.02,
+                            width: 0.25,
+                            height: 0.24,
+                            confidence: None,
+                            cut: false,
+                        },
+                        CropKeyframe {
+                            time_us: 1_000_000,
+                            x: 0.04,
+                            y: 0.02,
+                            width: 0.25,
+                            height: 0.24,
+                            confidence: None,
+                            cut: false,
+                        },
+                    ],
+                },
+                bottom: CropPanelDoc::default(),
+            }),
+            ..Default::default()
+        },
+        16.0 / 9.0,
+        0,
+        2_000_000,
+    );
+    let gw_export = pipeline::with_crop_plan(
+        "libx264",
+        None,
+        Some(CropLayoutStage {
+            crop_plan: &gw_plan,
+            start_us: 0,
+            end_us: 2_000_000,
+        }),
+    );
+    let dual = gw_export.dual_video.as_ref().unwrap();
+    assert_eq!(gw_export.crop_files.len(), 1);
+    assert_eq!(gw_export.crop_files[0].0, "crop_top.cmd");
+    assert!(dual.top_filters[0].contains("sendcmd@t=f=crop_top.cmd"));
+    assert!(dual
+        .top_filters
+        .iter()
+        .any(|f| f.starts_with("pad=1080:576")));
+    assert!(dual
+        .bot_filters
+        .iter()
+        .any(|f| f.starts_with("pad=1080:1344")));
+    let graph = pipeline::build_dual_filter_complex(&gw_export);
+    assert!(graph.contains("vstack=inputs=2,ass=filename=captions.ass:fontsdir=fonts[vout]"));
 }

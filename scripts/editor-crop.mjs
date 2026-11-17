@@ -121,6 +121,51 @@ async function exerciseEditorCrop(page, url) {
   assert.equal(await cropDrawer.locator('[data-crop-keyframe]').count(), 2, 'refazer análise preserva correções manuais');
   await checkAt(140.0, 0, 'segmento editado mantém correção manual após refazer análise');
 
+  // #78: cinco layouts no preview e no painel Enquadrar.
+  // 1. Tela cheia (área): reutiliza keyframes manuais do #71, sem rastreio automático de rosto.
+  await cropDrawer.locator('[data-crop-layout-option="fullscreen_roi"]').click();
+  await page.waitForFunction(() => document.querySelector('[data-crop-layout="fullscreen_roi"]'));
+  assert.equal(await cropDrawer.locator('[data-crop-keyframe]').count(), 2, 'fullscreen_roi reutiliza keyframes do #71');
+  assert.equal(await cropDrawer.getByRole('button', { name: /Sugerir enquadramento|Refazer análise/ }).count(), 0);
+
+  // 2. Jogo + webcam: baixa confiança, proporção 30/70 ajustável e retângulos independentes por painel.
+  await cropDrawer.locator('[data-crop-layout-option="gameplay_webcam"]').click();
+  await page.waitForFunction(() => document.querySelector('[data-crop-layout="gameplay_webcam"][data-split-ratio="0.3000"]'));
+  await cropDrawer.locator('[data-webcam-low-confidence-notice]').waitFor();
+  assert.equal(await preview.locator('[data-preview-panel]').count(), 2, 'jogo + webcam renderiza dois painéis no preview');
+  await cropDrawer.getByRole('button', { name: 'Sugerir enquadramento', exact: true }).click();
+  await cropDrawer.getByText(/baixa confiança aplicada/).waitFor();
+  const topVideo = preview.locator('[data-preview-panel="top"] video');
+  const botVideo = preview.locator('[data-preview-panel="bottom"] video');
+  await page.waitForFunction(() => Boolean(document.querySelector('[data-preview-panel="bottom"] video')?.dataset.cropRect));
+  const topRectBefore = await topVideo.evaluate(v => v.dataset.cropRect);
+  await cropDrawer.locator('[data-crop-panel-tab="bottom"]').click();
+  await handle.focus();
+  await page.keyboard.press('ArrowRight');
+  await page.waitForFunction(() => document.querySelector('[data-crop-edits-count="1"]'));
+  assert.equal(await topVideo.evaluate(v => v.dataset.cropRect), topRectBefore, 'editar jogo mantém webcam');
+  assert.ok(await botVideo.evaluate(v => Boolean(v.dataset.cropRect)), 'painel de jogo tem crop aplicado');
+
+  // Ajusta divisão para 40%.
+  const splitSlider = cropDrawer.locator('[data-crop-split-slider]');
+  await splitSlider.fill('40');
+  await splitSlider.dispatchEvent('change');
+  await page.waitForFunction(() => document.querySelector('[data-split-ratio="0.4000"]'));
+
+  // 3. Duas pessoas empilhadas (50/50).
+  await cropDrawer.locator('[data-crop-layout-option="two_people"]').click();
+  await page.waitForFunction(() => document.querySelector('[data-crop-layout="two_people"][data-split-ratio="0.5000"]'));
+  assert.equal(await preview.locator('[data-preview-panel]').count(), 2);
+
+  // 4. Fit/centro.
+  await cropDrawer.locator('[data-crop-layout-option="fit"]').click();
+  await page.waitForFunction(() => document.querySelector('[data-crop-layout="fit"]'));
+  assert.equal(await preview.locator('[data-preview-panel]').count(), 0);
+
+  // Undo desfaz troca de layout voltando para two_people.
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => document.querySelector('[data-crop-layout="two_people"]'));
+
   await page.screenshot({ path: 'shots/editor-crop.png' });
   await page.keyboard.press('Escape');
   await cropDrawer.waitFor({ state: 'hidden' });

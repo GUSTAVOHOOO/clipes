@@ -179,3 +179,90 @@ def timeline(frames, start_us, end_us, aspect):
             "confidence": track.detection.score if track and track.missed == 0 else 0.0,
         })
     return {"schemaVersion": 1, "revision": 1, "status": "suggestion", "segments": segments}
+
+
+def two_people_timelines(frames, start_us, end_us, aspect, split_ratio=0.50):
+    """Sugestão para duas pessoas empilhadas (#78): dois painéis independentes."""
+    from .reframe_webcam import panel_crop_size, panel_heights
+
+    top_h, bot_h = panel_heights(split_ratio, 0.30, 0.70)
+    top_w, top_ch = panel_crop_size(aspect, 1080.0 / top_h)
+    bot_w, bot_ch = panel_crop_size(aspect, 1080.0 / bot_h)
+    tracker = Tracker()
+    top_cam, bot_cam = None, None
+    top_id, bot_id = None, None
+    previous = start_us
+    top_segments, bot_segments = [], []
+
+    def clamp_center(point, cw, ch):
+        return (
+            max(cw / 2, min(1.0 - cw / 2, point[0])),
+            max(ch / 2, min(1.0 - ch / 2, point[1])),
+        )
+
+    for time_us, detections, scene in frames:
+        if scene:
+            tracker = Tracker()
+            top_cam, bot_cam = None, None
+            top_id, bot_id = None, None
+        tracker.update(detections)
+        visible = sorted(
+            (t for t in tracker.tracks if t.missed == 0),
+            key=lambda t: t.detection.strength,
+            reverse=True,
+        )
+        by_id = {t.id: t for t in visible}
+        if top_id is not None and top_id not in by_id and not any(t.id == top_id for t in tracker.tracks):
+            top_id = None
+        if bot_id is not None and bot_id not in by_id and not any(t.id == bot_id for t in tracker.tracks):
+            bot_id = None
+        if top_id is None and bot_id is None and len(visible) >= 2:
+            pair = sorted(visible[:2], key=lambda t: t.detection.center[0])
+            top_id, bot_id = pair[0].id, pair[1].id
+        else:
+            for t in visible:
+                if t.id in (top_id, bot_id):
+                    continue
+                if top_id is None:
+                    top_id = t.id
+                elif bot_id is None:
+                    bot_id = t.id
+
+        top_track = by_id.get(top_id)
+        bot_track = by_id.get(bot_id)
+        top_target = clamp_center(top_track.detection.center if top_track else (0.25, 0.5), top_w, top_ch)
+        bot_target = clamp_center(bot_track.detection.center if bot_track else (0.75, 0.5), bot_w, bot_ch)
+        dt = max(1, time_us - previous) / 1_000_000
+
+        if top_cam is None or bot_cam is None:
+            top_cam = Camera(*top_target)
+            bot_cam = Camera(*bot_target)
+            reason = "scene" if scene and top_segments else "start"
+            if top_segments:
+                top_segments[-1]["endUs"] = time_us
+                bot_segments[-1]["endUs"] = time_us
+            top_segments.append({"startUs": time_us, "endUs": end_us, "reason": reason, "keyframes": []})
+            bot_segments.append({"startUs": time_us, "endUs": end_us, "reason": reason, "keyframes": []})
+            top_point, bot_point = top_target, bot_target
+        else:
+            top_point = top_cam.step(*top_target, dt)
+            bot_point = bot_cam.step(*bot_target, dt)
+        previous = time_us
+        top_segments[-1]["keyframes"].append({
+            "timeUs": time_us,
+            "x": max(0.0, min(1.0 - top_w, top_point[0] - top_w / 2)),
+            "y": max(0.0, min(1.0 - top_ch, top_point[1] - top_ch / 2)),
+            "width": top_w,
+            "height": top_ch,
+            "confidence": top_track.detection.score if top_track else 0.0,
+        })
+        bot_segments[-1]["keyframes"].append({
+            "timeUs": time_us,
+            "x": max(0.0, min(1.0 - bot_w, bot_point[0] - bot_w / 2)),
+            "y": max(0.0, min(1.0 - bot_ch, bot_point[1] - bot_ch / 2)),
+            "width": bot_w,
+            "height": bot_ch,
+            "confidence": bot_track.detection.score if bot_track else 0.0,
+        })
+
+    return top_segments, bot_segments

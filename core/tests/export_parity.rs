@@ -880,6 +880,7 @@ fn real_ffmpeg_manual_crop_edits_without_suggested_match_preview_and_hard_cut() 
                 ..kf(2_000_000, 0.65, 0.0, w_full, 1.0)
             },
         ],
+        ..Default::default()
     };
     let resolved = resolve(&timeline);
     let output = root.path().join("manual-crop-export.mp4");
@@ -921,5 +922,268 @@ fn real_ffmpeg_manual_crop_edits_without_suggested_match_preview_and_hard_cut() 
     assert!(
         mean_rgb_diff(&before_manual_cut, &after_manual_cut) > 15.0,
         "corte seco manual não mudou o enquadramento"
+    );
+}
+
+#[test]
+fn real_ffmpeg_v1_layouts_fit_roi_gameplay_webcam_and_two_people_match_preview_parity() {
+    use clipes_core::editor::crop::{
+        evaluate_plan, resolve_plan, CropKeyframe, CropLayout, CropPanelDoc, CropTimeline,
+        DualCropPanels,
+    };
+    use clipes_core::export::render::render_crop_plan;
+
+    let root = tempfile::tempdir().unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", root.path().join("data"));
+    let program = std::env::var("CLIPES_TEST_FFMPEG").unwrap_or("ffmpeg".into());
+    let source = root.path().join("layouts-src169.mp4");
+    // Quadrantes coloridos distintos (640x360):
+    // Topo-esquerda (webcam) = vermelho; Topo-direita = verde; Base-esquerda = azul; Base-direita = amarelo.
+    ffmpeg(&[
+        "-v",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=blue:size=640x360:rate=25:duration=3,drawbox=x=0:y=0:w=320:h=180:color=red:t=fill,drawbox=x=320:y=0:w=320:h=180:color=green:t=fill,drawbox=x=320:y=180:w=320:h=180:color=yellow:t=fill",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=440:duration=3",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-threads",
+        "2",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-y",
+        source.to_str().unwrap(),
+    ]);
+
+    let make_kf = |time_us, x, y, width, height| CropKeyframe {
+        time_us,
+        x,
+        y,
+        width,
+        height,
+        confidence: None,
+        cut: false,
+    };
+
+    // 1. Fit/centro com zoom/pan manual opcional
+    let fit_plan = resolve_plan(
+        &CropTimeline {
+            layout: Some(CropLayout::Fit),
+            ..Default::default()
+        },
+        16.0 / 9.0,
+        0,
+        2_000_000,
+    );
+    let fit_out = root.path().join("layout-fit.mp4");
+    render_crop_plan(
+        Path::new(&program),
+        &RenderInput {
+            source: source.clone(),
+            output: fit_out.clone(),
+            start_us: 0,
+            end_us: 2_000_000,
+            audio_track: 1,
+            words: vec![],
+            crop: vec![],
+        },
+        &fit_plan,
+        &CancelToken::new(),
+        &mut |_| {},
+    )
+    .unwrap();
+    let fit_frame = frame(&fit_out, 0.5, "scale=270:480");
+    // Barra preta no topo (y=10) no modo Fit
+    assert!(fit_frame[10 * 270 * 3] < 15 && fit_frame[10 * 270 * 3 + 1] < 15);
+
+    // 2. Tela cheia com área de interesse (ROI manual 9:16 no lado direito verde/amarelo)
+    let w916 = 9.0 / 16.0 / (16.0 / 9.0);
+    let roi_plan = resolve_plan(
+        &CropTimeline {
+            layout: Some(CropLayout::FullscreenRoi),
+            edits: vec![make_kf(0, 1.0 - w916, 0.0, w916, 1.0)],
+            ..Default::default()
+        },
+        16.0 / 9.0,
+        0,
+        2_000_000,
+    );
+    let roi_out = root.path().join("layout-roi.mp4");
+    render_crop_plan(
+        Path::new(&program),
+        &RenderInput {
+            source: source.clone(),
+            output: roi_out.clone(),
+            start_us: 0,
+            end_us: 2_000_000,
+            audio_track: 1,
+            words: vec![],
+            crop: vec![],
+        },
+        &roi_plan,
+        &CancelToken::new(),
+        &mut |_| {},
+    )
+    .unwrap();
+    let roi_eval = evaluate_plan(&roi_plan, 500_000);
+    let roi_actual = frame(&roi_out, 0.5, "scale=270:480");
+    let roi_ref = frame(
+        &source,
+        0.5,
+        &format!(
+            "scale=w='2*ceil(1080/{:.9}/2)':h='2*ceil(1920/{:.9}/2)':flags=lanczos,setsar=1,crop=1080:1920:x='min(iw-1080,max(0,{:.9}*iw))':y='min(ih-1920,max(0,{:.9}*ih))':exact=1,scale=270:480",
+            roi_eval[0].rect.width, roi_eval[0].rect.height, roi_eval[0].rect.x, roi_eval[0].rect.y
+        ),
+    );
+    assert!(mean_rgb_diff(&roi_actual, &roi_ref) < 5.0);
+
+    // 3. Jogo + webcam (30% webcam vermelha em cima + 70% jogo com pan horizontal embaixo)
+    let gw_plan = resolve_plan(
+        &CropTimeline {
+            layout: Some(CropLayout::GameplayWebcam),
+            split_ratio: Some(0.30),
+            gameplay_webcam: Some(DualCropPanels {
+                top: CropPanelDoc {
+                    suggested: None,
+                    edits: vec![make_kf(
+                        0,
+                        0.02,
+                        0.02,
+                        0.30,
+                        0.30 * (16.0 / 9.0) / (1080.0 / 576.0),
+                    )],
+                },
+                bottom: CropPanelDoc {
+                    suggested: None,
+                    edits: vec![
+                        make_kf(0, 0.05, 0.50, 0.22, 0.48),
+                        make_kf(1_500_000, 0.55, 0.50, 0.22, 0.48),
+                    ],
+                },
+            }),
+            ..Default::default()
+        },
+        16.0 / 9.0,
+        0,
+        2_000_000,
+    );
+    let gw_out = root.path().join("layout-gw.mp4");
+    render_crop_plan(
+        Path::new(&program),
+        &RenderInput {
+            source: source.clone(),
+            output: gw_out.clone(),
+            start_us: 0,
+            end_us: 2_000_000,
+            audio_track: 1,
+            words: vec![],
+            crop: vec![],
+        },
+        &gw_plan,
+        &CancelToken::new(),
+        &mut |_| {},
+    )
+    .unwrap();
+    let gw_info = probe(&gw_out);
+    assert_eq!(
+        (
+            gw_info["streams"][0]["width"].as_i64(),
+            gw_info["streams"][0]["height"].as_i64()
+        ),
+        (Some(1080), Some(1920))
+    );
+    for clip_t in [0.2_f64, 0.8, 1.6] {
+        let eval = evaluate_plan(&gw_plan, (clip_t * 1_000_000.0).round() as i64);
+        assert_eq!(eval.len(), 2);
+        let actual = frame(&gw_out, clip_t, "scale=270:480");
+        // Em 270x480: topo 30% = 144px (vermelho), base 70% = 336px (azul -> amarelo conforme pan).
+        let top_px = &actual[(70 * 270 + 135) * 3..(70 * 270 + 135) * 3 + 3];
+        assert!(
+            top_px[0] > 180 && top_px[1] < 60 && top_px[2] < 60,
+            "topo deveria ser webcam vermelha em t={clip_t}: {top_px:?}"
+        );
+        let bot_px = &actual[(320 * 270 + 135) * 3..(320 * 270 + 135) * 3 + 3];
+        if clip_t < 0.3 {
+            assert!(
+                bot_px[2] > 170 && bot_px[0] < 70,
+                "base em t={clip_t} deveria ser azul: {bot_px:?}"
+            );
+        } else if clip_t > 1.5 {
+            assert!(
+                bot_px[0] > 170 && bot_px[1] > 170 && bot_px[2] < 70,
+                "base em t={clip_t} deveria ser amarela: {bot_px:?}"
+            );
+        }
+    }
+
+    // 4. Duas pessoas empilhadas (50/50: topo verde, base azul)
+    let tp_plan = resolve_plan(
+        &CropTimeline {
+            layout: Some(CropLayout::TwoPeople),
+            split_ratio: Some(0.50),
+            two_people: Some(DualCropPanels {
+                top: CropPanelDoc {
+                    suggested: None,
+                    edits: vec![make_kf(
+                        0,
+                        0.55,
+                        0.02,
+                        0.30,
+                        0.30 * (16.0 / 9.0) / (1080.0 / 960.0),
+                    )],
+                },
+                bottom: CropPanelDoc {
+                    suggested: None,
+                    edits: vec![make_kf(
+                        0,
+                        0.05,
+                        0.55,
+                        0.30,
+                        0.30 * (16.0 / 9.0) / (1080.0 / 960.0),
+                    )],
+                },
+            }),
+            ..Default::default()
+        },
+        16.0 / 9.0,
+        0,
+        2_000_000,
+    );
+    let tp_out = root.path().join("layout-tp.mp4");
+    render_crop_plan(
+        Path::new(&program),
+        &RenderInput {
+            source: source.clone(),
+            output: tp_out.clone(),
+            start_us: 0,
+            end_us: 2_000_000,
+            audio_track: 1,
+            words: vec![],
+            crop: vec![],
+        },
+        &tp_plan,
+        &CancelToken::new(),
+        &mut |_| {},
+    )
+    .unwrap();
+    let tp_actual = frame(&tp_out, 0.5, "scale=270:480");
+    let tp_top = &tp_actual[(120 * 270 + 135) * 3..(120 * 270 + 135) * 3 + 3];
+    let tp_bot = &tp_actual[(360 * 270 + 135) * 3..(360 * 270 + 135) * 3 + 3];
+    assert!(
+        tp_top[1] > 100 && tp_top[0] < 60 && tp_top[2] < 60,
+        "topo duas pessoas deveria ser verde: {tp_top:?}"
+    );
+    assert!(
+        tp_bot[2] > 170 && tp_bot[0] < 60 && tp_bot[1] < 60,
+        "base duas pessoas deveria ser azul: {tp_bot:?}"
     );
 }

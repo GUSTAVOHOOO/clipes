@@ -649,6 +649,7 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             resolved_bounds: None,
             resolved_silences: None,
             resolved_crop: None,
+            resolved_crop_plan: None,
             resolved_captions: None,
             overwrite: confirmed,
         };

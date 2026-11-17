@@ -120,6 +120,11 @@ fn echo(request: &Request) -> Value {
 }
 
 fn source_row(source: i64) -> Result<(i64, f64), CoreError> {
+    let (duration, fps, _) = source_info(source)?;
+    Ok((duration, fps))
+}
+
+pub(crate) fn source_info(source: i64) -> Result<(i64, f64, f64), CoreError> {
     let (duration, metadata): (i64, String) = projects::with_reader(|c| {
         c.query_row(
             "SELECT duration_us, metadata FROM sources WHERE id=?1",
@@ -129,7 +134,43 @@ fn source_row(source: i64) -> Result<(i64, f64), CoreError> {
         .optional()
     })?
     .ok_or_else(|| error("source_not_found", "Fonte não encontrada."))?;
-    Ok((duration, fps_of(&metadata)))
+    Ok((duration, fps_of(&metadata), aspect_of(&metadata)))
+}
+
+/// Razão de aspecto efetiva do primeiro vídeo (considerando SAR e rotação 90°/270°).
+pub(crate) fn aspect_of(metadata: &str) -> f64 {
+    let parsed = serde_json::from_str::<Value>(metadata).ok();
+    let Some(stream) = parsed.as_ref().and_then(|m| {
+        m["streams"]
+            .as_array()?
+            .iter()
+            .find(|s| s["codec_type"] == "video")
+    }) else {
+        return 16.0 / 9.0;
+    };
+    let (Some(w), Some(h)) = (stream["width"].as_f64(), stream["height"].as_f64()) else {
+        return 16.0 / 9.0;
+    };
+    if w <= 0.0 || h <= 0.0 {
+        return 16.0 / 9.0;
+    }
+    let sar = stream["sample_aspect_ratio"]
+        .as_str()
+        .and_then(|s| s.split_once(':'))
+        .and_then(|(n, d)| {
+            let (n, d) = (n.parse::<f64>().ok()?, d.parse::<f64>().ok()?);
+            (n > 0.0 && d > 0.0).then_some(n / d)
+        })
+        .unwrap_or(1.0);
+    let rotated = stream["side_data_list"].as_array().is_some_and(|a| {
+        a.iter().any(|item| {
+            item["rotation"]
+                .as_i64()
+                .is_some_and(|r| r.abs() % 180 == 90)
+        })
+    });
+    let aspect = (w * sar) / h;
+    crop::sanitize_aspect(if rotated { 1.0 / aspect } else { aspect })
 }
 
 /// Taxa de quadros do primeiro vídeo (`avg_frame_rate` do ffprobe, "num/den").
@@ -170,11 +211,12 @@ fn open(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         result["startUs"].as_i64().unwrap(),
         result["endUs"].as_i64().unwrap(),
     );
-    let (duration, fps) = source_row(request.source)?;
+    let (duration, fps, aspect) = source_info(request.source)?;
     let (window_start, window_end) = proxy::window(start, end, duration)?;
     result["windowStartUs"] = json!(window_start);
     result["windowEndUs"] = json!(window_end);
     result["fps"] = json!(fps);
+    result["sourceAspect"] = json!(aspect);
     if request.candidate.is_none() {
         result["request"]
             .as_object_mut()

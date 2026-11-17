@@ -1,15 +1,25 @@
 //! Etapas compõem um plano, nunca executam processos. Veja docs/contribuindo/export.md.
-use crate::editor::crop::{interpolate_in_segment, CropKeyframe, CropSegment};
+use crate::editor::crop::{
+    interpolate_in_segment, CropKeyframe, CropLayout, CropSegment, PanelFitMode, ResolvedCropPlan,
+};
 use crate::editor::silences::{KeptSegment, SPLICE_FADE_US};
 use std::fmt::Write;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DualPanelFilters {
+    pub top_filters: Vec<String>,
+    pub bot_filters: Vec<String>,
+}
 
 #[derive(Default, Debug)]
 pub struct ExportPlan {
     pub video_filters: Vec<String>,
+    pub dual_video: Option<DualPanelFilters>,
     pub audio_filters: Vec<String>,
     pub encoder: String,
     pub encoder_args: Vec<String>,
     pub crop_commands: Option<String>,
+    pub crop_files: Vec<(String, String)>,
 }
 /// Alvos de loudness das plataformas (#63): -14 LUFS integrado, true peak de -1 dBTP, LRA 11 LU.
 pub const TARGET_LUFS: f64 = -14.0;
@@ -145,23 +155,23 @@ fn linear_expr(t0: f64, dt: f64, v0: f64, v1: f64) -> String {
     }
 }
 
-fn scale_w_expr(cw: &str, ch: &str) -> String {
-    format!("max(2,2*ceil(if(gte(dar*({cw})/({ch}),1080/1920),1080/({cw}),1920*dar/({ch}))/2))")
+fn scale_w_expr(cw: &str, ch: &str, target_w: u32, target_h: u32) -> String {
+    format!("max(2,2*ceil(if(gte(dar*({cw})/({ch}),{target_w}/{target_h}),{target_w}/({cw}),{target_h}*dar/({ch}))/2))")
 }
 
-fn scale_h_expr(cw: &str, ch: &str) -> String {
-    format!("max(2,2*ceil(if(gte(dar*({cw})/({ch}),1080/1920),1080/(({cw})*dar),1920/({ch}))/2))")
+fn scale_h_expr(cw: &str, ch: &str, target_w: u32, target_h: u32) -> String {
+    format!("max(2,2*ceil(if(gte(dar*({cw})/({ch}),{target_w}/{target_h}),{target_w}/(({cw})*dar),{target_h}/({ch}))/2))")
 }
 
-fn crop_w_expr(ratio: f64) -> String {
+fn crop_w_expr(ratio: f64, target_w: u32, target_h: u32) -> String {
     format!(
-        "min(1080,max(2,trunc(if(gte(a*({ratio:.9}),1080/1920),1080,1920*a*({ratio:.9}))/2)*2))"
+        "min({target_w},max(2,trunc(if(gte(a*({ratio:.9}),{target_w}/{target_h}),{target_w},{target_h}*a*({ratio:.9}))/2)*2))"
     )
 }
 
-fn crop_h_expr(ratio: f64) -> String {
+fn crop_h_expr(ratio: f64, target_w: u32, target_h: u32) -> String {
     format!(
-        "min(1920,max(2,trunc(if(gte(a*({ratio:.9}),1080/1920),1080/(a*({ratio:.9})),1920)/2)*2))"
+        "min({target_h},max(2,trunc(if(gte(a*({ratio:.9}),{target_w}/{target_h}),{target_w}/(a*({ratio:.9})),{target_h})/2)*2))"
     )
 }
 
@@ -173,128 +183,268 @@ fn clamp_y_expr(y_expr: &str, h_expr: &str) -> String {
     format!("min(((1-({h_expr}))/({h_expr}))*oh,max(0,(({y_expr})/({h_expr}))*oh))")
 }
 
+#[allow(clippy::too_many_arguments)]
+fn build_panel_crop_filters(
+    segments: &[CropSegment],
+    start_us: i64,
+    end_us: i64,
+    target_w: u32,
+    target_h: u32,
+    tag_suffix: &str,
+    cmd_filename: &str,
+) -> Option<(Vec<String>, Option<String>)> {
+    let sliced = slice_crop_segments(segments, start_us, end_us);
+    let first = sliced.first().and_then(|s| s.keyframes.first())?;
+    let all_kfs: Vec<&CropKeyframe> = sliced.iter().flat_map(|s| &s.keyframes).collect();
+    let is_static = all_kfs.iter().all(|k| {
+        (k.x - first.x).abs() < 1e-9
+            && (k.y - first.y).abs() < 1e-9
+            && (k.width - first.width).abs() < 1e-9
+            && (k.height - first.height).abs() < 1e-9
+    });
+    if is_static {
+        let filters = vec![
+            format!(
+                "crop=w='max(2,trunc(iw*{:.9}/2)*2)':h='max(2,trunc(ih*{:.9}/2)*2)':x='min(iw-ow,max(0,round(iw*{:.9})))':y='min(ih-oh,max(0,round(ih*{:.9})))':exact=1",
+                first.width, first.height, first.x, first.y
+            ),
+            format!(
+                "scale=w='if(gte(dar,{target_w}/{target_h}),{target_w},max(2,trunc({target_h}*dar/2)*2))':h='if(gte(dar,{target_w}/{target_h}),max(2,trunc({target_w}/dar/2)*2),{target_h})':flags=lanczos"
+            ),
+            "setsar=1".into(),
+            format!("pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:color=black"),
+        ];
+        return Some((filters, None));
+    }
+
+    let constant_size = all_kfs
+        .iter()
+        .all(|k| (k.width - first.width).abs() < 1e-9 && (k.height - first.height).abs() < 1e-9);
+    let first_ratio = first.width / first.height;
+    let min_w = all_kfs
+        .iter()
+        .map(|k| k.width)
+        .fold(f64::INFINITY, f64::min);
+    let min_h = all_kfs
+        .iter()
+        .map(|k| k.height)
+        .fold(f64::INFINITY, f64::min);
+    let scale_tag = format!("scale@s{tag_suffix}");
+    let crop_tag = format!("crop@c{tag_suffix}");
+    let send_tag = if tag_suffix.is_empty() {
+        format!("sendcmd=f={cmd_filename}")
+    } else {
+        format!("sendcmd@{tag_suffix}=f={cmd_filename}")
+    };
+    let mut commands = String::new();
+    let mut init_crop_x = None;
+    let mut init_crop_y = None;
+    let mut init_ratio = first_ratio;
+
+    for seg in &sliced {
+        let mut prev_ratio: Option<f64> = None;
+        for idx in 0..seg.keyframes.len() {
+            let a = &seg.keyframes[idx];
+            let t_a = (a.time_us - start_us) as f64 / 1_000_000.0;
+            let (x_expr, y_expr, cw_expr, ch_expr) = if idx + 1 < seg.keyframes.len() {
+                let b = &seg.keyframes[idx + 1];
+                let dt = (b.time_us - a.time_us) as f64 / 1_000_000.0;
+                (
+                    linear_expr(t_a, dt, a.x, b.x),
+                    linear_expr(t_a, dt, a.y, b.y),
+                    linear_expr(t_a, dt, a.width, b.width),
+                    linear_expr(t_a, dt, a.height, b.height),
+                )
+            } else {
+                (
+                    format!("{:.9}", a.x),
+                    format!("{:.9}", a.y),
+                    format!("{:.9}", a.width),
+                    format!("{:.9}", a.height),
+                )
+            };
+            let cx = clamp_x_expr(&x_expr, &cw_expr);
+            let cy = clamp_y_expr(&y_expr, &ch_expr);
+            let sw = scale_w_expr(&cw_expr, &ch_expr, target_w, target_h);
+            let sh = scale_h_expr(&cw_expr, &ch_expr, target_w, target_h);
+            let ratio = a.width / a.height;
+            if init_crop_x.is_none() {
+                init_crop_x = Some(cx.clone());
+                init_crop_y = Some(cy.clone());
+                init_ratio = ratio;
+            }
+            let mut parts = Vec::new();
+            if !constant_size {
+                parts.push(format!("{scale_tag} w '{sw}'"));
+                parts.push(format!("{scale_tag} h '{sh}'"));
+                if prev_ratio.is_none_or(|r| (r - ratio).abs() > 1e-6) {
+                    parts.push(format!(
+                        "{crop_tag} w '{}'",
+                        crop_w_expr(ratio, target_w, target_h)
+                    ));
+                    parts.push(format!(
+                        "{crop_tag} h '{}'",
+                        crop_h_expr(ratio, target_w, target_h)
+                    ));
+                    prev_ratio = Some(ratio);
+                }
+            }
+            parts.push(format!("{crop_tag} x '{cx}'"));
+            parts.push(format!("{crop_tag} y '{cy}'"));
+            commands.push_str(&format!("{t_a:.6} {};\n", parts.join(", ")));
+        }
+    }
+
+    let mut filters = vec![send_tag];
+    if constant_size {
+        let cw = format!("{:.9}", first.width);
+        let ch = format!("{:.9}", first.height);
+        filters.push(format!(
+            "scale=w='{}':h='{}':flags=lanczos",
+            scale_w_expr(&cw, &ch, target_w, target_h),
+            scale_h_expr(&cw, &ch, target_w, target_h)
+        ));
+    } else {
+        let max_cw = format!("{min_w:.9}");
+        let max_ch = format!("{min_h:.9}");
+        filters.push(format!(
+            "{scale_tag}=w='{}':h='{}':flags=lanczos:eval=frame",
+            scale_w_expr(&max_cw, &max_ch, target_w, target_h),
+            scale_h_expr(&max_cw, &max_ch, target_w, target_h)
+        ));
+    }
+    filters.push("setsar=1".into());
+    filters.push(format!(
+        "{crop_tag}=w='{}':h='{}':x='{}':y='{}':exact=1",
+        crop_w_expr(init_ratio, target_w, target_h),
+        crop_h_expr(init_ratio, target_w, target_h),
+        init_crop_x.unwrap(),
+        init_crop_y.unwrap(),
+    ));
+    filters.push(format!(
+        "pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:color=black"
+    ));
+    Some((filters, Some(commands)))
+}
+
 impl Stage for Crop<'_> {
     fn apply(&self, plan: &mut ExportPlan) {
-        let sliced = slice_crop_segments(self.segments, self.start_us, self.end_us);
-        let Some(first) = sliced.first().and_then(|s| s.keyframes.first()) else {
+        let Some((filters, cmd)) = build_panel_crop_filters(
+            self.segments,
+            self.start_us,
+            self.end_us,
+            1080,
+            1920,
+            "",
+            "crop.cmd",
+        ) else {
             Video.apply(plan);
             return;
         };
-        let all_kfs: Vec<&CropKeyframe> = sliced.iter().flat_map(|s| &s.keyframes).collect();
-        let is_static = all_kfs.iter().all(|k| {
-            (k.x - first.x).abs() < 1e-9
-                && (k.y - first.y).abs() < 1e-9
-                && (k.width - first.width).abs() < 1e-9
-                && (k.height - first.height).abs() < 1e-9
-        });
-        if is_static {
-            // Corte estático: crop exact=1 seguido de scale lanczos + Fit (#66).
-            plan.video_filters.extend([
-                format!(
-                    "crop=w='max(2,trunc(iw*{:.9}/2)*2)':h='max(2,trunc(ih*{:.9}/2)*2)':x='min(iw-ow,max(0,round(iw*{:.9})))':y='min(ih-oh,max(0,round(ih*{:.9})))':exact=1",
-                    first.width, first.height, first.x, first.y
-                ),
-                "scale=w='if(gte(dar,1080/1920),1080,max(2,trunc(1920*dar/2)*2))':h='if(gte(dar,1080/1920),max(2,trunc(1080/dar/2)*2),1920)':flags=lanczos".into(),
-                "setsar=1".into(),
-                "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black".into(),
-            ]);
+        if let Some(commands) = cmd {
+            plan.crop_files.push(("crop.cmd".into(), commands.clone()));
+            plan.crop_commands = Some(commands);
+        }
+        plan.video_filters.extend(filters);
+    }
+}
+
+pub struct CropLayoutStage<'a> {
+    pub crop_plan: &'a ResolvedCropPlan,
+    pub start_us: i64,
+    pub end_us: i64,
+}
+
+fn is_full_frame_static(segments: &[CropSegment]) -> bool {
+    segments.len() == 1 && segments[0].keyframes.len() == 1 && {
+        let k = &segments[0].keyframes[0];
+        k.x.abs() < 1e-9
+            && k.y.abs() < 1e-9
+            && (k.width - 1.0).abs() < 1e-9
+            && (k.height - 1.0).abs() < 1e-9
+    }
+}
+
+impl Stage for CropLayoutStage<'_> {
+    fn apply(&self, plan: &mut ExportPlan) {
+        if self.crop_plan.panels.len() == 2 {
+            let top = &self.crop_plan.panels[0];
+            let bot = &self.crop_plan.panels[1];
+            let (top_filters, top_cmd) = build_panel_crop_filters(
+                &top.segments,
+                self.start_us,
+                self.end_us,
+                top.target_width,
+                top.target_height,
+                "t",
+                "crop_top.cmd",
+            )
+            .unwrap_or_else(|| {
+                (
+                    vec![
+                        format!(
+                            "scale=w='if(gte(dar,{}/{}),{},max(2,trunc({}*dar/2)*2))':h='if(gte(dar,{}/{}),max(2,trunc({}/dar/2)*2),{})'",
+                            top.target_width, top.target_height, top.target_width, top.target_height,
+                            top.target_width, top.target_height, top.target_width, top.target_height
+                        ),
+                        "setsar=1".into(),
+                        format!("pad={}:{}:(ow-iw)/2:(oh-ih)/2:color=black", top.target_width, top.target_height),
+                    ],
+                    None,
+                )
+            });
+            let (bot_filters, bot_cmd) = build_panel_crop_filters(
+                &bot.segments,
+                self.start_us,
+                self.end_us,
+                bot.target_width,
+                bot.target_height,
+                "b",
+                "crop_bot.cmd",
+            )
+            .unwrap_or_else(|| {
+                (
+                    vec![
+                        format!(
+                            "scale=w='if(gte(dar,{}/{}),{},max(2,trunc({}*dar/2)*2))':h='if(gte(dar,{}/{}),max(2,trunc({}/dar/2)*2),{})'",
+                            bot.target_width, bot.target_height, bot.target_width, bot.target_height,
+                            bot.target_width, bot.target_height, bot.target_width, bot.target_height
+                        ),
+                        "setsar=1".into(),
+                        format!("pad={}:{}:(ow-iw)/2:(oh-ih)/2:color=black", bot.target_width, bot.target_height),
+                    ],
+                    None,
+                )
+            });
+            if let Some(cmd) = top_cmd {
+                plan.crop_files.push(("crop_top.cmd".into(), cmd));
+            }
+            if let Some(cmd) = bot_cmd {
+                plan.crop_files.push(("crop_bot.cmd".into(), cmd));
+            }
+            plan.dual_video = Some(DualPanelFilters {
+                top_filters,
+                bot_filters,
+            });
             return;
         }
-
-        let constant_size = all_kfs.iter().all(|k| {
-            (k.width - first.width).abs() < 1e-9 && (k.height - first.height).abs() < 1e-9
-        });
-        let first_ratio = first.width / first.height;
-        let min_w = all_kfs
-            .iter()
-            .map(|k| k.width)
-            .fold(f64::INFINITY, f64::min);
-        let min_h = all_kfs
-            .iter()
-            .map(|k| k.height)
-            .fold(f64::INFINITY, f64::min);
-        let mut commands = String::new();
-        let mut init_crop_x = None;
-        let mut init_crop_y = None;
-        let mut init_ratio = first_ratio;
-
-        for seg in &sliced {
-            let mut prev_ratio: Option<f64> = None;
-            for idx in 0..seg.keyframes.len() {
-                let a = &seg.keyframes[idx];
-                let t_a = (a.time_us - self.start_us) as f64 / 1_000_000.0;
-                let (x_expr, y_expr, cw_expr, ch_expr) = if idx + 1 < seg.keyframes.len() {
-                    let b = &seg.keyframes[idx + 1];
-                    let dt = (b.time_us - a.time_us) as f64 / 1_000_000.0;
-                    (
-                        linear_expr(t_a, dt, a.x, b.x),
-                        linear_expr(t_a, dt, a.y, b.y),
-                        linear_expr(t_a, dt, a.width, b.width),
-                        linear_expr(t_a, dt, a.height, b.height),
-                    )
-                } else {
-                    (
-                        format!("{:.9}", a.x),
-                        format!("{:.9}", a.y),
-                        format!("{:.9}", a.width),
-                        format!("{:.9}", a.height),
-                    )
-                };
-                let cx = clamp_x_expr(&x_expr, &cw_expr);
-                let cy = clamp_y_expr(&y_expr, &ch_expr);
-                let sw = scale_w_expr(&cw_expr, &ch_expr);
-                let sh = scale_h_expr(&cw_expr, &ch_expr);
-                let ratio = a.width / a.height;
-                if init_crop_x.is_none() {
-                    init_crop_x = Some(cx.clone());
-                    init_crop_y = Some(cy.clone());
-                    init_ratio = ratio;
-                }
-                let mut parts = Vec::new();
-                if !constant_size {
-                    parts.push(format!("scale@s w '{sw}'"));
-                    parts.push(format!("scale@s h '{sh}'"));
-                    if prev_ratio.is_none_or(|r| (r - ratio).abs() > 1e-6) {
-                        parts.push(format!("crop@c w '{}'", crop_w_expr(ratio)));
-                        parts.push(format!("crop@c h '{}'", crop_h_expr(ratio)));
-                        prev_ratio = Some(ratio);
-                    }
-                }
-                parts.push(format!("crop@c x '{cx}'"));
-                parts.push(format!("crop@c y '{cy}'"));
-                commands.push_str(&format!("{t_a:.6} {};\n", parts.join(", ")));
-            }
+        let Some(panel) = self.crop_plan.panels.first() else {
+            Video.apply(plan);
+            return;
+        };
+        if self.crop_plan.layout == CropLayout::Fit
+            && panel.fit_mode == PanelFitMode::Fit
+            && is_full_frame_static(&panel.segments)
+        {
+            Video.apply(plan);
+            return;
         }
-
-        plan.crop_commands = Some(commands);
-        plan.video_filters.push("sendcmd=f=crop.cmd".into());
-        if constant_size {
-            let cw = format!("{:.9}", first.width);
-            let ch = format!("{:.9}", first.height);
-            plan.video_filters.push(format!(
-                "scale=w='{}':h='{}':flags=lanczos",
-                scale_w_expr(&cw, &ch),
-                scale_h_expr(&cw, &ch)
-            ));
-        } else {
-            let max_cw = format!("{min_w:.9}");
-            let max_ch = format!("{min_h:.9}");
-            plan.video_filters.push(format!(
-                "scale@s=w='{}':h='{}':flags=lanczos:eval=frame",
-                scale_w_expr(&max_cw, &max_ch),
-                scale_h_expr(&max_cw, &max_ch)
-            ));
+        Crop {
+            segments: &panel.segments,
+            start_us: self.start_us,
+            end_us: self.end_us,
         }
-        plan.video_filters.push("setsar=1".into());
-        plan.video_filters.push(format!(
-            "crop@c=w='{}':h='{}':x='{}':y='{}':exact=1",
-            crop_w_expr(init_ratio),
-            crop_h_expr(init_ratio),
-            init_crop_x.unwrap(),
-            init_crop_y.unwrap(),
-        ));
-        plan.video_filters
-            .push("pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black".into());
+        .apply(plan);
     }
 }
 impl Stage for Video {
@@ -369,6 +519,43 @@ pub fn with_crop(encoder: &str, measured: Option<Measured>, crop: Option<Crop<'_
         stage.apply(&mut plan);
     }
     plan
+}
+
+pub fn with_crop_plan(
+    encoder: &str,
+    measured: Option<Measured>,
+    crop_plan: Option<CropLayoutStage<'_>>,
+) -> ExportPlan {
+    let mut plan = ExportPlan::default();
+    let selected = SelectedEncoder(encoder);
+    let loudness = Loudness(measured);
+    let video_stage: &dyn Stage = match &crop_plan {
+        Some(c) if !c.crop_plan.panels.is_empty() => c,
+        _ => &Video,
+    };
+    for stage in [video_stage, &Subtitle, &Audio, &loudness, &selected] {
+        stage.apply(&mut plan);
+    }
+    plan
+}
+
+/// Grafo para composição multi-painel sem emenda de silêncios (#78).
+pub fn build_dual_filter_complex(plan: &ExportPlan) -> String {
+    let dual = plan
+        .dual_video
+        .as_ref()
+        .expect("dual_video obrigatório para build_dual_filter_complex");
+    let post = if plan.video_filters.is_empty() {
+        String::new()
+    } else {
+        format!(",{}", plan.video_filters.join(","))
+    };
+    format!(
+        "[0:v:0]split=2[vti][vbi];[vti]{}[vtop];[vbi]{}[vbot];[vtop][vbot]vstack=inputs=2{}[vout]",
+        dual.top_filters.join(","),
+        dual.bot_filters.join(","),
+        post
+    )
 }
 
 fn sec(us: i64) -> String {
@@ -447,16 +634,22 @@ pub fn build_spliced_filter_complex(
     plan: &ExportPlan,
 ) -> String {
     let n = segments.len();
-    let (pre_crop, post_video) = if plan.crop_commands.is_some() && plan.video_filters.len() > 1 {
+    let (mut out, post_video) = if let Some(dual) = &plan.dual_video {
+        (
+            format!(
+                "[0:v:0]split=2[vti][vbi];[vti]{}[vtop];[vbi]{}[vbot];[vtop][vbot]vstack=inputs=2,split={n}",
+                dual.top_filters.join(","),
+                dual.bot_filters.join(",")
+            ),
+            plan.video_filters.as_slice(),
+        )
+    } else if (!plan.crop_files.is_empty() || plan.crop_commands.is_some())
+        && plan.video_filters.len() > 1
+    {
         let (head, tail) = plan.video_filters.split_at(plan.video_filters.len() - 1);
-        (Some(head), tail)
+        (format!("[0:v:0]{},split={n}", head.join(",")), tail)
     } else {
-        (None, plan.video_filters.as_slice())
-    };
-    let mut out = if let Some(crop_filters) = pre_crop {
-        format!("[0:v:0]{},split={n}", crop_filters.join(","))
-    } else {
-        format!("[0:v:0]split={n}")
+        (format!("[0:v:0]split={n}"), plan.video_filters.as_slice())
     };
     for i in 0..n {
         let _ = write!(out, "[v{i}]");

@@ -8,15 +8,21 @@ import { clock, fill } from '@/features/projects/selectionFormat';
 import { toProxySeconds, type PreviewProxyInfo } from '@/features/projects/CutPreview';
 import {
   clampCropRect,
-  cropZoomFactor,
-  defaultCropRect,
+  defaultPanelRect,
+  effectiveCropLayout,
+  fitZoomFactor,
   interpolateCrop,
+  panelZoomFactor,
   removeCropKeyframe,
+  resolveCropPlan,
+  splitBounds,
   toggleCropKeyframeCut,
   upsertCropKeyframe,
-  zoomCropRect,
+  zoomFitRect,
+  zoomPanelRect,
   type ClipCrop,
   type CropKeyframe,
+  type CropLayout,
   type CropRect,
 } from './cropMath';
 
@@ -36,12 +42,39 @@ type ReframeStatus = {
   error: { code: string; message: string } | null;
 };
 
+export type CropPanelSlot = 'primary' | 'top' | 'bottom';
+
+const LAYOUT_ORDER: CropLayout[] = ['face', 'fit', 'gameplay_webcam', 'two_people', 'fullscreen_roi'];
+
 const texts = {
   'pt-BR': {
+    layoutTitle: 'Layout do Corte',
+    layouts: {
+      face: 'Rosto',
+      fit: 'Fit / centro',
+      gameplay_webcam: 'Jogo + webcam',
+      two_people: 'Duas pessoas',
+      fullscreen_roi: 'Tela cheia (área)',
+    } as Record<CropLayout, string>,
+    layoutDesc: {
+      face: 'Fill 9:16 seguindo o rosto com sugestão automática e correção manual.',
+      fit: 'Fonte inteira centralizada com barras pretas e zoom/pan manuais opcionais.',
+      gameplay_webcam: 'Webcam no topo e jogo embaixo. Posicione o retângulo da webcam manualmente ou use a sugestão de baixa confiança.',
+      two_people: 'Duas janelas empilhadas com pan e zoom próprios por pessoa.',
+      fullscreen_roi: 'Fill 9:16 com área de interesse manual (mover e zoom, sem rastreio de rosto).',
+    } as Record<CropLayout, string>,
+    panelSelector: 'Painel ativo',
+    panelNames: {
+      gameplay_webcam: { top: 'Webcam', bottom: 'Jogo' },
+      two_people: { top: 'Pessoa 1 (topo)', bottom: 'Pessoa 2 (base)' },
+    } as Record<'gameplay_webcam' | 'two_people', { top: string; bottom: string }>,
+    splitLabelWebcam: 'Altura da webcam',
+    splitLabelTwoPeople: 'Divisão superior',
+    webcamLowConfidence: 'Caminho principal: posicione ou redimensione o retângulo da webcam manualmente. A detecção automática tem baixa confiança.',
     sourceFrame: 'Quadro da Fonte',
-    cropHandle: 'Área de recorte 9:16 na Fonte',
+    cropHandle: 'Área de recorte na Fonte',
     sourceVideo: 'Vídeo da Fonte para enquadramento',
-    hint: 'Arraste o recorte sobre a Fonte 16:9 ou use as setas com ele em foco (Shift para passo maior). Cada alteração cria um keyframe nesta posição.',
+    hint: 'Arraste o retângulo sobre a Fonte 16:9, clique para posicionar ou use as setas (Shift para passo maior).',
     preparingPreview: 'Aguardando o preview da Fonte…',
     zoom: 'Zoom do recorte',
     center: 'Centralizar',
@@ -53,7 +86,9 @@ const texts = {
     clearEdits: 'Limpar correções',
     statusTitle: 'Sugestão e correções',
     suggestionPresent: 'Sugestão automática: {segments} segmento(s). Segmentos sem keyframe manual seguem a sugestão.',
-    suggestionAbsent: 'Sem sugestão automática. Sem correções manuais, o export usa Fit 9:16.',
+    suggestionLowConf: 'Sugestão automática de baixa confiança aplicada ({confidence}%). Ajuste o retângulo manualmente se necessário.',
+    suggestionAbsent: 'Sem sugestão automática. Sem correções manuais, usa o enquadramento padrão do layout.',
+    manualOnlyHint: 'Layout manual: sem rastreio automático de rosto.',
     editsCount: '{count} keyframe(s) manual(is)',
     noEdits: 'Nenhuma correção manual gravada.',
     keyframesTitle: 'Keyframes manuais',
@@ -70,10 +105,33 @@ const texts = {
     } as Record<string, string>,
   },
   en: {
+    layoutTitle: 'Clip layout',
+    layouts: {
+      face: 'Face',
+      fit: 'Fit / center',
+      gameplay_webcam: 'Game + webcam',
+      two_people: 'Two people',
+      fullscreen_roi: 'Fullscreen (ROI)',
+    } as Record<CropLayout, string>,
+    layoutDesc: {
+      face: '9:16 Fill following the face with automatic suggestion and manual edits.',
+      fit: 'Entire Source centered with black bars and optional manual pan/zoom.',
+      gameplay_webcam: 'Webcam on top and gameplay below. Position the webcam rectangle manually or use the low-confidence suggestion.',
+      two_people: 'Two stacked panels with independent pan and zoom per person.',
+      fullscreen_roi: '9:16 Fill with manual area of interest (move and zoom, no face tracking).',
+    } as Record<CropLayout, string>,
+    panelSelector: 'Active panel',
+    panelNames: {
+      gameplay_webcam: { top: 'Webcam', bottom: 'Game' },
+      two_people: { top: 'Person 1 (top)', bottom: 'Person 2 (bottom)' },
+    } as Record<'gameplay_webcam' | 'two_people', { top: string; bottom: string }>,
+    splitLabelWebcam: 'Webcam height',
+    splitLabelTwoPeople: 'Top split',
+    webcamLowConfidence: 'Primary path: position or resize the webcam rectangle manually. Automatic detection is low-confidence.',
     sourceFrame: 'Source frame',
-    cropHandle: '9:16 crop area on Source',
+    cropHandle: 'Crop area on Source',
     sourceVideo: 'Source video for framing',
-    hint: 'Drag the crop over the 16:9 Source or use arrow keys when focused (Shift for larger step). Each change sets a keyframe at this time.',
+    hint: 'Drag the rectangle over the 16:9 Source, click to place, or use arrow keys (Shift for larger step).',
     preparingPreview: 'Waiting for Source preview…',
     zoom: 'Crop zoom',
     center: 'Center',
@@ -85,7 +143,9 @@ const texts = {
     clearEdits: 'Clear edits',
     statusTitle: 'Suggestion and edits',
     suggestionPresent: 'Automatic suggestion: {segments} segment(s). Segments without manual keyframes keep the suggestion.',
-    suggestionAbsent: 'No automatic suggestion. Without manual edits, export uses 9:16 Fit.',
+    suggestionLowConf: 'Low-confidence automatic suggestion applied ({confidence}%). Adjust the rectangle manually if needed.',
+    suggestionAbsent: 'No automatic suggestion. Without manual edits, uses the layout default.',
+    manualOnlyHint: 'Manual layout: no automatic face tracking.',
     editsCount: '{count} manual keyframe(s)',
     noEdits: 'No manual edits recorded.',
     keyframesTitle: 'Manual keyframes',
@@ -114,9 +174,12 @@ export function CropPanel({
   sourceUs,
   fps,
   rate,
+  sourceAspect: initialAspect,
   proxy,
   crop,
   busy,
+  onPreviewLayout,
+  onCommitLayout,
   onPreviewEdits,
   onCommitEdits,
   onSuggestionApplied,
@@ -129,11 +192,14 @@ export function CropPanel({
   sourceUs: number;
   fps: number;
   rate: number;
+  sourceAspect?: number;
   proxy: PreviewProxyInfo | null;
   crop: ClipCrop;
   busy: boolean;
-  onPreviewEdits: (edits: CropKeyframe[] | null) => void;
-  onCommitEdits: (edits: CropKeyframe[]) => void;
+  onPreviewLayout: (next: { layout: CropLayout; splitRatio: number } | null) => void;
+  onCommitLayout: (layout: CropLayout, splitRatio?: number) => void;
+  onPreviewEdits: (next: { panel: CropPanelSlot; layout: CropLayout; edits: CropKeyframe[] } | null) => void;
+  onCommitEdits: (edits: CropKeyframe[], panel: CropPanelSlot, layout: CropLayout) => void;
   onSuggestionApplied: (answer: CropAnswer) => void;
   onSeek: (us: number) => void;
   onPause: () => void;
@@ -141,12 +207,16 @@ export function CropPanel({
   const t = useText(texts);
   const videoRef = useRef<HTMLVideoElement>(null);
   const handleRef = useRef<HTMLDivElement>(null);
-  const [sourceAspect, setSourceAspect] = useState(16 / 9);
+  const [sourceAspect, setSourceAspect] = useState(initialAspect && initialAspect > 0.1 ? initialAspect : 16 / 9);
+  const [activeSubPanel, setActiveSubPanel] = useState<'top' | 'bottom'>('top');
   const [reframe, setReframe] = useState<ReframeStatus | null>(null);
   const [reframeError, setReframeError] = useState('');
   const zoomDragRef = useRef(false);
+  const splitDragRef = useRef(false);
   const dragRef = useRef<{
     pointerId: number;
+    panel: CropPanelSlot;
+    layout: CropLayout;
     offsetX: number;
     offsetY: number;
     rect: CropRect;
@@ -157,12 +227,68 @@ export function CropPanel({
   } | null>(null);
 
   const matchToleranceUs = useMemo(() => Math.max(10_000, Math.round(500_000 / Math.max(1, fps))), [fps]);
+  const activeLayout = effectiveCropLayout(crop);
+  const isDual = activeLayout === 'gameplay_webcam' || activeLayout === 'two_people';
+  const activeSlot: CropPanelSlot = isDual ? activeSubPanel : 'primary';
 
-  const currentRect = useMemo(
-    () => interpolateCrop(crop.resolved, sourceUs) ?? defaultCropRect(sourceAspect),
-    [crop.resolved, sourceUs, sourceAspect],
+  const plan = useMemo(
+    () => crop.plan ?? resolveCropPlan(crop, sourceAspect, range.startUs, range.endUs),
+    [crop, sourceAspect, range.startUs, range.endUs],
   );
-  const zoomPct = Math.round(cropZoomFactor(currentRect, sourceAspect) * 100);
+
+  const bounds = splitBounds(activeLayout);
+  const splitPct = Math.round(plan.splitRatio * 100);
+  const [splitUi, setSplitUi] = useState(splitPct);
+  useEffect(() => {
+    if (!splitDragRef.current) setSplitUi(splitPct);
+  }, [splitPct]);
+
+  const topPanel = plan.panels[0];
+  const botPanel = isDual ? plan.panels[1] : null;
+  const topRect = useMemo(
+    () => (topPanel ? interpolateCrop(topPanel.segments, sourceUs) : null) ?? defaultPanelRect(sourceAspect, 9 / 16),
+    [topPanel, sourceUs, sourceAspect],
+  );
+  const botRect = useMemo(
+    () => (botPanel ? interpolateCrop(botPanel.segments, sourceUs) : null),
+    [botPanel, sourceUs],
+  );
+
+  const activePanelPlan = activeSlot === 'bottom' && botPanel ? botPanel : topPanel;
+  const activePanelAspect = activePanelPlan ? activePanelPlan.targetWidth / activePanelPlan.targetHeight : 9 / 16;
+  const currentRect = activeSlot === 'bottom' && botRect ? botRect : topRect;
+
+  const activeEdits = useMemo(() => {
+    if (activeLayout === 'gameplay_webcam') {
+      const dual = crop.gameplayWebcam;
+      return activeSubPanel === 'bottom' ? (dual?.bottom.edits ?? []) : (dual?.top.edits ?? []);
+    }
+    if (activeLayout === 'two_people') {
+      const dual = crop.twoPeople;
+      return activeSubPanel === 'bottom' ? (dual?.bottom.edits ?? []) : (dual?.top.edits ?? []);
+    }
+    return crop.edits;
+  }, [activeLayout, activeSubPanel, crop.edits, crop.gameplayWebcam, crop.twoPeople]);
+
+  const activeSuggested = useMemo(() => {
+    if (activeLayout === 'gameplay_webcam') {
+      const dual = crop.gameplayWebcam;
+      return activeSubPanel === 'bottom' ? dual?.bottom.suggested : dual?.top.suggested;
+    }
+    if (activeLayout === 'two_people') {
+      const dual = crop.twoPeople;
+      return activeSubPanel === 'bottom' ? dual?.bottom.suggested : dual?.top.suggested;
+    }
+    if (activeLayout === 'face') return crop.suggested;
+    return null;
+  }, [activeLayout, activeSubPanel, crop.suggested, crop.gameplayWebcam, crop.twoPeople]);
+
+  const maxZoom = activeLayout === 'gameplay_webcam' && activeSubPanel === 'top' ? 6 : isDual ? 4 : 2.5;
+  const zoomPct = Math.round(
+    (activeLayout === 'fit'
+      ? fitZoomFactor(currentRect)
+      : panelZoomFactor(currentRect, sourceAspect, activePanelAspect, maxZoom)) * 100,
+  );
   const [zoomUi, setZoomUi] = useState(zoomPct);
   useEffect(() => {
     if (!zoomDragRef.current) setZoomUi(zoomPct);
@@ -217,12 +343,12 @@ export function CropPanel({
     };
   }, [reframe, clipId, onSuggestionApplied, t.errors]);
 
-  const commitAtPlayhead = (rect: CropRect, timeUs = Math.round(sourceUs)) => {
-    onCommitEdits(upsertCropKeyframe(crop.edits, { timeUs, ...rect }, matchToleranceUs));
+  const commitAtPlayhead = (rect: CropRect, timeUs = Math.round(sourceUs), slot = activeSlot, edits = activeEdits) => {
+    onCommitEdits(upsertCropKeyframe(edits, { timeUs, ...rect }, matchToleranceUs), slot, activeLayout);
   };
 
-  const previewAtTime = (baseEdits: CropKeyframe[], timeUs: number, rect: CropRect) => {
-    onPreviewEdits(upsertCropKeyframe(baseEdits, { timeUs, ...rect }, matchToleranceUs));
+  const previewAtTime = (baseEdits: CropKeyframe[], timeUs: number, rect: CropRect, slot: CropPanelSlot, layout: CropLayout) => {
+    onPreviewEdits({ panel: slot, layout, edits: upsertCropKeyframe(baseEdits, { timeUs, ...rect }, matchToleranceUs) });
   };
 
   const computeRectFromPointer = (e: PointerEvent<HTMLDivElement>, offsetX: number, offsetY: number, baseRect: CropRect): CropRect => {
@@ -246,27 +372,41 @@ export function CropPanel({
     if (box.width <= 0 || box.height <= 0) return;
     const nx = (e.clientX - box.left) / box.width;
     const ny = (e.clientY - box.top) / box.height;
-    const onHandle = Boolean((e.target as HTMLElement).closest('[data-crop-handle]'));
-    const offsetX = onHandle ? nx - currentRect.x : currentRect.width / 2;
-    const offsetY = onHandle ? ny - currentRect.y : currentRect.height / 2;
+    const hitSlotAttr = (e.target as HTMLElement).closest('[data-crop-rect-slot]')?.getAttribute('data-crop-rect-slot');
+    let slot: CropPanelSlot = activeSlot;
+    if (isDual && (hitSlotAttr === 'top' || hitSlotAttr === 'bottom')) {
+      slot = hitSlotAttr;
+      setActiveSubPanel(hitSlotAttr);
+    }
+    const targetRect = slot === 'bottom' && botRect ? botRect : topRect;
+    const targetEdits = isDual
+      ? (activeLayout === 'gameplay_webcam'
+        ? (slot === 'bottom' ? (crop.gameplayWebcam?.bottom.edits ?? []) : (crop.gameplayWebcam?.top.edits ?? []))
+        : (slot === 'bottom' ? (crop.twoPeople?.bottom.edits ?? []) : (crop.twoPeople?.top.edits ?? [])))
+      : crop.edits;
+    const onHandle = Boolean(hitSlotAttr);
+    const offsetX = onHandle ? nx - targetRect.x : targetRect.width / 2;
+    const offsetY = onHandle ? ny - targetRect.y : targetRect.height / 2;
     const timeUs = Math.round(sourceUs);
     const initialRect = onHandle
-      ? currentRect
-      : clampCropRect({ ...currentRect, x: nx - offsetX, y: ny - offsetY });
+      ? targetRect
+      : clampCropRect({ ...targetRect, x: nx - offsetX, y: ny - offsetY });
     dragRef.current = {
       pointerId: e.pointerId,
+      panel: slot,
+      layout: activeLayout,
       offsetX,
       offsetY,
-      rect: currentRect,
+      rect: targetRect,
       lastRect: initialRect,
       timeUs,
-      baseEdits: crop.edits,
+      baseEdits: targetEdits,
       moved: !onHandle,
     };
     handleRef.current?.focus({ preventScroll: true });
     e.currentTarget.setPointerCapture(e.pointerId);
     if (!onHandle) {
-      previewAtTime(crop.edits, timeUs, initialRect);
+      previewAtTime(targetEdits, timeUs, initialRect, slot, activeLayout);
     }
   };
 
@@ -277,7 +417,7 @@ export function CropPanel({
     const nextRect = computeRectFromPointer(e, drag.offsetX, drag.offsetY, drag.rect);
     drag.lastRect = nextRect;
     drag.moved = true;
-    previewAtTime(drag.baseEdits, drag.timeUs, nextRect);
+    previewAtTime(drag.baseEdits, drag.timeUs, nextRect, drag.panel, drag.layout);
   };
 
   const finishDrag = (e: PointerEvent<HTMLDivElement>, commit: boolean) => {
@@ -291,19 +431,22 @@ export function CropPanel({
     onPreviewEdits(null);
     if (commit && drag.moved) {
       const finalRect = computeRectFromPointer(e, drag.offsetX, drag.offsetY, drag.rect);
-      onCommitEdits(upsertCropKeyframe(drag.baseEdits, { timeUs: drag.timeUs, ...finalRect }, matchToleranceUs));
+      onCommitEdits(upsertCropKeyframe(drag.baseEdits, { timeUs: drag.timeUs, ...finalRect }, matchToleranceUs), drag.panel, drag.layout);
     }
   };
 
   const startReframe = async () => {
     setReframeError('');
     try {
+      const reframeLayout = isDual ? activeLayout : 'face';
       const started = await coreDispatch<ReframeStatus>('reframe.start', {
         source: sourceId,
         startUs: range.startUs,
         endUs: range.endUs,
         requested: true,
-        force: Boolean(crop.suggested),
+        layout: reframeLayout,
+        ...(isDual ? { splitRatio: plan.splitRatio } : {}),
+        force: Boolean(activeSuggested),
       });
       setReframe(started);
       if (started.state === 'completed') {
@@ -324,14 +467,118 @@ export function CropPanel({
     }
   };
 
-  const suggestedSegmentsCount = crop.suggested?.segments?.length ?? 0;
+  const supportsAnalysis = activeLayout === 'face' || isDual;
+  const suggestedSegmentsCount = activeSuggested?.segments?.length ?? 0;
+  const firstSuggestedConf = activeSuggested?.segments?.[0]?.keyframes?.[0]?.confidence;
   const analyzing = reframe?.state === 'queued' || reframe?.state === 'running';
   const centerPct = Math.round((currentRect.x + currentRect.width / 2) * 100);
   const proxyReady = proxy?.state === 'ready';
+  const panelNames = isDual ? t.panelNames[activeLayout] : null;
+
+  const zoomFor = (z: number) => (
+    activeLayout === 'fit'
+      ? zoomFitRect(currentRect, z)
+      : zoomPanelRect(currentRect, sourceAspect, activePanelAspect, z, maxZoom)
+  );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 text-sm" data-crop-panel>
-      <section className="flex shrink-0 flex-col gap-2" aria-label={t.sourceFrame}>
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 text-sm" data-crop-panel data-active-crop-layout={activeLayout}>
+      <section className="flex shrink-0 flex-col gap-1.5" aria-label={t.layoutTitle}>
+        <h4 className="text-xs font-medium text-fg-2">{t.layoutTitle}</h4>
+        <div role="radiogroup" aria-label={t.layoutTitle} className="grid grid-cols-2 gap-1.5">
+          {LAYOUT_ORDER.map(layout => {
+            const selected = activeLayout === layout;
+            return (
+              <button
+                key={layout}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                data-crop-layout-option={layout}
+                disabled={busy}
+                onClick={() => {
+                  onPause();
+                  setReframeError('');
+                  onCommitLayout(layout);
+                }}
+                className={`foco rounded-md border px-2 py-1.5 text-left text-xs transition-colors ${
+                  selected ? 'border-accent bg-accent-subtle font-medium text-fg' : 'border-line bg-field text-fg-2 hover:bg-hover'
+                }`}
+              >
+                {t.layouts[layout]}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-xs leading-relaxed text-fg-3">{t.layoutDesc[activeLayout]}</p>
+        {activeLayout === 'gameplay_webcam' && (
+          <p className="rounded-md border border-line bg-warning-subtle px-2 py-1.5 text-xs text-fg" data-webcam-low-confidence-notice>
+            {t.webcamLowConfidence}
+          </p>
+        )}
+      </section>
+
+      {isDual && bounds && panelNames && (
+        <section className="flex shrink-0 flex-col gap-2 border-t border-line pt-2.5" aria-label={t.panelSelector}>
+          <div className="flex gap-1.5" role="group" aria-label={t.panelSelector}>
+            {(['top', 'bottom'] as const).map(slot => (
+              <Button
+                key={slot}
+                tamanho="sm"
+                variante={activeSubPanel === slot ? 'secundario' : 'fantasma'}
+                data-crop-panel-tab={slot}
+                aria-pressed={activeSubPanel === slot}
+                onClick={() => setActiveSubPanel(slot)}
+              >
+                {panelNames[slot]}
+              </Button>
+            ))}
+          </div>
+          <label className="flex flex-col gap-1">
+            <span className="flex items-center justify-between text-xs text-fg-2">
+              <span>{activeLayout === 'gameplay_webcam' ? t.splitLabelWebcam : t.splitLabelTwoPeople}</span>
+              <span className="font-mono" data-crop-split-pct>{splitUi}%</span>
+            </span>
+            <input
+              type="range"
+              aria-label={activeLayout === 'gameplay_webcam' ? t.splitLabelWebcam : t.splitLabelTwoPeople}
+              data-crop-split-slider
+              min={Math.round(bounds[1] * 100)}
+              max={Math.round(bounds[2] * 100)}
+              step={1}
+              value={splitUi}
+              disabled={busy}
+              className="foco w-full"
+              onPointerDown={() => {
+                splitDragRef.current = true;
+                onPause();
+              }}
+              onPointerUp={() => {
+                if (splitDragRef.current) {
+                  splitDragRef.current = false;
+                  onPreviewLayout(null);
+                  onCommitLayout(activeLayout, splitUi / 100);
+                }
+              }}
+              onPointerCancel={() => {
+                splitDragRef.current = false;
+                onPreviewLayout(null);
+              }}
+              onChange={e => {
+                const next = Number(e.target.value);
+                setSplitUi(next);
+                if (splitDragRef.current) {
+                  onPreviewLayout({ layout: activeLayout, splitRatio: next / 100 });
+                } else {
+                  onCommitLayout(activeLayout, next / 100);
+                }
+              }}
+            />
+          </label>
+        </section>
+      )}
+
+      <section className="flex shrink-0 flex-col gap-2 border-t border-line pt-2.5" aria-label={t.sourceFrame}>
         <div className="flex items-center justify-between text-xs">
           <span className="font-medium text-fg-2">{t.sourceFrame}</span>
           <span className="font-mono text-fg-2" data-crop-center-pct>{centerPct}% · {zoomUi}%</span>
@@ -377,46 +624,103 @@ export function CropPanel({
             </div>
           )}
 
-          <div
-            ref={handleRef}
-            tabIndex={0}
-            role="slider"
-            data-foco-inicial
-            data-crop-handle
-            aria-label={t.cropHandle}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={centerPct}
-            aria-valuetext={`${centerPct}%`}
-            className="foco absolute cursor-grab touch-none border-2 border-handle bg-accent-subtle shadow-[0_0_0_9999px_rgba(0,0,0,0.45)] active:cursor-grabbing"
-            style={{
-              left: `${currentRect.x * 100}%`,
-              top: `${currentRect.y * 100}%`,
-              width: `${currentRect.width * 100}%`,
-              height: `${currentRect.height * 100}%`,
-            }}
-            onKeyDown={e => {
-              if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key) || e.ctrlKey || e.metaKey || e.altKey) {
-                return;
-              }
-              e.preventDefault();
-              e.stopPropagation();
-              onPause();
-              const step = e.shiftKey ? 0.05 : 0.01;
-              let next = { ...currentRect };
-              if (e.key === 'Home') next.x = 0;
-              else if (e.key === 'End') next.x = 1 - next.width;
-              else if (e.key === 'ArrowLeft') next.x -= step;
-              else if (e.key === 'ArrowRight') next.x += step;
-              else if (e.key === 'ArrowUp') next.y -= step;
-              else if (e.key === 'ArrowDown') next.y += step;
-              commitAtPlayhead(clampCropRect(next));
-            }}
-          >
-            <span className="pointer-events-none absolute top-1 left-1 rounded-xs bg-letterbox/90 px-1 text-[10px] font-medium text-white">
-              9:16
-            </span>
-          </div>
+          {isDual && botRect && panelNames ? (
+            <>
+              {(['top', 'bottom'] as const).map(slot => {
+                const rect = slot === 'top' ? topRect : botRect;
+                const isActive = activeSubPanel === slot;
+                const slotCenter = Math.round((rect.x + rect.width / 2) * 100);
+                return (
+                  <div
+                    key={slot}
+                    ref={isActive ? handleRef : undefined}
+                    tabIndex={isActive ? 0 : -1}
+                    role={isActive ? 'slider' : undefined}
+                    data-foco-inicial={isActive ? true : undefined}
+                    data-crop-handle={isActive ? true : undefined}
+                    data-crop-rect-slot={slot}
+                    aria-label={isActive ? `${t.cropHandle} (${panelNames[slot]})` : panelNames[slot]}
+                    aria-valuemin={isActive ? 0 : undefined}
+                    aria-valuemax={isActive ? 100 : undefined}
+                    aria-valuenow={isActive ? slotCenter : undefined}
+                    aria-valuetext={isActive ? `${slotCenter}%` : undefined}
+                    className={`foco absolute cursor-grab touch-none border-2 active:cursor-grabbing ${
+                      isActive ? 'z-10 border-handle bg-accent-subtle/60 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]' : 'border-dashed border-line-strong bg-transparent opacity-80'
+                    }`}
+                    style={{
+                      left: `${rect.x * 100}%`,
+                      top: `${rect.y * 100}%`,
+                      width: `${rect.width * 100}%`,
+                      height: `${rect.height * 100}%`,
+                    }}
+                    onKeyDown={isActive ? e => {
+                      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key) || e.ctrlKey || e.metaKey || e.altKey) {
+                        return;
+                      }
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onPause();
+                      const step = e.shiftKey ? 0.05 : 0.01;
+                      const next = { ...rect };
+                      if (e.key === 'Home') next.x = 0;
+                      else if (e.key === 'End') next.x = 1 - next.width;
+                      else if (e.key === 'ArrowLeft') next.x -= step;
+                      else if (e.key === 'ArrowRight') next.x += step;
+                      else if (e.key === 'ArrowUp') next.y -= step;
+                      else if (e.key === 'ArrowDown') next.y += step;
+                      commitAtPlayhead(clampCropRect(next));
+                    } : undefined}
+                  >
+                    <span className="pointer-events-none absolute top-1 left-1 rounded-xs bg-letterbox/90 px-1 text-[10px] font-medium text-white">
+                      {panelNames[slot]}
+                    </span>
+                  </div>
+                );
+              })}
+            </>
+          ) : (
+            <div
+              ref={handleRef}
+              tabIndex={0}
+              role="slider"
+              data-foco-inicial
+              data-crop-handle
+              data-crop-rect-slot="primary"
+              aria-label={t.cropHandle}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={centerPct}
+              aria-valuetext={`${centerPct}%`}
+              className="foco absolute cursor-grab touch-none border-2 border-handle bg-accent-subtle shadow-[0_0_0_9999px_rgba(0,0,0,0.45)] active:cursor-grabbing"
+              style={{
+                left: `${currentRect.x * 100}%`,
+                top: `${currentRect.y * 100}%`,
+                width: `${currentRect.width * 100}%`,
+                height: `${currentRect.height * 100}%`,
+              }}
+              onKeyDown={e => {
+                if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key) || e.ctrlKey || e.metaKey || e.altKey) {
+                  return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                onPause();
+                const step = e.shiftKey ? 0.05 : 0.01;
+                const next = { ...currentRect };
+                if (e.key === 'Home') next.x = 0;
+                else if (e.key === 'End') next.x = 1 - next.width;
+                else if (e.key === 'ArrowLeft') next.x -= step;
+                else if (e.key === 'ArrowRight') next.x += step;
+                else if (e.key === 'ArrowUp') next.y -= step;
+                else if (e.key === 'ArrowDown') next.y += step;
+                commitAtPlayhead(clampCropRect(next));
+              }}
+            >
+              <span className="pointer-events-none absolute top-1 left-1 rounded-xs bg-letterbox/90 px-1 text-[10px] font-medium text-white">
+                {activeLayout === 'fit' ? 'Fit' : '9:16'}
+              </span>
+            </div>
+          )}
         </div>
 
         <p className="text-xs leading-relaxed text-fg-3">{t.hint}</p>
@@ -430,9 +734,9 @@ export function CropPanel({
             type="range"
             aria-label={t.zoom}
             min={100}
-            max={250}
+            max={Math.round(maxZoom * 100)}
             step={5}
-            value={zoomUi}
+            value={Math.min(zoomUi, Math.round(maxZoom * 100))}
             disabled={busy}
             className="foco w-full"
             onPointerDown={() => {
@@ -443,7 +747,7 @@ export function CropPanel({
               if (zoomDragRef.current) {
                 zoomDragRef.current = false;
                 onPreviewEdits(null);
-                commitAtPlayhead(zoomCropRect(currentRect, sourceAspect, zoomUi / 100));
+                commitAtPlayhead(zoomFor(zoomUi / 100));
               }
             }}
             onPointerCancel={() => {
@@ -453,9 +757,9 @@ export function CropPanel({
             onChange={e => {
               const nextZoom = Number(e.target.value);
               setZoomUi(nextZoom);
-              const nextRect = zoomCropRect(currentRect, sourceAspect, nextZoom / 100);
+              const nextRect = zoomFor(nextZoom / 100);
               if (zoomDragRef.current) {
-                previewAtTime(crop.edits, Math.round(sourceUs), nextRect);
+                previewAtTime(activeEdits, Math.round(sourceUs), nextRect, activeSlot, activeLayout);
               } else {
                 commitAtPlayhead(nextRect);
               }
@@ -497,13 +801,19 @@ export function CropPanel({
       <section className="flex shrink-0 flex-col gap-2 border-t border-line pt-3" aria-label={t.statusTitle}>
         <h4 className="text-xs font-medium text-fg-2">{t.statusTitle}</h4>
         <p className="text-xs text-fg-3">
-          {crop.suggested ? fill(t.suggestionPresent, { segments: suggestedSegmentsCount }) : t.suggestionAbsent}
+          {!supportsAnalysis
+            ? t.manualOnlyHint
+            : activeSuggested
+              ? (activeLayout === 'gameplay_webcam' && typeof firstSuggestedConf === 'number'
+                ? fill(t.suggestionLowConf, { confidence: Math.round(firstSuggestedConf * 100) })
+                : fill(t.suggestionPresent, { segments: suggestedSegmentsCount }))
+              : t.suggestionAbsent}
         </p>
-        <p className="font-mono text-xs text-fg-2" data-crop-edits-count={crop.edits.length}>
-          {crop.edits.length > 0 ? fill(t.editsCount, { count: crop.edits.length }) : t.noEdits}
+        <p className="font-mono text-xs text-fg-2" data-crop-edits-count={activeEdits.length}>
+          {activeEdits.length > 0 ? fill(t.editsCount, { count: activeEdits.length }) : t.noEdits}
         </p>
         <div className="flex flex-wrap gap-2">
-          {analyzing ? (
+          {supportsAnalysis && (analyzing ? (
             <>
               <span className="text-xs text-fg-2" role="status">
                 {fill(t.analyzing, { progress: reframe?.progress ?? 0 })}
@@ -515,19 +825,19 @@ export function CropPanel({
           ) : (
             <Button
               tamanho="sm"
-              icone={crop.suggested ? <RefreshCw size={13} /> : <Sparkles size={13} />}
+              icone={activeSuggested ? <RefreshCw size={13} /> : <Sparkles size={13} />}
               disabled={busy}
               onClick={() => void startReframe()}
             >
-              {crop.suggested ? t.reanalyze : t.analyze}
+              {activeSuggested ? t.reanalyze : t.analyze}
             </Button>
-          )}
+          ))}
           <Button
             tamanho="sm"
             variante="fantasma"
             icone={<RotateCcw size={13} />}
-            disabled={busy || crop.edits.length === 0}
-            onClick={() => onCommitEdits([])}
+            disabled={busy || activeEdits.length === 0}
+            onClick={() => onCommitEdits([], activeSlot, activeLayout)}
           >
             {t.clearEdits}
           </Button>
@@ -541,14 +851,18 @@ export function CropPanel({
 
       <section className="flex shrink-0 flex-col gap-2 border-t border-line pt-3" aria-label={t.keyframesTitle}>
         <h4 className="text-xs font-medium text-fg-2">{t.keyframesTitle}</h4>
-        {crop.edits.length === 0 ? (
+        {activeEdits.length === 0 ? (
           <p className="text-xs text-fg-3">{t.noEdits}</p>
         ) : (
           <ol className="flex flex-col gap-1.5">
-            {crop.edits.map((k, idx) => {
+            {activeEdits.map((k, idx) => {
               const outside = k.timeUs < range.startUs || k.timeUs > range.endUs;
               const kCenter = Math.round((k.x + k.width / 2) * 100);
-              const kZoom = Math.round(cropZoomFactor(k, sourceAspect) * 100);
+              const kZoom = Math.round(
+                (activeLayout === 'fit'
+                  ? fitZoomFactor(k)
+                  : panelZoomFactor(k, sourceAspect, activePanelAspect, maxZoom)) * 100,
+              );
               const timeLabel = msClock(k.timeUs);
               return (
                 <li
@@ -582,7 +896,7 @@ export function CropPanel({
                       title={t.hardCut}
                       icone={<Scissors size={12} />}
                       disabled={busy}
-                      onClick={() => onCommitEdits(toggleCropKeyframeCut(crop.edits, k.timeUs))}
+                      onClick={() => onCommitEdits(toggleCropKeyframeCut(activeEdits, k.timeUs), activeSlot, activeLayout)}
                     >
                       {t.hardCut}
                     </Button>
@@ -591,7 +905,7 @@ export function CropPanel({
                     rotulo={fill(t.deleteKeyframe, { time: timeLabel })}
                     tamanho="sm"
                     disabled={busy}
-                    onClick={() => onCommitEdits(removeCropKeyframe(crop.edits, k.timeUs))}
+                    onClick={() => onCommitEdits(removeCropKeyframe(activeEdits, k.timeUs), activeSlot, activeLayout)}
                   >
                     <Trash2 size={13} />
                   </IconButton>

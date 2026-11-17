@@ -7,7 +7,7 @@ pub mod pipeline;
 pub mod render;
 
 use crate::caption_style::{self, store::ClipId, Preset, Style, StyledWord, WordOverride};
-use crate::editor::crop::{self, CropSegment};
+use crate::editor::crop::{self, CropSegment, ResolvedCropPlan};
 use crate::editor::silences::{KeptSegment, SpliceMap};
 use crate::{projects, CommandRegistration, CommandResult, CoreError, EventSink};
 use captions::CaptionWord;
@@ -58,6 +58,8 @@ pub(crate) struct StartRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) resolved_crop: Option<Vec<CropSegment>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) resolved_crop_plan: Option<ResolvedCropPlan>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) resolved_captions: Option<Vec<FrozenCaptionWord>>,
     // Só o lote (#64) com `confirmed: true` ativa a substituição atômica de destino existente.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -96,6 +98,7 @@ pub(crate) struct Target {
     pub(crate) active_cuts: Vec<(i64, i64)>,
     pub(crate) transcript: i64,
     pub(crate) crop: Vec<CropSegment>,
+    pub(crate) crop_plan: Option<ResolvedCropPlan>,
     pub(crate) caption_track: &'static str,
     pub(crate) target_language: Option<String>,
 }
@@ -236,11 +239,12 @@ pub(crate) fn target(
                 })
             })
             .unwrap_or(((start_us, end_us), Vec::new()));
-        let duration: i64 = c.query_row(
-            "SELECT duration_us FROM sources WHERE id=?1",
+        let (duration, metadata): (i64, String) = c.query_row(
+            "SELECT duration_us, metadata FROM sources WHERE id=?1",
             [request.source_id],
-            |r| r.get(0),
+            |r| Ok((r.get(0)?, r.get(1)?)),
         )?;
+        let source_aspect = crate::editor::aspect_of(&metadata);
         if end_us > duration {
             return Ok(Err(bounds()));
         }
@@ -438,10 +442,19 @@ pub(crate) fn target(
                 });
             }
         }
-        let crop = edited
+        let crop_plan = edited
             .as_ref()
-            .map(|doc| crop::resolve(&doc.crop))
-            .unwrap_or_default();
+            .filter(|doc| doc.crop.has_explicit_crop())
+            .map(|doc| crop::resolve_plan(&doc.crop, source_aspect, start_us, end_us));
+        let crop = crop_plan
+            .as_ref()
+            .and_then(|p| p.panels.first().map(|panel| panel.segments.clone()))
+            .unwrap_or_else(|| {
+                edited
+                    .as_ref()
+                    .map(|doc| crop::resolve(&doc.crop))
+                    .unwrap_or_default()
+            });
         let words = styled
             .iter()
             .filter(|w| !w.overrides.hidden.unwrap_or(false))
@@ -460,6 +473,7 @@ pub(crate) fn target(
             active_cuts,
             transcript,
             crop,
+            crop_plan,
             caption_track,
             target_language: active_lang,
         }))
@@ -537,6 +551,7 @@ pub(crate) fn prepare_start_request(
         .map(|_| (resolved.start_us, resolved.end_us));
     request.resolved_silences = request.cut.clip_id.map(|_| resolved.active_cuts.clone());
     request.resolved_crop = request.cut.clip_id.map(|_| resolved.crop.clone());
+    request.resolved_crop_plan = resolved.crop_plan.clone();
     request.resolved_captions =
         (resolved.caption_track == "translated").then(|| resolved.frozen_captions());
     render::validate_output_with_overwrite(&request.output, request.overwrite)?;
@@ -658,6 +673,7 @@ pub(crate) fn run(
         let ffmpeg = crate::components::cache_settings()?
             .2
             .ok_or_else(|| error("component_missing", "Instale o Componente FFmpeg."))?;
+        let crop_plan = request.resolved_crop_plan.or(target.crop_plan);
         let crop = request.resolved_crop.unwrap_or(target.crop);
         let input = render::RenderInput {
             source,
@@ -685,13 +701,14 @@ pub(crate) fn run(
                 }
             });
             let mut last = 0;
-            let result = encoder::render_styled_spliced_with_fallback_overwrite(
+            let result = encoder::render_styled_spliced_crop_plan_with_fallback_overwrite(
                 &ffmpeg,
                 &input,
                 &target.segments,
                 &prepared,
                 &preferred,
                 request.overwrite,
+                crop_plan.as_ref(),
                 &cancel,
                 &mut |percentage| {
                     if percentage > last {

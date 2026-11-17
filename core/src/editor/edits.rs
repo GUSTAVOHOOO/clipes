@@ -41,8 +41,22 @@ pub(crate) struct EditSnapshot {
     pub crop_edits: Option<Vec<crop::CropKeyframe>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub narration_starts: Option<BTreeMap<i64, i64>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crop_layout: Option<crop::CropLayout>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crop_split_ratio: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gameplay_webcam_edits: Option<(Vec<crop::CropKeyframe>, Vec<crop::CropKeyframe>)>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub two_people_edits: Option<(Vec<crop::CropKeyframe>, Vec<crop::CropKeyframe>)>,
 }
 impl EditSnapshot {
+    fn dual_edits(
+        dual: Option<&crop::DualCropPanels>,
+    ) -> Option<(Vec<crop::CropKeyframe>, Vec<crop::CropKeyframe>)> {
+        dual.filter(|d| !d.top.edits.is_empty() || !d.bottom.edits.is_empty())
+            .map(|d| (d.top.edits.clone(), d.bottom.edits.clone()))
+    }
     fn from_doc(doc: &Document) -> Self {
         Self {
             start_id: doc.range.start_id,
@@ -53,6 +67,10 @@ impl EditSnapshot {
             crop_edits: (!doc.crop.edits.is_empty()).then(|| doc.crop.edits.clone()),
             narration_starts: (!doc.narration_starts.is_empty())
                 .then(|| doc.narration_starts.clone()),
+            crop_layout: doc.crop.layout,
+            crop_split_ratio: doc.crop.split_ratio,
+            gameplay_webcam_edits: Self::dual_edits(doc.crop.gameplay_webcam.as_ref()),
+            two_people_edits: Self::dual_edits(doc.crop.two_people.as_ref()),
         }
     }
     fn borders(&self) -> Borders {
@@ -142,6 +160,10 @@ fn decode(encoded: &str) -> Result<Document, CoreError> {
                 silences: None,
                 crop_edits: None,
                 narration_starts: None,
+                crop_layout: None,
+                crop_split_ratio: None,
+                gameplay_webcam_edits: None,
+                two_people_edits: None,
             };
             Document {
                 schema_version: SCHEMA_VERSION,
@@ -245,13 +267,25 @@ fn montage_view(doc: &Document) -> Value {
     }
     value
 }
-fn crop_view(crop: &crop::CropTimeline) -> Value {
+fn doc_aspect(doc: &Document) -> f64 {
+    source_info(doc.original.source_id)
+        .map(|(_, _, aspect)| aspect)
+        .unwrap_or(16.0 / 9.0)
+}
+fn crop_view(crop: &crop::CropTimeline, range: &Borders, source_aspect: f64) -> Value {
     let resolved = crop::resolve(crop);
+    let plan = crop::resolve_plan(crop, source_aspect, range.start_us, range.end_us);
     json!({
+        "layout": plan.layout,
+        "explicitLayout": crop.layout,
+        "splitRatio": plan.split_ratio,
         "suggested": crop.suggested,
         "edits": crop.edits,
+        "gameplayWebcam": crop.gameplay_webcam,
+        "twoPeople": crop.two_people,
         "resolved": resolved,
-        "hasCrop": !resolved.is_empty(),
+        "hasCrop": crop.has_explicit_crop(),
+        "plan": plan,
     })
 }
 fn answer(id: i64, doc: &Document) -> Value {
@@ -267,11 +301,12 @@ fn answer(id: i64, doc: &Document) -> Value {
         .as_ref()
         .map(|s| s.intervals.as_slice())
         .unwrap_or(&[]);
+    let aspect = doc_aspect(doc);
     json!({"clipId":id,"schemaVersion":doc.schema_version,"revision":doc.revision,
         "request":{"source_id":doc.original.source_id,"candidate_id":doc.original.candidate_id,"start_id":r.start_id,"end_id":r.end_id},
         "startUs":r.start_us,"endUs":r.end_us,"undoCount":doc.undo.len(),"redoCount":doc.redo.len(),
         "silences":{"enabled":doc.silences.is_some(),"thresholdUs":threshold_us,"intervals":intervals,"segments":splice.segments,"removedUs":splice.removed_us,"effectiveDurationUs":splice.output_duration_us},
-        "crop":crop_view(&doc.crop),
+        "crop":crop_view(&doc.crop, r, aspect),
         "montage":montage_view(doc)})
 }
 fn save(s: &mut State, due_only: bool) -> Result<(), CoreError> {
@@ -620,12 +655,19 @@ fn history(v: Value, redo: bool) -> CommandResult {
         let next_range = next.borders();
         let next_crop_edits = next.crop_edits.unwrap_or_default();
         let next_narration_starts = next.narration_starts.unwrap_or_default();
+        let next_gw_edits = next.gameplay_webcam_edits.unwrap_or_default();
+        let next_tp_edits = next.two_people_edits.unwrap_or_default();
         validate(&entry.doc, &next_range)?;
         validate_silences(&next_range, next.silences.as_ref())?;
+        crop::validate_split_ratio(next.crop_layout, next.crop_split_ratio)?;
         crop::validate_edits(&next_crop_edits)?;
         if next_narration_starts.values().any(|&t| t < 0) {
             return Err(invalid());
         }
+        crop::validate_edits(&next_gw_edits.0)?;
+        crop::validate_edits(&next_gw_edits.1)?;
+        crop::validate_edits(&next_tp_edits.0)?;
+        crop::validate_edits(&next_tp_edits.1)?;
         if redo {
             entry.doc.redo.pop();
             entry.doc.undo.push(EditSnapshot::from_doc(&entry.doc));
@@ -635,8 +677,28 @@ fn history(v: Value, redo: bool) -> CommandResult {
         }
         entry.doc.range = next_range;
         entry.doc.silences = next.silences;
+        entry.doc.crop.layout = next.crop_layout;
+        entry.doc.crop.split_ratio = next.crop_split_ratio;
         entry.doc.crop.edits = next_crop_edits;
         entry.doc.narration_starts = next_narration_starts;
+        let apply_dual =
+            |slot: &mut Option<crop::DualCropPanels>,
+             (top, bot): (Vec<crop::CropKeyframe>, Vec<crop::CropKeyframe>)| {
+                if top.is_empty()
+                    && bot.is_empty()
+                    && slot
+                        .as_ref()
+                        .is_none_or(|d| d.top.suggested.is_none() && d.bottom.suggested.is_none())
+                {
+                    *slot = None;
+                } else {
+                    let d = slot.get_or_insert_with(crop::DualCropPanels::default);
+                    d.top.edits = top;
+                    d.bottom.edits = bot;
+                }
+            };
+        apply_dual(&mut entry.doc.crop.gameplay_webcam, next_gw_edits);
+        apply_dual(&mut entry.doc.crop.two_people, next_tp_edits);
         entry.doc.revision += 1;
         entry.dirty = Some(Instant::now());
     }
@@ -802,7 +864,8 @@ fn silences_apply_all(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 }
 
 fn crop_answer(id: i64, doc: &Document) -> Value {
-    let mut out = crop_view(&doc.crop);
+    let aspect = doc_aspect(doc);
+    let mut out = crop_view(&doc.crop, &doc.range, aspect);
     out["clipId"] = json!(id);
     out["schemaVersion"] = json!(doc.schema_version);
     out["revision"] = json!(doc.revision);
@@ -816,23 +879,130 @@ fn crop_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let entry = load(&mut s, id)?;
     Ok(crop_answer(id, &entry.doc))
 }
+fn dual_slot_mut(
+    timeline: &mut crop::CropTimeline,
+    layout: crop::CropLayout,
+) -> Result<&mut crop::DualCropPanels, CoreError> {
+    match layout {
+        crop::CropLayout::GameplayWebcam => Ok(timeline
+            .gameplay_webcam
+            .get_or_insert_with(crop::DualCropPanels::default)),
+        crop::CropLayout::TwoPeople => Ok(timeline
+            .two_people
+            .get_or_insert_with(crop::DualCropPanels::default)),
+        _ => Err(crop::invalid_crop()),
+    }
+}
+fn crop_set_layout(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let id = id(&v)?;
+    let layout: crop::CropLayout =
+        serde_json::from_value(v["layout"].clone()).map_err(|_| crop::invalid_crop())?;
+    let raw_ratio = v
+        .get("split_ratio")
+        .or_else(|| v.get("splitRatio"))
+        .filter(|val| !val.is_null())
+        .map(|val| val.as_f64().ok_or_else(crop::invalid_crop))
+        .transpose()?;
+    let next_ratio = if let Some((def, _, _)) = crop::split_bounds(layout) {
+        let validated = crop::validate_split_ratio(Some(layout), raw_ratio)?;
+        Some(validated.unwrap_or(def))
+    } else {
+        if raw_ratio.is_some() {
+            return Err(crop::invalid_crop());
+        }
+        None
+    };
+    let mut s = lock()?;
+    let entry = load(&mut s, id)?;
+    let resolved_ratio = if raw_ratio.is_some() {
+        next_ratio
+    } else if entry.doc.crop.layout == Some(layout) {
+        entry.doc.crop.split_ratio.or(next_ratio)
+    } else {
+        next_ratio
+    };
+    if v["preview"].as_bool().unwrap_or(false) {
+        let mut doc = entry.doc.clone();
+        doc.crop.layout = Some(layout);
+        doc.crop.split_ratio = resolved_ratio;
+        return Ok(crop_answer(id, &doc));
+    }
+    if entry.doc.crop.layout != Some(layout) || entry.doc.crop.split_ratio != resolved_ratio {
+        push_history(entry);
+        entry.doc.crop.layout = Some(layout);
+        entry.doc.crop.split_ratio = resolved_ratio;
+    }
+    Ok(crop_answer(id, &entry.doc))
+}
 fn crop_set_suggested(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let id = id(&v)?;
     let mut s = lock()?;
     let entry = load(&mut s, id)?;
-    let suggested: Option<crop::SuggestedCrop> = if let Some(reframe_id) = v["reframe_id"].as_i64()
-    {
-        let raw: Option<String> = projects::with_reader(|c| {
+    if let Some(reframe_id) = v["reframe_id"].as_i64() {
+        type ReframeSuggestionRow = (Option<String>, String, Option<f64>, Option<String>);
+        let row: Option<ReframeSuggestionRow> = projects::with_reader(|c| {
             c.query_row(
-                "SELECT timeline FROM reframe_suggestions WHERE id=?1 AND source_id=?2",
-                (reframe_id, entry.doc.original.source_id),
-                |r| r.get(0),
-            )
-            .optional()
+                    "SELECT timeline, layout, split_ratio, secondary_timeline FROM reframe_suggestions WHERE id=?1 AND source_id=?2",
+                    (reframe_id, entry.doc.original.source_id),
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                )
+                .optional()
         })?;
+        let (raw, layout_str, split_ratio, raw_sec) = row.ok_or_else(crop::invalid_crop)?;
         let text = raw.ok_or_else(crop::invalid_crop)?;
-        Some(serde_json::from_str(&text).map_err(|_| crop::invalid_crop())?)
-    } else if v.get("suggested").is_some_and(Value::is_null) {
+        let primary: crop::SuggestedCrop =
+            serde_json::from_str(&text).map_err(|_| crop::invalid_crop())?;
+        crop::validate_suggested(&primary)?;
+        let secondary: Option<crop::SuggestedCrop> = raw_sec
+            .map(|s| serde_json::from_str(&s))
+            .transpose()
+            .map_err(|_| crop::invalid_crop())?;
+        if let Some(ref sec) = secondary {
+            crop::validate_suggested(sec)?;
+        }
+        match layout_str.as_str() {
+            "gameplay_webcam" | "two_people" => {
+                let target_layout = if layout_str == "gameplay_webcam" {
+                    crop::CropLayout::GameplayWebcam
+                } else {
+                    crop::CropLayout::TwoPeople
+                };
+                let sec = secondary.ok_or_else(crop::invalid_crop)?;
+                let mut changed = false;
+                if entry.doc.crop.layout != Some(target_layout) {
+                    entry.doc.crop.layout = Some(target_layout);
+                    changed = true;
+                }
+                if let Some(ratio) = split_ratio {
+                    if entry.doc.crop.split_ratio != Some(ratio) {
+                        entry.doc.crop.split_ratio = Some(ratio);
+                        changed = true;
+                    }
+                }
+                let dual = dual_slot_mut(&mut entry.doc.crop, target_layout)?;
+                if dual.top.suggested.as_ref() != Some(&primary)
+                    || dual.bottom.suggested.as_ref() != Some(&sec)
+                {
+                    dual.top.suggested = Some(primary);
+                    dual.bottom.suggested = Some(sec);
+                    changed = true;
+                }
+                if changed {
+                    entry.doc.revision += 1;
+                    entry.dirty = Some(Instant::now());
+                }
+            }
+            _ => {
+                if entry.doc.crop.suggested.as_ref() != Some(&primary) {
+                    entry.doc.crop.suggested = Some(primary);
+                    entry.doc.revision += 1;
+                    entry.dirty = Some(Instant::now());
+                }
+            }
+        }
+        return Ok(crop_answer(id, &entry.doc));
+    }
+    let suggested: Option<crop::SuggestedCrop> = if v.get("suggested").is_some_and(Value::is_null) {
         None
     } else {
         Some(serde_json::from_value(v["suggested"].clone()).map_err(|_| crop::invalid_crop())?)
@@ -852,16 +1022,70 @@ fn crop_set_edits(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let edits: Vec<crop::CropKeyframe> =
         serde_json::from_value(v["edits"].clone()).map_err(|_| crop::invalid_crop())?;
     crop::validate_edits(&edits)?;
+    let panel = match v.get("panel").and_then(Value::as_str) {
+        None | Some("primary") => "primary",
+        Some(p @ ("top" | "bottom")) => p,
+        Some(_) => return Err(crop::invalid_crop()),
+    };
+    let explicit_layout: Option<crop::CropLayout> = v
+        .get("layout")
+        .filter(|val| !val.is_null())
+        .map(|val| serde_json::from_value(val.clone()).map_err(|_| crop::invalid_crop()))
+        .transpose()?;
     let mut s = lock()?;
     let entry = load(&mut s, id)?;
+    if panel == "primary" {
+        if v["preview"].as_bool().unwrap_or(false) {
+            let mut doc = entry.doc.clone();
+            doc.crop.edits = edits;
+            return Ok(crop_answer(id, &doc));
+        }
+        if entry.doc.crop.edits != edits {
+            push_history(entry);
+            entry.doc.crop.edits = edits;
+        }
+        return Ok(crop_answer(id, &entry.doc));
+    }
+    let target_layout = explicit_layout.unwrap_or_else(|| entry.doc.crop.effective_layout());
+    if !matches!(
+        target_layout,
+        crop::CropLayout::GameplayWebcam | crop::CropLayout::TwoPeople
+    ) {
+        return Err(crop::invalid_crop());
+    }
     if v["preview"].as_bool().unwrap_or(false) {
         let mut doc = entry.doc.clone();
-        doc.crop.edits = edits;
+        doc.crop.layout = Some(target_layout);
+        let dual = dual_slot_mut(&mut doc.crop, target_layout)?;
+        if panel == "top" {
+            dual.top.edits = edits;
+        } else {
+            dual.bottom.edits = edits;
+        }
         return Ok(crop_answer(id, &doc));
     }
-    if entry.doc.crop.edits != edits {
+    let current_edits = match target_layout {
+        crop::CropLayout::GameplayWebcam => entry.doc.crop.gameplay_webcam.as_ref(),
+        crop::CropLayout::TwoPeople => entry.doc.crop.two_people.as_ref(),
+        _ => None,
+    }
+    .map(|d| {
+        if panel == "top" {
+            &d.top.edits
+        } else {
+            &d.bottom.edits
+        }
+    });
+    let changed = current_edits != Some(&edits) || entry.doc.crop.layout != Some(target_layout);
+    if changed {
         push_history(entry);
-        entry.doc.crop.edits = edits;
+        entry.doc.crop.layout = Some(target_layout);
+        let dual = dual_slot_mut(&mut entry.doc.crop, target_layout)?;
+        if panel == "top" {
+            dual.top.edits = edits;
+        } else {
+            dual.bottom.edits = edits;
+        }
     }
     Ok(crop_answer(id, &entry.doc))
 }
@@ -870,9 +1094,17 @@ fn crop_evaluate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let time_us = v["time_us"].as_i64().ok_or_else(crop::invalid_crop)?;
     let mut s = lock()?;
     let entry = load(&mut s, id)?;
-    let resolved = crop::resolve(&entry.doc.crop);
-    let rect = crop::interpolate(&resolved, time_us);
-    Ok(json!({ "clipId": id, "timeUs": time_us, "rect": rect }))
+    let doc = &entry.doc;
+    let aspect = doc_aspect(doc);
+    let plan = crop::resolve_plan(&doc.crop, aspect, doc.range.start_us, doc.range.end_us);
+    let panels = crop::evaluate_plan(&plan, time_us);
+    let rect = if doc.crop.has_explicit_crop() {
+        panels.first().map(|p| p.rect)
+    } else {
+        let resolved = crop::resolve(&doc.crop);
+        crop::interpolate(&resolved, time_us)
+    };
+    Ok(json!({ "clipId": id, "timeUs": time_us, "rect": rect, "panels": panels }))
 }
 fn crop_example(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let id = id(&v)?;
@@ -1010,6 +1242,7 @@ inventory::submit! {CommandRegistration {name:"editor.silences.toggle",execute:s
 inventory::submit! {CommandRegistration {name:"editor.silences.revert_all",execute:silences_revert_all}}
 inventory::submit! {CommandRegistration {name:"editor.silences.apply_all",execute:silences_apply_all}}
 inventory::submit! {CommandRegistration {name:"editor.crop.get",execute:crop_get}}
+inventory::submit! {CommandRegistration {name:"editor.crop.set_layout",execute:crop_set_layout}}
 inventory::submit! {CommandRegistration {name:"editor.crop.set_suggested",execute:crop_set_suggested}}
 inventory::submit! {CommandRegistration {name:"editor.crop.set_edits",execute:crop_set_edits}}
 inventory::submit! {CommandRegistration {name:"editor.crop.evaluate",execute:crop_evaluate}}
