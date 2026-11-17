@@ -715,6 +715,8 @@ fn run_inner(job_id: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreE
             (block_id, version_id),
             |r| r.get(0),
         )?;
+        crate::narration_cleanup::remove_clean_file_for_narration(c, project, narration_id);
+        crate::narration_cleanup::upsert_pending_in(c, narration_id, &info.sha256, None, false)?;
         crate::narration_align::mark_pending_in(
             c,
             narration_id,

@@ -58,7 +58,16 @@ type MockBlockAlignment = {
   spokenText: string | null;
   wordCount: number;
 };
-const narrationGenerated = new Map<number, { blockId: number; voiceId: string; modelId: string; engineId: string; trimmed?: boolean; durationUs: number; alignment: MockBlockAlignment }[]>();
+type MockCleanupInfo = {
+  applicable: boolean;
+  enabled: boolean;
+  ready: boolean;
+  noiseFloorDb: number | null;
+  noiseFloorSource: 'pending' | 'vad' | 'default';
+  warningCode: string | null;
+  warning: string | null;
+};
+const narrationGenerated = new Map<number, { blockId: number; voiceId: string; modelId: string; engineId: string; trimmed?: boolean; cleanupEnabled?: boolean; cleanupReady?: boolean; durationUs: number; alignment: MockBlockAlignment }[]>();
 const sourceTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('source-test');
 const componentsMissing = typeof location !== 'undefined' && new URLSearchParams(location.search).has('components-missing');
 const budgetTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('budget-test');
@@ -507,8 +516,8 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       return { id: a.id } as T;
     }
     if (name === 'tts.models.cancel') return {} as T;
-    if (name === 'narration.get' || name === 'narration.generate' || name === 'narration.regenerate_block' || name === 'narration.import' || name === 'narration.align' || name === 'narration.align_block' || name === 'narration.review' || name === 'narration.record_block' || name === 'narration.trim_block' || name === 'narration.discard_draft') {
-      const a = args as { candidate: number; block?: number; voiceId?: string; choice?: 'script' | 'spoken'; audioBase64?: string };
+    if (name === 'narration.get' || name === 'narration.generate' || name === 'narration.regenerate_block' || name === 'narration.import' || name === 'narration.align' || name === 'narration.align_block' || name === 'narration.review' || name === 'narration.record_block' || name === 'narration.trim_block' || name === 'narration.discard_draft' || name === 'narration.cleanup.set' || name === 'narration.cleanup.prepare') {
+      const a = args as { candidate: number; block?: number; voiceId?: string; choice?: 'script' | 'spoken'; audioBase64?: string; enabled?: boolean };
       const s = scriptMockDispatch('script.get', { candidate: a.candidate }) as { narrationAllowed: boolean; current: { blocks: { id: number; position: number; title: string; narration: string | null }[] } | null };
       const recordNoWorker = typeof location !== 'undefined' && new URLSearchParams(location.search).has('record-no-worker');
       const recordNoSpeech = typeof location !== 'undefined' && new URLSearchParams(location.search).has('record-no-speech');
@@ -540,6 +549,8 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
           modelId: trimmed ? 'silero-vad' : 'untrimmed',
           engineId: 'recorded',
           trimmed,
+          cleanupEnabled: true,
+          cleanupReady: false,
           durationUs,
           alignment: vadReady ? defaultAlign(target.narration, idx) : { status: 'pending' as const, choice: null, activeTrack: null, substitutions: 0, insertions: 0, deletions: 0, maxConsecutiveInsertions: 0, errorCode: null, modelId: '', spokenText: null, wordCount: 0 },
         };
@@ -603,6 +614,8 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
           voiceId: 'imported',
           modelId: 'external',
           engineId: 'imported',
+          cleanupEnabled: true,
+          cleanupReady: false,
           durationUs: 2_800_000,
           alignment: defaultAlign(blocks[idx]?.narration ?? null, idx),
         };
@@ -630,12 +643,60 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         const updated = next.find(e => e.blockId === a.block);
         return { candidate: a.candidate, block: a.block, alignment: updated?.alignment ?? null } as T;
       }
+      const cleanupFor = (hit: { engineId: string; cleanupEnabled?: boolean; cleanupReady?: boolean }): MockCleanupInfo | null => {
+        if (hit.engineId !== 'recorded' && hit.engineId !== 'imported') return null;
+        return {
+          applicable: true,
+          enabled: hit.cleanupEnabled ?? true,
+          ready: hit.cleanupReady ?? false,
+          noiseFloorDb: vadReady ? -44 : -50,
+          noiseFloorSource: vadReady ? 'vad' : 'default',
+          warningCode: vadReady ? null : 'vad_unavailable',
+          warning: vadReady ? null : 'Piso de ruído padrão usado: instale o worker para medir o ruído da gravação.',
+        };
+      };
+      if (name === 'narration.cleanup.set') {
+        const existing = narrationGenerated.get(a.candidate) ?? [];
+        const hit = existing.find(e => e.blockId === a.block);
+        if (!hit) throw { code: 'narration_missing', message: 'Este bloco ainda não tem áudio.' };
+        if (hit.engineId !== 'recorded' && hit.engineId !== 'imported') {
+          throw { code: 'cleanup_not_applicable', message: 'A limpeza de voz só se aplica a Narração gravada ou importada.' };
+        }
+        const updated = { ...hit, cleanupEnabled: Boolean(a.enabled) };
+        narrationGenerated.set(a.candidate, existing.map(e => (e.blockId === a.block ? updated : e)));
+        return { candidate: a.candidate, blockId: a.block, narrationId: a.block, cleanup: cleanupFor(updated) } as T;
+      }
+      if (name === 'narration.cleanup.prepare') {
+        if (componentsMissing) throw { code: 'ffmpeg_missing', message: 'Instale o Componente FFmpeg para limpar o áudio.' };
+        const existing = narrationGenerated.get(a.candidate) ?? [];
+        const hit = existing.find(e => e.blockId === a.block);
+        if (!hit) throw { code: 'narration_missing', message: 'Este bloco ainda não tem áudio.' };
+        if (hit.engineId !== 'recorded' && hit.engineId !== 'imported') {
+          throw { code: 'cleanup_not_applicable', message: 'A limpeza de voz só se aplica a Narração gravada ou importada.' };
+        }
+        const updated = { ...hit, cleanupReady: true };
+        narrationGenerated.set(a.candidate, existing.map(e => (e.blockId === a.block ? updated : e)));
+        const info = cleanupFor(updated)!;
+        return {
+          candidate: a.candidate,
+          blockId: a.block,
+          narrationId: a.block,
+          enabled: info.enabled,
+          ready: true,
+          cleanRelPath: `narrations/c${a.candidate}/b${a.block}-v1.clean.wav`,
+          durationUs: updated.durationUs,
+          noiseFloorDb: info.noiseFloorDb,
+          noiseFloorSource: info.noiseFloorSource,
+          warningCode: info.warningCode,
+          warning: info.warning,
+        } as T;
+      }
       const list = narrationGenerated.get(a.candidate) ?? [];
       const blocks = (s.current?.blocks ?? []).map(b => {
         const hit = list.find(x => x.blockId === b.id);
         return {
           blockId: b.id, position: b.position, title: b.title, versionId: 1, narrationText: b.narration,
-          audio: hit ? { id: b.id, versionId: 1, voiceId: hit.voiceId, modelId: hit.modelId, engineId: hit.engineId, relPath: `narrations/c${a.candidate}/b${b.id}-v1.wav`, durationUs: hit.durationUs, sampleRate: 24000, channels: 1, bytes: 153644, stale: false, trimmed: hit.trimmed ?? true } : null,
+          audio: hit ? { id: b.id, versionId: 1, voiceId: hit.voiceId, modelId: hit.modelId, engineId: hit.engineId, relPath: `narrations/c${a.candidate}/b${b.id}-v1.wav`, durationUs: hit.durationUs, sampleRate: 24000, channels: 1, bytes: 153644, stale: false, trimmed: hit.trimmed ?? true, cleanup: cleanupFor(hit) } : null,
           alignment: hit ? hit.alignment : null,
         };
       });

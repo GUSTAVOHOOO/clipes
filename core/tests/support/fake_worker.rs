@@ -269,9 +269,16 @@ fn transcribe_worker() {
                                 if let (Ok(s_us), Ok(e_us)) =
                                     (a.trim().parse::<i64>(), b.trim().parse::<i64>())
                                 {
+                                    let mut silences = Vec::new();
+                                    if s_us > 0 {
+                                        silences.push(serde_json::json!({"start_us":0,"end_us":s_us.min(dur_us)}));
+                                    }
+                                    if e_us < dur_us {
+                                        silences.push(serde_json::json!({"start_us":e_us.max(0),"end_us":dur_us}));
+                                    }
                                     send(
                                         &mut out,
-                                        serde_json::json!({"v":1,"type":"result","id":id,"data":{"covered_us":dur_us,"spans":[{"start_us":s_us,"end_us":e_us}],"silences":[]}}),
+                                        serde_json::json!({"v":1,"type":"result","id":id,"data":{"covered_us":dur_us,"spans":[{"start_us":s_us,"end_us":e_us}],"silences":silences}}),
                                     );
                                     continue;
                                 }

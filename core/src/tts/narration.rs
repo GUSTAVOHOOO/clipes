@@ -586,6 +586,13 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                     } else {
                         crate::narration_align::read_block_alignment_json(c, r.id, &r.sha256)?
                     };
+                    let cleanup = crate::narration_cleanup::read_cleanup_json(
+                        c,
+                        &project,
+                        r.id,
+                        &r.engine_id,
+                        &r.sha256,
+                    )?;
                     (
                         json!({
                             "id": r.id,
@@ -600,6 +607,7 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                             "bytes": r.bytes,
                             "stale": stale,
                             "trimmed": r.trimmed,
+                            "cleanup": cleanup,
                         }),
                         align,
                     )
@@ -908,6 +916,7 @@ pub fn run(job_id: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreErr
                 (block.block_id, version_id),
                 |r| r.get(0),
             )?;
+            crate::narration_cleanup::delete_for_tts_in(c, project, narration_id)?;
             crate::narration_align::mark_pending_in(
                 c,
                 narration_id,
