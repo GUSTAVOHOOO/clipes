@@ -17,16 +17,16 @@ import { CaptionPanel } from '@/features/captions/CaptionPanel';
 import { useCaptions } from '@/features/captions/useCaptions';
 import { BorderHandles, type Adjustment, type Edge } from './BorderHandles';
 import { SilencesPanel } from './SilencesPanel';
-import { CropPanel, type CropAnswer } from './CropPanel';
+import { CropPanel, type CropAnswer, type CropPanelSlot } from './CropPanel';
 import { TranslationPanel } from '@/features/translation/TranslationPanel';
-import { resolveCrop, type ClipCrop, type CropKeyframe } from './cropMath';
+import { resolveCrop, resolveCropPlan, type ClipCrop, type CropKeyframe, type CropLayout } from './cropMath';
 
 export const editorOpenEvent = 'clipes-editor-open';
 /** Abre o editor num Corte: candidato aprovado ou par de Frases da Fonte. O núcleo valida as bordas. */
 export function openEditor(request: ExportRequest) { window.dispatchEvent(new CustomEvent<ExportRequest>(editorOpenEvent, { detail: request })); }
 
 type Edited = { clipId: number; request: ExportRequest; startUs: number; endUs: number; undoCount: number; redoCount: number; revision: number; silences?: SilencesState; crop?: ClipCrop };
-type Opened = Edited & { windowStartUs: number; windowEndUs: number; fps: number };
+type Opened = Edited & { windowStartUs: number; windowEndUs: number; fps: number; sourceAspect?: number };
 type Thumbs = { id: string; count: number; intervalUs: number; width: number; height: number; columns: number };
 type Timeline = { state: 'queued' | 'running' | 'ready' | 'failed' | 'cancelled' | 'missing'; key: string; job: number | null; progress: number; error: string | null; thumbs: Thumbs | null };
 
@@ -82,7 +82,8 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
   const [endId, setEndId] = useState(request.end_id);
   const [range, setRange] = useState<{ startUs: number; endUs: number } | null>(null);
   const [cropState, setCropState] = useState<ClipCrop | null>(null);
-  const [draftCropEdits, setDraftCropEdits] = useState<CropKeyframe[] | null>(null);
+  const [draftCropLayout, setDraftCropLayout] = useState<{ layout: CropLayout; splitRatio: number } | null>(null);
+  const [draftCropEdits, setDraftCropEdits] = useState<{ panel: CropPanelSlot; layout: CropLayout; edits: CropKeyframe[] } | null>(null);
   const [proxyInfo, setProxyInfo] = useState<PreviewProxyInfo | null>(null);
   const [sentences, setSentences] = useState<TimelineSentence[]>([]);
   const [error, setError] = useState('');
@@ -134,7 +135,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
       }
       committed.current = info; setHistory(info); setSilences(info.silences ?? null);
       setStartId(info.request.start_id); setEndId(info.request.end_id);
-      setOpened(info); setSentences(all); setRange({ startUs: info.startUs, endUs: info.endUs }); setCropState(info.crop ?? null); setDraftCropEdits(null); setSourceUs(info.startUs);
+      setOpened(info); setSentences(all); setRange({ startUs: info.startUs, endUs: info.endUs }); setCropState(info.crop ?? null); setDraftCropLayout(null); setDraftCropEdits(null); setSourceUs(info.startUs);
       requestAnimationFrame(() => { if (scroller.current) scroller.current.scrollLeft = Math.max(0, usToPx(info.startUs, info.windowStartUs) - 80); });
     }).catch(e => { if (alive) setError(errorCode(e)); });
     return () => { alive = false; };
@@ -197,22 +198,38 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
   }, []);
   const applyCropAnswer = useCallback((ans: CropAnswer) => {
     if (!committed.current) return;
+    const nextCrop: ClipCrop = {
+      layout: ans.layout,
+      explicitLayout: ans.explicitLayout,
+      splitRatio: ans.splitRatio,
+      suggested: ans.suggested,
+      edits: ans.edits,
+      gameplayWebcam: ans.gameplayWebcam,
+      twoPeople: ans.twoPeople,
+      resolved: ans.resolved,
+      hasCrop: ans.hasCrop,
+      plan: ans.plan,
+    };
     const next: Edited = {
       ...committed.current,
       revision: ans.revision,
       undoCount: ans.undoCount,
       redoCount: ans.redoCount,
-      crop: { suggested: ans.suggested, edits: ans.edits, resolved: ans.resolved, hasCrop: ans.hasCrop },
+      crop: nextCrop,
     };
     committed.current = next;
     display(next);
     setError('');
   }, [display]);
-  const commitCropEdits = useCallback((edits: CropKeyframe[]) => {
+  const commitCropLayout = useCallback((layout: CropLayout, splitRatio?: number) => {
     const seq = ++sequence.current;
     operations.current = operations.current.then(async () => {
       if (!committed.current) return;
-      const ans = await coreDispatch<CropAnswer>('editor.crop.set_edits', { clip_id: committed.current.clipId, edits });
+      const ans = await coreDispatch<CropAnswer>('editor.crop.set_layout', {
+        clip_id: committed.current.clipId,
+        layout,
+        ...(splitRatio !== undefined ? { split_ratio: splitRatio } : {}),
+      });
       if (seq === sequence.current) applyCropAnswer(ans);
       else if (committed.current) {
         committed.current = {
@@ -220,7 +237,56 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
           revision: ans.revision,
           undoCount: ans.undoCount,
           redoCount: ans.redoCount,
-          crop: { suggested: ans.suggested, edits: ans.edits, resolved: ans.resolved, hasCrop: ans.hasCrop },
+          crop: {
+            layout: ans.layout,
+            explicitLayout: ans.explicitLayout,
+            splitRatio: ans.splitRatio,
+            suggested: ans.suggested,
+            edits: ans.edits,
+            gameplayWebcam: ans.gameplayWebcam,
+            twoPeople: ans.twoPeople,
+            resolved: ans.resolved,
+            hasCrop: ans.hasCrop,
+            plan: ans.plan,
+          },
+        };
+      }
+    }).catch(err => {
+      if (seq === sequence.current) {
+        if (committed.current) display(committed.current);
+        setError(errorCode(err) || 'default');
+      }
+    });
+  }, [applyCropAnswer, display]);
+  const commitCropEdits = useCallback((edits: CropKeyframe[], panel: CropPanelSlot = 'primary', layout?: CropLayout) => {
+    const seq = ++sequence.current;
+    operations.current = operations.current.then(async () => {
+      if (!committed.current) return;
+      const ans = await coreDispatch<CropAnswer>('editor.crop.set_edits', {
+        clip_id: committed.current.clipId,
+        edits,
+        panel,
+        ...(layout ? { layout } : {}),
+      });
+      if (seq === sequence.current) applyCropAnswer(ans);
+      else if (committed.current) {
+        committed.current = {
+          ...committed.current,
+          revision: ans.revision,
+          undoCount: ans.undoCount,
+          redoCount: ans.redoCount,
+          crop: {
+            layout: ans.layout,
+            explicitLayout: ans.explicitLayout,
+            splitRatio: ans.splitRatio,
+            suggested: ans.suggested,
+            edits: ans.edits,
+            gameplayWebcam: ans.gameplayWebcam,
+            twoPeople: ans.twoPeople,
+            resolved: ans.resolved,
+            hasCrop: ans.hasCrop,
+            plan: ans.plan,
+          },
         };
       }
     }).catch(err => {
@@ -256,6 +322,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
   const adjust = useCallback((edge: Edge, args: Adjustment, preview = false) => edit('editor.adjust', { edge, ...args }, preview, edge), [edit]);
   const cancelPreview = useCallback((edge?: Edge) => {
     ++sequence.current;
+    setDraftCropLayout(null);
     setDraftCropEdits(null);
     if (committed.current) { display(committed.current); if (edge) seek(edge === 'start' ? committed.current.startUs : committed.current.endUs); }
   }, [display, seek]);
@@ -394,13 +461,53 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
   }, [silences, range]);
   const visibleSilences = useMemo(() => (silences?.intervals ?? []).filter(i => usToPx(i.endUs, windowStartUs) >= visible[0] && usToPx(i.startUs, windowStartUs) <= visible[1]), [silences, windowStartUs, visible]);
   const effectiveCrop = useMemo<ClipCrop>(() => {
-    const base = cropState ?? { suggested: null, edits: [], resolved: [], hasCrop: false };
-    if (!draftCropEdits) return base;
-    const resolved = resolveCrop(base.suggested, draftCropEdits);
-    return { suggested: base.suggested, edits: draftCropEdits, resolved, hasCrop: resolved.length > 0 };
-  }, [cropState, draftCropEdits]);
+    const base: ClipCrop = cropState ?? { suggested: null, edits: [], resolved: [], hasCrop: false };
+    const startUs = range?.startUs ?? 0;
+    const endUs = range?.endUs ?? 1;
+    const aspect = opened?.sourceAspect ?? 16 / 9;
+    if (!draftCropLayout && !draftCropEdits) {
+      if (base.plan) return base;
+      const plan = resolveCropPlan(base, aspect, startUs, endUs);
+      return { ...base, plan };
+    }
+    const next: ClipCrop = {
+      ...base,
+      ...(draftCropLayout ? { layout: draftCropLayout.layout, explicitLayout: draftCropLayout.layout, splitRatio: draftCropLayout.splitRatio } : {}),
+    };
+    if (draftCropEdits) {
+      if (draftCropEdits.panel === 'primary') {
+        next.edits = draftCropEdits.edits;
+      } else if (draftCropEdits.layout === 'gameplay_webcam') {
+        const cur = next.gameplayWebcam ?? { top: { suggested: null, edits: [] }, bottom: { suggested: null, edits: [] } };
+        next.gameplayWebcam = {
+          top: draftCropEdits.panel === 'top' ? { ...cur.top, edits: draftCropEdits.edits } : cur.top,
+          bottom: draftCropEdits.panel === 'bottom' ? { ...cur.bottom, edits: draftCropEdits.edits } : cur.bottom,
+        };
+      } else if (draftCropEdits.layout === 'two_people') {
+        const cur = next.twoPeople ?? { top: { suggested: null, edits: [] }, bottom: { suggested: null, edits: [] } };
+        next.twoPeople = {
+          top: draftCropEdits.panel === 'top' ? { ...cur.top, edits: draftCropEdits.edits } : cur.top,
+          bottom: draftCropEdits.panel === 'bottom' ? { ...cur.bottom, edits: draftCropEdits.edits } : cur.bottom,
+        };
+      }
+    }
+    const plan = resolveCropPlan(next, aspect, startUs, endUs);
+    const resolved = resolveCrop(next.suggested, next.edits);
+    return { ...next, layout: plan.layout, splitRatio: plan.splitRatio, resolved, hasCrop: true, plan };
+  }, [cropState, draftCropLayout, draftCropEdits, opened?.sourceAspect, range?.startUs, range?.endUs]);
   const crop = useMemo(() => (effectiveCrop.resolved.length ? effectiveCrop.resolved : null), [effectiveCrop.resolved]);
-  const visibleCropKeyframes = useMemo(() => effectiveCrop.edits.filter(k => { const px = usToPx(k.timeUs, windowStartUs); return px >= visible[0] && px <= visible[1]; }), [effectiveCrop.edits, windowStartUs, visible]);
+  const cropPlan = useMemo(() => (effectiveCrop.hasCrop ? (effectiveCrop.plan ?? null) : null), [effectiveCrop.hasCrop, effectiveCrop.plan]);
+  const activeTimelineKeyframes = useMemo(() => {
+    const layout = effectiveCrop.explicitLayout ?? effectiveCrop.layout;
+    if (layout === 'gameplay_webcam') {
+      return [...(effectiveCrop.gameplayWebcam?.top.edits ?? []), ...(effectiveCrop.gameplayWebcam?.bottom.edits ?? [])];
+    }
+    if (layout === 'two_people') {
+      return [...(effectiveCrop.twoPeople?.top.edits ?? []), ...(effectiveCrop.twoPeople?.bottom.edits ?? [])];
+    }
+    return effectiveCrop.edits;
+  }, [effectiveCrop]);
+  const visibleCropKeyframes = useMemo(() => activeTimelineKeyframes.filter(k => { const px = usToPx(k.timeUs, windowStartUs); return px >= visible[0] && px <= visible[1]; }), [activeTimelineKeyframes, windowStartUs, visible]);
 
   return <section role="region" aria-label={t.title} data-start-id={startId} data-end-id={endId} data-start-us={range?.startUs} data-end-us={range?.endUs} data-window-start-us={opened?.windowStartUs} data-undo-count={history.undoCount} data-source-us={Math.round(sourceUs)} data-rate={rate} data-silences-removed-us={silencesView.removedUs}
     className="fixed inset-0 flex flex-col overflow-hidden bg-canvas text-fg" style={{ zIndex: 'var(--z-scrim)' }}>
@@ -420,7 +527,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
       <Puxador lado="dir" g={right} itens={[{ id: 'borders', rotulo: t.borders, atalho: ']', icone: <PanelRight size={16} />, onClick: () => { left.fechar(); openRight('borders'); } }, { id: 'captions', rotulo: t.captions, atalho: 'C', icone: <Captions size={16} />, onClick: () => { left.fechar(); openRight('captions'); } }, { id: 'silences', rotulo: t.silences, atalho: 'S', icone: <Scissors size={16} />, onClick: () => { left.fechar(); openRight('silences'); } }, { id: 'crop', rotulo: t.crop, atalho: 'F', icone: <Crop size={16} />, onClick: () => { left.fechar(); openRight('crop'); } }, { id: 'translation', rotulo: t.translation, atalho: 'T', icone: <Languages size={16} />, onClick: () => { left.fechar(); openRight('translation'); } }]} />
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4"><div className="m-auto flex flex-col items-center gap-3">
         {!opened && !error && <p aria-live="polite" className="text-fg-2">{t.loading}</p>}
-        {opened && <div style={{ width: 'min(18rem, 22vh)' }}><CutPreview sourceId={request.source_id} startUs={opened.startUs} endUs={opened.endUs} rate={rate} onSourceTime={us => setSourceUs(us)} onProxyChange={setProxyInfo} captions={captions.data} skipIntervals={activeSilences} crop={crop} /></div>}
+        {opened && <div style={{ width: 'min(18rem, 22vh)' }}><CutPreview sourceId={request.source_id} startUs={opened.startUs} endUs={opened.endUs} rate={rate} onSourceTime={us => setSourceUs(us)} onProxyChange={setProxyInfo} captions={captions.data} skipIntervals={activeSilences} crop={crop} cropPlan={cropPlan} /></div>}
         {opened && <div className="flex flex-wrap items-center justify-center gap-2" role="group" aria-label={t.shortcuts}>
           <Button tamanho="sm" onClick={() => setRate(nextRate(rate, 'j'))} atalho="J">{t.back.replace(/ \(.\)$/, '')}</Button>
           <Button tamanho="sm" onClick={() => setRate(0)} atalho="K">{t.pause.replace(/ \(.\)$/, '')}</Button>
@@ -532,9 +639,12 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
               sourceUs={sourceUs}
               fps={opened.fps}
               rate={rate}
+              sourceAspect={opened.sourceAspect}
               proxy={proxyInfo}
               crop={effectiveCrop}
               busy={closing}
+              onPreviewLayout={setDraftCropLayout}
+              onCommitLayout={commitCropLayout}
               onPreviewEdits={setDraftCropEdits}
               onCommitEdits={commitCropEdits}
               onSuggestionApplied={applyCropAnswer}

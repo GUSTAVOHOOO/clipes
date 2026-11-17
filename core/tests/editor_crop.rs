@@ -193,5 +193,139 @@ fn migrates_v1_clip_documents_to_v2_and_preserves_suggested_separately_from_edit
         0.15,
         "edição de crop depois de enfileirar não muda o job"
     );
+
+    // #78: cinco layouts, proporção ajustável, painéis independentes, undo/redo e congelamento no export.
+    let err_ratio = dispatch(
+        "editor.crop.set_layout",
+        json!({"clip_id":cand_clip,"layout":"gameplay_webcam","split_ratio":0.10}),
+        &mut |_| {},
+    )
+    .unwrap_err();
+    assert_eq!(err_ratio.code, "invalid_crop");
+
+    // Fullscreen ROI reutiliza os edits manuais do #71 e ignora suggested.
+    call(
+        "editor.crop.set_suggested",
+        json!({"clip_id":cand_clip,"suggested":suggested_before}),
+    );
+    let roi = call(
+        "editor.crop.set_layout",
+        json!({"clip_id":cand_clip,"layout":"fullscreen_roi"}),
+    );
+    assert_eq!(roi["layout"], "fullscreen_roi");
+    assert_eq!(
+        roi["plan"]["panels"][0]["keyframes"]
+            .as_array()
+            .map(|a| a.len())
+            .unwrap_or(0),
+        0
+    );
+    assert!(
+        (roi["plan"]["panels"][0]["segments"][0]["keyframes"][0]["x"]
+            .as_f64()
+            .unwrap()
+            - 0.55)
+            .abs()
+            < 1e-9
+    );
+
+    // Jogo + webcam: padrão 30/70, ajustável 20..50%, retângulos manuais por painel preservados no undo/redo.
+    let gw = call(
+        "editor.crop.set_layout",
+        json!({"clip_id":cand_clip,"layout":"gameplay_webcam","split_ratio":0.35}),
+    );
+    assert_eq!(gw["layout"], "gameplay_webcam");
+    assert_eq!(gw["plan"]["panels"][0]["targetHeight"], 672);
+    assert_eq!(gw["plan"]["panels"][1]["targetHeight"], 1248);
+
+    let gw_top = call(
+        "editor.crop.set_edits",
+        json!({"clip_id":cand_clip,"panel":"top","edits":[{"timeUs":12_000_000,"x":0.02,"y":0.04,"width":0.25,"height":0.24}]}),
+    );
+    assert!(
+        (gw_top["plan"]["panels"][0]["segments"][0]["keyframes"][0]["x"]
+            .as_f64()
+            .unwrap()
+            - 0.02)
+            .abs()
+            < 1e-9
+    );
+    let gw_bot = call(
+        "editor.crop.set_edits",
+        json!({"clip_id":cand_clip,"panel":"bottom","edits":[{"timeUs":12_000_000,"x":0.30,"y":0.0,"width":0.42,"height":1.0}]}),
+    );
+    assert!(
+        (gw_bot["plan"]["panels"][1]["segments"][0]["keyframes"][0]["x"]
+            .as_f64()
+            .unwrap()
+            - 0.30)
+            .abs()
+            < 1e-9
+    );
+
+    let eval_gw = call(
+        "editor.crop.evaluate",
+        json!({"clip_id":cand_clip,"time_us":12_000_000}),
+    );
+    assert_eq!(eval_gw["panels"].as_array().unwrap().len(), 2);
+    assert!((eval_gw["panels"][0]["rect"]["x"].as_f64().unwrap() - 0.02).abs() < 1e-9);
+    assert!((eval_gw["panels"][1]["rect"]["x"].as_f64().unwrap() - 0.30).abs() < 1e-9);
+
+    // Duas pessoas empilhadas + Fit/centro.
+    let tp = call(
+        "editor.crop.set_layout",
+        json!({"clip_id":cand_clip,"layout":"two_people"}),
+    );
+    assert_eq!(tp["plan"]["panels"][0]["targetHeight"], 960);
+    assert_eq!(tp["plan"]["panels"][1]["targetHeight"], 960);
+
+    let fit = call(
+        "editor.crop.set_layout",
+        json!({"clip_id":cand_clip,"layout":"fit"}),
+    );
+    assert_eq!(fit["plan"]["panels"][0]["fitMode"], "fit");
+
+    // Undo volta para two_people e depois para gameplay_webcam com edits preservados.
+    let undone_tp = call("editor.undo", json!({"clip_id":cand_clip}));
+    assert_eq!(undone_tp["crop"]["layout"], "two_people");
+    let undone_gw = call("editor.undo", json!({"clip_id":cand_clip}));
+    assert_eq!(undone_gw["crop"]["layout"], "gameplay_webcam");
+    assert!(
+        (undone_gw["crop"]["plan"]["panels"][0]["segments"][0]["keyframes"][0]["x"]
+            .as_f64()
+            .unwrap()
+            - 0.02)
+            .abs()
+            < 1e-9
+    );
+
+    // Export congela resolved_crop_plan para gameplay_webcam.
+    let out_gw = root.path().join("frozen-gw.mp4");
+    let job_gw = call(
+        "export.start",
+        json!({"source_id":source,"start_id":2,"end_id":6,"candidate_id":cand,"clip_id":cand_clip,"output":out_gw}),
+    )["job"]
+        .as_i64()
+        .unwrap();
+    let frozen_gw: Value = serde_json::from_str(
+        &clipes_core::projects::with_reader(|c| {
+            c.query_row(
+                "SELECT request FROM exports WHERE job_id=?1",
+                [job_gw],
+                |r| r.get::<_, String>(0),
+            )
+        })
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(frozen_gw["resolved_crop_plan"]["layout"], "gameplay_webcam");
+    assert_eq!(
+        frozen_gw["resolved_crop_plan"]["panels"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+
     call("projects.close", json!({}));
 }

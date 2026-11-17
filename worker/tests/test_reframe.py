@@ -63,8 +63,13 @@ def test_cuda_failure_uses_the_same_checkpoint_on_cpu(tmp_path):
     assert len(attempts) == 2
 
 
-@pytest.mark.parametrize("params", [{}, {"source": "x", "start_us": -1},
-    {"source": "x", "ffmpeg": "f", "start_us": True, "end_us": 10, "model": {"path": "m", "device": "cpu"}}])
+@pytest.mark.parametrize("params", [
+    {},
+    {"source": "x", "start_us": -1},
+    {"source": "x", "ffmpeg": "f", "start_us": True, "end_us": 10, "model": {"path": "m", "device": "cpu"}},
+    {"source": "x", "ffmpeg": "f", "start_us": 0, "end_us": 10, "layout": "unknown", "model": {"path": "m", "device": "cpu"}},
+    {"source": "x", "ffmpeg": "f", "start_us": 0, "end_us": 10, "layout": "gameplay_webcam", "split_ratio": 0.99, "model": {"path": "m", "device": "cpu"}},
+])
 def test_invalid_request_is_rejected_before_loading(params):
     task = reframe_task(loader=lambda *args: pytest.fail("must not load"))
     with pytest.raises(WorkerError, match="invalid_message"):
@@ -112,6 +117,27 @@ def test_real_ffmpeg_on_synthetic_video_with_fake_detections(tmp_path):
     assert data["segments"][0]["startUs"] == 200_000
     assert data["segments"][-1]["endUs"] == 1_800_000
     assert data["segments"][1]["reason"] == "scene"
+
+    # Testa os layouts multi-painel (gameplay_webcam e two_people) sobre vídeo sintético
+    from clipes_worker.reframe_camera import Detection
+    class SyntheticWebcamDetector:
+        device = "cpu"
+        def detect(self, frame):
+            return [Detection(0.08, 0.12, 0.08, 0.12, 0.91)]
+    wc_data = analyze(SyntheticWebcamDetector(), {
+        "source": str(source), "ffmpeg": ffmpeg, "start_us": 200_000, "end_us": 1_800_000,
+        "layout": "gameplay_webcam", "split_ratio": 0.30,
+    }, Context())
+    assert wc_data["secondarySegments"]
+    assert wc_data["metrics"]["webcamDetected"] is True
+    assert wc_data["metrics"]["webcamConfidence"] <= 0.65
+
+    tp_data = analyze(Detector(), {
+        "source": str(source), "ffmpeg": ffmpeg, "start_us": 200_000, "end_us": 1_800_000,
+        "layout": "two_people", "split_ratio": 0.50,
+    }, Context())
+    assert len(tp_data["segments"]) == 2
+    assert len(tp_data["secondarySegments"]) == 2
 
 
 @pytest.mark.skipif(not __import__("os").environ.get("CLIPES_YUNET_MANUAL_FACE"),

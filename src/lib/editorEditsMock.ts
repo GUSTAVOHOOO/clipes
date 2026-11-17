@@ -1,14 +1,52 @@
-// Fixture determinística do contrato #70/#77/#66/#71, só usada com VITE_CORE_MOCK + editor-test.
+// Fixture determinística do contrato #70/#77/#66/#71/#78, só usada com VITE_CORE_MOCK + editor-test.
 import type { ExportRequest } from './core';
 import type { KeptSegment, SilenceInterval, SilencesState } from '@/features/editor/timelineMath';
-import { interpolateCrop, resolveCrop, type CropKeyframe, type SuggestedCrop } from '@/features/editor/cropMath';
+import {
+  defaultPanelRect,
+  interpolateCrop,
+  panelHeights,
+  resolveCrop,
+  resolveCropPlan,
+  splitBounds,
+  type CropKeyframe,
+  type CropLayout,
+  type DualCropPanels,
+  type SuggestedCrop,
+} from '@/features/editor/cropMath';
 
 type Range = { startUs: number; endUs: number };
 type MockSilences = { thresholdUs: number; intervals: SilenceInterval[] };
-type Snapshot = { range: Range; silences: MockSilences | null; cropEdits: CropKeyframe[] };
-type CropDoc = { suggested: SuggestedCrop | null; edits: CropKeyframe[] };
+type CropDoc = {
+  layout: CropLayout | null;
+  splitRatio: number | null;
+  suggested: SuggestedCrop | null;
+  edits: CropKeyframe[];
+  gameplayWebcam: DualCropPanels | null;
+  twoPeople: DualCropPanels | null;
+};
+type Snapshot = {
+  range: Range;
+  silences: MockSilences | null;
+  cropLayout: CropLayout | null;
+  cropSplitRatio: number | null;
+  cropEdits: CropKeyframe[];
+  gameplayWebcamEdits: [CropKeyframe[], CropKeyframe[]] | null;
+  twoPeopleEdits: [CropKeyframe[], CropKeyframe[]] | null;
+};
 type Clip = { id: number; request: ExportRequest; range: Range; silences: MockSilences | null; undo: Snapshot[]; redo: Snapshot[]; revision: number; crop: CropDoc };
-type ReframeJob = { id: number; job: number; source: number; startUs: number; endUs: number; polls: number; revision: number; timeline: SuggestedCrop | null };
+type ReframeJob = {
+  id: number;
+  job: number;
+  source: number;
+  startUs: number;
+  endUs: number;
+  layout: 'face' | 'gameplay_webcam' | 'two_people';
+  splitRatio: number | null;
+  polls: number;
+  revision: number;
+  timeline: SuggestedCrop | null;
+  secondaryTimeline: SuggestedCrop | null;
+};
 
 const clips = new Map<string, Clip>();
 const reframeJobs = new Map<number, ReframeJob>();
@@ -17,6 +55,7 @@ const fail = (code: string) => { throw { code }; };
 const ids = (r: Range) => ({ start_id: Math.floor(r.startUs / 10_000_000) + 1, end_id: Math.ceil(r.endUs / 10_000_000) });
 const cloneSilences = (s: MockSilences | null): MockSilences | null => s ? { thresholdUs: s.thresholdUs, intervals: s.intervals.map(i => ({ ...i })) } : null;
 const cloneEdits = (edits: CropKeyframe[]): CropKeyframe[] => edits.map(k => ({ ...k }));
+const cloneDual = (d: DualCropPanels | null): DualCropPanels | null => d ? { top: { suggested: d.top.suggested, edits: cloneEdits(d.top.edits) }, bottom: { suggested: d.bottom.suggested, edits: cloneEdits(d.bottom.edits) } } : null;
 const cropTest = () => typeof location !== 'undefined' && new URLSearchParams(location.search).has('crop-test');
 
 function exampleCrop(startUs: number, endUs: number, revision = 1): SuggestedCrop {
@@ -32,7 +71,63 @@ function exampleCrop(startUs: number, endUs: number, revision = 1): SuggestedCro
     ],
   };
 }
-const cropView = (crop: CropDoc) => { const resolved = resolveCrop(crop.suggested, crop.edits); return { suggested: crop.suggested, edits: crop.edits, resolved, hasCrop: resolved.length > 0 }; };
+
+function exampleDualCrop(
+  layout: 'gameplay_webcam' | 'two_people',
+  startUs: number,
+  endUs: number,
+  splitRatio: number | null,
+  revision = 1,
+): { primary: SuggestedCrop; secondary: SuggestedCrop } {
+  const [topH, botH] = panelHeights(layout, splitRatio);
+  const topRect = layout === 'gameplay_webcam'
+    ? defaultPanelRect(16 / 9, 1080 / topH, 3.2, revision > 1 ? 0.82 : 0.16, 0.22)
+    : defaultPanelRect(16 / 9, 1080 / topH, 1.0, 0.22, 0.5);
+  const botRect = layout === 'gameplay_webcam'
+    ? defaultPanelRect(16 / 9, 1080 / botH, 1.0, 0.56, 0.5)
+    : defaultPanelRect(16 / 9, 1080 / botH, 1.0, 0.78, 0.5);
+  const conf = layout === 'gameplay_webcam' ? 0.48 : 0.91;
+  return {
+    primary: {
+      schemaVersion: 1, revision, status: 'suggestion',
+      segments: [{ startUs, endUs, reason: 'start', keyframes: [{ timeUs: startUs, ...topRect, confidence: conf }] }],
+    },
+    secondary: {
+      schemaVersion: 1, revision, status: 'suggestion',
+      segments: [{ startUs, endUs, reason: 'start', keyframes: [{ timeUs: startUs, ...botRect, confidence: conf }] }],
+    },
+  };
+}
+
+function cropView(crop: CropDoc, range: Range) {
+  const resolved = resolveCrop(crop.suggested, crop.edits);
+  const plan = resolveCropPlan(
+    {
+      explicitLayout: crop.layout,
+      splitRatio: crop.splitRatio ?? undefined,
+      suggested: crop.suggested,
+      edits: crop.edits,
+      gameplayWebcam: crop.gameplayWebcam,
+      twoPeople: crop.twoPeople,
+    },
+    16 / 9,
+    range.startUs,
+    range.endUs,
+  );
+  const hasCrop = crop.layout !== null || crop.suggested !== null || crop.edits.length > 0 || crop.gameplayWebcam !== null || crop.twoPeople !== null;
+  return {
+    layout: plan.layout,
+    explicitLayout: crop.layout,
+    splitRatio: plan.splitRatio,
+    suggested: crop.suggested,
+    edits: crop.edits,
+    gameplayWebcam: crop.gameplayWebcam,
+    twoPeople: crop.twoPeople,
+    resolved,
+    hasCrop,
+    plan,
+  };
+}
 
 export function buildMockSplice(range: Range, silences: MockSilences | null): { segments: KeptSegment[]; removedUs: number; effectiveDurationUs: number } {
   const active = (silences?.intervals ?? [])
@@ -96,7 +191,17 @@ export function getMockClipSplice(clipId: number | undefined, startUs: number, e
   return buildMockSplice(c.range, c.silences);
 }
 
-const answer = (c: Clip, r = c.range, s = c.silences) => ({
+const snapshotOf = (c: Clip): Snapshot => ({
+  range: c.range,
+  silences: cloneSilences(c.silences),
+  cropLayout: c.crop.layout,
+  cropSplitRatio: c.crop.splitRatio,
+  cropEdits: cloneEdits(c.crop.edits),
+  gameplayWebcamEdits: c.crop.gameplayWebcam ? [cloneEdits(c.crop.gameplayWebcam.top.edits), cloneEdits(c.crop.gameplayWebcam.bottom.edits)] : null,
+  twoPeopleEdits: c.crop.twoPeople ? [cloneEdits(c.crop.twoPeople.top.edits), cloneEdits(c.crop.twoPeople.bottom.edits)] : null,
+});
+
+const answer = (c: Clip, r = c.range, s = c.silences, crop = c.crop) => ({
   clipId: c.id,
   schemaVersion: 2,
   request: { ...c.request, ...ids(r) },
@@ -105,7 +210,7 @@ const answer = (c: Clip, r = c.range, s = c.silences) => ({
   undoCount: c.undo.length,
   redoCount: c.redo.length,
   silences: silencesView(r, s),
-  crop: cropView(c.crop),
+  crop: cropView(crop, r),
 });
 
 export function editorEditsMock(name: string, a: Record<string, unknown>): unknown {
@@ -116,57 +221,152 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
     let c = clips.get(key);
     if (!c) {
       const startUs = (request.start_id - 1) * 10_000_000, endUs = request.end_id * 10_000_000;
-      c = { id: clips.size + 1, request, range: { startUs, endUs }, silences: null, undo: [], redo: [], revision: 0, crop: { suggested: cropTest() ? exampleCrop(startUs, endUs) : null, edits: [] } };
+      c = {
+        id: clips.size + 1,
+        request,
+        range: { startUs, endUs },
+        silences: null,
+        undo: [],
+        redo: [],
+        revision: 0,
+        crop: {
+          layout: null,
+          splitRatio: null,
+          suggested: cropTest() ? exampleCrop(startUs, endUs) : null,
+          edits: [],
+          gameplayWebcam: null,
+          twoPeople: null,
+        },
+      };
       clips.set(key, c);
     }
-    return { ...answer(c), windowStartUs: Math.max(0, c.range.startUs - 120_000_000), windowEndUs: c.range.endUs + 120_000_000, fps: 24 };
+    return { ...answer(c), windowStartUs: Math.max(0, c.range.startUs - 120_000_000), windowEndUs: c.range.endUs + 120_000_000, fps: 24, sourceAspect: 16 / 9 };
   }
   if (name === 'reframe.start') {
     const source = Number(a.source ?? 1);
     const startUs = Number(a.startUs ?? 0);
     const endUs = Number(a.endUs ?? 0);
+    const layout = (a.layout as 'face' | 'gameplay_webcam' | 'two_people') ?? 'face';
+    const splitRatio = typeof a.splitRatio === 'number' ? a.splitRatio : null;
     const force = Boolean(a.force);
     let existing = [...reframeJobs.values()].find(j => j.source === source && j.startUs === startUs && j.endUs === endUs);
     if (!existing) {
       const id = nextReframeId++;
-      existing = { id, job: 6000 + id, source, startUs, endUs, polls: 0, revision: force ? 2 : 1, timeline: null };
+      existing = { id, job: 6000 + id, source, startUs, endUs, layout, splitRatio, polls: 0, revision: force ? 2 : 1, timeline: null, secondaryTimeline: null };
       reframeJobs.set(id, existing);
-    } else if (force) {
+    } else if (force || existing.layout !== layout || existing.splitRatio !== splitRatio) {
       existing.polls = 0;
+      existing.layout = layout;
+      existing.splitRatio = splitRatio;
       existing.revision += 1;
       existing.timeline = null;
+      existing.secondaryTimeline = null;
     }
-    return { id: existing.id, job: existing.job, source: existing.source, startUs: existing.startUs, endUs: existing.endUs, timeline: existing.timeline, error: null, state: existing.timeline ? 'completed' : 'queued', progress: existing.timeline ? 100 : 0 };
+    return {
+      id: existing.id, job: existing.job, source: existing.source, startUs: existing.startUs, endUs: existing.endUs,
+      layout: existing.layout, splitRatio: existing.splitRatio, timeline: existing.timeline, secondaryTimeline: existing.secondaryTimeline,
+      error: null, state: existing.timeline ? 'completed' : 'queued', progress: existing.timeline ? 100 : 0,
+    };
   }
   if (name === 'reframe.status') {
     const item = reframeJobs.get(Number(a.id));
     if (!item) return fail('reframe_not_found');
     item.polls += 1;
     if (!item.timeline && item.polls >= 1) {
-      item.timeline = exampleCrop(item.startUs, item.endUs, item.revision);
+      if (item.layout === 'gameplay_webcam' || item.layout === 'two_people') {
+        const dual = exampleDualCrop(item.layout, item.startUs, item.endUs, item.splitRatio, item.revision);
+        item.timeline = dual.primary;
+        item.secondaryTimeline = dual.secondary;
+      } else {
+        item.timeline = exampleCrop(item.startUs, item.endUs, item.revision);
+        item.secondaryTimeline = null;
+      }
     }
-    return { id: item.id, job: item.job, source: item.source, startUs: item.startUs, endUs: item.endUs, timeline: item.timeline, error: null, state: item.timeline ? 'completed' : 'running', progress: item.timeline ? 100 : 50 };
+    return {
+      id: item.id, job: item.job, source: item.source, startUs: item.startUs, endUs: item.endUs,
+      layout: item.layout, splitRatio: item.splitRatio, timeline: item.timeline, secondaryTimeline: item.secondaryTimeline,
+      error: null, state: item.timeline ? 'completed' : 'running', progress: item.timeline ? 100 : 50,
+    };
   }
   if (name.startsWith('editor.crop.')) {
     const c = [...clips.values()].find(item => item.id === a.clip_id);
     if (!c) return fail('invalid_clip');
-    const cropReply = (crop = c.crop) => ({ clipId: c.id, schemaVersion: 2, revision: c.revision, undoCount: c.undo.length, redoCount: c.redo.length, ...cropView(crop) });
+    const cropReply = (crop = c.crop) => ({ clipId: c.id, schemaVersion: 2, revision: c.revision, undoCount: c.undo.length, redoCount: c.redo.length, ...cropView(crop, c.range) });
     if (name === 'editor.crop.get') return cropReply();
-    if (name === 'editor.crop.evaluate') return { clipId: c.id, timeUs: Number(a.time_us), rect: interpolateCrop(resolveCrop(c.crop.suggested, c.crop.edits), Number(a.time_us)) };
+    if (name === 'editor.crop.evaluate') {
+      const plan = resolveCropPlan({ explicitLayout: c.crop.layout, splitRatio: c.crop.splitRatio ?? undefined, suggested: c.crop.suggested, edits: c.crop.edits, gameplayWebcam: c.crop.gameplayWebcam, twoPeople: c.crop.twoPeople }, 16 / 9, c.range.startUs, c.range.endUs);
+      const panels = plan.panels.map(p => ({ targetWidth: p.targetWidth, targetHeight: p.targetHeight, fitMode: p.fitMode, rect: interpolateCrop(p.segments, Number(a.time_us)) }));
+      return { clipId: c.id, timeUs: Number(a.time_us), rect: panels[0]?.rect ?? null, panels };
+    }
+    if (name === 'editor.crop.set_layout') {
+      const layout = a.layout as CropLayout;
+      const bounds = splitBounds(layout);
+      const rawRatio = typeof a.split_ratio === 'number' ? a.split_ratio : null;
+      const nextRatio = bounds ? (rawRatio !== null ? Math.min(bounds[2], Math.max(bounds[1], rawRatio)) : (c.crop.layout === layout && c.crop.splitRatio !== null ? c.crop.splitRatio : bounds[0])) : null;
+      if (a.preview) {
+        return cropReply({ ...c.crop, layout, splitRatio: nextRatio });
+      }
+      if (c.crop.layout !== layout || c.crop.splitRatio !== nextRatio) {
+        c.undo.push(snapshotOf(c));
+        if (c.undo.length > 100) c.undo.shift();
+        c.redo = [];
+        c.crop.layout = layout;
+        c.crop.splitRatio = nextRatio;
+        c.revision++;
+      }
+      return cropReply();
+    }
     if (name === 'editor.crop.set_suggested') {
       const reframeId = typeof a.reframe_id === 'number' ? a.reframe_id : null;
-      const nextSuggested = reframeId !== null ? (reframeJobs.get(reframeId)?.timeline ?? fail('invalid_crop')) : ((a.suggested as SuggestedCrop | null) ?? null);
-      c.crop.suggested = nextSuggested; c.revision++;
+      if (reframeId !== null) {
+        const job = reframeJobs.get(reframeId);
+        if (!job?.timeline) return fail('invalid_crop');
+        if (job.layout === 'gameplay_webcam' || job.layout === 'two_people') {
+          c.crop.layout = job.layout;
+          if (job.splitRatio !== null) c.crop.splitRatio = job.splitRatio;
+          const slotKey = job.layout === 'gameplay_webcam' ? 'gameplayWebcam' : 'twoPeople';
+          const cur = c.crop[slotKey] ?? { top: { suggested: null, edits: [] }, bottom: { suggested: null, edits: [] } };
+          c.crop[slotKey] = { top: { ...cur.top, suggested: job.timeline }, bottom: { ...cur.bottom, suggested: job.secondaryTimeline } };
+        } else {
+          c.crop.suggested = job.timeline;
+        }
+        c.revision++;
+        return cropReply();
+      }
+      c.crop.suggested = (a.suggested as SuggestedCrop | null) ?? null; c.revision++;
       return cropReply();
     }
     if (name === 'editor.crop.set_edits') {
       const nextEdits = cloneEdits((a.edits as CropKeyframe[]) ?? []);
-      if (a.preview) return cropReply({ suggested: c.crop.suggested, edits: nextEdits });
-      if (JSON.stringify(c.crop.edits) !== JSON.stringify(nextEdits)) {
-        c.undo.push({ range: c.range, silences: cloneSilences(c.silences), cropEdits: cloneEdits(c.crop.edits) });
+      const panel = (a.panel as 'primary' | 'top' | 'bottom') ?? 'primary';
+      if (panel === 'primary') {
+        if (a.preview) return cropReply({ ...c.crop, edits: nextEdits });
+        if (JSON.stringify(c.crop.edits) !== JSON.stringify(nextEdits)) {
+          c.undo.push(snapshotOf(c));
+          if (c.undo.length > 100) c.undo.shift();
+          c.redo = [];
+          c.crop.edits = nextEdits;
+          c.revision++;
+        }
+        return cropReply();
+      }
+      const targetLayout = (a.layout as CropLayout) ?? c.crop.layout;
+      if (targetLayout !== 'gameplay_webcam' && targetLayout !== 'two_people') return fail('invalid_crop');
+      const slotKey = targetLayout === 'gameplay_webcam' ? 'gameplayWebcam' : 'twoPeople';
+      const curDual = c.crop[slotKey] ?? { top: { suggested: null, edits: [] }, bottom: { suggested: null, edits: [] } };
+      const nextDual: DualCropPanels = {
+        top: panel === 'top' ? { ...curDual.top, edits: nextEdits } : curDual.top,
+        bottom: panel === 'bottom' ? { ...curDual.bottom, edits: nextEdits } : curDual.bottom,
+      };
+      if (a.preview) {
+        return cropReply({ ...c.crop, layout: targetLayout, [slotKey]: nextDual });
+      }
+      if (JSON.stringify(curDual[panel].edits) !== JSON.stringify(nextEdits) || c.crop.layout !== targetLayout) {
+        c.undo.push(snapshotOf(c));
         if (c.undo.length > 100) c.undo.shift();
         c.redo = [];
-        c.crop.edits = nextEdits;
+        c.crop.layout = targetLayout;
+        c.crop[slotKey] = nextDual;
         c.revision++;
       }
       return cropReply();
@@ -177,14 +377,29 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
   const c = [...clips.values()].find(c => c.id === a.clip_id);
   if (!c) return fail('invalid_clip');
   const pushUndo = () => {
-    c.undo.push({ range: c.range, silences: cloneSilences(c.silences), cropEdits: cloneEdits(c.crop.edits) });
+    c.undo.push(snapshotOf(c));
     if (c.undo.length > 100) c.undo.shift();
     c.redo = [];
   };
   if (name === 'editor.undo' || name === 'editor.redo') {
     const from = name === 'editor.undo' ? c.undo : c.redo, to = name === 'editor.undo' ? c.redo : c.undo;
     const next = from.pop();
-    if (next) { to.push({ range: c.range, silences: cloneSilences(c.silences), cropEdits: cloneEdits(c.crop.edits) }); c.range = next.range; c.silences = next.silences; c.crop.edits = cloneEdits(next.cropEdits); c.revision++; }
+    if (next) {
+      to.push(snapshotOf(c));
+      c.range = next.range;
+      c.silences = next.silences;
+      c.crop.layout = next.cropLayout;
+      c.crop.splitRatio = next.cropSplitRatio;
+      c.crop.edits = cloneEdits(next.cropEdits);
+      const applyDual = (cur: DualCropPanels | null, edits: [CropKeyframe[], CropKeyframe[]] | null): DualCropPanels | null => {
+        if (!edits && !cur) return null;
+        const base = cur ?? { top: { suggested: null, edits: [] }, bottom: { suggested: null, edits: [] } };
+        return { top: { ...base.top, edits: cloneEdits(edits?.[0] ?? []) }, bottom: { ...base.bottom, edits: cloneEdits(edits?.[1] ?? []) } };
+      };
+      c.crop.gameplayWebcam = applyDual(c.crop.gameplayWebcam, next.gameplayWebcamEdits);
+      c.crop.twoPeople = applyDual(c.crop.twoPeople, next.twoPeopleEdits);
+      c.revision++;
+    }
     return answer(c);
   }
   if (name === 'editor.silences.detect') {

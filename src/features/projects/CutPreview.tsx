@@ -6,7 +6,7 @@ import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { CaptionOverlay } from '@/features/captions/CaptionOverlay';
 import type { CaptionData } from '@/features/captions/types';
-import { cropVideoTransform, interpolateCrop, type CropSegment } from '@/features/editor/cropMath';
+import { cropVideoTransform, interpolateCrop, type CropSegment, type ResolvedCropPlan } from '@/features/editor/cropMath';
 
 /** Corte (ou candidato da seleção) a pré-visualizar: tempos em µs da Fonte. */
 export type CutRange = { sourceId: number; startUs: number; endUs: number };
@@ -58,10 +58,11 @@ export type PreviewProxyInfo = { state: Proxy['state']; key: string; windowStart
 
 /** Preview 9:16 em Fit (barras, sem corte) de um Corte, sobre o proxy de GOP curto gerado pelo núcleo. */
 /** `rate` (editor, #61): 0 pausa, >0 toca nessa velocidade, <0 volta por passos. `onSourceTime` informa o tempo da Fonte a cada atualização. */
-export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onProxyChange, captions, skipIntervals, crop }: { sourceId: number; startUs: number; endUs: number; rate?: number; onSourceTime?: (sourceUs: number) => void; onProxyChange?: (proxy: PreviewProxyInfo | null) => void; captions?: CaptionData | null; skipIntervals?: SkipInterval[]; crop?: CropSegment[] | null }) {
+export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onProxyChange, captions, skipIntervals, crop, cropPlan }: { sourceId: number; startUs: number; endUs: number; rate?: number; onSourceTime?: (sourceUs: number) => void; onProxyChange?: (proxy: PreviewProxyInfo | null) => void; captions?: CaptionData | null; skipIntervals?: SkipInterval[]; crop?: CropSegment[] | null; cropPlan?: ResolvedCropPlan | null }) {
   const t = useText(texts);
   const frame = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
+  const bottomVideo = useRef<HTMLVideoElement>(null);
   const pending = useRef<number | null>(null);
   const [proxy, setProxy] = useState<Proxy | null>(null);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
@@ -185,35 +186,76 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
     pending.current = null;
     el.currentTime = start; setTime(start);
   }
-  const hasCrop = !!(crop && crop.length > 0);
+  const isDual = !!(cropPlan && cropPlan.panels.length === 2);
+  const effectiveSingleSegments = cropPlan && cropPlan.panels.length === 1 ? cropPlan.panels[0].segments : crop;
+  const isFitDefault = !!(
+    cropPlan &&
+    cropPlan.layout === 'fit' &&
+    cropPlan.panels.length === 1 &&
+    cropPlan.panels[0].segments.length === 1 &&
+    cropPlan.panels[0].segments[0].keyframes.length === 1 &&
+    cropPlan.panels[0].segments[0].keyframes[0].x === 0 &&
+    cropPlan.panels[0].segments[0].keyframes[0].y === 0 &&
+    cropPlan.panels[0].segments[0].keyframes[0].width === 1 &&
+    cropPlan.panels[0].segments[0].keyframes[0].height === 1
+  );
+  const hasCrop = isDual || (!isFitDefault && !!(effectiveSingleSegments && effectiveSingleSegments.length > 0));
+  const splitRatio = cropPlan?.splitRatio ?? 0.5;
+
   useEffect(() => {
     const el = video.current;
+    const botEl = bottomVideo.current;
     const box = frame.current;
-    if (!el || !box || proxy?.state !== 'ready' || !hasCrop || !crop) {
-      if (el) {
-        el.style.position = ''; el.style.left = ''; el.style.top = '';
-        el.style.width = ''; el.style.height = ''; el.style.maxWidth = ''; el.style.maxHeight = '';
-        el.style.objectFit = ''; el.style.transformOrigin = ''; el.style.transform = '';
-        delete el.dataset.cropRect;
-      }
+    const resetEl = (v: HTMLVideoElement | null) => {
+      if (!v) return;
+      v.style.position = ''; v.style.left = ''; v.style.top = '';
+      v.style.width = ''; v.style.height = ''; v.style.maxWidth = ''; v.style.maxHeight = '';
+      v.style.objectFit = ''; v.style.transformOrigin = ''; v.style.transform = '';
+      delete v.dataset.cropRect;
+    };
+    if (!el || !box || proxy?.state !== 'ready' || !hasCrop) {
+      resetEl(el);
+      resetEl(botEl);
       return;
     }
+    const applyRect = (v: HTMLVideoElement, rect: { x: number; y: number; width: number; height: number }, panelW: number, panelH: number) => {
+      if (!v.videoWidth || !v.videoHeight || panelW <= 0 || panelH <= 0) return;
+      const { offsetX, offsetY, scaleX, scaleY } = cropVideoTransform(rect, panelW, panelH, v.videoWidth, v.videoHeight);
+      v.style.position = 'absolute'; v.style.left = '0px'; v.style.top = '0px';
+      v.style.width = `${panelW}px`; v.style.height = `${panelH}px`;
+      v.style.maxWidth = 'none'; v.style.maxHeight = 'none';
+      v.style.objectFit = 'fill'; v.style.transformOrigin = 'top left';
+      v.style.transform = `translate3d(${offsetX}px, ${offsetY}px, 0) scale(${scaleX}, ${scaleY})`;
+      v.dataset.cropRect = `${rect.x.toFixed(6)},${rect.y.toFixed(6)},${rect.width.toFixed(6)},${rect.height.toFixed(6)}`;
+    };
     let alive = true, raf = 0, lastKey = '';
     const renderCrop = (force = false) => {
       if (!alive || !box.clientWidth || !box.clientHeight || !el.videoWidth || !el.videoHeight) return;
+      if (isDual && botEl && cropPlan) {
+        if (Math.abs(botEl.currentTime - el.currentTime) > 0.04 && botEl.readyState >= 1) {
+          botEl.currentTime = el.currentTime;
+        }
+        if (el.paused && !botEl.paused) botEl.pause();
+        else if (!el.paused && botEl.paused && botEl.readyState >= 1) {
+          botEl.playbackRate = el.playbackRate;
+          void botEl.play().catch(() => {});
+        }
+      }
       const sourceAt = proxy.windowStartUs + el.currentTime * 1_000_000;
-      const rect = interpolateCrop(crop, sourceAt);
-      if (!rect) return;
-      const key = `${Math.round(sourceAt)}:${box.clientWidth}x${box.clientHeight}:${el.videoWidth}x${el.videoHeight}`;
+      const key = `${Math.round(sourceAt)}:${box.clientWidth}x${box.clientHeight}:${el.videoWidth}x${el.videoHeight}:${splitRatio.toFixed(4)}:${isDual}`;
       if (!force && key === lastKey) return;
       lastKey = key;
-      const { offsetX, offsetY, scaleX, scaleY } = cropVideoTransform(rect, box.clientWidth, box.clientHeight, el.videoWidth, el.videoHeight);
-      el.style.position = 'absolute'; el.style.left = '0px'; el.style.top = '0px';
-      el.style.width = `${box.clientWidth}px`; el.style.height = `${box.clientHeight}px`;
-      el.style.maxWidth = 'none'; el.style.maxHeight = 'none';
-      el.style.objectFit = 'fill'; el.style.transformOrigin = 'top left';
-      el.style.transform = `translate3d(${offsetX}px, ${offsetY}px, 0) scale(${scaleX}, ${scaleY})`;
-      el.dataset.cropRect = `${rect.x.toFixed(6)},${rect.y.toFixed(6)},${rect.width.toFixed(6)},${rect.height.toFixed(6)}`;
+      if (isDual && cropPlan && cropPlan.panels.length === 2) {
+        const topH = box.clientHeight * cropPlan.splitRatio;
+        const botH = box.clientHeight * (1 - cropPlan.splitRatio);
+        const topRect = interpolateCrop(cropPlan.panels[0].segments, sourceAt);
+        const botRect = interpolateCrop(cropPlan.panels[1].segments, sourceAt);
+        if (topRect) applyRect(el, topRect, box.clientWidth, topH);
+        if (botRect && botEl) applyRect(botEl, botRect, box.clientWidth, botH);
+      } else if (effectiveSingleSegments) {
+        const rect = interpolateCrop(effectiveSingleSegments, sourceAt);
+        if (rect) applyRect(el, rect, box.clientWidth, box.clientHeight);
+      }
     };
     const tick = () => {
       if (!alive) return;
@@ -225,13 +267,15 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
     observer?.observe(box);
     el.addEventListener('loadedmetadata', onEvent);
     el.addEventListener('seeked', onEvent);
+    botEl?.addEventListener('loadedmetadata', onEvent);
     tick();
     return () => {
       alive = false; cancelAnimationFrame(raf); observer?.disconnect();
       el.removeEventListener('loadedmetadata', onEvent);
       el.removeEventListener('seeked', onEvent);
+      botEl?.removeEventListener('loadedmetadata', onEvent);
     };
-  }, [crop, hasCrop, proxy?.state, proxy?.windowStartUs]);
+  }, [cropPlan, effectiveSingleSegments, hasCrop, isDual, splitRatio, proxy?.state, proxy?.windowStartUs]);
   function toggle() {
     const el = video.current;
     if (!el) return;
@@ -240,7 +284,23 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
   async function cancel() { if (proxy?.job != null) { try { await coreDispatch('jobs.cancel', { id: proxy.job }); } catch { setError({ code: '', message: '' }); } } }
 
   const sourceUs = proxy ? proxy.windowStartUs + time * 1_000_000 : startUs;
-  return <section aria-label={t.title} data-preview-state={proxy?.state ?? (error ? 'error' : 'loading')} data-seek-us={lastSeekUs ?? undefined} data-crop-active={hasCrop ? 'true' : undefined} className="flex w-full max-w-[18rem] flex-col gap-2 text-sm">
+  const videoEl = (
+    <video ref={video} src={proxy ? mediaUrl(proxy.key) : undefined} aria-label={t.video} className={hasCrop ? undefined : 'h-full w-full object-contain'} playsInline preload="auto"
+      onLoadedMetadata={onLoaded} onTimeUpdate={e => {
+        const curSec = e.currentTarget.currentTime;
+        if (proxy && !e.currentTarget.paused) {
+          const jumpTo = skipCutForward(proxy.windowStartUs + curSec * 1_000_000, skipRef.current);
+          if (jumpTo !== null) {
+            const mapped = toProxySeconds(jumpTo, proxy.windowStartUs, proxy.windowEndUs);
+            if (mapped !== null) { e.currentTarget.currentTime = mapped; setTime(mapped); onSourceTime?.(jumpTo); return; }
+          }
+        }
+        setTime(curSec);
+        if (proxy) onSourceTime?.(proxy.windowStartUs + curSec * 1_000_000);
+      }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
+      onError={() => { if (isTauri()) setNotice(t.playError); }} />
+  );
+  return <section aria-label={t.title} data-preview-state={proxy?.state ?? (error ? 'error' : 'loading')} data-seek-us={lastSeekUs ?? undefined} data-crop-active={hasCrop ? 'true' : undefined} data-crop-layout={cropPlan?.layout} data-split-ratio={isDual ? splitRatio.toFixed(4) : undefined} className="flex w-full max-w-[18rem] flex-col gap-2 text-sm">
     {!proxy && !error && <p aria-live="polite" className="text-fg-2">{t.preparing}</p>}
     {error && <p role="alert" className="rounded-md border border-line bg-warning-subtle p-3 text-fg">{t.code[error.code] ?? t.error}</p>}
     {working && proxy && <div className="flex flex-col gap-2" aria-live="polite">
@@ -254,20 +314,16 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
     </div>}
     {proxy?.state === 'ready' && <>
       <div ref={frame} className="relative aspect-[9/16] w-full overflow-hidden rounded-md border border-line bg-black">
-        <video ref={video} src={mediaUrl(proxy.key)} aria-label={t.video} className={hasCrop ? undefined : 'h-full w-full object-contain'} playsInline preload="auto"
-          onLoadedMetadata={onLoaded} onTimeUpdate={e => {
-            const curSec = e.currentTarget.currentTime;
-            if (proxy && !e.currentTarget.paused) {
-              const jumpTo = skipCutForward(proxy.windowStartUs + curSec * 1_000_000, skipRef.current);
-              if (jumpTo !== null) {
-                const mapped = toProxySeconds(jumpTo, proxy.windowStartUs, proxy.windowEndUs);
-                if (mapped !== null) { e.currentTarget.currentTime = mapped; setTime(mapped); onSourceTime?.(jumpTo); return; }
-              }
-            }
-            setTime(curSec);
-            if (proxy) onSourceTime?.(proxy.windowStartUs + curSec * 1_000_000);
-          }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
-          onError={() => { if (isTauri()) setNotice(t.playError); }} />
+        {isDual ? (
+          <>
+            <div data-preview-panel="top" className="absolute inset-x-0 top-0 overflow-hidden" style={{ height: `${splitRatio * 100}%` }}>
+              {videoEl}
+            </div>
+            <div data-preview-panel="bottom" className="absolute inset-x-0 overflow-hidden" style={{ top: `${splitRatio * 100}%`, height: `${(1 - splitRatio) * 100}%` }}>
+              <video ref={bottomVideo} src={mediaUrl(proxy.key)} aria-hidden muted playsInline preload="auto" data-crop-panel="bottom" />
+            </div>
+          </>
+        ) : videoEl}
         {captions && <CaptionOverlay data={captions} video={video} windowStartUs={proxy.windowStartUs} />}
       </div>
       <div className="flex items-center gap-2">

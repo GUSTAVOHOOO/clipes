@@ -410,14 +410,61 @@ pub(crate) fn render_styled_spliced_with_overwrite(
     cancel: &CancelToken,
     progress: &mut dyn FnMut(u8),
 ) -> Result<(), CoreError> {
+    render_styled_spliced_crop_plan_with_overwrite(
+        ffmpeg, input, segments, prepared, encoder, overwrite, None, cancel, progress,
+    )
+}
+
+/// Exporta um plano de layout completo (#78: 5 layouts v1, 1 ou 2 painéis).
+#[allow(clippy::too_many_arguments)]
+pub fn render_crop_plan(
+    ffmpeg: &Path,
+    input: &RenderInput,
+    crop_plan: &crate::editor::crop::ResolvedCropPlan,
+    cancel: &CancelToken,
+    progress: &mut dyn FnMut(u8),
+) -> Result<(), CoreError> {
+    let duration = input.end_us - input.start_us;
+    let ass = captions::ass(&input.words, duration)?;
+    let doc = AssDoc {
+        ass: &ass,
+        font_file: "NotoSans-Bold.ttf",
+        font_bytes: FONT_BYTES,
+    };
+    render_ass_spliced_plan(
+        ffmpeg,
+        input,
+        &[],
+        &doc,
+        super::encoder::X264,
+        false,
+        Some(crop_plan),
+        cancel,
+        progress,
+    )
+}
+
+/// Variante interna usada pelo export com layout (#78).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn render_styled_spliced_crop_plan_with_overwrite(
+    ffmpeg: &Path,
+    input: &RenderInput,
+    segments: &[KeptSegment],
+    prepared: &crate::caption_style::Prepared,
+    encoder: &str,
+    overwrite: bool,
+    crop_plan: Option<&crate::editor::crop::ResolvedCropPlan>,
+    cancel: &CancelToken,
+    progress: &mut dyn FnMut(u8),
+) -> Result<(), CoreError> {
     prepared.style.validate()?;
     let doc = AssDoc {
         ass: &prepared.ass,
         font_file: prepared.style.font_file(),
         font_bytes: prepared.style.font_bytes(),
     };
-    render_ass_spliced(
-        ffmpeg, input, segments, &doc, encoder, overwrite, cancel, progress,
+    render_ass_spliced_plan(
+        ffmpeg, input, segments, &doc, encoder, overwrite, crop_plan, cancel, progress,
     )
 }
 
@@ -435,6 +482,23 @@ fn render_ass_spliced(
     doc: &AssDoc<'_>,
     encoder: &str,
     overwrite: bool,
+    cancel: &CancelToken,
+    progress: &mut dyn FnMut(u8),
+) -> Result<(), CoreError> {
+    render_ass_spliced_plan(
+        ffmpeg, input, segments, doc, encoder, overwrite, None, cancel, progress,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_ass_spliced_plan(
+    ffmpeg: &Path,
+    input: &RenderInput,
+    segments: &[KeptSegment],
+    doc: &AssDoc<'_>,
+    encoder: &str,
+    overwrite: bool,
+    crop_plan: Option<&crate::editor::crop::ResolvedCropPlan>,
     cancel: &CancelToken,
     progress: &mut dyn FnMut(u8),
 ) -> Result<(), CoreError> {
@@ -490,14 +554,26 @@ fn render_ass_spliced(
         &mut tracker,
         progress,
     )?;
-    let crop = (!input.crop.is_empty()).then_some(pipeline::Crop {
-        segments: &input.crop,
-        start_us: input.start_us,
-        end_us: input.end_us,
-    });
-    let plan = pipeline::with_crop(encoder, measured, crop);
-    if let Some(commands) = &plan.crop_commands {
-        fs::write(work.path().join("crop.cmd"), commands).map_err(|_| failed())?;
+    let plan = if let Some(cp) = crop_plan {
+        pipeline::with_crop_plan(
+            encoder,
+            measured,
+            Some(pipeline::CropLayoutStage {
+                crop_plan: cp,
+                start_us: input.start_us,
+                end_us: input.end_us,
+            }),
+        )
+    } else {
+        let crop = (!input.crop.is_empty()).then_some(pipeline::Crop {
+            segments: &input.crop,
+            start_us: input.start_us,
+            end_us: input.end_us,
+        });
+        pipeline::with_crop(encoder, measured, crop)
+    };
+    for (name, commands) in &plan.crop_files {
+        fs::write(work.path().join(name), commands).map_err(|_| failed())?;
     }
     let mut args: Vec<OsString> = vec![
         "-hide_banner".into(),
@@ -527,6 +603,18 @@ fn render_ass_spliced(
             "[vout]".into(),
             "-map".into(),
             "[aout]".into(),
+        ]);
+    } else if plan.dual_video.is_some() {
+        let graph = pipeline::build_dual_filter_complex(&plan);
+        args.extend([
+            "-filter_complex".into(),
+            graph.into(),
+            "-map".into(),
+            "[vout]".into(),
+            "-map".into(),
+            format!("0:{}", input.audio_track).into(),
+            "-af".into(),
+            plan.audio_filters.join(",").into(),
         ]);
     } else {
         args.extend([

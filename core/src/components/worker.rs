@@ -67,6 +67,10 @@ const FILES: &[(&str, &[u8])] = &[
         include_bytes!("../../../worker/src/clipes_worker/reframe_camera.py"),
     ),
     (
+        "src/clipes_worker/reframe_webcam.py",
+        include_bytes!("../../../worker/src/clipes_worker/reframe_webcam.py"),
+    ),
+    (
         "src/clipes_worker/transcribe.py",
         include_bytes!("../../../worker/src/clipes_worker/transcribe.py"),
     ),
