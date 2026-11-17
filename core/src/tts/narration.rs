@@ -254,15 +254,26 @@ pub(crate) fn resolve_rel_path(project: &Path, rel: &str) -> Option<PathBuf> {
     (resolved.starts_with(&root) && resolved.is_file()).then_some(resolved)
 }
 
-/// Durações reais em µs dos áudios de Narração atuais por `script_blocks.id` (#79 -> #204).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct NarrationBlockAudio {
+    pub narration_id: i64,
+    pub path: PathBuf,
+    pub duration_us: i64,
+}
+
+/// Áudios reais de Narração atuais por `script_blocks.id` (#79 -> #204 / #82).
 /// Ignora blocos cujo texto do Roteiro mudou desde a geração da Narração ou cujo WAV não existe.
-pub fn block_durations_for_candidate(candidate_id: i64) -> Result<BTreeMap<i64, i64>, CoreError> {
+/// Para Cortes diretos (`script_requires_transformed`), devolve mapa vazio.
+pub(crate) fn block_audio_for_candidate(
+    candidate_id: i64,
+) -> Result<BTreeMap<i64, NarrationBlockAudio>, CoreError> {
     let project = project_root_dir()?;
     let cut = crate::selection::approved_cut(candidate_id)?;
     let rows = projects::with_reader(|c| {
         let latest = match read_latest_script_in(c, &cut)? {
             Ok(Some(s)) => s,
             Ok(None) => return Ok(Ok(Vec::new())),
+            Err(e) if e.code == "script_requires_transformed" => return Ok(Ok(Vec::new())),
             Err(e) => return Ok(Err(e)),
         };
         let mut out = Vec::new();
@@ -270,27 +281,45 @@ pub fn block_durations_for_candidate(candidate_id: i64) -> Result<BTreeMap<i64, 
             let Some(ver_id) = b.version_id else {
                 continue;
             };
-            let row: Option<(String, i64)> = c
+            let row: Option<(i64, String, i64)> = c
                 .query_row(
-                    "SELECT audio_rel_path, duration_us FROM narration_blocks WHERE block_id=?1 AND version_id=?2",
+                    "SELECT id, audio_rel_path, duration_us FROM narration_blocks WHERE block_id=?1 AND version_id=?2",
                     (b.block_id, ver_id),
-                    |r| Ok((r.get(0)?, r.get(1)?)),
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
                 )
                 .optional()?;
-            if let Some((rel, duration_us)) = row {
-                out.push((b.block_id, rel, duration_us));
+            if let Some((narration_id, rel, duration_us)) = row {
+                out.push((b.block_id, narration_id, rel, duration_us));
             }
         }
         Ok(Ok(out))
     })??;
 
     let mut map = BTreeMap::new();
-    for (block_id, rel, duration_us) in rows {
-        if duration_us > 0 && resolve_rel_path(&project, &rel).is_some() {
-            map.insert(block_id, duration_us);
+    for (block_id, narration_id, rel, duration_us) in rows {
+        if duration_us > 0 {
+            if let Some(path) = resolve_rel_path(&project, &rel) {
+                map.insert(
+                    block_id,
+                    NarrationBlockAudio {
+                        narration_id,
+                        path,
+                        duration_us,
+                    },
+                );
+            }
         }
     }
     Ok(map)
+}
+
+/// Durações reais em µs dos áudios de Narração atuais por `script_blocks.id` (#79 -> #204).
+/// Ignora blocos cujo texto do Roteiro mudou desde a geração da Narração ou cujo WAV não existe.
+pub fn block_durations_for_candidate(candidate_id: i64) -> Result<BTreeMap<i64, i64>, CoreError> {
+    Ok(block_audio_for_candidate(candidate_id)?
+        .into_iter()
+        .map(|(block_id, audio)| (block_id, audio.duration_us))
+        .collect())
 }
 
 /// Caminho absoluto seguro de um áudio da Narração pelo `narration_blocks.id`, para `media.rs`.

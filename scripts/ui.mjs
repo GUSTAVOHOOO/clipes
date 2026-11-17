@@ -7,7 +7,7 @@ import { mkdir } from 'node:fs/promises';
 import { testEditorBorders } from './editor-borders.mjs';
 import { testEditorSilencesPanel, testEditorSilencesPreview } from './editor-silences.mjs';
 import { testEditorCrop } from './editor-crop.mjs';
-import { testEditorMontage } from './editor-montage.mjs';
+import { testEditorMontage, testEditorDucking } from './editor-montage.mjs';
 import { testTranslation, testTranslationBlocked } from './translation-ui.mjs';
 import { testTtsComponents, testTtsNarrationLocked, testTtsNarrationUnlocked, testNarrationDeviationAndTrack } from './tts-ui.mjs';
 import { testPackagingChapters } from './packaging-chapters-ui.mjs';
@@ -810,6 +810,13 @@ try {
   assert.equal(await offline.locator('video').count(), 0, 'Fonte offline: nada é gerado nem tocado');
   assert.equal(await offline.getByRole('progressbar').count(), 0);
   assert.match(await selection.innerText(), /Energia do áudio não medida/);
+  await page.goto(`${url}?source-test=1&transcript-test=1&selection-energy-queued=1`);
+  const queuedEnergy = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
+  await queuedEnergy.getByText(/Energia do áudio na fila/).waitFor();
+  assert.equal(await queuedEnergy.getByRole('button', { name: 'Selecionar Cortes' }).isDisabled(), false);
+  await page.goto(`${url}?source-test=1&transcript-test=1&selection-energy-running=1`);
+  const runningEnergy = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
+  await runningEnergy.getByText(/Medindo a energia do áudio \(45%\)/).waitFor();
   await page.goto(`${url}?source-test=1&transcript-test=1&selection-energy=1`);
   const energySelection = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
   await energySelection.getByRole('button', { name: 'Selecionar Cortes' }).click();
@@ -1258,6 +1265,7 @@ try {
   await testEditorSilencesPreview(page, url);
   await testEditorCrop(page, url);
   await testEditorMontage(page, url);
+  await testEditorDucking(page, url);
   await testPackagingChapters(page, url);
   // Export em lote (#64): por Fonte na Seleção e por Projeto, progresso ponderado, cancelamento, sobrescrita e falha isolada.
   await page.goto(`${url}?source-test=1&transcript-test=1`);
@@ -1300,6 +1308,49 @@ try {
   await conflictBatch.getByText(/Concluído com falhas · 100%/).waitFor({ timeout: 10000 });
   assert.match(await conflictBatch.innerText(), /1 de 2 Cortes exportados · 1 com falha/);
   assert.match(await conflictBatch.innerText(), /Não foi possível exportar o Corte\./);
+
+  // Ticket #251: Ollama nativo no Assistente, "Usar chave de API" -> Preferências (Provedor) e atalho para Componentes.
+  await page.goto(`${url}?assistant-test=1`);
+  const ollamaWizard = page.getByRole('dialog', { name: 'Escolha como o Clipes vai usar IA' });
+  await ollamaWizard.waitFor();
+  await ollamaWizard.getByRole('button', { name: 'Usar Ollama' }).click();
+  await ollamaWizard.getByText('Provedor padrão escolhido: API ou modelo local configurado').waitFor();
+  await ollamaWizard.getByRole('button', { name: 'Concluir' }).click();
+  await ollamaWizard.waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: 'Preferências' }).click();
+  const providerSection = page.locator('section[aria-labelledby="provider-title"]');
+  await providerSection.waitFor();
+  assert.equal(await providerSection.getByLabel('Tipo de provedor').inputValue(), 'ollama');
+  assert.equal(await providerSection.getByLabel('Endereço da API').inputValue(), 'http://127.0.0.1:11434');
+  assert.equal(await providerSection.getByLabel('Modelo', { exact: true }).inputValue(), 'llama3:8b');
+  const mainProfile = page.locator('section[aria-labelledby="profiles-title"]').getByRole('article', { name: 'Principal' });
+  await mainProfile.waitFor();
+  assert.match(await mainProfile.innerText(), /ollama · llama3:8b/);
+  assert.match(await mainProfile.innerText(), /http:\/\/127\.0\.0\.1:11434(?!\/v1)/);
+
+  await page.goto(`${url}?assistant-test=1`);
+  const apiWizard = page.getByRole('dialog', { name: 'Escolha como o Clipes vai usar IA' });
+  await apiWizard.waitFor();
+  await apiWizard.getByRole('button', { name: 'Usar chave de API' }).click();
+  await apiWizard.waitFor({ state: 'hidden' });
+  await page.getByRole('heading', { name: 'Preferências' }).waitFor();
+  await page.locator('#provider-title').waitFor();
+  assert.equal(await page.getByLabel('Padrão para todas as tarefas').inputValue(), 'endpoint');
+  const providerVisible = await page.locator('#provider-title').evaluate(el => {
+    const r = el.getBoundingClientRect();
+    return r.top >= 0 && r.bottom <= window.innerHeight;
+  });
+  assert.equal(providerVisible, true, 'Provedor section should be scrolled into view');
+
+  await page.goto(`${url}?source-test=1&components-missing=1`);
+  await page.getByText(/FFmpeg e o Motor de transcrição local ainda não estão instalados/).waitFor();
+  const downloadedMissing = page.locator('li').filter({ hasText: '/test/downloaded.mp4' });
+  await downloadedMissing.getByText(/FFmpeg e o Motor de transcrição local não estão instalados/).waitFor();
+  await downloadedMissing.getByRole('button', { name: 'Transcrever' }).click();
+  await downloadedMissing.getByRole('alert').getByText(/Instale o Componente FFmpeg/).waitFor();
+  await downloadedMissing.getByRole('button', { name: 'Abrir Componentes' }).first().click();
+  await page.getByRole('heading', { name: 'Componentes' }).waitFor();
+
   assert.deepEqual(errors, []);
   console.log('UI keyboard, preferences, about, drawer and screenshots: OK');
 } finally { await browser?.close(); server.kill(); }
