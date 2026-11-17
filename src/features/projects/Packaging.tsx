@@ -4,6 +4,7 @@ import { LanguageContext, useText, type Language } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { AiDisclosureNote } from '@/features/guardrails/GuardrailsPanel';
+import { SOURCE_PERMISSION_UPDATED_EVENT } from './Sources';
 import { fill } from './selectionFormat';
 
 type Limits = { titleChars: number; descriptionBytes: number; tagsChars: number; tags: number; tagChars: number; hashtags: number };
@@ -78,7 +79,11 @@ export function Packaging({ candidate }: { candidate: number }) {
   useEffect(() => {
     let active = true;
     coreDispatch<Doc>('packaging.get', { candidate }).then(d => { if (active) apply(d); }).catch(() => { if (active) setError(t.errors.default); });
-    return () => { active = false; };
+    const onPermission = () => {
+      coreDispatch<Doc>('packaging.get', { candidate }).then(d => { if (active) setDoc(d); }).catch(() => {});
+    };
+    window.addEventListener(SOURCE_PERMISSION_UPDATED_EVENT, onPermission);
+    return () => { active = false; window.removeEventListener(SOURCE_PERMISSION_UPDATED_EVENT, onPermission); };
   }, [candidate, apply, t.errors.default]);
   useEffect(() => {
     if (!generating) return;

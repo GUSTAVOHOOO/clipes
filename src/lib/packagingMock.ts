@@ -6,7 +6,17 @@ type Gen = { language: string; generated: Fields; edits: Fields[] };
 const gens: Gen[] = [];
 let pendingPolls = 0;
 const limits = { titleChars: 100, descriptionBytes: 5000, tagsChars: 500, tags: 30, tagChars: 60, hashtags: 15 };
-const credit = () => flag('packaging-nopermission') ? null : 'Crédito: vídeo original de Canal Exemplo.\nFonte: https://example.com/watch?v=abc';
+let permissionOverride: { status: string; who?: string } | null = null;
+export function setPackagingMockPermission(permission: { status: string; who?: string } | null) {
+  permissionOverride = permission;
+}
+const credit = () => {
+  if (permissionOverride !== null) {
+    if (permissionOverride.status !== 'granted' || !permissionOverride.who?.trim()) return null;
+    return `Crédito: vídeo original de ${permissionOverride.who.trim()}.`;
+  }
+  return flag('packaging-nopermission') ? null : 'Crédito: vídeo original de Canal Exemplo.\nFonte: https://example.com/watch?v=abc';
+};
 const violation = (code: string) => ({ code, message: 'Edição inválida.', usage: { violations: [{ code }] } });
 
 function view() {

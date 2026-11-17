@@ -9,10 +9,10 @@ import { exportMock } from '@/features/export/mock';
  */
 export type ExportRequest = { source_id: number; start_id: number; end_id: number; candidate_id?: number; clip_id?: number };
 import { batchMockDispatch } from './batchMock';
-import { packagingMockDispatch } from './packagingMock';
+import { packagingMockDispatch, setPackagingMockPermission } from './packagingMock';
 import { thumbnailMockDispatch } from './thumbnailMock';
 import { scriptMockDispatch } from './scriptMock';
-import { translationMockDispatch } from './translationMock';
+import { translationMockDispatch, setTranslationMockPermission } from './translationMock';
 
 const groqRetryTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('groq-retry-test');
 const denoMock = { installed: false };
@@ -314,6 +314,8 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         } as T;
       }
       const totalCuts = selectionFlag('export-batch-empty') || (scope === 'source' && !selectionMock.run) ? 0 : 2;
+      const batchSrc = sourceItems.find(s => s.id === (a.source_id ?? 1)) ?? sourceItems[0];
+      const batchGranted = batchSrc?.permission?.status === 'granted';
       return {
         scope,
         directMonetizationAck: ack,
@@ -326,7 +328,9 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         over60s: false,
         over60sCount: 0,
         shortClaimLimitUs: 60_000_000,
-        permission: { status: 'none', grantedCount: 0, missingCount: totalCuts, totalCount: totalCuts },
+        permission: totalCuts === 0
+          ? { status: 'none', grantedCount: 0, missingCount: 0, totalCount: 0 }
+          : { status: batchGranted ? 'granted' : 'none', grantedCount: batchGranted ? totalCuts : 0, missingCount: batchGranted ? 0 : totalCuts, totalCount: totalCuts },
         script: hasTransformed && totalCuts > 0 ? { applicable: true, transformedCount: totalCuts, approvedCount: 0, unapprovedCount: totalCuts } : { applicable: false },
         narration: hasTransformed && totalCuts > 0 ? { applicable: true, hasTts: false, ttsCutCount: 0, transformedCount: totalCuts } : { applicable: false },
       } as T;
@@ -353,6 +357,20 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (sourceTest && name === 'sources.inspect') return {format:{duration:'12'},streams:[{index:0,codec_type:'audio',codec_name:'aac'}]} as T;
     if (sourceTest && name === 'sources.import') { const a=args as {path:string;permission:{status:string};origin_url?:string;language?:string}; const item={id:4,path:a.path,status:'available',available:true,verified:true,language:a.language??channelProfileMock.language,permission:a.permission}; sourceItems.push(item); return {...item,origin_url:a.origin_url} as T; }
     if (sourceTest && name === 'sources.language.set') { const { id, language } = args as { id: number; language: string }; sourceItems = sourceItems.map(item => item.id === id ? { ...item, language } : item); return sourceItems.find(item => item.id === id) as T; }
+    if (sourceTest && name === 'sources.permission.set') {
+      const { id, permission } = args as { id: number; permission: { status: string; who?: string; where?: string; scope?: string } };
+      if (permission?.status !== 'none' && !(permission?.status === 'granted' && permission.who?.trim() && permission.where?.trim() && permission.scope?.trim())) {
+        throw { code: 'invalid_permission', message: 'Registre a Permissão ou informe que não há permissão' };
+      }
+      const normalized = permission.status === 'none'
+        ? { status: 'none' }
+        : { status: 'granted', who: permission.who!.trim(), where: permission.where!.trim(), scope: permission.scope!.trim() };
+      if (!sourceItems.some(item => item.id === id)) throw { code: 'source_missing', message: 'Fonte não encontrada' };
+      sourceItems = sourceItems.map(item => item.id === id ? { ...item, permission: normalized } : item);
+      setPackagingMockPermission(normalized);
+      setTranslationMockPermission(id, normalized);
+      return sourceItems.find(item => item.id === id) as T;
+    }
 
     if (sourceTest && (name === 'sources.hash' || name === 'sources.relocate')) {
       const { id, confirmed } = args as { id: number; confirmed?: boolean };
