@@ -6,7 +6,7 @@ mod font_cmap;
 pub mod pipeline;
 pub mod render;
 
-use crate::caption_style::{self, store::ClipId, Preset, Style, StyledWord, WordOverride};
+use crate::caption_style::{self, store::ClipId, Style, StyledWord, WordOverride};
 use crate::editor::crop::{self, CropSegment, ResolvedCropPlan};
 use crate::editor::silences::{KeptSegment, SpliceMap};
 use crate::{projects, CommandRegistration, CommandResult, CoreError, EventSink};
@@ -208,12 +208,29 @@ fn parse(v: Value) -> Result<ExportRequest, CoreError> {
 
 pub(crate) type FrozenTarget = ((i64, i64), Vec<(i64, i64)>);
 
+fn resolve_clip_id(request: &ExportRequest) -> Result<Option<i64>, CoreError> {
+    if let Some(clip_id) = request.clip_id {
+        return Ok(Some(clip_id));
+    }
+    let Some(candidate_id) = request.candidate_id else {
+        return Ok(None);
+    };
+    projects::with_reader(|c| {
+        c.query_row(
+            "SELECT id FROM clip_edits WHERE identity=?1",
+            [format!("candidate:{candidate_id}")],
+            |r| r.get(0),
+        )
+        .optional()
+    })
+}
+
 pub(crate) fn target(
     request: &ExportRequest,
     frozen: Option<FrozenTarget>,
     frozen_captions: Option<&[FrozenCaptionWord]>,
 ) -> Result<Target, CoreError> {
-    target_with(request, frozen, frozen_captions, None, None)
+    target_with(request, frozen, frozen_captions, None, None, true)
 }
 
 pub(crate) fn target_with(
@@ -222,11 +239,14 @@ pub(crate) fn target_with(
     frozen_captions: Option<&[FrozenCaptionWord]>,
     frozen_output: Option<&(String, i64, Vec<FrozenOutputCaptionWord>)>,
     track_override: Option<&str>,
+    resolve_candidate_edit: bool,
 ) -> Result<Target, CoreError> {
-    let edited = request
-        .clip_id
-        .map(crate::editor::edits::document)
-        .transpose()?;
+    let clip_id = if resolve_candidate_edit {
+        resolve_clip_id(request)?
+    } else {
+        request.clip_id
+    };
+    let edited = clip_id.map(crate::editor::edits::document).transpose()?;
     if let Some(doc) = &edited {
         if doc.original.source_id != request.source_id
             || doc.original.candidate_id.is_none()
@@ -240,7 +260,7 @@ pub(crate) fn target_with(
         candidate_id: doc.original.candidate_id,
         start_id: doc.range.start_id,
         end_id: doc.range.end_id,
-        clip_id: request.clip_id,
+        clip_id,
     });
     let request = effective.as_ref().unwrap_or(request);
     if request.start_id <= 0 || request.end_id < request.start_id {
@@ -654,10 +674,11 @@ pub(crate) fn current_path() -> Result<PathBuf, CoreError> {
 
 fn cmd_captions(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let _project = projects::start_job()?;
-    let style = request_style(&v)?;
     let track_override = v["track"].as_str().map(str::to_owned);
-    let request = parse(v)?;
-    let target = target_with(&request, None, None, None, track_override.as_deref())?;
+    let mut request = parse(v)?;
+    request.clip_id = resolve_clip_id(&request)?;
+    let style = style_for_clip(request.clip_id)?;
+    let target = target_with(&request, None, None, None, track_override.as_deref(), true)?;
     let words = captions::sanitize(&target.words)?;
     let prepared = caption_style::prepare_with_sentences(
         &target.styled,
@@ -691,12 +712,8 @@ fn cmd_captions(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 fn style_for_clip(clip_id: Option<i64>) -> Result<Style, CoreError> {
     match clip_id {
         Some(id) => caption_style::store::style(ClipId(id)),
-        None => Ok(Style::preset(Preset::Vertical)),
+        None => projects::with_reader(caption_style::store::default_style_in)?,
     }
-}
-
-fn request_style(v: &Value) -> Result<Style, CoreError> {
-    style_for_clip(v["clip_id"].as_i64())
 }
 
 fn check_target_glyphs(target: &Target, style: &Style) -> Result<(), CoreError> {
@@ -713,6 +730,7 @@ pub(crate) fn prepare_start_request(
     project: &Path,
 ) -> Result<(StartRequest, i64), CoreError> {
     // Ignora qualquer snapshot enviado pela UI; o núcleo resolve o documento atual.
+    request.cut.clip_id = resolve_clip_id(&request.cut)?;
     let resolved = target(&request.cut, None, None)?;
     let style = style_for_clip(request.cut.clip_id)?;
     request.resolved_bounds = request
@@ -929,9 +947,8 @@ pub(crate) fn run(
                 r.get(0)
             })
         })?;
-        let encoded: Value = serde_json::from_str(&request).map_err(|_| failed())?;
-        let style = request_style(&encoded)?;
-        let request: StartRequest = serde_json::from_value(encoded).map_err(|_| failed())?;
+        let request: StartRequest = serde_json::from_str(&request).map_err(|_| failed())?;
+        let style = style_for_clip(request.cut.clip_id)?;
         let frozen = request
             .resolved_bounds
             .map(|b| (b, request.resolved_silences.clone().unwrap_or_default()));
@@ -941,6 +958,7 @@ pub(crate) fn run(
             request.resolved_captions.as_deref(),
             request.resolved_output_captions.as_deref(),
             None,
+            false,
         )?;
         check_target_glyphs(&target, &style)?;
         let prepared = caption_style::prepare_with_sentences(
