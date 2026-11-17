@@ -1319,6 +1319,7 @@ fn cmd_track_set(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         )?;
         Ok(())
     })?;
+    crate::narration_align::sync_track_from_translation(ctx.clip_id, track)?;
     document(&ctx)
 }
 

@@ -164,20 +164,20 @@ pub(crate) fn parse_wav_info(path: &Path) -> Result<WavInfo, CoreError> {
 }
 
 #[derive(Clone, Debug)]
-struct CurrentBlock {
-    block_id: i64,
-    position: i64,
-    title: String,
-    version_id: Option<i64>,
-    narration_text: Option<String>,
+pub(crate) struct CurrentBlock {
+    pub block_id: i64,
+    pub position: i64,
+    pub title: String,
+    pub version_id: Option<i64>,
+    pub narration_text: Option<String>,
 }
 
-struct LatestScript {
-    language: String,
-    blocks: Vec<CurrentBlock>,
+pub(crate) struct LatestScript {
+    pub language: String,
+    pub blocks: Vec<CurrentBlock>,
 }
 
-fn read_latest_script_in(
+pub(crate) fn read_latest_script_in(
     c: &Connection,
     cut: &crate::selection::ApprovedCut,
 ) -> rusqlite::Result<Result<Option<LatestScript>, CoreError>> {
@@ -239,7 +239,7 @@ fn read_latest_script_in(
     Ok(Ok(Some(LatestScript { language, blocks })))
 }
 
-fn project_root_dir() -> Result<PathBuf, CoreError> {
+pub(crate) fn project_root_dir() -> Result<PathBuf, CoreError> {
     let cur = crate::dispatch("projects.current", json!({}), &mut |_| {})?;
     let path = cur["path"]
         .as_str()
@@ -247,7 +247,7 @@ fn project_root_dir() -> Result<PathBuf, CoreError> {
     Ok(PathBuf::from(path))
 }
 
-fn resolve_rel_path(project: &Path, rel: &str) -> Option<PathBuf> {
+pub(crate) fn resolve_rel_path(project: &Path, rel: &str) -> Option<PathBuf> {
     let candidate = project.join(rel);
     let root = project.join("narrations").canonicalize().ok()?;
     let resolved = candidate.canonicalize().ok()?;
@@ -480,6 +480,7 @@ struct AudioRow {
     sr: i64,
     ch: i64,
     bytes: i64,
+    sha256: String,
 }
 
 fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
@@ -494,14 +495,16 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .map(str::to_owned);
 
     let cut = crate::selection::approved_cut(candidate_id)?;
-    let (latest, job_busy, job_json) = projects::with_reader(|c| {
+    let (latest, job_busy, job_json, align_busy, align_job_json) = projects::with_reader(|c| {
         let latest = match read_latest_script_in(c, &cut)? {
             Ok(s) => s,
             Err(e) => return Ok(Err(e)),
         };
         let (busy, job) = read_job_json(c, candidate_id)?;
-        Ok(Ok((latest, busy, job)))
+        let (align_busy, align_job) = crate::narration_align::read_align_job_json(c, candidate_id)?;
+        Ok(Ok((latest, busy, job, align_busy, align_job)))
     })??;
+    let align_ready = crate::narration_align::prerequisites_ready();
 
     let Some(latest) = latest else {
         return Ok(json!({
@@ -513,6 +516,9 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             "activeModelId": catalog::active_model_id(&crate::components::load_settings()?, "pt"),
             "busy": job_busy,
             "job": job_json,
+            "alignBusy": align_busy,
+            "alignJob": align_job_json,
+            "alignPrerequisitesReady": align_ready,
             "blocks": [],
             "totalDurationUs": 0,
         }));
@@ -528,7 +534,7 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         for b in &latest.blocks {
             let row = c
                 .query_row(
-                    "SELECT id, version_id, voice_id, model_id, audio_rel_path, duration_us, sample_rate, channels, bytes
+                    "SELECT id, version_id, voice_id, model_id, audio_rel_path, duration_us, sample_rate, channels, bytes, sha256
                      FROM narration_blocks WHERE block_id=?1 ORDER BY id DESC LIMIT 1",
                     [b.block_id],
                     |r| {
@@ -542,30 +548,39 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                             sr: r.get(6)?,
                             ch: r.get(7)?,
                             bytes: r.get(8)?,
+                            sha256: r.get(9)?,
                         })
                     },
                 )
                 .optional()?;
-            let audio_json = match row {
+            let (audio_json, alignment_json) = match row {
                 Some(r) if resolve_rel_path(&project, &r.rel).is_some() => {
                     let stale = Some(r.ver_id) != b.version_id;
                     if !stale {
                         total_duration_us += r.dur;
                     }
-                    json!({
-                        "id": r.id,
-                        "versionId": r.ver_id,
-                        "voiceId": r.voice_id,
-                        "modelId": r.model_id,
-                        "relPath": r.rel,
-                        "durationUs": r.dur,
-                        "sampleRate": r.sr,
-                        "channels": r.ch,
-                        "bytes": r.bytes,
-                        "stale": stale,
-                    })
+                    let align = if stale {
+                        Value::Null
+                    } else {
+                        crate::narration_align::read_block_alignment_json(c, r.id, &r.sha256)?
+                    };
+                    (
+                        json!({
+                            "id": r.id,
+                            "versionId": r.ver_id,
+                            "voiceId": r.voice_id,
+                            "modelId": r.model_id,
+                            "relPath": r.rel,
+                            "durationUs": r.dur,
+                            "sampleRate": r.sr,
+                            "channels": r.ch,
+                            "bytes": r.bytes,
+                            "stale": stale,
+                        }),
+                        align,
+                    )
                 }
-                _ => Value::Null,
+                _ => (Value::Null, Value::Null),
             };
             blocks_json.push(json!({
                 "blockId": b.block_id,
@@ -574,6 +589,7 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                 "versionId": b.version_id,
                 "narrationText": b.narration_text,
                 "audio": audio_json,
+                "alignment": alignment_json,
             }));
         }
         Ok(())
@@ -588,6 +604,9 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         "activeModelId": active_model_id,
         "busy": job_busy,
         "job": job_json,
+        "alignBusy": align_busy,
+        "alignJob": align_job_json,
+        "alignPrerequisitesReady": align_ready,
         "blocks": blocks_json,
         "totalDurationUs": total_duration_us,
     }))
@@ -800,6 +819,7 @@ pub fn run(job_id: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreErr
         return Err(error("block_not_found", "Bloco não encontrado."));
     }
 
+    let norm_lang = normalize_language(&latest.language).to_owned();
     let total = targets.len();
     for (idx, block) in targets.into_iter().enumerate() {
         preview::check(job_id, stop)?;
@@ -852,6 +872,19 @@ pub fn run(job_id: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreErr
                     &info.sha256,
                 ),
             )?;
+            let narration_id: i64 = c.query_row(
+                "SELECT id FROM narration_blocks WHERE block_id=?1 AND version_id=?2",
+                (block.block_id, version_id),
+                |r| r.get(0),
+            )?;
+            crate::narration_align::mark_pending_in(
+                c,
+                narration_id,
+                block.block_id,
+                version_id,
+                &info.sha256,
+                &norm_lang,
+            )?;
             Ok(())
         })?;
 
@@ -859,6 +892,7 @@ pub fn run(job_id: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreErr
         let _ = jobs::progress(job_id, "narration", pct, "Narração gerada");
     }
 
+    crate::narration_align::enqueue_after_tts(candidate_id, only_block_id);
     Ok(())
 }
 

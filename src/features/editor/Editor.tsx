@@ -677,7 +677,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
       </GavetaBorda>
       <GavetaBorda lado="dir" g={right} rotulo={view === 'captions' ? t.captions : view === 'silences' ? t.silences : view === 'crop' ? t.crop : view === 'translation' ? t.translation : t.borders}>
         {view === 'captions' ? <><CabecalhoGaveta acoes={<Button tamanho="sm" onClick={right.fechar}>{t.close.replace(/ .*/, '')}</Button>}><h3 className="font-semibold">{t.captions}</h3></CabecalhoGaveta>
-          {opened && <CaptionPanel data={captions.data} clipId={opened.clipId} sourceId={request.source_id} refresh={captions.refresh} loadError={captions.error} />}</> : view === 'silences' ? <>
+          {opened && <CaptionPanel data={captions.data} clipId={opened.clipId} sourceId={request.source_id} candidateId={request.candidate_id} refresh={captions.refresh} loadError={captions.error} />}</> : view === 'silences' ? <>
           <CabecalhoGaveta acoes={<Button tamanho="sm" onClick={right.fechar}>{t.close.replace(/ .*/, '')}</Button>}><h3 className="font-semibold">{t.silences}</h3></CabecalhoGaveta>
           <SilencesPanel
             silences={silencesView}

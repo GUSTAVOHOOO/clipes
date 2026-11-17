@@ -1,0 +1,9 @@
+{"from":"core","message":{"v":1,"type":"hello","protocol":1}}
+{"from":"worker","message":{"v":1,"type":"handshake","protocol":1,"worker":"*","python":"*","libs":{"faster-whisper":"*","onnxruntime":"*","numpy":"*","opencv-python-headless":"*"}}}
+{"from":"core","message":{"v":1,"type":"request","id":"r1","task":"align","params":{"audio":"narracao.wav","text":"Olá mundo.","language":"pt","batch_size":1,"model":{"id":"fake","dir":"modelo","device":"cpu","compute_type":"int8"}}}}
+{"from":"worker","message":{"v":1,"type":"event","event":"model_loaded","model":"faster-whisper-align:fake:cpu:int8"}}
+{"from":"worker","message":{"v":1,"type":"progress","id":"r1","stage":"aligning","percentage":10,"message":"Transcrevendo áudio da Narração"}}
+{"from":"worker","message":{"v":1,"type":"progress","id":"r1","stage":"aligning","percentage":50,"message":"Transcrevendo áudio da Narração"}}
+{"from":"worker","message":{"v":1,"type":"progress","id":"r1","stage":"aligning","percentage":100,"message":"Alinhando Narração ao Roteiro"}}
+{"from":"worker","message":{"v":1,"type":"result","id":"r1","data":{"spoken_words":[{"text":"Olá","start_us":1100000,"end_us":1400000},{"text":"mundo.","start_us":1500000,"end_us":1900000}],"script_words":[{"text":"Olá","start_us":1120000,"end_us":1380000,"probability":0.95},{"text":"mundo.","start_us":1480000,"end_us":1880000,"probability":0.97}],"silences":[{"start_us":0,"end_us":1000000}]}}}
+{"from":"core","message":{"v":1,"type":"shutdown"}}

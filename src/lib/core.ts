@@ -19,7 +19,20 @@ const denoMock = { installed: false };
 const pocketTtsMock = { installed: false };
 const ttsActiveModels: Record<string, string> = { pt: 'portuguese_24l', en: 'english' };
 const ttsInstalledModels = new Set<string>();
-const narrationGenerated = new Map<number, { blockId: number; voiceId: string; modelId: string; durationUs: number }[]>();
+type MockBlockAlignment = {
+  status: 'pending' | 'aligned' | 'needs_review' | 'approved' | 'failed';
+  choice: 'script' | 'spoken' | null;
+  activeTrack: 'script' | 'spoken' | null;
+  substitutions: number;
+  insertions: number;
+  deletions: number;
+  maxConsecutiveInsertions: number;
+  errorCode: string | null;
+  modelId: string;
+  spokenText: string | null;
+  wordCount: number;
+};
+const narrationGenerated = new Map<number, { blockId: number; voiceId: string; modelId: string; durationUs: number; alignment: MockBlockAlignment }[]>();
 const sourceTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('source-test');
 const componentsMissing = typeof location !== 'undefined' && new URLSearchParams(location.search).has('components-missing');
 const budgetTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('budget-test');
@@ -453,21 +466,47 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       return { id: a.id } as T;
     }
     if (name === 'tts.models.cancel') return {} as T;
-    if (name === 'narration.get' || name === 'narration.generate' || name === 'narration.regenerate_block') {
-      const a = args as { candidate: number; block?: number; voiceId?: string };
+    if (name === 'narration.get' || name === 'narration.generate' || name === 'narration.regenerate_block' || name === 'narration.align' || name === 'narration.align_block' || name === 'narration.review') {
+      const a = args as { candidate: number; block?: number; voiceId?: string; choice?: 'script' | 'spoken' };
       const s = scriptMockDispatch('script.get', { candidate: a.candidate }) as { narrationAllowed: boolean; current: { blocks: { id: number; position: number; title: string; narration: string | null }[] } | null };
-      if (name !== 'narration.get') {
+      const defaultAlign = (text: string | null, idx: number): MockBlockAlignment => {
+        const deviationMode = typeof location !== 'undefined' && new URLSearchParams(location.search).has('narration-deviation');
+        const wordCount = (text ?? '').trim().split(/\s+/).filter(Boolean).length || 4;
+        if (deviationMode && idx === 0) {
+          return { status: 'needs_review', choice: null, activeTrack: null, substitutions: 0, insertions: 2, deletions: 0, maxConsecutiveInsertions: 2, errorCode: null, modelId: 'whisper-turbo', spokenText: `${text ?? 'Bloco'} extra improviso`, wordCount: wordCount + 2 };
+        }
+        return { status: 'aligned', choice: null, activeTrack: 'script', substitutions: 0, insertions: 0, deletions: 0, maxConsecutiveInsertions: 0, errorCode: null, modelId: 'whisper-turbo', spokenText: null, wordCount };
+      };
+      if (name === 'narration.generate' || name === 'narration.regenerate_block') {
         if (!s.narrationAllowed) throw { code: 'script_not_approved', message: 'Aprove o Roteiro.' };
         const voiceId = a.voiceId ?? channelProfileMock.narrationVoice ?? '13063';
         const modelId = ttsActiveModels.pt;
         const blocks = s.current?.blocks ?? [];
         const existing = narrationGenerated.get(a.candidate) ?? [];
         const blockDurationUs = selectionFlag('packaging-chapters') ? 12_000_000 : 3_200_000;
-        const next = blocks.map(b => (a.block === undefined || b.id === a.block)
-          ? { blockId: b.id, voiceId, modelId, durationUs: blockDurationUs }
-          : (existing.find(e => e.blockId === b.id) ?? { blockId: b.id, voiceId, modelId, durationUs: blockDurationUs }));
+        const next = blocks.map((b, idx) => (a.block === undefined || b.id === a.block)
+          ? { blockId: b.id, voiceId, modelId, durationUs: blockDurationUs, alignment: defaultAlign(b.narration, idx) }
+          : (existing.find(e => e.blockId === b.id) ?? { blockId: b.id, voiceId, modelId, durationUs: blockDurationUs, alignment: defaultAlign(b.narration, idx) }));
         narrationGenerated.set(a.candidate, next);
         return { job: 790, candidate: a.candidate } as T;
+      }
+      if (name === 'narration.align' || name === 'narration.align_block') {
+        const blocks = s.current?.blocks ?? [];
+        const existing = narrationGenerated.get(a.candidate) ?? [];
+        const next = existing.map((e, idx) => (a.block === undefined || e.blockId === a.block)
+          ? { ...e, alignment: defaultAlign(blocks.find(b => b.id === e.blockId)?.narration ?? null, idx) }
+          : e);
+        narrationGenerated.set(a.candidate, next);
+        return { job: 791, candidate: a.candidate, block: a.block ?? null } as T;
+      }
+      if (name === 'narration.review') {
+        const existing = narrationGenerated.get(a.candidate) ?? [];
+        const next = existing.map(e => e.blockId === a.block
+          ? { ...e, alignment: { ...e.alignment, status: 'approved' as const, choice: a.choice ?? 'script', activeTrack: a.choice ?? 'script' } }
+          : e);
+        narrationGenerated.set(a.candidate, next);
+        const updated = next.find(e => e.blockId === a.block);
+        return { candidate: a.candidate, block: a.block, alignment: updated?.alignment ?? null } as T;
       }
       const list = narrationGenerated.get(a.candidate) ?? [];
       const blocks = (s.current?.blocks ?? []).map(b => {
@@ -475,12 +514,14 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         return {
           blockId: b.id, position: b.position, title: b.title, versionId: 1, narrationText: b.narration,
           audio: hit ? { id: b.id, versionId: 1, voiceId: hit.voiceId, modelId: hit.modelId, relPath: `narrations/c${a.candidate}/b${b.id}-v1.wav`, durationUs: hit.durationUs, sampleRate: 24000, channels: 1, bytes: 153644, stale: false } : null,
+          alignment: hit ? hit.alignment : null,
         };
       });
       return {
         candidate: a.candidate, narrationAllowed: s.narrationAllowed, gateReason: s.narrationAllowed ? null : 'pending_blocks',
         language: 'pt', defaultVoiceId: channelProfileMock.narrationVoice ?? '13063', activeModelId: ttsActiveModels.pt,
-        busy: false, job: null, blocks, totalDurationUs: blocks.reduce((acc, b) => acc + (b.audio?.durationUs ?? 0), 0),
+        busy: false, job: null, alignBusy: false, alignJob: null, alignPrerequisitesReady: true,
+        blocks, totalDurationUs: blocks.reduce((acc, b) => acc + (b.audio?.durationUs ?? 0), 0),
       } as T;
     }
     if (name === 'components.ytdlp.status') return {installed:true,version:'test'} as T;
