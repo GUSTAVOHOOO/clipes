@@ -1350,6 +1350,43 @@ try {
   await downloadedMissing.getByRole('button', { name: 'Abrir Componentes' }).first().click();
   await page.getByRole('heading', { name: 'Componentes' }).waitFor();
 
+  // Ticket #255: abertura offline no UpdateNotice ignora falhas de rede e preserva falhas reais de assinatura.
+  await page.evaluate(() => sessionStorage.removeItem('clipes.mock-update-installed'));
+  for (const offlineQuery of ['?updater-test=offline', '?updater-test=release-not-found']) {
+    await page.goto(`${url}${offlineQuery}`);
+    await page.getByRole('heading', { name: 'Projetos' }).waitFor();
+    await page.waitForTimeout(150);
+    assert.equal(await page.getByRole('dialog', { name: 'Atualização disponível' }).count(), 0);
+    assert.equal(await page.getByText('Não foi possível atualizar').count(), 0);
+  }
+
+  const offlinePage = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+  offlinePage.on('pageerror', e => errors.push(e.message));
+  offlinePage.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+  await offlinePage.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'onLine', { get: () => false, configurable: true });
+  });
+  await offlinePage.goto(url);
+  await offlinePage.getByRole('heading', { name: 'Projetos' }).waitFor();
+  await offlinePage.waitForTimeout(150);
+  assert.equal(await offlinePage.getByRole('dialog', { name: 'Atualização disponível' }).count(), 0);
+  assert.equal(await offlinePage.getByText('Não foi possível atualizar').count(), 0);
+  await offlinePage.close();
+
+  await page.goto(`${url}?updater-test=invalid-signature`);
+  await page.getByText('Não foi possível atualizar').waitFor();
+  assert.match(await page.getByRole('alert').innerText(), /Atualizações sem assinatura válida são recusadas/);
+
+  await page.goto(`${url}?updater-test=install-network-error`);
+  await page.getByRole('dialog', { name: 'Atualização disponível' }).getByRole('button', { name: 'Atualizar agora' }).click();
+  await page.getByText('Não foi possível atualizar').waitFor();
+  assert.doesNotMatch(await page.getByRole('alert').innerText(), /Atualizações sem assinatura válida são recusadas/);
+
+  await page.goto(`${url}?updater-test=install-invalid-signature`);
+  await page.getByRole('dialog', { name: 'Atualização disponível' }).getByRole('button', { name: 'Atualizar agora' }).click();
+  await page.getByText('Não foi possível atualizar').waitFor();
+  assert.match(await page.getByRole('alert').innerText(), /Atualizações sem assinatura válida são recusadas/);
+
   assert.deepEqual(errors, []);
   console.log('UI keyboard, preferences, about, drawer and screenshots: OK');
 } finally { await browser?.close(); server.kill(); }
