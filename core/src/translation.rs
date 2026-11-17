@@ -637,11 +637,21 @@ fn plan_batches(
         &profile.model,
         &structured(fixed_header),
     )?;
-    let price_threshold = provider::cost::price_for(&profile.kind, &profile.model)?
-        .and_then(|(price, _)| price.tiers.iter().map(|t| t.above_input_tokens).min());
+    let price_threshold =
+        provider::cost::price_for_endpoint(&profile.kind, &profile.endpoint, &profile.model)?
+            .and_then(|(price, _)| price.tiers.iter().map(|t| t.above_input_tokens).min());
 
     let mut input_limit = percent(profile.value, selection_windows::CONTEXT_USABLE_PERCENT)
         .saturating_sub(output_reserve);
+    if let Some(cap) = [profile.tokens_per_request, profile.tokens_per_minute]
+        .into_iter()
+        .flatten()
+        .min()
+    {
+        input_limit = input_limit.min(
+            percent(cap, selection_windows::CONTEXT_USABLE_PERCENT).saturating_sub(output_reserve),
+        );
+    }
     if let Some(threshold) = price_threshold {
         input_limit = input_limit.min(percent(
             threshold,

@@ -26,6 +26,12 @@ pub struct Price {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_output: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tokens_per_request: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tokens_per_minute: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tokens_per_day: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limits_source: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tiers: Vec<Tier>,
@@ -54,6 +60,9 @@ impl Price {
             || !rate(self.output_per_million)
             || self.context_window == Some(0)
             || self.max_output == Some(0)
+            || self.tokens_per_request == Some(0)
+            || self.tokens_per_minute == Some(0)
+            || self.tokens_per_day == Some(0)
         {
             return false;
         }

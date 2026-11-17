@@ -691,7 +691,7 @@ fn cli_result(kind: &str) -> Value {
 }
 
 fn catalog_limits(t: &ContextTarget) -> (Option<u64>, Option<u64>) {
-    super::cost::price_for(&t.kind, &t.model)
+    super::cost::price_for_endpoint(&t.kind, &t.endpoint, &t.model)
         .ok()
         .flatten()
         .map_or((None, None), |(p, _)| (p.context_window, p.max_output))
@@ -806,9 +806,12 @@ pub(super) fn probe(t: ContextTarget, cancel: &CancelToken) -> CommandResult {
 pub(crate) struct CachedContext {
     pub profile_id: String,
     pub kind: String,
+    pub endpoint: String,
     pub model: String,
     pub value: u64,
     pub origin: &'static str,
+    pub tokens_per_request: Option<u64>,
+    pub tokens_per_minute: Option<u64>,
 }
 
 /// Cache only, no probe and no network: the same resolution as `provider.context.get`.
@@ -822,21 +825,38 @@ pub(crate) fn effective_cached(
             CachedContext {
                 profile_id: kind.clone(),
                 kind,
+                endpoint: String::new(),
                 model: String::new(),
                 value: r.value,
                 origin: r.source.as_str(),
+                tokens_per_request: None,
+                tokens_per_minute: None,
             }
         }
         ContextPick::Profile(t) => {
             let local = is_loopback_endpoint(&t.endpoint);
             let found = cache_get(&t).unwrap_or_default();
-            let r = resolve_value(&t.kind, local, t.user_context, &found, catalog_limits(&t));
+            let catalog = super::cost::price_for_endpoint(&t.kind, &t.endpoint, &t.model)
+                .ok()
+                .flatten()
+                .map(|(p, _)| p);
+            let catalog_ctx = catalog
+                .as_ref()
+                .map_or((None, None), |p| (p.context_window, p.max_output));
+            let r = resolve_value(&t.kind, local, t.user_context, &found, catalog_ctx);
             CachedContext {
                 value: r.value,
                 origin: r.source.as_str(),
                 profile_id: t.id,
                 kind: t.kind,
+                endpoint: t.endpoint,
                 model: t.model,
+                tokens_per_request: t
+                    .tokens_per_request
+                    .or_else(|| catalog.as_ref().and_then(|p| p.tokens_per_request)),
+                tokens_per_minute: t
+                    .tokens_per_minute
+                    .or_else(|| catalog.as_ref().and_then(|p| p.tokens_per_minute)),
             }
         }
     })
