@@ -113,19 +113,26 @@ try {
   await hardwareCard.getByLabel('Configuração').selectOption({ label: 'Whisper large-v3-turbo · CPU · int8' });
   await hardwareCard.getByText(/bem mais lento que o Whisper small/).waitFor();
   await page.screenshot({ path: 'shots/hardware.png', fullPage: true });
-  await hardwareCard.getByRole('button', { name: 'Voltar ao automático' }).click();
+  await hardwareCard.getByRole('button', { name: 'Voltar ao automático', exact: true }).click();
   await hardwareCard.getByText(/\(automática\)/).waitFor();
   await hardwareCard.getByText('Lote seguro medido na GPU: ainda não medido (padrão 1).').waitFor();
   const groupingSwitch = hardwareCard.getByRole('switch', { name: /Agrupar trechos de VAD/ });
   assert.equal(await groupingSwitch.isChecked(), false);
-  await hardwareCard.getByText(/ganho típico de 0% a 10%/).waitFor();
+  await hardwareCard.getByText(/na CPU vem ligado porque acelera/).waitFor();
+  await hardwareCard.getByText(/na GPU vem desligado porque usa mais VRAM sem ganho medido/).waitFor();
+  await hardwareCard.getByText(/Agora: automático./).waitFor();
+  assert.equal(await hardwareCard.getByRole('button', { name: 'Agrupamento: voltar ao automático' }).count(), 0);
   await hardwareCard.getByRole('button', { name: 'Medir hardware' }).click();
   await hardwareCard.getByText('Medição concluída.').waitFor();
   await hardwareCard.getByText('Lote seguro medido na GPU: 8 trechos.').waitFor();
   await groupingSwitch.check();
   assert.equal(await groupingSwitch.isChecked(), true);
   await hardwareCard.getByText(/Agrupa até 8 trechos consecutivos/).waitFor();
+  await hardwareCard.getByText(/Agora: escolha sua./).waitFor();
   await groupingSwitch.uncheck();
+  assert.equal(await groupingSwitch.isChecked(), false);
+  await hardwareCard.getByRole('button', { name: 'Agrupamento: voltar ao automático' }).click();
+  await hardwareCard.getByText(/Agora: automático./).waitFor();
   assert.equal(await groupingSwitch.isChecked(), false);
 
   await testTtsComponents(page);
@@ -441,7 +448,7 @@ try {
   await downloadedRow.getByText(/Estimativa: cerca de 3 h 52 min/).waitFor();
   assert.match(await downloadedRow.innerText(), /É uma estimativa, não uma garantia/);
   assert.equal(await downloadedRow.getByText('Sem GPU compatível, a Transcrição pode demorar.').count(), 0);
-  await downloadedRow.getByText('Agrupamento por VAD: desligado (ajuste em Componentes).').waitFor();
+  await downloadedRow.getByText('Agrupamento por VAD: desligado, automático (na GPU usa mais VRAM sem ganho medido; ajuste em Componentes).').waitFor();
   assert.equal(await downloadedRow.getByRole('switch').count(), 0);
   await downloadedRow.getByRole('button', {name:'Transcrever'}).click();
   await downloadedRow.getByText('Transcrevendo: 40%').waitFor();
@@ -1140,6 +1147,7 @@ try {
   await cpuRow.getByText(/Estimativa: cerca de 25 h 42 min \(entre 17 h 59 min e 38 h 33 min\)/).waitFor();
   assert.match(await cpuRow.innerText(), /Whisper small · CPU · int8/);
   await page.screenshot({path:'shots/estimate-cpu.png',fullPage:true});
+  await cpuRow.getByText('Agrupamento por VAD: ligado, automático, lote 8 (na CPU acelera; ajuste em Componentes).').waitFor();
   await cpuRow.getByRole('button',{name:'Usar o Motor Groq'}).click();
   assert.equal(await cpuRow.getByLabel('Motor de transcrição').inputValue(), 'groq');
   await page.goto(`${url}?source-test=1&hardware-probe-fallback=1`);
