@@ -340,7 +340,12 @@ try {
   {
     const deadline = Date.now() + 20_000;
     while (Date.now() < deadline) {
-      const ready = await wd.exec(() => Boolean(window.__TAURI_INTERNALS__?.invoke && document.body.innerText.includes('Transcrição pronta')));
+      const ready = await wd.exec(() => {
+        for (const btn of document.querySelectorAll('button')) {
+          if (btn.textContent?.trim() === 'Agora não') btn.click();
+        }
+        return Boolean(window.__TAURI_INTERNALS__?.invoke && document.body.innerText.includes('Transcrição pronta'));
+      });
       if (ready) break;
       await delay(250);
     }

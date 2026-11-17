@@ -36,7 +36,9 @@ jobs:
             "$DRIVER_PKG" \
             xvfb \
             ffmpeg \
-            gstreamer1.0-tools
+            gstreamer1.0-tools \
+            gstreamer1.0-libav \
+            gstreamer1.0-plugins-bad
           which WebKitWebDriver || dpkg -L "$DRIVER_PKG" | grep -E 'WebKitWebDriver|bin/' || true
       - name: Verificar libass no FFmpeg
         run: ffmpeg -hide_banner -h filter=ass
