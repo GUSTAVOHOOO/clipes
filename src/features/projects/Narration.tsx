@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
+import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { coreDispatch } from '@/lib/core';
+import { mediaUrl } from '@/lib/media';
 import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import type { TtsCatalog } from '@/features/components/TtsCatalogCard';
@@ -107,7 +108,6 @@ const texts = {
   },
 } as const;
 
-const mediaUrl = (id: string) => (isTauri() ? convertFileSrc(id, 'clipes-media') : `/__clipes-media__/${id}`);
 const codeOf = (e: unknown) => (typeof e === 'object' && e !== null && 'code' in e ? String(e.code) : '');
 const fmtSeconds = (us: number) => (us / 1_000_000).toFixed(2);
 

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
+import { isTauri } from '@tauri-apps/api/core';
 import { coreDispatch } from '@/lib/core';
+import { mediaUrl as buildMediaUrl } from '@/lib/media';
 import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { CaptionOverlay } from '@/features/captions/CaptionOverlay';
@@ -43,9 +44,8 @@ function code(error: unknown) { return typeof error === 'object' && error !== nu
 export function toProxySeconds(sourceUs: number, windowStartUs: number, windowEndUs: number): number | null {
   return sourceUs >= windowStartUs && sourceUs <= windowEndUs ? (sourceUs - windowStartUs) / 1_000_000 : null;
 }
-const clipesMediaUrl = (resource: string) => (isTauri() ? convertFileSrc(resource, 'clipes-media') : `/__clipes-media__/${resource}`);
-const mediaUrl = (key: string) => clipesMediaUrl(`proxy/${key}`);
-const narrationMediaUrl = (id: number) => clipesMediaUrl(`narration/${id}`);
+const mediaUrl = (key: string) => buildMediaUrl(`proxy/${key}`);
+const narrationMediaUrl = (id: number) => buildMediaUrl(`narration/${id}`);
 
 export type SkipInterval = { startUs: number; endUs: number };
 
