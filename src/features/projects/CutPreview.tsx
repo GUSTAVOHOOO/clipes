@@ -64,6 +64,7 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
   const video = useRef<HTMLVideoElement>(null);
   const bottomVideo = useRef<HTMLVideoElement>(null);
   const pending = useRef<number | null>(null);
+  const loadedWindow = useRef<{ sourceId: number; windowStartUs: number; windowEndUs: number } | null>(null);
   const [proxy, setProxy] = useState<Proxy | null>(null);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
   const [notice, setNotice] = useState('');
@@ -75,17 +76,25 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
     setError(null); setNotice('');
     try {
       const next = await coreDispatch<Proxy>('proxy.request', { source_id: sourceId, start_us: startUs, end_us: endUs });
-      if (active()) setProxy(next);
+      if (active()) {
+        loadedWindow.current = next.state === 'failed' || next.state === 'cancelled'
+          ? null
+          : { sourceId, windowStartUs: next.windowStartUs, windowEndUs: next.windowEndUs };
+        setProxy(next);
+      }
     } catch (e) {
-      if (active()) { setProxy(null); setError({ code: code(e), message: typeof e === 'object' && e !== null && 'message' in e ? String(e.message) : '' }); }
+      if (active()) { loadedWindow.current = null; setProxy(null); setError({ code: code(e), message: typeof e === 'object' && e !== null && 'message' in e ? String(e.message) : '' }); }
     }
   }, [sourceId, startUs, endUs]);
   useEffect(() => {
+    const win = loadedWindow.current;
+    if (win && win.sourceId === sourceId && startUs >= win.windowStartUs && endUs <= win.windowEndUs) return;
+    loadedWindow.current = null;
     let alive = true;
     setProxy(null); setPlaying(false); setTime(0); setLastSeekUs(null); pending.current = null;
     void request(() => alive);
     return () => { alive = false; };
-  }, [request]);
+  }, [sourceId, startUs, endUs, request]);
 
   useEffect(() => {
     onProxyChange?.(proxy ? { state: proxy.state, key: proxy.key, windowStartUs: proxy.windowStartUs, windowEndUs: proxy.windowEndUs } : null);
@@ -100,8 +109,13 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
     const sync = () => {
       coreDispatch<Status>('proxy.status', { key: proxy.key }).then(next => {
         if (!alive) return;
-        if (next.state === 'missing') void request(() => alive);
-        else setProxy(current => (current && current.key === next.key ? { ...current, ...next } : current));
+        if (next.state === 'missing') {
+          loadedWindow.current = null;
+          void request(() => alive);
+        } else {
+          if (next.state === 'failed' || next.state === 'cancelled') loadedWindow.current = null;
+          setProxy(current => (current && current.key === next.key ? { ...current, ...next } : current));
+        }
       }).catch(() => { if (alive) setError({ code: '', message: '' }); });
     };
     if (isTauri()) listen('core-progress', sync).then(fn => { if (alive) unlisten = fn; else fn(); }).catch(() => {});
@@ -350,7 +364,7 @@ export function CutPreviewPanel({ sourceId }: { sourceId: number }) {
   }, [sourceId]);
   if (!cut) return null;
   return <div className="mt-3 flex flex-col gap-2">
-    <CutPreview sourceId={cut.sourceId} startUs={cut.startUs} endUs={cut.endUs} />
+    <CutPreview key={`${cut.sourceId}:${cut.startUs}:${cut.endUs}`} sourceId={cut.sourceId} startUs={cut.startUs} endUs={cut.endUs} />
     <div><Button tamanho="sm" onClick={() => setCut(null)}>{t.close}</Button></div>
   </div>;
 }

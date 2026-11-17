@@ -1174,8 +1174,8 @@ try {
   }
   // Editor do Corte (#61): teclado, sincronização com o preview, virtualização e capturas, PT e EN, com o núcleo simulado.
   for (const L of [
-    { lang: 'pt-BR', title: 'Editor do Corte', close: 'Fechar editor', timeline: 'Timeline do Corte', transcript: 'Transcrição do editor', borders: 'Bordas do Corte', error: 'O Corte ficaria abaixo da duração mínima.', hint: 'voltar · pausar · avançar' },
-    { lang: 'en', title: 'Clip editor', close: 'Close editor', timeline: 'Clip timeline', transcript: 'Editor Transcript', borders: 'Clip borders', error: 'The Clip would fall below the minimum duration.', hint: 'reverse · pause · forward' },
+    { lang: 'pt-BR', title: 'Editor do Corte', close: 'Fechar editor', timeline: 'Timeline do Corte', transcript: 'Transcrição do editor', borders: 'Bordas do Corte', captions: 'Legenda', silences: 'Silêncios', crop: 'Enquadrar', translation: 'Tradução', play: 'Reproduzir', pause: 'Pausar', back: 'Voltar', forward: 'Avançar', markIn: 'Marcar entrada', markOut: 'Marcar saída', export: 'Exportar', palette: 'Paleta de comandos', error: 'O Corte ficaria abaixo da duração mínima.', hint: 'voltar · pausar · avançar' },
+    { lang: 'en', title: 'Clip editor', close: 'Close editor', timeline: 'Clip timeline', transcript: 'Editor Transcript', borders: 'Clip borders', captions: 'Captions', silences: 'Silences', crop: 'Framing', translation: 'Translation', play: 'Play', pause: 'Pause', back: 'Reverse', forward: 'Forward', markIn: 'Mark in', markOut: 'Mark out', export: 'Export', palette: 'Command palette', error: 'The Clip would fall below the minimum duration.', hint: 'reverse · pause · forward' },
   ]) {
     await page.evaluate(lang => localStorage.setItem('clipes.language', lang), L.lang);
     await page.goto(`${url}?source-test=1&transcript-test=1&editor-test=1`);
@@ -1248,7 +1248,31 @@ try {
     await testTranslation(page, editor, L.lang);
     assert.match(await editor.innerText(), new RegExp(L.hint), 'atalhos visíveis junto dos controles');
     for (const key of ['J', 'K', 'L', 'I', 'O']) assert.ok((await editor.locator('kbd', { hasText: new RegExp(`^${key}$`) }).count()) > 0, `tecla ${key} visível`);
-    await editor.getByRole('button', { name: L.close, exact: true }).click();
+    // Paleta Ctrl+K dentro do Editor (#248): gavetas, transporte, entrada/saída, exportar e fechar.
+    await page.keyboard.press('Control+k');
+    const editorPalette = page.getByRole('dialog', { name: L.palette });
+    await editorPalette.waitFor();
+    for (const label of [L.transcript, L.borders, L.captions, L.silences, L.crop, L.translation, L.play, L.back, L.forward, L.markIn, L.markOut, L.export, L.close]) {
+      assert.ok((await editorPalette.getByRole('option', { name: new RegExp(label) }).count()) > 0, `comando ${label} presente no Ctrl+K`);
+    }
+    await editorPalette.getByRole('option', { name: new RegExp(`^${L.play}`) }).click();
+    await editorPalette.waitFor({ state: 'hidden' });
+    await page.waitForFunction(() => document.querySelector('[data-rate="1"]'));
+    await page.keyboard.press('Control+k');
+    await editorPalette.waitFor();
+    await editorPalette.getByRole('option', { name: new RegExp(`^${L.pause}`) }).click();
+    await editorPalette.waitFor({ state: 'hidden' });
+    await page.waitForFunction(() => document.querySelector('[data-rate="0"]'));
+    await page.keyboard.press('Control+k');
+    await editorPalette.waitFor();
+    await editorPalette.getByRole('option', { name: new RegExp(`^${L.captions}`) }).click();
+    const paletteCaptions = editor.getByRole('dialog', { name: L.captions, exact: true });
+    await paletteCaptions.waitFor();
+    await page.keyboard.press('Escape');
+    await paletteCaptions.waitFor({ state: 'hidden' });
+    await page.keyboard.press('Control+k');
+    await editorPalette.waitFor();
+    await editorPalette.getByRole('option', { name: new RegExp(`^${L.close}`) }).click();
     await editor.waitFor({ state: 'detached' });
   }
   await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
