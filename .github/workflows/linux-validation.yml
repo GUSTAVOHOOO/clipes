@@ -23,15 +23,21 @@ jobs:
       - name: Instalar dependências de build e runtime Linux
         run: |
           sudo apt-get update
+          if apt-cache show webkitgtk-webdriver >/dev/null 2>&1; then
+            DRIVER_PKG=webkitgtk-webdriver
+          else
+            DRIVER_PKG=webkit2gtk-driver
+          fi
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
             libappindicator3-dev \
             librsvg2-dev \
             patchelf \
-            webkit2gtk-driver \
+            "$DRIVER_PKG" \
             xvfb \
             ffmpeg \
             gstreamer1.0-tools
+          which WebKitWebDriver || dpkg -L "$DRIVER_PKG" | grep -E 'WebKitWebDriver|bin/' || true
       - name: Verificar libass no FFmpeg
         run: ffmpeg -hide_banner -h filter=ass
       - name: Cachear tauri-driver
