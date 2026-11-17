@@ -80,7 +80,7 @@ pub(crate) struct StartRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) resolved_captions: Option<Vec<FrozenCaptionWord>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) resolved_output_captions: Option<(String, i64, Vec<FrozenOutputCaptionWord>)>,
+    pub(crate) resolved_output_captions: Option<Box<(String, i64, Vec<FrozenOutputCaptionWord>)>>,
     // Só o lote (#64) com `confirmed: true` ativa a substituição atômica de destino existente.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub(crate) overwrite: bool,
@@ -289,10 +289,10 @@ pub(crate) fn target_with(
     } else {
         None
     };
-    let has_translation_rows = match (request.clip_id, active_lang.as_deref()) {
-        (Some(_), Some(_)) => true,
-        _ => false,
-    };
+    let has_translation_rows = matches!(
+        (request.clip_id, active_lang.as_deref()),
+        (Some(_), Some(_))
+    );
     let requested_track = track_override.or(saved_track.as_deref());
     let chosen_track: &'static str = if let Some((track, _, _)) = frozen_output {
         if track == "narration" {
@@ -582,21 +582,20 @@ pub(crate) fn target_with(
         if chosen_track == "narration" {
             if let Some(ref narration) = narration_data {
                 captions_duration_us = narration.total_duration_us.max(splice.output_duration_us);
-                let (merged_styled, merged_starts, merged_ends, merged_sids, merged_keys) =
-                    crate::narration_align::merge_narration_and_source_words(
-                        narration,
-                        styled,
-                        source_starts,
-                        source_ends,
-                        sentence_ids,
-                        &splice,
-                        end_us,
-                    );
-                styled = merged_styled;
-                source_starts = merged_starts;
-                source_ends = merged_ends;
-                sentence_ids = merged_sids;
-                sentence_keys = merged_keys;
+                let merged = crate::narration_align::merge_narration_and_source_words(
+                    narration,
+                    styled,
+                    source_starts,
+                    source_ends,
+                    sentence_ids,
+                    &splice,
+                    end_us,
+                );
+                styled = merged.styled;
+                source_starts = merged.source_starts;
+                source_ends = merged.source_ends;
+                sentence_ids = merged.sentence_ids;
+                sentence_keys = merged.sentence_keys;
             }
         } else if sentence_keys.is_empty() && !styled.is_empty() {
             sentence_keys = vec![None; styled.len()];
@@ -723,8 +722,8 @@ pub(crate) fn prepare_start_request(
     request.resolved_crop_plan = resolved.crop_plan.clone();
     request.resolved_captions =
         (resolved.caption_track == "translated").then(|| resolved.frozen_captions());
-    request.resolved_output_captions =
-        (resolved.caption_track == "narration").then(|| resolved.frozen_output_captions());
+    request.resolved_output_captions = (resolved.caption_track == "narration")
+        .then(|| Box::new(resolved.frozen_output_captions()));
     render::validate_output_with_overwrite(&request.output, request.overwrite)?;
     let _ = crate::jobs::preview::source(request.cut.source_id, project)?;
     check_target_glyphs(&resolved, &style)?;
@@ -836,7 +835,7 @@ pub(crate) fn run(
             &request.cut,
             frozen,
             request.resolved_captions.as_deref(),
-            request.resolved_output_captions.as_ref(),
+            request.resolved_output_captions.as_deref(),
             None,
         )?;
         check_target_glyphs(&target, &style)?;

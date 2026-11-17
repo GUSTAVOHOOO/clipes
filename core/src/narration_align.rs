@@ -420,8 +420,10 @@ fn try_read_pcm_wav(path: &Path) -> Result<Option<PcmWav>, CoreError> {
         return Ok(None);
     }
     let samples = raw
-        .chunks_exact(2)
-        .map(|b| i16::from_le_bytes([b[0], b[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|b| i16::from_le_bytes(*b))
         .collect();
     Ok(Some(PcmWav {
         sample_rate: sr,
@@ -1640,6 +1642,14 @@ pub(crate) fn filter_source_words_outside_narration(
     (out_styled, out_starts, out_ends, out_sids)
 }
 
+pub(crate) struct MergedNarrationWords {
+    pub(crate) styled: Vec<crate::caption_style::StyledWord>,
+    pub(crate) source_starts: Vec<i64>,
+    pub(crate) source_ends: Vec<i64>,
+    pub(crate) sentence_ids: Vec<Option<i64>>,
+    pub(crate) sentence_keys: Vec<Option<(i64, i64)>>,
+}
+
 /// Constrói a lista mesclada (Narração nos seus intervalos + Fonte original fora deles) e os
 /// índices de Frase para `caption_style::prepare_with_sentences`.
 pub(crate) fn merge_narration_and_source_words(
@@ -1650,13 +1660,7 @@ pub(crate) fn merge_narration_and_source_words(
     source_sentence_ids: Vec<Option<i64>>,
     splice: &SpliceMap,
     clip_end_us: i64,
-) -> (
-    Vec<crate::caption_style::StyledWord>,
-    Vec<i64>,
-    Vec<i64>,
-    Vec<Option<i64>>,
-    Vec<Option<(i64, i64)>>,
-) {
+) -> MergedNarrationWords {
     let (filtered_styled, filtered_starts, filtered_ends, filtered_sids) =
         filter_source_words_outside_narration(
             source_styled,
@@ -1742,7 +1746,13 @@ pub(crate) fn merge_narration_and_source_words(
         out_keys.push(item.sentence_key);
     }
 
-    (out_styled, out_starts, out_ends, out_sids, out_keys)
+    MergedNarrationWords {
+        styled: out_styled,
+        source_starts: out_starts,
+        source_ends: out_ends,
+        sentence_ids: out_sids,
+        sentence_keys: out_keys,
+    }
 }
 
 inventory::submit! { CommandRegistration { name: "narration.align", execute: cmd_align } }
