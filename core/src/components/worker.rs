@@ -74,6 +74,10 @@ const FILES: &[(&str, &[u8])] = &[
         "src/clipes_worker/transcribe.py",
         include_bytes!("../../../worker/src/clipes_worker/transcribe.py"),
     ),
+    (
+        "src/clipes_worker/align.py",
+        include_bytes!("../../../worker/src/clipes_worker/align.py"),
+    ),
 ];
 
 fn worker_dir(settings: &Settings) -> PathBuf {
@@ -138,7 +142,7 @@ pub(super) fn uv_version_for(settings: &Settings) -> Option<String> {
 }
 
 /// O worker está instalado (ambiente criado e estado gravado)?
-pub(super) fn installed(settings: &Settings) -> bool {
+pub(crate) fn installed(settings: &Settings) -> bool {
     let worker = worker_dir(settings);
     state_path(&worker).is_file() && venv_python(&worker).is_file()
 }

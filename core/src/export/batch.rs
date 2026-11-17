@@ -651,6 +651,7 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             resolved_crop: None,
             resolved_crop_plan: None,
             resolved_captions: None,
+            resolved_output_captions: None,
             overwrite: confirmed,
         };
         match super::prepare_start_request(req, &project) {

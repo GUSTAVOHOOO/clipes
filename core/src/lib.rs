@@ -73,6 +73,7 @@ pub mod guardrails;
 pub mod jobs;
 pub mod media;
 pub mod montage;
+pub mod narration_align;
 pub mod packaging;
 pub mod process;
 pub mod projects;

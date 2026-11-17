@@ -238,6 +238,10 @@ fn transcribe_worker() {
                     probe_reply(&mut out, &id, params);
                     continue;
                 }
+                if message["task"] == "align" {
+                    align_reply(&mut out, &id, params);
+                    continue;
+                }
                 let seconds: f64 = params["audio"]
                     .as_str()
                     .and_then(|p| fs::read_to_string(p).ok())
@@ -361,6 +365,99 @@ fn main() {
         .map(|i| args[i + 1].as_str())
         .unwrap_or("handshake");
     worker(scenario);
+}
+
+/// Tarefa `align` (#81): valida que recebeu WAV 16 kHz mono e devolve `spoken_words` + `script_words`.
+fn align_reply(out: &mut std::io::StdoutLock<'_>, id: &Value, params: &Value) {
+    let send = |out: &mut std::io::StdoutLock<'_>, value: Value| {
+        writeln!(out, "{value}").unwrap();
+        out.flush().unwrap();
+    };
+    if let Ok(code) = std::env::var("CLIPES_FAKE_ALIGN_FAIL") {
+        if !code.is_empty() {
+            send(
+                out,
+                serde_json::json!({"v":1,"type":"error","id":id,"code":code,"message":"x"}),
+            );
+            return;
+        }
+    }
+    let Some(audio_path) = params["audio"].as_str() else {
+        send(
+            out,
+            serde_json::json!({"v":1,"type":"error","id":id,"code":"invalid_message","message":"x"}),
+        );
+        return;
+    };
+    let Ok(bytes) = fs::read(audio_path) else {
+        send(
+            out,
+            serde_json::json!({"v":1,"type":"error","id":id,"code":"internal","message":"x"}),
+        );
+        return;
+    };
+    if bytes.len() < 44 || &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WAVE" {
+        send(
+            out,
+            serde_json::json!({"v":1,"type":"error","id":id,"code":"invalid_message","message":"x"}),
+        );
+        return;
+    }
+    let channels = u16::from_le_bytes([bytes[22], bytes[23]]);
+    let sample_rate = u32::from_le_bytes([bytes[24], bytes[25], bytes[26], bytes[27]]);
+    if channels != 1 || sample_rate != 16_000 {
+        send(
+            out,
+            serde_json::json!({"v":1,"type":"error","id":id,"code":"invalid_message","message":"x"}),
+        );
+        return;
+    }
+    if let Some(log) = std::env::var_os("CLIPES_FAKE_ALIGN_LOG") {
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log)
+            .unwrap();
+        writeln!(
+            file,
+            "{} {} {} {}",
+            params["language"].as_str().unwrap_or(""),
+            channels,
+            sample_rate,
+            params["text"].as_str().unwrap_or("")
+        )
+        .unwrap();
+    }
+    let text = params["text"].as_str().unwrap_or("");
+    let script_words: Vec<Value> = text
+        .split_whitespace()
+        .enumerate()
+        .map(|(i, w)| {
+            let s = 100_000 + i as i64 * 250_000;
+            serde_json::json!({"text":w,"start_us":s,"end_us":s+200_000,"probability":0.95})
+        })
+        .collect();
+    let spoken_src = std::env::var("CLIPES_FAKE_ALIGN_SPOKEN").ok();
+    let spoken_text = spoken_src
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or(text);
+    let spoken_words: Vec<Value> = spoken_text
+        .split_whitespace()
+        .enumerate()
+        .map(|(i, w)| {
+            let s = 110_000 + i as i64 * 240_000;
+            serde_json::json!({"text":w,"start_us":s,"end_us":s+190_000})
+        })
+        .collect();
+    send(
+        out,
+        serde_json::json!({"v":1,"type":"progress","id":id,"stage":"aligning","percentage":50,"message":"Alinhando"}),
+    );
+    send(
+        out,
+        serde_json::json!({"v":1,"type":"result","id":id,"data":{"spoken_words":spoken_words,"script_words":script_words,"silences":[]}}),
+    );
 }
 
 /// Tarefa `probe` do Motor local (#50). `CLIPES_FAKE_PROBE_FAIL` é uma lista separada por vírgulas:
