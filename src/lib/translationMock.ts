@@ -12,6 +12,53 @@ type ClipTranslationState = {
 };
 
 const clips = new Map<number, ClipTranslationState>();
+type MockPermission = { status: string; who?: string; where?: string; scope?: string };
+const permissionOverrides = new Map<number, MockPermission>();
+
+export function setTranslationMockPermission(sourceId: number, permission: MockPermission) {
+  permissionOverrides.set(sourceId, permission);
+}
+
+function hasTranslationScope(scope?: string): boolean {
+  if (!scope) return false;
+  return scope
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .split(/[,\s]+/)
+    .map(tok => tok.replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, ''))
+    .some(tok => tok === 'traducao' || tok === 'translation');
+}
+
+function permissionStateOf(sourceId: number): { permitted: boolean; permissionError: { code: string; message: string } | null } {
+  const override = permissionOverrides.get(sourceId);
+  if (override) {
+    if (override.status !== 'granted') {
+      return {
+        permitted: false,
+        permissionError: {
+          code: 'translation_permission_required',
+          message: 'Esta Fonte não tem Permissão registrada com escopo “tradução”. Registre a Permissão antes de traduzir.',
+        },
+      };
+    }
+    if (!hasTranslationScope(override.scope)) {
+      return {
+        permitted: false,
+        permissionError: {
+          code: 'translation_permission_required',
+          message: 'A Permissão desta Fonte não inclui o escopo “tradução”. Atualize a Permissão da Fonte para incluir tradução.',
+        },
+      };
+    }
+    return { permitted: true, permissionError: null };
+  }
+  const permitted = !flag('translation-nopermission');
+  return {
+    permitted,
+    permissionError: permitted ? null : { code: 'translation_permission_required', message: 'A Permissão desta Fonte não inclui o escopo “tradução”.' },
+  };
+}
 
 function stateOf(clipId: number): ClipTranslationState {
   let st = clips.get(clipId);
@@ -38,7 +85,7 @@ function buildDoc(clipId: number) {
       st.lines.set(id, { text: st.targetLanguage === 'pt-BR' ? `Frase traduzida ${id}` : `Translated sentence ${id}`, edited: false });
     }
   }
-  const permitted = !flag('translation-nopermission');
+  const { permitted, permissionError } = permissionStateOf(1);
   const languageRequired = flag('translation-language');
   const detectedLanguage = languageRequired ? null : 'pt-BR';
   const sentences: TranslatedLine[] = [];
@@ -74,7 +121,7 @@ function buildDoc(clipId: number) {
     sourceId: 1,
     transcriptId: 1,
     permitted,
-    permissionError: permitted ? null : { code: 'translation_permission_required', message: 'A Permissão desta Fonte não inclui o escopo “tradução”.' },
+    permissionError,
     detectedLanguage,
     languageRequired,
     defaultTargetLanguage: detectedLanguage ? 'en' : null,
@@ -95,7 +142,8 @@ export function translationMockDispatch(name: string, args: object): unknown {
   const st = stateOf(clipId);
   if (name === 'translation.get') return buildDoc(clipId);
   if (name === 'translation.estimate') {
-    if (flag('translation-nopermission')) throw { code: 'translation_permission_required', message: 'A Permissão desta Fonte não inclui o escopo “tradução”.' };
+    const perm = permissionStateOf(1);
+    if (!perm.permitted) throw perm.permissionError;
     const targetLanguage = a.target_language ?? (flag('translation-language') ? undefined : 'en');
     if (!targetLanguage) throw { code: 'language_required', message: 'O idioma do Corte não é claro. Escolha o idioma de destino: PT-BR ou EN.' };
     return {
@@ -110,7 +158,8 @@ export function translationMockDispatch(name: string, args: object): unknown {
     };
   }
   if (name === 'translation.start') {
-    if (flag('translation-nopermission')) throw { code: 'translation_permission_required', message: 'A Permissão desta Fonte não inclui o escopo “tradução”.' };
+    const perm = permissionStateOf(1);
+    if (!perm.permitted) throw perm.permissionError;
     const targetLanguage = (a.target_language ?? (flag('translation-language') ? undefined : 'en')) as 'pt-BR' | 'en' | undefined;
     if (!targetLanguage) throw { code: 'language_required', message: 'O idioma do Corte não é claro. Escolha o idioma de destino: PT-BR ou EN.' };
     if (flag('translation-paid') && !a.confirmed) throw { code: 'confirmation_required', message: 'Esta tradução usa um Provedor pago.' };

@@ -3,6 +3,7 @@ import { coreDispatch } from '@/lib/core';
 import { LanguageContext, useText, type Language } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { SOURCE_PERMISSION_UPDATED_EVENT } from '@/features/projects/Sources';
 import { clock, fill } from '@/features/projects/selectionFormat';
 
 type SentenceLine = {
@@ -220,7 +221,9 @@ export function TranslationPanel({
   useEffect(() => {
     let active = true;
     refresh().catch(() => { if (active) setLoadError(true); });
-    return () => { active = false; };
+    const onPermission = () => { if (active) void refresh().catch(() => {}); };
+    window.addEventListener(SOURCE_PERMISSION_UPDATED_EVENT, onPermission);
+    return () => { active = false; window.removeEventListener(SOURCE_PERMISSION_UPDATED_EVENT, onPermission); };
   }, [refresh, clipRevision]);
 
   const running = doc?.run?.state === 'running';
