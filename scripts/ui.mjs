@@ -7,7 +7,7 @@ import { mkdir } from 'node:fs/promises';
 import { testEditorBorders } from './editor-borders.mjs';
 import { testEditorSilencesPanel, testEditorSilencesPreview } from './editor-silences.mjs';
 import { testEditorCrop } from './editor-crop.mjs';
-import { testEditorMontage } from './editor-montage.mjs';
+import { testEditorMontage, testEditorDucking } from './editor-montage.mjs';
 import { testTranslation, testTranslationBlocked } from './translation-ui.mjs';
 import { testTtsComponents, testTtsNarrationLocked, testTtsNarrationUnlocked } from './tts-ui.mjs';
 import { testPackagingChapters } from './packaging-chapters-ui.mjs';
@@ -1258,6 +1258,7 @@ try {
   await testEditorSilencesPreview(page, url);
   await testEditorCrop(page, url);
   await testEditorMontage(page, url);
+  await testEditorDucking(page, url);
   await testPackagingChapters(page, url);
   await testThumbnailPreview(page, url);
   // Export em lote (#64): por Fonte na Seleção e por Projeto, progresso ponderado, cancelamento, sobrescrita e falha isolada.

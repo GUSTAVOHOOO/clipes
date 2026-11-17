@@ -540,7 +540,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
       <Puxador lado="dir" g={right} itens={[{ id: 'borders', rotulo: t.borders, atalho: ']', icone: <PanelRight size={16} />, onClick: () => { left.fechar(); openRight('borders'); } }, { id: 'captions', rotulo: t.captions, atalho: 'C', icone: <Captions size={16} />, onClick: () => { left.fechar(); openRight('captions'); } }, { id: 'silences', rotulo: t.silences, atalho: 'S', icone: <Scissors size={16} />, onClick: () => { left.fechar(); openRight('silences'); } }, { id: 'crop', rotulo: t.crop, atalho: 'F', icone: <Crop size={16} />, onClick: () => { left.fechar(); openRight('crop'); } }, { id: 'translation', rotulo: t.translation, atalho: 'T', icone: <Languages size={16} />, onClick: () => { left.fechar(); openRight('translation'); } }]} />
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4"><div className="m-auto flex flex-col items-center gap-3">
         {!opened && !error && <p aria-live="polite" className="text-fg-2">{t.loading}</p>}
-        {opened && <div style={{ width: 'min(18rem, 22vh)' }}><CutPreview sourceId={request.source_id} startUs={opened.startUs} endUs={opened.endUs} rate={rate} onSourceTime={us => setSourceUs(us)} onProxyChange={setProxyInfo} captions={captions.data} skipIntervals={activeSilences} crop={crop} cropPlan={cropPlan} /></div>}
+        {opened && <div style={{ width: 'min(18rem, 22vh)' }}><CutPreview sourceId={request.source_id} startUs={opened.startUs} endUs={opened.endUs} rate={rate} onSourceTime={us => setSourceUs(us)} onProxyChange={setProxyInfo} captions={captions.data} skipIntervals={activeSilences} crop={crop} cropPlan={cropPlan} montage={montage} keptSegments={silencesView.segments} clipStartUs={range?.startUs} clipEndUs={range?.endUs} /></div>}
         {opened && <div className="flex flex-wrap items-center justify-center gap-2" role="group" aria-label={t.shortcuts}>
           <Button tamanho="sm" onClick={() => setRate(nextRate(rate, 'j'))} atalho="J">{t.back.replace(/ \(.\)$/, '')}</Button>
           <Button tamanho="sm" onClick={() => setRate(0)} atalho="K">{t.pause.replace(/ \(.\)$/, '')}</Button>
@@ -564,7 +564,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
             clipId={opened.clipId}
             startId={startId}
             endId={endId}
-            refreshKey={`${startId}-${endId}-${silencesView.removedUs}`}
+            refreshKey={`${startId}-${endId}-${silencesView.removedUs}-${montage?.freezeTailUs ?? 0}-${captionRevision}`}
           />
         )}
       </div>
