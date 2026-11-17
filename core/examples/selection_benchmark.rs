@@ -1990,9 +1990,9 @@ impl Provider for CodexBenchProvider {
 }
 
 fn open_bench_copy(bench_dir: &Path, tag: &str) -> Result<PathBuf, String> {
-    let data_dir = bench_dir.join(format!("data-{tag}"));
+    let data_dir = bench_dir.join(format!("data-w148-{tag}"));
     setup_env(&data_dir, None)?;
-    let work_project = bench_dir.join(format!("work-{tag}.clipes"));
+    let work_project = bench_dir.join(format!("work-w148-{tag}.clipes"));
     if work_project.exists() {
         fs::remove_dir_all(&work_project).map_err(|e| e.to_string())?;
     }
@@ -2004,32 +2004,60 @@ fn open_bench_copy(bench_dir: &Path, tag: &str) -> Result<PathBuf, String> {
 
 fn select_windows_for_mode(
     planned: &[BenchPlannedWindow],
+    spec: &MatrixWindowSpec,
     source_idx: usize,
     mode: &str,
     sample_plan: Option<&SamplePlanFile>,
 ) -> Vec<BenchPlannedWindow> {
-    if mode != "sample" {
+    if mode != "sample" || spec.window_max_us.is_none() {
         return planned.to_vec();
     }
     let Some(plan) = sample_plan else {
         return planned.to_vec();
     };
-    let ref_spans: Vec<(i64, i64)> = plan
+    let ref_windows: Vec<&PlannedWindowInfo> = plan
         .sampled_windows
         .iter()
         .filter(|w| w.source_index == source_idx)
-        .map(|w| (w.start_us, w.end_us))
         .collect();
-    if ref_spans.is_empty() {
+    if ref_windows.is_empty() {
         return Vec::new();
+    }
+    if spec.window_max_us == Some(15 * 60_000_000) && spec.overlap_us == 3 * 60_000_000 {
+        let wanted: std::collections::HashSet<usize> =
+            ref_windows.iter().map(|w| w.window_index).collect();
+        return planned
+            .iter()
+            .filter(|w| wanted.contains(&w.index))
+            .cloned()
+            .collect();
+    }
+    let mut picked: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
+    let w_max = spec.window_max_us.unwrap_or(i64::MAX);
+    if w_max <= 15 * 60_000_000 {
+        for w in planned {
+            let w_mid = (w.start_us + w.end_us) / 2;
+            if ref_windows
+                .iter()
+                .any(|rw| rw.start_us <= w_mid && w_mid <= rw.end_us)
+            {
+                picked.insert(w.index);
+            }
+        }
+    }
+    for rw in &ref_windows {
+        let ref_mid = (rw.start_us + rw.end_us) / 2;
+        if let Some(best) = planned
+            .iter()
+            .filter(|w| w.start_us <= ref_mid && ref_mid <= w.end_us)
+            .min_by_key(|w| ((w.start_us + w.end_us) / 2 - ref_mid).abs())
+        {
+            picked.insert(best.index);
+        }
     }
     planned
         .iter()
-        .filter(|w| {
-            ref_spans
-                .iter()
-                .any(|&(rs, re)| w.end_us.min(re) - w.start_us.max(rs) > 0)
-        })
+        .filter(|w| picked.contains(&w.index))
         .cloned()
         .collect()
 }
@@ -2099,8 +2127,13 @@ fn cmd_plan_matrix(args: &[String]) -> Result<(), String> {
                     .map(|w| (w.start_us, w.end_us))
                     .collect();
                 let crossing = evaluate_window_crossing(&win_spans, &gt);
-                let sampled =
-                    select_windows_for_mode(&plan.windows, *idx, "sample", sample_plan.as_ref());
+                let sampled = select_windows_for_mode(
+                    &plan.windows,
+                    spec,
+                    *idx,
+                    "sample",
+                    sample_plan.as_ref(),
+                );
                 let tokens_sum: u64 = plan.windows.iter().map(|w| w.est_input_tokens).sum();
 
                 if let BenchPlanStatus::Infeasible {
@@ -2223,10 +2256,11 @@ fn parse_cell_filter(
 fn eval_gt_for_windows(
     all_gt: &[GroundTruthClip],
     mode: &str,
+    spec: &MatrixWindowSpec,
     source_idx: usize,
     sample_plan: Option<&SamplePlanFile>,
 ) -> Vec<GroundTruthClip> {
-    if mode != "sample" {
+    if mode != "sample" || spec.window_max_us.is_none() {
         return all_gt.to_vec();
     }
     let Some(plan) = sample_plan else {
@@ -2319,7 +2353,7 @@ fn cmd_run_matrix(args: &[String]) -> Result<(), String> {
 
     let task = ai_task::find("selection").ok_or("tarefa selection ausente")?;
     let fixed_tokens = selection_fixed_tokens();
-    let runs_root = bench_dir.join("runs").join(&tag);
+    let runs_root = bench_dir.join("w148_runs").join(&tag);
     fs::create_dir_all(&runs_root).map_err(|e| e.to_string())?;
 
     let mut cell_results = Vec::new();
@@ -2362,7 +2396,7 @@ fn cmd_run_matrix(args: &[String]) -> Result<(), String> {
                 .map(|w| (w.start_us, w.end_us))
                 .collect();
             let eval_gt =
-                eval_gt_for_windows(&item.ground_truth(), mode, *idx, sample_plan.as_ref());
+                eval_gt_for_windows(&item.ground_truth(), mode, spec, *idx, sample_plan.as_ref());
             let crossing = evaluate_window_crossing(&win_spans, &eval_gt);
             cell_crossing_clips += crossing.crossing_clips;
             cell_total_clips += crossing.total_clips;
@@ -2384,12 +2418,12 @@ fn cmd_run_matrix(args: &[String]) -> Result<(), String> {
             }
 
             let target_windows =
-                select_windows_for_mode(&plan.windows, *idx, mode, sample_plan.as_ref());
+                select_windows_for_mode(&plan.windows, spec, *idx, mode, sample_plan.as_ref());
             let span_pairs: Vec<(i64, i64)> = target_windows
                 .iter()
                 .map(|w| (w.start_us, w.end_us))
                 .collect();
-            let sampled_dur_us = if mode == "sample" {
+            let sampled_dur_us = if mode == "sample" && spec.window_max_us.is_some() {
                 union_duration_us(&span_pairs)
             } else {
                 item.duration_seconds * 1_000_000
