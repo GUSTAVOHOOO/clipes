@@ -406,7 +406,7 @@ mod settings {
     }
     enum Picked {
         Cli(String),
-        Profile(Profile),
+        Profile(Box<Profile>),
     }
     /// Resolves the destination of one call and applies the per-task "local only" veto before
     /// the consent check, the vault and any network access. Locality is computed here, at
@@ -455,14 +455,14 @@ mod settings {
         if local_only && !is_loopback_endpoint(&profile.endpoint) {
             return Err(local_only_violation());
         }
-        Ok(Picked::Profile(profile))
+        Ok(Picked::Profile(Box::new(profile)))
     }
     pub(crate) fn routed(task: Option<&str>, explicit: Option<&str>) -> Result<Routed, CoreError> {
         Ok(match pick_target(task, explicit)? {
             Picked::Cli(kind) => Routed::Cli(kind),
             Picked::Profile(p) => Routed::Api {
                 local: is_loopback_endpoint(&p.endpoint),
-                profile: ProfileInfo::from(&p),
+                profile: ProfileInfo::from(&*p),
             },
         })
     }
@@ -999,7 +999,7 @@ mod settings {
                 return crate::provider_cli::CliProvider(kind, timeout)
                     .structured_with(&request, cancel);
             }
-            Picked::Profile(profile) => profile,
+            Picked::Profile(profile) => *profile,
         };
         let settings = {
             let _guard = locked()?;

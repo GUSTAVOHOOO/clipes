@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { isTauri } from '@tauri-apps/api/core';
 import { coreDispatch } from '@/lib/core';
-import { useText } from '@/lib/i18n';
+import { LanguageContext, useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { openCutPreview } from './CutPreview';
@@ -18,7 +18,7 @@ type Weight = { key: string; weight: number };
 type Preview = { paid: boolean; videoKind?: VideoKind; profile?: string; plan?: { state: 'full' | 'reduced'; windows: unknown[] }; weights?: Weight[]; estimate: Estimate };
 type Axis = { score: number; why: string };
 type Candidate = { id: number; rank: number; startId: number; endId: number; startUs: number; endUs: number; axes: Record<string, Axis>; total: number; title: string; windows: number[]; adjusted: boolean; adjust: { extendedBefore?: number; extendedAfter?: number; trimmedEnd?: number } | null; chat?: CandidateChat[]; profile?: string; revision?: number };
-type Win = { index: number; startUs: number; endUs: number; state: string; code: string | null };
+type Win = { index: number; startUs: number; endUs: number; state: string; code: string | null; resetAtMs?: number | null };
 type ChatStatus = { state: 'none' | 'available' | 'absent'; canFetch: boolean; peaks: number; job: { state: string } | null };
 type EnergyStatus = { measured: boolean; marks: { high: number; peak: number }; job: { id?: number; state: string; progress?: number } | null };
 type Run = { videoKind?: VideoKind; summary?: { energy?: { measured: boolean; high?: number; peak?: number }; chat?: { available: boolean; peaks?: number } } | null; id: number; state: 'running' | 'completed' | 'partial'; weights: Weight[]; budgetPause: string | null; counts: { windows: number; completed: number; failed: number; kept: number; discarded: number; merged: number }; createdAt: string };
@@ -42,7 +42,8 @@ const texts = {
     minScore: 'Nota mínima', none: 'Nenhum candidato nesta seleção: o modelo não achou Cortes que valessem a pena.', noneFilter: 'Nenhum candidato com essa Nota.',
     run: 'Execução', error: 'Não foi possível atualizar a seleção.',
     state: { queued: 'na fila', running: 'em andamento', completed: 'concluída', failed: 'falhou', cancelled: 'cancelada', uncertain: 'incerta', unscheduled: 'não iniciada' },
-    code: { verification_failed: 'a resposta não passou na verificação', output_invalid: 'a resposta fugiu do formato', invalid_json: 'a resposta não era JSON válido', context_truncated: 'a Transcrição foi cortada pelo Provedor; a resposta não foi aceita', cancelled: 'cancelada', timeout_uncertain: 'tempo esgotado, resultado incerto', not_started: 'não iniciada', output_truncated: 'a resposta foi cortada', refusal: 'o Provedor recusou', default: 'falhou' },
+    resetAt: ' · reinicia às {time}',
+    code: { verification_failed: 'a resposta não passou na verificação', output_invalid: 'a resposta fugiu do formato', invalid_json: 'a resposta não era JSON válido', context_truncated: 'a Transcrição foi cortada pelo Provedor; a resposta não foi aceita', cancelled: 'cancelada', timeout_uncertain: 'tempo esgotado, resultado incerto', not_started: 'não iniciada', output_truncated: 'a resposta foi cortada', refusal: 'o Provedor recusou', provider_daily_limit: 'limite diário do Provedor atingido', request_too_large: 'a janela passou do limite de tamanho do Provedor', default: 'falhou' },
   },
   en: {
     title: 'Clip selection', start: 'Select Clips', cancel: 'Cancel selection', resume: 'Resume windows', redo: 'Redo window',
@@ -60,7 +61,8 @@ const texts = {
     minScore: 'Minimum score', none: 'No candidates in this selection: the model found no Clips worth keeping.', noneFilter: 'No candidate with this score.',
     run: 'Run', error: 'Could not update the selection.',
     state: { queued: 'queued', running: 'running', completed: 'completed', failed: 'failed', cancelled: 'cancelled', uncertain: 'uncertain', unscheduled: 'not started' },
-    code: { verification_failed: 'the answer failed verification', output_invalid: 'the answer did not match the format', invalid_json: 'the answer was not valid JSON', context_truncated: 'the Provider cut the Transcript; the answer was not accepted', cancelled: 'cancelled', timeout_uncertain: 'timed out, result uncertain', not_started: 'not started', output_truncated: 'the answer was cut off', refusal: 'the Provider refused', default: 'failed' },
+    resetAt: ' · resets at {time}',
+    code: { verification_failed: 'the answer failed verification', output_invalid: 'the answer did not match the format', invalid_json: 'the answer was not valid JSON', context_truncated: 'the Provider cut the Transcript; the answer was not accepted', cancelled: 'cancelled', timeout_uncertain: 'timed out, result uncertain', not_started: 'not started', output_truncated: 'the answer was cut off', refusal: 'the Provider refused', provider_daily_limit: 'Provider daily limit reached', request_too_large: 'the window exceeded the Provider size limit', default: 'failed' },
   },
 };
 const usd = (micro: number) => (micro / 1_000_000).toFixed(4);
@@ -68,6 +70,7 @@ const usd = (micro: number) => (micro / 1_000_000).toFixed(4);
 /** Seleção de Cortes de uma Fonte transcrita: estimativa, execução por Janela e candidatos. */
 export function Selection({ sourceId }: { sourceId: number }) {
   const t = useText(texts);
+  const language = useContext(LanguageContext);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [blocked, setBlocked] = useState('');
   const [runs, setRuns] = useState<Run[]>([]);
@@ -234,10 +237,15 @@ export function Selection({ sourceId }: { sourceId: number }) {
       </div>
       {head.budgetPause && <p role="note" className="rounded-md border border-line bg-warning-subtle p-3">{t.paused}</p>}
       <ul className="flex flex-col gap-1 text-fg-2">
-        {detail.windows.map(w => <li key={w.index} className="flex flex-wrap items-center gap-2" data-window={w.index}>
-          <span>{fill(t.window, { n: w.index + 1 })} ({clock(w.startUs)}–{clock(w.endUs)}): {t.state[w.state as keyof typeof t.state] ?? w.state}{w.code ? ` · ${t.code[w.code as keyof typeof t.code] ?? t.code.default}` : ''}</span>
-          {w.code && w.code !== 'cancelled' || w.state === 'cancelled' || w.state === 'unscheduled' ? <Button tamanho="sm" disabled={busy || running} aria-label={`${t.redo} ${w.index + 1}`} onClick={() => void askRedo([w.index])}>{t.redo}</Button> : null}
-        </li>)}
+        {detail.windows.map(w => {
+          const reset = w.code === 'provider_daily_limit' && typeof w.resetAtMs === 'number'
+            ? fill(t.resetAt, { time: new Intl.DateTimeFormat(language, { hour: '2-digit', minute: '2-digit' }).format(new Date(w.resetAtMs)) })
+            : '';
+          return <li key={w.index} className="flex flex-wrap items-center gap-2" data-window={w.index}>
+            <span>{fill(t.window, { n: w.index + 1 })} ({clock(w.startUs)}–{clock(w.endUs)}): {t.state[w.state as keyof typeof t.state] ?? w.state}{w.code ? ` · ${t.code[w.code as keyof typeof t.code] ?? t.code.default}${reset}` : ''}</span>
+            {w.code && w.code !== 'cancelled' || w.state === 'cancelled' || w.state === 'unscheduled' ? <Button tamanho="sm" disabled={busy || running} aria-label={`${t.redo} ${w.index + 1}`} onClick={() => void askRedo([w.index])}>{t.redo}</Button> : null}
+          </li>;
+        })}
       </ul>
       {!running && <p className="text-fg-2">{fill(t.summary, { kept: head.counts.kept, merged: head.counts.merged, discarded: head.counts.discarded })}</p>}
       {!running && head.summary?.energy && <p className="text-fg-2" data-energy={head.summary.energy.measured ? 'measured' : 'missing'}>{head.summary.energy.measured ? fill(t.energyOn, { high: head.summary.energy.high ?? 0, peak: head.summary.energy.peak ?? 0 }) : t.energyOff}</p>}
