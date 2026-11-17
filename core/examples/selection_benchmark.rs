@@ -1723,7 +1723,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("calibrate-chat") => cmd_calibrate_chat(&args[1..]),
         Some("plan-sample") => cmd_plan_sample(&args[1..]),
         Some("run-selection") => cmd_run_selection(&args[1..]),
-        _ => Err("Subcomandos: prepare | calibrate-chat | plan-sample | run-selection".into()),
+        Some("deterministic-eval") => {
+            clipes_core::selection::deterministic_benchmark::run_cli(&args[1..])
+        }
+        _ => Err(
+            "Subcomandos: prepare | calibrate-chat | plan-sample | run-selection | deterministic-eval"
+                .into(),
+        ),
     };
     res.map_err(|e| io::Error::other(e).into())
 }

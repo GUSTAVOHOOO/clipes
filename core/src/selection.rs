@@ -20,6 +20,7 @@ use std::collections::BTreeMap;
 
 pub mod benchmark;
 pub mod cut;
+pub mod deterministic_benchmark;
 mod review;
 pub mod routing_benchmark;
 pub(crate) use review::{approved_cut, ApprovedCut};
