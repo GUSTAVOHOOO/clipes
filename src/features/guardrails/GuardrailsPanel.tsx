@@ -42,8 +42,13 @@ export type GuardrailsState = {
     generatedBlocks?: number;
     totalBlocks?: number;
     voices?: string[];
+    freezeTailUs?: number;
+    longFreezeTail?: boolean;
     ttsCutCount?: number;
     transformedCount?: number;
+    freezeTailCount?: number;
+    longFreezeTailCount?: number;
+    maxFreezeTailUs?: number;
   };
 };
 
@@ -80,6 +85,9 @@ export const guardrailsTexts = {
       narrationTtsActiveSingle: 'Narração por TTS: {generated} de {total} blocos sintetizados ({voices}) — divulgue conteúdo sintético quando aplicável (especialmente se a voz imitar pessoa real).',
       narrationTtsNoneSingle: 'Narração por TTS: nenhum áudio TTS gerado para este Corte.',
       narrationTtsBatch: 'Narração por TTS: {ttsCount} de {total} Vídeos transformados com áudio TTS — divulgue conteúdo sintético quando aplicável.',
+      narrationFreezeTailSingle: 'Sobra final da Narração: o último quadro ficará congelado por {sec} s ao fim do vídeo.',
+      narrationLongFreezeTailSingle: 'Sobra final longa da Narração: ultrapassa o Corte em {sec} s (> 5 s) e congelará o último quadro.',
+      narrationFreezeTailBatch: 'Sobra final da Narração: {count} Vídeo(s) transformado(s) congelarão o último quadro (até {sec} s).',
       transformationRule: 'Legenda, crop e filtros não contam como Transformação.',
       musicFixed: 'Música com claim: verifique se há música de fundo ou trilha de jogo na Fonte; músicas protegidas podem gerar claim no Content ID mesmo com Permissão.',
       musicOver60Single: 'Corte acima de 60 s: Shorts com mais de 1 minuto que contenham música com claim são bloqueados e ficam inelegíveis para monetização.',
@@ -118,6 +126,9 @@ export const guardrailsTexts = {
       narrationTtsActiveSingle: 'TTS Narration: {generated} of {total} blocks synthesized ({voices}) — disclose synthetic content when applicable (especially if the voice imitates a real person).',
       narrationTtsNoneSingle: 'TTS Narration: no TTS audio generated for this Clip.',
       narrationTtsBatch: 'TTS Narration: {ttsCount} of {total} Transformed Videos use TTS audio — disclose synthetic content when applicable.',
+      narrationFreezeTailSingle: 'Narration tail overflow: the last frame will freeze for {sec} s at the end of the video.',
+      narrationLongFreezeTailSingle: 'Long Narration tail overflow: exceeds the Clip by {sec} s (> 5 s) and will freeze the last frame.',
+      narrationFreezeTailBatch: 'Narration tail overflow: {count} Transformed Video(s) will freeze the last frame (up to {sec} s).',
       transformationRule: 'Captions, crop, and filters do not count as Transformation.',
       musicFixed: 'Claimed music: check for background music or game soundtracks in the Source; copyrighted music can trigger a Content ID claim even with Permission.',
       musicOver60Single: 'Clip over 60 s: Shorts longer than 1 minute containing claimed music are blocked and ineligible for monetization.',
@@ -299,6 +310,25 @@ export function GuardrailsChecklist(props: ChecklistProps) {
     });
   })();
 
+  const freezeTailText = (() => {
+    if (!state?.narration?.applicable) return null;
+    if (state.scope === 'single') {
+      const tailUs = state.narration.freezeTailUs ?? 0;
+      if (tailUs <= 0) return null;
+      const sec = (tailUs / 1_000_000).toFixed(1);
+      return fill(
+        state.narration.longFreezeTail ? t.narrationLongFreezeTailSingle : t.narrationFreezeTailSingle,
+        { sec },
+      );
+    }
+    const count = state.narration.freezeTailCount ?? 0;
+    if (count <= 0) return null;
+    return fill(t.narrationFreezeTailBatch, {
+      count,
+      sec: ((state.narration.maxFreezeTailUs ?? 0) / 1_000_000).toFixed(1),
+    });
+  })();
+
   return (
     <details
       data-guardrails-checklist
@@ -314,6 +344,14 @@ export function GuardrailsChecklist(props: ChecklistProps) {
           <li data-guardrails-item="permission">{permissionText}</li>
           {scriptText && <li data-guardrails-item="script">{scriptText}</li>}
           {narrationText && <li data-guardrails-item="narration-tts">{narrationText}</li>}
+          {freezeTailText && (
+            <li
+              data-guardrails-freeze-tail
+              className="rounded-sm bg-warning-subtle px-2 py-1 text-fg"
+            >
+              {freezeTailText}
+            </li>
+          )}
           <li data-guardrails-item="transformation">{t.transformationRule}</li>
           <li data-guardrails-item="music">{t.musicFixed}</li>
           {state?.over60s && (
