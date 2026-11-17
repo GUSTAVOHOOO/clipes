@@ -11,11 +11,35 @@ pub struct DualPanelFilters {
     pub bot_filters: Vec<String>,
 }
 
+/// Segmento de Narração posicionado no vídeo montado (#82, valores apenas numéricos).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NarrationMixSegment {
+    /// Índice do input no FFmpeg (`1..=K`; `0` é a Fonte).
+    pub input_index: usize,
+    /// Início resolvido no vídeo montado em µs (`>= 0`).
+    pub start_us: i64,
+    /// Duração real do WAV em µs (`> 0`).
+    pub duration_us: i64,
+}
+
+/// Plano numérico da mixagem de Narração, ducking e congelamento final (`tpad`) para o export (#82).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NarrationMixPlan {
+    pub segments: Vec<NarrationMixSegment>,
+    /// Duração do Corte emendado antes do `tpad` final, em µs.
+    pub clip_duration_us: i64,
+    /// Sobra final além do Corte que vira congelamento do último quadro (`tpad`), em µs.
+    pub freeze_tail_us: i64,
+    /// Duração total final (`clip_duration_us + freeze_tail_us`), em µs.
+    pub total_duration_us: i64,
+}
+
 #[derive(Default, Debug)]
 pub struct ExportPlan {
     pub video_filters: Vec<String>,
     pub dual_video: Option<DualPanelFilters>,
     pub audio_filters: Vec<String>,
+    pub narration_mix: Option<NarrationMixPlan>,
     pub encoder: String,
     pub encoder_args: Vec<String>,
     pub crop_commands: Option<String>,
@@ -27,6 +51,24 @@ pub const TARGET_TRUE_PEAK_DBTP: f64 = -1.0;
 pub const TARGET_LRA_LU: f64 = 11.0;
 /// Taxa de saída fixa: o `loudnorm` reamostra internamente (192 kHz), então se volta a 48 kHz.
 pub const OUTPUT_SAMPLE_RATE: u32 = 48_000;
+
+/// Parâmetros documentados do ducking da Fonte enquanto a Narração toca (#82):
+/// alvo padrão de ~ -12 dB de redução para fala de TTS (~ -26 dBFS RMS), com ataque e
+/// liberação suaves para evitar cortes bruscos entre palavras.
+pub const DUCKING_TARGET_DB: f64 = -12.0;
+pub const DUCKING_THRESHOLD: f64 = 0.015;
+pub const DUCKING_RATIO: f64 = 4.0;
+pub const DUCKING_ATTACK_MS: f64 = 40.0;
+pub const DUCKING_RELEASE_MS: f64 = 300.0;
+pub const DUCKING_KNEE: f64 = 4.0;
+pub const DUCKING_LEVEL_SC: f64 = 2.0;
+
+/// Filtro `sidechaincompress` usado no export com a Narração como sidechain (#82).
+pub fn sidechain_duck_filter() -> String {
+    format!(
+        "sidechaincompress=threshold={DUCKING_THRESHOLD}:ratio={DUCKING_RATIO}:attack={DUCKING_ATTACK_MS}:release={DUCKING_RELEASE_MS}:knee={DUCKING_KNEE}:level_sc={DUCKING_LEVEL_SC}"
+    )
+}
 
 /// Medição da primeira passagem do `loudnorm`; só números, nunca o stderr (ADR-0006).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -59,6 +101,9 @@ pub struct Crop<'a> {
 }
 pub struct Subtitle;
 pub struct Audio;
+/// Etapa de Narração e ducking (#82): entra antes de `Loudness` com `sidechaincompress`,
+/// `amix normalize=0` e `tpad` final só quando a Narração ultrapassa o fim do Corte.
+pub struct Ducking<'a>(pub &'a NarrationMixPlan);
 /// Última etapa de áudio (#63): `loudnorm` linear com os valores medidos e volta a 48 kHz.
 /// As etapas futuras de áudio (#82, #154, #155: limpeza, ducking, trilha, `amix normalize=0`)
 /// entram antes dela. Sem medição (áudio silencioso), nada é aplicado.
@@ -469,6 +514,14 @@ impl Stage for Audio {
         plan.audio_filters.push("anull".into());
     }
 }
+impl Stage for Ducking<'_> {
+    fn apply(&self, plan: &mut ExportPlan) {
+        if self.0.segments.is_empty() {
+            return;
+        }
+        plan.narration_mix = Some(self.0.clone());
+    }
+}
 impl Stage for Loudness {
     fn apply(&self, plan: &mut ExportPlan) {
         let Some(m) = self.0 else { return };
@@ -508,6 +561,15 @@ pub fn with_loudness(encoder: &str, measured: Option<Measured>) -> ExportPlan {
     with_crop(encoder, measured, None)
 }
 pub fn with_crop(encoder: &str, measured: Option<Measured>, crop: Option<Crop<'_>>) -> ExportPlan {
+    with_narration(encoder, measured, crop, None)
+}
+
+pub fn with_narration(
+    encoder: &str,
+    measured: Option<Measured>,
+    crop: Option<Crop<'_>>,
+    narration: Option<&NarrationMixPlan>,
+) -> ExportPlan {
     let mut plan = ExportPlan::default();
     let selected = SelectedEncoder(encoder);
     let loudness = Loudness(measured);
@@ -515,7 +577,14 @@ pub fn with_crop(encoder: &str, measured: Option<Measured>, crop: Option<Crop<'_
         Some(c) if !c.segments.is_empty() => c,
         _ => &Video,
     };
-    for stage in [video_stage, &Subtitle, &Audio, &loudness, &selected] {
+    let ducking = narration.map(Ducking);
+    let mut stages: Vec<&dyn Stage> = vec![video_stage, &Subtitle, &Audio];
+    if let Some(d) = &ducking {
+        stages.push(d);
+    }
+    stages.push(&loudness);
+    stages.push(&selected);
+    for stage in stages {
         stage.apply(&mut plan);
     }
     plan
@@ -526,6 +595,15 @@ pub fn with_crop_plan(
     measured: Option<Measured>,
     crop_plan: Option<CropLayoutStage<'_>>,
 ) -> ExportPlan {
+    with_crop_plan_and_narration(encoder, measured, crop_plan, None)
+}
+
+pub fn with_crop_plan_and_narration(
+    encoder: &str,
+    measured: Option<Measured>,
+    crop_plan: Option<CropLayoutStage<'_>>,
+    narration: Option<&NarrationMixPlan>,
+) -> ExportPlan {
     let mut plan = ExportPlan::default();
     let selected = SelectedEncoder(encoder);
     let loudness = Loudness(measured);
@@ -533,10 +611,98 @@ pub fn with_crop_plan(
         Some(c) if !c.crop_plan.panels.is_empty() => c,
         _ => &Video,
     };
-    for stage in [video_stage, &Subtitle, &Audio, &loudness, &selected] {
+    let ducking = narration.map(Ducking);
+    let mut stages: Vec<&dyn Stage> = vec![video_stage, &Subtitle, &Audio];
+    if let Some(d) = &ducking {
+        stages.push(d);
+    }
+    stages.push(&loudness);
+    stages.push(&selected);
+    for stage in stages {
         stage.apply(&mut plan);
     }
     plan
+}
+
+/// Insere `tpad` logo antes de `ass=...` para congelar apenas o último quadro limpo na sobra final (#82).
+fn append_video_with_tpad(filters: &[String], freeze_tail_us: i64) -> Vec<String> {
+    if freeze_tail_us <= 0 {
+        return filters.to_vec();
+    }
+    let tpad = format!("tpad=stop_mode=clone:stop_duration={}", sec(freeze_tail_us));
+    let mut out = Vec::with_capacity(filters.len() + 1);
+    let insert_at = filters
+        .iter()
+        .position(|f| f.starts_with("ass="))
+        .unwrap_or(filters.len());
+    out.extend_from_slice(&filters[..insert_at]);
+    out.push(tpad);
+    out.extend_from_slice(&filters[insert_at..]);
+    out
+}
+
+/// Anexa ao grafo o estágio de áudio da Narração (#82): normalização de formato, atraso por bloco,
+/// `amix normalize=0` entre blocos, `sidechaincompress` na Fonte e `amix normalize=0` final,
+/// seguido dos filtros posteriores (`loudnorm` + `aresample`). Só usa números (ADR-0006).
+fn push_narration_audio_graph(
+    out: &mut String,
+    source_label: &str,
+    trim_source: bool,
+    mix: &NarrationMixPlan,
+    post_audio: &[String],
+) {
+    let total_sec = sec(mix.total_duration_us.max(mix.clip_duration_us));
+    let _ = write!(
+        out,
+        "{source_label}aresample={OUTPUT_SAMPLE_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo"
+    );
+    if trim_source && mix.clip_duration_us > 0 {
+        let _ = write!(
+            out,
+            ",atrim=start=0:end={},asetpts=PTS-STARTPTS",
+            sec(mix.clip_duration_us)
+        );
+    }
+    let _ = write!(out, ",apad=whole_dur={total_sec}[asrc];");
+
+    for (i, seg) in mix.segments.iter().enumerate() {
+        let _ = write!(
+            out,
+            "[{}:a]aresample={OUTPUT_SAMPLE_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo",
+            seg.input_index
+        );
+        if seg.start_us > 0 {
+            let delay_ms = format!("{:.3}", seg.start_us as f64 / 1000.0);
+            let _ = write!(out, ",adelay=delays={delay_ms}:all=1");
+        }
+        let _ = write!(out, "[n{i}];");
+    }
+
+    if mix.segments.len() == 1 {
+        let _ = write!(
+            out,
+            "[n0]apad=whole_dur={total_sec},asplit=2[nar_sc][nar_mix];"
+        );
+    } else {
+        for i in 0..mix.segments.len() {
+            let _ = write!(out, "[n{i}]");
+        }
+        let _ = write!(
+            out,
+            "amix=inputs={}:duration=longest:normalize=0,apad=whole_dur={total_sec},asplit=2[nar_sc][nar_mix];",
+            mix.segments.len()
+        );
+    }
+
+    let _ = write!(
+        out,
+        "[asrc][nar_sc]{}[aducked];[aducked][nar_mix]amix=inputs=2:duration=longest:normalize=0",
+        sidechain_duck_filter()
+    );
+    if !post_audio.is_empty() {
+        let _ = write!(out, ",{}", post_audio.join(","));
+    }
+    out.push_str("[aout]");
 }
 
 /// Grafo para composição multi-painel sem emenda de silêncios (#78).
@@ -545,10 +711,12 @@ pub fn build_dual_filter_complex(plan: &ExportPlan) -> String {
         .dual_video
         .as_ref()
         .expect("dual_video obrigatório para build_dual_filter_complex");
-    let post = if plan.video_filters.is_empty() {
+    let freeze_tail_us = plan.narration_mix.as_ref().map_or(0, |m| m.freeze_tail_us);
+    let post_filters = append_video_with_tpad(&plan.video_filters, freeze_tail_us);
+    let post = if post_filters.is_empty() {
         String::new()
     } else {
-        format!(",{}", plan.video_filters.join(","))
+        format!(",{}", post_filters.join(","))
     };
     format!(
         "[0:v:0]split=2[vti][vbi];[vti]{}[vtop];[vbi]{}[vbot];[vtop][vbot]vstack=inputs=2{}[vout]",
@@ -558,7 +726,33 @@ pub fn build_dual_filter_complex(plan: &ExportPlan) -> String {
     )
 }
 
+/// Grafo completo com Narração, ducking (`sidechaincompress` + `amix normalize=0`) e `tpad` final
+/// para Corte contínuo (sem emenda de silêncios), suportando layout simples e multi-painel (#82).
+pub fn build_narration_filter_complex(audio_track: i64, plan: &ExportPlan) -> String {
+    let mix = plan
+        .narration_mix
+        .as_ref()
+        .expect("narration_mix obrigatório para build_narration_filter_complex");
+    let mut out = if plan.dual_video.is_some() {
+        let mut v = build_dual_filter_complex(plan);
+        v.push(';');
+        v
+    } else {
+        let v_filters = append_video_with_tpad(&plan.video_filters, mix.freeze_tail_us);
+        format!("[0:v:0]{}[vout];", v_filters.join(","))
+    };
+    push_narration_audio_graph(
+        &mut out,
+        &format!("[0:{audio_track}]"),
+        true,
+        mix,
+        &plan.audio_filters,
+    );
+    out
+}
+
 fn sec(us: i64) -> String {
+    let us = us.max(0);
     format!("{}.{:06}", us / 1_000_000, us % 1_000_000)
 }
 
@@ -598,35 +792,58 @@ pub fn build_measure_filter_complex(
     clip_start_us: i64,
     segments: &[KeptSegment],
 ) -> String {
-    let n = segments.len();
-    let mut out = format!("[0:{audio_track}]asplit={n}");
-    for i in 0..n {
-        let _ = write!(out, "[a{i}]");
+    build_measure_filter_complex_with_narration(audio_track, clip_start_us, segments, None)
+}
+
+/// Monta o grafo da 1ª passagem do `loudnorm` (#63/#77/#82), incluindo ducking e mixagem
+/// da Narração antes da medição quando houver blocos narrados.
+pub fn build_measure_filter_complex_with_narration(
+    audio_track: i64,
+    clip_start_us: i64,
+    segments: &[KeptSegment],
+    narration_mix: Option<&NarrationMixPlan>,
+) -> String {
+    let mut out = String::new();
+    let measure = [loudnorm_measure_filter()];
+    if segments.len() > 1 {
+        let n = segments.len();
+        let _ = write!(out, "[0:{audio_track}]asplit={n}");
+        for i in 0..n {
+            let _ = write!(out, "[a{i}]");
+        }
+        out.push(';');
+        for (i, seg) in segments.iter().enumerate() {
+            push_audio_trim_fade(
+                &mut out,
+                i,
+                seg.source_start_us - clip_start_us,
+                seg.source_end_us - clip_start_us,
+                i > 0,
+                i + 1 < n,
+            );
+        }
+        for i in 0..n {
+            let _ = write!(out, "[at{i}]");
+        }
+        if let Some(mix) = narration_mix.filter(|m| !m.segments.is_empty()) {
+            let _ = write!(out, "concat=n={n}:v=0:a=1[ac];");
+            push_narration_audio_graph(&mut out, "[ac]", false, mix, &measure);
+        } else {
+            let _ = write!(
+                out,
+                "concat=n={n}:v=0:a=1,{}[aout]",
+                loudnorm_measure_filter()
+            );
+        }
+    } else if let Some(mix) = narration_mix.filter(|m| !m.segments.is_empty()) {
+        push_narration_audio_graph(&mut out, &format!("[0:{audio_track}]"), true, mix, &measure);
     }
-    out.push(';');
-    for (i, seg) in segments.iter().enumerate() {
-        push_audio_trim_fade(
-            &mut out,
-            i,
-            seg.source_start_us - clip_start_us,
-            seg.source_end_us - clip_start_us,
-            i > 0,
-            i + 1 < n,
-        );
-    }
-    for i in 0..n {
-        let _ = write!(out, "[at{i}]");
-    }
-    let _ = write!(
-        out,
-        "concat=n={n}:v=0:a=1,{}[aout]",
-        loudnorm_measure_filter()
-    );
     out
 }
 
-/// Monta o grafo completo (#77): corte e `concat` de vídeo e áudio pelos mesmos pontos
-/// com `afade` curto sem sobreposição (nunca `acrossfade`), antes de legenda e loudness.
+/// Monta o grafo completo (#77/#82): corte e `concat` de vídeo e áudio pelos mesmos pontos
+/// com `afade` curto sem sobreposição (nunca `acrossfade`), seguido de `tpad`, legenda,
+/// ducking/mixagem da Narração e loudness.
 pub fn build_spliced_filter_complex(
     audio_track: i64,
     clip_start_us: i64,
@@ -673,11 +890,17 @@ pub fn build_spliced_filter_complex(
     for i in 0..n {
         let _ = write!(out, "[vt{i}][at{i}]");
     }
+    let freeze_tail_us = plan.narration_mix.as_ref().map_or(0, |m| m.freeze_tail_us);
+    let post_video = append_video_with_tpad(post_video, freeze_tail_us);
     let _ = write!(
         out,
-        "concat=n={n}:v=1:a=1[vc][ac];[vc]{}[vout];[ac]{}[aout]",
-        post_video.join(","),
-        plan.audio_filters.join(",")
+        "concat=n={n}:v=1:a=1[vc][ac];[vc]{}[vout];",
+        post_video.join(",")
     );
+    if let Some(mix) = &plan.narration_mix {
+        push_narration_audio_graph(&mut out, "[ac]", false, mix, &plan.audio_filters);
+    } else {
+        let _ = write!(out, "[ac]{}[aout]", plan.audio_filters.join(","));
+    }
     out
 }

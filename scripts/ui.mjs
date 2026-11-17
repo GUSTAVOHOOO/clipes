@@ -7,7 +7,10 @@ import { mkdir } from 'node:fs/promises';
 import { testEditorBorders } from './editor-borders.mjs';
 import { testEditorSilencesPanel, testEditorSilencesPreview } from './editor-silences.mjs';
 import { testEditorCrop } from './editor-crop.mjs';
+import { testEditorMontage, testEditorDucking } from './editor-montage.mjs';
 import { testTranslation, testTranslationBlocked } from './translation-ui.mjs';
+import { testTtsComponents, testTtsNarrationLocked, testTtsNarrationUnlocked } from './tts-ui.mjs';
+import { testPackagingChapters } from './packaging-chapters-ui.mjs';
 const socket = createServer();
 await new Promise(resolve => socket.listen(0, '127.0.0.1', resolve));
 const port = socket.address().port;
@@ -110,6 +113,8 @@ try {
   await hardwareCard.getByText(/\(automática\)/).waitFor();
   await hardwareCard.getByRole('button', { name: 'Medir hardware' }).click();
   await hardwareCard.getByText('Medição concluída.').waitFor();
+
+  await testTtsComponents(page);
 
   page.once('dialog', dialog => dialog.dismiss());
   await page.getByRole('button', { name: 'Baixar' }).first().click();
@@ -352,7 +357,10 @@ try {
   assert.equal(await channelProfile.getByLabel('Duração mínima (s)').inputValue(), '20');
   assert.equal(await channelProfile.getByLabel('Duração máxima (s)').inputValue(), '60');
   assert.equal(await channelProfile.getByLabel('Preset').inputValue(), 'vertical');
-  await channelProfile.getByText(/campo reservado para o TTS/).waitFor();
+  const voiceSelect = channelProfile.locator('[data-channel-narration-voice]');
+  await voiceSelect.waitFor();
+  await voiceSelect.selectOption('13063');
+  assert.equal(await voiceSelect.inputValue(), '13063');
   await channelProfile.getByText(/Ritmo de publicação sugerido/).waitFor();
   assert.equal(await channelProfile.getByLabel(/Provedor|Chave|OAuth|Senha/i).count(), 0);
   await channelProfile.getByLabel('Duração máxima (s)').fill('181');
@@ -802,6 +810,13 @@ try {
   assert.equal(await offline.locator('video').count(), 0, 'Fonte offline: nada é gerado nem tocado');
   assert.equal(await offline.getByRole('progressbar').count(), 0);
   assert.match(await selection.innerText(), /Energia do áudio não medida/);
+  await page.goto(`${url}?source-test=1&transcript-test=1&selection-energy-queued=1`);
+  const queuedEnergy = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
+  await queuedEnergy.getByText(/Energia do áudio na fila/).waitFor();
+  assert.equal(await queuedEnergy.getByRole('button', { name: 'Selecionar Cortes' }).isDisabled(), false);
+  await page.goto(`${url}?source-test=1&transcript-test=1&selection-energy-running=1`);
+  const runningEnergy = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
+  await runningEnergy.getByText(/Medindo a energia do áudio \(45%\)/).waitFor();
   await page.goto(`${url}?source-test=1&transcript-test=1&selection-energy=1`);
   const energySelection = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
   await energySelection.getByRole('button', { name: 'Selecionar Cortes' }).click();
@@ -836,7 +851,12 @@ try {
   await page.goto(`${url}?source-test=1&transcript-test=1&selection-blocked=1`);
   const blockedSelection = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
   await blockedSelection.getByText(/contexto efetivo de 4096 tokens/).waitFor();
-  assert.equal(await blockedSelection.getByRole('button', { name: 'Selecionar Cortes' }).isDisabled(), true);
+  const blockedButton = blockedSelection.getByRole('button', { name: 'Selecionar Cortes' });
+  assert.equal(await blockedButton.isDisabled(), true);
+  const blockedReasonId = await blockedButton.getAttribute('aria-describedby');
+  assert.ok(blockedReasonId, 'botão desabilitado aponta para a explicação');
+  assert.match(await blockedSelection.locator(`#${blockedReasonId}`).innerText(), /contexto efetivo de 4096 tokens/);
+  assert.match((await blockedButton.getAttribute('title')) ?? '', /contexto efetivo de 4096 tokens/);
   // Refazer com outro perfil (#126): perfil, custo e saída da máquina antes de rodar, confirmação, vetos e Janela incerta.
   const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const redoChecks = async L => {
@@ -941,6 +961,7 @@ try {
   const remaining = script.locator('[data-script-remaining]');
   await remaining.getByText('Faltam 3 de 3 blocos para aprovar.').waitFor();
   assert.equal(await script.getByRole('button', { name: /aprovar todos|approve all/i }).count(), 0, 'não há aprovação em massa');
+  await testTtsNarrationLocked(kindReview);
   await script.locator('[data-script-block]').nth(0).getByRole('button', { name: 'Aprovar bloco' }).click();
   await remaining.getByText('Faltam 2 de 3 blocos para aprovar.').waitFor();
   const second = script.locator('[data-script-block]').nth(1);
@@ -951,6 +972,7 @@ try {
   await second.getByRole('button', { name: 'Aprovar bloco' }).click();
   await script.locator('[data-script-block]').nth(2).getByRole('button', { name: 'Aprovar bloco' }).click();
   await remaining.getByText(/a Narração está liberada/).waitFor();
+  await testTtsNarrationUnlocked(page, kindReview);
   await second.getByLabel('Texto do bloco 2').fill('Outra edição.');
   await second.getByRole('button', { name: 'Salvar edição' }).click();
   await remaining.getByText('Faltam 1 de 3 blocos para aprovar.').waitFor();
@@ -1037,7 +1059,10 @@ try {
   const enProfile = page.getByRole('region', { name: 'Channel profile' });
   await enProfile.waitFor();
   await enProfile.getByText(/Suggested publishing cadence/).waitFor();
-  await enProfile.getByText(/field reserved for TTS/).waitFor();
+  const enVoice = enProfile.locator('[data-channel-narration-voice]');
+  await enVoice.waitFor();
+  await enVoice.selectOption('alba');
+  assert.equal(await enVoice.inputValue(), 'alba');
   const enNotice = enProfile.locator('[data-direct-notice-review]');
   assert.equal(await enNotice.getAttribute('data-direct-notice-status'), 'pending');
   assert.match(await enNotice.innerText(), /Not yet shown during export/);
@@ -1156,8 +1181,8 @@ try {
   }
   // Editor do Corte (#61): teclado, sincronização com o preview, virtualização e capturas, PT e EN, com o núcleo simulado.
   for (const L of [
-    { lang: 'pt-BR', title: 'Editor do Corte', close: 'Fechar editor', timeline: 'Timeline do Corte', transcript: 'Transcrição do editor', borders: 'Bordas do Corte', error: 'O Corte ficaria abaixo da duração mínima.', hint: 'voltar · pausar · avançar' },
-    { lang: 'en', title: 'Clip editor', close: 'Close editor', timeline: 'Clip timeline', transcript: 'Editor Transcript', borders: 'Clip borders', error: 'The Clip would fall below the minimum duration.', hint: 'reverse · pause · forward' },
+    { lang: 'pt-BR', title: 'Editor do Corte', close: 'Fechar editor', timeline: 'Timeline do Corte', transcript: 'Transcrição do editor', borders: 'Bordas do Corte', captions: 'Legenda', silences: 'Silêncios', crop: 'Enquadrar', translation: 'Tradução', play: 'Reproduzir', pause: 'Pausar', back: 'Voltar', forward: 'Avançar', markIn: 'Marcar entrada', markOut: 'Marcar saída', export: 'Exportar', palette: 'Paleta de comandos', error: 'O Corte ficaria abaixo da duração mínima.', hint: 'voltar · pausar · avançar' },
+    { lang: 'en', title: 'Clip editor', close: 'Close editor', timeline: 'Clip timeline', transcript: 'Editor Transcript', borders: 'Clip borders', captions: 'Captions', silences: 'Silences', crop: 'Framing', translation: 'Translation', play: 'Play', pause: 'Pause', back: 'Reverse', forward: 'Forward', markIn: 'Mark in', markOut: 'Mark out', export: 'Export', palette: 'Command palette', error: 'The Clip would fall below the minimum duration.', hint: 'reverse · pause · forward' },
   ]) {
     await page.evaluate(lang => localStorage.setItem('clipes.language', lang), L.lang);
     await page.goto(`${url}?source-test=1&transcript-test=1&editor-test=1`);
@@ -1230,7 +1255,31 @@ try {
     await testTranslation(page, editor, L.lang);
     assert.match(await editor.innerText(), new RegExp(L.hint), 'atalhos visíveis junto dos controles');
     for (const key of ['J', 'K', 'L', 'I', 'O']) assert.ok((await editor.locator('kbd', { hasText: new RegExp(`^${key}$`) }).count()) > 0, `tecla ${key} visível`);
-    await editor.getByRole('button', { name: L.close, exact: true }).click();
+    // Paleta Ctrl+K dentro do Editor (#248): gavetas, transporte, entrada/saída, exportar e fechar.
+    await page.keyboard.press('Control+k');
+    const editorPalette = page.getByRole('dialog', { name: L.palette });
+    await editorPalette.waitFor();
+    for (const label of [L.transcript, L.borders, L.captions, L.silences, L.crop, L.translation, L.play, L.back, L.forward, L.markIn, L.markOut, L.export, L.close]) {
+      assert.ok((await editorPalette.getByRole('option', { name: new RegExp(label) }).count()) > 0, `comando ${label} presente no Ctrl+K`);
+    }
+    await editorPalette.getByRole('option', { name: new RegExp(`^${L.play}`) }).click();
+    await editorPalette.waitFor({ state: 'hidden' });
+    await page.waitForFunction(() => document.querySelector('[data-rate="1"]'));
+    await page.keyboard.press('Control+k');
+    await editorPalette.waitFor();
+    await editorPalette.getByRole('option', { name: new RegExp(`^${L.pause}`) }).click();
+    await editorPalette.waitFor({ state: 'hidden' });
+    await page.waitForFunction(() => document.querySelector('[data-rate="0"]'));
+    await page.keyboard.press('Control+k');
+    await editorPalette.waitFor();
+    await editorPalette.getByRole('option', { name: new RegExp(`^${L.captions}`) }).click();
+    const paletteCaptions = editor.getByRole('dialog', { name: L.captions, exact: true });
+    await paletteCaptions.waitFor();
+    await page.keyboard.press('Escape');
+    await paletteCaptions.waitFor({ state: 'hidden' });
+    await page.keyboard.press('Control+k');
+    await editorPalette.waitFor();
+    await editorPalette.getByRole('option', { name: new RegExp(`^${L.close}`) }).click();
     await editor.waitFor({ state: 'detached' });
   }
   await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
@@ -1238,6 +1287,9 @@ try {
   await testEditorBorders(page, url);
   await testEditorSilencesPreview(page, url);
   await testEditorCrop(page, url);
+  await testEditorMontage(page, url);
+  await testEditorDucking(page, url);
+  await testPackagingChapters(page, url);
   // Export em lote (#64): por Fonte na Seleção e por Projeto, progresso ponderado, cancelamento, sobrescrita e falha isolada.
   await page.goto(`${url}?source-test=1&transcript-test=1`);
   const batchSel = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
@@ -1279,6 +1331,49 @@ try {
   await conflictBatch.getByText(/Concluído com falhas · 100%/).waitFor({ timeout: 10000 });
   assert.match(await conflictBatch.innerText(), /1 de 2 Cortes exportados · 1 com falha/);
   assert.match(await conflictBatch.innerText(), /Não foi possível exportar o Corte\./);
+
+  // Ticket #251: Ollama nativo no Assistente, "Usar chave de API" -> Preferências (Provedor) e atalho para Componentes.
+  await page.goto(`${url}?assistant-test=1`);
+  const ollamaWizard = page.getByRole('dialog', { name: 'Escolha como o Clipes vai usar IA' });
+  await ollamaWizard.waitFor();
+  await ollamaWizard.getByRole('button', { name: 'Usar Ollama' }).click();
+  await ollamaWizard.getByText('Provedor padrão escolhido: API ou modelo local configurado').waitFor();
+  await ollamaWizard.getByRole('button', { name: 'Concluir' }).click();
+  await ollamaWizard.waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: 'Preferências' }).click();
+  const providerSection = page.locator('section[aria-labelledby="provider-title"]');
+  await providerSection.waitFor();
+  assert.equal(await providerSection.getByLabel('Tipo de provedor').inputValue(), 'ollama');
+  assert.equal(await providerSection.getByLabel('Endereço da API').inputValue(), 'http://127.0.0.1:11434');
+  assert.equal(await providerSection.getByLabel('Modelo', { exact: true }).inputValue(), 'llama3:8b');
+  const mainProfile = page.locator('section[aria-labelledby="profiles-title"]').getByRole('article', { name: 'Principal' });
+  await mainProfile.waitFor();
+  assert.match(await mainProfile.innerText(), /ollama · llama3:8b/);
+  assert.match(await mainProfile.innerText(), /http:\/\/127\.0\.0\.1:11434(?!\/v1)/);
+
+  await page.goto(`${url}?assistant-test=1`);
+  const apiWizard = page.getByRole('dialog', { name: 'Escolha como o Clipes vai usar IA' });
+  await apiWizard.waitFor();
+  await apiWizard.getByRole('button', { name: 'Usar chave de API' }).click();
+  await apiWizard.waitFor({ state: 'hidden' });
+  await page.getByRole('heading', { name: 'Preferências' }).waitFor();
+  await page.locator('#provider-title').waitFor();
+  assert.equal(await page.getByLabel('Padrão para todas as tarefas').inputValue(), 'endpoint');
+  const providerVisible = await page.locator('#provider-title').evaluate(el => {
+    const r = el.getBoundingClientRect();
+    return r.top >= 0 && r.bottom <= window.innerHeight;
+  });
+  assert.equal(providerVisible, true, 'Provedor section should be scrolled into view');
+
+  await page.goto(`${url}?source-test=1&components-missing=1`);
+  await page.getByText(/FFmpeg e o Motor de transcrição local ainda não estão instalados/).waitFor();
+  const downloadedMissing = page.locator('li').filter({ hasText: '/test/downloaded.mp4' });
+  await downloadedMissing.getByText(/FFmpeg e o Motor de transcrição local não estão instalados/).waitFor();
+  await downloadedMissing.getByRole('button', { name: 'Transcrever' }).click();
+  await downloadedMissing.getByRole('alert').getByText(/Instale o Componente FFmpeg/).waitFor();
+  await downloadedMissing.getByRole('button', { name: 'Abrir Componentes' }).first().click();
+  await page.getByRole('heading', { name: 'Componentes' }).waitFor();
+
   assert.deepEqual(errors, []);
   console.log('UI keyboard, preferences, about, drawer and screenshots: OK');
 } finally { await browser?.close(); server.kill(); }

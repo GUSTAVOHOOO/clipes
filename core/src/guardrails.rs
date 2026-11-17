@@ -74,6 +74,30 @@ fn effective_clip_duration(clip_id: Option<i64>) -> Option<i64> {
     Some(splice.output_duration_us.max(0))
 }
 
+fn resolve_candidate_clip_id(candidate_id: i64, explicit_clip_id: Option<i64>) -> Option<i64> {
+    if explicit_clip_id.is_some() {
+        return explicit_clip_id;
+    }
+    projects::with_reader(|c| {
+        c.query_row(
+            "SELECT id FROM clip_edits WHERE identity=?1",
+            [format!("candidate:{candidate_id}")],
+            |r| r.get(0),
+        )
+        .optional()
+    })
+    .ok()
+    .flatten()
+}
+
+fn narration_freeze_tail_us(clip_id: Option<i64>, candidate_id: i64) -> i64 {
+    let resolved_clip = resolve_candidate_clip_id(candidate_id, clip_id);
+    crate::montage::plan_for_clip(resolved_clip, candidate_id, &[])
+        .ok()
+        .flatten()
+        .map_or(0, |p| p.freeze_tail_us.max(0))
+}
+
 fn sentence_range_duration(
     c: &rusqlite::Connection,
     source_id: i64,
@@ -197,6 +221,50 @@ fn check_single(v: &Value, ack: bool) -> CommandResult {
         json!({ "applicable": false })
     };
 
+    let narration_json = if video_kind == VideoKind::Transformed {
+        match candidate_id {
+            Some(cid) => {
+                let freeze_tail_us = narration_freeze_tail_us(clip_id, cid);
+                let long_freeze_tail = freeze_tail_us > crate::montage::LONG_FREEZE_TAIL_US;
+                match crate::tts::guardrail_status(cid) {
+                    Ok(Some(st)) => json!({
+                        "applicable": true,
+                        "hasTts": st.has_tts,
+                        "generatedBlocks": st.generated_blocks,
+                        "totalBlocks": st.total_blocks,
+                        "voices": st.voices,
+                        "freezeTailUs": freeze_tail_us,
+                        "longFreezeTail": long_freeze_tail,
+                    }),
+                    Ok(None) => json!({ "applicable": false }),
+                    Err(e) if e.code == "not_approved" || e.code == "candidate_not_found" => {
+                        json!({
+                            "applicable": true,
+                            "hasTts": false,
+                            "generatedBlocks": 0,
+                            "totalBlocks": 0,
+                            "voices": [],
+                            "freezeTailUs": freeze_tail_us,
+                            "longFreezeTail": long_freeze_tail,
+                        })
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+            None => json!({
+                "applicable": true,
+                "hasTts": false,
+                "generatedBlocks": 0,
+                "totalBlocks": 0,
+                "voices": [],
+                "freezeTailUs": 0,
+                "longFreezeTail": false,
+            }),
+        }
+    } else {
+        json!({ "applicable": false })
+    };
+
     let has_direct = video_kind == VideoKind::Direct;
     let over60s = duration_us > SHORT_CLAIM_LIMIT_US;
     Ok(json!({
@@ -221,6 +289,7 @@ fn check_single(v: &Value, ack: bool) -> CommandResult {
             "scope": perm.scope,
         },
         "script": script_json,
+        "narration": narration_json,
     }))
 }
 
@@ -281,6 +350,7 @@ fn check_batch(scope: &str, v: &Value, ack: bool) -> CommandResult {
             "shortClaimLimitUs": SHORT_CLAIM_LIMIT_US,
             "permission": perm,
             "script": { "applicable": false },
+            "narration": { "applicable": false },
         }));
     }
 
@@ -293,6 +363,10 @@ fn check_batch(scope: &str, v: &Value, ack: bool) -> CommandResult {
     let mut transformed_count = 0usize;
     let mut script_approved_count = 0usize;
     let mut script_unapproved_count = 0usize;
+    let mut tts_cut_count = 0usize;
+    let mut freeze_tail_count = 0usize;
+    let mut long_freeze_tail_count = 0usize;
+    let mut max_freeze_tail_us = 0i64;
 
     let mut perm_cache: HashMap<i64, PermissionInfo> = HashMap::new();
     let mut kind_cache: HashMap<i64, VideoKind> = HashMap::new();
@@ -318,6 +392,19 @@ fn check_batch(scope: &str, v: &Value, ack: bool) -> CommandResult {
                         script_unapproved_count += 1;
                     }
                     Err(e) => return Err(e),
+                }
+                if let Ok(Some(tts)) = crate::tts::guardrail_status(cut.candidate_id) {
+                    if tts.has_tts {
+                        tts_cut_count += 1;
+                    }
+                }
+                let tail_us = narration_freeze_tail_us(cut.clip_id, cut.candidate_id);
+                if tail_us > 0 {
+                    freeze_tail_count += 1;
+                    max_freeze_tail_us = max_freeze_tail_us.max(tail_us);
+                    if tail_us > crate::montage::LONG_FREEZE_TAIL_US {
+                        long_freeze_tail_count += 1;
+                    }
                 }
             }
         }
@@ -383,6 +470,19 @@ fn check_batch(scope: &str, v: &Value, ack: bool) -> CommandResult {
                 "transformedCount": transformed_count,
                 "approvedCount": script_approved_count,
                 "unapprovedCount": script_unapproved_count,
+            })
+        } else {
+            json!({ "applicable": false })
+        },
+        "narration": if has_transformed {
+            json!({
+                "applicable": true,
+                "hasTts": tts_cut_count > 0,
+                "ttsCutCount": tts_cut_count,
+                "transformedCount": transformed_count,
+                "freezeTailCount": freeze_tail_count,
+                "longFreezeTailCount": long_freeze_tail_count,
+                "maxFreezeTailUs": max_freeze_tail_us,
             })
         } else {
             json!({ "applicable": false })

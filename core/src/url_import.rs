@@ -16,11 +16,8 @@ struct Settings {
     download_dir: PathBuf,
 }
 fn settings_path() -> Result<PathBuf, CoreError> {
-    let root = std::env::var_os("CLIPES_DATA_DIR")
-        .map(PathBuf::from)
-        .or_else(|| dirs::data_local_dir().map(|p| p.join("Clipes")))
-        .ok_or_else(|| error("settings", "Diretório de dados indisponível"))?;
-    Ok(root.join("url-import.json"))
+    crate::paths::config_file("url-import.json")
+        .map_err(|_| error("settings", "Diretório de dados indisponível"))
 }
 fn load() -> Result<Settings, CoreError> {
     match fs::read(settings_path()?) {

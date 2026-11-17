@@ -86,6 +86,7 @@ impl Env {
         std::env::set_var("CLIPES_FAKE_WORKER_MODE", "transcribe");
         std::env::remove_var("CLIPES_FAKE_WORKER_CRASH");
         std::env::remove_var("CLIPES_FAKE_WORKER_HOLD");
+        std::env::remove_var("CLIPES_FAKE_WORKER_HELD");
         std::env::remove_var("CLIPES_FAKE_TRANSCRIBE_LOG");
         std::env::remove_var("CLIPES_FAKE_LANGUAGE_LOG");
         std::env::remove_var("CLIPES_FAKE_SILENT_BLOCKS");
@@ -1190,17 +1191,21 @@ fn source_language_is_editable_before_start_and_locked_after_progress() {
     assert_eq!(env.status(source)["language"], "fr");
 
     let hold = env.root.path().join("hold");
+    let held = env.root.path().join("held");
     fs::write(&hold, b"1").unwrap();
     std::env::set_var("CLIPES_FAKE_WORKER_HOLD", &hold);
+    std::env::set_var("CLIPES_FAKE_WORKER_HELD", &held);
     let started = run(
         "transcription.start",
         json!({"project":env.project,"source_id":source,"language":"de"}),
     )
     .unwrap();
     assert_eq!(env.status(source)["language"], "de");
-    wait("transcrição em andamento", || {
-        env.job_state("transcription")
-            .is_some_and(|(s, _)| s == "running")
+    wait("worker falso segurou a transcrição", || {
+        held.exists()
+            && env
+                .job_state("transcription")
+                .is_some_and(|(s, _)| s == "running")
     });
     assert_eq!(
         run(
@@ -1211,12 +1216,13 @@ fn source_language_is_editable_before_start_and_locked_after_progress() {
         .code,
         "transcription_busy"
     );
-    let crash = env.root.path().join("crash");
-    fs::write(&crash, b"1").unwrap();
-    std::env::set_var("CLIPES_FAKE_WORKER_CRASH", &crash);
     run("jobs.cancel", json!({"id":started["job_id"]})).unwrap();
-    fs::remove_file(&hold).unwrap();
+    // Só solta o worker depois de confirmar o cancelamento, para não concluir o 1º bloco antes do sinal chegar.
     env.wait_transcribe("cancelled");
+    fs::remove_file(&hold).unwrap();
+    let _ = fs::remove_file(&held);
+    std::env::remove_var("CLIPES_FAKE_WORKER_HOLD");
+    std::env::remove_var("CLIPES_FAKE_WORKER_HELD");
 
     // 0 blocos gravados: ainda permite editar antes de retomar com blocos.
     assert_eq!(env.status(source)["transcript"]["resume_us"], 0);
@@ -1228,6 +1234,9 @@ fn source_language_is_editable_before_start_and_locked_after_progress() {
     assert_eq!(env.status(source)["language"], "it");
 
     // Após gravar o 1º bloco, trava o idioma como fixo da Fonte.
+    let crash = env.root.path().join("crash");
+    fs::write(&crash, b"1").unwrap();
+    std::env::set_var("CLIPES_FAKE_WORKER_CRASH", &crash);
     env.start(source).unwrap();
     env.wait_transcribe("failed");
     assert_eq!(env.status(source)["transcript"]["resume_us"], 8_000_000);
@@ -1351,4 +1360,99 @@ fn groq_engine_sends_fixed_source_language_in_every_block() {
         .collect();
     assert_eq!(words.len(), 3);
     assert!(words.iter().all(|w| w["language"] == "en"));
+}
+
+#[test]
+fn commit_normalizes_overlapping_and_zero_duration_words_across_blocks() {
+    use clipes_core::transcription::{BlockRequest, BlockResult, TranscriptionEngine, Word};
+    use std::sync::atomic::AtomicBool;
+
+    struct OverlapEngine {
+        calls: usize,
+    }
+    impl TranscriptionEngine for OverlapEngine {
+        fn transcribe_block(
+            &mut self,
+            _request: &BlockRequest<'_>,
+            _cancel: &AtomicBool,
+            _progress: &mut dyn FnMut(u8),
+        ) -> Result<BlockResult, clipes_core::CoreError> {
+            self.calls += 1;
+            if self.calls == 1 {
+                // Bloco 1 (0..10s): palavra 1 começa 196 ms antes do fim da 0, com duração zero
+                // e fim antes do fim da anterior; última palavra cruza para 10,2s.
+                Ok(BlockResult {
+                    covered_us: 10_000_000,
+                    words: vec![
+                        Word {
+                            text: "um".into(),
+                            start_us: 500_000,
+                            end_us: 840_000,
+                            language: Some("pt".into()),
+                        },
+                        Word {
+                            text: "dois.".into(),
+                            start_us: 644_000,
+                            end_us: 644_000,
+                            language: Some("pt".into()),
+                        },
+                        Word {
+                            text: "tres".into(),
+                            start_us: 9_900_000,
+                            end_us: 10_200_000,
+                            language: Some("pt".into()),
+                        },
+                    ],
+                    silences: vec![],
+                })
+            } else {
+                // Bloco 2 (resume = 10s): primeira palavra a +100ms (10,1s) sobrepõe o fim da
+                // última palavra do bloco 1 (10,2s).
+                Ok(BlockResult {
+                    covered_us: 10_000_000,
+                    words: vec![Word {
+                        text: "quatro.".into(),
+                        start_us: 100_000,
+                        end_us: 400_000,
+                        language: Some("pt".into()),
+                    }],
+                    silences: vec![],
+                })
+            }
+        }
+    }
+
+    let env = Env::new(20);
+    let source = env.import(0);
+    let job = env.paid_job(source);
+    let mut engine = OverlapEngine { calls: 0 };
+    clipes_core::transcription::run_with(
+        &mut engine,
+        job,
+        source,
+        Path::new(&env.project),
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+
+    let words: Vec<_> = env
+        .rows(source)
+        .into_iter()
+        .filter(|r| r["kind"] == "word")
+        .collect();
+    assert_eq!(words.len(), 4);
+    assert_eq!(words[0]["start_us"], 500_000);
+    assert_eq!(words[0]["end_us"], 840_000);
+    assert_eq!(words[1]["start_us"], 840_000);
+    assert_eq!(words[1]["end_us"], 840_001);
+    assert_eq!(words[2]["start_us"], 9_900_000);
+    assert_eq!(words[2]["end_us"], 10_200_000);
+    assert_eq!(words[3]["start_us"], 10_200_000);
+    assert_eq!(words[3]["end_us"], 10_400_000);
+
+    let sentences = run("transcription.sentences", json!({"source_id": source})).unwrap();
+    let list = sentences.as_array().unwrap();
+    assert_eq!(list.len(), 2);
+    assert!(list[0]["end_us"].as_i64().unwrap() <= list[1]["start_us"].as_i64().unwrap());
+    assert!(list[0]["end_us"].as_i64().unwrap() > list[0]["start_us"].as_i64().unwrap());
 }

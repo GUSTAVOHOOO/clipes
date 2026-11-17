@@ -39,18 +39,8 @@ fn error(code: &str, message: &str) -> CoreError {
     }
 }
 fn path() -> Result<PathBuf, CoreError> {
-    if let Some(dir) = std::env::var_os("CLIPES_DATA_DIR") {
-        return Ok(PathBuf::from(dir).join("provider-cli.json"));
-    }
-    #[cfg(test)]
-    return Ok(std::env::temp_dir().join(format!(
-        "clipes-cli-settings-test-{}.json",
-        std::process::id()
-    )));
-    #[cfg(not(test))]
-    directories::ProjectDirs::from("io", "github.gustavohooo", "clipes")
-        .map(|p| p.config_dir().join("provider-cli.json"))
-        .ok_or_else(|| error("settings", "Could not locate settings directory"))
+    crate::paths::config_file("provider-cli.json")
+        .map_err(|_| error("settings", "Could not locate settings directory"))
 }
 fn read() -> Result<Settings, CoreError> {
     match fs::read(path()?) {

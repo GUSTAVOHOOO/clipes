@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
 import { coreDispatch } from '@/lib/core';
@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/Button';
 import { CaptionOverlay } from '@/features/captions/CaptionOverlay';
 import type { CaptionData } from '@/features/captions/types';
 import { cropVideoTransform, interpolateCrop, type CropSegment, type ResolvedCropPlan } from '@/features/editor/cropMath';
+import { sourceToSplicedUs, type KeptSegment, type MontageState } from '@/features/editor/timelineMath';
+import { activeNarrationAt, stepDuckGain, targetDuckGain, type PreviewNarrationSegment } from '@/features/editor/duckingMath';
 
 /** Corte (ou candidato da seleção) a pré-visualizar: tempos em µs da Fonte. */
 export type CutRange = { sourceId: number; startUs: number; endUs: number };
@@ -41,7 +43,9 @@ function code(error: unknown) { return typeof error === 'object' && error !== nu
 export function toProxySeconds(sourceUs: number, windowStartUs: number, windowEndUs: number): number | null {
   return sourceUs >= windowStartUs && sourceUs <= windowEndUs ? (sourceUs - windowStartUs) / 1_000_000 : null;
 }
-const mediaUrl = (key: string) => (isTauri() ? convertFileSrc(`proxy/${key}`, 'clipes-media') : `/__clipes-media__/proxy/${key}`);
+const clipesMediaUrl = (resource: string) => (isTauri() ? convertFileSrc(resource, 'clipes-media') : `/__clipes-media__/${resource}`);
+const mediaUrl = (key: string) => clipesMediaUrl(`proxy/${key}`);
+const narrationMediaUrl = (id: number) => clipesMediaUrl(`narration/${id}`);
 
 export type SkipInterval = { startUs: number; endUs: number };
 
@@ -58,34 +62,76 @@ export type PreviewProxyInfo = { state: Proxy['state']; key: string; windowStart
 
 /** Preview 9:16 em Fit (barras, sem corte) de um Corte, sobre o proxy de GOP curto gerado pelo núcleo. */
 /** `rate` (editor, #61): 0 pausa, >0 toca nessa velocidade, <0 volta por passos. `onSourceTime` informa o tempo da Fonte a cada atualização. */
-export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onProxyChange, captions, skipIntervals, crop, cropPlan }: { sourceId: number; startUs: number; endUs: number; rate?: number; onSourceTime?: (sourceUs: number) => void; onProxyChange?: (proxy: PreviewProxyInfo | null) => void; captions?: CaptionData | null; skipIntervals?: SkipInterval[]; crop?: CropSegment[] | null; cropPlan?: ResolvedCropPlan | null }) {
+export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onProxyChange, captions, skipIntervals, crop, cropPlan, montage, keptSegments, clipStartUs, clipEndUs }: { sourceId: number; startUs: number; endUs: number; rate?: number; onSourceTime?: (sourceUs: number) => void; onProxyChange?: (proxy: PreviewProxyInfo | null) => void; captions?: CaptionData | null; skipIntervals?: SkipInterval[]; crop?: CropSegment[] | null; cropPlan?: ResolvedCropPlan | null; montage?: MontageState | null; keptSegments?: KeptSegment[]; clipStartUs?: number; clipEndUs?: number }) {
   const t = useText(texts);
   const frame = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
   const bottomVideo = useRef<HTMLVideoElement>(null);
+  const audioRefs = useRef(new Map<number, HTMLAudioElement>());
+  const duckGainRef = useRef(1);
+  const tailRef = useRef({ active: false, tailUs: 0, lastTs: 0 });
   const pending = useRef<number | null>(null);
+  const loadedWindow = useRef<{ sourceId: number; windowStartUs: number; windowEndUs: number } | null>(null);
   const [proxy, setProxy] = useState<Proxy | null>(null);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
   const [notice, setNotice] = useState('');
   const [playing, setPlaying] = useState(false);
+  const [tailActive, setTailActive] = useState(false);
+  const [duckState, setDuckState] = useState<{ active: boolean; blockId: number | null; gain: number }>({ active: false, blockId: null, gain: 1 });
   const [time, setTime] = useState(0);
   const [lastSeekUs, setLastSeekUs] = useState<number | null>(null);
+
+  const effectiveClipStartUs = clipStartUs ?? startUs;
+  const effectiveClipEndUs = clipEndUs ?? endUs;
+  const narrationSegments = useMemo<PreviewNarrationSegment[]>(() => {
+    if (!montage?.blocks?.length) return [];
+    return montage.blocks
+      .filter((b): b is typeof b & { audioId: number } => typeof b.audioId === 'number' && b.durationUs > 0)
+      .map(b => ({
+        blockId: b.blockId,
+        audioId: b.audioId,
+        startUs: b.startUs,
+        endUs: b.endUs,
+        durationUs: b.durationUs,
+      }));
+  }, [montage]);
+  const hasNarration = narrationSegments.length > 0;
+  const clipDurationUs = useMemo(() => {
+    if (montage) return montage.clipDurationUs;
+    if (keptSegments && keptSegments.length > 0) return keptSegments[keptSegments.length - 1].outputEndUs;
+    return Math.max(0, effectiveClipEndUs - effectiveClipStartUs);
+  }, [montage, keptSegments, effectiveClipEndUs, effectiveClipStartUs]);
+  const freezeTailUs = useMemo(() => {
+    if (!hasNarration) return 0;
+    const maxEnd = narrationSegments.reduce((acc, s) => Math.max(acc, s.endUs), 0);
+    return Math.max(0, maxEnd - clipDurationUs);
+  }, [hasNarration, narrationSegments, clipDurationUs]);
 
   const request = useCallback(async (active: () => boolean) => {
     setError(null); setNotice('');
     try {
       const next = await coreDispatch<Proxy>('proxy.request', { source_id: sourceId, start_us: startUs, end_us: endUs });
-      if (active()) setProxy(next);
+      if (active()) {
+        loadedWindow.current = next.state === 'failed' || next.state === 'cancelled'
+          ? null
+          : { sourceId, windowStartUs: next.windowStartUs, windowEndUs: next.windowEndUs };
+        setProxy(next);
+      }
     } catch (e) {
-      if (active()) { setProxy(null); setError({ code: code(e), message: typeof e === 'object' && e !== null && 'message' in e ? String(e.message) : '' }); }
+      if (active()) { loadedWindow.current = null; setProxy(null); setError({ code: code(e), message: typeof e === 'object' && e !== null && 'message' in e ? String(e.message) : '' }); }
     }
   }, [sourceId, startUs, endUs]);
   useEffect(() => {
+    const win = loadedWindow.current;
+    if (win && win.sourceId === sourceId && startUs >= win.windowStartUs && endUs <= win.windowEndUs) return;
+    loadedWindow.current = null;
     let alive = true;
-    setProxy(null); setPlaying(false); setTime(0); setLastSeekUs(null); pending.current = null;
+    tailRef.current = { active: false, tailUs: 0, lastTs: 0 };
+    duckGainRef.current = 1;
+    setProxy(null); setPlaying(false); setTailActive(false); setDuckState({ active: false, blockId: null, gain: 1 }); setTime(0); setLastSeekUs(null); pending.current = null;
     void request(() => alive);
     return () => { alive = false; };
-  }, [request]);
+  }, [sourceId, startUs, endUs, request]);
 
   useEffect(() => {
     onProxyChange?.(proxy ? { state: proxy.state, key: proxy.key, windowStartUs: proxy.windowStartUs, windowEndUs: proxy.windowEndUs } : null);
@@ -100,8 +146,13 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
     const sync = () => {
       coreDispatch<Status>('proxy.status', { key: proxy.key }).then(next => {
         if (!alive) return;
-        if (next.state === 'missing') void request(() => alive);
-        else setProxy(current => (current && current.key === next.key ? { ...current, ...next } : current));
+        if (next.state === 'missing') {
+          loadedWindow.current = null;
+          void request(() => alive);
+        } else {
+          if (next.state === 'failed' || next.state === 'cancelled') loadedWindow.current = null;
+          setProxy(current => (current && current.key === next.key ? { ...current, ...next } : current));
+        }
       }).catch(() => { if (alive) setError({ code: '', message: '' }); });
     };
     if (isTauri()) listen('core-progress', sync).then(fn => { if (alive) unlisten = fn; else fn(); }).catch(() => {});
@@ -112,12 +163,68 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
   const skipRef = useRef(skipIntervals);
   skipRef.current = skipIntervals;
 
+  const syncNarrationAndDuck = useCallback((dtMs: number, snap: boolean) => {
+    const el = video.current;
+    if (!el || !proxy || proxy.state !== 'ready') return;
+    if (!hasNarration) {
+      if (el.volume !== 1) el.volume = 1;
+      duckGainRef.current = 1;
+      for (const a of audioRefs.current.values()) {
+        if (!a.paused) a.pause();
+      }
+      setDuckState(prev => (prev.active || prev.gain !== 1 || prev.blockId !== null ? { active: false, blockId: null, gain: 1 } : prev));
+      return;
+    }
+    const outputUs = tailRef.current.active
+      ? clipDurationUs + tailRef.current.tailUs
+      : sourceToSplicedUs(proxy.windowStartUs + el.currentTime * 1_000_000, keptSegments, effectiveClipStartUs);
+    const activeSeg = activeNarrationAt(narrationSegments, outputUs);
+    const active = activeSeg !== null;
+    const nextGain = snap ? targetDuckGain(active) : stepDuckGain(duckGainRef.current, active, dtMs);
+    duckGainRef.current = nextGain;
+    el.volume = nextGain;
+    const activeBlockId = activeSeg?.blockId ?? null;
+    setDuckState(prev => (
+      prev.active === active && prev.blockId === activeBlockId && Math.abs(prev.gain - nextGain) < 0.001
+        ? prev
+        : { active, blockId: activeBlockId, gain: nextGain }
+    ));
+
+    const forwardPlaying = (!el.paused || tailRef.current.active) && !el.ended && (rate === undefined || rate >= 0);
+    const playbackRate = rate && rate > 0 ? rate : (el.playbackRate || 1);
+    for (const seg of narrationSegments) {
+      const audioEl = audioRefs.current.get(seg.blockId);
+      if (!audioEl) continue;
+      if (forwardPlaying && activeSeg?.blockId === seg.blockId) {
+        const desiredSec = Math.max(0, (outputUs - seg.startUs) / 1_000_000);
+        if (audioEl.readyState >= 1 && Math.abs(audioEl.currentTime - desiredSec) > 0.08) {
+          audioEl.currentTime = desiredSec;
+        }
+        if (audioEl.playbackRate !== playbackRate) audioEl.playbackRate = playbackRate;
+        if (audioEl.paused) void audioEl.play().catch(() => {});
+      } else if (!audioEl.paused) {
+        audioEl.pause();
+      }
+    }
+  }, [proxy, hasNarration, clipDurationUs, keptSegments, effectiveClipStartUs, narrationSegments, rate]);
+  const syncNarrationRef = useRef(syncNarrationAndDuck);
+  syncNarrationRef.current = syncNarrationAndDuck;
+
   // Velocidade pedida pelo editor. Para trás o `<video>` não toca: volta em passos de 100 ms.
   useEffect(() => {
     const el = video.current;
     if (rate === undefined || !el || proxy?.state !== 'ready') return;
-    if (rate > 0) { el.playbackRate = rate; el.play().catch(() => {}); return; }
+    if (rate > 0) {
+      tailRef.current = { active: false, tailUs: 0, lastTs: 0 };
+      setTailActive(false);
+      el.playbackRate = rate;
+      el.play().catch(() => {});
+      return;
+    }
+    tailRef.current = { active: false, tailUs: 0, lastTs: 0 };
+    setTailActive(false);
     el.pause();
+    syncNarrationAndDuck(0, true);
     if (rate === 0) return;
     const timer = window.setInterval(() => {
       let nextTime = Math.max(0, el.currentTime + rate * 0.1);
@@ -128,10 +235,55 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
         if (mapped !== null) nextTime = mapped;
       }
       el.currentTime = nextTime;
+      syncNarrationAndDuck(0, true);
       if (el.currentTime <= 0) window.clearInterval(timer);
     }, 100);
     return () => window.clearInterval(timer);
-  }, [rate, proxy?.state, proxy?.windowStartUs, proxy?.windowEndUs]);
+  }, [rate, proxy?.state, proxy?.windowStartUs, proxy?.windowEndUs, syncNarrationAndDuck]);
+
+  // Sincroniza áudio da Narração, envoltória de ducking (-12 dB) e congelamento de cauda (`tpad`).
+  useEffect(() => {
+    if (!hasNarration || !proxy || proxy.state !== 'ready') return;
+    syncNarrationAndDuck(0, true);
+    if (!playing && !tailActive) return;
+    let alive = true, raf = 0;
+    let lastTs = performance.now();
+    const tick = (now: number) => {
+      if (!alive) return;
+      const dtMs = Math.min(100, Math.max(0, now - lastTs));
+      lastTs = now;
+      const el = video.current;
+      if (el) {
+        const playbackRate = rate && rate > 0 ? rate : (el.playbackRate || 1);
+        if (tailRef.current.active) {
+          tailRef.current.tailUs += dtMs * 1000 * playbackRate;
+          if (tailRef.current.tailUs >= freezeTailUs) {
+            tailRef.current = { active: false, tailUs: 0, lastTs: 0 };
+            setTailActive(false);
+            setPlaying(false);
+          }
+        } else if (freezeTailUs > 0 && !el.paused) {
+          const curSourceUs = proxy.windowStartUs + el.currentTime * 1_000_000;
+          if (curSourceUs >= effectiveClipEndUs - 20_000) {
+            const clampedSec = toProxySeconds(effectiveClipEndUs, proxy.windowStartUs, proxy.windowEndUs);
+            if (clampedSec !== null) {
+              el.currentTime = clampedSec;
+              setTime(clampedSec);
+            }
+            el.pause();
+            onSourceTime?.(effectiveClipEndUs);
+            tailRef.current = { active: true, tailUs: 0, lastTs: now };
+            setTailActive(true);
+            setPlaying(true);
+          }
+        }
+      }
+      syncNarrationAndDuck(dtMs, false);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { alive = false; cancelAnimationFrame(raf); };
+  }, [hasNarration, proxy, playing, tailActive, freezeTailUs, effectiveClipEndUs, rate, onSourceTime, syncNarrationAndDuck]);
 
   // Pula silêncios ativos com latência de quadro enquanto o preview está reproduzindo.
   useEffect(() => {
@@ -161,9 +313,12 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
   const windowSeconds = proxy ? (proxy.windowEndUs - proxy.windowStartUs) / 1_000_000 : 0;
   function seekProxy(seconds: number) {
     const el = video.current;
+    tailRef.current = { active: false, tailUs: 0, lastTs: 0 };
+    setTailActive(false);
     if (!el || el.readyState < 1) { pending.current = seconds; return; }
     el.currentTime = seconds;
     setTime(seconds);
+    syncNarrationRef.current(0, true);
   }
   // Clique numa palavra da Transcrição: mapeia o tempo da Fonte para o do proxy.
   useEffect(() => {
@@ -185,6 +340,7 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
     const start = pending.current ?? toProxySeconds(startUs, proxy.windowStartUs, proxy.windowEndUs) ?? 0;
     pending.current = null;
     el.currentTime = start; setTime(start);
+    syncNarrationAndDuck(0, true);
   }
   const isDual = !!(cropPlan && cropPlan.panels.length === 2);
   const effectiveSingleSegments = cropPlan && cropPlan.panels.length === 1 ? cropPlan.panels[0].segments : crop;
@@ -279,6 +435,13 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
   function toggle() {
     const el = video.current;
     if (!el) return;
+    if (tailRef.current.active) {
+      tailRef.current = { active: false, tailUs: 0, lastTs: 0 };
+      setTailActive(false);
+      setPlaying(false);
+      syncNarrationAndDuck(0, true);
+      return;
+    }
     if (el.paused) el.play().catch(() => { if (isTauri()) setNotice(t.playError); }); else el.pause();
   }
   async function cancel() { if (proxy?.job != null) { try { await coreDispatch('jobs.cancel', { id: proxy.job }); } catch { setError({ code: '', message: '' }); } } }
@@ -292,15 +455,16 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
           const jumpTo = skipCutForward(proxy.windowStartUs + curSec * 1_000_000, skipRef.current);
           if (jumpTo !== null) {
             const mapped = toProxySeconds(jumpTo, proxy.windowStartUs, proxy.windowEndUs);
-            if (mapped !== null) { e.currentTarget.currentTime = mapped; setTime(mapped); onSourceTime?.(jumpTo); return; }
+            if (mapped !== null) { e.currentTarget.currentTime = mapped; setTime(mapped); onSourceTime?.(jumpTo); syncNarrationAndDuck(0, true); return; }
           }
         }
         setTime(curSec);
         if (proxy) onSourceTime?.(proxy.windowStartUs + curSec * 1_000_000);
-      }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
+        if (e.currentTarget.paused && !tailRef.current.active) syncNarrationAndDuck(0, true);
+      }} onPlay={() => setPlaying(true)} onPause={() => { if (!tailRef.current.active) { setPlaying(false); syncNarrationAndDuck(0, true); } }} onEnded={() => { setPlaying(false); syncNarrationAndDuck(0, true); }}
       onError={() => { if (isTauri()) setNotice(t.playError); }} />
   );
-  return <section aria-label={t.title} data-preview-state={proxy?.state ?? (error ? 'error' : 'loading')} data-seek-us={lastSeekUs ?? undefined} data-crop-active={hasCrop ? 'true' : undefined} data-crop-layout={cropPlan?.layout} data-split-ratio={isDual ? splitRatio.toFixed(4) : undefined} className="flex w-full max-w-[18rem] flex-col gap-2 text-sm">
+  return <section aria-label={t.title} data-preview-state={proxy?.state ?? (error ? 'error' : 'loading')} data-seek-us={lastSeekUs ?? undefined} data-crop-active={hasCrop ? 'true' : undefined} data-crop-layout={cropPlan?.layout} data-split-ratio={isDual ? splitRatio.toFixed(4) : undefined} data-ducking={hasNarration ? (duckState.active ? 'true' : 'false') : undefined} data-duck-gain={hasNarration ? duckState.gain.toFixed(3) : undefined} data-narration-active-block={duckState.blockId ?? undefined} data-freeze-tail-active={tailActive ? 'true' : undefined} className="flex w-full max-w-[18rem] flex-col gap-2 text-sm">
     {!proxy && !error && <p aria-live="polite" className="text-fg-2">{t.preparing}</p>}
     {error && <p role="alert" className="rounded-md border border-line bg-warning-subtle p-3 text-fg">{t.code[error.code] ?? t.error}</p>}
     {working && proxy && <div className="flex flex-col gap-2" aria-live="polite">
@@ -327,9 +491,22 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
         {captions && <CaptionOverlay data={captions} video={video} windowStartUs={proxy.windowStartUs} />}
       </div>
       <div className="flex items-center gap-2">
-        <Button tamanho="sm" onClick={toggle}>{playing ? t.pause : t.play}</Button>
+        <Button tamanho="sm" onClick={toggle}>{playing || tailActive ? t.pause : t.play}</Button>
         <span className="font-mono text-xs text-fg-2" data-preview-clock>{clock(sourceUs)}</span>
       </div>
+      {narrationSegments.map(seg => (
+        <audio
+          key={`${seg.blockId}:${seg.audioId}`}
+          ref={node => {
+            if (node) audioRefs.current.set(seg.blockId, node);
+            else audioRefs.current.delete(seg.blockId);
+          }}
+          src={narrationMediaUrl(seg.audioId)}
+          preload="auto"
+          data-preview-narration-audio={seg.blockId}
+          aria-hidden
+        />
+      ))}
       <input type="range" aria-label={t.seek} min={0} max={windowSeconds} step={0.01} value={Math.min(time, windowSeconds)} onChange={e => seekProxy(Number(e.target.value))} className="w-full" />
     </>}
     {notice && <p role="status" className="text-fg-2">{notice}</p>}
@@ -350,7 +527,7 @@ export function CutPreviewPanel({ sourceId }: { sourceId: number }) {
   }, [sourceId]);
   if (!cut) return null;
   return <div className="mt-3 flex flex-col gap-2">
-    <CutPreview sourceId={cut.sourceId} startUs={cut.startUs} endUs={cut.endUs} />
+    <CutPreview key={`${cut.sourceId}:${cut.startUs}:${cut.endUs}`} sourceId={cut.sourceId} startUs={cut.startUs} endUs={cut.endUs} />
     <div><Button tamanho="sm" onClick={() => setCut(null)}>{t.close}</Button></div>
   </div>;
 }

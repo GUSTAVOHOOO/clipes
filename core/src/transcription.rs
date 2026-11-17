@@ -34,6 +34,12 @@ inventory::submit! { projects::Migration { id: "0048_001_transcripts", sql: "CRE
 // sonda); o modelo da Transcrição não.
 inventory::submit! { projects::Migration { id: "0050_001_transcription_block_config", sql: "CREATE TABLE transcription_block_config (transcript_id INTEGER NOT NULL REFERENCES transcripts(id) ON DELETE CASCADE, start_us INTEGER NOT NULL, device TEXT NOT NULL, compute_type TEXT NOT NULL, PRIMARY KEY(transcript_id,start_us)) WITHOUT ROWID;" } }
 
+// Reparo idempotente (#233) para Transcrições já salvas com palavras sobrepostas ou de duração
+// zero (padrão do faster-whisper). Aplica a mesma regra de `sentences::normalize_spans`: ordem
+// monotônica por `position`, início limitado ao fim da palavra anterior e duração mínima de 1 µs.
+// Transcrições com tempos negativos ficam intocadas para o planejador devolver erro tipado.
+inventory::submit! { projects::Migration { id: "0233_001_normalize_transcript_timestamps", sql: "CREATE TEMP TABLE _norm_words_src (transcript_id INTEGER NOT NULL, rn INTEGER NOT NULL, position INTEGER NOT NULL, start_us INTEGER NOT NULL, end_us INTEGER NOT NULL, PRIMARY KEY (transcript_id, rn)) WITHOUT ROWID; INSERT INTO _norm_words_src(transcript_id, rn, position, start_us, end_us) SELECT transcript_id, ROW_NUMBER() OVER (PARTITION BY transcript_id ORDER BY position), position, start_us, end_us FROM transcript_words WHERE kind = 'word' AND NOT EXISTS (SELECT 1 FROM transcript_words w2 WHERE w2.transcript_id = transcript_words.transcript_id AND (w2.start_us < 0 OR w2.end_us < 0)); WITH RECURSIVE fixed(transcript_id, rn, position, start_us, end_us) AS (SELECT transcript_id, rn, position, start_us, MAX(end_us, start_us + 1) FROM _norm_words_src WHERE rn = 1 UNION ALL SELECT s.transcript_id, s.rn, s.position, MAX(s.start_us, f.end_us), MAX(s.end_us, MAX(s.start_us, f.end_us) + 1) FROM _norm_words_src s JOIN fixed f ON f.transcript_id = s.transcript_id AND s.rn = f.rn + 1) UPDATE transcript_words SET start_us = f.start_us, end_us = f.end_us FROM fixed f WHERE transcript_words.transcript_id = f.transcript_id AND transcript_words.position = f.position AND (transcript_words.start_us != f.start_us OR transcript_words.end_us != f.end_us); DROP TABLE _norm_words_src; UPDATE sentences SET start_us = COALESCE((SELECT MIN(w.start_us) FROM transcript_words w WHERE w.transcript_id = sentences.transcript_id AND w.kind = 'word' AND w.position BETWEEN sentences.first_position AND sentences.last_position), start_us), end_us = COALESCE((SELECT MAX(w.end_us) FROM transcript_words w WHERE w.transcript_id = sentences.transcript_id AND w.kind = 'word' AND w.position BETWEEN sentences.first_position AND sentences.last_position), end_us) WHERE NOT EXISTS (SELECT 1 FROM transcript_words w2 WHERE w2.transcript_id = sentences.transcript_id AND (w2.start_us < 0 OR w2.end_us < 0));" } }
+
 /// Duração de cada bloco de áudio. `CLIPES_TRANSCRIBE_BLOCK_SECONDS` existe só para os testes.
 const BLOCK_US: i64 = 600_000_000;
 fn block_us() -> i64 {
@@ -525,27 +531,14 @@ fn commit(
     } else {
         block.covered_us.min(len)
     };
+    if block
+        .words
+        .iter()
+        .any(|w| w.start_us < 0 || w.end_us < 0 || resume + w.start_us < 0 || resume + w.end_us < 0)
+    {
+        return Err(bad_result());
+    }
     let next = resume + covered;
-    // (ordem no mesmo instante, tipo, texto, início, fim, idioma)
-    type Row<'a> = (i64, &'a str, &'a str, i64, i64, Option<&'a str>);
-    let mut rows: Vec<Row<'_>> = Vec::new();
-    for (start, end) in &block.silences {
-        let (start, end) = (resume + start, resume + (*end).max(*start));
-        if end > start {
-            rows.push((0, "silence", "", start, end, None));
-        }
-    }
-    for w in &block.words {
-        rows.push((
-            1,
-            "word",
-            &w.text,
-            resume + w.start_us,
-            resume + w.end_us,
-            w.language.as_deref(),
-        ));
-    }
-    rows.sort_by_key(|r| (r.3, r.0));
     let complete = next >= duration_us;
     projects::with_writer(|conn| {
         let tx = conn.transaction()?;
@@ -554,6 +547,36 @@ fn commit(
             tx.execute("INSERT OR REPLACE INTO transcription_block_config(transcript_id,start_us,device,compute_type) VALUES (?1,?2,?3,?4)", (transcript, resume, device, compute_type))?;
         }
         tx.execute("UPDATE transcription_calls SET state='completed' WHERE transcript_id=?1 AND job_id=?2 AND start_us=?3 AND state='pending'",(transcript,job,resume))?;
+        let prev_word_end: Option<i64> = tx
+            .query_row(
+                "SELECT end_us FROM transcript_words WHERE transcript_id=?1 AND kind='word' ORDER BY position DESC LIMIT 1",
+                [transcript],
+                |r| r.get(0),
+            )
+            .optional()?;
+        // Normaliza os tempos das palavras no ponto único de gravação (#233): ordem monotônica,
+        // início limitado ao fim da palavra anterior (inclusive entre blocos) e duração mínima de 1 µs.
+        let mut word_spans: Vec<(i64, i64)> = block
+            .words
+            .iter()
+            .map(|w| (resume + w.start_us, resume + w.end_us))
+            .collect();
+        if crate::sentences::normalize_spans(&mut word_spans, prev_word_end).is_err() {
+            return Ok(Err(bad_result()));
+        }
+        // (ordem no mesmo instante, tipo, texto, início, fim, idioma)
+        type Row<'a> = (i64, &'a str, &'a str, i64, i64, Option<&'a str>);
+        let mut rows: Vec<Row<'_>> = Vec::new();
+        for (start, end) in &block.silences {
+            let (start, end) = (resume + start, resume + (*end).max(*start));
+            if end > start {
+                rows.push((0, "silence", "", start, end, None));
+            }
+        }
+        for (w, (start, end)) in block.words.iter().zip(word_spans) {
+            rows.push((1, "word", &w.text, start, end, w.language.as_deref()));
+        }
+        rows.sort_by_key(|r| (r.3, r.0));
         let mut position: i64 = tx.query_row(
             "SELECT COALESCE(MAX(position)+1, 0) FROM transcript_words WHERE transcript_id=?1",
             [transcript],
@@ -608,8 +631,9 @@ fn commit(
                 (next * 100 / duration_us.max(1)).clamp(0, 99),
             ),
         )?;
-        tx.commit()
-    })
+        tx.commit()?;
+        Ok(Ok(()))
+    })?
 }
 
 fn project_job(v: &Value) -> Result<projects::ProjectJob, CoreError> {

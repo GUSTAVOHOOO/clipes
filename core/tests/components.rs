@@ -60,8 +60,35 @@ fn download_requires_confirmation() {
     assert_eq!(err.code, "confirmation_required");
 }
 
+static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+struct EnvGuard {
+    _lock: std::sync::MutexGuard<'static, ()>,
+    prev: Option<std::ffi::OsString>,
+}
+
+impl EnvGuard {
+    fn set(dir: &std::path::Path) -> Self {
+        let lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let prev = std::env::var_os("CLIPES_DATA_DIR");
+        std::env::set_var("CLIPES_DATA_DIR", dir);
+        Self { _lock: lock, prev }
+    }
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        match self.prev.take() {
+            Some(v) => std::env::set_var("CLIPES_DATA_DIR", v),
+            None => std::env::remove_var("CLIPES_DATA_DIR"),
+        }
+    }
+}
+
 #[test]
 fn deno_download_requires_confirmation_and_status_reports_missing_component() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = EnvGuard::set(tmp.path());
     let err = dispatch(
         "components.download",
         json!({"id":"deno", "confirmed":false}),
@@ -71,7 +98,7 @@ fn deno_download_requires_confirmation_and_status_reports_missing_component() {
     assert_eq!(err.code, "confirmation_required");
     let status = dispatch("components.deno.status", json!({}), &mut |_| {}).unwrap();
     assert!(status["pinned"].is_string());
-    assert!(status["installed"].is_boolean());
+    assert_eq!(status["installed"], false);
 }
 
 #[test]
@@ -82,6 +109,8 @@ fn yt_dlp_update_requires_confirmation() {
 
 #[test]
 fn transcription_models_are_pinned_licensed_and_need_consent_and_the_worker() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = EnvGuard::set(tmp.path());
     let models = dispatch("components.models.manifest", json!({}), &mut |_| {}).unwrap();
     let models = models.as_array().unwrap();
     assert_eq!(models.len(), 3);
@@ -131,4 +160,40 @@ fn transcription_models_are_pinned_licensed_and_need_consent_and_the_worker() {
     )
     .unwrap_err();
     assert_eq!(error.code, "unknown_component");
+}
+
+#[test]
+fn ffmpeg_status_reports_missing_until_configured() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = EnvGuard::set(tmp.path());
+    let initial = dispatch("components.ffmpeg.status", json!({}), &mut |_| {}).unwrap();
+    assert_eq!(initial["installed"], false);
+    assert_eq!(initial["incomplete"], false);
+
+    let exe_dir = tmp.path().join("components");
+    std::fs::create_dir_all(&exe_dir).unwrap();
+    let ffmpeg = exe_dir.join(if cfg!(windows) {
+        "ffmpeg.exe"
+    } else {
+        "ffmpeg"
+    });
+    let ffprobe = exe_dir.join(if cfg!(windows) {
+        "ffprobe.exe"
+    } else {
+        "ffprobe"
+    });
+    std::fs::write(&ffmpeg, b"ffmpeg").unwrap();
+    let settings = dispatch("components.settings.get", json!({}), &mut |_| {}).unwrap();
+    let mut updated = settings.clone();
+    updated["ffmpeg_path"] = json!(ffmpeg);
+    dispatch("components.settings.set", updated, &mut |_| {}).unwrap();
+
+    let incomplete = dispatch("components.ffmpeg.status", json!({}), &mut |_| {}).unwrap();
+    assert_eq!(incomplete["incomplete"], true);
+    assert_eq!(incomplete["installed"], false);
+
+    std::fs::write(&ffprobe, b"ffprobe").unwrap();
+    let ready = dispatch("components.ffmpeg.status", json!({}), &mut |_| {}).unwrap();
+    assert_eq!(ready["incomplete"], false);
+    assert_eq!(ready["installed"], true);
 }

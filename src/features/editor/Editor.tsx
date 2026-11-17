@@ -12,10 +12,11 @@ import { GuardrailsChecklist } from '@/features/guardrails/GuardrailsPanel';
 import { CabecalhoGaveta, GavetaBorda, Puxador, ZonaBorda, useGaveta } from '@/components/shell/Gaveta';
 import { CutPreview, previewSeekEvent, type PreviewProxyInfo, type PreviewSeekEvent } from '@/features/projects/CutPreview';
 import { clock, fill } from '@/features/projects/selectionFormat';
-import { PX_PER_SEC, neighborStart, nextRate, pxToUs, sentenceAt, usToPx, visiblePx, visibleSentences, visibleThumbs, type SilencesState, type TimelineSentence } from './timelineMath';
+import { PX_PER_SEC, neighborStart, nextRate, pxToUs, sentenceAt, usToPx, visiblePx, visibleSentences, visibleThumbs, type MontageState, type SilencesState, type TimelineSentence } from './timelineMath';
 import { CaptionPanel } from '@/features/captions/CaptionPanel';
 import { useCaptions } from '@/features/captions/useCaptions';
 import { BorderHandles, type Adjustment, type Edge } from './BorderHandles';
+import { NarrationTrack } from './NarrationTrack';
 import { SilencesPanel } from './SilencesPanel';
 import { CropPanel, type CropAnswer, type CropPanelSlot } from './CropPanel';
 import { TranslationPanel } from '@/features/translation/TranslationPanel';
@@ -25,7 +26,7 @@ export const editorOpenEvent = 'clipes-editor-open';
 /** Abre o editor num Corte: candidato aprovado ou par de Frases da Fonte. O núcleo valida as bordas. */
 export function openEditor(request: ExportRequest) { window.dispatchEvent(new CustomEvent<ExportRequest>(editorOpenEvent, { detail: request })); }
 
-type Edited = { clipId: number; request: ExportRequest; startUs: number; endUs: number; undoCount: number; redoCount: number; revision: number; silences?: SilencesState; crop?: ClipCrop };
+type Edited = { clipId: number; request: ExportRequest; startUs: number; endUs: number; undoCount: number; redoCount: number; revision: number; silences?: SilencesState; crop?: ClipCrop; montage?: MontageState | null };
 type Opened = Edited & { windowStartUs: number; windowEndUs: number; fps: number; sourceAspect?: number };
 type Thumbs = { id: string; count: number; intervalUs: number; width: number; height: number; columns: number };
 type Timeline = { state: 'queued' | 'running' | 'ready' | 'failed' | 'cancelled' | 'missing'; key: string; job: number | null; progress: number; error: string | null; thumbs: Thumbs | null };
@@ -33,7 +34,7 @@ type Timeline = { state: 'queued' | 'running' | 'ready' | 'failed' | 'cancelled'
 const texts = {
   'pt-BR': {
     title: 'Editor do Corte', close: 'Fechar editor', timeline: 'Timeline do Corte', transcript: 'Transcrição do editor', borders: 'Bordas do Corte', captions: 'Legenda', silences: 'Silêncios', crop: 'Enquadrar', translation: 'Tradução',
-    markIn: 'Marcar entrada', markOut: 'Marcar saída', back: 'Voltar', pause: 'Pausar', forward: 'Avançar', rate: 'Velocidade', export: 'Exportar', exportNeedsCandidate: 'Abra um candidato aprovado para exportar.',
+    markIn: 'Marcar entrada', markOut: 'Marcar saída', back: 'Voltar', play: 'Reproduzir', pause: 'Pausar', forward: 'Avançar', spaceHint: 'Espaço / K', rate: 'Velocidade', export: 'Exportar', exportNeedsCandidate: 'Abra um candidato aprovado para exportar.',
     shortcuts: 'Atalhos', hintPlay: 'voltar · pausar · avançar', hintMark: 'entrada · saída (Frase inteira)', hintFrame: 'quadro', hintSentence: 'Frase anterior/próxima', hintDrawers: 'gavetas',
     duration: 'Duração {value}', start: 'Entrada', end: 'Saída', startEarlier: 'Estender início', startLater: 'Encurtar início', endEarlier: 'Encurtar fim', endLater: 'Estender fim',
     loading: 'Abrindo o editor…', timelinePreparing: 'Preparando miniaturas e onda…', timelineFailed: 'Não foi possível gerar as miniaturas e a onda.', cancel: 'Cancelar', retry: 'Gerar de novo',
@@ -41,11 +42,14 @@ const texts = {
     note: 'Arraste as alças para encaixar em Frase. Segure Alt para ajustar por quadro. As edições são salvas automaticamente.',
     silenceActive: 'Silêncio removido ({ms} ms) — clique para reverter', silenceReverted: 'Silêncio revertido ({ms} ms) — clique para reaplicar',
     cropKeyframe: 'Keyframe de enquadramento em {time}',
-    errors: { adjust_empty: 'O Corte precisa manter ao menos uma Frase.', adjust_too_short: 'O Corte ficaria abaixo da duração mínima.', adjust_too_long: 'O Corte ficaria acima da duração máxima.', unknown_sentence_id: 'Frase desconhecida.', invalid_range: 'Intervalo do Corte inválido.', invalid_silence_threshold: 'O limite de silêncio deve ficar entre 300 ms e 2000 ms.', invalid_silence_interval: 'Trecho de silêncio inválido.', invalid_crop: 'Enquadramento inválido.', candidate_not_found: 'Candidato não encontrado.', transcript_missing: 'Transcrição não encontrada.', source_not_found: 'Fonte não encontrada.', default: 'Não foi possível abrir o editor.' } as Record<string, string>,
+    montageFreezeTail: 'Último quadro congelado por {sec} s no fim (sobra da Narração).',
+    montageLongFreezeTail: 'Aviso: a Narração ultrapassa o fim do Corte em {sec} s (> 5 s) e congelará o último quadro.',
+    montageEstimated: 'Duração da Narração estimada por caracteres.',
+    errors: { adjust_empty: 'O Corte precisa manter ao menos uma Frase.', adjust_too_short: 'O Corte ficaria abaixo da duração mínima.', adjust_too_long: 'O Corte ficaria acima da duração máxima.', unknown_sentence_id: 'Frase desconhecida.', invalid_range: 'Intervalo do Corte inválido.', invalid_silence_threshold: 'O limite de silêncio deve ficar entre 300 ms e 2000 ms.', invalid_silence_interval: 'Trecho de silêncio inválido.', invalid_crop: 'Enquadramento inválido.', invalid_montage: 'Montagem inválida.', block_not_found: 'Bloco não encontrado.', candidate_not_found: 'Candidato não encontrado.', transcript_missing: 'Transcrição não encontrada.', source_not_found: 'Fonte não encontrada.', default: 'Não foi possível abrir o editor.' } as Record<string, string>,
   },
   en: {
     title: 'Clip editor', close: 'Close editor', timeline: 'Clip timeline', transcript: 'Editor Transcript', borders: 'Clip borders', captions: 'Captions', silences: 'Silences', crop: 'Framing', translation: 'Translation',
-    markIn: 'Mark in', markOut: 'Mark out', back: 'Reverse', pause: 'Pause', forward: 'Forward', rate: 'Speed', export: 'Export', exportNeedsCandidate: 'Open an approved candidate to export.',
+    markIn: 'Mark in', markOut: 'Mark out', back: 'Reverse', play: 'Play', pause: 'Pause', forward: 'Forward', spaceHint: 'Space / K', rate: 'Speed', export: 'Export', exportNeedsCandidate: 'Open an approved candidate to export.',
     shortcuts: 'Shortcuts', hintPlay: 'reverse · pause · forward', hintMark: 'in · out (whole Sentence)', hintFrame: 'frame', hintSentence: 'previous/next Sentence', hintDrawers: 'drawers',
     duration: 'Duration {value}', start: 'In', end: 'Out', startEarlier: 'Extend start', startLater: 'Shorten start', endEarlier: 'Shorten end', endLater: 'Extend end',
     loading: 'Opening the editor…', timelinePreparing: 'Preparing thumbnails and waveform…', timelineFailed: 'Could not generate thumbnails and waveform.', cancel: 'Cancel', retry: 'Generate again',
@@ -53,14 +57,17 @@ const texts = {
     note: 'Drag handles to snap to Sentences. Hold Alt to adjust by frame. Edits are saved automatically.',
     silenceActive: 'Removed silence ({ms} ms) — click to revert', silenceReverted: 'Reverted silence ({ms} ms) — click to reapply',
     cropKeyframe: 'Framing keyframe at {time}',
-    errors: { adjust_empty: 'The Clip must keep at least one Sentence.', adjust_too_short: 'The Clip would fall below the minimum duration.', adjust_too_long: 'The Clip would exceed the maximum duration.', unknown_sentence_id: 'Unknown Sentence.', invalid_range: 'Invalid Clip range.', invalid_silence_threshold: 'Silence threshold must be between 300 ms and 2000 ms.', invalid_silence_interval: 'Invalid silence interval.', invalid_crop: 'Invalid crop.', candidate_not_found: 'Candidate not found.', transcript_missing: 'Transcript not found.', source_not_found: 'Source not found.', default: 'Could not open the editor.' } as Record<string, string>,
+    montageFreezeTail: 'Last frame freezes for {sec} s at the end (Narration overflow).',
+    montageLongFreezeTail: 'Warning: Narration exceeds the Clip end by {sec} s (> 5 s) and will freeze the last frame.',
+    montageEstimated: 'Narration durations estimated from character count.',
+    errors: { adjust_empty: 'The Clip must keep at least one Sentence.', adjust_too_short: 'The Clip would fall below the minimum duration.', adjust_too_long: 'The Clip would exceed the maximum duration.', unknown_sentence_id: 'Unknown Sentence.', invalid_range: 'Invalid Clip range.', invalid_silence_threshold: 'Silence threshold must be between 300 ms and 2000 ms.', invalid_silence_interval: 'Invalid silence interval.', invalid_crop: 'Invalid crop.', invalid_montage: 'Invalid montage.', block_not_found: 'Block not found.', candidate_not_found: 'Candidate not found.', transcript_missing: 'Transcript not found.', source_not_found: 'Source not found.', default: 'Could not open the editor.' } as Record<string, string>,
   },
 };
 
 const errorCode = (e: unknown) => (typeof e === 'object' && e !== null && 'code' in e ? String(e.code) : '');
 const mediaUrl = (id: string) => (isTauri() ? convertFileSrc(id, 'clipes-media') : `/__clipes-media__/${id}`);
 const borderClock = (us: number) => `${clock(us)}.${String(Math.floor((us % 1_000_000) / 1000)).padStart(3, '0')}`;
-const ROW = { thumbs: 54, wave: 40, sentences: 56 } as const;
+const ROW = { thumbs: 54, wave: 40, sentences: 56, narration: 44 } as const;
 
 /** Escuta o pedido de abertura e monta o editor em sobreposição. Um por aplicativo. */
 export function EditorHost() {
@@ -94,6 +101,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
   const [scroll, setScroll] = useState({ left: 0, width: 1200 });
   const [history, setHistory] = useState({ undoCount: 0, redoCount: 0 });
   const [silences, setSilences] = useState<SilencesState | null>(null);
+  const [montage, setMontage] = useState<MontageState | null>(null);
   const [captionRevision, setCaptionRevision] = useState(0);
   const [closing, setClosing] = useState(false);
   const committed = useRef<Edited | null>(null);
@@ -107,6 +115,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
   const captions = useCaptions(captionRequest, captionRevision);
   const scroller = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
   const state = useRef({ sourceUs: 0, rate: 0, startId, endId, sentences, opened, fps: 30 });
   state.current = { sourceUs, rate, startId, endId, sentences, opened, fps: opened?.fps ?? 30 };
   useEffect(() => {
@@ -133,7 +142,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
       if (committed.current?.clipId === info.clipId && committed.current.revision > info.revision) {
         setWindowRevision(n => n + 1); return;
       }
-      committed.current = info; setHistory(info); setSilences(info.silences ?? null);
+      committed.current = info; setHistory(info); setSilences(info.silences ?? null); setMontage(info.montage ?? null);
       setStartId(info.request.start_id); setEndId(info.request.end_id);
       setOpened(info); setSentences(all); setRange({ startUs: info.startUs, endUs: info.endUs }); setCropState(info.crop ?? null); setDraftCropLayout(null); setDraftCropEdits(null); setSourceUs(info.startUs);
       requestAnimationFrame(() => { if (scroller.current) scroller.current.scrollLeft = Math.max(0, usToPx(info.startUs, info.windowStartUs) - 80); });
@@ -179,7 +188,8 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
   }, [opened, request.source_id]);
 
   const windowStartUs = opened?.windowStartUs ?? 0;
-  const totalPx = opened ? usToPx(opened.windowEndUs, windowStartUs) : 0;
+  const timelineEndUs = opened ? Math.max(opened.windowEndUs, range && montage && montage.freezeTailUs > 0 ? range.endUs + montage.freezeTailUs + 2_000_000 : 0) : 0;
+  const totalPx = opened ? usToPx(timelineEndUs, windowStartUs) : 0;
 
   /** Move o cabeçote (do editor) e pede ao preview que vá ao mesmo tempo da Fonte. */
   const seek = useCallback((us: number) => {
@@ -194,6 +204,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
     setStartId(answer.request.start_id); setEndId(answer.request.end_id);
     setRange({ startUs: answer.startUs, endUs: answer.endUs }); setHistory(answer);
     setSilences(answer.silences ?? null);
+    if (answer.montage !== undefined) setMontage(answer.montage);
     if (answer.crop) setCropState(answer.crop);
   }, []);
   const applyCropAnswer = useCallback((ans: CropAnswer) => {
@@ -338,13 +349,25 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
   }, [mark]);
   const moveEdge = useCallback((edge: Edge, delta: number) => adjust(edge, { sentence_delta: delta }), [adjust]);
   useComandos([
-    { id: 'editor-undo', titulo: t.undo, grupo: t.title, dica: 'Ctrl+Z', executar: () => edit('editor.undo', {}), desabilitado: !history.undoCount },
-    { id: 'editor-redo', titulo: t.redo, grupo: t.title, dica: 'Ctrl+Shift+Z / Ctrl+Y', executar: () => edit('editor.redo', {}), desabilitado: !history.redoCount },
-    { id: 'editor-extend-start', titulo: `${t.startEarlier} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+←', executar: () => moveEdge('start', -1) },
-    { id: 'editor-shorten-start', titulo: `${t.startLater} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+→', executar: () => moveEdge('start', 1) },
-    { id: 'editor-shorten-end', titulo: `${t.endEarlier} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+↑', executar: () => moveEdge('end', -1) },
-    { id: 'editor-extend-end', titulo: `${t.endLater} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+↓', executar: () => moveEdge('end', 1) },
+    { id: 'editor-transcript', titulo: t.transcript, grupo: t.title, dica: '[', executar: () => { right.fechar(); left.alternar(); } },
+    { id: 'editor-borders', titulo: t.borders, grupo: t.title, dica: ']', executar: () => { left.fechar(); openRight('borders'); } },
+    { id: 'editor-captions', titulo: t.captions, grupo: t.title, dica: 'C', executar: () => { left.fechar(); openRight('captions'); } },
+    { id: 'editor-silences', titulo: t.silences, grupo: t.title, dica: 'S', executar: () => { left.fechar(); openRight('silences'); } },
     { id: 'editor-crop', titulo: t.crop, grupo: t.title, dica: 'F', executar: () => { left.fechar(); openRight('crop'); } },
+    { id: 'editor-translation', titulo: t.translation, grupo: t.title, dica: 'T', executar: () => { left.fechar(); openRight('translation'); } },
+    { id: 'editor-play-pause', titulo: rate === 0 ? t.play : t.pause, grupo: t.title, dica: t.spaceHint, executar: () => setRate(rate === 0 ? 1 : 0), desabilitado: !opened },
+    { id: 'editor-back', titulo: t.back, grupo: t.title, dica: 'J', executar: () => setRate(nextRate(rate, 'j')), desabilitado: !opened },
+    { id: 'editor-forward', titulo: t.forward, grupo: t.title, dica: 'L', executar: () => setRate(nextRate(rate, 'l')), desabilitado: !opened },
+    { id: 'editor-mark-in', titulo: t.markIn, grupo: t.title, dica: 'I', executar: () => markAtPlayhead('start'), desabilitado: !opened || closing },
+    { id: 'editor-mark-out', titulo: t.markOut, grupo: t.title, dica: 'O', executar: () => markAtPlayhead('end'), desabilitado: !opened || closing },
+    { id: 'editor-undo', titulo: t.undo, grupo: t.title, dica: 'Ctrl+Z', executar: () => edit('editor.undo', {}), desabilitado: !history.undoCount || closing },
+    { id: 'editor-redo', titulo: t.redo, grupo: t.title, dica: 'Ctrl+Shift+Z / Ctrl+Y', executar: () => edit('editor.redo', {}), desabilitado: !history.redoCount || closing },
+    { id: 'editor-extend-start', titulo: `${t.startEarlier} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+←', executar: () => moveEdge('start', -1), desabilitado: !opened || closing },
+    { id: 'editor-shorten-start', titulo: `${t.startLater} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+→', executar: () => moveEdge('start', 1), desabilitado: !opened || closing },
+    { id: 'editor-shorten-end', titulo: `${t.endEarlier} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+↑', executar: () => moveEdge('end', -1), desabilitado: !opened || closing },
+    { id: 'editor-extend-end', titulo: `${t.endLater} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+↓', executar: () => moveEdge('end', 1), desabilitado: !opened || closing },
+    { id: 'editor-export', titulo: t.export, grupo: t.title, executar: () => headerRef.current?.querySelector<HTMLButtonElement>('[data-export-trigger]')?.click(), desabilitado: request.candidate_id === undefined || !opened || closing },
+    { id: 'editor-close', titulo: t.close, grupo: t.title, dica: 'Esc', executar: close, desabilitado: closing },
   ]);
 
   // Atalhos do editor não capturam campos de texto nem camadas abertas.
@@ -368,7 +391,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
         return;
       }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (target?.closest('[data-edge]') && key.startsWith('Arrow')) return;
+      if (target?.closest('[data-edge],[data-narration-block]') && key.startsWith('Arrow')) return;
       if (key === '[' && !inLayer?.closest('aside[data-lado="dir"]')) { take(); right.fechar(); left.alternar(); return; }
       if (key === ']' && !inLayer?.closest('aside[data-lado="esq"]')) { take(); left.fechar(); openRight('borders'); return; }
       if ((key === 'c' || key === 'C') && !inLayer) { take(); left.fechar(); openRight('captions'); return; }
@@ -509,9 +532,12 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
   }, [effectiveCrop]);
   const visibleCropKeyframes = useMemo(() => activeTimelineKeyframes.filter(k => { const px = usToPx(k.timeUs, windowStartUs); return px >= visible[0] && px <= visible[1]; }), [activeTimelineKeyframes, windowStartUs, visible]);
 
-  return <section role="region" aria-label={t.title} data-start-id={startId} data-end-id={endId} data-start-us={range?.startUs} data-end-us={range?.endUs} data-window-start-us={opened?.windowStartUs} data-undo-count={history.undoCount} data-source-us={Math.round(sourceUs)} data-rate={rate} data-silences-removed-us={silencesView.removedUs}
+  const hasNarrationTrack = !!(montage && montage.blocks.length > 0);
+  const narrationWarning = montage?.warnings.find(w => w.code === 'long_freeze_tail' || w.code === 'freeze_tail');
+
+  return <section role="region" aria-label={t.title} data-start-id={startId} data-end-id={endId} data-start-us={range?.startUs} data-end-us={range?.endUs} data-window-start-us={opened?.windowStartUs} data-undo-count={history.undoCount} data-source-us={Math.round(sourceUs)} data-rate={rate} data-silences-removed-us={silencesView.removedUs} data-montage-freeze-tail-us={montage?.freezeTailUs ?? 0} data-montage-total-duration-us={montage?.totalDurationUs ?? 0}
     className="fixed inset-0 flex flex-col overflow-hidden bg-canvas text-fg" style={{ zIndex: 'var(--z-scrim)' }}>
-    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-line px-4">
+    <header ref={headerRef} className="flex h-12 shrink-0 items-center gap-3 border-b border-line px-4">
       <h2 className="text-base font-semibold">{t.title}</h2>
       {range && <span className="font-mono text-xs text-fg-2">{borderClock(range.startUs)} – {borderClock(range.endUs)} · {fill(t.duration, { value: clock(silencesView.removedUs > 0 ? silencesView.effectiveDurationUs : range.endUs - range.startUs) })}{silencesView.removedUs > 0 ? ` (-${Math.round(silencesView.removedUs / 1000)} ms)` : ''}</span>}
       <div className="flex-1" />
@@ -527,7 +553,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
       <Puxador lado="dir" g={right} itens={[{ id: 'borders', rotulo: t.borders, atalho: ']', icone: <PanelRight size={16} />, onClick: () => { left.fechar(); openRight('borders'); } }, { id: 'captions', rotulo: t.captions, atalho: 'C', icone: <Captions size={16} />, onClick: () => { left.fechar(); openRight('captions'); } }, { id: 'silences', rotulo: t.silences, atalho: 'S', icone: <Scissors size={16} />, onClick: () => { left.fechar(); openRight('silences'); } }, { id: 'crop', rotulo: t.crop, atalho: 'F', icone: <Crop size={16} />, onClick: () => { left.fechar(); openRight('crop'); } }, { id: 'translation', rotulo: t.translation, atalho: 'T', icone: <Languages size={16} />, onClick: () => { left.fechar(); openRight('translation'); } }]} />
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4"><div className="m-auto flex flex-col items-center gap-3">
         {!opened && !error && <p aria-live="polite" className="text-fg-2">{t.loading}</p>}
-        {opened && <div style={{ width: 'min(18rem, 22vh)' }}><CutPreview sourceId={request.source_id} startUs={opened.startUs} endUs={opened.endUs} rate={rate} onSourceTime={us => setSourceUs(us)} onProxyChange={setProxyInfo} captions={captions.data} skipIntervals={activeSilences} crop={crop} cropPlan={cropPlan} /></div>}
+        {opened && range && <div style={{ width: 'min(18rem, 22vh)' }}><CutPreview sourceId={request.source_id} startUs={range.startUs} endUs={range.endUs} rate={rate} onSourceTime={us => setSourceUs(us)} onProxyChange={setProxyInfo} captions={captions.data} skipIntervals={activeSilences} crop={crop} cropPlan={cropPlan} montage={montage} keptSegments={silencesView.segments} clipStartUs={range.startUs} clipEndUs={range.endUs} /></div>}
         {opened && <div className="flex flex-wrap items-center justify-center gap-2" role="group" aria-label={t.shortcuts}>
           <Button tamanho="sm" onClick={() => setRate(nextRate(rate, 'j'))} atalho="J">{t.back.replace(/ \(.\)$/, '')}</Button>
           <Button tamanho="sm" onClick={() => setRate(0)} atalho="K">{t.pause.replace(/ \(.\)$/, '')}</Button>
@@ -551,7 +577,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
             clipId={opened.clipId}
             startId={startId}
             endId={endId}
-            refreshKey={`${startId}-${endId}-${silencesView.removedUs}`}
+            refreshKey={`${startId}-${endId}-${silencesView.removedUs}-${montage?.freezeTailUs ?? 0}-${captionRevision}`}
           />
         )}
       </div>
@@ -562,9 +588,25 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
           {timeline.state === 'failed' ? t.timelineFailed : `${t.timelinePreparing} ${timeline.progress}%`}
           {(timeline.state === 'queued' || timeline.state === 'running') && <> <Button tamanho="sm" variante="fantasma" onClick={() => void dispatchTimeline(timeline.job)}>{t.cancel}</Button></>}
         </p>}
-        <div ref={scroller} className="relative overflow-x-auto overflow-y-hidden" style={{ height: ROW.thumbs + ROW.wave + ROW.sentences + 14 }}
+        {hasNarrationTrack && montage && (narrationWarning || montage.usesEstimatedDurations) && (
+          <div className="flex flex-wrap items-center gap-3 border-b border-line/60 px-3 py-1 text-xs">
+            {narrationWarning && (
+              <span
+                role="status"
+                data-montage-warning={narrationWarning.code}
+                className={narrationWarning.code === 'long_freeze_tail' ? 'text-danger font-medium' : 'text-fg-2'}
+              >
+                {fill(narrationWarning.code === 'long_freeze_tail' ? t.montageLongFreezeTail : t.montageFreezeTail, { sec: (montage.freezeTailUs / 1_000_000).toFixed(1) })}
+              </span>
+            )}
+            {montage.usesEstimatedDurations && (
+              <span className="text-fg-3">{t.montageEstimated}</span>
+            )}
+          </div>
+        )}
+        <div ref={scroller} className="relative overflow-x-auto overflow-y-hidden" style={{ height: ROW.thumbs + ROW.wave + ROW.sentences + (hasNarrationTrack ? ROW.narration + 4 : 0) + 14 }}
           onClick={e => {
-            if ((e.target as Element).closest('[data-editor-sentence],[data-silence-cut],[data-timeline-crop-kf]') || !scroller.current) return;
+            if ((e.target as Element).closest('[data-editor-sentence],[data-silence-cut],[data-timeline-crop-kf],[data-narration-block],[data-narration-reset]') || !scroller.current) return;
             const rect = scroller.current.getBoundingClientRect();
             seek(pxToUs(e.clientX - rect.left + scroller.current.scrollLeft, windowStartUs));
           }}>
@@ -596,6 +638,22 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
                 <span className="mr-1 font-mono text-[10px] text-fg-3">{s.id}</span>{s.text}
               </button>)}
             </div>
+            {hasNarrationTrack && montage && range && opened && (
+              <NarrationTrack
+                montage={montage}
+                range={range}
+                segments={silencesView.segments}
+                sentences={sentences}
+                windowStartUs={windowStartUs}
+                fps={opened.fps}
+                top={ROW.thumbs + ROW.wave + ROW.sentences + 8}
+                height={ROW.narration}
+                onSetStart={(blockId, timeUs, free, preview) => edit('editor.montage.set_start', { block_id: blockId, time_us: timeUs, free }, preview)}
+                onCancel={() => cancelPreview()}
+                onSeek={us => { setRate(0); seek(us); }}
+                onPause={() => setRate(0)}
+              />
+            )}
             {range && opened && <BorderHandles startUs={range.startUs} endUs={range.endUs} windowStartUs={windowStartUs} fps={opened.fps} labels={{ start: t.start, end: t.end }} adjust={adjust} cancel={cancelPreview} pause={() => setRate(0)} />}
             {visibleCropKeyframes.map(k => {
               const label = fill(t.cropKeyframe, { time: borderClock(k.timeUs) });

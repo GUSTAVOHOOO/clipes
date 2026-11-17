@@ -21,6 +21,39 @@ use serde_json::{json, Value};
 pub const PAUSE_US: i64 = 700_000;
 /// Duração máxima de uma Frase antes de ser quebrada na maior pausa interna.
 pub const MAX_SENTENCE_US: i64 = 25_000_000;
+/// Duração mínima garantida para palavras e Frases normalizadas (1 µs).
+pub const MIN_SPAN_DURATION_US: i64 = 1;
+
+/// Normaliza intervalos `(start_us, end_us)` em ordem monotônica: cada item começa em
+/// `start_us.max(prev_end)` e termina em `end_us.max(start_us + MIN_SPAN_DURATION_US)`.
+/// Tempos negativos retornam `Err(())` em vez de serem mascarados.
+pub(crate) fn normalize_spans(
+    spans: &mut [(i64, i64)],
+    initial_prev_end_us: Option<i64>,
+) -> Result<bool, ()> {
+    if initial_prev_end_us.is_some_and(|p| p < 0) {
+        return Err(());
+    }
+    let mut prev_end = initial_prev_end_us;
+    let mut changed = false;
+    for (start, end) in spans.iter_mut() {
+        if *start < 0 || *end < 0 {
+            return Err(());
+        }
+        let norm_start = match prev_end {
+            Some(prev) => (*start).max(prev),
+            None => *start,
+        };
+        let norm_end = (*end).max(norm_start.saturating_add(MIN_SPAN_DURATION_US));
+        if norm_start != *start || norm_end != *end {
+            *start = norm_start;
+            *end = norm_end;
+            changed = true;
+        }
+        prev_end = Some(norm_end);
+    }
+    Ok(changed)
+}
 
 inventory::submit! { projects::Migration { id: "0049_001_sentences", sql: "CREATE TABLE sentences (transcript_id INTEGER NOT NULL REFERENCES transcripts(id) ON DELETE CASCADE, id INTEGER NOT NULL, first_position INTEGER NOT NULL, last_position INTEGER NOT NULL, start_us INTEGER NOT NULL, end_us INTEGER NOT NULL, language TEXT, text TEXT NOT NULL, PRIMARY KEY (transcript_id, id)) WITHOUT ROWID; CREATE INDEX sentences_by_time ON sentences(transcript_id, start_us);" } }
 
@@ -154,7 +187,7 @@ pub(crate) fn segment_transcript(transcript: i64) -> Result<(usize, bool), CoreE
         if state.as_deref() != Some("complete") {
             return Ok(None);
         }
-        let words = {
+        let mut words = {
             let mut q = tx.prepare(
                 "SELECT position, text, start_us, end_us, language FROM transcript_words WHERE transcript_id=?1 AND kind='word' ORDER BY position",
             )?;
@@ -169,6 +202,22 @@ pub(crate) fn segment_transcript(transcript: i64) -> Result<(usize, bool), CoreE
             })?;
             rows.collect::<rusqlite::Result<Vec<_>>>()?
         };
+        // Reparo idempotente para palavras já salvas com sobreposição ou duração zero; tempos
+        // negativos permanecem intocados para que a validação devolva erro tipado.
+        let mut word_spans: Vec<(i64, i64)> =
+            words.iter().map(|w| (w.start_us, w.end_us)).collect();
+        if let Ok(true) = normalize_spans(&mut word_spans, None) {
+            let mut update = tx.prepare(
+                "UPDATE transcript_words SET start_us=?3, end_us=?4 WHERE transcript_id=?1 AND position=?2",
+            )?;
+            for (word, &(start, end)) in words.iter_mut().zip(&word_spans) {
+                if word.start_us != start || word.end_us != end {
+                    word.start_us = start;
+                    word.end_us = end;
+                    update.execute((transcript, word.position, start, end))?;
+                }
+            }
+        }
         // Fronteiras e IDs vêm só do texto original do Motor e dos tempos (estáveis por
         // contrato); o texto de cada Frase vem do texto efetivo (com as correções, #52).
         let mut computed = segment(&words);

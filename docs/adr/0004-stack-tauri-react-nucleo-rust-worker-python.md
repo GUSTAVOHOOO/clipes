@@ -54,3 +54,14 @@ Decisão do dev em 14/11/2026, a partir da [pesquisa de lives longas e contexto 
 O adaptador é próprio, no núcleo Rust, e usa o contexto efetivo do Perfil de Provedor para definir `num_ctx`. O máximo anunciado pelo modelo não prova quanto contexto foi carregado: o núcleo descobre e confere o limite da configuração usada. O tipo `ollama` estende a lista de tipos de Perfil de Provedor do [ADR-0010](0010-perfis-multiplos-de-provedor-tarefa-para-perfil-e-somente-local.md).
 
 É uma exceção para controlar o contexto do Ollama, não uma abertura para formatos nativos de outros servidores. LM Studio, llama.cpp e os demais endpoints compatíveis continuam no formato OpenAI. Valem os mesmos contratos de saída e validação, custo, cancelamento, consentimento e "Somente local"; local continua sendo só loopback. Não há troca automática de Provedor.
+
+## Emenda de 16/11/2026: Pocket TTS como Componente executável no lugar do Kokoro no worker
+
+Decisão do dev em 16/11/2026, a partir do [spike #207](../research/2026-11-16-pocket-tts.md) (PR #212) e da [pesquisa de 24 camadas](../research/2026-11-16-tts-24-camadas.md) (PR #229). O TTS da Narração deixa de rodar como tarefa do worker Python (Kokoro/ONNX Runtime) e passa a usar o **binário Rust oficial `pocket-tts`** (MIT) como **Componente executável** chamado diretamente pelo núcleo via `core::process::spawn_managed` (sem shell), com pesos baixados do mirror sem gate `kyutai/pocket-tts-without-voice-cloning` (CC-BY-4.0) e embeddings de voz prontos em `.safetensors`.
+
+Motivos:
+- evita trazer PyTorch (~740 MiB–2,9 GiB) para o worker Python, preservando o ambiente enxuto do worker para `faster-whisper` e `onnxruntime` (YuNet);
+- o binário oficial já inclui o modelo PT-BR (`portuguese_24l` padrão e `portuguese` 6L leve) e o modelo inglês (`english`), roda em CPU sem exigir GPU NVIDIA e aceita configuração e embeddings locais sem rede em tempo de geração;
+- reutiliza o fluxo existente de Componentes (SHA-256 fixado, licença e termo de uso exibidos antes do download, sem login nem token HF).
+
+O worker Python continua exclusivo para transcrição (`faster-whisper`), VAD/sonda e reenquadramento (`onnxruntime` / YuNet).

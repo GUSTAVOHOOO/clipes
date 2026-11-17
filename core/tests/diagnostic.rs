@@ -2,8 +2,35 @@ use clipes_core::dispatch;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
+static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+struct EnvGuard {
+    _lock: std::sync::MutexGuard<'static, ()>,
+    prev: Option<std::ffi::OsString>,
+}
+
+impl EnvGuard {
+    fn set(dir: &std::path::Path) -> Self {
+        let lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let prev = std::env::var_os("CLIPES_DATA_DIR");
+        std::env::set_var("CLIPES_DATA_DIR", dir);
+        Self { _lock: lock, prev }
+    }
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        match self.prev.take() {
+            Some(v) => std::env::set_var("CLIPES_DATA_DIR", v),
+            None => std::env::remove_var("CLIPES_DATA_DIR"),
+        }
+    }
+}
+
 #[test]
 fn diagnostic_never_echoes_unlisted_input() {
+    let root = tempfile::tempdir().unwrap();
+    let _guard = EnvGuard::set(root.path());
     let result = dispatch("diagnostic.get", json!({"secret":"PRIVATE-KEY", "path":"C:/Users/Alice/private.mp4", "transcript":"PRIVATE-TEXT"}), &mut |_| {}).unwrap();
     let text = result.to_string();
     assert!(!text.contains("PRIVATE"));
@@ -36,7 +63,7 @@ fn diagnostic_never_leaks_transcript_words_after_export_glyph_missing() {
     let root = tempfile::tempdir().unwrap();
     let data = root.path().join("data");
     std::fs::create_dir_all(&data).unwrap();
-    std::env::set_var("CLIPES_DATA_DIR", &data);
+    let _guard = EnvGuard::set(&data);
     dispatch(
         "projects.create",
         json!({"parent": root.path(), "name": "DiagGlifo"}),

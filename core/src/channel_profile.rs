@@ -208,6 +208,23 @@ pub(crate) fn default_language() -> Result<String, CoreError> {
     }
 }
 
+/// Voz de Narração configurada no Perfil de canal (#79), se houver.
+pub(crate) fn configured_narration_voice() -> Result<Option<String>, CoreError> {
+    match projects::with_reader(|c| {
+        c.query_row(
+            "SELECT narration_voice FROM channel_profile WHERE id=1",
+            [],
+            |r| r.get::<_, Option<String>>(0),
+        )
+        .optional()
+    }) {
+        Ok(Some(Some(voice))) if crate::tts::is_valid_voice(&voice) => Ok(Some(voice)),
+        Ok(_) => Ok(None),
+        Err(e) if e.code == "project_not_open" => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
 /// Se o aviso único de monetização do Corte direto (#76) já foi confirmado neste canal.
 pub(crate) fn direct_monetization_ack() -> Result<bool, CoreError> {
     projects::with_reader(|c| {
@@ -280,6 +297,13 @@ fn read_in(c: &Connection) -> rusqlite::Result<Result<ChannelProfile, CoreError>
     }))
 }
 
+fn deserialize_nullable<'de, D>(deserializer: D) -> Result<Option<Option<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<String>::deserialize(deserializer).map(Some)
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SetInput {
@@ -295,8 +319,8 @@ struct SetInput {
     caption_style: Option<Style>,
     #[serde(default)]
     allowed_sources: Option<Vec<AllowedSource>>,
-    #[serde(default)]
-    narration_voice: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_nullable")]
+    narration_voice: Option<Option<String>>,
     #[serde(default)]
     direct_monetization_ack: Option<IgnoredAny>,
     #[serde(default)]
@@ -342,16 +366,30 @@ fn get(_: Value, _: &mut EventSink<'_>) -> CommandResult {
     Ok(json!(profile))
 }
 
+fn validate_narration_voice(voice: Option<String>) -> Result<Option<String>, CoreError> {
+    match voice.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        None => Ok(None),
+        Some(id) => {
+            if crate::tts::is_valid_voice(id) {
+                Ok(Some(id.to_owned()))
+            } else {
+                Err(invalid(
+                    "Voz de Narração desconhecida ou indisponível pela política de licenças do Clipes.",
+                ))
+            }
+        }
+    }
+}
+
 fn set(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let input: SetInput = serde_json::from_value(v).map_err(|_| {
         invalid("Dados do Perfil de canal inválidos. Credenciais sociais e escolha de Provedor não fazem parte do Perfil.")
     })?;
     let _ = (input.limits, input.direct_monetization_ack);
-    if input.narration_voice.is_some() {
-        return Err(invalid(
-            "O campo de voz da Narração fica reservado até a entrada do TTS.",
-        ));
-    }
+    let requested_voice = match input.narration_voice {
+        Some(v) => Some(validate_narration_voice(v)?),
+        None => None,
+    };
 
     let updated = projects::with_writer(|c| {
         let tx = c.transaction()?;
@@ -407,21 +445,28 @@ fn set(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             }
         }
 
+        let narration_voice = match requested_voice {
+            Some(v) => v,
+            None => current.narration_voice,
+        };
+
         tx.execute(
             "INSERT INTO channel_profile (id, video_kind, language, min_us, max_us, allowed_sources, narration_voice)
-             VALUES (1, ?1, ?2, ?3, ?4, ?5, NULL)
+             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT(id) DO UPDATE SET
                video_kind = excluded.video_kind,
                language = excluded.language,
                min_us = excluded.min_us,
                max_us = excluded.max_us,
-               allowed_sources = excluded.allowed_sources",
+               allowed_sources = excluded.allowed_sources,
+               narration_voice = excluded.narration_voice",
             (
                 video_kind.as_str(),
                 &language,
                 min_us,
                 max_us,
                 &allowed_json,
+                &narration_voice,
             ),
         )?;
         let saved = read_in(&tx)?;

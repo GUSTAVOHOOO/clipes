@@ -6,7 +6,7 @@ mod font_cmap;
 pub mod pipeline;
 pub mod render;
 
-use crate::caption_style::{self, store::ClipId, Preset, Style, StyledWord, WordOverride};
+use crate::caption_style::{self, store::ClipId, Style, StyledWord, WordOverride};
 use crate::editor::crop::{self, CropSegment, ResolvedCropPlan};
 use crate::editor::silences::{KeptSegment, SpliceMap};
 use crate::{projects, CommandRegistration, CommandResult, CoreError, EventSink};
@@ -61,6 +61,8 @@ pub(crate) struct StartRequest {
     pub(crate) resolved_crop_plan: Option<ResolvedCropPlan>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) resolved_captions: Option<Vec<FrozenCaptionWord>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) resolved_narration_starts: Option<std::collections::BTreeMap<i64, i64>>,
     // Só o lote (#64) com `confirmed: true` ativa a substituição atômica de destino existente.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub(crate) overwrite: bool,
@@ -163,15 +165,43 @@ fn parse(v: Value) -> Result<ExportRequest, CoreError> {
 
 pub(crate) type FrozenTarget = ((i64, i64), Vec<(i64, i64)>);
 
+fn resolve_clip_id(request: &ExportRequest) -> Result<Option<i64>, CoreError> {
+    if let Some(clip_id) = request.clip_id {
+        return Ok(Some(clip_id));
+    }
+    let Some(candidate_id) = request.candidate_id else {
+        return Ok(None);
+    };
+    projects::with_reader(|c| {
+        c.query_row(
+            "SELECT id FROM clip_edits WHERE identity=?1",
+            [format!("candidate:{candidate_id}")],
+            |r| r.get(0),
+        )
+        .optional()
+    })
+}
+
 pub(crate) fn target(
     request: &ExportRequest,
     frozen: Option<FrozenTarget>,
     frozen_captions: Option<&[FrozenCaptionWord]>,
 ) -> Result<Target, CoreError> {
-    let edited = request
-        .clip_id
-        .map(crate::editor::edits::document)
-        .transpose()?;
+    target_with(request, frozen, frozen_captions, true)
+}
+
+fn target_with(
+    request: &ExportRequest,
+    frozen: Option<FrozenTarget>,
+    frozen_captions: Option<&[FrozenCaptionWord]>,
+    resolve_candidate_edit: bool,
+) -> Result<Target, CoreError> {
+    let clip_id = if resolve_candidate_edit {
+        resolve_clip_id(request)?
+    } else {
+        request.clip_id
+    };
+    let edited = clip_id.map(crate::editor::edits::document).transpose()?;
     if let Some(doc) = &edited {
         if doc.original.source_id != request.source_id
             || doc.original.candidate_id.is_none()
@@ -185,7 +215,7 @@ pub(crate) fn target(
         candidate_id: doc.original.candidate_id,
         start_id: doc.range.start_id,
         end_id: doc.range.end_id,
-        clip_id: request.clip_id,
+        clip_id,
     });
     let request = effective.as_ref().unwrap_or(request);
     if request.start_id <= 0 || request.end_id < request.start_id {
@@ -490,8 +520,9 @@ pub(crate) fn current_path() -> Result<PathBuf, CoreError> {
 
 fn cmd_captions(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let _project = projects::start_job()?;
-    let style = request_style(&v)?;
-    let request = parse(v)?;
+    let mut request = parse(v)?;
+    request.clip_id = resolve_clip_id(&request)?;
+    let style = style_for_clip(request.clip_id)?;
     let target = target(&request, None, None)?;
     let words = captions::sanitize(&target.words)?;
     let prepared = caption_style::prepare(&target.styled, &style, target.output_duration_us)?;
@@ -521,12 +552,8 @@ fn cmd_captions(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 fn style_for_clip(clip_id: Option<i64>) -> Result<Style, CoreError> {
     match clip_id {
         Some(id) => caption_style::store::style(ClipId(id)),
-        None => Ok(Style::preset(Preset::Vertical)),
+        None => projects::with_reader(caption_style::store::default_style_in)?,
     }
-}
-
-fn request_style(v: &Value) -> Result<Style, CoreError> {
-    style_for_clip(v["clip_id"].as_i64())
 }
 
 fn check_target_glyphs(target: &Target, style: &Style) -> Result<(), CoreError> {
@@ -543,6 +570,7 @@ pub(crate) fn prepare_start_request(
     project: &Path,
 ) -> Result<(StartRequest, i64), CoreError> {
     // Ignora qualquer snapshot enviado pela UI; o núcleo resolve o documento atual.
+    request.cut.clip_id = resolve_clip_id(&request.cut)?;
     let resolved = target(&request.cut, None, None)?;
     let style = style_for_clip(request.cut.clip_id)?;
     request.resolved_bounds = request
@@ -554,10 +582,112 @@ pub(crate) fn prepare_start_request(
     request.resolved_crop_plan = resolved.crop_plan.clone();
     request.resolved_captions =
         (resolved.caption_track == "translated").then(|| resolved.frozen_captions());
+    request.resolved_narration_starts = request
+        .cut
+        .clip_id
+        .map(crate::editor::edits::document)
+        .transpose()?
+        .map(|doc| doc.narration_starts);
     render::validate_output_with_overwrite(&request.output, request.overwrite)?;
     let _ = crate::jobs::preview::source(request.cut.source_id, project)?;
     check_target_glyphs(&resolved, &style)?;
-    Ok((request, resolved.output_duration_us))
+    let total_duration_us = resolve_narration_render(
+        request.cut.candidate_id,
+        request.cut.clip_id,
+        &resolved,
+        request.resolved_narration_starts.as_ref(),
+    )?
+    .map_or(resolved.output_duration_us, |n| n.total_duration_us);
+    Ok((request, total_duration_us))
+}
+
+/// Resolve as faixas de Narração e `tpad` final a partir de `montage::audio_mix_plan` e dos
+/// WAVs gravados pelo #79. Retorna `None` quando o Corte não tem Narração sintetizada.
+fn resolve_narration_render(
+    candidate_id: Option<i64>,
+    clip_id: Option<i64>,
+    target: &Target,
+    frozen_starts: Option<&std::collections::BTreeMap<i64, i64>>,
+) -> Result<Option<render::NarrationRenderInput>, CoreError> {
+    let Some(candidate_id) = candidate_id else {
+        return Ok(None);
+    };
+    let Some(script_doc) = crate::script::montage_blocks_readonly(candidate_id)? else {
+        return Ok(None);
+    };
+    let audio_map = crate::tts::block_audio_for_candidate(candidate_id)?;
+    if audio_map.is_empty() {
+        return Ok(None);
+    }
+    let manual_starts = match frozen_starts {
+        Some(starts) => starts.clone(),
+        None => match clip_id {
+            Some(id) => crate::editor::edits::document(id)?.narration_starts,
+            None => std::collections::BTreeMap::new(),
+        },
+    };
+    let sentences = crate::montage::load_transcript_sentences(target.transcript)?;
+    let splice = SpliceMap::new(target.start_us, target.end_us, &target.active_cuts);
+    let blocks: Vec<crate::montage::MontageBlockInput> = script_doc
+        .blocks
+        .into_iter()
+        .map(|b| {
+            let (duration_us, estimated) = match audio_map.get(&b.id) {
+                Some(audio) => (audio.duration_us, false),
+                None => (
+                    b.narration
+                        .as_deref()
+                        .map_or(0, crate::montage::estimate_block_duration_us),
+                    true,
+                ),
+            };
+            crate::montage::MontageBlockInput {
+                block_id: b.id,
+                position: b.position,
+                title: b.title,
+                refs: b.refs,
+                duration_us,
+                estimated,
+            }
+        })
+        .collect();
+    let plan = crate::montage::resolve(&crate::montage::MontageInput {
+        blocks: &blocks,
+        sentences: &sentences,
+        splice: &splice,
+        manual_starts: &manual_starts,
+    })?;
+    let mix = crate::montage::audio_mix_plan(&plan);
+    let tracks: Vec<render::NarrationTrackInput> = mix
+        .segments
+        .into_iter()
+        .filter_map(|seg| {
+            audio_map
+                .get(&seg.block_id)
+                .map(|audio| render::NarrationTrackInput {
+                    path: audio.path.clone(),
+                    start_us: seg.start_us,
+                    duration_us: audio.duration_us,
+                })
+        })
+        .collect();
+    if tracks.is_empty() {
+        return Ok(None);
+    }
+    let narration_end_us = tracks
+        .iter()
+        .map(|t| t.start_us + t.duration_us)
+        .max()
+        .unwrap_or(0);
+    let clip_duration_us = mix.clip_duration_us;
+    let freeze_tail_us = (narration_end_us - clip_duration_us).max(0);
+    let total_duration_us = clip_duration_us + freeze_tail_us;
+    Ok(Some(render::NarrationRenderInput {
+        tracks,
+        clip_duration_us,
+        freeze_tail_us,
+        total_duration_us,
+    }))
 }
 
 pub(crate) fn enqueue_tx(
@@ -623,11 +753,7 @@ fn cmd_status(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 }
 
 fn settings_path() -> Result<PathBuf, CoreError> {
-    std::env::var_os("CLIPES_DATA_DIR")
-        .map(PathBuf::from)
-        .or_else(|| dirs::data_local_dir().map(|p| p.join("Clipes")))
-        .map(|p| p.join("export-settings.json"))
-        .ok_or_else(failed)
+    crate::paths::config_file("export-settings.json").map_err(|_| failed())
 }
 pub(crate) fn save_directory(path: &Path) -> Result<(), CoreError> {
     let target = settings_path()?;
@@ -659,15 +785,25 @@ pub(crate) fn run(
                 r.get(0)
             })
         })?;
-        let encoded: Value = serde_json::from_str(&request).map_err(|_| failed())?;
-        let style = request_style(&encoded)?;
-        let request: StartRequest = serde_json::from_value(encoded).map_err(|_| failed())?;
+        let request: StartRequest = serde_json::from_str(&request).map_err(|_| failed())?;
+        let style = style_for_clip(request.cut.clip_id)?;
         let frozen = request
             .resolved_bounds
             .map(|b| (b, request.resolved_silences.clone().unwrap_or_default()));
-        let target = target(&request.cut, frozen, request.resolved_captions.as_deref())?;
+        let target = target_with(
+            &request.cut,
+            frozen,
+            request.resolved_captions.as_deref(),
+            false,
+        )?;
         check_target_glyphs(&target, &style)?;
         let prepared = caption_style::prepare(&target.styled, &style, target.output_duration_us)?;
+        let narration = resolve_narration_render(
+            request.cut.candidate_id,
+            request.cut.clip_id,
+            &target,
+            request.resolved_narration_starts.as_ref(),
+        )?;
         let (source, _, audio, _, _) =
             crate::jobs::preview::source(request.cut.source_id, project)?;
         let ffmpeg = crate::components::cache_settings()?
@@ -701,7 +837,7 @@ pub(crate) fn run(
                 }
             });
             let mut last = 0;
-            let result = encoder::render_styled_spliced_crop_plan_with_fallback_overwrite(
+            let result = encoder::render_styled_spliced_crop_plan_narration_with_fallback_overwrite(
                 &ffmpeg,
                 &input,
                 &target.segments,
@@ -709,6 +845,7 @@ pub(crate) fn run(
                 &preferred,
                 request.overwrite,
                 crop_plan.as_ref(),
+                narration.as_ref(),
                 &cancel,
                 &mut |percentage| {
                     if percentage > last {
