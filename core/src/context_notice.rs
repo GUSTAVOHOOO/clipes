@@ -16,7 +16,7 @@
 use crate::diagnostic::{DiagnosticField, DiagnosticKind};
 use crate::selection_windows::{
     plan_for_profile, PlanState, ProfileRequest, DEFAULT_OUTPUT_RESERVE, DEFAULT_OVERLAP_US,
-    DEFAULT_REASONING_RESERVE, MIN_WINDOW_FACTOR, WINDOW_MAX_US,
+    DEFAULT_REASONING_RESERVE, MIN_REQUEST_LIMITED_WINDOW_FACTOR, MIN_WINDOW_FACTOR, WINDOW_MAX_US,
 };
 use crate::sentences::Sentence;
 use crate::{provider, CommandRegistration, CommandResult, EventSink};
@@ -118,9 +118,21 @@ fn selection_state(args: Value, _: &mut EventSink<'_>) -> CommandResult {
         reasoning_reserve: DEFAULT_REASONING_RESERVE,
         max_cut_us: DEFAULT_OVERLAP_US,
     };
-    let (state, windows) = match plan_for_profile(&request, &frases) {
-        Ok(plan) => (plan.state, Some(plan.windows)),
-        Err(e) if e.code == "context_too_small" => (PlanState::Blocked, None),
+    let (state, windows, min_window_us) = match plan_for_profile(&request, &frases) {
+        Ok(plan) => (plan.state, Some(plan.windows), plan.min_window_us),
+        Err(e) if e.code == "context_too_small" => {
+            let limited_by_request = [context.tokens_per_request, context.tokens_per_minute]
+                .into_iter()
+                .flatten()
+                .min()
+                .is_some_and(|cap| cap < context.value);
+            let factor = if limited_by_request {
+                MIN_REQUEST_LIMITED_WINDOW_FACTOR
+            } else {
+                MIN_WINDOW_FACTOR
+            };
+            (PlanState::Blocked, None, DEFAULT_OVERLAP_US * factor)
+        }
         Err(e) => return Err(e),
     };
     let minutes = |us: i64| us as f64 / 60_000_000.0;
@@ -143,7 +155,7 @@ fn selection_state(args: Value, _: &mut EventSink<'_>) -> CommandResult {
         "reference": {
             "sourceMinutes": REFERENCE_SOURCE_MINUTES,
             "maxWindowMinutes": WINDOW_MAX_US / 60_000_000,
-            "minWindowMinutes": DEFAULT_OVERLAP_US * MIN_WINDOW_FACTOR / 60_000_000,
+            "minWindowMinutes": min_window_us / 60_000_000,
             "firstWindowMinutes": first,
             "windows": windows_count,
         },

@@ -3,6 +3,10 @@ use super::*;
 use reqwest::blocking::{Client, RequestBuilder};
 
 const OLLAMA_DEFAULT_CONTEXT: u64 = 4096;
+const MAX_RATE_LIMIT_RETRIES: u64 = 3;
+const MAX_RETRY_WAIT: Duration = Duration::from_secs(90);
+/// Reset delays above 10 minutes (with 1 s rounding margin for HTTP-date) indicate a daily quota.
+const DAILY_RESET_THRESHOLD: Duration = Duration::from_secs(601);
 #[derive(Clone, Copy)]
 enum Kind {
     OpenAi,
@@ -103,20 +107,172 @@ provider!(OllamaProvider, Ollama, "ollama");
 pub(super) struct Reply {
     pub(super) status: u16,
     pub(super) retry_after: Option<String>,
+    pub(super) reset_tokens: Option<String>,
+    pub(super) reset_requests: Option<String>,
+    pub(super) remaining_tokens: Option<u64>,
+    pub(super) remaining_requests: Option<u64>,
     pub(super) body: Result<Vec<u8>, reqwest::Error>,
 }
 
-fn retry_delay(reply: &Reply) -> Option<u64> {
-    reply.retry_after.as_deref().and_then(|v| {
-        v.parse::<u64>().ok().or_else(|| {
-            httpdate::parse_http_date(v).ok().map(|date| {
-                date.duration_since(std::time::SystemTime::now())
-                    .unwrap_or_default()
-                    .as_secs()
-                    .saturating_add(1)
-            })
+/// Parses plain seconds (integer/float) or Go-style durations (`7.66s`, `2m59.56s`, `1h2m3s`).
+fn parse_duration_header(value: &str) -> Option<Duration> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Ok(secs) = trimmed.parse::<f64>() {
+        if secs.is_finite() && (0.0..=86_400_000.0).contains(&secs) {
+            return Some(Duration::from_secs_f64(secs));
+        }
+        return None;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    let bytes = lower.as_bytes();
+    let mut i = 0;
+    let mut total_secs = 0.0_f64;
+    let mut segments = 0_usize;
+    while i < bytes.len() {
+        let num_start = i;
+        while i < bytes.len() && (bytes[i].is_ascii_digit() || bytes[i] == b'.') {
+            i += 1;
+        }
+        if i == num_start {
+            return None;
+        }
+        let num: f64 = lower[num_start..i].parse().ok()?;
+        if !num.is_finite() || num < 0.0 {
+            return None;
+        }
+        let unit_start = i;
+        while i < bytes.len() && bytes[i].is_ascii_alphabetic() {
+            i += 1;
+        }
+        let multiplier = match &lower[unit_start..i] {
+            "ms" => 0.001,
+            "s" => 1.0,
+            "m" => 60.0,
+            "h" => 3600.0,
+            "d" => 86400.0,
+            _ => return None,
+        };
+        total_secs += num * multiplier;
+        segments += 1;
+    }
+    (segments > 0 && total_secs.is_finite() && (0.0..=86_400_000.0).contains(&total_secs))
+        .then(|| Duration::from_secs_f64(total_secs))
+}
+
+fn parse_retry_after(value: &str) -> Option<Duration> {
+    parse_duration_header(value).or_else(|| {
+        httpdate::parse_http_date(value.trim()).ok().map(|date| {
+            let diff = date
+                .duration_since(std::time::SystemTime::now())
+                .unwrap_or_default();
+            Duration::from_secs(diff.as_secs().saturating_add(1))
         })
     })
+}
+
+fn retry_delay(reply: &Reply) -> Option<u64> {
+    reply
+        .retry_after
+        .as_deref()
+        .and_then(parse_retry_after)
+        .map(|d| d.as_secs())
+}
+
+fn has_word(haystack: &str, word: &str) -> bool {
+    let bytes = haystack.as_bytes();
+    let mut offset = 0;
+    while let Some(pos) = haystack[offset..].find(word) {
+        let start = offset + pos;
+        let end = start + word.len();
+        let before_ok = start == 0 || !bytes[start - 1].is_ascii_alphanumeric();
+        let after_ok = end == bytes.len() || !bytes[end].is_ascii_alphanumeric();
+        if before_ok && after_ok {
+            return true;
+        }
+        offset = start + word.len();
+    }
+    false
+}
+
+fn body_indicates_daily_limit(reply: &Reply) -> bool {
+    let Ok(bytes) = &reply.body else {
+        return false;
+    };
+    let lower = String::from_utf8_lossy(bytes).to_ascii_lowercase();
+    lower.contains("per day")
+        || lower.contains("daily limit")
+        || has_word(&lower, "tpd")
+        || has_word(&lower, "rpd")
+}
+
+struct RateLimitInfo {
+    delay: Option<Duration>,
+    daily: bool,
+    reset_at_ms: Option<u64>,
+}
+
+fn rate_limit_info(reply: &Reply) -> RateLimitInfo {
+    let retry_after = reply.retry_after.as_deref().and_then(parse_retry_after);
+    let reset_tokens = reply
+        .reset_tokens
+        .as_deref()
+        .and_then(parse_duration_header);
+    let reset_requests = reply
+        .reset_requests
+        .as_deref()
+        .and_then(parse_duration_header);
+    let tokens_active = reply.remaining_tokens == Some(0) || retry_after.is_none();
+    let requests_active = reply.remaining_requests == Some(0)
+        || (retry_after.is_none() && reset_tokens.is_none() && reply.remaining_requests.is_none());
+    let delay = [
+        retry_after,
+        tokens_active.then_some(reset_tokens).flatten(),
+        requests_active.then_some(reset_requests).flatten(),
+    ]
+    .into_iter()
+    .flatten()
+    .max();
+    let daily = body_indicates_daily_limit(reply)
+        || delay.is_some_and(|d| d > DAILY_RESET_THRESHOLD)
+        || (reply.remaining_tokens == Some(0)
+            && reset_tokens.is_some_and(|d| d > DAILY_RESET_THRESHOLD))
+        || (reply.remaining_requests == Some(0)
+            && reset_requests.is_some_and(|d| d > DAILY_RESET_THRESHOLD));
+    let reset_delay = if daily {
+        [
+            delay,
+            reply
+                .remaining_requests
+                .is_none_or(|r| r == 0)
+                .then_some(reset_requests)
+                .flatten(),
+            reply
+                .remaining_tokens
+                .is_none_or(|r| r == 0)
+                .then_some(reset_tokens)
+                .flatten(),
+            retry_after,
+        ]
+        .into_iter()
+        .flatten()
+        .max()
+    } else {
+        delay
+    };
+    let reset_at_ms = daily
+        .then_some(reset_delay)
+        .flatten()
+        .and_then(|d| std::time::SystemTime::now().checked_add(d))
+        .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64);
+    RateLimitInfo {
+        delay,
+        daily,
+        reset_at_ms,
+    }
 }
 
 /// Sends the request on a helper thread and waits for it in short slices. On cancellation
@@ -127,14 +283,34 @@ pub(super) fn send_cancellable(
 ) -> Result<Result<Reply, reqwest::Error>, CoreError> {
     let (sender, receiver) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let reply = call.send().map(|response| Reply {
-            status: response.status().as_u16(),
-            retry_after: response
+        let reply = call.send().map(|response| {
+            let header_str = |name: &str| {
+                response
+                    .headers()
+                    .get(name)
+                    .and_then(|v| v.to_str().ok())
+                    .map(str::to_owned)
+            };
+            let header_u64 = |name: &str| header_str(name).and_then(|v| v.trim().parse().ok());
+            let status = response.status().as_u16();
+            let retry_after = response
                 .headers()
                 .get(reqwest::header::RETRY_AFTER)
                 .and_then(|v| v.to_str().ok())
-                .map(str::to_owned),
-            body: response.bytes().map(|b| b.to_vec()),
+                .map(str::to_owned);
+            let reset_tokens = header_str("x-ratelimit-reset-tokens");
+            let reset_requests = header_str("x-ratelimit-reset-requests");
+            let remaining_tokens = header_u64("x-ratelimit-remaining-tokens");
+            let remaining_requests = header_u64("x-ratelimit-remaining-requests");
+            Reply {
+                status,
+                retry_after,
+                reset_tokens,
+                reset_requests,
+                remaining_tokens,
+                remaining_requests,
+                body: response.bytes().map(|b| b.to_vec()),
+            }
         });
         let _ = sender.send(reply);
     });
@@ -233,6 +409,16 @@ impl Adapter {
     }
     /// An HTTP failure whose body reports token usage was billed: carry `{usage, calls}`.
     fn http_failure(&self, reply: &Reply, code: &str, message: &str, calls: u64) -> CoreError {
+        self.http_failure_with_reset(reply, code, message, calls, None)
+    }
+    fn http_failure_with_reset(
+        &self,
+        reply: &Reply,
+        code: &str,
+        message: &str,
+        calls: u64,
+        reset_at_ms: Option<u64>,
+    ) -> CoreError {
         let mut e = error(code, message);
         let usage = reply
             .body
@@ -241,8 +427,13 @@ impl Adapter {
             .and_then(|bytes| serde_json::from_slice::<Value>(bytes).ok())
             .map(|body| self.capabilities.usage_of(&body))
             .filter(|(i, o)| i.is_some() || o.is_some());
-        if let Some((i, o)) = usage {
-            e.usage = Some(json!({"usage":usage_value(i, o),"calls":calls}));
+        if usage.is_some() || reset_at_ms.is_some() {
+            let usage_json = usage.map_or(Value::Null, |(i, o)| usage_value(i, o));
+            let mut info = json!({"usage":usage_json,"calls":calls});
+            if let Some(ms) = reset_at_ms {
+                info["resetAtMs"] = json!(ms);
+            }
+            e.usage = Some(info);
         }
         e
     }
@@ -298,7 +489,7 @@ impl Adapter {
         let payload = serde_json::to_vec(body)
             .map_err(|_| error("invalid_request", "Invalid structured request"))?;
         let input_sha256 = cost::sha256_hex(&payload);
-        for attempt in 0..3 {
+        for attempt in 0..=MAX_RATE_LIMIT_RETRIES {
             if cancel.is_cancelled() {
                 return Err(cancelled());
             }
@@ -324,6 +515,7 @@ impl Adapter {
                 Ok(Ok(reply)) => {
                     let code = match reply.status {
                         429 => "rate_limit",
+                        413 => "request_too_large",
                         200..=299 => "ok",
                         _ => "provider_http",
                     };
@@ -376,33 +568,60 @@ impl Adapter {
                 Err(_) => return Err(error("network", "Could not reach provider")),
             };
             let calls = attempt + 1;
-            if reply.status == 429 && attempt < 2 {
-                let delay = retry_delay(&reply).ok_or_else(|| {
-                    self.http_failure(
+            if matches!(reply.status, 413 | 429) {
+                let info = rate_limit_info(&reply);
+                if info.daily {
+                    if let Some(last) = log.last_mut() {
+                        last["code"] = json!("provider_daily_limit");
+                    }
+                    return Err(self.http_failure_with_reset(
                         &reply,
-                        "rate_limit",
-                        "Provider did not specify a valid retry delay",
+                        "provider_daily_limit",
+                        "Provider daily limit reached",
                         calls,
-                    )
-                })?;
-                if delay > 30 {
+                        info.reset_at_ms,
+                    ));
+                }
+                if reply.status == 413 && info.delay.is_none() {
                     return Err(self.http_failure(
                         &reply,
-                        "rate_limit",
-                        "Provider requested a longer retry delay",
+                        "request_too_large",
+                        "Request exceeds provider size limit",
                         calls,
                     ));
                 }
-                sleep(Duration::from_secs(delay), cancel)?;
-                continue;
-            }
-            if reply.status == 429 {
-                return Err(self.http_failure(
-                    &reply,
-                    "rate_limit",
-                    "Provider rate limit exceeded",
-                    calls,
-                ));
+                if attempt < MAX_RATE_LIMIT_RETRIES {
+                    let Some(delay) = info.delay else {
+                        return Err(self.http_failure(
+                            &reply,
+                            "rate_limit",
+                            "Provider did not specify a valid retry delay",
+                            calls,
+                        ));
+                    };
+                    if delay > MAX_RETRY_WAIT {
+                        let (code, message) = if reply.status == 413 {
+                            ("request_too_large", "Request exceeds provider size limit")
+                        } else {
+                            ("rate_limit", "Provider requested a longer retry delay")
+                        };
+                        return Err(self.http_failure(&reply, code, message, calls));
+                    }
+                    if let Some(last) = log.last_mut() {
+                        last["rateLimitRetry"] = json!(true);
+                        if reply.status == 413 {
+                            last["code"] = json!("rate_limit");
+                        }
+                    }
+                    sleep(delay, cancel)?;
+                    continue;
+                }
+                let (code, message) = if reply.status == 413 {
+                    ("request_too_large", "Request exceeds provider size limit")
+                } else {
+                    ("rate_limit", "Provider rate limit exceeded")
+                };
+                return Err(self.http_failure(&reply, code, message, calls));
             }
             if !(200..300).contains(&reply.status) {
                 return Err(self.http_failure(
@@ -511,8 +730,16 @@ impl Adapter {
                             );
                         }
                         if info.is_some() {
-                            e.usage =
-                                Some(json!({"usage":usage_value(input, output),"calls":calls}));
+                            let mut next =
+                                json!({"usage":usage_value(input, output),"calls":calls});
+                            if let Some(reset) = info
+                                .as_ref()
+                                .and_then(|v| v.get("resetAtMs"))
+                                .filter(|v| !v.is_null())
+                            {
+                                next["resetAtMs"] = reset.clone();
+                            }
+                            e.usage = Some(next);
                         }
                         return Err(e);
                     }
@@ -602,5 +829,33 @@ impl Adapter {
             messages.push(json!({"role":"user","content":"Repair the previous response to match the schema. Return only JSON."}));
         }
         unreachable!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_groq_duration_reset_headers() {
+        assert_eq!(parse_duration_header("0"), Some(Duration::ZERO));
+        assert_eq!(
+            parse_duration_header("500ms"),
+            Some(Duration::from_millis(500))
+        );
+        assert_eq!(
+            parse_duration_header("7.66s"),
+            Some(Duration::from_secs_f64(7.66))
+        );
+        assert_eq!(
+            parse_duration_header("2m59.56s"),
+            Some(Duration::from_secs_f64(179.56))
+        );
+        assert_eq!(
+            parse_duration_header("1h2m3s"),
+            Some(Duration::from_secs(3723))
+        );
+        assert_eq!(parse_duration_header(""), None);
+        assert_eq!(parse_duration_header("abc"), None);
     }
 }

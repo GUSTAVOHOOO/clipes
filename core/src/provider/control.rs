@@ -92,7 +92,8 @@ pub(crate) fn before_call(request: &StructuredRequest, log: &[Value]) -> Result<
         let Some(scope) = scope else {
             return Ok(Value::Null);
         };
-        if scope.limit.is_some_and(|max| log.len() as u64 >= max) {
+        let counted = log.iter().filter(|e| e["rateLimitRetry"] != true).count() as u64;
+        if scope.limit.is_some_and(|max| counted >= max) {
             return Err(error("budget_calls", "Call budget reached before sending"));
         }
         match &scope.guard {

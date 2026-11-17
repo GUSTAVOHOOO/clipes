@@ -146,7 +146,7 @@ fn token_calibration_diagnostic() -> String {
 inventory::submit! { crate::diagnostic::DiagnosticField { kind: crate::diagnostic::DiagnosticKind::TokenCalibration, value: token_calibration_diagnostic } }
 pub(crate) use context::effective_cached;
 pub use settings::{output_reserve, run_structured};
-pub(crate) use settings::{profile_infos, routed, Routed};
+pub(crate) use settings::{profile_endpoint, profile_infos, routed, Routed};
 
 mod settings {
     use super::*;
@@ -213,6 +213,12 @@ mod settings {
         /// Timeout in seconds the user sets for this profile (#147); absent uses the default.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         timeout_secs: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tokens_per_request: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tokens_per_minute: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tokens_per_day: Option<u64>,
     }
     impl Profile {
         fn account(&self) -> String {
@@ -243,6 +249,9 @@ mod settings {
             context: None,
             max_output: None,
             timeout_secs: None,
+            tokens_per_request: None,
+            tokens_per_minute: None,
+            tokens_per_day: None,
         }]
     }
     fn find(settings: &Settings, id: &str) -> Option<Profile> {
@@ -285,6 +294,12 @@ mod settings {
         let settings = read()?;
         Ok(profiles(&settings).iter().map(ProfileInfo::from).collect())
     }
+    /// Endpoint of a saved profile by id, used to resolve host-specific catalog entries.
+    pub(crate) fn profile_endpoint(id: &str) -> Option<String> {
+        let _guard = locked().ok()?;
+        let settings = read().ok()?;
+        find(&settings, id).map(|p| p.endpoint)
+    }
     /// What context discovery (#143) needs about one profile. The key is read separately,
     /// after the vetoes, so a skipped probe never touches the vault.
     pub(super) struct ContextTarget {
@@ -294,6 +309,8 @@ mod settings {
         pub model: String,
         pub user_context: Option<u64>,
         pub user_max_output: Option<u64>,
+        pub tokens_per_request: Option<u64>,
+        pub tokens_per_minute: Option<u64>,
         pub native_schema: bool,
         pub confirmed: bool,
         pub timeouts: Timeouts,
@@ -373,6 +390,8 @@ mod settings {
             model: profile.model,
             user_context: profile.context,
             user_max_output: profile.max_output,
+            tokens_per_request: profile.tokens_per_request,
+            tokens_per_minute: profile.tokens_per_minute,
             native_schema: profile.native_schema,
             timeouts: settings.timeouts,
         }
@@ -387,7 +406,7 @@ mod settings {
     }
     enum Picked {
         Cli(String),
-        Profile(Profile),
+        Profile(Box<Profile>),
     }
     /// Resolves the destination of one call and applies the per-task "local only" veto before
     /// the consent check, the vault and any network access. Locality is computed here, at
@@ -436,14 +455,14 @@ mod settings {
         if local_only && !is_loopback_endpoint(&profile.endpoint) {
             return Err(local_only_violation());
         }
-        Ok(Picked::Profile(profile))
+        Ok(Picked::Profile(Box::new(profile)))
     }
     pub(crate) fn routed(task: Option<&str>, explicit: Option<&str>) -> Result<Routed, CoreError> {
         Ok(match pick_target(task, explicit)? {
             Picked::Cli(kind) => Routed::Cli(kind),
             Picked::Profile(p) => Routed::Api {
                 local: is_loopback_endpoint(&p.endpoint),
-                profile: ProfileInfo::from(&p),
+                profile: ProfileInfo::from(&*p),
             },
         })
     }
@@ -549,7 +568,7 @@ mod settings {
         };
         let remote = !is_local_endpoint(&p.endpoint).unwrap_or(false);
         let key = metadata(settings, &p.account());
-        json!({"profileId":p.id, "endpoint":p.endpoint, "model":p.model, "kind":p.kind, "nativeSchema":p.native_schema, "context":p.context, "maxOutput":p.max_output, "timeoutSecs":p.timeout_secs, "limits":limits_view(settings, p), "timeouts":settings.timeouts.effective(), "keyLastFour":key.key_last_four, "remote":remote, "confirmed":metadata(settings, &p.endpoint).confirmed})
+        json!({"profileId":p.id, "endpoint":p.endpoint, "model":p.model, "kind":p.kind, "nativeSchema":p.native_schema, "context":p.context, "maxOutput":p.max_output, "timeoutSecs":p.timeout_secs, "tokensPerRequest":p.tokens_per_request, "tokensPerMinute":p.tokens_per_minute, "tokensPerDay":p.tokens_per_day, "limits":limits_view(settings, p), "timeouts":settings.timeouts.effective(), "keyLastFour":key.key_last_four, "remote":remote, "confirmed":metadata(settings, &p.endpoint).confirmed})
     }
     fn status(args: Value, _: &mut EventSink<'_>) -> CommandResult {
         let _guard = locked()?;
@@ -572,15 +591,27 @@ mod settings {
             0,
             None,
         );
+        let catalog = super::cost::price_for_endpoint(&p.kind, &p.endpoint, &p.model)
+            .ok()
+            .flatten()
+            .map(|(price, _)| price);
+        let rate_entry = |profile_val: Option<u64>, catalog_val: Option<u64>| {
+            profile_val
+                .map(|value| json!({"value": value, "source": "profile"}))
+                .or_else(|| catalog_val.map(|value| json!({"value": value, "source": "catalog"})))
+        };
         json!({
             "maxOutput": {"value": output.tokens, "source": output.source},
             "timeout": {"seconds": timeout.duration.as_secs(), "source": timeout.source},
             "timeoutMsPer1kInputTokens": super::limits::TIMEOUT_MS_PER_1K_INPUT_TOKENS,
             "minUsefulOutput": super::limits::MIN_USEFUL_OUTPUT_TOKENS,
+            "tokensPerRequest": rate_entry(p.tokens_per_request, catalog.as_ref().and_then(|c| c.tokens_per_request)),
+            "tokensPerMinute": rate_entry(p.tokens_per_minute, catalog.as_ref().and_then(|c| c.tokens_per_minute)),
+            "tokensPerDay": rate_entry(p.tokens_per_day, catalog.as_ref().and_then(|c| c.tokens_per_day)),
         })
     }
     fn profile_view(settings: &Settings, p: &Profile) -> Value {
-        let price = super::cost::price_for(&p.kind, &p.model)
+        let price = super::cost::price_for_endpoint(&p.kind, &p.endpoint, &p.model)
             .ok()
             .flatten()
             .map(|(price, source)| {
@@ -590,6 +621,8 @@ mod settings {
             "id": p.id, "label": p.label, "kind": p.kind, "endpoint": p.endpoint,
             "model": p.model, "nativeSchema": p.native_schema, "context": p.context,
             "maxOutput": p.max_output, "timeoutSecs": p.timeout_secs,
+            "tokensPerRequest": p.tokens_per_request, "tokensPerMinute": p.tokens_per_minute,
+            "tokensPerDay": p.tokens_per_day,
             "limits": limits_view(settings, p),
             "ownKey": p.vault_account.is_some(),
             "keyLastFour": metadata(settings, &p.account()).key_last_four,
@@ -683,30 +716,45 @@ mod settings {
             Some(false) => stale = vault_account.take(),
             None => {}
         }
-        let context = match args.get("context") {
-            None => existing.and_then(|i| list[i].context),
-            Some(Value::Null) => None,
-            Some(value) => Some(
-                value
-                    .as_u64()
-                    .filter(|n| *n > 0 && *n <= u32::MAX as u64)
-                    .ok_or_else(|| error("invalid_settings", "Invalid context"))?,
-            ),
+        let parse_limit = |field: &str, existing_val: Option<u64>, msg: &str| match args.get(field)
+        {
+            None => Ok(existing_val),
+            Some(Value::Null) => Ok(None),
+            Some(value) => value
+                .as_u64()
+                .filter(|n| *n > 0 && *n <= u32::MAX as u64)
+                .map(Some)
+                .ok_or_else(|| error("invalid_settings", msg)),
         };
-        let max_output = match args.get("maxOutput") {
-            None => existing.and_then(|i| list[i].max_output),
-            Some(Value::Null) => None,
-            Some(value) => Some(
-                value
-                    .as_u64()
-                    .filter(|n| *n > 0 && *n <= u32::MAX as u64)
-                    .ok_or_else(|| error("invalid_settings", "Invalid max output"))?,
-            ),
-        };
+        let context = parse_limit(
+            "context",
+            existing.and_then(|i| list[i].context),
+            "Invalid context",
+        )?;
+        let max_output = parse_limit(
+            "maxOutput",
+            existing.and_then(|i| list[i].max_output),
+            "Invalid max output",
+        )?;
         let timeout_secs = match args.get("timeoutSecs") {
             None => existing.and_then(|i| list[i].timeout_secs),
             Some(value) => super::control::parse_seconds(value)?,
         };
+        let tokens_per_request = parse_limit(
+            "tokensPerRequest",
+            existing.and_then(|i| list[i].tokens_per_request),
+            "Invalid tokens per request",
+        )?;
+        let tokens_per_minute = parse_limit(
+            "tokensPerMinute",
+            existing.and_then(|i| list[i].tokens_per_minute),
+            "Invalid tokens per minute",
+        )?;
+        let tokens_per_day = parse_limit(
+            "tokensPerDay",
+            existing.and_then(|i| list[i].tokens_per_day),
+            "Invalid tokens per day",
+        )?;
         let profile = Profile {
             id: target.into(),
             label,
@@ -721,6 +769,9 @@ mod settings {
             context,
             max_output,
             timeout_secs,
+            tokens_per_request,
+            tokens_per_minute,
+            tokens_per_day,
         };
         match existing {
             Some(i) => list[i] = profile,
@@ -948,7 +999,7 @@ mod settings {
                 return crate::provider_cli::CliProvider(kind, timeout)
                     .structured_with(&request, cancel);
             }
-            Picked::Profile(profile) => profile,
+            Picked::Profile(profile) => *profile,
         };
         let settings = {
             let _guard = locked()?;

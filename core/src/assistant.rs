@@ -320,20 +320,23 @@ fn tasks(_: Value, _: &mut EventSink<'_>) -> CommandResult {
         read()?
     };
     let infos = crate::provider::profile_infos()?;
-    let cost_of = |kind: &str, model: &str, local: bool| -> Result<Value, CoreError> {
-        if local {
-            return Ok(json!({"kind": "zero"}));
-        }
-        Ok(match crate::provider::cost::price_for(kind, model)? {
-            None => json!({"kind": "unknown"}),
-            Some((price, source)) => json!({
-                "kind": "usd",
-                "inputPerMillion": price.input_per_million,
-                "outputPerMillion": price.output_per_million,
-                "priceSource": source,
-            }),
-        })
-    };
+    let cost_of =
+        |kind: &str, endpoint: &str, model: &str, local: bool| -> Result<Value, CoreError> {
+            if local {
+                return Ok(json!({"kind": "zero"}));
+            }
+            Ok(
+                match crate::provider::cost::price_for_endpoint(kind, endpoint, model)? {
+                    None => json!({"kind": "unknown"}),
+                    Some((price, source)) => json!({
+                        "kind": "usd",
+                        "inputPerMillion": price.input_per_million,
+                        "outputPerMillion": price.output_per_million,
+                        "priceSource": source,
+                    }),
+                },
+            )
+        };
     let from_profile = |id: &str| -> Result<Option<Value>, CoreError> {
         let Some(p) = infos.iter().find(|p| p.id == id) else {
             return Ok(None);
@@ -341,7 +344,7 @@ fn tasks(_: Value, _: &mut EventSink<'_>) -> CommandResult {
         let local = crate::provider::is_loopback_endpoint(&p.endpoint);
         Ok(Some(json!({
             "id": p.id, "label": p.label, "kind": p.kind, "model": p.model,
-            "local": local, "cli": false, "cost": cost_of(&p.kind, &p.model, local)?,
+            "local": local, "cli": false, "cost": cost_of(&p.kind, &p.endpoint, &p.model, local)?,
         })))
     };
     let target = |choice: &str| -> Result<Option<Value>, CoreError> {

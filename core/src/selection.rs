@@ -818,6 +818,11 @@ impl WindowRow {
             .unwrap_or(fallback)
             .to_owned()
     }
+    fn reset_at_ms(&self) -> Option<u64> {
+        matches!(self.outcome(), Outcome::Failed(_))
+            .then(|| self.result.as_ref().and_then(|r| r["resetAtMs"].as_u64()))
+            .flatten()
+    }
 }
 
 fn read_windows(run: i64) -> Result<Vec<WindowRow>, CoreError> {
@@ -908,14 +913,29 @@ fn emit(run: i64, step: &str, percentage: u8, message: &str, error: Option<CoreE
 
 /// Chamado pela fila depois de cada job `ai:selection`.
 pub(crate) fn on_job_settled(job: i64) {
-    let run = projects::with_reader(|c| {
+    let info = projects::with_reader(|c| {
         c.query_row(
-            "SELECT run_id FROM selection_windows WHERE job_id=?1",
+            "SELECT w.run_id, j.state, json_extract(j.result,'$.code') FROM selection_windows w JOIN jobs j ON j.id=w.job_id WHERE w.job_id=?1",
             [job],
-            |r| r.get::<_, i64>(0),
+            |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, Option<String>>(2)?,
+                ))
+            },
         )
     });
-    if let Ok(run) = run {
+    if let Ok((run, state, code)) = info {
+        if state == "failed" && code.as_deref() == Some("provider_daily_limit") {
+            let _ = projects::with_writer(|c| {
+                c.execute(
+                    "UPDATE jobs SET state='cancelled' WHERE state='queued' AND id IN (SELECT job_id FROM selection_windows WHERE run_id=?1 AND job_id IS NOT NULL)",
+                    [run],
+                )?;
+                Ok(())
+            });
+        }
         let _ = advance(run);
     }
 }
@@ -1455,7 +1475,7 @@ fn run_json(run: i64, revision: Option<i64>) -> Result<Value, CoreError> {
                 Outcome::Failed(code) => Value::String(code),
                 _ => Value::Null,
             };
-            json!({"index": w.idx, "firstId": w.first_id, "lastId": w.last_id, "startUs": w.start_us, "endUs": w.end_us, "jobId": w.job_id, "state": w.state(), "code": code, "profile": w.effective().profile, "redoFailed": w.effective().redo_failed})
+            json!({"index": w.idx, "firstId": w.first_id, "lastId": w.last_id, "startUs": w.start_us, "endUs": w.end_us, "jobId": w.job_id, "state": w.state(), "code": code, "resetAtMs": w.reset_at_ms(), "profile": w.effective().profile, "redoFailed": w.effective().redo_failed})
         })
         .collect();
     let candidates = projects::with_reader(|c| {

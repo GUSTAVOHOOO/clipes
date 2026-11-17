@@ -34,6 +34,8 @@ fn input(spans: &[SentenceSpan], ctx: u64) -> PlanInput<'_> {
         reasoning_reserve: 0,
         max_cut_us: DEFAULT_OVERLAP_US,
         price_threshold: None,
+        tokens_per_request: None,
+        tokens_per_minute: None,
     }
 }
 
@@ -309,4 +311,52 @@ fn minute_markers_are_counted_once_per_minute_in_each_window() {
     // 15 min = 15 ou 16 marcadores de 10 caracteres (3 tokens cada).
     let extra = a.windows[0].tokens_high - b.windows[0].tokens_high;
     assert!((45..=51).contains(&extra), "{extra}");
+}
+
+#[test]
+fn request_and_minute_limit_splits_windows_down_to_twice_max_cut_and_blocks_below_that() {
+    // Caso real do #57/#269: 462 tok/min (385 * 1.2 sem calibração), max_cut de 3 min,
+    // contexto grande (131 072) e limite de 8 000 TPM / por requisição, com saída de 2 000.
+    // 12 Frases/min * 128 chars * 0.3 ≈ 460.8-462 tok/min (com marcador de minuto).
+    let spans = live(30, 125);
+    let mut groq = input(&spans, 131_072);
+    groq.fixed_tokens = 1_130;
+    groq.output_reserve = 2_000;
+    groq.tokens_per_request = Some(8_000);
+    groq.tokens_per_minute = Some(8_000);
+    let p = plan(&groq).unwrap();
+    assert_eq!(p.state, PlanState::Reduced);
+    // 85 % de 8 000 - 2 000 = 4 800 de entrada máxima; mínimo cai para 2 * max_cut = 6 min.
+    assert_eq!(p.input_limit_tokens, 4_800);
+    assert_eq!(p.min_window_us, 2 * DEFAULT_OVERLAP_US);
+    check(&spans, &p, DEFAULT_OVERLAP_US);
+    assert!(p.windows.len() >= 4);
+    assert!(p.windows.iter().all(|w| w.tokens_high <= 4_800));
+
+    // Mesmo caso sem limite por requisição/TPM teria bloqueado se o limite fosse o contexto
+    // (3 * max_cut = 9 min > ~7,9 min que cabem em 4 800 tokens).
+    let mut as_context = input(&spans, 8_000);
+    as_context.fixed_tokens = 1_130;
+    as_context.output_reserve = 2_000;
+    assert!(matches!(
+        plan(&as_context).unwrap_err(),
+        PlanError::ContextTooSmall { .. }
+    ));
+
+    // Se nem 2 * max_cut (6 min) couber no limite por requisição, bloqueia com o motivo.
+    let mut tiny = groq;
+    tiny.tokens_per_request = Some(6_000);
+    tiny.tokens_per_minute = Some(6_000);
+    let err = plan(&tiny).unwrap_err();
+    assert!(matches!(
+        err,
+        PlanError::ContextTooSmall {
+            request_limit: Some(6_000),
+            ..
+        }
+    ));
+    let core: CoreError = err.into();
+    assert_eq!(core.code, "context_too_small");
+    assert!(core.message.contains("6000"));
+    assert!(core.message.contains("6 min"));
 }
