@@ -624,24 +624,7 @@ impl Drop for TempDir {
     }
 }
 
-/// Pede o replay ao yt-dlp numa pasta temporária ao lado da mídia e o move para o lugar final.
-/// `Ok(false)`: o vídeo não tem `live_chat` (não é erro).
-fn fetch(url: &str, target: &Path, id: i64, stop: &AtomicBool) -> Result<bool, CoreError> {
-    let exe = crate::components::ytdlp_executable()?;
-    let dir = target
-        .parent()
-        .ok_or_else(|| error("chat_storage", "Pasta da Fonte indisponível."))?;
-    let temp = (0..100)
-        .find_map(|n| {
-            let nonce = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .ok()?
-                .as_nanos();
-            let p = dir.join(format!(".clipes-chat-{}-{nonce}-{n}", std::process::id()));
-            fs::create_dir(&p).ok().map(|_| TempDir(p))
-        })
-        .ok_or_else(|| error("chat_storage", "Pasta da Fonte indisponível."))?;
-    let template = temp.0.join("%(id)s.%(ext)s");
+fn fetch_args(url: &str, template: &Path, deno: Option<&Path>) -> Vec<std::ffi::OsString> {
     let mut args: Vec<std::ffi::OsString> = [
         "--ignore-config",
         "--no-playlist",
@@ -658,10 +641,35 @@ fn fetch(url: &str, target: &Path, id: i64, stop: &AtomicBool) -> Result<bool, C
     ]
     .iter()
     .map(std::ffi::OsString::from)
+    .chain([template.as_os_str().to_os_string()])
     .collect();
-    args.push(template.into_os_string());
+    args.extend(crate::url_import::js_runtime_args(deno));
     args.push("--".into());
     args.push(url.into());
+    args
+}
+
+/// Pede o replay ao yt-dlp numa pasta temporária ao lado da mídia e o move para o lugar final.
+/// `Ok(false)`: o vídeo não tem `live_chat` (não é erro).
+fn fetch(url: &str, target: &Path, id: i64, stop: &AtomicBool) -> Result<bool, CoreError> {
+    let exe = crate::components::ytdlp_executable()?;
+    // O deno é opcional: sem o Componente, o yt-dlp roda como antes (#203, #250).
+    let deno = crate::components::deno_executable();
+    let dir = target
+        .parent()
+        .ok_or_else(|| error("chat_storage", "Pasta da Fonte indisponível."))?;
+    let temp = (0..100)
+        .find_map(|n| {
+            let nonce = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .ok()?
+                .as_nanos();
+            let p = dir.join(format!(".clipes-chat-{}-{nonce}-{n}", std::process::id()));
+            fs::create_dir(&p).ok().map(|_| TempDir(p))
+        })
+        .ok_or_else(|| error("chat_storage", "Pasta da Fonte indisponível."))?;
+    let template = temp.0.join("%(id)s.%(ext)s");
+    let args = fetch_args(url, &template, deno.as_deref());
     preview::run_process_as(&exe, args, id, stop, chat_failed, |_| {})?;
     preview::check(id, stop)?;
     let found = fs::read_dir(&temp.0)

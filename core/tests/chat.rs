@@ -481,4 +481,24 @@ fn chat_peaks_reach_the_selection_text_and_the_candidate_without_leaking_message
         fail("chat.fetch", json!({"source_id": 9999})).code,
         "source_missing"
     );
+
+    // ---- 7. Componente deno (#250): chat.fetch e job de chat passam `--js-runtimes deno:<caminho>`.
+    fs::write(components.join(exe("deno")), b"fake").unwrap();
+    std::env::set_var("CLIPES_FAKE_CHAT_FILE", root.path().join("nao-existe.json"));
+    let (with_deno, _) = import_url(&project, "https://example.com/watch/chat-replay-deno");
+    assert_eq!(wait_job(chat_job(with_deno))["state"], "failed");
+    assert_eq!(
+        call("chat.status", json!({"source_id": with_deno}))["state"],
+        "none"
+    );
+    std::env::set_var("CLIPES_FAKE_CHAT_FILE", &replay);
+    let refetch = call("chat.fetch", json!({"source_id": with_deno}));
+    assert_eq!(
+        wait_job(refetch["job"].as_i64().unwrap())["state"],
+        "completed"
+    );
+    assert_eq!(
+        call("chat.status", json!({"source_id": with_deno}))["state"],
+        "available"
+    );
 }
