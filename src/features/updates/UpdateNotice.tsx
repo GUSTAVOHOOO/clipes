@@ -7,6 +7,12 @@ import { check, type Update } from '@tauri-apps/plugin-updater';
 import { Button } from '@/components/ui/Button';
 import { useText } from '@/lib/i18n';
 import { textos } from './texts';
+import {
+  errorReason,
+  formatUpdateError,
+  isSignatureOrIntegrityError,
+  shouldIgnoreAutoCheckError,
+} from './updateError';
 
 type Estado =
   | { kind: 'closed' }
@@ -14,14 +20,27 @@ type Estado =
   | { kind: 'available'; update: Update; currentVersion: string }
   | { kind: 'installing' }
   | { kind: 'installed' }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; reason: string; signature: boolean };
 
 const mock = import.meta.env.VITE_UPDATER_MOCK === 'available';
 
-async function verificar(): Promise<{ update: Update | null; currentVersion: string }> {
+async function verificar(auto: boolean): Promise<{ update: Update | null; currentVersion: string }> {
   if (!mock && !isTauri()) return { update: null, currentVersion: '' };
+  if (auto && typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return { update: null, currentVersion: '' };
+  }
   const currentVersion = mock ? '0.1.0' : await getVersion();
   if (mock) {
+    const scenario = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('updater-test') : null;
+    if (scenario === 'offline') {
+      throw new Error('error sending request for url (https://github.com/GUSTAVOHOOO/clipes/releases/latest/download/latest.json): client error (Connect)');
+    }
+    if (scenario === 'release-not-found') {
+      throw new Error('Could not fetch a valid release JSON from the remote');
+    }
+    if (scenario === 'invalid-signature') {
+      throw new Error('The signature verification failed');
+    }
     if (sessionStorage.getItem('clipes.mock-update-installed') === '1') return { update: null, currentVersion };
     return {
       currentVersion,
@@ -30,17 +49,21 @@ async function verificar(): Promise<{ update: Update | null; currentVersion: str
         body: 'Novidades de teste',
         date: '2026-11-13T00:00:00Z',
         currentVersion,
-        downloadAndInstall: async () => {},
+        downloadAndInstall: async () => {
+          if (scenario === 'install-invalid-signature') throw new Error('The signature verification failed');
+          if (scenario === 'install-network-error') throw new Error('error sending request for url (https://github.com/GUSTAVOHOOO/clipes/releases/download/v0.2.0/clipes.exe)');
+        },
       } as Update,
     };
   }
   return { update: await check(), currentVersion };
 }
 
-const detalheErro = (error: unknown) => {
-  const reason = error instanceof Error ? error.message : String(error);
-  return `${reason} Atualizações sem assinatura válida são recusadas.`;
-};
+const toErrorState = (error: unknown): Estado => ({
+  kind: 'error',
+  reason: errorReason(error),
+  signature: isSignatureOrIntegrityError(error),
+});
 
 export function UpdateNotice() {
   const t = useText(textos);
@@ -48,13 +71,18 @@ export function UpdateNotice() {
 
   useEffect(() => {
     let ativo = true;
-    verificar()
+    verificar(true)
       .then(({ update, currentVersion }) => {
         if (!ativo) return;
         setEstado(update ? { kind: 'available', update, currentVersion } : { kind: 'closed' });
       })
       .catch(error => {
-        if (ativo) setEstado({ kind: 'error', message: detalheErro(error) });
+        if (!ativo) return;
+        if (shouldIgnoreAutoCheckError(error)) {
+          setEstado({ kind: 'closed' });
+          return;
+        }
+        setEstado(toErrorState(error));
       });
     return () => { ativo = false; };
   }, []);
@@ -70,26 +98,29 @@ export function UpdateNotice() {
       }
       else await relaunch();
     } catch (error) {
-      setEstado({ kind: 'error', message: detalheErro(error) });
+      setEstado(toErrorState(error));
     }
   };
 
   const tentarNovamente = () => {
     setEstado({ kind: 'checking' });
-    verificar()
+    verificar(false)
       .then(({ update, currentVersion }) => setEstado(update ? { kind: 'available', update, currentVersion } : { kind: 'closed' }))
-      .catch(error => setEstado({ kind: 'error', message: detalheErro(error) }));
+      .catch(error => setEstado(toErrorState(error)));
   };
 
   if (estado.kind === 'closed' || estado.kind === 'checking') return null;
 
-  if (estado.kind === 'error') return (
-    <div role="status" className="fixed bottom-4 right-4 flex w-[min(420px,calc(100vw-32px))] flex-col gap-3 rounded-lg border border-line-strong bg-raised p-4 text-fg shadow-overlay" style={{ zIndex: 'var(--z-toast)' }}>
-      <strong>{t.failed}</strong>
-      <p role="alert" className="break-words text-fg-2">{estado.message}</p>
-      <div className="flex justify-end gap-2"><Button onClick={() => setEstado({ kind: 'closed' })}>{t.close}</Button><Button variante="primario" onClick={tentarNovamente}>{t.retry}</Button></div>
-    </div>
-  );
+  if (estado.kind === 'error') {
+    const message = estado.signature ? formatUpdateError(estado.reason, t.invalidSignature) : estado.reason;
+    return (
+      <div role="status" className="fixed bottom-4 right-4 flex w-[min(420px,calc(100vw-32px))] flex-col gap-3 rounded-lg border border-line-strong bg-raised p-4 text-fg shadow-overlay" style={{ zIndex: 'var(--z-toast)' }}>
+        <strong>{t.failed}</strong>
+        <p role="alert" className="break-words text-fg-2">{message}</p>
+        <div className="flex justify-end gap-2"><Button onClick={() => setEstado({ kind: 'closed' })}>{t.close}</Button><Button variante="primario" onClick={tentarNovamente}>{t.retry}</Button></div>
+      </div>
+    );
+  }
 
   return (
     <D.Root open onOpenChange={open => { if (!open) setEstado({ kind: 'closed' }); }}>

@@ -197,3 +197,90 @@ fn ffmpeg_status_reports_missing_until_configured() {
     assert_eq!(ready["incomplete"], false);
     assert_eq!(ready["installed"], true);
 }
+
+#[test]
+fn changing_data_dir_revalidates_managed_ffmpeg_and_preserves_system_ffmpeg() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = EnvGuard::set(tmp.path());
+
+    let ffmpeg_bin = if cfg!(windows) {
+        "ffmpeg.exe"
+    } else {
+        "ffmpeg"
+    };
+    let ffprobe_bin = if cfg!(windows) {
+        "ffprobe.exe"
+    } else {
+        "ffprobe"
+    };
+
+    let dir_a = tmp.path().join("dir-a");
+    let dir_b = tmp.path().join("dir-b");
+    let dir_c = tmp.path().join("dir-c");
+    std::fs::create_dir_all(dir_a.join("components")).unwrap();
+    std::fs::create_dir_all(&dir_b).unwrap();
+    std::fs::create_dir_all(dir_c.join("components")).unwrap();
+
+    let ffmpeg_a = dir_a.join("components").join(ffmpeg_bin);
+    std::fs::write(&ffmpeg_a, b"ffmpeg-a").unwrap();
+    std::fs::write(dir_a.join("components").join(ffprobe_bin), b"ffprobe-a").unwrap();
+
+    let mut settings = dispatch("components.settings.get", json!({}), &mut |_| {}).unwrap();
+    settings["data_dir"] = json!(dir_a);
+    settings["ffmpeg_path"] = json!(ffmpeg_a);
+    dispatch("components.settings.set", settings.clone(), &mut |_| {}).unwrap();
+    let status_a = dispatch("components.ffmpeg.status", json!({}), &mut |_| {}).unwrap();
+    assert_eq!(status_a["installed"], true);
+    assert_eq!(status_a["incomplete"], false);
+
+    // Ao mudar para uma data_dir vazia, a UI ainda envia o ffmpeg_path antigo gerenciado;
+    // o núcleo precisa limpar em vez de tratá-lo como FFmpeg do sistema.
+    let mut to_empty = dispatch("components.settings.get", json!({}), &mut |_| {}).unwrap();
+    to_empty["data_dir"] = json!(dir_b);
+    let updated_empty = dispatch("components.settings.set", to_empty, &mut |_| {}).unwrap();
+    assert!(
+        updated_empty["ffmpeg_path"].is_null(),
+        "ffmpeg_path gerenciado na data_dir antiga deve ser limpo: {updated_empty}"
+    );
+    let persisted = dispatch("components.settings.get", json!({}), &mut |_| {}).unwrap();
+    assert!(persisted["ffmpeg_path"].is_null());
+    let status_b = dispatch("components.ffmpeg.status", json!({}), &mut |_| {}).unwrap();
+    assert_eq!(status_b["installed"], false);
+    assert_eq!(status_b["incomplete"], false);
+
+    // Ao mudar para uma data_dir que já tem FFmpeg gerenciado, o caminho é atualizado para ela.
+    let ffmpeg_c = dir_c.join("components").join(ffmpeg_bin);
+    std::fs::write(&ffmpeg_c, b"ffmpeg-c").unwrap();
+    std::fs::write(dir_c.join("components").join(ffprobe_bin), b"ffprobe-c").unwrap();
+    let mut back_to_a = dispatch("components.settings.get", json!({}), &mut |_| {}).unwrap();
+    back_to_a["data_dir"] = json!(dir_a);
+    back_to_a["ffmpeg_path"] = json!(ffmpeg_a);
+    dispatch("components.settings.set", back_to_a, &mut |_| {}).unwrap();
+
+    let mut to_c = dispatch("components.settings.get", json!({}), &mut |_| {}).unwrap();
+    to_c["data_dir"] = json!(dir_c);
+    let updated_c = dispatch("components.settings.set", to_c, &mut |_| {}).unwrap();
+    assert_eq!(
+        std::path::PathBuf::from(updated_c["ffmpeg_path"].as_str().unwrap()),
+        ffmpeg_c
+    );
+    let status_c = dispatch("components.ffmpeg.status", json!({}), &mut |_| {}).unwrap();
+    assert_eq!(status_c["installed"], true);
+    assert_eq!(status_c["incomplete"], false);
+
+    // FFmpeg externo do sistema continua preservado quando data_dir muda.
+    let external_ffmpeg = tmp.path().join("system-bin").join(ffmpeg_bin);
+    std::fs::create_dir_all(external_ffmpeg.parent().unwrap()).unwrap();
+    std::fs::write(&external_ffmpeg, b"sys-ffmpeg").unwrap();
+    let mut with_system = dispatch("components.settings.get", json!({}), &mut |_| {}).unwrap();
+    with_system["ffmpeg_path"] = json!(external_ffmpeg);
+    dispatch("components.settings.set", with_system, &mut |_| {}).unwrap();
+
+    let mut system_to_b = dispatch("components.settings.get", json!({}), &mut |_| {}).unwrap();
+    system_to_b["data_dir"] = json!(dir_b);
+    let updated_sys = dispatch("components.settings.set", system_to_b, &mut |_| {}).unwrap();
+    assert_eq!(
+        std::path::PathBuf::from(updated_sys["ffmpeg_path"].as_str().unwrap()),
+        external_ffmpeg
+    );
+}
