@@ -495,12 +495,21 @@ fn probe(server: Server, base: &Url) -> Value {
             .or_else(|| get(&client, base, "health").map(|_| Vec::new())),
     };
     match models {
-        Some(models) => json!({
-            "found": true,
-            // Base compatível com a API da OpenAI, pronta para `provider.configure`.
-            "endpoint": base.join("v1").map(|u| u.to_string()).unwrap_or_default(),
-            "models": models,
-        }),
+        Some(models) => {
+            let endpoint = match server {
+                // Ollama usa a raiz para `/api/show`, `/api/ps` e `/api/chat` (sem `/v1`).
+                Server::Ollama => base.as_str().trim_end_matches('/').to_owned(),
+                // Base compatível com a API da OpenAI, pronta para `provider.configure`.
+                Server::LmStudio | Server::LlamaCpp => {
+                    base.join("v1").map(|u| u.to_string()).unwrap_or_default()
+                }
+            };
+            json!({
+                "found": true,
+                "endpoint": endpoint,
+                "models": models,
+            })
+        }
         None => absent,
     }
 }
