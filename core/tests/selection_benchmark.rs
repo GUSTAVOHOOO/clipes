@@ -1,14 +1,26 @@
 //! Testes do benchmark de seleção (#57) com fixtures sintéticas e sem rede.
 use clipes_core::{
-    chat::Interval,
-    dispatch, jobs,
+    ai_task,
+    chat::{ChatMark, Interval, Reaction},
+    dispatch,
+    energy::EnergyLevel,
+    jobs,
     projects::with_writer,
     provider::{cost::Target, CancelToken, Provider, StructuredRequest},
-    selection::benchmark::{
-        aggregate_metrics, evaluate_chat_signal, evaluate_source, grid_search_chat,
-        merge_overlapping_scenes, mid_sentence_boundary_count, wilson_ci95, CandidateSpan,
-        ChatCalibrationParams, CostCounts, GroundTruthClip, ProviderCostTiming, SentenceSpan,
+    selection::{
+        benchmark::{
+            aggregate_metrics, bench_window_input, build_candidates_for_benchmark, default_matrix,
+            evaluate_chat_signal, evaluate_source, evaluate_two_pass_rerank,
+            evaluate_window_crossing, format_b_line, format_timestamp_tenths, grid_search_chat,
+            merge_overlapping_scenes, mid_sentence_boundary_count, plan_matrix_windows,
+            wilson_ci95, BenchFormat, BenchPlanStatus, CandidateSpan, ChatCalibrationParams,
+            CostCounts, GroundTruthClip, MatrixWindowSpec, ProviderCostTiming, SentenceSpan,
+            ValidityCounts,
+        },
+        cut::{MAX_CUT_US, MIN_CUT_US},
     },
+    selection_windows::WINDOW_MAX_US,
+    sentences::{Marks, Sentence},
     CoreError,
 };
 use serde_json::{json, Value};
@@ -364,4 +376,250 @@ fn headless_benchmark_pipeline_runs_with_fake_provider_and_synthetic_fixture() {
     } else {
         std::env::remove_var("CLIPES_DATA_DIR");
     }
+}
+
+fn synthetic_sentences(count: usize, step_secs: i64, lang: &str) -> Vec<Sentence> {
+    (1..=count)
+        .map(|i| {
+            let idx = (i - 1) as i64;
+            Sentence {
+                id: i as i64,
+                first_position: idx * 10,
+                last_position: idx * 10 + 9,
+                start_us: idx * step_secs * 1_000_000,
+                end_us: (idx + 1) * step_secs * 1_000_000,
+                language: Some(lang.to_owned()),
+                text: "frase sintetica de fala continua para testar janelas do benchmark."
+                    .to_owned(),
+            }
+        })
+        .collect()
+}
+
+#[test]
+fn format_b_line_and_timestamp_tenths_include_marks() {
+    assert_eq!(format_timestamp_tenths(0), "00:00:00.0");
+    assert_eq!(format_timestamp_tenths(3_723_450_000), "01:02:03.4");
+    let s = Sentence {
+        id: 123,
+        first_position: 0,
+        last_position: 4,
+        start_us: 3_723_400_000,
+        end_us: 3_728_000_000,
+        language: Some("pt".into()),
+        text: "momento engracado".into(),
+    };
+    let mut marks = Marks::default();
+    marks.energy.insert(123, EnergyLevel::Peak);
+    marks.chat.insert(
+        123,
+        ChatMark {
+            interval: 1,
+            ratio_tenths: 31,
+            reaction: Some(Reaction::Laugh),
+            at_us: 3_723_400_000,
+        },
+    );
+    let line = format_b_line(&s, &marks);
+    assert_eq!(
+        line,
+        "[S123 01:02:03.4] [energia pico] [chat 3,1× · risadas] momento engracado\n"
+    );
+}
+
+#[test]
+fn matrix_planner_covers_26_cells_keeps_product_cap_15m_and_marks_infeasible() {
+    assert_eq!(WINDOW_MAX_US, 15 * 60_000_000);
+    let matrix = default_matrix();
+    assert_eq!(matrix.len(), 26);
+
+    // 90 min de fala sintética (540 Frases de 10 s).
+    let frases = synthetic_sentences(540, 10, "pt");
+    let marks = Marks::default();
+
+    // Perfil 500k (Codex): todas as 26 células são viáveis.
+    for spec in &matrix {
+        let plan = plan_matrix_windows(&frases, &marks, spec, 500_000, 1_200, 2_000, 0, 1.2);
+        assert!(
+            matches!(plan.status, BenchPlanStatus::Full),
+            "esperava Full para {} em 500k, veio {:?}",
+            spec.id,
+            plan.status
+        );
+        assert!(!plan.windows.is_empty());
+        if spec.window_max_us.is_none() {
+            assert_eq!(plan.windows.len(), 1);
+        }
+    }
+
+    // Perfil local 8k: live inteira (90 min) e 30/60 min em formato B são inviáveis e não são forçadas.
+    let full_h = MatrixWindowSpec::new(None, 0, BenchFormat::CompactH);
+    let plan_full_8k = plan_matrix_windows(&frases, &marks, &full_h, 8_192, 1_200, 2_000, 0, 1.2);
+    assert!(matches!(
+        plan_full_8k.status,
+        BenchPlanStatus::Infeasible { .. }
+    ));
+    assert!(plan_full_8k.windows.is_empty());
+
+    let w60_b = MatrixWindowSpec::new(Some(60), 3, BenchFormat::FullB);
+    let plan_60b_8k = plan_matrix_windows(&frases, &marks, &w60_b, 8_192, 1_200, 2_000, 0, 1.2);
+    assert!(matches!(
+        plan_60b_8k.status,
+        BenchPlanStatus::Infeasible { .. }
+    ));
+
+    // Perfil local 32k: 30 min H é viável, mas live inteira de 90 min em B é inviável.
+    let w30_h = MatrixWindowSpec::new(Some(30), 3, BenchFormat::CompactH);
+    let plan_30h_32k = plan_matrix_windows(&frases, &marks, &w30_h, 32_768, 1_200, 2_000, 0, 1.2);
+    assert!(matches!(plan_30h_32k.status, BenchPlanStatus::Full));
+}
+
+#[test]
+fn window_crossing_measures_clips_straddling_boundaries() {
+    // Janelas de 10 min sem sobreposição: [0..600s] e [600..1200s].
+    let windows_ov0 = vec![(0, 600_000_000), (600_000_000, 1_200_000_000)];
+    // Janelas de 10 min com sobreposição de 3 min: [0..600s] e [420..1020s].
+    let windows_ov3 = vec![(0, 600_000_000), (420_000_000, 1_020_000_000)];
+    let gt = vec![
+        GroundTruthClip {
+            start_us: 100_000_000,
+            end_us: 140_000_000,
+        },
+        GroundTruthClip {
+            // Cruza a borda de 600 s!
+            start_us: 585_000_000,
+            end_us: 615_000_000,
+        },
+    ];
+    let s0 = evaluate_window_crossing(&windows_ov0, &gt);
+    assert_eq!(s0.total_clips, 2);
+    assert_eq!(s0.contained_clips, 1);
+    assert_eq!(s0.crossing_clips, 1);
+    assert!((s0.crossing_rate - 0.5).abs() < 1e-9);
+
+    let s3 = evaluate_window_crossing(&windows_ov3, &gt);
+    assert_eq!(s3.contained_clips, 2);
+    assert_eq!(s3.crossing_clips, 0);
+    assert_eq!(s3.crossing_rate, 0.0);
+}
+
+struct FakeMatrixProvider {
+    fail_with_bad_id: bool,
+}
+
+impl Provider for FakeMatrixProvider {
+    fn structured(&self, request: &StructuredRequest) -> Result<Value, CoreError> {
+        self.structured_with(request, &CancelToken::new())
+    }
+    fn structured_with(
+        &self,
+        request: &StructuredRequest,
+        _: &CancelToken,
+    ) -> Result<Value, CoreError> {
+        let axis = |why: &str| json!({"score": 8, "why": why});
+        let (start_id, end_id) = if self.fail_with_bad_id {
+            (999_999, 999_999)
+        } else {
+            assert!(!request.transcript.is_empty());
+            (2, 4)
+        };
+        Ok(json!({
+            "data": {
+                "schemaVersion": 1,
+                "candidates": [{
+                    "startId": start_id,
+                    "endId": end_id,
+                    "title": "Teste",
+                    "hook": axis("gancho"),
+                    "selfContained": axis("completo"),
+                    "energy": axis("alta"),
+                    "value": axis("bom"),
+                    "closing": axis("fecha")
+                }]
+            },
+            "usage": {"inputTokens": 250, "outputTokens": 80},
+            "calls": 1
+        }))
+    }
+}
+
+#[test]
+fn bench_window_input_runs_through_ai_task_verifiers_for_h_and_b() {
+    let task = ai_task::find("selection").unwrap();
+    assert_eq!(task.version, 3);
+    assert_eq!(
+        task.prompt_sha256,
+        "e00332d06248cff669ccb8922aae9d50190a7e30715630e566c4943941469b8a"
+    );
+
+    let frases = synthetic_sentences(6, 10, "en");
+    let marks = Marks::default();
+    let ok_provider = FakeMatrixProvider {
+        fail_with_bad_id: false,
+    };
+    let bad_provider = FakeMatrixProvider {
+        fail_with_bad_id: true,
+    };
+
+    for fmt in [BenchFormat::CompactH, BenchFormat::FullB] {
+        let input = bench_window_input(&frases, fmt, MIN_CUT_US, MAX_CUT_US, &marks);
+        let out = ai_task::run(task, &input, &ok_provider, &CancelToken::new()).unwrap();
+        let (cands, tally) =
+            build_candidates_for_benchmark(&frases, MIN_CUT_US, MAX_CUT_US, &[(0, out.data)]);
+        assert_eq!(tally.kept, 1);
+        assert_eq!(cands[0].start_id, 2);
+        assert_eq!(cands[0].end_id, 4);
+
+        let err = ai_task::run(task, &input, &bad_provider, &CancelToken::new()).unwrap_err();
+        assert_eq!(err.code, "verification_failed");
+        let mut val = ValidityCounts {
+            windows_total: 2,
+            windows_attempted: 2,
+            windows_completed: 1,
+            ..Default::default()
+        };
+        val.record_failure(&err.code);
+        val.finalize();
+        assert_eq!(val.verification_failed, 1);
+        assert!((val.validity_rate - 0.5).abs() < 1e-9);
+    }
+}
+
+#[test]
+fn two_pass_rerank_measures_recall_at_k_improvement() {
+    let gt = vec![
+        GroundTruthClip {
+            start_us: 100_000_000,
+            end_us: 130_000_000,
+        },
+        GroundTruthClip {
+            start_us: 200_000_000,
+            end_us: 230_000_000,
+        },
+    ];
+    let pass1 = vec![
+        CandidateSpan {
+            start_id: 1,
+            end_id: 2,
+            start_us: 10_000_000,
+            end_us: 40_000_000,
+        },
+        CandidateSpan {
+            start_id: 5,
+            end_id: 6,
+            start_us: 100_000_000,
+            end_us: 130_000_000,
+        },
+        CandidateSpan {
+            start_id: 9,
+            end_id: 10,
+            start_us: 200_000_000,
+            end_us: 230_000_000,
+        },
+    ];
+    // Na 1ª passada o topo-2 tem apenas 1/2 acertos; na 2ª passada sobe os dois acertos para o topo-2.
+    let eval = evaluate_two_pass_rerank(&gt, &pass1, &[1, 2, 0], &[2, 3]);
+    assert_eq!(eval.top_k[0].k, 2);
+    assert!((eval.top_k[0].pass1_recall_min_50 - 0.5).abs() < 1e-9);
+    assert!((eval.top_k[0].pass2_recall_min_50 - 1.0).abs() < 1e-9);
 }
