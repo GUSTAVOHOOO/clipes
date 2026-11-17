@@ -6,7 +6,6 @@ use clipes_core::{
     script,
 };
 use serde_json::{json, Value};
-use std::collections::BTreeMap;
 
 fn call(name: &str, args: Value) -> Value {
     dispatch(name, args, &mut |_| {}).unwrap()
@@ -204,11 +203,7 @@ fn headless_montage_resolves_anchors_pushes_tail_drag_undo_and_persists() {
     );
 
     // Consumo direto pelo #79/#82 via `plan_for_clip` com durações reais.
-    let mut real_durations = BTreeMap::new();
-    real_durations.insert(block_ids[0], 5_000_000);
-    real_durations.insert(block_ids[1], 5_000_000);
-    real_durations.insert(block_ids[2], 5_000_000);
-    real_durations.insert(block_ids[3], 5_000_000);
+    let real_durations: Vec<(i64, i64)> = block_ids.iter().map(|&id| (id, 5_000_000)).collect();
     let real_plan = montage::plan_for_clip(Some(clip_id), candidate, &real_durations)
         .unwrap()
         .unwrap();

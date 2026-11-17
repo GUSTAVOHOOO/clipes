@@ -30,8 +30,9 @@ duração por caracteres em `montage::estimate_block_duration_us`:
 - `ESTIMATED_CHARS_PER_SECOND = 15` (~150 palavras/min)
 - `MIN_ESTIMATED_BLOCK_US = 500_000` (500 ms para texto não vazio; `0` para vazio)
 
-Quando o #79/#83/#84 existirem, basta passar o mapa `block_id -> duration_us` real para
-`montage::plan_for_clip` (ou diretamente para `montage::resolve`).
+Quando o #79/#83/#84 existirem, basta passar a lista de pares `(block_id, duration_us)`
+(`&[(i64, i64)]`, ou `&Vec<(i64, i64)>`) para `montage::plan_for_clip` (ou diretamente para
+`montage::resolve`).
 
 ## Contrato para #79, #80, #81 e #82
 
@@ -40,9 +41,10 @@ Em `core/src/montage.rs`:
 - `montage::resolve(&MontageInput) -> Result<MontagePlan, CoreError>`: função pura (sem banco
   nem I/O) que resolve `start_us`, `end_us`, `pushed_us`, `overflow_us`, `freeze_tail_us`,
   `total_duration_us` e `warnings` em µs do vídeo final.
-- `montage::plan_for_clip(clip_id, candidate_id, &durations_by_block) -> Result<Option<MontagePlan>, CoreError>`:
+- `montage::plan_for_clip(clip_id, candidate_id, durations: &[(i64, i64)]) -> Result<Option<MontagePlan>, CoreError>`:
   lê o documento `clip_edits` (bordas, silêncios e `narrationStarts`) + os blocos atuais do
-  Roteiro e devolve o `MontagePlan`.
+  Roteiro e devolve o `MontagePlan` (usando a estimativa por caracteres como padrão para
+  qualquer bloco ausente de `durations`).
 - `montage::audio_mix_plan(&MontagePlan) -> AudioMixPlan`: devolve apenas os segmentos
   `{ block_id, start_us, end_us, duration_us }`, `clip_duration_us`, `freeze_tail_us` e
   `total_duration_us` para consumo direto do #82 (`sidechaincompress`, `amix normalize=0` e

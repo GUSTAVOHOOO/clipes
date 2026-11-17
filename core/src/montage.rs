@@ -373,12 +373,12 @@ pub fn audio_mix_plan(plan: &MontagePlan) -> AudioMixPlan {
 /// Resolve o plano de montagem para um Corte do Projeto aberto, combinando:
 /// - o documento do editor (`clip_id`, se existir) para bordas, silêncios e inícios manuais;
 /// - o Roteiro mais recente do candidato (`candidate_id`);
-/// - as durações reais por `script_blocks.id` (`durations_by_block`), com fallback na estimativa
-///   por caracteres enquanto o #79 não grava durações medidas.
+/// - as durações reais por `script_blocks.id` (`durations`, pares `(block_id, duration_us)`),
+///   com fallback na estimativa por caracteres enquanto o #79 não grava durações medidas.
 pub fn plan_for_clip(
     clip_id: Option<i64>,
     candidate_id: i64,
-    durations_by_block: &BTreeMap<i64, i64>,
+    durations: &[(i64, i64)],
 ) -> Result<Option<MontagePlan>, CoreError> {
     let Some(script_doc) = script::montage_blocks_readonly(candidate_id)? else {
         return Ok(None);
@@ -409,6 +409,7 @@ pub fn plan_for_clip(
         }
     };
 
+    let durations_by_block: BTreeMap<i64, i64> = durations.iter().copied().collect();
     let sentences = load_transcript_sentences(cut.transcript)?;
     let splice = SpliceMap::new(clip_start_us, clip_end_us, &active_silences);
     let blocks: Vec<MontageBlockInput> = script_doc
