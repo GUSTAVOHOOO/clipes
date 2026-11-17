@@ -4,6 +4,7 @@ import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { ackDirectMonetizationNotice, checkGuardrails, DirectMonetizationDialog } from '@/features/guardrails/GuardrailsPanel';
 import { correctionEvent, type CorrectionEvent } from '@/features/projects/TranscriptTimeline';
 import type { MissingGlyph } from '@/features/captions/types';
 import { coreDispatch, type ExportRequest } from '@/lib/core';
@@ -51,6 +52,8 @@ export function ExportButton({ sourceId, candidateId, clipId, title, startId, en
   const [draftWord, setDraftWord] = useState('');
   const [fixBusy, setFixBusy] = useState(false);
   const [fixError, setFixError] = useState('');
+  const [directNoticeOpen, setDirectNoticeOpen] = useState(false);
+  const exportTrigger = useRef<HTMLButtonElement>(null);
   const fixTrigger = useRef<HTMLButtonElement>(null);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -88,7 +91,7 @@ export function ExportButton({ sourceId, candidateId, clipId, title, startId, en
     }
   }, [rawError?.code, allMissing.length, missingGlyphs.length]);
 
-  async function start() {
+  async function proceedStart() {
     if (!approved || !startId || !endId) return;
     setBusy(true); setStartError(null); setFixedPositions([]); setFixedNotice(false);
     try {
@@ -107,6 +110,23 @@ export function ExportButton({ sourceId, candidateId, clipId, title, startId, en
       const errObj = typeof e === 'object' && e !== null ? e as Partial<ExportError> : {};
       if (alive.current) setStartError({ code: errObj.code ? String(errObj.code) : 'default', message: errObj.message, usage: errObj.usage });
     } finally { if (alive.current) setBusy(false); }
+  }
+  async function start() {
+    if (!approved || !startId || !endId) return;
+    const guardrails = await checkGuardrails({
+      scope: 'single',
+      source_id: sourceId,
+      candidate_id: candidateId,
+      ...(clipId !== undefined ? { clip_id: clipId } : {}),
+      start_id: startId,
+      end_id: endId,
+    });
+    if (!alive.current) return;
+    if (guardrails?.needsDirectNotice) {
+      setDirectNoticeOpen(true);
+      return;
+    }
+    await proceedStart();
   }
   async function cancel() {
     if (!status) return;
@@ -163,7 +183,7 @@ export function ExportButton({ sourceId, candidateId, clipId, title, startId, en
       : t.errors[rawError.code] ?? t.errors.default)
     : '';
   return <div className="flex flex-wrap items-center gap-2" data-export>
-    <Button tamanho="sm" disabled={!approved || !startId || !endId || active} carregando={busy} title={approved ? undefined : t.pending} onClick={() => void start()}>{t.export}</Button>
+    <Button ref={exportTrigger} tamanho="sm" disabled={!approved || !startId || !endId || active} carregando={busy} title={approved ? undefined : t.pending} onClick={() => void start()}>{t.export}</Button>
     {active && <Button tamanho="sm" disabled={busy} onClick={() => void cancel()}>{t.cancel}</Button>}
     {status && <span role="status" className="text-sm text-fg-2">{status.state === 'running' ? `${t.running} · ${status.progress}%` : status.state === 'failed' ? '' : t[status.state]}</span>}
     {active && <progress value={status?.progress ?? 0} max={100} aria-label={t.running} className="w-28 max-w-full" />}
@@ -208,5 +228,16 @@ export function ExportButton({ sourceId, candidateId, clipId, title, startId, en
         {fixError && <p role="alert" className="text-sm text-danger">{fixError}</p>}
       </div>
     </ConfirmDialog>
+    <DirectMonetizationDialog
+      open={directNoticeOpen}
+      onOpenChange={setDirectNoticeOpen}
+      finalFocus={exportTrigger}
+      onConfirm={() => {
+        setDirectNoticeOpen(false);
+        void ackDirectMonetizationNotice().then(() => {
+          if (alive.current) void proceedStart();
+        });
+      }}
+    />
   </div>;
 }

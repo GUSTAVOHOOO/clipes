@@ -143,6 +143,7 @@ pub struct ChannelProfile {
     pub caption_style: Style,
     pub allowed_sources: Vec<AllowedSource>,
     pub narration_voice: Option<String>,
+    pub direct_monetization_ack: bool,
     pub limits: ProfileLimits,
 }
 
@@ -207,10 +208,23 @@ pub(crate) fn default_language() -> Result<String, CoreError> {
     }
 }
 
+/// Se o aviso único de monetização do Corte direto (#76) já foi confirmado neste canal.
+pub(crate) fn direct_monetization_ack() -> Result<bool, CoreError> {
+    projects::with_reader(|c| {
+        Ok(c.query_row(
+            "SELECT direct_monetization_ack FROM channel_profile WHERE id=1",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .optional()?
+        .is_some_and(|v| v != 0))
+    })
+}
+
 fn read_in(c: &Connection) -> rusqlite::Result<Result<ChannelProfile, CoreError>> {
     let row = c
         .query_row(
-            "SELECT video_kind, language, min_us, max_us, allowed_sources, narration_voice FROM channel_profile WHERE id=1",
+            "SELECT video_kind, language, min_us, max_us, allowed_sources, narration_voice, direct_monetization_ack FROM channel_profile WHERE id=1",
             [],
             |r| {
                 Ok((
@@ -220,21 +234,24 @@ fn read_in(c: &Connection) -> rusqlite::Result<Result<ChannelProfile, CoreError>
                     r.get::<_, i64>(3)?,
                     r.get::<_, String>(4)?,
                     r.get::<_, Option<String>>(5)?,
+                    r.get::<_, i64>(6)? != 0,
                 ))
             },
         )
         .optional()?;
-    let (kind, language, min_us, max_us, allowed_raw, narration_voice) = match row {
-        Some(row) => row,
-        None => (
-            "direct".into(),
-            DEFAULT_LANGUAGE.into(),
-            DEFAULT_MIN_CUT_US,
-            DEFAULT_MAX_CUT_US,
-            "[]".into(),
-            None,
-        ),
-    };
+    let (kind, language, min_us, max_us, allowed_raw, narration_voice, direct_monetization_ack) =
+        match row {
+            Some(row) => row,
+            None => (
+                "direct".into(),
+                DEFAULT_LANGUAGE.into(),
+                DEFAULT_MIN_CUT_US,
+                DEFAULT_MAX_CUT_US,
+                "[]".into(),
+                None,
+                false,
+            ),
+        };
     let Some(video_kind) = VideoKind::parse(&kind) else {
         return Ok(Err(error(
             "invalid_video_kind",
@@ -258,6 +275,7 @@ fn read_in(c: &Connection) -> rusqlite::Result<Result<ChannelProfile, CoreError>
         caption_style,
         allowed_sources,
         narration_voice,
+        direct_monetization_ack,
         limits: ProfileLimits::current(),
     }))
 }
@@ -279,6 +297,8 @@ struct SetInput {
     allowed_sources: Option<Vec<AllowedSource>>,
     #[serde(default)]
     narration_voice: Option<String>,
+    #[serde(default)]
+    direct_monetization_ack: Option<IgnoredAny>,
     #[serde(default)]
     limits: Option<IgnoredAny>,
 }
@@ -326,7 +346,7 @@ fn set(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let input: SetInput = serde_json::from_value(v).map_err(|_| {
         invalid("Dados do Perfil de canal inválidos. Credenciais sociais e escolha de Provedor não fazem parte do Perfil.")
     })?;
-    let _ = input.limits;
+    let _ = (input.limits, input.direct_monetization_ack);
     if input.narration_voice.is_some() {
         return Err(invalid(
             "O campo de voz da Narração fica reservado até a entrada do TTS.",
