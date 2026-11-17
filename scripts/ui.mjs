@@ -111,8 +111,18 @@ try {
   await page.screenshot({ path: 'shots/hardware.png', fullPage: true });
   await hardwareCard.getByRole('button', { name: 'Voltar ao automático' }).click();
   await hardwareCard.getByText(/\(automática\)/).waitFor();
+  await hardwareCard.getByText('Lote seguro medido na GPU: ainda não medido (padrão 1).').waitFor();
+  const groupingSwitch = hardwareCard.getByRole('switch', { name: /Agrupar trechos de VAD/ });
+  assert.equal(await groupingSwitch.isChecked(), false);
+  await hardwareCard.getByText(/ganho típico de 0% a 10%/).waitFor();
   await hardwareCard.getByRole('button', { name: 'Medir hardware' }).click();
   await hardwareCard.getByText('Medição concluída.').waitFor();
+  await hardwareCard.getByText('Lote seguro medido na GPU: 8 trechos.').waitFor();
+  await groupingSwitch.check();
+  assert.equal(await groupingSwitch.isChecked(), true);
+  await hardwareCard.getByText(/Agrupa até 8 trechos consecutivos/).waitFor();
+  await groupingSwitch.uncheck();
+  assert.equal(await groupingSwitch.isChecked(), false);
 
   await testTtsComponents(page);
 
@@ -427,6 +437,8 @@ try {
   await downloadedRow.getByText(/Estimativa: cerca de 3 h 52 min/).waitFor();
   assert.match(await downloadedRow.innerText(), /É uma estimativa, não uma garantia/);
   assert.equal(await downloadedRow.getByText('Sem GPU compatível, a Transcrição pode demorar.').count(), 0);
+  await downloadedRow.getByText('Agrupamento por VAD: desligado (ajuste em Componentes).').waitFor();
+  assert.equal(await downloadedRow.getByRole('switch').count(), 0);
   await downloadedRow.getByRole('button', {name:'Transcrever'}).click();
   await downloadedRow.getByText('Transcrevendo: 40%').waitFor();
   await downloadedRow.getByRole('button', {name:'Cancelar transcrição'}).click();
@@ -1099,6 +1111,8 @@ try {
   await page.screenshot({path:'shots/estimate-cpu.png',fullPage:true});
   await cpuRow.getByRole('button',{name:'Usar o Motor Groq'}).click();
   assert.equal(await cpuRow.getByLabel('Motor de transcrição').inputValue(), 'groq');
+  await page.goto(`${url}?source-test=1&hardware-probe-fallback=1`);
+  await page.locator('li').filter({hasText:'/test/downloaded.mp4'}).first().getByText('A verificação automática da GPU falhou; a Transcrição local caiu para a CPU.').waitFor();
   // Estado do perfil para a seleção de Cortes (#146): três estados, em PT-BR e EN, só informativo.
   for (const L of [
     { lang: 'pt-BR', prefs: 'Preferências', add: 'Adicionar perfil', name: 'Nome do perfil', endpoint: 'Endereço da API', model: 'Modelo', ctx: 'Contexto em tokens (opcional)', save: 'Salvar perfil', edit: 'Editar',
