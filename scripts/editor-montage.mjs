@@ -147,6 +147,27 @@ export async function testEditorDucking(page, url) {
     }, null, { timeout: 5000 });
     await page.keyboard.press('k');
 
+    // Arrasta o bloco 103 para gerar sobra final (freezeTailUs = 5s) e confere o aviso no checklist pré-export
+    // e o congelamento do último quadro no CutPreview.
+    const b3 = editor.locator('[data-narration-block="103"]');
+    await b3.scrollIntoViewIfNeeded();
+    const box = await b3.boundingBox();
+    await page.mouse.move(box.x + 24, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 24 + 1315, box.y + box.height / 2, { steps: 10 });
+    await page.mouse.up();
+    await page.waitForFunction(() => document.querySelector('[data-undo-count="1"]'));
+    await page.waitForFunction(() => document.querySelector('[data-montage-freeze-tail-us="5000000"]'));
+
+    const checklist = editor.locator('[data-guardrails-checklist]');
+    await checklist.locator('summary').click();
+    await checklist.locator('[data-guardrails-freeze-tail]').waitFor();
+
+    // Tocar perto do fim do Corte (proxy 179.9 s -> 3659.9 s) entra no modo de quadro congelado (`data-freeze-tail-active`).
+    await video.evaluate(v => { v.currentTime = 179.92; void v.play(); });
+    await page.waitForFunction(() => document.querySelector('[data-freeze-tail-active="true"]'), null, { timeout: 5000 });
+    await preview.getByRole('button', { name: 'Pausar', exact: true }).click();
+
     await editor.getByRole('button', { name: 'Fechar editor', exact: true }).click();
     await editor.waitFor({ state: 'detached' });
   } finally {

@@ -564,7 +564,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
             clipId={opened.clipId}
             startId={startId}
             endId={endId}
-            refreshKey={`${startId}-${endId}-${silencesView.removedUs}`}
+            refreshKey={`${startId}-${endId}-${silencesView.removedUs}-${montage?.freezeTailUs ?? 0}-${captionRevision}`}
           />
         )}
       </div>
