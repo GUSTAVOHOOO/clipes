@@ -4,8 +4,20 @@
 //! séries agregadas de chat e contagens de custo/tempo para calcular recall, bordas no meio de
 //! Frase, tempo/custo por hora e calibração dos parâmetros de pico de chat.
 
-use crate::chat::{self, Interval, Peak};
+use crate::{
+    ai_task::TaskInput,
+    chat::{self, Interval, Peak},
+    energy,
+    provider::EstimateHint,
+    selection::{
+        self,
+        cut::{target_candidates, PREFERRED_MAX_US},
+        Range, VideoKind,
+    },
+    sentences::{self, Marks, Sentence, SentenceMarks},
+};
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use std::collections::HashMap;
 
 /// Intervalo de um Corte humano de referência (em µs na Fonte).
@@ -605,4 +617,800 @@ pub fn wilson_ci95(hits: usize, total: usize) -> (f64, f64) {
         (center - half).clamp(0.0, 1.0),
         (center + half).clamp(0.0, 1.0),
     )
+}
+
+// ---------------------------------------------------------------- matriz de janelas e formatos (#148)
+
+const BENCH_MINUTE_US: i64 = 60_000_000;
+
+/// Formato de serialização de Frases usado no experimento #148 (somente no harness).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BenchFormat {
+    /// Formato compacto H (`## hh:mm` + `ID texto`), padrão da v1 no núcleo.
+    CompactH,
+    /// Formato completo B (`[S123 01:02:03.4] texto`), braço experimental do #115/#148.
+    FullB,
+}
+
+impl BenchFormat {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::CompactH => "H",
+            Self::FullB => "B",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim() {
+            "H" | "h" | "compact" | "CompactH" => Some(Self::CompactH),
+            "B" | "b" | "full" | "FullB" => Some(Self::FullB),
+            _ => None,
+        }
+    }
+
+    pub fn estimate_format(self) -> &'static str {
+        match self {
+            Self::CompactH => "compact",
+            Self::FullB => "full",
+        }
+    }
+
+    /// Caracteres por token padrão da pesquisa #115 (§3.4) / `cost.rs`.
+    pub fn default_chars_per_token(self, language: &str) -> f64 {
+        match self {
+            Self::CompactH => {
+                if language == "en" {
+                    3.6
+                } else {
+                    3.3
+                }
+            }
+            Self::FullB => 2.4,
+        }
+    }
+}
+
+/// Formata um instante em microssegundos como `hh:mm:ss.d` (décimos de segundo) para o formato B.
+pub fn format_timestamp_tenths(us: i64) -> String {
+    let tenths_total = us.max(0) / 100_000;
+    let d = tenths_total % 10;
+    let secs_total = tenths_total / 10;
+    let s = secs_total % 60;
+    let mins_total = secs_total / 60;
+    let m = mins_total % 60;
+    let h = mins_total / 60;
+    format!("{h:02}:{m:02}:{s:02}.{d}")
+}
+
+/// Serializa uma única Frase no formato B (`[S123 01:02:03.4] texto`, com marcas opcionais).
+pub fn format_b_line(sentence: &Sentence, marks: &impl SentenceMarks) -> String {
+    let ts = format_timestamp_tenths(sentence.start_us);
+    let mut out = format!("[S{} {ts}]", sentence.id);
+    if let Some(mark) = marks.energy_of(sentence.id).and_then(energy::mark) {
+        out.push(' ');
+        out.push_str(mark);
+    }
+    if let Some(mark) = marks.chat_of(sentence.id) {
+        out.push(' ');
+        out.push_str(&chat::mark(mark));
+    }
+    out.push(' ');
+    out.push_str(&sentence.text);
+    out.push('\n');
+    out
+}
+
+/// Serializa um trecho de Frases no formato B completo.
+pub fn format_b_transcript(sentences: &[Sentence], marks: &impl SentenceMarks) -> String {
+    let mut out = String::new();
+    for s in sentences {
+        out.push_str(&format_b_line(s, marks));
+    }
+    out
+}
+
+fn dominant_language(sentences: &[Sentence]) -> String {
+    let mut counts = std::collections::BTreeMap::<&str, usize>::new();
+    for s in sentences {
+        let lang = s
+            .language
+            .as_deref()
+            .filter(|l| l.len() == 2 && l.bytes().all(|c| c.is_ascii_lowercase()))
+            .unwrap_or("und");
+        *counts.entry(lang).or_default() += s.text.chars().count();
+    }
+    let total: usize = counts.values().sum();
+    if total == 0 {
+        return "und".into();
+    }
+    counts
+        .into_iter()
+        .find(|(_, n)| {
+            n.saturating_mul(100) >= total.saturating_mul(sentences::LANGUAGE_MAJORITY_PERCENT)
+        })
+        .map_or_else(|| "mul".into(), |(l, _)| l.into())
+}
+
+/// Monta o `TaskInput` da Tarefa de IA `selection` para qualquer formato experimental do #148,
+/// preservando o prompt, o schema e os verificadores do núcleo (#53/#57).
+pub fn bench_window_input(
+    frases: &[Sentence],
+    format: BenchFormat,
+    min_us: i64,
+    max_us: i64,
+    marks: &Marks,
+) -> TaskInput {
+    let length = frases.last().map_or(0, |s| s.end_us) - frases.first().map_or(0, |s| s.start_us);
+    let target = target_candidates(length);
+    let desired_max = PREFERRED_MAX_US.min(max_us).max(min_us);
+    let (body, hint) = match format {
+        BenchFormat::CompactH => {
+            let compact = sentences::compact_with_hint_marked(frases, marks);
+            (compact.text, compact.hint)
+        }
+        BenchFormat::FullB => (
+            format_b_transcript(frases, marks),
+            EstimateHint {
+                format: "full".into(),
+                language: dominant_language(frases),
+            },
+        ),
+    };
+    let fmt_note = match format {
+        BenchFormat::CompactH => "",
+        BenchFormat::FullB => {
+            " formato=B ([S<ID> hh:mm:ss.d]; devolva startId/endId inteiros sem S)"
+        }
+    };
+    let header = format!(
+        "#JANELA max_candidatos={target} duracao_desejada_s={}-{} duracao_maxima_s={}{fmt_note}\n",
+        min_us / 1_000_000,
+        desired_max / 1_000_000,
+        max_us / 1_000_000,
+    );
+    TaskInput {
+        transcript: header + &body,
+        estimate_hint: hint,
+        context: json!({
+            "ids": frases.iter().map(|s| s.id).collect::<Vec<_>>(),
+            "targetCandidates": target,
+        }),
+        native_schema: false,
+    }
+}
+
+/// Configuração de uma célula da matriz experimental do #148.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MatrixWindowSpec {
+    pub id: String,
+    pub duration_label: String,
+    /// `None` representa a live inteira em uma única chamada.
+    pub window_max_us: Option<i64>,
+    pub overlap_us: i64,
+    pub format: BenchFormat,
+}
+
+impl MatrixWindowSpec {
+    pub fn new(window_minutes: Option<i64>, overlap_minutes: i64, format: BenchFormat) -> Self {
+        let (duration_label, window_max_us) = match window_minutes {
+            Some(m) => (format!("{m}m"), Some(m * BENCH_MINUTE_US)),
+            None => ("full".to_owned(), None),
+        };
+        let ov_min = if window_max_us.is_none() {
+            0
+        } else {
+            overlap_minutes.max(0)
+        };
+        let id = format!("{duration_label}_ov{ov_min}m_{}", format.as_str());
+        Self {
+            id,
+            duration_label,
+            window_max_us,
+            overlap_us: ov_min * BENCH_MINUTE_US,
+            format,
+        }
+    }
+}
+
+/// Matriz completa do ticket #148: 10/15/30/60 min × 0/1/3 min × H/B + live inteira × H/B (26 células).
+pub fn default_matrix() -> Vec<MatrixWindowSpec> {
+    let mut specs = Vec::with_capacity(26);
+    for dur in [Some(10), Some(15), Some(30), Some(60)] {
+        for ov in [0, 1, 3] {
+            for fmt in [BenchFormat::CompactH, BenchFormat::FullB] {
+                specs.push(MatrixWindowSpec::new(dur, ov, fmt));
+            }
+        }
+    }
+    for fmt in [BenchFormat::CompactH, BenchFormat::FullB] {
+        specs.push(MatrixWindowSpec::new(None, 0, fmt));
+    }
+    specs
+}
+
+/// Estado do planejamento de uma célula da matriz para um dado limite de contexto efetivo.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum BenchPlanStatus {
+    Full,
+    Reduced {
+        min_achieved_us: i64,
+        max_achieved_us: i64,
+    },
+    Infeasible {
+        code: String,
+        required_tokens: u64,
+        available_tokens: u64,
+    },
+}
+
+/// Janela planejada pelo harness do #148 (contém apenas índices, tempos e contagens).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BenchPlannedWindow {
+    pub index: usize,
+    pub first_index: usize,
+    pub last_index: usize,
+    pub first_id: i64,
+    pub last_id: i64,
+    pub start_us: i64,
+    pub end_us: i64,
+    pub duration_us: i64,
+    pub sentence_count: usize,
+    pub transcript_chars: usize,
+    pub est_input_tokens: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BenchPlan {
+    pub spec: MatrixWindowSpec,
+    pub effective_context_tokens: u64,
+    pub input_budget_tokens: u64,
+    pub status: BenchPlanStatus,
+    pub windows: Vec<BenchPlannedWindow>,
+}
+
+fn json_escaped_chars(text: &str) -> u64 {
+    serde_json::to_string(text).map_or(text.chars().count() as u64, |j| {
+        (j.chars().count() as u64).saturating_sub(2)
+    })
+}
+
+/// Planeja janelas experimentais para o #148 respeitando a capacidade real do perfil (margem de 85%,
+/// reserva de saída/raciocínio e tokens fixos). Registra combinações inviáveis sem forçar.
+#[allow(clippy::too_many_arguments)]
+pub fn plan_matrix_windows(
+    sentences: &[Sentence],
+    marks: &Marks,
+    spec: &MatrixWindowSpec,
+    effective_context_tokens: u64,
+    fixed_tokens: u64,
+    output_reserve: u64,
+    reasoning_reserve: u64,
+    planning_factor: f64,
+) -> BenchPlan {
+    let usable = ((u128::from(effective_context_tokens) * 85) / 100) as u64;
+    let input_limit = usable.saturating_sub(output_reserve.saturating_add(reasoning_reserve));
+    let budget = input_limit.saturating_sub(fixed_tokens);
+
+    if sentences.is_empty() {
+        return BenchPlan {
+            spec: spec.clone(),
+            effective_context_tokens,
+            input_budget_tokens: budget,
+            status: BenchPlanStatus::Full,
+            windows: Vec::new(),
+        };
+    }
+
+    let lang = dominant_language(sentences);
+    let chars_per_tok = spec.format.default_chars_per_token(&lang).max(0.5);
+    let tok_per_char = (1.0 / chars_per_tok) * planning_factor.max(1.0);
+
+    let line_chars: Vec<u64> = sentences
+        .iter()
+        .map(|s| {
+            let text = match spec.format {
+                BenchFormat::CompactH => sentences::line(s, marks),
+                BenchFormat::FullB => format_b_line(s, marks),
+            };
+            json_escaped_chars(&text)
+        })
+        .collect();
+    let header_chars = match spec.format {
+        BenchFormat::CompactH => json_escaped_chars("## 00:00\n"),
+        BenchFormat::FullB => 0,
+    };
+
+    let n = sentences.len();
+    let mut prefix_chars = Vec::with_capacity(n + 1);
+    let mut prefix_headers = Vec::with_capacity(n + 1);
+    let mut c_sum = 0_u64;
+    let mut h_sum = 0_u64;
+    prefix_chars.push(0);
+    prefix_headers.push(0);
+    let minute_of = |s: &Sentence| s.start_us.max(0) / BENCH_MINUTE_US;
+    for i in 0..n {
+        c_sum = c_sum.saturating_add(line_chars[i]);
+        if matches!(spec.format, BenchFormat::CompactH) {
+            h_sum += u64::from(i == 0 || minute_of(&sentences[i]) != minute_of(&sentences[i - 1]));
+        }
+        prefix_chars.push(c_sum);
+        prefix_headers.push(h_sum);
+    }
+    let starts_header = |i: usize| {
+        matches!(spec.format, BenchFormat::CompactH)
+            && (i == 0 || minute_of(&sentences[i]) != minute_of(&sentences[i - 1]))
+    };
+    let chars_of = |s: usize, e: usize| {
+        let extra = if matches!(spec.format, BenchFormat::CompactH) {
+            let markers = prefix_headers[e + 1] - prefix_headers[s] + u64::from(!starts_header(s));
+            markers.saturating_mul(header_chars)
+        } else {
+            0
+        };
+        (prefix_chars[e + 1] - prefix_chars[s]).saturating_add(extra)
+    };
+    let tokens_of =
+        |s: usize, e: usize| -> u64 { ((chars_of(s, e) as f64) * tok_per_char).ceil() as u64 };
+
+    // Live inteira: 1 única chamada. Se não couber, registra inviável sem quebrar em janelas.
+    if spec.window_max_us.is_none() {
+        let needed = tokens_of(0, n - 1);
+        if needed > budget {
+            return BenchPlan {
+                spec: spec.clone(),
+                effective_context_tokens,
+                input_budget_tokens: budget,
+                status: BenchPlanStatus::Infeasible {
+                    code: "context_too_small_full_live".into(),
+                    required_tokens: needed.saturating_add(fixed_tokens),
+                    available_tokens: input_limit,
+                },
+                windows: Vec::new(),
+            };
+        }
+        return BenchPlan {
+            spec: spec.clone(),
+            effective_context_tokens,
+            input_budget_tokens: budget,
+            status: BenchPlanStatus::Full,
+            windows: vec![BenchPlannedWindow {
+                index: 0,
+                first_index: 0,
+                last_index: n - 1,
+                first_id: sentences[0].id,
+                last_id: sentences[n - 1].id,
+                start_us: sentences[0].start_us,
+                end_us: sentences[n - 1].end_us,
+                duration_us: sentences[n - 1].end_us - sentences[0].start_us,
+                sentence_count: n,
+                transcript_chars: chars_of(0, n - 1) as usize,
+                est_input_tokens: needed.saturating_add(fixed_tokens),
+            }],
+        };
+    }
+
+    let w_max = spec.window_max_us.unwrap();
+    let overlap = spec.overlap_us;
+    let min_req_us = if overlap > 0 {
+        w_max.min(overlap.saturating_mul(2))
+    } else {
+        w_max.min(5 * BENCH_MINUTE_US)
+    };
+
+    let mut windows = Vec::new();
+    let mut reduced = false;
+    let mut start = 0_usize;
+    while start < n {
+        let by_duration = sentences[start..]
+            .partition_point(|s| s.end_us - sentences[start].start_us <= w_max)
+            .checked_sub(1)
+            .map(|k| start + k)
+            .unwrap_or(start);
+
+        let by_tokens = {
+            let (mut lo, mut hi) = (start, by_duration + 1);
+            while lo < hi {
+                let mid = lo + (hi - lo) / 2;
+                if tokens_of(start, mid) <= budget {
+                    lo = mid + 1;
+                } else {
+                    hi = mid;
+                }
+            }
+            match lo.checked_sub(1).filter(|last| *last >= start) {
+                Some(last) => last,
+                None => {
+                    return BenchPlan {
+                        spec: spec.clone(),
+                        effective_context_tokens,
+                        input_budget_tokens: budget,
+                        status: BenchPlanStatus::Infeasible {
+                            code: "context_too_small".into(),
+                            required_tokens: tokens_of(start, start).saturating_add(fixed_tokens),
+                            available_tokens: input_limit,
+                        },
+                        windows: Vec::new(),
+                    };
+                }
+            }
+        };
+
+        let required = (start
+            + sentences[start..]
+                .partition_point(|s| s.end_us - sentences[start].start_us < min_req_us))
+        .min(n - 1)
+        .min(by_duration);
+        if required > by_tokens {
+            return BenchPlan {
+                spec: spec.clone(),
+                effective_context_tokens,
+                input_budget_tokens: budget,
+                status: BenchPlanStatus::Infeasible {
+                    code: "context_too_small".into(),
+                    required_tokens: tokens_of(start, required).saturating_add(fixed_tokens),
+                    available_tokens: input_limit,
+                },
+                windows: Vec::new(),
+            };
+        }
+
+        let end = by_duration.min(by_tokens);
+        if by_tokens < by_duration {
+            reduced = true;
+        }
+        let dur_us = sentences[end].end_us - sentences[start].start_us;
+        windows.push(BenchPlannedWindow {
+            index: windows.len(),
+            first_index: start,
+            last_index: end,
+            first_id: sentences[start].id,
+            last_id: sentences[end].id,
+            start_us: sentences[start].start_us,
+            end_us: sentences[end].end_us,
+            duration_us: dur_us,
+            sentence_count: end - start + 1,
+            transcript_chars: chars_of(start, end) as usize,
+            est_input_tokens: tokens_of(start, end).saturating_add(fixed_tokens),
+        });
+        if end == n - 1 {
+            break;
+        }
+        let cut = sentences[end].end_us - overlap;
+        let next = sentences.partition_point(|s| s.start_us <= cut);
+        let reaches_beyond =
+            next > start && sentences[end + 1].end_us - sentences[next].start_us <= w_max;
+        start = if reaches_beyond { next } else { end + 1 };
+    }
+
+    let min_achieved = windows.iter().map(|w| w.duration_us).min().unwrap_or(0);
+    let max_achieved = windows.iter().map(|w| w.duration_us).max().unwrap_or(0);
+    let total_dur = sentences[n - 1].end_us - sentences[0].start_us;
+    // Se pediu janela >15 min (30 ou 60 min) numa Fonte mais longa que 15 min, mas o contexto
+    // reduziu todas as janelas para <= 15 min, registra inviabilidade para evitar duplicar 15m.
+    let status = if w_max > 15 * BENCH_MINUTE_US
+        && total_dur > 15 * BENCH_MINUTE_US
+        && max_achieved <= 15 * BENCH_MINUTE_US
+    {
+        BenchPlanStatus::Infeasible {
+            code: "context_cannot_hold_target_window".into(),
+            required_tokens: tokens_of(0, n - 1).saturating_add(fixed_tokens),
+            available_tokens: input_limit,
+        }
+    } else if reduced {
+        BenchPlanStatus::Reduced {
+            min_achieved_us: min_achieved,
+            max_achieved_us: max_achieved,
+        }
+    } else {
+        BenchPlanStatus::Full
+    };
+
+    BenchPlan {
+        spec: spec.clone(),
+        effective_context_tokens,
+        input_budget_tokens: budget,
+        status,
+        windows,
+    }
+}
+
+/// Mede quantos Cortes humanos cabem inteiros em ao menos uma janela e quantos cruzam borda.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowCrossingStats {
+    pub total_clips: usize,
+    pub contained_clips: usize,
+    pub crossing_clips: usize,
+    pub crossing_rate: f64,
+}
+
+pub fn evaluate_window_crossing(
+    windows: &[(i64, i64)],
+    ground_truth: &[GroundTruthClip],
+) -> WindowCrossingStats {
+    let total_clips = ground_truth.len();
+    let contained_clips = ground_truth
+        .iter()
+        .filter(|gt| {
+            windows
+                .iter()
+                .any(|&(ws, we)| ws <= gt.start_us && gt.end_us <= we)
+        })
+        .count();
+    let crossing_clips = total_clips.saturating_sub(contained_clips);
+    WindowCrossingStats {
+        total_clips,
+        contained_clips,
+        crossing_clips,
+        crossing_rate: rate(crossing_clips, total_clips),
+    }
+}
+
+/// Contagem de validade de saída e falhas tipadas por execução (#148).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidityCounts {
+    pub windows_total: usize,
+    pub windows_attempted: usize,
+    pub windows_completed: usize,
+    pub windows_failed: usize,
+    pub invalid_json: usize,
+    pub output_invalid: usize,
+    pub verification_failed: usize,
+    pub context_truncated: usize,
+    pub timeout_uncertain: usize,
+    pub rate_limit: usize,
+    pub other_errors: usize,
+    pub validity_rate: f64,
+}
+
+impl ValidityCounts {
+    pub fn record_failure(&mut self, code: &str) {
+        self.windows_failed += 1;
+        match code {
+            "invalid_json" | "invalid_response" => self.invalid_json += 1,
+            "output_invalid" | "output_truncated" | "refusal" => self.output_invalid += 1,
+            "verification_failed" => self.verification_failed += 1,
+            "context_truncated" => self.context_truncated += 1,
+            "timeout_uncertain" => self.timeout_uncertain += 1,
+            "rate_limit" | "provider_daily_limit" => self.rate_limit += 1,
+            _ => self.other_errors += 1,
+        }
+    }
+
+    pub fn finalize(&mut self) {
+        self.validity_rate = rate(self.windows_completed, self.windows_attempted);
+    }
+
+    pub fn merge(&mut self, other: &Self) {
+        self.windows_total += other.windows_total;
+        self.windows_attempted += other.windows_attempted;
+        self.windows_completed += other.windows_completed;
+        self.windows_failed += other.windows_failed;
+        self.invalid_json += other.invalid_json;
+        self.output_invalid += other.output_invalid;
+        self.verification_failed += other.verification_failed;
+        self.context_truncated += other.context_truncated;
+        self.timeout_uncertain += other.timeout_uncertain;
+        self.rate_limit += other.rate_limit;
+        self.other_errors += other.other_errors;
+        self.finalize();
+    }
+}
+
+/// Candidato produzido pelo pipeline exato do núcleo (`build_candidates`), para avaliação
+/// no harness (e eventual segunda passada) sem tocar no SQLite do produto.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BenchCandidate {
+    pub start_id: i64,
+    pub end_id: i64,
+    pub start_us: i64,
+    pub end_us: i64,
+    pub total_centi: u32,
+    pub title: String,
+    pub windows: Vec<usize>,
+    pub scores: Vec<u8>,
+    pub why: Vec<String>,
+}
+
+impl BenchCandidate {
+    pub fn span(&self) -> CandidateSpan {
+        CandidateSpan {
+            start_id: self.start_id,
+            end_id: self.end_id,
+            start_us: self.start_us,
+            end_us: self.end_us,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CandidateTallySummary {
+    pub proposed: usize,
+    pub kept: usize,
+    pub merged: usize,
+    pub adjusted: usize,
+    pub too_short: usize,
+    pub too_long: usize,
+    pub unknown_id: usize,
+}
+
+/// Executa o mesmo ajuste de bordas, junção de duplicatas e ordenação de `selection.rs` sobre as
+/// saídas validadas pelo `ai_task::run` no harness.
+pub fn build_candidates_for_benchmark(
+    frases: &[Sentence],
+    min_us: i64,
+    max_us: i64,
+    done: &[(usize, Value)],
+) -> (Vec<BenchCandidate>, CandidateTallySummary) {
+    let range = Range { min_us, max_us };
+    let (kept, tally) = selection::build_candidates(VideoKind::Direct, frases, &range, done);
+    let summary = CandidateTallySummary {
+        proposed: tally.proposed,
+        kept: kept.len(),
+        merged: tally.merged,
+        adjusted: tally.adjusted,
+        too_short: tally.too_short,
+        too_long: tally.too_long,
+        unknown_id: tally.unknown_id,
+    };
+    let out = kept
+        .into_iter()
+        .map(|(m, p)| BenchCandidate {
+            start_id: frases[p.start].id,
+            end_id: frases[p.end].id,
+            start_us: m.span.start_us,
+            end_us: m.span.end_us,
+            total_centi: m.total_centi,
+            title: p.title,
+            windows: m.windows,
+            scores: p.scores,
+            why: p.why,
+        })
+        .collect();
+    (out, summary)
+}
+
+/// Métricas de comparação antes/depois da segunda passada (reordenação global) por corte de topo K.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TopKRecall {
+    pub k: usize,
+    pub pass1_recall_min_50: f64,
+    pub pass2_recall_min_50: f64,
+    pub pass1_recall_iou_30: f64,
+    pub pass2_recall_iou_30: f64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TwoPassEvalMetrics {
+    pub total_clips: usize,
+    pub total_candidates: usize,
+    pub pass1_all_recall_min_50: f64,
+    pub pass2_all_recall_min_50: f64,
+    pub top_k: Vec<TopKRecall>,
+}
+
+fn recall_at_k(
+    ground_truth: &[GroundTruthClip],
+    ordered_spans: &[CandidateSpan],
+    k: usize,
+) -> (f64, f64) {
+    if ground_truth.is_empty() {
+        return (0.0, 0.0);
+    }
+    let slice = &ordered_spans[..ordered_spans.len().min(k)];
+    let hit_min50 = ground_truth
+        .iter()
+        .filter(|gt| {
+            slice
+                .iter()
+                .any(|c| min_overlap_ratio(gt.start_us, gt.end_us, c.start_us, c.end_us) >= 0.50)
+        })
+        .count();
+    let hit_iou30 = ground_truth
+        .iter()
+        .filter(|gt| {
+            slice
+                .iter()
+                .any(|c| iou(gt.start_us, gt.end_us, c.start_us, c.end_us) >= 0.30)
+        })
+        .count();
+    (
+        rate(hit_min50, ground_truth.len()),
+        rate(hit_iou30, ground_truth.len()),
+    )
+}
+
+/// Avalia o ganho da segunda passada em Recall@K comparando a ordem original (Pass 1) com a ordem
+/// reordenada (Pass 2, índices base-0 em `pass1_ordered`).
+pub fn evaluate_two_pass_rerank(
+    ground_truth: &[GroundTruthClip],
+    pass1_ordered: &[CandidateSpan],
+    pass2_indices: &[usize],
+    ks: &[usize],
+) -> TwoPassEvalMetrics {
+    let pass2_ordered: Vec<CandidateSpan> = pass2_indices
+        .iter()
+        .filter_map(|&idx| pass1_ordered.get(idx).copied())
+        .collect();
+    let (p1_all, _) = recall_at_k(ground_truth, pass1_ordered, pass1_ordered.len());
+    let (p2_all, _) = recall_at_k(ground_truth, &pass2_ordered, pass2_ordered.len());
+    let top_k = ks
+        .iter()
+        .map(|&k| {
+            let (p1_m, p1_i) = recall_at_k(ground_truth, pass1_ordered, k);
+            let (p2_m, p2_i) = recall_at_k(ground_truth, &pass2_ordered, k);
+            TopKRecall {
+                k,
+                pass1_recall_min_50: p1_m,
+                pass2_recall_min_50: p2_m,
+                pass1_recall_iou_30: p1_i,
+                pass2_recall_iou_30: p2_i,
+            }
+        })
+        .collect();
+    TwoPassEvalMetrics {
+        total_clips: ground_truth.len(),
+        total_candidates: pass1_ordered.len(),
+        pass1_all_recall_min_50: p1_all,
+        pass2_all_recall_min_50: p2_all,
+        top_k,
+    }
+}
+
+/// Carrega as Frases segmentadas, marcas de energia e marcas de chat de uma Fonte do Projeto
+/// aberto, usando as mesmas funções internas da seleção (#53/#54/#151).
+pub fn load_source_sentences_and_marks(
+    source_id: i64,
+    with_chat: bool,
+) -> Result<(Vec<Sentence>, Marks, bool), crate::CoreError> {
+    let transcript = sentences::source_transcript(&json!({"source_id": source_id}))?;
+    sentences::segment_transcript(transcript)?;
+    let frases = sentences::load_for(transcript)?;
+    let energy_marks = energy::load_marks(transcript)?.unwrap_or_default();
+    let chat_loaded = chat::load_marks(transcript, &frases)?;
+    let has_chat = chat_loaded.is_some();
+    let chat_marks = if with_chat {
+        chat_loaded.unwrap_or_default()
+    } else {
+        Default::default()
+    };
+    Ok((
+        frases,
+        Marks {
+            energy: energy_marks,
+            chat: chat_marks,
+        },
+        has_chat,
+    ))
+}
+
+/// Estimativa de tokens fixos (envelope + instrução + schema) da Tarefa `selection` para
+/// dimensionamento de janelas no harness do #148.
+pub fn selection_fixed_tokens() -> u64 {
+    let task = super::task_for(VideoKind::Direct);
+    let instruction = crate::ai_task::normalized_prompt(task.prompt);
+    let schema: Value = serde_json::from_str(task.wire_schema).unwrap_or(Value::Null);
+    let req = crate::provider::StructuredRequest {
+        estimate_hint: EstimateHint {
+            format: "compact".into(),
+            language: "pt".into(),
+        },
+        instruction,
+        transcript: String::new(),
+        schema,
+        native_schema: false,
+        max_output_tokens: Some(task.budget.max_output_tokens),
+    };
+    let chars = crate::provider::cost::input_characters(&req) as f64;
+    (chars / 3.3).ceil() as u64
 }
