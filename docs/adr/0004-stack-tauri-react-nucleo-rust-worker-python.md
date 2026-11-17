@@ -16,7 +16,7 @@ O protótipo provou que o Tauri 2 com WebView2 dá conta do editor. A condição
    - as chamadas a FFmpeg e yt-dlp como executáveis separados, via `std::process::Command` e sem shell;
    - o cofre de chaves do sistema;
    - a **camada de Provedor**.
-2. **UI React**, que só exibe e edita. Ela pode enviar a chave ao núcleo na entrada, mas nunca lê chaves e nunca abre processos. Fala com o núcleo por comandos do Tauri, e a mídia chega por um protocolo próprio com suporte a Range.
+2. **UI React**, que só exibe e edita. Ela pode enviar a chave ao núcleo na entrada, mas nunca lê chaves e nunca abre processos. Fala com o núcleo por comandos do Tauri, e a mídia chega por um protocolo próprio com suporte a Range (no Linux, por servidor HTTP loopback autenticado — ver emenda ao final).
 3. **Um único worker Python ("worker de ML")**, que roda:
    - o faster-whisper (transcrição);
    - o Kokoro (TTS), de preferência via ONNX Runtime e sem PyTorch, se o benchmark confirmar;
@@ -65,3 +65,16 @@ Motivos:
 - reutiliza o fluxo existente de Componentes (SHA-256 fixado, licença e termo de uso exibidos antes do download, sem login nem token HF).
 
 O worker Python continua exclusivo para transcrição (`faster-whisper`), VAD/sonda e reenquadramento (`onnxruntime` / YuNet).
+
+## Emenda de 17/11/2026: servidor HTTP loopback para mídia no Linux (WebKitGTK)
+
+Decisão registrada a partir da [validação automatizada no Linux (#69)](../research/2026-11-17-validacao-linux.md) e do [#246](https://github.com/GUSTAVOHOOO/clipes/issues/246). O protocolo próprio `clipes-media` com suporte a `Range` continua válido no **Windows** (WebView2, onde `convertFileSrc` vira `http://clipes-media.localhost/...`) e no **macOS** (WKWebView). No **Linux**, o esquema customizado `clipes-media://` não é reproduzível pelo backend de vídeo do WebKitGTK:
+
+- **Evidência (#69, `libwebkit2gtk-4.1-0` 2.52.6, GStreamer `1.28.2`):** com `gstreamer1.0-libav` e `gstreamer1.0-plugins-bad` instalados, `video.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"')` retorna `"probably"` e `fetch('clipes-media://localhost/proxy%2F...')` recebe HTTP `206` OK, mas `<video src="clipes-media://...">` falha imediatamente em `MediaPlayerPrivateGStreamer.cpp:1554:loadingFailed` com `FormatError` (`video.error.code = 4`, `MEDIA_ERR_SRC_NOT_SUPPORTED`).
+- **Evidência com loopback:** servindo o mesmo `proxy.mp4` (960×540, 250 s, GOP 0,5 s) por `http://127.0.0.1:<porta>/...` com suporte a `Range` (HTTP `206`), o WebKitGTK reproduziu o vídeo normalmente e concluiu 100 buscas com **mediana de 16 ms** e **p95 de 18 ms** em `requestVideoFrameCallback` (`seeked`: mediana 7 ms, p95 13 ms).
+
+Por isso, apenas no **Linux**, o adaptador Tauri (`src-tauri`) sobe um servidor HTTP loopback em processo para a mídia do preview e da timeline, mantendo as mesmas garantias de isolamento do núcleo:
+- bind exclusivo em `127.0.0.1` e porta aleatória (`0`);
+- token criptográfico aleatório por sessão na URL (requisições sem token válido respondem `403`);
+- reuso de `clipes_core::media` (apenas IDs opacos `proxy/<chave>`, `thumbs/<chave>`, `source/<id>` e `narration/<id>` do Projeto aberto, com caminho canônico verificado e recusa de `..` e symlinks que escapem);
+- sem listagem de diretórios e sem CORS aberto (`Access-Control-Allow-Origin: *` removido; CORS restrito à origem do app).
