@@ -16,69 +16,69 @@ Conduzir o usuário pelo fluxo humano-no-loop obrigatório do **Vídeo transform
 
 * **De onde o usuário chega:**
   * Da sub-aba **Editar** (`#/projeto/:id/corte/:corteId/editar`) pelo seletor de sub-abas no `<ContextoCorte>`.
-  * Da **Revisão de Cortes** (`#/projeto/:id/cortes/revisao/:runId`) ao abrir um Corte aprovado de **Vídeo transformado** ou ao converter um **Corte direto** via ação *"Converter em Vídeo transformado"* no `<ContextoCorte>`.
+  * Da **Revisão de Cortes** (`#/projeto/:id/cortes/revisao/:runId`) ao abrir um Corte aprovado de **Vídeo transformado** *(nota: a ação "Converter em Vídeo transformado" no `<ContextoCorte>` permanece desabilitada com tooltip até existir comando no núcleo)*.
   * Do toast/link de job concluído na **Fila de Jobs** (`ai:angles:done`, `ai:script_block:done`, `narration`, `narration_align`).
 * **Para onde o usuário vai:**
   * Para **Empacotar** (`#/projeto/:id/corte/:corteId/empacotar`) ao finalizar a Narração para gerar capa, título, descrição com capítulos e tags.
   * Para **Editar** (`#/projeto/:id/corte/:corteId/editar`) para ajustar o posicionamento temporal da Narração na `NarrationTrack` (`editor.montage.set_start`), revisar legendas na faixa `narration` ou mixar trilha/SFX.
-  * Para outro Corte aprovado via botões `< Corte anterior | Próximo aprovado >` em `<ContextoCorte>`.
+  * Para outro Corte aprovado via botões `< Anterior | Próximo aprovado >` (`Alt+PageUp` / `Alt+PageDown`) em `<ContextoCorte>`.
 * **Guardas de rota:**
   1. Sem Projeto aberto → redireciona para `#/inicio`.
-  2. `:corteId` inexistente ou candidato não aprovado → redireciona para `#/projeto/:id/cortes` com aviso.
-  3. Corte for **Corte direto** (`videoKind === "direct"`) → a aba `Transformar` fica **oculta** no `<ContextoCorte>`; se acessada diretamente por URL/histórico, redireciona para `#/projeto/:id/corte/:corteId/editar` com aviso informativo (`"Transformar está disponível apenas para Vídeo transformado"`).
+  2. `:corteId` inexistente ou candidato não aprovado → redireciona para `#/projeto/:id/cortes` com aviso; Corte avulso (`avulso-*`, sem `candidate_id`) → redireciona para `#/projeto/:id/corte/:corteId/editar` (`Transformar` e `Empacotar` ficam ocultas).
+  3. Corte for **Corte direto** (`videoKind === "direct"`) → a aba `Transformar` fica **oculta** no `<ContextoCorte>`; se acessada diretamente por URL/histórico, redireciona para `#/projeto/:id/corte/:corteId/editar` com toast informativo (`"Transformar está disponível apenas para Vídeo transformado"`).
 
 ---
 
 ### 2. Layout por zonas
 
-A sub-aba ocupa a área principal abaixo do `<ShellGlobal>` e do `<ContextoCorte>`. O cabeçalho do **Stepper** permanece fixo no topo da sub-aba; o conteúdo do passo ativo e o painel lateral de contexto da Transcrição rolam de forma independente.
+A sub-aba ocupa a área principal abaixo do `<ShellGlobal>` e do `<ContextoCorte>`. O cabeçalho do **Stepper** permanece fixo no topo da sub-aba; o conteúdo do passo ativo e o painel lateral esquerdo de contexto da Transcrição rolam de forma independente.
 
 #### Em 1366 px (notebook alvo)
 
-Por padrão, o painel de contexto (**Transcrição do Corte**) inicia **recolhido** (`Ctrl/Cmd+]` abre/fecha), preservando largura de leitura confortável (`≤ 68 ch`) para roteiro, edição de blocos e teleprompter sem aperto horizontal:
+Por padrão, o painel esquerdo de contexto (**Transcrição do Corte**) inicia **recolhido** (`Ctrl/Cmd+[` abre/fecha), preservando largura de leitura confortável (`≤ 68 ch`) para roteiro, edição de blocos e teleprompter sem aperto horizontal:
 
 ```text
-+----------------------------------------------------------------------------------+
-| <ShellGlobal> (Barra Superior 44px)                                              |
-+----------------------------------------------------------------------------------+
-| <ContextoCorte>: < Anterior | Corte #12 [Vídeo transformado] | Próximo >         |
-| Sub-abas: [ Editar ]  [(ativo) Transformar ]  [ Empacotar ]      [Exportar MP4]  |
-+----------------------------------------------------------------------------------+
-| STEPPER (fixo na sub-aba):                                                       |
-|  (1) Ângulo [Escolhido] ──> (2) Roteiro [3/5 aprovados] ──> (3) [Trava] Narração |
-|                                                [Abrir Transcrição do Corte (Ctrl+])] |
-+----------------------------------------------------------------------------------+
-|                                                                                  |
-|   ÁREA DO PASSO ATIVO (centralizada/confortável <= 68 ch, scroll próprio)        |
-|   +--------------------------------------------------------------------------+   |
-|   | Cabeçalho do Passo + Banner pedagógico (quando aplicável)                |   |
-|   | Controles primários do Passo (estimativa/geração/status)                 |   |
-|   +--------------------------------------------------------------------------+   |
-|   | Lista de cartões / blocos / formulários do Passo                         |   |
-|   | (no Passo 1: sugestões + formulário manual)                              |   |
-|   | (no Passo 2: blocos numerados 1..N editáveis + aprovar/regenerar)        |   |
-|   | (no Passo 3: pré-requisitos TTS + ações globais + cartões por bloco)     |   |
-|   +--------------------------------------------------------------------------+   |
-|                                                                                  |
-+----------------------------------------------------------------------------------+
-| <BarraStatus> (Autosave / Job ativo / Dica F6 e atalhos)                         |
-+----------------------------------------------------------------------------------+
++-------------------------------------------------------------------------------------+
+| <ShellGlobal> (Barra Superior 44px)                                                 |
++-------------------------------------------------------------------------------------+
+| <ContextoCorte>: < Anterior | Corte 2/8: "Como o streamer..." [Vídeo transformado]  |
+|   [Próximo aprovado >] | Sub-abas: [Editar] [(ativo) Transformar] [Empacotar] | [Exportar Corte] |
++-------------------------------------------------------------------------------------+
+| STEPPER (fixo na sub-aba):                                                          |
+|  (1) Ângulo [Escolhido] ──> (2) Roteiro [3/5 aprovados] ──> (3) [Trava] Narração    |
+|  [Abrir Transcrição do Corte (Ctrl+[)]                                              |
++-------------------------------------------------------------------------------------+
+|                                                                                     |
+|   ÁREA DO PASSO ATIVO (centralizada/confortável <= 68 ch, scroll próprio)           |
+|   +-----------------------------------------------------------------------------+   |
+|   | Cabeçalho do Passo + Banner pedagógico (quando aplicável)                   |   |
+|   | Controles primários do Passo (estimativa/geração/status)                    |   |
+|   +-----------------------------------------------------------------------------+   |
+|   | Lista de cartões / blocos / formulários do Passo                            |   |
+|   | (no Passo 1: sugestões + formulário manual)                                 |   |
+|   | (no Passo 2: blocos numerados 1..N editáveis + aprovar/regenerar)           |   |
+|   | (no Passo 3: pré-requisitos TTS + ações globais + cartões por bloco)        |   |
+|   +-----------------------------------------------------------------------------+   |
+|                                                                                     |
++-------------------------------------------------------------------------------------+
+| <BarraStatus> (Autosave / Job ativo / Dica F6 e atalhos)                            |
++-------------------------------------------------------------------------------------+
 ```
 
 #### Variação em 1440+ px
 
-A **Transcrição do Corte** (com IDs de Frase e timestamps) abre acoplada à direita como painel auxiliar (`<aside>`), sem cobrir a área do passo ativo, facilitando conferir falas originais ao escrever um ângulo ou editar `refs` dos blocos do Roteiro:
+A **Transcrição do Corte** (com IDs de Frase e timestamps) abre acoplada à **esquerda** como painel auxiliar (`<aside>`, alternável com `Ctrl/Cmd+[`), sem cobrir a área do passo ativo, facilitando conferir falas originais ao escrever um ângulo ou editar `refs` dos blocos do Roteiro:
 
 ```text
 +----------------------------------------------------------------------------------+
 | STEPPER: (1) Ângulo [Escolhido] ──> (2) Roteiro [5/5 aprovados] ──> (3) Narração |
-+----------------------------------------------------+-----------------------------+
-| ÁREA DO PASSO ATIVO (<= 68 ch, scroll próprio)     | TRANSCRIÇÃO DO CORTE        |
-|                                                    | (painel acoplado, scroll)   |
-| [Cabeçalho, avisos e ações do Passo]               | #104 [00:12] "Quando a..."  |
-| [Blocos / Formulários / Controles de Narração]     | #105 [00:18] "E aí o..."    |
-|                                                    | (clique copia ID p/ refs)   |
-+----------------------------------------------------+-----------------------------+
++-----------------------------+----------------------------------------------------+
+| TRANSCRIÇÃO DO CORTE        | ÁREA DO PASSO ATIVO (<= 68 ch, scroll próprio)     |
+| (painel esquerdo, scroll)   |                                                    |
+| #104 [00:12] "Quando a..."  | [Cabeçalho, avisos e ações do Passo]               |
+| #105 [00:18] "E aí o..."    | [Blocos / Formulários / Controles de Narração]     |
+| (clique copia ID p/ refs)   |                                                    |
++-----------------------------+----------------------------------------------------+
 ```
 
 #### Sub-superfícies internas do Passo 3 (Narração)
@@ -129,7 +129,7 @@ A **Transcrição do Corte** (com IDs de Frase e timestamps) abre acoplada à di
   1. **Passo `1. Ângulo`**: sempre habilitado. Mostra badge `"Pendente"` ou `"Definido: {selected.name}"`.
   2. **Passo `2. Roteiro`**: desabilitado se `selected === null` (tooltip/texto: *"Escolha ou escreva um ângulo no Passo 1 para liberar o Roteiro"*). Quando liberado, mostra `"Não gerado"`, `"{approved}/{total} aprovados"` ou `"Todos aprovados"`.
   3. **Passo `3. Narração`**: clicável para leitura explicativa, porém **travado para ações de áudio** enquanto `narrationAllowed === false` (`gateReason`: `"no_script"` | `"generating"` | `"pending_blocks"`). Mostra cadeado com rótulo `"Travado · {pending} blocos pendentes"`. Quando `narrationAllowed === true`, mostra `"{comAudio}/{total} blocos com voz"` ou `"Pronto para Empacotar"`.
-* **Botão auxiliar à direita:** *"Abrir Transcrição do Corte"* / *"Fechar Transcrição"* (`Ctrl/Cmd+]`).
+* **Botão auxiliar à esquerda:** *"Abrir Transcrição do Corte"* / *"Fechar Transcrição"* (`Ctrl/Cmd+[`).
 
 #### Zona B — Conteúdo do Passo 1: Ângulo
 
@@ -194,7 +194,7 @@ A **Transcrição do Corte** (com IDs de Frase e timestamps) abre acoplada à di
       * Dois botões: *"Usar texto do Roteiro"* (`narration.review { choice: "script" }`) e *"Usar texto falado"* (`narration.review { choice: "spoken" }`).
     * Botão secundário *"Re-alinhar bloco"* (`narration.align_block`).
 
-#### Zona E — Painel lateral acoplável: Transcrição do Corte
+#### Zona E — Painel lateral esquerdo acoplável: Transcrição do Corte
 
 * **Dados:** `editor.sentences` ou trecho da Transcrição do Corte (`start_id`..`end_id`), com IDs das Frases e timestamps em `tabular-nums`.
 * **Comportamento:** permite ler o que é dito no Corte enquanto se define Ângulo/Roteiro e clicar em qualquer Frase para inserir/alternar seu ID no campo `refs` em foco (no Passo 1 ou Passo 2).
@@ -239,7 +239,7 @@ A **Transcrição do Corte** (com IDs de Frase e timestamps) abre acoplada à di
 
 | `CoreError.code` | Mensagem humana na UI | Ação de recuperação |
 |---|---|---|
-| `script_requires_transformed` | Este Corte é um Corte direto; Transformação e Narração existem apenas no Vídeo transformado. | Botão *"Voltar para Editar"* (ou usar *"Converter em Vídeo transformado"* no cabeçalho). |
+| `script_requires_transformed` | Este Corte é um Corte direto; Transformação e Narração existem apenas no Vídeo transformado. | Botão *"Voltar para Editar"* (conversão individual no cabeçalho permanece desabilitada até ticket do núcleo). |
 | `angle_required` | Escolha ou escreva um ângulo no Passo 1 antes de gerar o Roteiro. | Botão *"Ir para o Passo 1 (Ângulo)"*. |
 | `angle_invalid` | Confira o nome (até 60 caracteres), a promessa (1 frase, até 200 caracteres) e as Frases selecionadas. | Foca o primeiro campo inválido. |
 | `script_not_approved` | Aprove todos os blocos do Roteiro antes de gerar, gravar ou importar a Narração. | Botão *"Ir para o bloco pendente"*. |
@@ -282,10 +282,11 @@ A **Transcrição do Corte** (com IDs de Frase e timestamps) abre acoplada à di
 
 ### 7. Teclado e acessibilidade
 
-* **Regiões `F6` / `Shift+F6`:** Topo (`ShellGlobal` + `<ContextoCorte>`) → Stepper + Área do Passo ativo → Painel lateral da Transcrição do Corte (quando aberto) → Barra de Status.
+* **Regiões `F6` / `Shift+F6`:** Topo (`<ShellGlobal>` + `<ContextoCorte>`) → Painel esquerdo da Transcrição do Corte (quando aberto) → Stepper + Área do Passo ativo → Barra de Status.
 * **Atalhos da tela (sem conflitos com a tabela da arquitetura):**
   * `Ctrl/Cmd+K`: Paleta de comandos (permite saltar para Passo 1/2/3, *"Sugerir Roteiro"*, *"Aprovar bloco atual"*, *"Abrir gravador"*).
-  * `Ctrl/Cmd+]`: Abrir/recolher painel da Transcrição do Corte.
+  * `Ctrl/Cmd+[`: Abrir/recolher painel esquerdo da Transcrição do Corte.
+  * `Alt+PageUp` / `Alt+PageDown`: `< Anterior` / `Próximo aprovado >` no `<ContextoCorte>`.
   * `Ctrl/Cmd+S`: Se o foco estiver dentro de um bloco editado no Passo 2, salva a edição desse bloco (`script.edit`).
   * `Esc`: Fecha o Gravador com Teleprompter (quando não está gravando ou após confirmar descarte) ou fecha diálogos abertos devolvendo foco ao gatilho.
   * `Espaço`: No Gravador com Teleprompter (fora de sliders/inputs), pausa/retoma a rolagem ou reprodução do rascunho; em botões/controles focados, ativa o controle normalmente.
@@ -358,7 +359,7 @@ Preparar e validar todos os artefatos de publicação do Corte — **Capa (PNG)*
   * Se `credit.warning === "no_permission"`, link direto para **Fontes e Transcrição** (`#/projeto/:id/fontes/:fonteId`) para registrar a **Permissão** da Fonte.
 * **Guardas de rota:**
   1. Sem Projeto aberto → redireciona para `#/inicio`.
-  2. `:corteId` inexistente ou candidato não aprovado → redireciona para `#/projeto/:id/cortes` com aviso.
+  2. `:corteId` inexistente ou candidato não aprovado → redireciona para `#/projeto/:id/cortes` com aviso; Corte avulso (`avulso-*`, sem `candidate_id`) → redireciona para `#/projeto/:id/corte/:corteId/editar` (`Empacotar` fica oculta).
   3. Disponível tanto para **Corte direto** quanto para **Vídeo transformado** (adaptando o bloco de capítulos e os avisos de guardrails conforme `videoKind`).
 
 ---
@@ -373,8 +374,8 @@ A sub-aba usa duas colunas acopladas abaixo do `<ContextoCorte>` — **Capa e Pr
 +----------------------------------------------------------------------------------+
 | <ShellGlobal> (Barra Superior 44px)                                              |
 +----------------------------------------------------------------------------------+
-| <ContextoCorte>: < Anterior | Corte #12 [Vídeo transformado] | Próximo >         |
-| Sub-abas: [ Editar ]  [ Transformar ]  [(ativo) Empacotar ]      [Exportar MP4]  |
+| <ContextoCorte>: < Anterior | Corte 2/8: "Como o streamer..." [Vídeo transformado]     |
+|   [Próximo aprovado >] | Sub-abas: [Editar] [Transformar] [(ativo) Empacotar] | [Exportar Corte] |
 +----------------------------------------------------------------------------------+
 |                                        |                                         |
 |  COLUNA ESQUERDA (~42%): CAPA          |  COLUNA DIREITA (~58%): FICHA & SAÍDA   |
@@ -539,7 +540,8 @@ A proporção ajusta para ~40% esquerda / ~60% direita com maior respiro para o 
 * **Atalhos da tela (sem conflitos com a tabela da arquitetura):**
   * `Ctrl/Cmd+K`: Paleta de comandos (*"Sugerir capa"*, *"Usar quadro atual"*, *"Sugerir Empacotamento"*, *"Atualizar capítulos"*, *"Exportar capa PNG"*, *"Exportar vídeo MP4"*).
   * `Ctrl/Cmd+S`: Salva alterações pendentes da ficha de Empacotamento (`packaging.edit`).
-  * `Ctrl/Cmd+E`: Dispara fluxo de exportação individual (`export.start`).
+  * `Ctrl/Cmd+E`: Dispara fluxo de exportação individual (`Exportar Corte`, `export.start`).
+  * `Alt+PageUp` / `Alt+PageDown`: `< Anterior` / `Próximo aprovado >` no `<ContextoCorte>`.
   * `Espaço`, `J`/`K`/`L`, `←`/`→`: Controlam reprodução e busca quadro a quadro no preview da capa **apenas** quando o foco não está em campos de texto (`input`, `textarea`, `select`) e respeitando o interruptor WCAG 2.1.4.
 * **Padrões WAI-ARIA APG:**
   * **Scrubber da capa:** `role="slider"`, `aria-label="Instante da capa"`, `aria-valuemin`, `aria-valuemax`, `aria-valuenow` e `aria-valuetext` legível (`"00:14.200 de 00:48.000"`).
@@ -595,7 +597,7 @@ Componentes reutilizáveis demandados por este pacote (alinhados aos nomes da ar
 | Componente | Responsabilidade neste pacote | Props mínimas sugeridas | Pacote provável de origem |
 |---|---|---|---|
 | `<ShellGlobal>` | Barra superior, Barra de Status, Fila de Jobs global e Paleta `Ctrl/Cmd+K` | *(envolve a rota via Router)* | Pacote A |
-| `<ContextoCorte>` | Cabeçalho do Corte (`< Anterior | Próximo >`, tipo do vídeo, ação *"Converter em Vídeo transformado"*, abas `Editar`/`Transformar`/`Empacotar`) | `corteId`, `abaAtiva: 'editar' \| 'transformar' \| 'empacotar'` | Pacote D |
+| `<ContextoCorte>` | Cabeçalho do Corte (`"Corte {i}/{N}: {título}"` ou `"Corte #{id}"` se avulso, `< Anterior \| Próximo aprovado >`, tipo do vídeo, ação *"Converter em Vídeo transformado"* desabilitada com tooltip até ticket de Rust, abas `Editar`/`Transformar`/`Empacotar`, botão `"Exportar Corte"`) | `corteId`, `abaAtiva: 'editar' \| 'transformar' \| 'empacotar'` | Pacote D |
 | `<ResumoCustoPrivacidade>` | Cartão/diálogo padrão pré-disparo de IA (rota, selo local/remoto/CLI, estimativa USD/cota, orçamento, `confirmed: true`) | `aberto`, `tarefa`, `perfil`, `destino: 'local' \| 'remoto' \| 'cli'`, `host?`, `estimativa`, `orcamento?`, `aoConfirmar`, `aoCancelar` | Pacote A |
 | `<ConfirmDialog>` | Diálogo modal acessível de confirmação para ações destrutivas/substituição (trocar ângulo, sobrescrever áudio, aviso de Corte direto) | `aberto`, `titulo`, `descricao`, `rotuloConfirmar`, `rotuloCancelar`, `aoConfirmar`, `aoCancelar` | Pacote A |
 | `<PlayerProxy>` | Player de vídeo do proxy 9:16/16:9 com transporte (`Espaço`/`J`/`K`/`L`/`←`/`→`), `proxy.request`/`status` e scrubber opcional | `sourceId`, `startUs`, `endUs`, `instanteAtualUs`, `aoMudarInstante`, `modo: 'editor' \| 'capa'` | Pacote C / D |

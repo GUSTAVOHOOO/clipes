@@ -58,11 +58,11 @@ Antes das duas superfícies, esta seção fixa o contrato obrigatório de sessã
 
 Situar o usuário dentro de um Corte aprovado, permitindo navegar entre os Cortes aprovados sem voltar à lista, alternar entre as sub-abas do Corte, converter um **Corte direto** em **Vídeo transformado** e disparar/acompanhar a exportação MP4 individual.
 
-* **De onde chega:** ao abrir qualquer Corte aprovado em `#/projeto/:id/cortes/revisao/:runId` ou `#/projeto/:id/exportacao`.
-* **Rotas que o exibem:** `#/projeto/:id/corte/:corteId/editar`, `#/projeto/:id/corte/:corteId/transformar`, `#/projeto/:id/corte/:corteId/empacotar`.
+* **De onde chega:** ao abrir qualquer Corte aprovado em `#/projeto/:id/cortes/revisao/:runId` (preservando `?run=:runId`) ou `#/projeto/:id/exportacao` (todos os aprovados do Projeto), ou um Corte avulso (`avulso-<sourceId>-<startId>-<endId>`).
+* **Rotas que o exibem:** `#/projeto/:id/corte/:corteId/editar`, `#/projeto/:id/corte/:corteId/transformar`, `#/projeto/:id/corte/:corteId/empacotar` *(para Corte avulso, apenas `/editar` é exibida; `Transformar` e `Empacotar` ficam ocultas)*.
 * **Para onde vai:**
-  * `< Anterior` / `Próximo aprovado >`: mesmo sufixo de sub-aba no Corte vizinho (se mudar para um **Corte direto** estando em `Transformar`, cai na guarda de rota e redireciona para `Editar`).
-  * Sub-abas: `Editar` | `Transformar` *(apenas se `videoKind === 'transformed'`)* | `Empacotar`.
+  * `< Anterior` / `Próximo aprovado >` (`Alt+PageUp` / `Alt+PageDown`): usa os aprovados da execução de `?run=:runId` quando presente na URL, ou todos os aprovados do Projeto caso contrário; mantém o mesmo sufixo de sub-aba no Corte vizinho (se mudar para um **Corte direto** estando em `Transformar`, cai na guarda de rota, redireciona para `Editar` e exibe o toast informativo *"Transformar está disponível apenas para Vídeo transformado"*).
+  * Sub-abas: `Editar` | `Transformar` *(apenas se `videoKind === 'transformed'` e `candidateId !== null`)* | `Empacotar` *(omitida se `candidateId === null`)*.
   * Voltar para `2. Cortes` ou `3. Exportação` via barra superior do Shell (com `editor.flush` se estiver em `Editar`).
 
 ### 2. Layout por zonas
@@ -71,18 +71,18 @@ Situar o usuário dentro de um Corte aprovado, permitindo navegar entre os Corte
 
 ```text
 +---------------------------------------------------------------------------------------------------+
-| [<- Cortes]  Corte 2/8: "Como o streamer reagiu..."  [Corte direto v]  (Converter p/ transformado)|
-|              [< Anterior] [Proximo >]   |  (Editar)  [Empacotar]  |   [Exportar Corte (Ctrl+E)]   |
+| [<- Cortes]  Corte 2/8: "Como o streamer reagiu..."  [Corte direto]  (Converter - em breve)       |
+|              [< Anterior] [Proximo aprovado >] | (Editar) [Empacotar] |    [Exportar Corte]       |
 +---------------------------------------------------------------------------------------------------+
 ```
-*(Em 1366 px, se o título for longo, ele trunca com reticências mantendo sempre visíveis: posição `2/8`, setas `< Anterior` / `Próximo >`, selo do tipo + ação discreta, sub-abas e botão `Exportar Corte`.)*
+*(Em 1366 px, se o título for longo, ele trunca com reticências mantendo sempre visíveis: posição `2/8` — ou `Corte #{id}` se avulso —, setas `< Anterior` / `Próximo aprovado >`, selo do tipo + ação desabilitada com tooltip, sub-abas e botão `Exportar Corte` `Ctrl/Cmd+E`.)*
 
 **1440+ px** *(linha única folgada)*:
 
 ```text
-+-------------------------------------------------------------------------------------------------------------+
-| [<- Cortes] | < Anterior | Corte 2/8: "Como o streamer..." | Proximo > | [Video transformado] | [Editar][Transformar][Empacotar] | [Exportar Corte] |
-+-------------------------------------------------------------------------------------------------------------+
++---------------------------------------------------------------------------------------------------------------+
+| [<- Cortes] | < Anterior | Corte 2/8: "Como o streamer..." | Proximo aprovado > | [Video transformado] | [Editar][Transformar][Empacotar] | [Exportar Corte] |
++---------------------------------------------------------------------------------------------------------------+
 ```
 
 **Diálogo de Exportação Individual** *(aberto sobre a tela via botão `Exportar Corte` ou `Ctrl/Cmd+E`)*:
@@ -106,15 +106,15 @@ Situar o usuário dentro de um Corte aprovado, permitindo navegar entre os Corte
 
 ### 3. Conteúdo e componentes
 
-* **Trilha de contexto:** botão discreto `Voltar para Cortes` (`#/projeto/:id/cortes`), título curto derivado da 1ª Frase do Corte (ou título de Empacotamento se já existir), contador `tabular-nums` (`i / N` dos Cortes aprovados).
-* **Navegação entre aprovados:** botões `< Anterior` e `Próximo aprovado >` (desabilitados nos extremos ou com tooltip indicando o título do vizinho).
+* **Trilha de contexto:** botão discreto `Voltar para Cortes` (`#/projeto/:id/cortes`), título formatado como `"Corte {i}/{N}: {título}"` (ou `"Corte #{id}"` quando avulso, sem `candidateId`), contador `tabular-nums` (`i / N` dos Cortes aprovados da execução de `?run=:runId` quando presente, ou de todo o Projeto caso contrário).
+* **Navegação entre aprovados:** botões `< Anterior` (`Alt+PageUp`) e `Próximo aprovado >` (`Alt+PageDown`) — desabilitados nos extremos ou com tooltip indicando o título do vizinho (ocultos/desabilitados para Corte avulso).
 * **Tipo do Corte e ação discreta de conversão:**
   * `<Status>` com rótulo canônico **Corte direto** ou **Vídeo transformado**.
-  * Quando **Corte direto**: botão discreto de link/fantasma *"Converter em Vídeo transformado"* (com tooltip explicando que habilita a sub-aba `Transformar`: Ângulo, Roteiro e Narração; **hoje bloqueado/desabilitado por lacuna do núcleo** — ver Seção 9).
+  * Quando **Corte direto** (e `candidateId !== null`): botão discreto *"Converter em Vídeo transformado"* **desabilitado com tooltip** explicando que habilitará `Transformar` (Ângulo, Roteiro e Narração) assim que o ticket de núcleo for implementado (ver Seção 9).
 * **Sub-abas do Corte (`nav` semântica com `aria-current="page"`):**
   * `Editar` (`#/projeto/:id/corte/:corteId/editar`)
-  * `Transformar` (`#/projeto/:id/corte/:corteId/transformar`) — **omitida** quando `videoKind === 'direct'`.
-  * `Empacotar` (`#/projeto/:id/corte/:corteId/empacotar`)
+  * `Transformar` (`#/projeto/:id/corte/:corteId/transformar`) — **omitida** quando `videoKind === 'direct'` ou `candidateId === null` (acesso direto por URL redireciona para `Editar` com toast informativo *"Transformar está disponível apenas para Vídeo transformado"*).
+  * `Empacotar` (`#/projeto/:id/corte/:corteId/empacotar`) — **omitida** quando `candidateId === null`.
 * **Gatilho e Diálogo de Exportação Individual:**
   * Botão primário compacto `Exportar Corte` (`Ctrl/Cmd+E`).
   * Ao abrir: chama `editor.flush` (se estiver em `Editar` e `dirty`), `guardrails.check { scope: "single", source_id, candidate_id, clip_id, start_id, end_id }`, `export.captions` (lê `missingGlyphs` e `emojiRemoved`), e `export.settings` (`last_directory`).
@@ -126,8 +126,8 @@ Situar o usuário dentro de um Corte aprovado, permitindo navegar entre os Corte
 
 | Ação | Comando(s) do núcleo | Pré-condições | Confirmação / Custo | O que muda na tela | Desfazer |
 |---|---|---|---|---|---|
-| Ir para Corte anterior / próximo | `editor.flush` *(se em `Editar`)* + navegação de rota | Haver outro Corte aprovado | Se `editor.flush` falhar, `<ConfirmDialog>` bloqueante | Troca `:corteId` mantendo a sub-aba (ou cai para `Editar` se `direct` em `Transformar`) | Não |
-| Trocar sub-aba (`Editar`/`Transformar`/`Empacotar`) | `editor.flush` *(ao sair de `Editar`)* | Para `Transformar`, `videoKind === 'transformed'` | Se `editor.flush` falhar, `<ConfirmDialog>` bloqueante | Navega para a sub-aba alvo | Não |
+| Ir para Corte anterior / próximo | `editor.flush` *(se em `Editar`)* + navegação de rota | Haver outro Corte aprovado (na execução `?run` ou no Projeto) | Se `editor.flush` falhar, `<ConfirmDialog>` de 3 ações (*"Tentar salvar novamente"*, *"Continuar editando"*, *"Sair descartando alterações não salvas"*) | Troca `:corteId` mantendo a sub-aba (ou cai para `Editar` com toast se `direct` em `Transformar`) | Não |
+| Trocar sub-aba (`Editar`/`Transformar`/`Empacotar`) | `editor.flush` *(ao sair de `Editar`)* | Para `Transformar`, `videoKind === 'transformed'` | Se `editor.flush` falhar, `<ConfirmDialog>` de 3 ações (*"Tentar salvar novamente"*, *"Continuar editando"*, *"Sair descartando alterações não salvas"*) | Navega para a sub-aba alvo | Não |
 | Converter Corte direto em Vídeo transformado | *(Lacuna: comando inexistente — ver Seção 9)* | `videoKind === 'direct'` | `<ConfirmDialog>` explicando que habilitará Ângulo, Roteiro e Narração | Exibiria sub-aba `Transformar` e atualizaria o `<Status>` | Não |
 | Abrir diálogo de exportação individual (`Ctrl/Cmd+E`) | `editor.flush` *(se sujo)*, `guardrails.check`, `export.captions`, `export.settings` | Projeto aberto; Fonte online | Nenhuma (gratuito/local) | Abre modal pré-exportação com checklist e destino sugerido | Não |
 | Confirmar ciência de risco do Corte direto | `guardrails.ack_direct_notice` | `needsDirectNotice === true` | Clique explícito no aviso do checklist | Marca `directMonetizationAck: true` no Perfil de canal e recolhe o aviso | Não |
@@ -160,8 +160,8 @@ Situar o usuário dentro de um Corte aprovado, permitindo navegar entre os Corte
 
 * **Região `F6`:** `<ContextoCorte>` integra a região de cabeçalho/sub-navegação da janela (logo após a Barra Superior).
 * **Sub-abas:** `<nav aria-label="Etapas do Corte">` com links reais `#/projeto/:id/corte/:corteId/...` e `aria-current="page"` na sub-aba ativa.
-* **Atalhos:** `Ctrl/Cmd+E` abre o diálogo de exportação individual (registrado via `useComandos` e visível na Paleta `Ctrl/Cmd+K`). **Não** usa `[`/`]` para anterior/próximo (reservados na arquitetura para `Ctrl+[` e `Ctrl+]` dos painéis).
-* **Alvos e foco:** botões `< Anterior`, `Próximo >` e sub-abas têm altura/largura mínima `≥ 24×24 px` e classe `.foco`; modal de exportação usa `@base-ui/react/dialog` com *focus trap* e retorno do foco ao botão `Exportar Corte` ao fechar.
+* **Atalhos:** `Ctrl/Cmd+E` abre o diálogo de exportação individual (`Exportar Corte`) e `Alt+PageUp` / `Alt+PageDown` navegam para `< Anterior` / `Próximo aprovado >` (ambos registrados via `useComandos` e visíveis na Paleta `Ctrl/Cmd+K`). **Não** usa `[`/`]` para anterior/próximo (reservados na arquitetura para `Ctrl+[` e `Ctrl+]` dos painéis).
+* **Alvos e foco:** botões `< Anterior`, `Próximo aprovado >` e sub-abas têm altura/largura mínima `≥ 24×24 px` e classe `.foco`; modal de exportação usa `@base-ui/react/dialog` com *focus trap* e retorno do foco ao botão `Exportar Corte` ao fechar.
 
 ### 8. US do #26 atendidas
 
@@ -195,7 +195,7 @@ Situar o usuário dentro de um Corte aprovado, permitindo navegar entre os Corte
 Refinar um Corte aprovado em quatro zonas sincronizadas — ajustando bordas por Frase ou quadro, revisando silêncios com preservação de respiro, configurando enquadramento 9:16 (manual ou com YuNet *just-in-time*), estilizando/traduzindo legendas e mixando Narração, trilha sonora e SFX — com salvamento contínuo e desfazer por Corte.
 
 * **De onde chega:** de `#/projeto/:id/cortes/revisao/:runId` (`Enter` ou *"Editar Corte"*), do `<ContextoCorte>` de outro Corte, de `Transformar` / `Empacotar`, ou da Mesa de Prontidão (`#/projeto/:id/exportacao`).
-* **Guarda de entrada:** sem Projeto aberto → `#/inicio`; Corte ausente ou não aprovado → `#/projeto/:id/cortes`; Fonte `offline`/`changed` → abre em modo somente-leitura de texto/bordas com banner de relocalização.
+* **Guarda de entrada:** sem Projeto aberto → `#/inicio`; Corte ausente ou não aprovado → `#/projeto/:id/cortes`; redirecionado de `Transformar` por ser **Corte direto** → exibe toast informativo (*"Transformar está disponível apenas para Vídeo transformado"*); Fonte `offline`/`changed` → abre em modo somente-leitura de texto/bordas com banner de relocalização.
 * **Para onde vai:** `Transformar` *(se Vídeo transformado)*, `Empacotar`, outro Corte via `<ContextoCorte>`, ou retorno a `Cortes` / `Exportação` (sempre executando `editor.flush` antes de desmontar).
 
 ### 2. Layout por zonas
@@ -352,7 +352,7 @@ Abrir o painel esquerdo (`Ctrl/Cmd+[`) recolhe automaticamente o painel direito 
 | Mover bloco de Narração na timeline | `editor.montage.set_start` (`preview: true/false`, `time_us: null` para automático) | Vídeo transformado com Roteiro | Nenhuma | Recalcula `MontagePlan`, avisos `block_pushed` e `freezeTailUs` | Sim (`editor.undo`) |
 | Gerenciar biblioteca de áudio | `audio.import`, `audio.license.set`, `audio.delete` | Arquivo local ≤ 500 MiB; `attribution` se `cc_by` | `<ConfirmDialog>` ao excluir da biblioteca (`audio.delete`) | Atualiza lista na aba `Áudio e SFX` e checklist de licenças | Não |
 | Definir/ajustar trilha sonora e SFX | `editor.audio.soundtrack.set`/`.clear`, `editor.audio.sfx.add`/`.update`/`.remove` | Asset do `kind` compatível presente no Projeto | Nenhuma (reversível imediato via `Ctrl/Cmd+Z`) | Atualiza `AudioTrack`, curva de ducking `-12 dB` e prévia sonora | Sim (`editor.undo`) |
-| Desfazer / Refazer / Salvar | `editor.undo`, `editor.redo`, `editor.flush` | Pilha não vazia (`undo`/`redo`) | Se `editor.flush` falhar ao sair, `<ConfirmDialog>` de bloqueio | Restaura snapshot do Corte ou persiste no SQLite (`editor_saved`) | Recíproco (`undo` ↔ `redo`) |
+| Desfazer / Refazer / Salvar | `editor.undo`, `editor.redo`, `editor.flush` | Pilha não vazia (`undo`/`redo`) | Se `editor.flush` falhar ao sair, `<ConfirmDialog>` com 3 ações (*"Tentar salvar novamente"*, *"Continuar editando"*, *"Sair descartando alterações não salvas"*) | Restaura snapshot do Corte ou persiste no SQLite (`editor_saved`) | Recíproco (`undo` ↔ `redo`) |
 
 ### 5. Estados
 

@@ -145,7 +145,7 @@ Toda a moldura externa ocupa a viewport sem scroll global; apenas o conteúdo da
        * Se Vídeo transformado com Roteiro/Narração pendente → *"Transformar"* (`#/projeto/:id/corte/:corteId/transformar`).
        * Se sem Empacotamento/Capa → *"Empacotar"* (`#/projeto/:id/corte/:corteId/empacotar`).
        * Caso contrário → *"Editar Corte"* (`#/projeto/:id/corte/:corteId/editar`).
-     * Ações secundárias (ícones com tooltip/menu): *"Abrir no Editor"* (`#/projeto/:id/corte/:corteId/editar`), *"Empacotar"* (`#/projeto/:id/corte/:corteId/empacotar`) e *"Exportar só este"* (`export.start`).
+     * Ações secundárias (ícones com tooltip/menu): *"Abrir no Editor"* (`#/projeto/:id/corte/:corteId/editar`), *"Empacotar"* (`#/projeto/:id/corte/:corteId/empacotar`) e *"Exportar só este"* (`export.start` via mesmo modal pré-exportação de `guardrails.check` do `<ContextoCorte>`).
 
 #### Zona B — Configuração e Disparo da Exportação em Lote
 * **Escopo do lote:**
@@ -190,11 +190,11 @@ Toda a moldura externa ocupa a viewport sem scroll global; apenas o conteúdo da
 
 | Ação do usuário | Comando(s) do núcleo | Pré-condições | Confirmação / Cartão de custo | O que muda na tela depois | Desfazer |
 |---|---|---|---|---|---|
-| Carregar Mesa de Prontidão | `sources.list`, `selection.list`, `selection.get`, `selection.review`, `packaging.get`, `thumbnail.get`, `guardrails.check`, `export.settings`, `export.encoder.status`, `export.batch.list` | Projeto aberto | Nenhuma (local, US$ 0,00) | Preenche grade de aprovados, pendências, pasta padrão e checklist | — |
+| Carregar Mesa de Prontidão | `sources.list`, `selection.list`, `selection.get`, `selection.review`, `packaging.get`, `thumbnail.get`, `guardrails.check`, `export.settings`, `export.encoder.status`, `export.batch.list` *(lazy-loading paginado por página/viewport + cache no Store de Projeto Ativo até existir `export.readiness`)* | Projeto aberto | Nenhuma (local, US$ 0,00) | Preenche grade de aprovados, pendências, pasta padrão e checklist | — |
 | Escolher pasta de saída | Diálogo nativo de pasta (`@tauri-apps/plugin-dialog`) | Nenhuma | Nenhuma | Atualiza campo `outputDir` na Zona B (só persiste no núcleo ao iniciar export) | — |
 | Abrir edição rápida do Corte | Navegação para `#/projeto/:id/corte/:corteId/(editar\|transformar\|empacotar)` | Corte aprovado | Nenhuma | Sai para a rota do Corte selecionado | Botão Voltar / histórico do navegador |
 | Exportar em lote (disparo) | 1) Se `needsDirectNotice`: `guardrails.ack_direct_notice` <br> 2) `export.batch.start { output_dir, source_id?, project, confirmed? }` | `N >= 1` aprovado, `output_dir` existente, FFmpeg instalado | 1) `<ConfirmDialog>` único por canal para risco de Corte direto (se `needsDirectNotice`). <br> 2) Se retornar `confirmation_required` (`usage.conflicts`), `<ConfirmDialog>` listando arquivos que serão sobrescritos (`confirmed: true`). Custo: **US$ 0,00 (local)**. | Enfileira N jobs `export`, atualiza `export.settings.last_directory`, alterna para `?sub=lotes` (ou destaca lote ativo) e exibe barra de progresso em tempo real | Cancelar lote (`export.batch.cancel`) para itens ainda não concluídos |
-| Exportar Corte individual (menu do card) | `export.start { source_id, start_id, end_id, candidate_id, output }` (+ diálogo salvar `.mp4`) | Fonte `available`, FFmpeg instalado, sem glifos faltando | Se `needsDirectNotice`: `<ConfirmDialog>` de Corte direto. Custo: **US$ 0,00 (local)**. | Enfileira job `export`, abre progresso na Fila de Jobs e consulta `export.status` | `jobs.cancel { id }` |
+| Exportar Corte individual (menu do card *"Exportar só este"*) | `guardrails.check`, `export.captions`, `export.settings` → `export.start { source_id, start_id, end_id, candidate_id, output }` | Fonte `available`, FFmpeg instalado, sem glifos faltando | Abre o mesmo modal pré-exportação de `guardrails.check` do Pacote D (com `guardrails.ack_direct_notice` se `needsDirectNotice` e destino `.mp4`). Custo: **US$ 0,00 (local)**. | Enfileira job `export`, abre progresso na Fila de Jobs e consulta `export.status` | `jobs.cancel { id }` |
 | Cancelar lote em andamento | `export.batch.cancel { id }` | Lote com `state === "running"` | `<ConfirmDialog>` simples (*"Cancelar exportação do lote? Cortes já concluídos serão mantidos."*) | Marca lote como `cancelled` e cancela jobs pendentes/em andamento | Não (disparar novo lote se necessário) |
 | Abrir pasta / arquivo exportado | Ação do SO (`opener` do Tauri) | Pasta/arquivo existe no disco | Nenhuma | Abre gerenciador de arquivos do SO na pasta ou reproduz MP4 | — |
 
@@ -273,7 +273,7 @@ O store central da Fila de Jobs recebe e distribui para a tela:
   3. **`export.settings` é somente leitura:** não há `export.settings.set`, então escolher uma pasta na UI não a persiste se o usuário sair antes de iniciar o lote.
   4. **Falta cálculo de ETA no núcleo:** `export.batch.status` e `core-progress` enviam `percentage`, mas não `etaMs` / `startedAtMs`, exigindo estimativa no front-end.
 * **Mock TS (`src/lib/core.ts`, `src/features/export/mock.ts`):**
-  1. `src/features/export/mock.ts` não possui handler explícito para `export.status` (cai no ramo genérico de `jobs`) e já retorna `encoder_fallback`, divergindo do Rust atual; precisa alinhar contrato e suportar cenário simulado de fallback (`?export-fallback=1`).
+  1. `src/features/export/mock.ts` não possui handler explícito para `export.status` (cai no ramo genérico de `jobs`) e já retorna `encoder_fallback`, divergindo do Rust atual; precisa alinhar contrato e suportar cenário simulado de fallback (`?estado=fallback`).
   2. Os mocks de `sources.list`, `selection.list`, `selection.review`, `packaging.get`, `thumbnail.get` e `guardrails.check` em `src/lib/core.ts` estão atrás de query params (`?source-test=1`, `?transcript-test=1`) e `guardrails.check` em escopo `project` usa nomes divergentes (`applicable`/`totalUnverified` em vez de `hasAudio`/`unverifiedCount` e omite `freezeTail*`). Precisam estar ativos por padrão com Projeto de demonstração completo.
   3. Simular eventos `core-progress` reais (`export`, `export_batch`, `export_batch_complete`, `export_batch_cancelled`) ao chamar `export.start`, `export.batch.start` e `export.batch.cancel` no mock.
 

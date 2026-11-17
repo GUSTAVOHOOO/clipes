@@ -6,7 +6,7 @@ Este documento consolida [01-arquitetura.md](./01-arquitetura.md) e os 6 pacotes
 
 ## Resumo
 
-As 22 telas e superfícies dos pacotes **A–F** estão especificadas com cobertura completa das macro-etapas, fluxos do **Corte direto** e **Vídeo transformado**, estados padronizados, máquina de eventos `core-progress` e requisitos WCAG 2.2 AA. Todo o catálogo de comandos do núcleo com valor direto de UI (além de 10 comandos auxiliares internos/cliente) tem destino mapeado. Dois pontos de entrada de arquitetura foram resolvidos pela inspeção do código: `:corteId` deve identificar `candidateId` para Cortes da seleção (pois `clipId` só nasce ao chamar `editor.open`, enquanto Transformar/Empacotar exigem `candidate`) e o agrupamento VAD `#279` (`transcription.grouping`) já está implementado no núcleo Rust (`core/src/components/hardware.rs:1084-1107`). O que **bloqueia a Fase 4 (mockups e design system)** é: (1) a decisão do dev sobre 11 pontos de produto/arquitetura listados na Seção 3 (especialmente `:corteId` para Cortes avulsos, diálogo de `CloseRequested` com downloads/jobs ativos, escape de falha em `editor.flush` e persistência de Aparência/WCAG 2.1.4), (2) a correção de 12 inconsistências entre pacotes (como o lado/atalho da Transcrição do Corte entre D e E e `?sub=` vs. `/lotes`), e (3) a criação de mockups detalhados para as 5 abas do Inspetor e `Índice do Corte` no **Pacote D**, que é funcionalmente completo mas condensado visualmente. Para a **Fase 5 (tickets)**, restam 3 correções de núcleo bloqueantes, 11 melhorias de núcleo e a remoção dos portões de query string + implementação dos handlers ausentes no mock TS.
+As 22 telas e superfícies dos pacotes **A–F** estão especificadas com cobertura completa das macro-etapas, fluxos do **Corte direto** e **Vídeo transformado**, estados padronizados, máquina de eventos `core-progress` e requisitos WCAG 2.2 AA. Todo o catálogo de comandos do núcleo com valor direto de UI (além de 10 comandos auxiliares internos/cliente) tem destino mapeado. Dois pontos de entrada de arquitetura foram resolvidos pela inspeção do código: `:corteId` deve identificar `candidateId` para Cortes da seleção (pois `clipId` só nasce ao chamar `editor.open`, enquanto Transformar/Empacotar exigem `candidate`) e o agrupamento VAD `#279` (`transcription.grouping`) já está implementado no núcleo Rust (`core/src/components/hardware.rs:1084-1107`). Em 17/11 o dev aprovou as recomendações dos 11 pontos de produto/arquitetura da Seção 3, e as 10 inconsistências entre pacotes foram aplicadas (a 10 parcialmente: vale o catálogo canônico, sem reescrever os pacotes). Falta para a **Fase 4 (mockups e design system)** detalhar os wireframes das 5 abas do Inspetor e do `Índice do Corte` no **Pacote D**, que é funcionalmente completo mas condensado visualmente. Para a **Fase 5 (tickets)**, restam 3 correções de núcleo bloqueantes, 11 melhorias de núcleo e a remoção dos portões de query string + implementação dos handlers ausentes no mock TS.
 
 ---
 
@@ -255,107 +255,107 @@ Nomes canônicos unificados em PT-BR e alinhados às primitivas já existentes e
 
 ## Questões para a arquitetura
 
-Todas as 30 questões originais dos pacotes `A`–`F` foram consolidadas e deduplicadas em **27 questões**:
+Todas as 30 questões originais dos pacotes `A`–`F` foram consolidadas e deduplicadas em **26 questões**:
 
-1. **O que é `:corteId` na rota `#/projeto/:id/corte/:corteId/...` e como tratar Cortes avulsos sem `candidate_id`?** *(Origem: C#1, E#1)* — **[decisão do dev]**
+1. **O que é `:corteId` na rota `#/projeto/:id/corte/:corteId/...` e como tratar Cortes avulsos sem `candidate_id`?** *(Origem: C#1, E#1)* — **[decidido pelo dev em 17/11: recomendação aprovada]**
    * *Problema:* Todos os comandos de `angles.*`, `script.*`, `narration.*`, `thumbnail.*` e `packaging.*` exigem `candidate: number` (`candidate_id`), enquanto `editor.open` recebe `{ source_id, start_id, end_id, candidate_id? }` e só cria o `clipId` (`clip_edits.id` em `core/src/editor/edits.rs:475-493`) na primeira abertura do editor. Além disso, `editor.open` aceita `candidate_id: null` (Corte avulso com identidade `"source:<sId>:<startId>:<endId>"`).
    * *Opções:* (a) `:corteId` = `candidateId` para Cortes da seleção e token `avulso-<sourceId>-<startId>-<endId>` (com `Transformar`/`Empacotar` ocultos) para avulsos; (b) `:corteId` = `clipId` (exigiria chamar `editor.open` antes de ir a qualquer sub-aba ou da Mesa de Prontidão, mesmo sem abrir o Editor).
-   * *Resolução recomendada:* **Opção (a) — `:corteId` é `candidateId`** para Cortes aprovados (e `avulso-<sourceId>-<startId>-<endId>` para Cortes avulsos sem `candidate_id`, ocultando `Transformar` e `Empacotar`). *Motivo:* na Revisão (`C.2`) e na Mesa de Prontidão (`F.1`), o candidato aprovado pode ainda não ter registro em `clip_edits`, mas já possui `candidateId` estável usado por `Transformar`, `Empacotar` e `export.start`.
+   * *Decisão:* **Opção (a) — `:corteId` é `candidateId`** para Cortes aprovados (e `avulso-<sourceId>-<startId>-<endId>` para Cortes avulsos sem `candidate_id`, ocultando `Transformar` e `Empacotar`). *Motivo:* na Revisão (`C.2`) e na Mesa de Prontidão (`F.1`), o candidato aprovado pode ainda não ter registro em `clip_edits`, mas já possui `candidateId` estável usado por `Transformar`, `Empacotar` e `export.start`.
 
-2. **Diálogo de fechamento da janela com downloads/jobs ativos (`WindowEvent::CloseRequested`)** *(Origem: A#3, F#5)* — **[decisão do dev]**
+2. **Diálogo de fechamento da janela com downloads/jobs ativos (`WindowEvent::CloseRequested`)** *(Origem: A#3, F#5)* — **[decidido pelo dev em 17/11: recomendação aprovada]**
    * *Problema:* `src-tauri/src/main.rs:90-108` intercepta `CloseRequested` no Rust apenas para rodar `editor.flush` sincronamente. Downloads globais (`components.*`, `tts.models.*`, `sources.url.*`) e parte do estado em voo são rastreados no Store da WebView, que não é consultado hoje antes de fechar.
    * *Opções:* (a) Rust executa `editor.flush` primeiro (se falhar, `prevent_close()` + `editor_save_failed`); se passar, emite evento `app-close-requested` à WebView com `prevent_close()` quando fechamento ainda não foi confirmado; o front verifica o Store e, se não houver nada ativo, chama `window.destroy()`; se houver download/export/chamada paga em voo, abre `<ConfirmDialog>`; (b) manter lista de operações globais em Rust e expor comando de consulta síncrona.
-   * *Resolução recomendada:* **Opção (a)** (coordenação Rust ↔ WebView via evento Tauri). *Motivo:* reutiliza o Store único previsto em `01-arquitetura.md` §5, mantém `editor.flush` síncrono no Rust como trava de integridade e cumpre o diálogo explicativo da §5 sem duplicar máquina de estados de UI em Rust.
+   * *Decisão:* **Opção (a)** (coordenação Rust ↔ WebView via evento Tauri). *Motivo:* reutiliza o Store único previsto em `01-arquitetura.md` §5, mantém `editor.flush` síncrono no Rust como trava de integridade e cumpre o diálogo explicativo da §5 sem duplicar máquina de estados de UI em Rust.
 
-3. **Persistência de Aparência, Escala UI (`100%`/`115%`), Alto Contraste, Idioma e interruptor WCAG 2.1.4 + remapeamento de atalhos** *(Origem: A#2)* — **[decisão do dev]**
+3. **Persistência de Aparência, Escala UI (`100%`/`115%`), Alto Contraste, Idioma e interruptor WCAG 2.1.4 + remapeamento de atalhos** *(Origem: A#2)* — **[decidido pelo dev em 17/11: recomendação aprovada]**
    * *Problema:* Hoje `tema.ts` e `i18n.ts` gravam em `localStorage` da WebView (que não segue `CLIPES_DATA_DIR`), e o núcleo Rust não possui comando para `ui-settings.json`.
    * *Opções:* (a) Persistir localmente no front (`localStorage`, conforme §10.1 de `01-arquitetura.md`); (b) criar comando Rust para gravar `ui-settings.json` em `config_dir`/`CLIPES_DATA_DIR` (ou `@tauri-apps/plugin-store`).
-   * *Resolução recomendada:* **Opção (a) no v2** com interface isolada no Store de Sessão. *Motivo:* `01-arquitetura.md` §10 já define *"preferências de atalhos (armazenadas localmente)"* no front, evita novo ticket de Rust bloqueando Fase 4/5 e atende plenamente desktop + navegador mock.
+   * *Decisão:* **Opção (a) no v2** com interface isolada no Store de Sessão. *Motivo:* `01-arquitetura.md` §10 já define *"preferências de atalhos (armazenadas localmente)"* no front, evita novo ticket de Rust bloqueando Fase 4/5 e atende plenamente desktop + navegador mock.
 
-4. **Válvula de escape quando `editor.flush` falha repetidamente ao sair da rota `Editar`** *(Origem: D#2)* — **[decisão do dev]**
+4. **Válvula de escape quando `editor.flush` falha repetidamente ao sair da rota `Editar`** *(Origem: D#2)* — **[decidido pelo dev em 17/11: recomendação aprovada]**
    * *Problema:* A §3 de `01-arquitetura.md` determina bloquear a saída com diálogo se `editor.flush` falhar. Se o disco estiver cheio ou somente-leitura, o usuário ficaria preso na rota para sempre.
    * *Opções:* (a) Bloqueio absoluto sem saída; (b) `<ConfirmDialog>` com 3 ações: *"Tentar salvar novamente"* (primário), *"Continuar editando"* e ação secundária de perigo *"Sair descartando alterações não salvas"*.
-   * *Resolução recomendada:* **Opção (b)** na navegação SPA, mantendo bloqueio no `CloseRequested` (ou oferecendo o mesmo descarte consciente). *Motivo:* impede deadlock de navegação sem perder segurança contra perda acidental de edições.
+   * *Decisão:* **Opção (b)** na navegação SPA, mantendo bloqueio no `CloseRequested` (ou oferecendo o mesmo descarte consciente). *Motivo:* impede deadlock de navegação sem perder segurança contra perda acidental de edições.
 
-5. **Lista de navegação `< Anterior | Próximo aprovado >` no `<ContextoCorte>`** *(Origem: D#1)* — **[decisão do dev]**
+5. **Lista de navegação `< Anterior | Próximo aprovado >` no `<ContextoCorte>`** *(Origem: D#1)* — **[decidido pelo dev em 17/11: recomendação aprovada]**
    * *Problema:* Ao entrar no Corte vindo da Bancada C.2 (uma execução específica `?run=:runId`) vs. vindo da Mesa de Prontidão (`F.1`, todos os aprovados do Projeto), qual conjunto define `i / N`?
    * *Opções:* (a) Sempre todos os aprovados do Projeto; (b) Preservar a execução da origem quando `?run=:runId` estiver presente, e usar todos os aprovados do Projeto caso contrário.
-   * *Resolução recomendada:* **Opção (b)**. *Motivo:* respeita o contexto mental de quem está revisando uma live/execução específica sem impedir percorrer todo o Projeto quando vem da Exportação.
+   * *Decisão:* **Opção (b)**. *Motivo:* respeita o contexto mental de quem está revisando uma live/execução específica sem impedir percorrer todo o Projeto quando vem da Exportação.
 
-6. **Atalho de teclado dedicado para `< Anterior | Próximo aprovado >` no `<ContextoCorte>`** *(Origem: D#3)* — **[decisão do dev]**
+6. **Atalho de teclado dedicado para `< Anterior | Próximo aprovado >` no `<ContextoCorte>`** *(Origem: D#3)* — **[decidido pelo dev em 17/11: recomendação aprovada]**
    * *Problema:* `[` e `]` foram removidos para eliminar conflito com `Ctrl+[` / `Ctrl+]` dos painéis.
    * *Opções:* (a) Sem atalho de teclado (apenas botões e Paleta `Ctrl/Cmd+K`); (b) Adicionar `Alt+PageUp` / `Alt+PageDown` (livres no mapa da §8).
-   * *Resolução recomendada:* **Opção (b)** (`Alt+PageUp` / `Alt+PageDown`) registrados em `useComandos`. *Motivo:* acelera revisão em sequência por teclado sem colidir com nenhum atalho NLE nem de texto.
+   * *Decisão:* **Opção (b)** (`Alt+PageUp` / `Alt+PageDown`) registrados em `useComandos`. *Motivo:* acelera revisão em sequência por teclado sem colidir com nenhum atalho NLE nem de texto.
 
-7. **Ação *"Exportar só este"* diretamente nos cards da Mesa de Prontidão (`F.1`)** *(Origem: F#3)* — **[decisão do dev]**
+7. **Ação *"Exportar só este"* diretamente nos cards da Mesa de Prontidão (`F.1`)** *(Origem: F#3)* — **[decidido pelo dev em 17/11: recomendação aprovada]**
    * *Problema:* A §2 da arquitetura lista `export.start` apenas em `Editar` e `Empacotar`, mas o Pacote F incluiu *"Exportar só este"* no menu secundário do cartão.
    * *Opções:* (a) Restringir à Tela do Corte; (b) Manter como ação secundária no cartão abrindo o mesmo modal pré-exportação de `guardrails.check` do Pacote D.
-   * *Resolução recomendada:* **Opção (b)**. *Motivo:* evita obrigar o usuário a navegar para outro contexto quando só quer reexportar um Corte corrigido, reutilizando o mesmo modal e guardrails.
+   * *Decisão:* **Opção (b)**. *Motivo:* evita obrigar o usuário a navegar para outro contexto quando só quer reexportar um Corte corrigido, reutilizando o mesmo modal e guardrails.
 
-8. **Desempenho N+1 ao montar a Mesa de Prontidão (`#/projeto/:id/exportacao`)** *(Origem: F#2)* — **[decisão do dev]**
+8. **Desempenho N+1 ao montar a Mesa de Prontidão (`#/projeto/:id/exportacao`)** *(Origem: F#2)* — **[decidido pelo dev em 17/11: recomendação aprovada]**
    * *Problema:* Hoje não existe comando agregado no Rust; montar a grade exige `sources.list` → `selection.list` → `selection.review` + `packaging.get`, `thumbnail.get` e `guardrails.check` por candidato aprovado.
    * *Opções:* (a) Lazy-loading no front por página/viewport + cache no Store de Projeto Ativo; (b) Novo comando Rust `export.readiness` agregado.
-   * *Resolução recomendada:* **Ambas em etapas** — usar lazy-loading paginado + cache no front imediatamente (não bloqueia Fase 4/5) e abrir ticket de **melhora** para `export.readiness` no Rust.
+   * *Decisão:* **Ambas em etapas** — usar lazy-loading paginado + cache no front imediatamente (não bloqueia Fase 4/5) e abrir ticket de **melhora** para `export.readiness` no Rust.
 
-9. **Cálculo de ETA na Fila de Jobs (`jobs.list` e `ProgressEvent`)** *(Origem: F#4)* — **[decisão do dev]**
+9. **Cálculo de ETA na Fila de Jobs (`jobs.list` e `ProgressEvent`)** *(Origem: F#4)* — **[decidido pelo dev em 17/11: recomendação aprovada]**
    * *Problema:* `core/src/jobs.rs:206` e `ProgressEvent` não informam `startedAtMs` nem `etaMs`.
    * *Opções:* (a) Não mostrar ETA nunca; (b) Calcular ETA no Store do front apenas para jobs determinísticos observados desde o início na sessão atual (omitindo após reload ou em estágios `ai:*` indeterminados), e abrir ticket de melhora para `started_at_ms` no Rust.
-   * *Resolução recomendada:* **Opção (b)**. *Motivo:* dá feedback útil em transcrições e lotes longos sem inventar estimativas falsas após recarregar a janela.
+   * *Decisão:* **Opção (b)**. *Motivo:* dá feedback útil em transcrições e lotes longos sem inventar estimativas falsas após recarregar a janela.
 
-10. **Empacotamento 100% manual sem Provedor (`packaging.edit` exige `packaging.generate` prévio)** *(Origem: E#3)* — **[decisão do dev]**
+10. **Empacotamento 100% manual sem Provedor (`packaging.edit` exige `packaging.generate` prévio)** *(Origem: E#3)* — **[decidido pelo dev em 17/11: recomendação aprovada]**
     * *Problema:* Verificado em `core/src/packaging.rs:949` que `packaging.edit` retorna `nothing_to_edit` se nunca houve `packaging.generate`. Usuários sem Provedor ou que queiram redigir tudo manualmente ficam bloqueados.
     * *Opções:* (a) Manter CTA *"Sugerir Empacotamento"* como entrada obrigatória; (b) Abrir ticket de núcleo para `packaging.edit` inicializar registro vazio quando `current === null`.
-    * *Resolução recomendada:* **Opção (b)** (ticket de **melhora**, mantendo o CTA de sugestão quando vazio até o backend suportar). *Motivo:* melhora autonomia para usuários 100% manuais ou offline sem bloquear a Fase 4.
+    * *Decisão:* **Opção (b)** (ticket de **melhora**, mantendo o CTA de sugestão quando vazio até o backend suportar). *Motivo:* melhora autonomia para usuários 100% manuais ou offline sem bloquear a Fase 4.
 
-11. **Remoção de áudio de bloco na Narração (`narration.delete_block`) e tooltip preventivo de `transcription.undo`** *(Origem: B#4, E#4)* — **[decisão do dev]**
+11. **Remoção de áudio de bloco na Narração (`narration.delete_block`) e tooltip preventivo de `transcription.undo`** *(Origem: B#4, E#4)* — **[decidido pelo dev em 17/11: recomendação aprovada]**
     * *Problema:* (1) Em `Narration` (`E.1`), um bloco com áudio gravado/importado/TTS só pode ser substituído, não limpo de volta a `Sem áudio`; (2) `transcription.corrections` (`B.3`) retorna só `{ can_undo, can_redo }`, impedindo exibir no tooltip qual Fonte será afetada pelo `Ctrl+Z` global antes do clique.
-    * *Resolução recomendada:* Abrir tickets de núcleo de baixa prioridade (**opcional** para `narration.delete_block`; **melhora** para `next_undo`/`next_redo` em `transcription.corrections`). Na v1, substituição de bloco e aviso genérico no tooltip + toast pós-`undo` com `r.source_id` atendem sem bloquear.
+    * *Decisão:* Abrir tickets de núcleo de baixa prioridade (**opcional** para `narration.delete_block`; **melhora** para `next_undo`/`next_redo` em `transcription.corrections`). Na v1, substituição de bloco e aviso genérico no tooltip + toast pós-`undo` com `r.source_id` atendem sem bloquear.
 
 ---
 
-12. **`#/assistente` como rota dedicada vs. modal sobre `#/inicio`** *(Origem: A#1)* — **[resolvida por consistência]**
+12. **`#/assistente` como rota dedicada vs. modal sobre `#/inicio`** *(Origem: A#1)* — **[resolvida por consistência; aprovada em 17/11]**
     * *Resolução recomendada:* **Rota dedicada `#/assistente?passo=1|2`** usando `<Tela modoMinimo>` (já prevista em `01-arquitetura.md` §3, preserva histórico e testes E2E diretos; ajustar o termo *"modal"* na §2).
 
-13. **Seção `#/config/custos` sem Projeto aberto** *(Origem: A#4)* — **[resolvida por consistência]**
+13. **Seção `#/config/custos` sem Projeto aberto** *(Origem: A#4)* — **[resolvida por consistência; aprovada em 17/11]**
     * *Resolução recomendada:* **Manter `#/config/custos` acessível sem Projeto aberto** para `Tabela de Preços e Estimador` (globais), exibindo `<EstadoTela tipo="vazio">` acionável nas abas de Orçamentos/Gastos/Auditoria (conforme tabela §3 que só redireciona `#/config/projeto`).
 
-14. **Seletor de pasta/arquivo do SO vs. campo editável no navegador/Playwright** *(Origem: A#5)* — **[resolvida por consistência]**
+14. **Seletor de pasta/arquivo do SO vs. campo editável no navegador/Playwright** *(Origem: A#5)* — **[resolvida por consistência; aprovada em 17/11]**
     * *Resolução recomendada:* Manter botão nativo (`@tauri-apps/plugin-dialog`) **acompanhado de input de texto editável** (ou fallback modal em navegador) nos caminhos de `projects.create/open`, `components.settings.set`, `sources.url.settings.set` e exportação.
 
-15. **Manifesto macOS incompleto (`ffmpeg`, `yt-dlp`, `uv`)** *(Origem: A#6)* — **[resolvida por consistência]**
+15. **Manifesto macOS incompleto (`ffmpeg`, `yt-dlp`, `uv`)** *(Origem: A#6)* — **[resolvida por consistência; aprovada em 17/11]**
     * *Resolução recomendada:* Seguir `01-arquitetura.md` §11.8 — UI orienta `components.ffmpeg.system` de forma não bloqueante no macOS até inclusão no manifesto Rust.
 
-16. **Padronização de sub-visões por query string (`?sub=lotes` vs. `/lotes`)** *(Origem: B#1, F#1)* — **[resolvida por consistência]**
+16. **Padronização de sub-visões por query string (`?sub=lotes` vs. `/lotes`)** *(Origem: B#1, F#1)* — **[resolvida por consistência; aprovada em 17/11]**
     * *Resolução recomendada:* Oficializar `#/projeto/:id/fontes?sub=fontes|lotes` e `#/projeto/:id/exportacao?sub=prontidao|lotes` na tabela de rotas de `01-arquitetura.md` §3, mantendo `#/projeto/:id/exportacao/lotes` como redirect/alias de compatibilidade.
 
-17. **Player da Fonte inteira (`mediaUrl("source/" + fonteId)`) vs. `proxy.request` em `#/projeto/:id/fontes/:fonteId`** *(Origem: B#2)* — **[resolvida por consistência]**
+17. **Player da Fonte inteira (`mediaUrl("source/" + fonteId)`) vs. `proxy.request` em `#/projeto/:id/fontes/:fonteId`** *(Origem: B#2)* — **[resolvida por consistência; aprovada em 17/11]**
     * *Resolução recomendada:* Usar `<PlayerReferenciaFonte>` sobre `mediaUrl("source/" + fonteId)` (HTTP `206 Range` já existe em `core/src/media.rs`) com tratamento gracioso de erro de codec na WebView, pois `proxy.request` rejeita trechos > 10 min (`clip_too_long`).
 
-18. **Duplicação controlada de `transcription.grouping` (#279) e fechamento do contrato** *(Origem: B#3)* — **[resolvida por consistência]**
+18. **Duplicação controlada de `transcription.grouping` (#279) e fechamento do contrato** *(Origem: B#3)* — **[resolvida por consistência; aprovada em 17/11]**
     * *Resolução recomendada:* Manter o controle sincronizado no cartão do Motor Local (`B.3`) e em `#/config/componentes` (`A.7`) deixando explícito no rótulo que vale para o app inteiro; contrato já está fechado e implementado em `core/src/components/hardware.rs:1084-1107`.
 
-19. **Conflito potencial entre `Enter` na palavra (`F2`/`Enter` = corrigir) vs. navegar vídeo (`US-55`)** *(Origem: B#5)* — **[resolvida por consistência]**
+19. **Conflito potencial entre `Enter` na palavra (`F2`/`Enter` = corrigir) vs. navegar vídeo (`US-55`)** *(Origem: B#5)* — **[resolvida por consistência; aprovada em 17/11]**
     * *Resolução recomendada:* Manter `F2` / `Enter` exclusivos para edição de grafia (`01-arquitetura.md` §8) e usar clique do ponteiro / `Ctrl/Cmd+Espaço` / botão *"Ouvir aqui"* para `seek` no vídeo.
 
-20. **Dados de `leavesMachine` e destino em `selection.estimate` (Modo 1)** *(Origem: C#2)* — **[resolvida por consistência]**
+20. **Dados de `leavesMachine` e destino em `selection.estimate` (Modo 1)** *(Origem: C#2)* — **[resolvida por consistência; aprovada em 17/11]**
     * *Resolução recomendada:* Front cruza `profile` com `provider.profiles.list` e `assistant.tasks` no Store de Sessão para alimentar `<ResumoCustoPrivacidade>`, evitando bloquear na espera por mudança do Modo 1 no Rust.
 
-21. **Uso de `selection.redo` vs. `jobs.redo` na Bancada C.2** *(Origem: C#3)* — **[resolvida por consistência]**
+21. **Uso de `selection.redo` vs. `jobs.redo` na Bancada C.2** *(Origem: C#3)* — **[resolvida por consistência; aprovada em 17/11]**
     * *Resolução recomendada:* Na Bancada (`C.2`) e Configurador (`C.1`), usar sempre `selection.redo` (confirmado no código `core/src/selection.rs:1092,1289` que apenas ele incrementa `selection_runs.revision`; `jobs.redo` em `core/src/jobs/redo.rs:201` só re-enfileira a unidade na Fila Global).
 
-22. **Visibilidade de Fontes transcritas em `#/projeto/:id/cortes` (`sources.list` sem `transcriptState`)** *(Origem: C#4)* — **[resolvida por consistência]**
+22. **Visibilidade de Fontes transcritas em `#/projeto/:id/cortes` (`sources.list` sem `transcriptState`)** *(Origem: C#4)* — **[resolvida por consistência; aprovada em 17/11]**
     * *Resolução recomendada:* Store de Projeto Ativo mantém mapa `transcriptStatusBySource` carregado em paralelo sob demanda e atualizado pelos eventos `core-progress` de `transcription`.
 
-23. **Sinalização de `editor.audio.soundtrack.clear` / `editor.audio.sfx.remove` vs. confirmação** *(Origem: D#4)* — **[resolvida por consistência]**
+23. **Sinalização de `editor.audio.soundtrack.clear` / `editor.audio.sfx.remove` vs. confirmação** *(Origem: D#4)* — **[resolvida por consistência; aprovada em 17/11]**
     * *Resolução recomendada:* Manter remoção imediata reversível por `Ctrl/Cmd+Z` (`editor.undo`) + toast *"Desfazer"*, reservando `<ConfirmDialog>` para *"Limpar todas as edições manuais"* de crop e `audio.delete`.
 
-24. **Invalidação de `export.captions` após `translation.edit`** *(Origem: D#5)* — **[resolvida por consistência]**
+24. **Invalidação de `export.captions` após `translation.edit`** *(Origem: D#5)* — **[resolvida por consistência; aprovada em 17/11]**
     * *Resolução recomendada:* Confirmado pela regra geral de `01-arquitetura.md` §10: qualquer `translation.edit` invalida `export.captions` no Store do Editor quando a faixa `Traduzida` está ativa.
 
-25. **Guarda de Fonte `offline`/`changed` em `Transformar` e `Empacotar`** *(Origem: E#2)* — **[resolvida por consistência]**
+25. **Guarda de Fonte `offline`/`changed` em `Transformar` e `Empacotar`** *(Origem: E#2)* — **[resolvida por consistência; aprovada em 17/11]**
     * *Resolução recomendada:* Estender a regra somente-leitura de mídia da §3 de `Editar` para `Transformar` e `Empacotar`: textos/áudios de Narração e Ficha de Empacotamento continuam editáveis via SQLite, exibindo banner de relocalização no lugar do preview/export PNG/MP4.
 
-26. **Seleção ad-hoc de `profileId` em `angles.generate`, `thumbnail.suggest` e `packaging.generate`** *(Origem: E#5)* — **[resolvida por consistência]**
+26. **Seleção ad-hoc de `profileId` em `angles.generate`, `thumbnail.suggest` e `packaging.generate`** *(Origem: E#5)* — **[resolvida por consistência; aprovada em 17/11]**
     * *Resolução recomendada:* Manter padrão atual do núcleo e ADR-0010 (roteamento em `#/config/provedores` e `jobs.redo` pós-execução na Fila; `profileId` ad-hoc exposto apenas onde já existe em `script.estimate`/`regenerate`).
 
 ---
@@ -438,18 +438,18 @@ Para o front v2 rodar integralmente no navegador (`VITE_CORE_MOCK=1`) e nos test
 
 ## Inconsistências entre pacotes
 
-| # | Item | Onde diverge | Correção recomendada |
-|---|---|---|---|
-| 1 | **Rota de Lotes** | `01-arquitetura.md` §2 cita `#/projeto/:id/exportacao/lotes`, §3 e `F` usam `#/projeto/:id/exportacao?sub=prontidao\|lotes`; `B` introduz `#/projeto/:id/fontes?sub=fontes\|lotes` ausente em §3. | Padronizar `?sub=` em ambas (`fontes?sub=fontes\|lotes` e `exportacao?sub=prontidao\|lotes`), manter `/exportacao/lotes` como redirect e atualizar `01-arquitetura.md` §2 e §3. |
-| 2 | **Assistente: modal vs. rota** | `01-arquitetura.md` §2 descreve *"(modal/fluxo guiado)"*, enquanto §3 e `A` definem rota `#/assistente?passo=1\|2`. | Fixar rota dedicada `#/assistente?passo=1\|2` com `<Tela modoMinimo>` e corrigir texto da §2. |
-| 3 | **Lado e atalho da Transcrição do Corte em `D` vs. `E`** | `D` (`Editar`) acopla Transcrição do Corte à **esquerda** com `Ctrl/Cmd+[` (e Inspetor à direita com `Ctrl/Cmd+]`). `E` (`Transformar`) acopla a Transcrição do Corte à **direita** com `Ctrl/Cmd+]`. | Manter Transcrição do Corte **sempre à esquerda com `Ctrl/Cmd+[`** tanto em `Editar` (`D`) quanto em `Transformar` (`E`) (iniciando recolhida em 1366 px e aberta à esquerda em 1440+ px). |
-| 4 | **Rótulos no `<ContextoCorte>`** | `D` usa *"Exportar Corte (Ctrl+E)"* e *"Corte 2/8: <título>"*; `E` usa *"Exportar MP4"* e *"Corte #12"*, além de citar *"Converter em Vídeo transformado"* como fluxo ativo apesar da lacuna do núcleo. | Padronizar *"Exportar Corte"* (`Ctrl/Cmd+E`), `"Corte {i}/{N}: {título}"` (ou `Corte #{id}` se avulso) e manter *"Converter em Vídeo transformado"* desabilitado com tooltip até o ticket #4 de Rust. |
-| 5 | **Toast ao redirecionar `Transformar` em `Corte direto`** | `E` especifica toast informativo (*"Transformar está disponível apenas para Vídeo transformado"*); `D` apenas cita o redirect para `/editar`. | Exibir o toast informativo de `E` no redirect de guarda de rota. |
-| 6 | **Escopo contextual de `Ctrl/Cmd+S`** | `01-arquitetura.md` §8 lista `Ctrl/Cmd+S` apenas para `editor.flush` (`Editar`); `E` usa também para `script.edit` (em `Transformar`) e `packaging.edit` (em `Empacotar`). | Atualizar §8 da arquitetura para tornar `Ctrl/Cmd+S` contextual às 3 sub-abas do Corte. |
-| 7 | **Exportação individual na Mesa de Prontidão** | `01-arquitetura.md` §2 coloca `export.start` só em `Editar`/`Empacotar`; `F.1` adiciona *"Exportar só este"* no menu do card. | Oficializar *"Exportar só este"* em `01-arquitetura.md` §2 abrindo o mesmo modal de `guardrails.check` do `<ContextoCorte>`. |
-| 8 | **Guarda de Fonte `offline`/`changed` em `Transformar`/`Empacotar`** | `01-arquitetura.md` §3 documenta modo somente-leitura de mídia apenas em `editar`; `E` aplica também em `transformar` e `empacotar`. | Estender a regra da §3 para `transformar` e `empacotar` (edição textual/áudio via SQLite preservada; preview e export bloqueados com banner). |
-| 9 | **Query params de teste** | `01-arquitetura.md` §3 define `?estado=vazio\|erro\|carregando` e `?paleta`; `D` e `F` adicionam `?estado=erro-flush`, `?estado=offline`, `?estado=parcial`, `?export-fallback=1`, `?updater-test=...`. | Unificar tabela oficial de params de mock/QA (`?estado=vazio\|erro\|carregando\|parcial\|offline\|erro-flush\|fallback` e `?paleta`). |
-| 10 | **Nomes/props dos componentes compartilhados** | Props misturando PT/EN (`open`/`aberto`, `variant`/`intent`/`variante`) e múltiplos nomes para estados (`BannerEstado`, `ErroAcionavel`, `EstadoVazio`, `Skeleton`). | Adotar estritamente as interfaces canônicas da Seção 2 deste documento. |
+| # | Item | Onde diverge | Correção recomendada | Status |
+|---|---|---|---|---|
+| 1 | **Rota de Lotes** | `01-arquitetura.md` §2 cita `#/projeto/:id/exportacao/lotes`, §3 e `F` usam `#/projeto/:id/exportacao?sub=prontidao\|lotes`; `B` introduz `#/projeto/:id/fontes?sub=fontes\|lotes` ausente em §3. | Padronizar `?sub=` em ambas (`fontes?sub=fontes\|lotes` e `exportacao?sub=prontidao\|lotes`), manter `/exportacao/lotes` como redirect e atualizar `01-arquitetura.md` §2 e §3. | aplicada |
+| 2 | **Assistente: modal vs. rota** | `01-arquitetura.md` §2 descreve *"(modal/fluxo guiado)"*, enquanto §3 e `A` definem rota `#/assistente?passo=1\|2`. | Fixar rota dedicada `#/assistente?passo=1\|2` com `<Tela modoMinimo>` e corrigir texto da §2. | aplicada |
+| 3 | **Lado e atalho da Transcrição do Corte em `D` vs. `E`** | `D` (`Editar`) acopla Transcrição do Corte à **esquerda** com `Ctrl/Cmd+[` (e Inspetor à direita com `Ctrl/Cmd+]`). `E` (`Transformar`) acopla a Transcrição do Corte à **direita** com `Ctrl/Cmd+]`. | Manter Transcrição do Corte **sempre à esquerda com `Ctrl/Cmd+[`** tanto em `Editar` (`D`) quanto em `Transformar` (`E`) (iniciando recolhida em 1366 px e aberta à esquerda em 1440+ px). | aplicada |
+| 4 | **Rótulos no `<ContextoCorte>`** | `D` usa *"Exportar Corte (Ctrl+E)"* e *"Corte 2/8: <título>"*; `E` usa *"Exportar MP4"* e *"Corte #12"*, além de citar *"Converter em Vídeo transformado"* como fluxo ativo apesar da lacuna do núcleo. | Padronizar *"Exportar Corte"* (`Ctrl/Cmd+E`), `"Corte {i}/{N}: {título}"` (ou `Corte #{id}` se avulso) e manter *"Converter em Vídeo transformado"* desabilitado com tooltip até o ticket #4 de Rust. | aplicada |
+| 5 | **Toast ao redirecionar `Transformar` em `Corte direto`** | `E` especifica toast informativo (*"Transformar está disponível apenas para Vídeo transformado"*); `D` apenas cita o redirect para `/editar`. | Exibir o toast informativo de `E` no redirect de guarda de rota. | aplicada |
+| 6 | **Escopo contextual de `Ctrl/Cmd+S`** | `01-arquitetura.md` §8 lista `Ctrl/Cmd+S` apenas para `editor.flush` (`Editar`); `E` usa também para `script.edit` (em `Transformar`) e `packaging.edit` (em `Empacotar`). | Atualizar §8 da arquitetura para tornar `Ctrl/Cmd+S` contextual às 3 sub-abas do Corte. | aplicada |
+| 7 | **Exportação individual na Mesa de Prontidão** | `01-arquitetura.md` §2 coloca `export.start` só em `Editar`/`Empacotar`; `F.1` adiciona *"Exportar só este"* no menu do card. | Oficializar *"Exportar só este"* em `01-arquitetura.md` §2 abrindo o mesmo modal de `guardrails.check` do `<ContextoCorte>`. | aplicada |
+| 8 | **Guarda de Fonte `offline`/`changed` em `Transformar`/`Empacotar`** | `01-arquitetura.md` §3 documenta modo somente-leitura de mídia apenas em `editar`; `E` aplica também em `transformar` e `empacotar`. | Estender a regra da §3 para `transformar` e `empacotar` (edição textual/áudio via SQLite preservada; preview e export bloqueados com banner). | aplicada |
+| 9 | **Query params de teste** | `01-arquitetura.md` §3 define `?estado=vazio\|erro\|carregando` e `?paleta`; `D` e `F` adicionam `?estado=erro-flush`, `?estado=offline`, `?estado=parcial`, `?export-fallback=1`, `?updater-test=...`. | Unificar tabela oficial de params de mock/QA (`?estado=vazio\|erro\|carregando\|parcial\|offline\|erro-flush\|fallback` e `?paleta`). | aplicada |
+| 10 | **Nomes/props dos componentes compartilhados** | Props misturando PT/EN (`open`/`aberto`, `variant`/`intent`/`variante`) e múltiplos nomes para estados (`BannerEstado`, `ErroAcionavel`, `EstadoVazio`, `Skeleton`). | Adotar estritamente as interfaces canônicas da Seção 2 deste documento. | aplicada parcialmente: regra canônica registrada em `01-arquitetura.md` e no catálogo; nomes/props nos pacotes `A`–`F` não foram reescritos |
 
 ---
 
@@ -480,8 +480,8 @@ Apesar de ser a tela mais complexa do aplicativo e ter extensão compacta frente
 
 Checklist objetivo antes de iniciar os mockups e o design system:
 
-- [ ] **Decisões do dev resolvidas (11 itens `[decisão do dev]` na Seção 3):** especialmente confirmar `:corteId` = `candidateId` (+ token `avulso-...`), coordenação de `CloseRequested` via evento Rust → WebView, válvula de escape no erro de `editor.flush`, persistência local de Aparência/WCAG 2.1.4 e *"Exportar só este"* na Mesa de Prontidão.
-- [ ] **Atualização pontual de `01-arquitetura.md`:** alinhar §2/§3 (`#/assistente` rota dedicada, `?sub=fontes|lotes`, `?sub=prontidao|lotes`, `:corteId`, guarda `offline`/`changed` em `Transformar`/`Empacotar`, `export.start` na Mesa de Prontidão) e §8 (`Ctrl/Cmd+S` contextual no Corte, `Alt+PageUp/PageDown` para `< Anterior | Próximo >`, manter Transcrição do Corte à esquerda `Ctrl/Cmd+[` em `D` e `E`).
+- [x] **Decisões do dev resolvidas (11 itens `[decidido pelo dev em 17/11: recomendação aprovada]` + 15 resoluções por consistência aprovadas na Seção 3):** `:corteId` = `candidateId` (+ token `avulso-...`), coordenação de `CloseRequested` via evento Rust → WebView, válvula de escape no erro de `editor.flush`, persistência local de Aparência/WCAG 2.1.4 e *"Exportar só este"* na Mesa de Prontidão.
+- [x] **Atualização pontual de `01-arquitetura.md`:** alinhar §2/§3 (`#/assistente` rota dedicada, `?sub=fontes|lotes`, `?sub=prontidao|lotes`, `:corteId`, guarda `offline`/`changed` em `Transformar`/`Empacotar`, `export.start` na Mesa de Prontidão, tabela oficial de query params), §5 (`CloseRequested`), §8 (`Ctrl/Cmd+S` contextual no Corte, `Alt+PageUp/PageDown` para `< Anterior | Próximo aprovado >`, Transcrição do Corte sempre à esquerda `Ctrl/Cmd+[` em `D` e `E`), §10 e §11 (tickets de melhora).
 - [ ] **Congelamento do Catálogo de Componentes Compartilhados (Seção 2):** mapear cada componente canônico para os arquivos existentes em `design-system/src/components/` antes de desenhar novos tokens ou componentes.
 - [ ] **Plano de detalhamento visual do Pacote D na Fase 4:** incluir explicitamente no escopo de mockups os wireframes das 5 abas do Inspetor, do `Índice do Corte` e da manipulação de retângulos no modo `Fonte 16:9`.
 - [ ] **Tickets separados para Fase 5 abertos:** 3 tickets bloqueantes da Fase 5 + 11 tickets de melhora no Rust (Seção 4) e pacote de atualização do Mock TS (Seção 5) para garantir protótipo e E2E navegáveis sem query flags ocultas.
