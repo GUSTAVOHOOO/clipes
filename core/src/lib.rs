@@ -71,6 +71,7 @@ pub mod energy;
 pub mod export;
 pub mod jobs;
 pub mod media;
+pub mod montage;
 pub mod packaging;
 pub mod process;
 pub mod projects;
