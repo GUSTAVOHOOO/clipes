@@ -348,7 +348,16 @@ fn signed_remote_catalog_updates_models_rejects_invalid_and_falls_back_offline()
     assert_eq!(pt24_entry["updateAvailable"], true);
 
     // 4. Download de atualização exige confirmação e valida SHA-256:
-    //    hash divergente falha com `hash_mismatch` e preserva o modelo antigo intacto.
+    //    sem confirmação falha com `confirmation_required`; hash divergente falha com
+    //    `hash_mismatch` e preserva o modelo antigo intacto.
+    let unconfirmed = dispatch(
+        "components.models.download",
+        json!({"id": "whisper-small", "confirmed": false}),
+        &mut |_| {},
+    )
+    .unwrap_err();
+    assert_eq!(unconfirmed.code, "confirmation_required");
+
     let (bad_dl_base, h_bad_dl) =
         spawn_http_map(|_| vec![("/whisper-small/config.json".into(), b"corrupted".to_vec())]);
     std::env::set_var("CLIPES_TEST_MODEL_BASE_URL", &bad_dl_base);
@@ -423,7 +432,23 @@ fn signed_remote_catalog_updates_models_rejects_invalid_and_falls_back_offline()
     assert_eq!(pt24_after["installedRevision"], tts_v2_rev);
     assert_eq!(pt24_after["updateAvailable"], false);
 
-    // 5. Cache adulterado no disco cai automaticamente para o catálogo embutido com aviso.
+    // 5. Anti-rollback via dispatch: versão menor que a ativa (v2 -> v1) é recusada.
+    let (rb_base, h_rb) = spawn_http_map(|_| {
+        let releases = serde_json::to_vec(&json!([{
+            "tag_name": "catalog-1",
+            "draft": false,
+            "assets": []
+        }]))
+        .unwrap();
+        vec![("/releases".into(), releases)]
+    });
+    std::env::set_var("CLIPES_TEST_CATALOG_URL", &rb_base);
+    let rb_err = dispatch("components.catalog.check", json!({}), &mut |_| {}).unwrap_err();
+    h_rb.join().unwrap();
+    assert_eq!(rb_err.code, "catalog_rollback");
+    assert_eq!(call("components.catalog.status", json!({}))["version"], 2);
+
+    // 6. Cache adulterado no disco cai automaticamente para o catálogo embutido com aviso.
     fs::write(data_dir.join("catalog/catalog.json"), b"{\"version\":99}").unwrap();
     let tampered_status = call("components.catalog.status", json!({}));
     assert_eq!(tampered_status["version"], 1);
