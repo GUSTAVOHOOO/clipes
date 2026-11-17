@@ -365,7 +365,7 @@ pub(crate) fn guardrail_status(candidate_id: i64) -> Result<Option<TtsGuardrailS
             };
             let row: Option<(String, String)> = c
                 .query_row(
-                    "SELECT voice_id, audio_rel_path FROM narration_blocks WHERE block_id=?1 AND version_id=?2",
+                    "SELECT voice_id, audio_rel_path FROM narration_blocks WHERE block_id=?1 AND version_id=?2 AND engine_id='pocket-tts'",
                     (b.block_id, ver_id),
                     |r| Ok((r.get(0)?, r.get(1)?)),
                 )
@@ -475,12 +475,14 @@ struct AudioRow {
     ver_id: i64,
     voice_id: String,
     model_id: String,
+    engine_id: String,
     rel: String,
     dur: i64,
     sr: i64,
     ch: i64,
     bytes: i64,
     sha256: String,
+    trimmed: bool,
 }
 
 fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
@@ -505,6 +507,7 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         Ok(Ok((latest, busy, job, align_busy, align_job)))
     })??;
     let align_ready = crate::narration_align::prerequisites_ready();
+    let vad_ready = crate::narration_record::vad_ready();
 
     let Some(latest) = latest else {
         return Ok(json!({
@@ -519,6 +522,7 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             "alignBusy": align_busy,
             "alignJob": align_job_json,
             "alignPrerequisitesReady": align_ready,
+            "vadReady": vad_ready,
             "blocks": [],
             "totalDurationUs": 0,
         }));
@@ -534,8 +538,10 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         for b in &latest.blocks {
             let row = c
                 .query_row(
-                    "SELECT id, version_id, voice_id, model_id, audio_rel_path, duration_us, sample_rate, channels, bytes, sha256
-                     FROM narration_blocks WHERE block_id=?1 ORDER BY id DESC LIMIT 1",
+                    "SELECT nb.id, nb.version_id, nb.voice_id, nb.model_id, nb.engine_id, nb.audio_rel_path, nb.duration_us, nb.sample_rate, nb.channels, nb.bytes, nb.sha256, COALESCE(nr.trimmed, 1)
+                     FROM narration_blocks nb
+                     LEFT JOIN narration_recordings nr ON nr.narration_id=nb.id
+                     WHERE nb.block_id=?1 ORDER BY nb.id DESC LIMIT 1",
                     [b.block_id],
                     |r| {
                         Ok(AudioRow {
@@ -543,12 +549,14 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                             ver_id: r.get(1)?,
                             voice_id: r.get(2)?,
                             model_id: r.get(3)?,
-                            rel: r.get(4)?,
-                            dur: r.get(5)?,
-                            sr: r.get(6)?,
-                            ch: r.get(7)?,
-                            bytes: r.get(8)?,
-                            sha256: r.get(9)?,
+                            engine_id: r.get(4)?,
+                            rel: r.get(5)?,
+                            dur: r.get(6)?,
+                            sr: r.get(7)?,
+                            ch: r.get(8)?,
+                            bytes: r.get(9)?,
+                            sha256: r.get(10)?,
+                            trimmed: r.get::<_, i64>(11)? != 0,
                         })
                     },
                 )
@@ -570,12 +578,14 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                             "versionId": r.ver_id,
                             "voiceId": r.voice_id,
                             "modelId": r.model_id,
+                            "engineId": r.engine_id,
                             "relPath": r.rel,
                             "durationUs": r.dur,
                             "sampleRate": r.sr,
                             "channels": r.ch,
                             "bytes": r.bytes,
                             "stale": stale,
+                            "trimmed": r.trimmed,
                         }),
                         align,
                     )
@@ -607,6 +617,7 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         "alignBusy": align_busy,
         "alignJob": align_job_json,
         "alignPrerequisitesReady": align_ready,
+        "vadReady": vad_ready,
         "blocks": blocks_json,
         "totalDurationUs": total_duration_us,
     }))
