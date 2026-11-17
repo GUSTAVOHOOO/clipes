@@ -48,12 +48,14 @@ inventory::collect!(DiagnosticField);
 pub enum DiagnosticEvent {
     ComponentFailure,
     InvalidEstimateHint,
+    GpuProbeFallback,
 }
 impl DiagnosticEvent {
     fn code(self) -> &'static str {
         match self {
             Self::ComponentFailure => "component_failure",
             Self::InvalidEstimateHint => "invalid_estimate_hint",
+            Self::GpuProbeFallback => "gpu_probe_fallback",
         }
     }
 }
@@ -81,6 +83,7 @@ fn log_lines(path: &Path) -> Vec<&'static str> {
             let message = match line.as_str() {
                 "component_failure" => Some("Erro: falha em componente"),
                 "invalid_estimate_hint" => Some("Metadados de estimativa inválidos"),
+                "gpu_probe_fallback" => Some("Aviso: sonda da GPU falhou; transcrição em CPU"),
                 _ => None,
             };
             if let Some(message) = message {

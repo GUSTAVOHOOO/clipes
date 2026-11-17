@@ -396,6 +396,9 @@ fn probe_reply(out: &mut std::io::StdoutLock<'_>, id: &Value, params: &Value) {
             serde_json::json!({"v":1,"type":"error","id":id,"code":code,"message":"x"}),
         )
     };
+    if mode == "info" && has("fail:info".into()) {
+        return error(out, "internal");
+    }
     if device == "cuda" && has(format!("hang:{compute}")) {
         loop {
             std::thread::sleep(std::time::Duration::from_secs(1));
