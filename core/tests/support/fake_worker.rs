@@ -92,7 +92,8 @@ fn worker(scenario: &str) {
 /// deriva as palavras do pedido, uma por segundo coberto (início em k+0,1 s). O áudio falso
 /// do ffmpeg falso guarda só a duração do bloco em segundos. Se CLIPES_FAKE_WORKER_CRASH
 /// apontar para um arquivo existente, o worker o apaga e morre no segundo pedido do processo;
-/// enquanto CLIPES_FAKE_WORKER_HOLD existir, segura o pedido (atendendo `cancel`).
+/// enquanto CLIPES_FAKE_WORKER_HOLD existir, segura o pedido (atendendo `cancel`) e,
+/// se CLIPES_FAKE_WORKER_HELD estiver definido, cria esse arquivo ao entrar na espera.
 fn transcribe_worker() {
     use std::sync::mpsc;
     let (tx, rx) = mpsc::channel::<Value>();
@@ -132,6 +133,11 @@ fn transcribe_worker() {
                     }
                 }
                 let hold = std::env::var_os("CLIPES_FAKE_WORKER_HOLD").map(PathBuf::from);
+                if hold.as_ref().is_some_and(|h| h.exists()) {
+                    if let Some(held) = std::env::var_os("CLIPES_FAKE_WORKER_HELD") {
+                        let _ = fs::write(held, b"1");
+                    }
+                }
                 let mut cancelled = false;
                 while hold.as_ref().is_some_and(|h| h.exists()) {
                     if let Ok(m) = rx.recv_timeout(std::time::Duration::from_millis(20)) {

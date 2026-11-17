@@ -3,6 +3,7 @@ import { coreDispatch } from '@/lib/core';
 import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import type { CaptionStyle } from '@/features/captions/types';
+import type { TtsCatalog, TtsVoice } from '@/features/components/TtsCatalogCard';
 import { GUARDRAILS_UPDATED_EVENT, guardrailsTexts } from '@/features/guardrails/GuardrailsPanel';
 import { VideoKindPicker, type VideoKind } from './videoKind';
 
@@ -84,7 +85,9 @@ const texts = {
     sourceNote: 'Nota de licença ou autorização (opcional)',
     addSource: 'Adicionar fonte permitida',
     removeSource: 'Remover',
-    narrationVoice: 'Voz da Narração: campo reservado para o TTS (indisponível nesta versão).',
+    narrationVoice: 'Voz padrão da Narração (TTS)',
+    narrationVoiceAuto: 'Padrão automático do idioma do Roteiro',
+    narrationVoiceHint: 'Usada como padrão na síntese da Narração; pode ser trocada antes de gerar.',
     cadence: 'Ritmo de publicação sugerido (orientação): publique em ritmo regular e moderado (por exemplo, 1 a 3 vídeos por dia por canal) e evite enviar lotes grandes de vídeos parecidos em sequência, para reduzir risco de filtros de spam.',
     save: 'Salvar perfil do canal',
     saved: 'Perfil do canal salvo.',
@@ -127,7 +130,9 @@ const texts = {
     sourceNote: 'License or authorization note (optional)',
     addSource: 'Add allowed source',
     removeSource: 'Remove',
-    narrationVoice: 'Narration voice: field reserved for TTS (unavailable in this version).',
+    narrationVoice: 'Default Narration voice (TTS)',
+    narrationVoiceAuto: 'Automatic default for Script language',
+    narrationVoiceHint: 'Used as the default for Narration synthesis; can be overridden before generating.',
     cadence: 'Suggested publishing cadence (guideline): publish at a steady, moderate pace (for example, 1 to 3 videos per day per channel) and avoid uploading large batches of similar videos back-to-back to reduce spam-filter risk.',
     save: 'Save channel profile',
     saved: 'Channel profile saved.',
@@ -159,6 +164,7 @@ export function ChannelProfile({ projectId }: { projectId: string }) {
     { code: 'pt', name: 'portuguese' },
     { code: 'en', name: 'english' },
   ]);
+  const [voices, setVoices] = useState<TtsVoice[]>([]);
   const [minSec, setMinSec] = useState('20');
   const [maxSec, setMaxSec] = useState('60');
   const [sourceLabel, setSourceLabel] = useState('');
@@ -171,14 +177,16 @@ export function ChannelProfile({ projectId }: { projectId: string }) {
   const load = useCallback(async () => {
     setError('');
     setStatus('');
-    const [loaded, langs] = await Promise.all([
+    const [loaded, langs, catalog] = await Promise.all([
       coreDispatch<ChannelProfileData>('channel_profile.get', {}),
       coreDispatch<LanguageOption[]>('channel_profile.languages', {}).catch(() => null),
+      coreDispatch<TtsCatalog>('tts.catalog', {}).catch(() => null),
     ]);
     setProfile(loaded);
     setMinSec(String(Math.round(loaded.minUs / 1_000_000)));
     setMaxSec(String(Math.round(loaded.maxUs / 1_000_000)));
     if (langs && langs.length > 0) setLanguages(langs);
+    if (catalog?.voices) setVoices(catalog.voices);
   }, []);
 
   useEffect(() => {
@@ -242,7 +250,7 @@ export function ChannelProfile({ projectId }: { projectId: string }) {
         maxUs: max * 1_000_000,
         captionStyle: profile.captionStyle,
         allowedSources: profile.allowedSources,
-        narrationVoice: null,
+        narrationVoice: profile.narrationVoice,
       });
       setProfile(saved);
       setMinSec(String(Math.round(saved.minUs / 1_000_000)));
@@ -474,7 +482,22 @@ export function ChannelProfile({ projectId }: { projectId: string }) {
             )}
           </fieldset>
 
-          <p className="text-xs text-fg-2" data-narration-voice-reserved>{t.narrationVoice}</p>
+          <label className="flex flex-col gap-1">
+            {t.narrationVoice}
+            <select
+              data-channel-narration-voice
+              className={`${field} w-80`}
+              value={profile.narrationVoice ?? ''}
+              disabled={busy}
+              onChange={e => { setProfile({ ...profile, narrationVoice: e.target.value || null }); setStatus(''); }}
+            >
+              <option value="">{t.narrationVoiceAuto}</option>
+              {voices.map(v => (
+                <option key={v.id} value={v.id}>{v.label} ({v.license})</option>
+              ))}
+            </select>
+            <span className="text-xs text-fg-2">{t.narrationVoiceHint}</span>
+          </label>
 
           <p role="note" className="rounded-md border border-line bg-field p-3 text-fg-2">
             {t.cadence}

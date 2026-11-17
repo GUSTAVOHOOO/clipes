@@ -229,19 +229,28 @@ fn resolve_doc_montage(doc: &Document) -> Result<Option<ResolvedDocMontage>, Cor
     };
     let sentences = montage::load_transcript_sentences(transcript_id)?;
     let splice = SpliceMap::new(doc.range.start_us, doc.range.end_us, &doc.active_silences());
+    let tts_durations = crate::tts::block_durations_for_candidate(candidate_id).unwrap_or_default();
     let blocks: Vec<montage::MontageBlockInput> = script_doc
         .blocks
         .into_iter()
-        .map(|b| montage::MontageBlockInput {
-            block_id: b.id,
-            position: b.position,
-            title: b.title,
-            refs: b.refs,
-            duration_us: b
-                .narration
-                .as_deref()
-                .map_or(0, montage::estimate_block_duration_us),
-            estimated: true,
+        .map(|b| {
+            let (duration_us, estimated) = match tts_durations.get(&b.id).copied() {
+                Some(real) => (real, false),
+                None => (
+                    b.narration
+                        .as_deref()
+                        .map_or(0, montage::estimate_block_duration_us),
+                    true,
+                ),
+            };
+            montage::MontageBlockInput {
+                block_id: b.id,
+                position: b.position,
+                title: b.title,
+                refs: b.refs,
+                duration_us,
+                estimated,
+            }
         })
         .collect();
     let plan = montage::resolve(&montage::MontageInput {

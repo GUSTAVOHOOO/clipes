@@ -197,6 +197,38 @@ fn check_single(v: &Value, ack: bool) -> CommandResult {
         json!({ "applicable": false })
     };
 
+    let narration_json = if video_kind == VideoKind::Transformed {
+        match candidate_id {
+            Some(cid) => match crate::tts::guardrail_status(cid) {
+                Ok(Some(st)) => json!({
+                    "applicable": true,
+                    "hasTts": st.has_tts,
+                    "generatedBlocks": st.generated_blocks,
+                    "totalBlocks": st.total_blocks,
+                    "voices": st.voices,
+                }),
+                Ok(None) => json!({ "applicable": false }),
+                Err(e) if e.code == "not_approved" || e.code == "candidate_not_found" => json!({
+                    "applicable": true,
+                    "hasTts": false,
+                    "generatedBlocks": 0,
+                    "totalBlocks": 0,
+                    "voices": [],
+                }),
+                Err(e) => return Err(e),
+            },
+            None => json!({
+                "applicable": true,
+                "hasTts": false,
+                "generatedBlocks": 0,
+                "totalBlocks": 0,
+                "voices": [],
+            }),
+        }
+    } else {
+        json!({ "applicable": false })
+    };
+
     let has_direct = video_kind == VideoKind::Direct;
     let over60s = duration_us > SHORT_CLAIM_LIMIT_US;
     Ok(json!({
@@ -221,6 +253,7 @@ fn check_single(v: &Value, ack: bool) -> CommandResult {
             "scope": perm.scope,
         },
         "script": script_json,
+        "narration": narration_json,
     }))
 }
 
@@ -281,6 +314,7 @@ fn check_batch(scope: &str, v: &Value, ack: bool) -> CommandResult {
             "shortClaimLimitUs": SHORT_CLAIM_LIMIT_US,
             "permission": perm,
             "script": { "applicable": false },
+            "narration": { "applicable": false },
         }));
     }
 
@@ -293,6 +327,7 @@ fn check_batch(scope: &str, v: &Value, ack: bool) -> CommandResult {
     let mut transformed_count = 0usize;
     let mut script_approved_count = 0usize;
     let mut script_unapproved_count = 0usize;
+    let mut tts_cut_count = 0usize;
 
     let mut perm_cache: HashMap<i64, PermissionInfo> = HashMap::new();
     let mut kind_cache: HashMap<i64, VideoKind> = HashMap::new();
@@ -318,6 +353,11 @@ fn check_batch(scope: &str, v: &Value, ack: bool) -> CommandResult {
                         script_unapproved_count += 1;
                     }
                     Err(e) => return Err(e),
+                }
+                if let Ok(Some(tts)) = crate::tts::guardrail_status(cut.candidate_id) {
+                    if tts.has_tts {
+                        tts_cut_count += 1;
+                    }
                 }
             }
         }
@@ -383,6 +423,16 @@ fn check_batch(scope: &str, v: &Value, ack: bool) -> CommandResult {
                 "transformedCount": transformed_count,
                 "approvedCount": script_approved_count,
                 "unapprovedCount": script_unapproved_count,
+            })
+        } else {
+            json!({ "applicable": false })
+        },
+        "narration": if has_transformed {
+            json!({
+                "applicable": true,
+                "hasTts": tts_cut_count > 0,
+                "ttsCutCount": tts_cut_count,
+                "transformedCount": transformed_count,
             })
         } else {
             json!({ "applicable": false })

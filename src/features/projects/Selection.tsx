@@ -27,6 +27,7 @@ type Pending = { kind: 'start' } | { kind: 'redo'; windows?: number[] };
 const texts = {
   'pt-BR': {
     title: 'Seleção de Cortes', start: 'Selecionar Cortes', cancel: 'Cancelar seleção', resume: 'Retomar janelas', redo: 'Refazer janela',
+    estimating: 'Calculando janelas de seleção…', runningReason: 'Há uma seleção em andamento para esta Fonte.', busyReason: 'Aguarde a operação atual terminar.',
     estimate: 'Estimativa: {windows} janelas', free: 'sem custo (modelo local)', unknown: 'custo desconhecido', quota: 'consome a cota do plano', range: 'entre US$ {min} e US$ {max}', reduced: 'janelas reduzidas pelo contexto do modelo',
     confirmTitle: 'Usar o Provedor pago?', confirmBody: 'A seleção envia a Transcrição, em janelas, ao Provedor escolhido. Custo estimado: {cost}.', confirmRedo: 'Refazer envia de novo só as janelas escolhidas. Custo estimado: {cost}.', confirm: 'Confirmar e selecionar', confirmRedoLabel: 'Confirmar e refazer', dismiss: 'Cancelar',
     progress: 'Progresso da seleção', windowsDone: '{done} de {total} janelas', window: 'Janela {n}', paused: 'Pausada pelo orçamento do lote. Aumente o teto e continue na fila.',
@@ -42,6 +43,7 @@ const texts = {
   },
   en: {
     title: 'Clip selection', start: 'Select Clips', cancel: 'Cancel selection', resume: 'Resume windows', redo: 'Redo window',
+    estimating: 'Estimating selection windows…', runningReason: 'A selection is already running for this Source.', busyReason: 'Wait for the current action to finish.',
     estimate: 'Estimate: {windows} windows', free: 'free (local model)', unknown: 'cost unknown', quota: 'uses your plan quota', range: 'between US$ {min} and US$ {max}', reduced: 'windows shortened by the model context',
     confirmTitle: 'Use the paid Provider?', confirmBody: 'The selection sends the Transcript, in windows, to the chosen Provider. Estimated cost: {cost}.', confirmRedo: 'Redo sends only the chosen windows again. Estimated cost: {cost}.', confirm: 'Confirm and select', confirmRedoLabel: 'Confirm and redo', dismiss: 'Cancel',
     progress: 'Selection progress', windowsDone: '{done} of {total} windows', window: 'Window {n}', paused: 'Paused by the batch budget. Raise the cap and continue in the queue.',
@@ -158,6 +160,17 @@ export function Selection({ sourceId }: { sourceId: number }) {
 
   const head = detail?.run;
   const running = head?.state === 'running';
+  const startDisabled = busy || running || preview === null;
+  const disabledReason = blocked
+    ? blocked
+    : busy
+      ? t.busyReason
+      : running
+        ? t.runningReason
+        : preview === null
+          ? t.estimating
+          : '';
+  const reasonId = `selection-disabled-reason-${sourceId}`;
   const needsRedo = detail?.windows.some(w => w.code !== null) ?? false;
   const shown = (detail?.candidates ?? []).filter(c => c.total >= minScore);
   const dialogEstimate = pending?.kind === 'start' ? preview?.estimate : redoPaid?.estimate;
@@ -167,8 +180,9 @@ export function Selection({ sourceId }: { sourceId: number }) {
     <VideoKindPicker value={videoKind} onChange={setVideoKind} disabled={busy || running} />
     {preview?.weights && <WeightsLine weights={preview.weights} />}
     <div className="flex flex-wrap items-center gap-3">
-      <Button ref={focus} variante="primario" disabled={busy || running || preview === null} onClick={begin}>{t.start}</Button>
+      <Button ref={focus} variante="primario" disabled={startDisabled} title={disabledReason || undefined} aria-describedby={disabledReason ? reasonId : undefined} onClick={begin}>{t.start}</Button>
       {preview && <span className="text-fg-2">{fill(t.estimate, { windows: preview.estimate.windows })} · {costText(preview.estimate)}{preview.plan?.state === 'reduced' ? ` · ${t.reduced}` : ''}</span>}
+      {!blocked && disabledReason && <span id={reasonId} className="text-fg-2">{disabledReason}</span>}
       {running && <Button disabled={busy} onClick={() => void cancel()}>{t.cancel}</Button>}
       {chat?.canFetch && chat.state !== 'available' && <Button disabled={fetching} onClick={() => void fetchChat()}>{fetching ? t.chatFetching : t.chatFetch}</Button>}
       {chat?.state === 'available' && <span className="text-fg-2" data-chat="available">{fill(t.chatAvailable, { peaks: chat.peaks })}</span>}
@@ -176,7 +190,7 @@ export function Selection({ sourceId }: { sourceId: number }) {
       {chat?.job?.state === 'failed' && chat.state === 'none' && <span role="alert" className="text-danger">{t.chatFailed}</span>}
       {runs.length > 1 && <label className="flex items-center gap-2">{t.run}<select className="h-8 rounded-md border border-line-strong bg-field px-2" value={current ?? ''} onChange={e => { setDetail(null); setCurrent(Number(e.target.value)); }}>{runs.map(r => <option key={r.id} value={r.id}>#{r.id} · {r.createdAt.slice(0, 16).replace('T', ' ')}</option>)}</select></label>}
     </div>
-    {blocked && <p role="alert" className="rounded-md border border-line bg-warning-subtle p-3 text-fg">{blocked}</p>}
+    {blocked && <p id={reasonId} role="alert" className="rounded-md border border-line bg-warning-subtle p-3 text-fg">{blocked}</p>}
     {head && <div className="flex flex-col gap-2" aria-live="polite">
       <div className="flex flex-wrap items-center gap-3">
         <VideoKindBadge kind={runKind} />

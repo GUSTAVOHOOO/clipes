@@ -30,15 +30,19 @@ const PROBE_SOURCE: &str = "testsrc2=size=1080x1920:rate=30:duration=1";
 
 // Qualidade equivalente entre encoders. Cada perfil mira o mesmo ponto do x264 (CRF 20,
 // preset fast): imagem visualmente próxima, a taxa de bits variando com o conteúdo. Os
-// valores seguem os guias de cada fabricante; só o NVENC foi comparado em máquina real (PR #62).
+// valores de QSV, AMF e VideoToolbox seguem os guias de cada fabricante; o NVENC foi
+// calibrado com VMAF/SSIM/PSNR em mídia real (#232, docs/research/2026-11-16-calibracao-nvenc-cq.md).
 
 /// x264: o que o #59 já usa, mantido sem alterações.
 pub(crate) const X264_ARGS: &[&str] = &["-preset", "fast", "-crf", "20", "-pix_fmt", "yuv420p"];
+/// CQ padrão do NVENC calibrado contra x264 CRF 20 `fast` em RTX 3050 (#232).
+pub const NVENC_CQ: &str = "25";
 /// NVENC: `p5` é o preset de qualidade intermediário, `hq` o ajuste de qualidade e
-/// `-cq 23` o alvo constante-qualidade (a escala do CQ é mais frouxa que a do CRF);
+/// `-cq 25` o alvo constante-qualidade calibrado contra x264 CRF 20 (`fast`);
 /// `-b:v 0` deixa só o CQ mandar na taxa.
 const NVENC_ARGS: &[&str] = &[
-    "-preset", "p5", "-tune", "hq", "-rc", "vbr", "-cq", "23", "-b:v", "0", "-pix_fmt", "yuv420p",
+    "-preset", "p5", "-tune", "hq", "-rc", "vbr", "-cq", NVENC_CQ, "-b:v", "0", "-pix_fmt",
+    "yuv420p",
 ];
 /// QSV: `-global_quality 22` liga o modo ICQ (qualidade constante); `medium` equilibra
 /// velocidade e eficiência. Entra como nv12, o formato nativo do Quick Sync.
@@ -237,11 +241,7 @@ impl Cache {
 static LOCK: Mutex<()> = Mutex::new(());
 
 fn cache_path() -> Result<PathBuf, CoreError> {
-    std::env::var_os("CLIPES_DATA_DIR")
-        .map(PathBuf::from)
-        .or_else(|| dirs::data_local_dir().map(|p| p.join("Clipes")))
-        .map(|p| p.join("export-encoder.json"))
-        .ok_or_else(failed)
+    crate::paths::data_file("export-encoder.json").map_err(|_| failed())
 }
 
 fn read_cache() -> Option<Cache> {

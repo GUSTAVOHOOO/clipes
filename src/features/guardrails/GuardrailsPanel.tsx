@@ -36,6 +36,15 @@ export type GuardrailsState = {
     approvedCount?: number;
     unapprovedCount?: number;
   };
+  narration?: {
+    applicable: boolean;
+    hasTts?: boolean;
+    generatedBlocks?: number;
+    totalBlocks?: number;
+    voices?: string[];
+    ttsCutCount?: number;
+    transformedCount?: number;
+  };
 };
 
 export const guardrailsTexts = {
@@ -68,6 +77,9 @@ export const guardrailsTexts = {
       scriptPendingSingle: 'Roteiro: pendente ({pending} de {total} blocos por aprovar).',
       scriptNoneSingle: 'Roteiro: ainda não gerado ou aprovado para este Vídeo transformado.',
       scriptBatch: 'Roteiro (Vídeo transformado): {approved} de {total} aprovados ({unapproved} pendentes).',
+      narrationTtsActiveSingle: 'Narração por TTS: {generated} de {total} blocos sintetizados ({voices}) — divulgue conteúdo sintético quando aplicável (especialmente se a voz imitar pessoa real).',
+      narrationTtsNoneSingle: 'Narração por TTS: nenhum áudio TTS gerado para este Corte.',
+      narrationTtsBatch: 'Narração por TTS: {ttsCount} de {total} Vídeos transformados com áudio TTS — divulgue conteúdo sintético quando aplicável.',
       transformationRule: 'Legenda, crop e filtros não contam como Transformação.',
       musicFixed: 'Música com claim: verifique se há música de fundo ou trilha de jogo na Fonte; músicas protegidas podem gerar claim no Content ID mesmo com Permissão.',
       musicOver60Single: 'Corte acima de 60 s: Shorts com mais de 1 minuto que contenham música com claim são bloqueados e ficam inelegíveis para monetização.',
@@ -103,6 +115,9 @@ export const guardrailsTexts = {
       scriptPendingSingle: 'Script: pending ({pending} of {total} blocks left to approve).',
       scriptNoneSingle: 'Script: not yet generated or approved for this Transformed Video.',
       scriptBatch: 'Script (Transformed Video): {approved} of {total} approved ({unapproved} pending).',
+      narrationTtsActiveSingle: 'TTS Narration: {generated} of {total} blocks synthesized ({voices}) — disclose synthetic content when applicable (especially if the voice imitates a real person).',
+      narrationTtsNoneSingle: 'TTS Narration: no TTS audio generated for this Clip.',
+      narrationTtsBatch: 'TTS Narration: {ttsCount} of {total} Transformed Videos use TTS audio — disclose synthetic content when applicable.',
       transformationRule: 'Captions, crop, and filters do not count as Transformation.',
       musicFixed: 'Claimed music: check for background music or game soundtracks in the Source; copyrighted music can trigger a Content ID claim even with Permission.',
       musicOver60Single: 'Clip over 60 s: Shorts longer than 1 minute containing claimed music are blocked and ineligible for monetization.',
@@ -268,6 +283,22 @@ export function GuardrailsChecklist(props: ChecklistProps) {
     });
   })();
 
+  const narrationText = (() => {
+    if (!state?.narration?.applicable) return null;
+    if (state.scope === 'single') {
+      if (!state.narration.hasTts) return t.narrationTtsNoneSingle;
+      return fill(t.narrationTtsActiveSingle, {
+        generated: state.narration.generatedBlocks ?? 0,
+        total: state.narration.totalBlocks ?? 0,
+        voices: (state.narration.voices ?? []).join(', ') || 'TTS',
+      });
+    }
+    return fill(t.narrationTtsBatch, {
+      ttsCount: state.narration.ttsCutCount ?? 0,
+      total: state.narration.transformedCount ?? 0,
+    });
+  })();
+
   return (
     <details
       data-guardrails-checklist
@@ -282,6 +313,7 @@ export function GuardrailsChecklist(props: ChecklistProps) {
           <li data-guardrails-item="video-kind">{kindText}</li>
           <li data-guardrails-item="permission">{permissionText}</li>
           {scriptText && <li data-guardrails-item="script">{scriptText}</li>}
+          {narrationText && <li data-guardrails-item="narration-tts">{narrationText}</li>}
           <li data-guardrails-item="transformation">{t.transformationRule}</li>
           <li data-guardrails-item="music">{t.musicFixed}</li>
           {state?.over60s && (
