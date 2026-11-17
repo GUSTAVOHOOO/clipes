@@ -1,0 +1,36 @@
+name: Catálogo assinado de modelos
+
+on:
+  push:
+    tags: ['catalog-*']
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Validar catálogo embutido no núcleo
+        run: cargo test -p clipes-core --lib components::catalog::tests::embedded_catalog_is_valid_and_complete
+      - name: Assinar catálogo
+        env:
+          CATALOG_SIGNING_KEY: ${{ secrets.CATALOG_SIGNING_KEY }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node scripts/sign-catalog.mjs dist-catalog
+      - name: Publicar release do catálogo
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" \
+            dist-catalog/catalog.json \
+            dist-catalog/catalog.json.sig \
+            --latest=false \
+            --title "Catálogo de modelos $RELEASE_TAG" \
+            --notes "Catálogo assinado (Ed25519) de modelos de Transcrição, detecção e TTS."

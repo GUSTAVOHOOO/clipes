@@ -170,7 +170,7 @@ pub fn resolve_with_env(
     })
 }
 
-fn is_cargo_test_binary() -> bool {
+pub(crate) fn is_cargo_test_binary() -> bool {
     if cfg!(test) {
         return true;
     }

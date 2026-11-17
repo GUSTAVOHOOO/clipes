@@ -917,7 +917,7 @@ pub fn run(job_id: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreErr
     let total = valid_targets.len();
     for (idx, (target, wav_path)) in valid_targets.into_iter().enumerate() {
         preview::check(job_id, stop)?;
-        if let Ok(sel) = models::selection_for(selection.spec.id) {
+        if let Ok(sel) = models::selection_for(&selection.spec.id) {
             selection = sel;
         }
         let tmp_wav = tmp_dir.join(format!("job-{job_id}-b{}.wav", target.block_id));
@@ -934,35 +934,33 @@ pub fn run(job_id: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreErr
         if tmp_wav.exists() {
             let _ = fs::remove_file(&tmp_wav);
         }
-        let (mut spoken, mut script_words) = match result {
-            Ok(pair) => pair,
-            Err(err) => {
-                if err.code != "cancelled" && err.code != "interrupted" {
-                    let _ = projects::with_writer(|c| {
-                        c.execute(
-                            "INSERT INTO narration_alignments(narration_id, block_id, version_id, audio_sha256, language, model_id, status, error_code)
-                             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'failed', ?7)
-                             ON CONFLICT(narration_id) DO UPDATE SET
-                               model_id=excluded.model_id,
-                               status='failed',
-                               error_code=excluded.error_code,
-                               updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')",
-                            (
-                                target.narration_id,
-                                target.block_id,
-                                target.version_id,
-                                &target.sha256,
-                                &lang,
-                                selection.spec.id,
-                                &err.code,
-                            ),
-                        )?;
-                        Ok(())
-                    });
-                }
-                return Err(err);
+        if let Err(err) = result.as_ref() {
+            if err.code != "cancelled" && err.code != "interrupted" {
+                let model_id = selection.spec.id.as_str();
+                let _ = projects::with_writer(|c| {
+                    c.execute(
+                        "INSERT INTO narration_alignments(narration_id, block_id, version_id, audio_sha256, language, model_id, status, error_code)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'failed', ?7)
+                         ON CONFLICT(narration_id) DO UPDATE SET
+                           model_id=excluded.model_id,
+                           status='failed',
+                           error_code=excluded.error_code,
+                           updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')",
+                        (
+                            target.narration_id,
+                            target.block_id,
+                            target.version_id,
+                            &target.sha256,
+                            &lang,
+                            model_id,
+                            &err.code,
+                        ),
+                    )?;
+                    Ok(())
+                });
             }
-        };
+        }
+        let (mut spoken, mut script_words) = result?;
 
         let deviation = evaluate_deviation(&target.text, &spoken);
         normalize_and_segment(&mut script_words, target.duration_us);
@@ -973,13 +971,14 @@ pub fn run(job_id: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreErr
                 "Não foi possível alinhar as palavras do Roteiro com o áudio.",
             ));
         }
-        let _ = hardware::config_for_model(&settings, selection.spec.id);
+        let _ = hardware::config_for_model(&settings, &selection.spec.id);
         let status = if deviation.needs_review {
             "needs_review"
         } else {
             "aligned"
         };
 
+        let model_id = selection.spec.id.as_str();
         projects::with_writer(|c| {
             let tx = c.transaction()?;
             tx.execute(
@@ -1005,7 +1004,7 @@ pub fn run(job_id: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreErr
                     target.version_id,
                     &target.sha256,
                     &lang,
-                    selection.spec.id,
+                    model_id,
                     status,
                     deviation.substitutions as i64,
                     deviation.insertions as i64,

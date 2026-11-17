@@ -678,6 +678,8 @@ fn enqueue_narration(v: &Value, block_id: Option<i64>) -> CommandResult {
     }
 
     let job_id = jobs::enqueue(JOB_KIND, Safety::Local)?;
+    let voice_id = bundle.voice_id.as_str();
+    let model_id = bundle.model_id.as_str();
     projects::with_writer(|c| {
         c.execute(
             "INSERT INTO narration_jobs(job_id, candidate_id, block_id, voice_id, model_id, quantize)
@@ -686,8 +688,8 @@ fn enqueue_narration(v: &Value, block_id: Option<i64>) -> CommandResult {
                 job_id,
                 candidate_id,
                 block_id,
-                bundle.voice_id,
-                bundle.model_id,
+                voice_id,
+                model_id,
                 i64::from(quantize),
             ),
         )?;
@@ -870,6 +872,8 @@ pub fn run(job_id: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreErr
         let out_wav = project.join(&rel_path);
         let info = synthesize_block(job_id, &exe, &bundle, quantize, text, &out_wav, stop)?;
 
+        let bundle_voice_id = bundle.voice_id.as_str();
+        let bundle_model_id = bundle.model_id.as_str();
         projects::with_writer(|c| {
             c.execute(
                 "INSERT INTO narration_blocks(block_id, version_id, voice_id, model_id, engine_id, audio_rel_path, duration_us, sample_rate, channels, bytes, sha256)
@@ -888,8 +892,8 @@ pub fn run(job_id: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreErr
                 (
                     block.block_id,
                     version_id,
-                    bundle.voice_id,
-                    bundle.model_id,
+                    bundle_voice_id,
+                    bundle_model_id,
                     ENGINE_ID,
                     &rel_path,
                     info.duration_us,

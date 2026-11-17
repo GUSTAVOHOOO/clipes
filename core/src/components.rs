@@ -1,3 +1,4 @@
+pub(crate) mod catalog;
 pub(crate) mod hardware;
 pub(crate) mod models;
 mod update;
