@@ -3,7 +3,10 @@
 //! `project_change`, que impede autosave tardio em outro Projeto.
 use super::silences::{self, SilenceConfig, SilenceStatus, SpliceMap, DEFAULT_MIN_SILENCE_US};
 use super::*;
-use crate::montage;
+use crate::{
+    audio::{self, SfxAnchor, SfxEdit, SoundtrackEdit, WordTrack},
+    montage,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -49,6 +52,10 @@ pub(crate) struct EditSnapshot {
     pub gameplay_webcam_edits: Option<(Vec<crop::CropKeyframe>, Vec<crop::CropKeyframe>)>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub two_people_edits: Option<(Vec<crop::CropKeyframe>, Vec<crop::CropKeyframe>)>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub soundtrack: Option<SoundtrackEdit>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sfx: Vec<SfxEdit>,
 }
 impl EditSnapshot {
     fn dual_edits(
@@ -71,6 +78,8 @@ impl EditSnapshot {
             crop_split_ratio: doc.crop.split_ratio,
             gameplay_webcam_edits: Self::dual_edits(doc.crop.gameplay_webcam.as_ref()),
             two_people_edits: Self::dual_edits(doc.crop.two_people.as_ref()),
+            soundtrack: doc.soundtrack.clone(),
+            sfx: doc.sfx.clone(),
         }
     }
     fn borders(&self) -> Borders {
@@ -107,6 +116,10 @@ pub(crate) struct Document {
     pub crop: crop::CropTimeline,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub narration_starts: BTreeMap<i64, i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub soundtrack: Option<SoundtrackEdit>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sfx: Vec<SfxEdit>,
 }
 impl Document {
     pub(crate) fn active_silences(&self) -> Vec<(i64, i64)> {
@@ -164,6 +177,8 @@ fn decode(encoded: &str) -> Result<Document, CoreError> {
                 crop_split_ratio: None,
                 gameplay_webcam_edits: None,
                 two_people_edits: None,
+                soundtrack: None,
+                sfx: Vec::new(),
             };
             Document {
                 schema_version: SCHEMA_VERSION,
@@ -175,6 +190,8 @@ fn decode(encoded: &str) -> Result<Document, CoreError> {
                 redo: v1.redo.into_iter().map(to_snapshot).collect(),
                 crop: crop::CropTimeline::default(),
                 narration_starts: BTreeMap::new(),
+                soundtrack: None,
+                sfx: Vec::new(),
             }
         }
         SCHEMA_VERSION => serde_json::from_value(raw).map_err(|_| invalid())?,
@@ -194,6 +211,20 @@ fn decode(encoded: &str) -> Result<Document, CoreError> {
         return Err(invalid());
     }
     crop::validate_timeline(&doc.crop)?;
+    if let Some(st) = &doc.soundtrack {
+        audio::validate_soundtrack_edit(st)?;
+    }
+    for sfx in &doc.sfx {
+        audio::validate_sfx_edit(sfx)?;
+    }
+    for snap in doc.undo.iter().chain(&doc.redo) {
+        if let Some(st) = &snap.soundtrack {
+            audio::validate_soundtrack_edit(st)?;
+        }
+        for sfx in &snap.sfx {
+            audio::validate_sfx_edit(sfx)?;
+        }
+    }
     Ok(doc)
 }
 fn load(s: &mut State, id: i64) -> Result<&mut Entry, CoreError> {
@@ -314,6 +345,29 @@ fn crop_view(crop: &crop::CropTimeline, range: &Borders, source_aspect: f64) -> 
         "plan": plan,
     })
 }
+fn audio_mix_view(doc: &Document) -> Value {
+    let Some(project) = current_project_path() else {
+        return Value::Null;
+    };
+    let active = doc.active_silences();
+    let splice = SpliceMap::new(doc.range.start_us, doc.range.end_us, &active);
+    let transcript_id = montage::transcript_id_for_source(doc.original.source_id)
+        .ok()
+        .flatten();
+    let montage_plan = resolve_doc_montage(doc).ok().flatten().map(|m| m.plan);
+    match audio::resolve_audio_mix(
+        &project,
+        doc.soundtrack.as_ref(),
+        &doc.sfx,
+        transcript_id,
+        &splice,
+        doc.original.candidate_id,
+        montage_plan.as_ref(),
+    ) {
+        Ok(view) => serde_json::to_value(view).unwrap_or(Value::Null),
+        Err(_) => Value::Null,
+    }
+}
 fn answer(id: i64, doc: &Document) -> Value {
     let r = &doc.range;
     let active = doc.active_silences();
@@ -333,7 +387,8 @@ fn answer(id: i64, doc: &Document) -> Value {
         "startUs":r.start_us,"endUs":r.end_us,"undoCount":doc.undo.len(),"redoCount":doc.redo.len(),
         "silences":{"enabled":doc.silences.is_some(),"thresholdUs":threshold_us,"intervals":intervals,"segments":splice.segments,"removedUs":splice.removed_us,"effectiveDurationUs":splice.output_duration_us},
         "crop":crop_view(&doc.crop, r, aspect),
-        "montage":montage_view(doc)})
+        "montage":montage_view(doc),
+        "audioMix":audio_mix_view(doc)})
 }
 fn save(s: &mut State, due_only: bool) -> Result<(), CoreError> {
     let ids: Vec<_> = s
@@ -458,6 +513,8 @@ pub(super) fn open(request: &Request, start: i64, end: i64) -> Result<Value, Cor
             redo: vec![],
             crop: crop::CropTimeline::default(),
             narration_starts: BTreeMap::new(),
+            soundtrack: None,
+            sfx: Vec::new(),
         };
         let encoded = serde_json::to_string(&doc).map_err(|_| invalid())?;
         projects::with_writer(|c| {
@@ -683,12 +740,20 @@ fn history(v: Value, redo: bool) -> CommandResult {
         let next_narration_starts = next.narration_starts.unwrap_or_default();
         let next_gw_edits = next.gameplay_webcam_edits.unwrap_or_default();
         let next_tp_edits = next.two_people_edits.unwrap_or_default();
+        let next_soundtrack = next.soundtrack;
+        let next_sfx = next.sfx;
         validate(&entry.doc, &next_range)?;
         validate_silences(&next_range, next.silences.as_ref())?;
         crop::validate_split_ratio(next.crop_layout, next.crop_split_ratio)?;
         crop::validate_edits(&next_crop_edits)?;
         if next_narration_starts.values().any(|&t| t < 0) {
             return Err(invalid());
+        }
+        if let Some(st) = &next_soundtrack {
+            audio::validate_soundtrack_edit(st)?;
+        }
+        for sfx in &next_sfx {
+            audio::validate_sfx_edit(sfx)?;
         }
         crop::validate_edits(&next_gw_edits.0)?;
         crop::validate_edits(&next_gw_edits.1)?;
@@ -707,6 +772,8 @@ fn history(v: Value, redo: bool) -> CommandResult {
         entry.doc.crop.split_ratio = next.crop_split_ratio;
         entry.doc.crop.edits = next_crop_edits;
         entry.doc.narration_starts = next_narration_starts;
+        entry.doc.soundtrack = next_soundtrack;
+        entry.doc.sfx = next_sfx;
         let apply_dual =
             |slot: &mut Option<crop::DualCropPanels>,
              (top, bot): (Vec<crop::CropKeyframe>, Vec<crop::CropKeyframe>)| {
@@ -1258,6 +1325,389 @@ fn montage_set_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     }
     Ok(answer(id, &entry.doc))
 }
+
+pub(crate) fn audio_asset_ids_for_clip(clip_id: i64) -> Result<Vec<i64>, CoreError> {
+    let doc = document(clip_id)?;
+    let mut ids = Vec::new();
+    if let Some(st) = &doc.soundtrack {
+        ids.push(st.asset_id);
+    }
+    for sfx in &doc.sfx {
+        ids.push(sfx.asset_id);
+    }
+    Ok(ids)
+}
+
+pub(crate) fn audio_asset_ids_for_candidate(candidate_id: i64) -> Result<Vec<i64>, CoreError> {
+    let clip_id: Option<i64> = projects::with_reader(|c| {
+        c.query_row(
+            "SELECT id FROM clip_edits WHERE identity=?1",
+            [format!("candidate:{candidate_id}")],
+            |r| r.get(0),
+        )
+        .optional()
+    })?;
+    match clip_id {
+        Some(id) => audio_asset_ids_for_clip(id),
+        None => Ok(Vec::new()),
+    }
+}
+
+fn require_asset_kind(
+    asset_id: i64,
+    expected: audio::AudioKind,
+) -> Result<audio::AudioAsset, CoreError> {
+    let asset = projects::with_reader(|c| audio::load_asset(c, asset_id))?.ok_or_else(|| {
+        error(
+            "audio_asset_missing",
+            "Áudio importado não encontrado no Projeto.",
+        )
+    })?;
+    if asset.kind != expected {
+        return Err(error(
+            "invalid_audio_kind",
+            if expected == audio::AudioKind::Music {
+                "Selecione um áudio importado como trilha sonora."
+            } else {
+                "Selecione um áudio importado como efeito sonoro."
+            },
+        ));
+    }
+    let Some(project) = current_project_path() else {
+        return Err(error(
+            "project_not_open",
+            "Abra um Projeto para gerenciar áudios.",
+        ));
+    };
+    if audio::resolve_audio_rel_path(&project, &asset.audio_rel_path).is_none() {
+        return Err(error(
+            "audio_asset_missing",
+            "Arquivo de áudio importado não foi encontrado no Projeto.",
+        ));
+    }
+    Ok(asset)
+}
+
+fn parse_sfx_anchor(v: &Value, doc: &Document) -> Result<SfxAnchor, CoreError> {
+    let kind = v["kind"]
+        .as_str()
+        .ok_or_else(|| error("invalid_audio_mix", "Âncora do efeito sonoro inválida."))?;
+    match kind {
+        "moment" => {
+            let raw = v["source_us"]
+                .as_i64()
+                .or_else(|| v["sourceUs"].as_i64())
+                .or_else(|| v["time_us"].as_i64())
+                .or_else(|| v["timeUs"].as_i64())
+                .ok_or_else(|| error("invalid_audio_mix", "Informe o momento do efeito."))?;
+            let clamped = raw.clamp(doc.range.start_us, doc.range.end_us);
+            Ok(SfxAnchor::Moment { source_us: clamped })
+        }
+        "word" => {
+            let track = match v.get("track").and_then(Value::as_str) {
+                None | Some("original") => WordTrack::Original,
+                Some("narration") => WordTrack::Narration,
+                Some(_) => {
+                    return Err(error(
+                        "invalid_audio_mix",
+                        "Faixa de palavra inválida para o efeito.",
+                    ))
+                }
+            };
+            let position = v["position"]
+                .as_i64()
+                .ok_or_else(|| error("word_not_found", "Informe a posição da palavra."))?;
+            let block_id = v
+                .get("block_id")
+                .or_else(|| v.get("blockId"))
+                .and_then(Value::as_i64);
+            let offset_us = v
+                .get("offset_us")
+                .or_else(|| v.get("offsetUs"))
+                .and_then(Value::as_i64)
+                .unwrap_or(0);
+            let anchor = SfxAnchor::Word {
+                track,
+                position,
+                block_id,
+                offset_us,
+            };
+            if track == WordTrack::Narration && block_id.is_none() {
+                return Err(error(
+                    "invalid_audio_mix",
+                    "Efeito ancorado na Narração exige o bloco de origem.",
+                ));
+            }
+            let transcript_id = montage::transcript_id_for_source(doc.original.source_id)?;
+            let splice =
+                SpliceMap::new(doc.range.start_us, doc.range.end_us, &doc.active_silences());
+            let montage_plan = resolve_doc_montage(doc).ok().flatten().map(|m| m.plan);
+            let (_, _, _, outside) = projects::with_reader(|c| {
+                audio::resolve_sfx_anchor(c, &anchor, transcript_id, &splice, montage_plan.as_ref())
+            })?;
+            if outside {
+                return Err(error(
+                    "word_not_found",
+                    "A palavra escolhida não está ativa dentro do Corte.",
+                ));
+            }
+            Ok(anchor)
+        }
+        _ => Err(error("invalid_audio_mix", "Tipo de âncora inválido.")),
+    }
+}
+
+fn nearest_clip_word_anchor(
+    doc: &Document,
+    source_us: i64,
+) -> Result<Option<SfxAnchor>, CoreError> {
+    let transcript_id = montage::transcript_id_for_source(doc.original.source_id)?;
+    let Some(tid) = transcript_id else {
+        return Ok(None);
+    };
+    let active = doc.active_silences();
+    let splice = SpliceMap::new(doc.range.start_us, doc.range.end_us, &active);
+    let words: Vec<(i64, i64)> = projects::with_reader(|c| {
+        let mut q = c.prepare(
+            "SELECT position, start_us FROM transcript_words
+             WHERE transcript_id=?1 AND kind='word' AND start_us>=?2 AND start_us<=?3
+             ORDER BY position",
+        )?;
+        let rows = q
+            .query_map((tid, doc.range.start_us, doc.range.end_us), |r| {
+                Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    })?;
+    let best = words
+        .into_iter()
+        .filter(|(_, su)| {
+            splice
+                .segments
+                .iter()
+                .any(|seg| *su >= seg.source_start_us && *su <= seg.source_end_us)
+        })
+        .min_by_key(|(pos, su)| ((*su - source_us).abs(), *pos));
+    Ok(best.map(|(position, _)| SfxAnchor::Word {
+        track: WordTrack::Original,
+        position,
+        block_id: None,
+        offset_us: 0,
+    }))
+}
+
+fn audio_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let id = id(&v)?;
+    let mut s = lock()?;
+    let entry = load(&mut s, id)?;
+    Ok(json!({
+        "clipId": id,
+        "schemaVersion": entry.doc.schema_version,
+        "revision": entry.doc.revision,
+        "undoCount": entry.doc.undo.len(),
+        "redoCount": entry.doc.redo.len(),
+        "audioMix": audio_mix_view(&entry.doc),
+    }))
+}
+
+fn audio_soundtrack_set(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let id = id(&v)?;
+    let mut s = lock()?;
+    let entry = load(&mut s, id)?;
+    let next_soundtrack = match v.get("asset_id") {
+        Some(Value::Null) => None,
+        Some(raw_asset) => {
+            let asset_id = raw_asset
+                .as_i64()
+                .ok_or_else(|| error("audio_asset_missing", "Áudio importado inválido."))?;
+            require_asset_kind(asset_id, audio::AudioKind::Music)?;
+            let prev = entry
+                .doc
+                .soundtrack
+                .as_ref()
+                .filter(|p| p.asset_id == asset_id);
+            let st = SoundtrackEdit {
+                asset_id,
+                start_us: v["start_us"]
+                    .as_i64()
+                    .unwrap_or_else(|| prev.map_or(0, |p| p.start_us)),
+                volume: v["volume"]
+                    .as_f64()
+                    .unwrap_or_else(|| prev.map_or(audio::DEFAULT_SOUNDTRACK_VOLUME, |p| p.volume)),
+                fade_in_us: v["fade_in_us"]
+                    .as_i64()
+                    .unwrap_or_else(|| prev.map_or(0, |p| p.fade_in_us)),
+                fade_out_us: v["fade_out_us"]
+                    .as_i64()
+                    .unwrap_or_else(|| prev.map_or(0, |p| p.fade_out_us)),
+                loop_to_fit: v["loop_to_fit"]
+                    .as_bool()
+                    .unwrap_or_else(|| prev.is_none_or(|p| p.loop_to_fit)),
+            };
+            audio::validate_soundtrack_edit(&st)?;
+            Some(st)
+        }
+        None => {
+            let Some(prev) = &entry.doc.soundtrack else {
+                return Err(error(
+                    "audio_asset_missing",
+                    "Selecione uma trilha sonora primeiro.",
+                ));
+            };
+            let st = SoundtrackEdit {
+                asset_id: prev.asset_id,
+                start_us: v["start_us"].as_i64().unwrap_or(prev.start_us),
+                volume: v["volume"].as_f64().unwrap_or(prev.volume),
+                fade_in_us: v["fade_in_us"].as_i64().unwrap_or(prev.fade_in_us),
+                fade_out_us: v["fade_out_us"].as_i64().unwrap_or(prev.fade_out_us),
+                loop_to_fit: v["loop_to_fit"].as_bool().unwrap_or(prev.loop_to_fit),
+            };
+            audio::validate_soundtrack_edit(&st)?;
+            Some(st)
+        }
+    };
+
+    if v["preview"].as_bool().unwrap_or(false) {
+        let mut doc = entry.doc.clone();
+        doc.soundtrack = next_soundtrack;
+        return Ok(answer(id, &doc));
+    }
+    if next_soundtrack != entry.doc.soundtrack {
+        push_history(entry);
+        entry.doc.soundtrack = next_soundtrack;
+    }
+    Ok(answer(id, &entry.doc))
+}
+
+fn audio_soundtrack_clear(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let id = id(&v)?;
+    let mut s = lock()?;
+    let entry = load(&mut s, id)?;
+    if v["preview"].as_bool().unwrap_or(false) {
+        let mut doc = entry.doc.clone();
+        doc.soundtrack = None;
+        return Ok(answer(id, &doc));
+    }
+    if entry.doc.soundtrack.is_some() {
+        push_history(entry);
+        entry.doc.soundtrack = None;
+    }
+    Ok(answer(id, &entry.doc))
+}
+
+fn audio_sfx_add(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let id = id(&v)?;
+    let mut s = lock()?;
+    let entry = load(&mut s, id)?;
+    let asset_id = v["asset_id"]
+        .as_i64()
+        .ok_or_else(|| error("audio_asset_missing", "Selecione um efeito sonoro."))?;
+    require_asset_kind(asset_id, audio::AudioKind::Sfx)?;
+    let anchor = parse_sfx_anchor(&v["anchor"], &entry.doc)?;
+    let next_id = entry.doc.sfx.iter().map(|s| s.id).max().unwrap_or(0) + 1;
+    let item = SfxEdit {
+        id: next_id,
+        asset_id,
+        anchor,
+        volume: v["volume"].as_f64().unwrap_or(audio::DEFAULT_SFX_VOLUME),
+        fade_in_us: v["fade_in_us"].as_i64().unwrap_or(0),
+        fade_out_us: v["fade_out_us"].as_i64().unwrap_or(0),
+    };
+    audio::validate_sfx_edit(&item)?;
+    if v["preview"].as_bool().unwrap_or(false) {
+        let mut doc = entry.doc.clone();
+        doc.sfx.push(item);
+        return Ok(answer(id, &doc));
+    }
+    push_history(entry);
+    entry.doc.sfx.push(item);
+    Ok(answer(id, &entry.doc))
+}
+
+fn audio_sfx_update(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let id = id(&v)?;
+    let sfx_id = v["id"]
+        .as_i64()
+        .ok_or_else(|| error("sfx_not_found", "Efeito sonoro não encontrado no Corte."))?;
+    let mut s = lock()?;
+    let entry = load(&mut s, id)?;
+    let Some(pos) = entry.doc.sfx.iter().position(|item| item.id == sfx_id) else {
+        return Err(error(
+            "sfx_not_found",
+            "Efeito sonoro não encontrado no Corte.",
+        ));
+    };
+    let mut next_item = entry.doc.sfx[pos].clone();
+    if let Some(asset_id) = v.get("asset_id").and_then(Value::as_i64) {
+        require_asset_kind(asset_id, audio::AudioKind::Sfx)?;
+        next_item.asset_id = asset_id;
+    }
+    if v.get("anchor").is_some_and(|a| !a.is_null()) {
+        next_item.anchor = parse_sfx_anchor(&v["anchor"], &entry.doc)?;
+    } else if let Some(requested) = v.get("time_us").and_then(Value::as_i64) {
+        let clamped = requested.clamp(entry.doc.range.start_us, entry.doc.range.end_us);
+        let (_, fps) = source_row(entry.doc.original.source_id)?;
+        let free = v["free"].as_bool().unwrap_or(false);
+        if free {
+            let snapped = ((clamped as f64 * fps / 1_000_000.0).round() * 1_000_000.0 / fps)
+                .round()
+                .clamp(
+                    entry.doc.range.start_us as f64,
+                    entry.doc.range.end_us as f64,
+                ) as i64;
+            next_item.anchor = SfxAnchor::Moment { source_us: snapped };
+        } else if let Some(word_anchor) = nearest_clip_word_anchor(&entry.doc, clamped)? {
+            next_item.anchor = word_anchor;
+        } else {
+            next_item.anchor = SfxAnchor::Moment { source_us: clamped };
+        }
+    }
+    if let Some(vol) = v.get("volume").and_then(Value::as_f64) {
+        next_item.volume = vol;
+    }
+    if let Some(fi) = v.get("fade_in_us").and_then(Value::as_i64) {
+        next_item.fade_in_us = fi;
+    }
+    if let Some(fo) = v.get("fade_out_us").and_then(Value::as_i64) {
+        next_item.fade_out_us = fo;
+    }
+    audio::validate_sfx_edit(&next_item)?;
+
+    if v["preview"].as_bool().unwrap_or(false) {
+        let mut doc = entry.doc.clone();
+        doc.sfx[pos] = next_item;
+        return Ok(answer(id, &doc));
+    }
+    if next_item != entry.doc.sfx[pos] {
+        push_history(entry);
+        entry.doc.sfx[pos] = next_item;
+    }
+    Ok(answer(id, &entry.doc))
+}
+
+fn audio_sfx_remove(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let id = id(&v)?;
+    let sfx_id = v["id"]
+        .as_i64()
+        .ok_or_else(|| error("sfx_not_found", "Efeito sonoro não encontrado no Corte."))?;
+    let mut s = lock()?;
+    let entry = load(&mut s, id)?;
+    let Some(pos) = entry.doc.sfx.iter().position(|item| item.id == sfx_id) else {
+        return Err(error(
+            "sfx_not_found",
+            "Efeito sonoro não encontrado no Corte.",
+        ));
+    };
+    if v["preview"].as_bool().unwrap_or(false) {
+        let mut doc = entry.doc.clone();
+        doc.sfx.remove(pos);
+        return Ok(answer(id, &doc));
+    }
+    push_history(entry);
+    entry.doc.sfx.remove(pos);
+    Ok(answer(id, &entry.doc))
+}
 inventory::submit! {CommandRegistration {name:"editor.adjust",execute:adjust}}
 inventory::submit! {CommandRegistration {name:"editor.undo",execute:undo}}
 inventory::submit! {CommandRegistration {name:"editor.redo",execute:redo}}
@@ -1275,6 +1725,12 @@ inventory::submit! {CommandRegistration {name:"editor.crop.evaluate",execute:cro
 inventory::submit! {CommandRegistration {name:"editor.crop.example",execute:crop_example}}
 inventory::submit! {CommandRegistration {name:"editor.montage.get",execute:montage_get}}
 inventory::submit! {CommandRegistration {name:"editor.montage.set_start",execute:montage_set_start}}
+inventory::submit! {CommandRegistration {name:"editor.audio.get",execute:audio_get}}
+inventory::submit! {CommandRegistration {name:"editor.audio.soundtrack.set",execute:audio_soundtrack_set}}
+inventory::submit! {CommandRegistration {name:"editor.audio.soundtrack.clear",execute:audio_soundtrack_clear}}
+inventory::submit! {CommandRegistration {name:"editor.audio.sfx.add",execute:audio_sfx_add}}
+inventory::submit! {CommandRegistration {name:"editor.audio.sfx.update",execute:audio_sfx_update}}
+inventory::submit! {CommandRegistration {name:"editor.audio.sfx.remove",execute:audio_sfx_remove}}
 
 #[cfg(test)]
 mod tests {

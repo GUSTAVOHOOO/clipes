@@ -19,6 +19,32 @@ const denoMock = { installed: false };
 const pocketTtsMock = { installed: false };
 const ttsActiveModels: Record<string, string> = { pt: 'portuguese_24l', en: 'english' };
 const ttsInstalledModels = new Set<string>();
+const ttsInstalledRevs = new Map<string, string>();
+const catalogScenario = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('catalog-test') : null;
+const catalogMock = {
+  version: 1,
+  embeddedVersion: 1,
+  source: 'embedded' as 'embedded' | 'remote',
+  warning: catalogScenario === 'tampered-cache' ? 'Assinatura do catálogo em cache inválida; usando o catálogo embutido.' : null as string | null,
+  warningCode: catalogScenario === 'tampered-cache' ? 'catalog_signature_invalid' : null as string | null,
+};
+const MODEL_REV_V1 = {
+  'whisper-turbo': '0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf',
+  'whisper-small': '536b0662742c02347bc0e980a01041f333bce120',
+  yunet: '48b10fa505aeb51fbd127fc60a5c660040e823b7',
+};
+const MODEL_REV_V2 = {
+  'whisper-turbo': '0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf',
+  'whisper-small': '2222222222222222222222222222222222222222',
+  yunet: '48b10fa505aeb51fbd127fc60a5c660040e823b7',
+};
+const TTS_REV_V1 = 'a7056f505a4a8ca72d8b5fb1440071d6f1a35739';
+const TTS_REV_V2 = '3333333333333333333333333333333333333333';
+const modelInstalledRevs = new Map<string, string>(
+  typeof location !== 'undefined' && new URLSearchParams(location.search).has('components-missing')
+    ? []
+    : [['whisper-small', MODEL_REV_V1['whisper-small']]],
+);
 type MockBlockAlignment = {
   status: 'pending' | 'aligned' | 'needs_review' | 'approved' | 'failed';
   choice: 'script' | 'spoken' | null;
@@ -32,7 +58,7 @@ type MockBlockAlignment = {
   spokenText: string | null;
   wordCount: number;
 };
-const narrationGenerated = new Map<number, { blockId: number; voiceId: string; modelId: string; engineId: string; durationUs: number; alignment: MockBlockAlignment }[]>();
+const narrationGenerated = new Map<number, { blockId: number; voiceId: string; modelId: string; engineId: string; trimmed?: boolean; durationUs: number; alignment: MockBlockAlignment }[]>();
 const sourceTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('source-test');
 const componentsMissing = typeof location !== 'undefined' && new URLSearchParams(location.search).has('components-missing');
 const budgetTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('budget-test');
@@ -67,7 +93,7 @@ let jobItems = [
 let transcribeMock: { transcript: object | null; job: object | null } = groqRetryTest ? {transcript:{id:1,engine:'groq',state:'running',resume_us:4e6,duration_us:10e6,words:1},job:{id:99,state:'cancelled',progress:40}} : { transcript: null, job: null };
 if (groqRetryTest || componentsMissing || hardwareCpuMode || hardwareProbeFallbackMode) sourceItems.push({id:4,path:'/test/downloaded.mp4',status:'available',available:true,verified:true,language:'pt',permission:{status:'none'}});
 let providerMock = { kind: 'openai', endpoint: '', model: '', nativeSchema: false, context: null as number | null, keyLastFour: null as string | null, remote: false, confirmed: false, confirmedEndpoints: [] as string[] };
-type ProfileMock = { id: string; label: string; kind: string; endpoint: string; model: string; nativeSchema: boolean; ownKey: boolean; context: number | null; maxOutput?: number | null; timeoutSecs?: number | null; keyLastFour: string | null };
+type ProfileMock = { id: string; label: string; kind: string; endpoint: string; model: string; nativeSchema: boolean; ownKey: boolean; context: number | null; maxOutput?: number | null; timeoutSecs?: number | null; tokensPerRequest?: number | null; tokensPerMinute?: number | null; tokensPerDay?: number | null; keyLastFour: string | null };
 let profileMocks: ProfileMock[] = [];
 const isLocalHost = (endpoint: string) => ['localhost', '127.0.0.1', '[::1]'].includes(new URL(endpoint).hostname);
 let priceOverrides: { provider: string; model: string; inputPerMillion: number; outputPerMillion: number }[] = [];
@@ -336,6 +362,12 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         const effectiveTransformed = hasTransformed || freezeTailUs > 0 || !!montageInfo?.montage;
         const effectiveKind = effectiveTransformed ? 'transformed' : videoKind;
         const scriptView = effectiveTransformed ? (scriptMockDispatch('script.get', { candidate: a.candidate_id ?? 1 }) as { current?: { blocks?: unknown[]; pending?: number } | null; narrationAllowed?: boolean }) : null;
+        const audioInfo = typeof (a as { clip_id?: number }).clip_id === 'number'
+          ? (editorEditsMock('editor.audio.get', { clip_id: (a as { clip_id?: number }).clip_id }) as { audioMix?: { soundtrack?: { assetId: number; licenseVerified: boolean } | null; sfx: { assetId: number; licenseVerified: boolean }[]; unverifiedCount: number } } | undefined)?.audioMix
+          : undefined;
+        const usedIds = new Set<number>();
+        if (audioInfo?.soundtrack) usedIds.add(audioInfo.soundtrack.assetId);
+        for (const item of audioInfo?.sfx ?? []) usedIds.add(item.assetId);
         return {
           scope: 'single',
           directMonetizationAck: ack,
@@ -351,6 +383,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
           permission: { status: granted ? 'granted' : 'none', grantedCount: granted ? 1 : 0, missingCount: granted ? 0 : 1, totalCount: 1, who: permObj?.who ?? null, where: permObj?.where ?? null, scope: permObj?.scope ?? null },
           script: effectiveTransformed ? { applicable: true, exists: !!scriptView?.current, approved: !!scriptView?.narrationAllowed, pendingBlocks: scriptView?.current?.pending ?? 0, totalBlocks: scriptView?.current?.blocks?.length ?? 0 } : { applicable: false },
           narration: effectiveTransformed ? (() => { const g = (narrationGenerated.get(a.candidate_id ?? 1) ?? []).filter(x => x.engineId !== 'imported' && x.engineId !== 'recorded'); return { applicable: true, hasTts: g.length > 0, generatedBlocks: g.length, totalBlocks: scriptView?.current?.blocks?.length ?? 0, voices: [...new Set(g.map(x => x.voiceId))], freezeTailUs, longFreezeTail: freezeTailUs > 5_000_000 }; })() : { applicable: false },
+          audio: { hasAudio: usedIds.size > 0, assetCount: usedIds.size, unverifiedCount: audioInfo?.unverifiedCount ?? 0 },
         } as T;
       }
       const totalCuts = selectionFlag('export-batch-empty') || (scope === 'source' && !selectionMock.run) ? 0 : 2;
@@ -373,6 +406,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
           : { status: batchGranted ? 'granted' : 'none', grantedCount: batchGranted ? totalCuts : 0, missingCount: batchGranted ? 0 : totalCuts, totalCount: totalCuts },
         script: hasTransformed && totalCuts > 0 ? { applicable: true, transformedCount: totalCuts, approvedCount: 0, unapprovedCount: totalCuts } : { applicable: false },
         narration: hasTransformed && totalCuts > 0 ? { applicable: true, hasTts: false, ttsCutCount: 0, transformedCount: totalCuts } : { applicable: false },
+        audio: { applicable: totalCuts > 0, cutsWithAudio: 0, cutsWithUnverifiedAudio: 0, totalUnverified: 0 },
       } as T;
     }
     if (sourceTest && new URLSearchParams(location.search).has('batch-test')) { const handled = batchMockDispatch(name, args); if (handled !== undefined) return handled as T; }
@@ -442,14 +476,20 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'components.download' && (args as { id?: string }).id === 'pocket-tts') { pocketTtsMock.installed = true; return { path: '/test/components/pocket-tts' } as T; }
     if (name === 'tts.catalog' || name === 'tts.models.choose') {
       if (name === 'tts.models.choose') { const a = args as { language: string; modelId: string }; ttsActiveModels[a.language] = a.modelId; }
+      const pt24Rev = catalogMock.version > 1 ? TTS_REV_V2 : TTS_REV_V1;
+      const revFor = (id: string) => (id === 'portuguese_24l' ? pt24Rev : TTS_REV_V1);
+      const installedRev = (id: string) => (ttsInstalledModels.has(id) ? (ttsInstalledRevs.get(id) ?? TTS_REV_V1) : null);
       return {
+        catalogVersion: catalogMock.version,
+        catalogSource: catalogMock.source,
+        catalogWarning: catalogMock.warning,
         componentInstalled: pocketTtsMock.installed,
         activeModels: { ...ttsActiveModels },
         engines: [{ id: 'pocket-tts', label: 'Pocket TTS (Kyutai)', componentId: 'pocket-tts', codeLicense: 'MIT', sourceUrl: 'https://github.com/kyutai-labs/pocket-tts/tree/v4.0.1', prohibitedUse: { textEn: 'Prohibited use: Use of our model must comply with all applicable laws and regulations and must not result in, involve, or facilitate any illegal, harmful, deceptive, fraudulent, or unauthorized activity.', summaryPt: 'Uso proibido pelo autor do modelo (Kyutai): sem imitação ou clonagem de voz sem consentimento explícito e legal.', version: 'mock' } }],
         models: [
-          { id: 'portuguese_24l', engineId: 'pocket-tts', language: 'pt', label: 'Pocket TTS PT-BR (24 camadas · padrão)', description: 'Qualidade superior em PT-BR.', defaultForLanguage: true, lightweight: false, active: ttsActiveModels.pt === 'portuguese_24l', installed: ttsInstalledModels.has('portuguese_24l'), termsAccepted: ttsInstalledModels.has('portuguese_24l'), repo: 'kyutai/pocket-tts-without-voice-cloning', revision: 'a7056f505a4a8ca72d8b5fb1440071d6f1a35739', license: 'CC-BY-4.0', sourceUrl: 'https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/tree/a7056f505a4a8ca72d8b5fb1440071d6f1a35739', size: 701332218 },
-          { id: 'portuguese', engineId: 'pocket-tts', language: 'pt', label: 'Pocket TTS PT-BR (6 camadas · leve)', description: 'Variante destilada mais rápida.', defaultForLanguage: false, lightweight: true, active: ttsActiveModels.pt === 'portuguese', installed: ttsInstalledModels.has('portuguese'), termsAccepted: ttsInstalledModels.has('portuguese'), repo: 'kyutai/pocket-tts-without-voice-cloning', revision: 'a7056f505a4a8ca72d8b5fb1440071d6f1a35739', license: 'CC-BY-4.0', sourceUrl: 'https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/tree/a7056f505a4a8ca72d8b5fb1440071d6f1a35739', size: 226502826 },
-          { id: 'english', engineId: 'pocket-tts', language: 'en', label: 'Pocket TTS EN (6 camadas · padrão)', description: 'Modelo oficial em inglês.', defaultForLanguage: true, lightweight: true, active: ttsActiveModels.en === 'english', installed: ttsInstalledModels.has('english'), termsAccepted: ttsInstalledModels.has('english'), repo: 'kyutai/pocket-tts-without-voice-cloning', revision: 'a7056f505a4a8ca72d8b5fb1440071d6f1a35739', license: 'CC-BY-4.0', sourceUrl: 'https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/tree/a7056f505a4a8ca72d8b5fb1440071d6f1a35739', size: 231761368 },
+          { id: 'portuguese_24l', engineId: 'pocket-tts', language: 'pt', label: 'Pocket TTS PT-BR (24 camadas · padrão)', description: 'Qualidade superior em PT-BR.', defaultForLanguage: true, lightweight: false, active: ttsActiveModels.pt === 'portuguese_24l', installed: ttsInstalledModels.has('portuguese_24l'), installedRevision: installedRev('portuguese_24l'), updateAvailable: ttsInstalledModels.has('portuguese_24l') && installedRev('portuguese_24l') !== revFor('portuguese_24l'), termsAccepted: ttsInstalledModels.has('portuguese_24l'), repo: 'kyutai/pocket-tts-without-voice-cloning', revision: revFor('portuguese_24l'), license: 'CC-BY-4.0', sourceUrl: `https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/tree/${revFor('portuguese_24l')}`, size: 701332218 },
+          { id: 'portuguese', engineId: 'pocket-tts', language: 'pt', label: 'Pocket TTS PT-BR (6 camadas · leve)', description: 'Variante destilada mais rápida.', defaultForLanguage: false, lightweight: true, active: ttsActiveModels.pt === 'portuguese', installed: ttsInstalledModels.has('portuguese'), installedRevision: installedRev('portuguese'), updateAvailable: false, termsAccepted: ttsInstalledModels.has('portuguese'), repo: 'kyutai/pocket-tts-without-voice-cloning', revision: TTS_REV_V1, license: 'CC-BY-4.0', sourceUrl: 'https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/tree/a7056f505a4a8ca72d8b5fb1440071d6f1a35739', size: 226502826 },
+          { id: 'english', engineId: 'pocket-tts', language: 'en', label: 'Pocket TTS EN (6 camadas · padrão)', description: 'Modelo oficial em inglês.', defaultForLanguage: true, lightweight: true, active: ttsActiveModels.en === 'english', installed: ttsInstalledModels.has('english'), installedRevision: installedRev('english'), updateAvailable: false, termsAccepted: ttsInstalledModels.has('english'), repo: 'kyutai/pocket-tts-without-voice-cloning', revision: TTS_REV_V1, license: 'CC-BY-4.0', sourceUrl: 'https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/tree/a7056f505a4a8ca72d8b5fb1440071d6f1a35739', size: 231761368 },
         ],
         voices: [
           { id: '13063', engineId: 'pocket-tts', language: 'pt', gender: 'male', label: 'Narrador PT-BR 13063 (masculina)', defaultForLanguage: true, license: 'CC-BY-4.0', attribution: 'BRSpeech-TTS / CML-TTS (CC-BY 4.0)', sourceUrl: 'https://huggingface.co/datasets/freds0/BRSpeech-TTS', models: ['portuguese_24l', 'portuguese'], installedModels: [] },
@@ -463,12 +503,16 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       if (!a.confirmed) throw { code: 'confirmation_required', message: 'Confirmação obrigatória.' };
       if (!a.termsAccepted) throw { code: 'terms_acceptance_required', message: 'Aceite o termo.' };
       ttsInstalledModels.add(a.id);
+      ttsInstalledRevs.set(a.id, a.id === 'portuguese_24l' && catalogMock.version > 1 ? TTS_REV_V2 : TTS_REV_V1);
       return { id: a.id } as T;
     }
     if (name === 'tts.models.cancel') return {} as T;
-    if (name === 'narration.get' || name === 'narration.generate' || name === 'narration.regenerate_block' || name === 'narration.import' || name === 'narration.align' || name === 'narration.align_block' || name === 'narration.review') {
-      const a = args as { candidate: number; block?: number; voiceId?: string; choice?: 'script' | 'spoken' };
+    if (name === 'narration.get' || name === 'narration.generate' || name === 'narration.regenerate_block' || name === 'narration.import' || name === 'narration.align' || name === 'narration.align_block' || name === 'narration.review' || name === 'narration.record_block' || name === 'narration.trim_block' || name === 'narration.discard_draft') {
+      const a = args as { candidate: number; block?: number; voiceId?: string; choice?: 'script' | 'spoken'; audioBase64?: string };
       const s = scriptMockDispatch('script.get', { candidate: a.candidate }) as { narrationAllowed: boolean; current: { blocks: { id: number; position: number; title: string; narration: string | null }[] } | null };
+      const recordNoWorker = typeof location !== 'undefined' && new URLSearchParams(location.search).has('record-no-worker');
+      const recordNoSpeech = typeof location !== 'undefined' && new URLSearchParams(location.search).has('record-no-speech');
+      const vadReady = !componentsMissing && !recordNoWorker;
       const defaultAlign = (text: string | null, idx: number): MockBlockAlignment => {
         const deviationMode = typeof location !== 'undefined' && new URLSearchParams(location.search).has('narration-deviation');
         const wordCount = (text ?? '').trim().split(/\s+/).filter(Boolean).length || 4;
@@ -477,6 +521,62 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         }
         return { status: 'aligned', choice: null, activeTrack: 'script', substitutions: 0, insertions: 0, deletions: 0, maxConsecutiveInsertions: 0, errorCode: null, modelId: 'whisper-turbo', spokenText: null, wordCount };
       };
+      if (name === 'narration.discard_draft') {
+        return { candidate: a.candidate, blockId: a.block ?? 0, discarded: true } as T;
+      }
+      if (name === 'narration.record_block') {
+        if (!s.narrationAllowed) throw { code: 'script_not_approved', message: 'Aprove o Roteiro.' };
+        if (recordNoSpeech) throw { code: 'no_speech_detected', message: 'Nenhuma fala detectada na gravação.', usage: { hasDraft: true, durationUs: 1_500_000 } };
+        const blocks = s.current?.blocks ?? [];
+        const idx = blocks.findIndex(b => b.id === a.block);
+        const target = blocks[idx];
+        if (!target) throw { code: 'block_not_found', message: 'Bloco não encontrado.' };
+        const existing = narrationGenerated.get(a.candidate) ?? [];
+        const trimmed = vadReady;
+        const durationUs = trimmed ? 2_400_000 : 3_500_000;
+        const entry = {
+          blockId: target.id,
+          voiceId: 'recorded',
+          modelId: trimmed ? 'silero-vad' : 'untrimmed',
+          engineId: 'recorded',
+          trimmed,
+          durationUs,
+          alignment: vadReady ? defaultAlign(target.narration, idx) : { status: 'pending' as const, choice: null, activeTrack: null, substitutions: 0, insertions: 0, deletions: 0, maxConsecutiveInsertions: 0, errorCode: null, modelId: '', spokenText: null, wordCount: 0 },
+        };
+        const next = existing.some(e => e.blockId === target.id)
+          ? existing.map(e => (e.blockId === target.id ? entry : e))
+          : [...existing, entry];
+        narrationGenerated.set(a.candidate, next);
+        return {
+          candidate: a.candidate,
+          blockId: target.id,
+          narrationId: target.id,
+          versionId: 1,
+          engineId: 'recorded',
+          voiceId: 'recorded',
+          modelId: entry.modelId,
+          relPath: `narrations/c${a.candidate}/b${target.id}-v1.wav`,
+          durationUs,
+          sampleRate: 24000,
+          channels: 1,
+          bytes: 115244,
+          trimmed,
+          warningCode: trimmed ? null : 'vad_unavailable',
+          warning: trimmed ? null : 'Aparo de silêncio indisponível: instale o worker.',
+        } as T;
+      }
+      if (name === 'narration.trim_block') {
+        if (!vadReady) throw { code: 'worker_missing', message: 'Instale o worker.' };
+        const blocks = s.current?.blocks ?? [];
+        const idx = blocks.findIndex(b => b.id === a.block);
+        const target = blocks[idx];
+        const existing = narrationGenerated.get(a.candidate) ?? [];
+        const hit = existing.find(e => e.blockId === a.block);
+        if (!hit || !target) throw { code: 'narration_missing', message: 'Gravação não encontrada.' };
+        const updated = { ...hit, modelId: 'silero-vad', trimmed: true, durationUs: 2_400_000, alignment: defaultAlign(target.narration, idx) };
+        narrationGenerated.set(a.candidate, existing.map(e => (e.blockId === a.block ? updated : e)));
+        return { candidate: a.candidate, blockId: target.id, trimmed: true, durationUs: 2_400_000 } as T;
+      }
       if (name === 'narration.generate' || name === 'narration.regenerate_block') {
         if (!s.narrationAllowed) throw { code: 'script_not_approved', message: 'Aprove o Roteiro.' };
         const voiceId = a.voiceId ?? channelProfileMock.narrationVoice ?? '13063';
@@ -485,8 +585,8 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         const existing = narrationGenerated.get(a.candidate) ?? [];
         const blockDurationUs = selectionFlag('packaging-chapters') ? 12_000_000 : 3_200_000;
         const next = blocks.map((b, idx) => (a.block === undefined || b.id === a.block)
-          ? { blockId: b.id, voiceId, modelId, engineId: 'pocket-tts', durationUs: blockDurationUs, alignment: defaultAlign(b.narration, idx) }
-          : (existing.find(e => e.blockId === b.id) ?? { blockId: b.id, voiceId, modelId, engineId: 'pocket-tts', durationUs: blockDurationUs, alignment: defaultAlign(b.narration, idx) }));
+          ? { blockId: b.id, voiceId, modelId, engineId: 'pocket-tts', trimmed: true, durationUs: blockDurationUs, alignment: defaultAlign(b.narration, idx) }
+          : (existing.find(e => e.blockId === b.id) ?? { blockId: b.id, voiceId, modelId, engineId: 'pocket-tts', trimmed: true, durationUs: blockDurationUs, alignment: defaultAlign(b.narration, idx) }));
         narrationGenerated.set(a.candidate, next);
         return { job: 790, candidate: a.candidate } as T;
       }
@@ -535,14 +635,14 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         const hit = list.find(x => x.blockId === b.id);
         return {
           blockId: b.id, position: b.position, title: b.title, versionId: 1, narrationText: b.narration,
-          audio: hit ? { id: b.id, versionId: 1, voiceId: hit.voiceId, modelId: hit.modelId, engineId: hit.engineId, relPath: `narrations/c${a.candidate}/b${b.id}-v1.wav`, durationUs: hit.durationUs, sampleRate: 24000, channels: 1, bytes: 153644, stale: false } : null,
+          audio: hit ? { id: b.id, versionId: 1, voiceId: hit.voiceId, modelId: hit.modelId, engineId: hit.engineId, relPath: `narrations/c${a.candidate}/b${b.id}-v1.wav`, durationUs: hit.durationUs, sampleRate: 24000, channels: 1, bytes: 153644, stale: false, trimmed: hit.trimmed ?? true } : null,
           alignment: hit ? hit.alignment : null,
         };
       });
       return {
         candidate: a.candidate, narrationAllowed: s.narrationAllowed, gateReason: s.narrationAllowed ? null : 'pending_blocks',
         language: 'pt', defaultVoiceId: channelProfileMock.narrationVoice ?? '13063', activeModelId: ttsActiveModels.pt,
-        busy: false, job: null, importBusy: false, importJob: null, alignBusy: false, alignJob: null, alignPrerequisitesReady: true,
+        busy: false, job: null, importBusy: false, importJob: null, alignBusy: false, alignJob: null, alignPrerequisitesReady: !componentsMissing, vadReady,
         blocks, totalDurationUs: blocks.reduce((acc, b) => acc + (b.audio?.durationUs ?? 0), 0),
       } as T;
     }
@@ -568,8 +668,16 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         providerMock = { ...providerMock, endpoint: 'http://127.0.0.1:11434/v1', model: 'llama3', kind: 'openai' };
         profileMocks = [{ id: 'forte', label: 'Forte remoto', kind: 'openai', endpoint: 'https://api.example.test/v1', model: 'forte-1', nativeSchema: false, ownKey: true, context: null, keyLastFour: '1234' }, { id: 'leve', label: 'Leve local', kind: 'openai', endpoint: 'http://127.0.0.1:11435/v1', model: 'leve-1', nativeSchema: false, ownKey: false, context: null, keyLastFour: null }];
       }
-      const limits = (p: ProfileMock) => ({ maxOutput: { value: p.maxOutput ?? 4096, source: p.maxOutput ? 'profile' : 'fallback' }, timeout: { seconds: p.timeoutSecs ?? (isLocalHost(p.endpoint) ? 300 : 60), source: p.timeoutSecs ? 'profile' : 'default' }, timeoutMsPer1kInputTokens: 1000, minUsefulOutput: 512 });
-      const view = (p: ProfileMock) => ({ ...p, maxOutput: p.maxOutput ?? null, timeoutSecs: p.timeoutSecs ?? null, limits: limits(p), keyLastFour: p.ownKey || p.endpoint !== providerMock.endpoint ? p.keyLastFour : providerMock.keyLastFour, local: isLocalHost(p.endpoint), confirmed: providerMock.confirmedEndpoints.includes(p.endpoint), price: null, cli: false });
+      const limits = (p: ProfileMock) => ({
+        maxOutput: { value: p.maxOutput ?? 4096, source: p.maxOutput ? 'profile' : 'fallback' },
+        timeout: { seconds: p.timeoutSecs ?? (isLocalHost(p.endpoint) ? 300 : 60), source: p.timeoutSecs ? 'profile' : 'default' },
+        timeoutMsPer1kInputTokens: 1000,
+        minUsefulOutput: 512,
+        tokensPerRequest: p.tokensPerRequest ? { value: p.tokensPerRequest, source: 'profile' } : null,
+        tokensPerMinute: p.tokensPerMinute ? { value: p.tokensPerMinute, source: 'profile' } : null,
+        tokensPerDay: p.tokensPerDay ? { value: p.tokensPerDay, source: 'profile' } : null,
+      });
+      const view = (p: ProfileMock) => ({ ...p, maxOutput: p.maxOutput ?? null, timeoutSecs: p.timeoutSecs ?? null, tokensPerRequest: p.tokensPerRequest ?? null, tokensPerMinute: p.tokensPerMinute ?? null, tokensPerDay: p.tokensPerDay ?? null, limits: limits(p), keyLastFour: p.ownKey || p.endpoint !== providerMock.endpoint ? p.keyLastFour : providerMock.keyLastFour, local: isLocalHost(p.endpoint), confirmed: providerMock.confirmedEndpoints.includes(p.endpoint), price: null, cli: false });
       const main = providerMock.endpoint ? [view({ id: 'legacy', label: 'Principal', kind: providerMock.kind, endpoint: providerMock.endpoint, model: providerMock.model, nativeSchema: providerMock.nativeSchema, context: providerMock.context, ownKey: false, keyLastFour: providerMock.keyLastFour })] : [];
       const cli = (kind: string, label: string, confirmed: boolean) => ({ id: kind, label, kind, endpoint: null, model: null, nativeSchema: false, ownKey: false, keyLastFour: null, local: false, confirmed, active: providerCliMock.selected === kind, price: null, cli: true, experimental: true });
       return { profiles: [...main, ...profileMocks.map(view), cli('codex', 'Codex CLI', providerCliMock.codexConfirmed), cli('claude', 'Claude Code CLI', providerCliMock.claudeConfirmed), {...cli('opencode', 'OpenCode CLI', providerCliMock.opencodeConfirmed), model:providerCliMock.opencodeModel, cost:{kind:providerCliMock.opencodeModel === 'opencode/big-pickle' ? 'zero' : 'unknown'}}] } as T;
@@ -600,9 +708,9 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'provider.cli.configure') { providerCliMock.selected = (args as { kind: string }).kind; if ('model' in args) providerCliMock.opencodeModel = (args as {model:string}).model; return {} as T; }
     if (name === 'provider.cli.confirm') { if (providerCliMock.selected === 'codex') providerCliMock.codexConfirmed = true; else if (providerCliMock.selected === 'opencode') providerCliMock.opencodeConfirmed = true; else providerCliMock.claudeConfirmed = true; return {} as T; }
     if (name === 'provider.configure' && (args as { profileId?: string }).profileId) {
-      const a = args as { profileId: string; label: string; kind: string; endpoint: string; model: string; nativeSchema: boolean; ownKey?: boolean; context?: number | null; maxOutput?: number | null; timeoutSecs?: number | null };
+      const a = args as { profileId: string; label: string; kind: string; endpoint: string; model: string; nativeSchema: boolean; ownKey?: boolean; context?: number | null; maxOutput?: number | null; timeoutSecs?: number | null; tokensPerRequest?: number | null; tokensPerMinute?: number | null; tokensPerDay?: number | null };
       const old = profileMocks.find(p => p.id === a.profileId);
-      const next = { id: a.profileId, label: a.label, kind: a.kind, endpoint: a.endpoint, model: a.model, nativeSchema: a.nativeSchema, context: a.context ?? null, maxOutput: 'maxOutput' in a ? a.maxOutput : old?.maxOutput ?? null, timeoutSecs: 'timeoutSecs' in a ? a.timeoutSecs : old?.timeoutSecs ?? null, ownKey: a.ownKey ?? old?.ownKey ?? false, keyLastFour: old?.keyLastFour ?? null };
+      const next = { id: a.profileId, label: a.label, kind: a.kind, endpoint: a.endpoint, model: a.model, nativeSchema: a.nativeSchema, context: a.context ?? null, maxOutput: 'maxOutput' in a ? a.maxOutput : old?.maxOutput ?? null, timeoutSecs: 'timeoutSecs' in a ? a.timeoutSecs : old?.timeoutSecs ?? null, tokensPerRequest: 'tokensPerRequest' in a ? a.tokensPerRequest : old?.tokensPerRequest ?? null, tokensPerMinute: 'tokensPerMinute' in a ? a.tokensPerMinute : old?.tokensPerMinute ?? null, tokensPerDay: 'tokensPerDay' in a ? a.tokensPerDay : old?.tokensPerDay ?? null, ownKey: a.ownKey ?? old?.ownKey ?? false, keyLastFour: old?.keyLastFour ?? null };
       profileMocks = old ? profileMocks.map(p => p.id === a.profileId ? next : p) : [...profileMocks, next];
       return { profileId: a.profileId } as T;
     }
@@ -645,16 +753,46 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       { id: 'pocket-tts', version: '3.3.0', size: 7914990, license: 'MIT', source_url: 'https://github.com/kyutai-labs/pocket-tts/tree/v4.0.1' },
       { id: 'uv', version: '0.13.8', size: 15000000, license: 'Apache-2.0', source_url: 'https://github.com/astral-sh/uv' },
     ] as T;
-    if (name === 'components.models.manifest') return [
-      { worker_installed: !componentsMissing, id: 'whisper-turbo', label: 'Whisper large-v3-turbo (GPU NVIDIA)', repo: 'dropbox-dash/faster-whisper-large-v3-turbo', revision: '0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf', license: 'MIT', source_url: 'https://huggingface.co/dropbox-dash/faster-whisper-large-v3-turbo/tree/0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf', size: 1621666000, installed: false, recommended: true },
-      { worker_installed: !componentsMissing, id: 'whisper-small', label: 'Whisper small (CPU)', repo: 'Systran/faster-whisper-small', revision: '536b0662742c02347bc0e980a01041f333bce120', license: 'MIT', source_url: 'https://huggingface.co/Systran/faster-whisper-small/tree/536b0662742c02347bc0e980a01041f333bce120', size: 486212372, installed: !componentsMissing, recommended: false },
-      { worker_installed: !componentsMissing, id: 'yunet', label: 'YuNet (reenquadramento)', repo: 'opencv/opencv_zoo', revision: '48b10fa505aeb51fbd127fc60a5c660040e823b7', license: 'MIT', source_url: 'https://github.com/opencv/opencv_zoo/tree/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/face_detection_yunet', size: 232589, installed: false, recommended: false },
-    ] as T;
+    if (name === 'components.catalog.status') return { ...catalogMock } as T;
+    if (name === 'components.catalog.check') {
+      if (catalogScenario === 'invalid-signature') {
+        throw { code: 'catalog_signature_invalid', message: 'Assinatura do catálogo remoto inválida; usando o catálogo embutido.' };
+      }
+      if (catalogScenario === 'offline') {
+        throw { code: 'catalog_network', message: 'Não foi possível consultar o catálogo remoto de modelos.' };
+      }
+      if (catalogScenario === 'update' && catalogMock.version === 1) {
+        catalogMock.version = 2;
+        catalogMock.source = 'remote';
+        catalogMock.warning = null;
+        catalogMock.warningCode = null;
+        return { ...catalogMock, previousVersion: 1, updated: true, upToDate: false } as T;
+      }
+      return { ...catalogMock, previousVersion: catalogMock.version, updated: false, upToDate: true } as T;
+    }
+    if (name === 'components.models.manifest') {
+      const revs = catalogMock.version > 1 ? MODEL_REV_V2 : MODEL_REV_V1;
+      const smallInstalled = modelInstalledRevs.get('whisper-small') ?? null;
+      const turboInstalled = modelInstalledRevs.get('whisper-turbo') ?? null;
+      const yunetInstalled = modelInstalledRevs.get('yunet') ?? null;
+      return [
+        { worker_installed: !componentsMissing, id: 'whisper-turbo', label: 'Whisper large-v3-turbo (GPU NVIDIA)', repo: 'dropbox-dash/faster-whisper-large-v3-turbo', revision: revs['whisper-turbo'], license: 'MIT', source_url: `https://huggingface.co/dropbox-dash/faster-whisper-large-v3-turbo/tree/${revs['whisper-turbo']}`, size: 1621666000, installed: turboInstalled !== null, installed_revision: turboInstalled, update_available: turboInstalled !== null && turboInstalled !== revs['whisper-turbo'], recommended: true, catalog_version: catalogMock.version, catalog_source: catalogMock.source },
+        { worker_installed: !componentsMissing, id: 'whisper-small', label: 'Whisper small (CPU)', repo: 'Systran/faster-whisper-small', revision: revs['whisper-small'], license: 'MIT', source_url: `https://huggingface.co/Systran/faster-whisper-small/tree/${revs['whisper-small']}`, size: 486212372, installed: smallInstalled !== null, installed_revision: smallInstalled, update_available: smallInstalled !== null && smallInstalled !== revs['whisper-small'], recommended: false, catalog_version: catalogMock.version, catalog_source: catalogMock.source },
+        { worker_installed: !componentsMissing, id: 'yunet', label: 'YuNet (reenquadramento)', repo: 'opencv/opencv_zoo', revision: revs.yunet, license: 'MIT', source_url: `https://github.com/opencv/opencv_zoo/tree/${revs.yunet}/models/face_detection_yunet`, size: 232589, installed: yunetInstalled !== null, installed_revision: yunetInstalled, update_available: yunetInstalled !== null && yunetInstalled !== revs.yunet, recommended: false, catalog_version: catalogMock.version, catalog_source: catalogMock.source },
+      ] as T;
+    }
     if (name.startsWith('transcription.hardware.') || name === 'transcription.estimate' || name === 'transcription.grouping') return hardwareMockDispatch(name, args) as T;
-    if (name === 'components.models.download') return { id: (args as { id: string }).id } as T;
+    if (name === 'components.models.download') {
+      const a = args as { id: string; confirmed?: boolean };
+      if (!a.confirmed) throw { code: 'confirmation_required', message: 'Confirme o download antes de iniciar' };
+      const revs = catalogMock.version > 1 ? MODEL_REV_V2 : MODEL_REV_V1;
+      const rev = revs[a.id as keyof typeof revs] ?? MODEL_REV_V1['whisper-small'];
+      modelInstalledRevs.set(a.id, rev);
+      return { id: a.id } as T;
+    }
     if (sourceTest && new URLSearchParams(location.search).has('transcript-test') && name === 'transcription.segment') return {} as T;
     // Preview do Corte simulado (#58): a Fonte 2 está offline; a primeira consulta de um Corte gera (40%), a seguinte já está pronta.
-    if (editorTest && (name.startsWith('editor.') || name.startsWith('captions.') || name.startsWith('reframe.') || name === 'export.captions')) return editorMock(name, args as Record<string, number>) as T;
+    if (editorTest && (name.startsWith('editor.') || name.startsWith('audio.') || name.startsWith('captions.') || name.startsWith('reframe.') || name === 'export.captions')) return editorMock(name, args as Record<string, number>) as T;
     const translated = translationMockDispatch(name, args);
     if (translated !== undefined) return translated as T;
     if (transcriptTest && name === 'proxy.request') { const a = args as {source_id:number; start_us:number; end_us:number}; if (a.source_id === 2) throw {code:'source_offline', message:'A Fonte está offline: reconecte ou relocalize a Fonte para ver o preview.'}; const key = 'ab'.repeat(32); mockProxyPolls = 0; return {state:'running', key, job:7, progress:40, error:null, windowStartUs:Math.max(0, a.start_us - 120_000_000), windowEndUs:a.end_us + 120_000_000} as T; }

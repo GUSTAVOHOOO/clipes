@@ -123,6 +123,21 @@ impl Cost {
     }
 }
 
+/// Maps `(kind, endpoint)` to the catalog provider name (`api.groq.com` resolves to `"groq"`).
+pub fn catalog_provider<'a>(kind: &'a str, endpoint: &str) -> &'a str {
+    let kind = if kind.is_empty() { "openai" } else { kind };
+    if kind == "openai"
+        && reqwest::Url::parse(endpoint)
+            .ok()
+            .and_then(|u| u.host_str().map(|h| h.eq_ignore_ascii_case("api.groq.com")))
+            .unwrap_or(false)
+    {
+        "groq"
+    } else {
+        kind
+    }
+}
+
 /// An override wins over the embedded table; the match is exact on provider and model.
 pub fn price_for(provider: &str, model: &str) -> Result<Option<(Price, &'static str)>, CoreError> {
     let _g = LOCK
@@ -137,11 +152,44 @@ pub fn price_for(provider: &str, model: &str) -> Result<Option<(Price, &'static 
         if let Some(base) = find(embedded().prices) {
             p.context_window = p.context_window.or(base.context_window);
             p.max_output = p.max_output.or(base.max_output);
+            p.tokens_per_request = p.tokens_per_request.or(base.tokens_per_request);
+            p.tokens_per_minute = p.tokens_per_minute.or(base.tokens_per_minute);
+            p.tokens_per_day = p.tokens_per_day.or(base.tokens_per_day);
             p.limits_source = p.limits_source.or(base.limits_source).or(base.source);
         }
         return Ok(Some((p, "override")));
     }
     Ok(find(embedded().prices).map(|p| (p, "table")))
+}
+
+/// Resolves price and model limits taking the endpoint host into account (e.g. `api.groq.com`).
+pub fn price_for_endpoint(
+    kind: &str,
+    endpoint: &str,
+    model: &str,
+) -> Result<Option<(Price, &'static str)>, CoreError> {
+    let catalog = catalog_provider(kind, endpoint);
+    if let Some(found) = price_for(catalog, model)? {
+        return Ok(Some(found));
+    }
+    if catalog != kind {
+        return price_for(kind, model);
+    }
+    Ok(None)
+}
+
+fn price_for_target(
+    profile: Option<&str>,
+    provider: &str,
+    model: &str,
+) -> Result<Option<(Price, &'static str)>, CoreError> {
+    if let Some(endpoint) = profile
+        .filter(|p| !p.is_empty())
+        .and_then(super::profile_endpoint)
+    {
+        return price_for_endpoint(provider, &endpoint, model);
+    }
+    price_for(provider, model)
 }
 
 fn micro_usd(tokens: u64, per_million: f64) -> u64 {
@@ -346,7 +394,12 @@ pub fn estimate_for(
         Target::Cli { name } => name.as_str(),
     };
     let range = token_range(profile, model, request)?;
-    let mut value = estimate_with_range(target, request, range)?;
+    let mut value = estimate_with_range_for(
+        (!profile.is_empty()).then_some(profile),
+        target,
+        request,
+        range,
+    )?;
     value["inputTokensLow"] = json!(range.low);
     value["inputCharacters"] = json!(input_characters(request));
     value["estimateHint"] = if request.estimate_hint.valid() {
@@ -396,6 +449,15 @@ pub(crate) fn estimate_with_range(
     request: &StructuredRequest,
     range: TokenRange,
 ) -> Result<Value, CoreError> {
+    estimate_with_range_for(None, target, request, range)
+}
+
+pub(crate) fn estimate_with_range_for(
+    profile: Option<&str>,
+    target: &Target,
+    request: &StructuredRequest,
+    range: TokenRange,
+) -> Result<Value, CoreError> {
     let (low_input, high_input) = (range.low, range.high);
     let mut tier = Value::Null;
     let (kind, ceiling, min, max, source) = match target {
@@ -413,7 +475,7 @@ pub(crate) fn estimate_with_range(
         Target::Api {
             provider, model, ..
         } => {
-            let price = price_for(provider, model)?;
+            let price = price_for_target(profile, provider, model)?;
             // The same ceiling the adapter sends (#147): the request, the model's `max_output`
             // and the conservative fallback; Anthropic always has one.
             let ceiling = super::limits::output_ceiling(super::limits::CeilingInput {
@@ -463,6 +525,15 @@ pub(crate) fn estimate_with_range(
 
 /// Real cost from the `usage` returned by the adapter (both token counts are needed).
 pub fn actual(target: &Target, usage: &Value) -> Result<Cost, CoreError> {
+    actual_for(None, target, usage)
+}
+
+/// Real cost using the profile's endpoint to resolve host-specific catalog entries (e.g. Groq).
+pub(crate) fn actual_for(
+    profile: Option<&str>,
+    target: &Target,
+    usage: &Value,
+) -> Result<Cost, CoreError> {
     Ok(match target {
         Target::Cli { .. } => Cost::PlanQuota,
         Target::OpenCode { model } => {
@@ -482,7 +553,7 @@ pub fn actual(target: &Target, usage: &Value) -> Result<Cost, CoreError> {
             ) else {
                 return Ok(Cost::Unknown);
             };
-            match price_for(provider, model)? {
+            match price_for_target(profile, provider, model)? {
                 None => Cost::Unknown,
                 Some((p, source)) => Cost::Usd {
                     micro_usd: price_micro_usd(&p, i, o),
@@ -557,7 +628,7 @@ pub fn outcome_of(code: &str) -> &'static str {
         "output_truncated" | "context_truncated" | "truncated" => "truncated",
         "refusal" | "refused" => "refused",
         "timeout_uncertain" | "budget_time" => "timeout_uncertain",
-        "rate_limit" => "rate_limit",
+        "rate_limit" | "provider_daily_limit" => "rate_limit",
         "cancelled" => "cancelled",
         "invalid_json"
         | "invalid_response"
@@ -808,10 +879,10 @@ pub fn run_costed_for(
         // could incorrectly move two low-tier calls into the high tier.
         let costs = log
             .iter()
-            .map(|entry| actual(target, &entry["usage"]))
+            .map(|entry| actual_for(profile, target, &entry["usage"]))
             .collect::<Result<Vec<_>, _>>()?;
         let cost = if costs.is_empty() {
-            actual(target, usage)?
+            actual_for(profile, target, usage)?
         } else if costs.contains(&Cost::Unknown) {
             Cost::Unknown
         } else if let Cost::Usd { source, .. } = costs[0] {
@@ -843,7 +914,7 @@ pub fn run_costed_for(
             } else {
                 entry["usage"].clone()
             };
-            let each_cost = actual(target, &usage)?;
+            let each_cost = actual_for(profile, target, &usage)?;
             let row = CallRow {
                 profile,
                 target,
@@ -878,7 +949,11 @@ pub fn run_costed_for(
             if let Some(info) = e.usage.clone().filter(|i| i.get("calls").is_some()) {
                 let calls = info["calls"].as_u64().unwrap_or(1);
                 let cost = settle(&info["usage"], calls, &e.code)?;
-                e.usage = Some(json!({"usage":info["usage"],"calls":calls,"cost":cost}));
+                let mut next = json!({"usage":info["usage"],"calls":calls,"cost":cost});
+                if let Some(reset) = info.get("resetAtMs").filter(|v| !v.is_null()) {
+                    next["resetAtMs"] = reset.clone();
+                }
+                e.usage = Some(next);
             } else if !log.is_empty()
                 || matches!(e.code.as_str(), "timeout_uncertain" | "cancelled")
             {

@@ -8,9 +8,13 @@ import { testEditorBorders } from './editor-borders.mjs';
 import { testEditorSilencesPanel, testEditorSilencesPreview } from './editor-silences.mjs';
 import { testEditorCrop } from './editor-crop.mjs';
 import { testEditorMontage, testEditorDucking } from './editor-montage.mjs';
+import { testEditorAudio, testEditorAudioDuckingPreview } from './editor-audio.mjs';
 import { testTranslation, testTranslationBlocked } from './translation-ui.mjs';
 import { testTtsComponents, testTtsNarrationLocked, testTtsNarrationUnlocked, testNarrationDeviationAndTrack } from './tts-ui.mjs';
+import { testCatalogComponents } from './catalog-ui.mjs';
+import { testTeleprompterRecording } from './record-ui.mjs';
 import { testPackagingChapters } from './packaging-chapters-ui.mjs';
+import { testThumbnailPreview } from './thumbnail-preview-ui.mjs';
 const socket = createServer();
 await new Promise(resolve => socket.listen(0, '127.0.0.1', resolve));
 const port = socket.address().port;
@@ -1326,12 +1330,16 @@ try {
   await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
   await testTranslationBlocked(page, url);
   await testNarrationDeviationAndTrack(page, url);
+  await testTeleprompterRecording(page, url);
   await testEditorBorders(page, url);
   await testEditorSilencesPreview(page, url);
   await testEditorCrop(page, url);
   await testEditorMontage(page, url);
   await testEditorDucking(page, url);
+  await testEditorAudio(page, url);
+  await testEditorAudioDuckingPreview(page, url);
   await testPackagingChapters(page, url);
+  await testThumbnailPreview(page, url);
   // Export em lote (#64): por Fonte na Seleção e por Projeto, progresso ponderado, cancelamento, sobrescrita e falha isolada.
   await page.goto(`${url}?source-test=1&transcript-test=1`);
   const batchSel = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
@@ -1534,6 +1542,8 @@ try {
   await downloadedMissing.getByRole('alert').getByText(/Instale o Componente FFmpeg/).waitFor();
   await downloadedMissing.getByRole('button', { name: 'Abrir Componentes' }).first().click();
   await page.getByRole('heading', { name: 'Componentes' }).waitFor();
+
+  await testCatalogComponents(page, url);
 
   // Ticket #255: abertura offline no UpdateNotice ignora falhas de rede e preserva falhas reais de assinatura.
   await page.evaluate(() => sessionStorage.removeItem('clipes.mock-update-installed'));

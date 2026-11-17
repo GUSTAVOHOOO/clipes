@@ -482,6 +482,7 @@ struct AudioRow {
     ch: i64,
     bytes: i64,
     sha256: String,
+    trimmed: bool,
 }
 
 fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
@@ -518,6 +519,7 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             )))
         })??;
     let align_ready = crate::narration_align::prerequisites_ready();
+    let vad_ready = crate::narration_record::vad_ready();
 
     let Some(latest) = latest else {
         return Ok(json!({
@@ -534,6 +536,7 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             "alignBusy": align_busy,
             "alignJob": align_job_json,
             "alignPrerequisitesReady": align_ready,
+            "vadReady": vad_ready,
             "blocks": [],
             "totalDurationUs": 0,
         }));
@@ -549,8 +552,10 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         for b in &latest.blocks {
             let row = c
                 .query_row(
-                    "SELECT id, version_id, voice_id, model_id, engine_id, audio_rel_path, duration_us, sample_rate, channels, bytes, sha256
-                     FROM narration_blocks WHERE block_id=?1 ORDER BY id DESC LIMIT 1",
+                    "SELECT nb.id, nb.version_id, nb.voice_id, nb.model_id, nb.engine_id, nb.audio_rel_path, nb.duration_us, nb.sample_rate, nb.channels, nb.bytes, nb.sha256, COALESCE(nr.trimmed, 1)
+                     FROM narration_blocks nb
+                     LEFT JOIN narration_recordings nr ON nr.narration_id=nb.id
+                     WHERE nb.block_id=?1 ORDER BY nb.id DESC LIMIT 1",
                     [b.block_id],
                     |r| {
                         Ok(AudioRow {
@@ -565,6 +570,7 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                             ch: r.get(8)?,
                             bytes: r.get(9)?,
                             sha256: r.get(10)?,
+                            trimmed: r.get::<_, i64>(11)? != 0,
                         })
                     },
                 )
@@ -593,6 +599,7 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                             "channels": r.ch,
                             "bytes": r.bytes,
                             "stale": stale,
+                            "trimmed": r.trimmed,
                         }),
                         align,
                     )
@@ -626,6 +633,7 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         "alignBusy": align_busy,
         "alignJob": align_job_json,
         "alignPrerequisitesReady": align_ready,
+        "vadReady": vad_ready,
         "blocks": blocks_json,
         "totalDurationUs": total_duration_us,
     }))
@@ -670,6 +678,8 @@ fn enqueue_narration(v: &Value, block_id: Option<i64>) -> CommandResult {
     }
 
     let job_id = jobs::enqueue(JOB_KIND, Safety::Local)?;
+    let voice_id = bundle.voice_id.as_str();
+    let model_id = bundle.model_id.as_str();
     projects::with_writer(|c| {
         c.execute(
             "INSERT INTO narration_jobs(job_id, candidate_id, block_id, voice_id, model_id, quantize)
@@ -678,8 +688,8 @@ fn enqueue_narration(v: &Value, block_id: Option<i64>) -> CommandResult {
                 job_id,
                 candidate_id,
                 block_id,
-                bundle.voice_id,
-                bundle.model_id,
+                voice_id,
+                model_id,
                 i64::from(quantize),
             ),
         )?;
@@ -862,6 +872,8 @@ pub fn run(job_id: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreErr
         let out_wav = project.join(&rel_path);
         let info = synthesize_block(job_id, &exe, &bundle, quantize, text, &out_wav, stop)?;
 
+        let bundle_voice_id = bundle.voice_id.as_str();
+        let bundle_model_id = bundle.model_id.as_str();
         projects::with_writer(|c| {
             c.execute(
                 "INSERT INTO narration_blocks(block_id, version_id, voice_id, model_id, engine_id, audio_rel_path, duration_us, sample_rate, channels, bytes, sha256)
@@ -880,8 +892,8 @@ pub fn run(job_id: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreErr
                 (
                     block.block_id,
                     version_id,
-                    bundle.voice_id,
-                    bundle.model_id,
+                    bundle_voice_id,
+                    bundle_model_id,
                     ENGINE_ID,
                     &rel_path,
                     info.duration_us,

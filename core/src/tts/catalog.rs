@@ -1,12 +1,14 @@
-//! Catálogo extensível de motores, modelos e vozes TTS (#79).
+//! Catálogo extensível de motores, modelos e vozes TTS (#79, #256).
 //!
-//! Novos motores e modelos entram nas tabelas deste módulo sem exigir alteração na UI:
-//! `tts.catalog` devolve os metadados, licenças, termo de uso proibido, vozes e estado instalado.
+//! Novos motores e modelos entram em `catalog/models.json` ou no catálogo remoto assinado
+//! sem exigir alteração na UI: `tts.catalog` devolve os metadados, licenças, termo de uso
+//! proibido, vozes e estado instalado.
 //!
 //! Todos os pesos do Pocket TTS vêm do mirror oficial sem login
 //! `kyutai/pocket-tts-without-voice-cloning` com revisão e SHA-256 fixados; os embeddings
 //! pré-computados vêm dos assets de release do Clipes com SHA-256 fixado (sem token HF).
 
+use crate::components::catalog::{embedded_catalog, load_active_catalog, ActiveCatalog};
 use crate::components::{fetch_with, jobs, load_settings, pocket_tts_executable, Settings};
 use crate::{CommandRegistration, CommandResult, CoreError, EventSink, ProgressEvent};
 use serde::{Deserialize, Serialize};
@@ -24,13 +26,8 @@ use std::{
 };
 
 const MARKER: &str = "model.state.json";
+const STAGE_DIGEST: &str = ".stage_digest";
 const SETTINGS_FILE: &str = "tts-settings.json";
-const HF_MIRROR_REPO: &str = "kyutai/pocket-tts-without-voice-cloning";
-const HF_MIRROR_REVISION: &str = "a7056f505a4a8ca72d8b5fb1440071d6f1a35739";
-
-/// URL base única dos assets de embeddings de voz publicados nas releases do Clipes.
-const VOICE_RELEASE_BASE_URL: &str =
-    "https://github.com/GUSTAVOHOOO/clipes/releases/download/tts-voices-1";
 
 /// Texto oficial de uso proibido publicado por Kyutai no cartão do Pocket TTS.
 pub(crate) const PROHIBITED_USE_EN: &str = "Prohibited use: Use of our model must comply with all applicable laws and regulations and must not result in, involve, or facilitate any illegal, harmful, deceptive, fraudulent, or unauthorized activity. Prohibited uses include, without limitation, voice impersonation or cloning without explicit and lawful consent; misinformation, disinformation, or deception (including fake news, fraudulent calls, or presenting generated content as genuine recordings of real people or events); and the generation of unlawful, harmful, libelous, abusive, harassing, discriminatory, hateful, or privacy-invasive content. We disclaim all liability for any non-compliant use.";
@@ -59,76 +56,62 @@ fn sanitize_download_error(err: CoreError) -> CoreError {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Debug)]
 pub(crate) struct TtsEngineSpec {
-    pub id: &'static str,
-    pub label: &'static str,
-    pub component_id: &'static str,
-    pub code_license: &'static str,
-    pub source_url: &'static str,
+    pub id: String,
+    pub label: String,
+    pub component_id: String,
+    pub code_license: String,
+    pub source_url: String,
     pub supports_quantize: bool,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Debug)]
 pub(crate) struct AssetFile {
-    pub name: &'static str,
-    pub url: &'static str,
+    pub name: String,
+    pub url: String,
     pub size: u64,
-    pub sha256: &'static str,
+    pub sha256: String,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Debug)]
 pub(crate) struct TtsModelSpec {
-    pub id: &'static str,
-    pub engine_id: &'static str,
-    pub language: &'static str,
-    pub label: &'static str,
-    pub description: &'static str,
+    pub id: String,
+    pub engine_id: String,
+    pub language: String,
+    pub label: String,
+    pub description: String,
     pub default_for_language: bool,
     pub lightweight: bool,
-    pub repo: &'static str,
-    pub revision: &'static str,
-    pub license: &'static str,
-    pub files: &'static [AssetFile],
-    pub config_template: &'static str,
+    pub repo: String,
+    pub revision: String,
+    pub license: String,
+    pub files: Vec<AssetFile>,
+    pub config_template: String,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Debug)]
 pub(crate) struct VoiceEmbedding {
-    pub model_id: &'static str,
-    pub filename: &'static str,
+    pub model_id: String,
+    pub filename: String,
     pub size: u64,
-    pub sha256: &'static str,
+    pub sha256: String,
+    pub url: String,
 }
 
-impl VoiceEmbedding {
-    pub(crate) fn url(&self) -> String {
-        format!("{VOICE_RELEASE_BASE_URL}/{}", self.filename)
-    }
-}
-
-#[derive(Clone, Copy)]
+#[derive(Clone, Debug)]
 pub(crate) struct TtsVoiceSpec {
-    pub id: &'static str,
-    pub engine_id: &'static str,
-    pub language: &'static str,
-    pub gender: &'static str,
-    pub label: &'static str,
+    pub id: String,
+    pub engine_id: String,
+    pub language: String,
+    pub gender: String,
+    pub label: String,
     pub default_for_language: bool,
-    pub license: &'static str,
-    pub attribution: &'static str,
-    pub source_url: &'static str,
-    pub embeddings: &'static [VoiceEmbedding],
+    pub license: String,
+    pub attribution: String,
+    pub source_url: String,
+    pub embeddings: Vec<VoiceEmbedding>,
 }
-
-pub(crate) const ENGINES: [TtsEngineSpec; 1] = [TtsEngineSpec {
-    id: "pocket-tts",
-    label: "Pocket TTS (Kyutai)",
-    component_id: "pocket-tts",
-    code_license: "MIT",
-    source_url: "https://github.com/kyutai-labs/pocket-tts/tree/v4.0.1",
-    supports_quantize: true,
-}];
 
 const PT_24L_YAML: &str = "\
 weights_path: '{{MODEL_PATH}}'
@@ -318,170 +301,155 @@ mimi:
     output_dimension: 512
 ";
 
-pub(crate) const MODELS: [TtsModelSpec; 3] = [
-    TtsModelSpec {
-        id: "portuguese_24l",
-        engine_id: "pocket-tts",
-        language: "pt",
-        label: "Pocket TTS PT-BR (24 camadas · padrão)",
-        description: "Qualidade superior em PT-BR (336M parâmetros); roda em CPU com quantização int8.",
-        default_for_language: true,
-        lightweight: false,
-        repo: HF_MIRROR_REPO,
-        revision: HF_MIRROR_REVISION,
-        license: "CC-BY-4.0",
-        files: &[
-            AssetFile {
-                name: "model.safetensors",
-                url: "https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/resolve/a7056f505a4a8ca72d8b5fb1440071d6f1a35739/languages/portuguese_24l/model.safetensors",
-                size: 672_178_676,
-                sha256: "ce7911fe914d055e55dcb8dcc973f735d9f51d09fe6fec4fe35d80ac2c9d9670",
-            },
-            AssetFile {
-                name: "tokenizer.json",
-                url: "https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/resolve/a7056f505a4a8ca72d8b5fb1440071d6f1a35739/languages/portuguese_24l/tokenizer.json",
-                size: 247_014,
-                sha256: "b33e269f7f042a763080d71ba087d74d2f6759674b238a723c028e436b1a25ab",
-            },
-        ],
-        config_template: PT_24L_YAML,
-    },
-    TtsModelSpec {
-        id: "portuguese",
-        engine_id: "pocket-tts",
-        language: "pt",
-        label: "Pocket TTS PT-BR (6 camadas · leve)",
-        description: "Variante destilada mais rápida (~4× tempo real em CPU) e menor download (219 MB).",
-        default_for_language: false,
-        lightweight: true,
-        repo: HF_MIRROR_REPO,
-        revision: HF_MIRROR_REVISION,
-        license: "CC-BY-4.0",
-        files: &[
-            AssetFile {
-                name: "model.safetensors",
-                url: "https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/resolve/a7056f505a4a8ca72d8b5fb1440071d6f1a35739/languages/portuguese/model.safetensors",
-                size: 219_029_196,
-                sha256: "28e20f32515ba8bd0eaec69671f11f8921414fcdc375aa072fa09f46cc1057c5",
-            },
-            AssetFile {
-                name: "tokenizer.json",
-                url: "https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/resolve/a7056f505a4a8ca72d8b5fb1440071d6f1a35739/languages/portuguese/tokenizer.json",
-                size: 247_014,
-                sha256: "b33e269f7f042a763080d71ba087d74d2f6759674b238a723c028e436b1a25ab",
-            },
-        ],
-        config_template: PT_6L_YAML,
-    },
-    TtsModelSpec {
-        id: "english",
-        engine_id: "pocket-tts",
-        language: "en",
-        label: "Pocket TTS EN (6 camadas · padrão)",
-        description: "Modelo oficial em inglês (109M parâmetros) para roteiros em EN.",
-        default_for_language: true,
-        lightweight: true,
-        repo: HF_MIRROR_REPO,
-        revision: HF_MIRROR_REVISION,
-        license: "CC-BY-4.0",
-        files: &[
-            AssetFile {
-                name: "model.safetensors",
-                url: "https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/resolve/a7056f505a4a8ca72d8b5fb1440071d6f1a35739/languages/english/model.safetensors",
-                size: 219_029_196,
-                sha256: "4c56cbd171c63e8a26ea61f5d48b8a0cd8f3c51f4652c0ab9a19bfcced8c931d",
-            },
-            AssetFile {
-                name: "tokenizer.json",
-                url: "https://huggingface.co/kyutai/pocket-tts-without-voice-cloning/resolve/a7056f505a4a8ca72d8b5fb1440071d6f1a35739/languages/english/tokenizer.json",
-                size: 245_020,
-                sha256: "f498428e1eafee50492f7be13dc9bfafcfc12e508cd0eb1b01c92ecd5d8c6687",
-            },
-        ],
-        config_template: EN_6L_YAML,
-    },
-];
-
-pub(crate) const VOICES: [TtsVoiceSpec; 3] = [
-    TtsVoiceSpec {
-        id: "13063",
-        engine_id: "pocket-tts",
-        language: "pt",
-        gender: "male",
-        label: "Narrador PT-BR 13063 (masculina)",
-        default_for_language: true,
-        license: "CC-BY-4.0",
-        attribution: "BRSpeech-TTS / CML-TTS (CEIA/UFG, CC-BY 4.0) a partir de gravação LibriVox em domínio público",
-        source_url: "https://huggingface.co/datasets/freds0/BRSpeech-TTS",
-        embeddings: &[
-            VoiceEmbedding {
-                model_id: "portuguese_24l",
-                filename: "13063-pt-24l.safetensors",
-                size: 28_906_528,
-                sha256: "1047a37288518872f9759d8802495d1e045a98463077ac81366fafe445283078",
-            },
-            VoiceEmbedding {
-                model_id: "portuguese",
-                filename: "13063-pt-6l.safetensors",
-                size: 7_226_616,
-                sha256: "529b2693901f4fa6a06b2fa9060833bd7e95e10f6a3c5c55d09f08bdf21c7a27",
-            },
-        ],
-    },
-    TtsVoiceSpec {
-        id: "alba",
-        engine_id: "pocket-tts",
-        language: "en",
-        gender: "female",
-        label: "Alba (EN, feminina)",
-        default_for_language: true,
-        license: "CC-BY-4.0",
-        attribution: "Alba MacKenna (kyutai/tts-voices/alba-mackenna/casual.wav, CC-BY 4.0)",
-        source_url: "https://huggingface.co/kyutai/tts-voices/tree/323332d33f997de8394f24a193e1a76df720e01a/alba-mackenna",
-        embeddings: &[VoiceEmbedding {
-            model_id: "english",
-            filename: "alba-en.safetensors",
-            size: 6_243_576,
-            sha256: "c10abce6ca7a66cb2b9b24265490f482bb9a9c761818c810f161d59825a7837b",
-        }],
-    },
-    TtsVoiceSpec {
-        id: "marius",
-        engine_id: "pocket-tts",
-        language: "en",
-        gender: "male",
-        label: "Marius (EN, masculina)",
-        default_for_language: false,
-        license: "CC0-1.0",
-        attribution: "Unmute Voice Donation Project (kyutai/tts-voices/voice-donations/Selfie.wav, CC0 1.0)",
-        source_url: "https://huggingface.co/kyutai/tts-voices/tree/323332d33f997de8394f24a193e1a76df720e01a/voice-donations",
-        embeddings: &[VoiceEmbedding {
-            model_id: "english",
-            filename: "marius-en.safetensors",
-            size: 6_243_576,
-            sha256: "d6e31471c4636fc5885657486f595b46bd2b8ec356c92c0409ef8beff6cafe1a",
-        }],
-    },
-];
-
-pub(crate) fn find_model(id: &str) -> Option<&'static TtsModelSpec> {
-    MODELS.iter().find(|m| m.id == id)
+fn default_config_template(model_id: &str) -> &'static str {
+    match model_id {
+        "portuguese" => PT_6L_YAML,
+        "english" => EN_6L_YAML,
+        _ => PT_24L_YAML,
+    }
 }
 
-pub(crate) fn find_voice(id: &str) -> Option<&'static TtsVoiceSpec> {
-    VOICES.iter().find(|v| v.id == id)
+struct EffectiveTtsCatalog {
+    active: ActiveCatalog,
+    engines: Vec<TtsEngineSpec>,
+    models: Vec<TtsModelSpec>,
+    voices: Vec<TtsVoiceSpec>,
+}
+
+fn from_manifest(active: ActiveCatalog) -> EffectiveTtsCatalog {
+    let base = active
+        .manifest
+        .tts
+        .voice_release_base_url
+        .trim_end_matches('/');
+    let engines = active
+        .manifest
+        .tts
+        .engines
+        .iter()
+        .map(|e| TtsEngineSpec {
+            id: e.id.clone(),
+            label: e.label.clone(),
+            component_id: e.component_id.clone(),
+            code_license: e.code_license.clone(),
+            source_url: e.source_url.clone(),
+            supports_quantize: e.supports_quantize,
+        })
+        .collect();
+    let models = active
+        .manifest
+        .tts
+        .models
+        .iter()
+        .map(|m| TtsModelSpec {
+            id: m.id.clone(),
+            engine_id: m.engine_id.clone(),
+            language: m.language.clone(),
+            label: m.label.clone(),
+            description: m.description.clone(),
+            default_for_language: m.default_for_language,
+            lightweight: m.lightweight,
+            repo: m.repo.clone(),
+            revision: m.revision.clone(),
+            license: m.license.clone(),
+            files: m
+                .files
+                .iter()
+                .map(|f| AssetFile {
+                    name: f.name.clone(),
+                    url: f.url.clone(),
+                    size: f.size,
+                    sha256: f.sha256.clone(),
+                })
+                .collect(),
+            config_template: m
+                .config_template
+                .clone()
+                .unwrap_or_else(|| default_config_template(&m.id).to_owned()),
+        })
+        .collect();
+    let voices = active
+        .manifest
+        .tts
+        .voices
+        .iter()
+        .map(|v| TtsVoiceSpec {
+            id: v.id.clone(),
+            engine_id: v.engine_id.clone(),
+            language: v.language.clone(),
+            gender: v.gender.clone(),
+            label: v.label.clone(),
+            default_for_language: v.default_for_language,
+            license: v.license.clone(),
+            attribution: v.attribution.clone(),
+            source_url: v.source_url.clone(),
+            embeddings: v
+                .embeddings
+                .iter()
+                .map(|e| VoiceEmbedding {
+                    model_id: e.model_id.clone(),
+                    filename: e.filename.clone(),
+                    size: e.size,
+                    sha256: e.sha256.clone(),
+                    url: e
+                        .url
+                        .clone()
+                        .unwrap_or_else(|| format!("{base}/{}", e.filename)),
+                })
+                .collect(),
+        })
+        .collect();
+    EffectiveTtsCatalog {
+        active,
+        engines,
+        models,
+        voices,
+    }
+}
+
+fn load_effective_tts(settings: &Settings) -> EffectiveTtsCatalog {
+    from_manifest(load_active_catalog(settings))
+}
+
+fn current_effective_tts() -> EffectiveTtsCatalog {
+    match load_settings() {
+        Ok(settings) => load_effective_tts(&settings),
+        Err(_) => {
+            let embedded = embedded_catalog().clone();
+            let embedded_version = embedded.version;
+            from_manifest(ActiveCatalog {
+                manifest: embedded,
+                source: crate::components::catalog::CatalogSource::Embedded,
+                embedded_version,
+                warning: None,
+            })
+        }
+    }
+}
+
+pub(crate) fn find_model_in(models: &[TtsModelSpec], id: &str) -> Option<TtsModelSpec> {
+    models.iter().find(|m| m.id == id).cloned()
+}
+
+pub(crate) fn find_voice(id: &str) -> Option<TtsVoiceSpec> {
+    current_effective_tts()
+        .voices
+        .into_iter()
+        .find(|v| v.id == id)
 }
 
 pub fn is_valid_voice(id: &str) -> bool {
     find_voice(id).is_some()
 }
 
-pub(crate) fn default_voice_for_language(lang: &str) -> &'static TtsVoiceSpec {
+pub(crate) fn default_voice_for_language(lang: &str) -> TtsVoiceSpec {
     let norm = normalize_language(lang);
-    VOICES
+    let cat = current_effective_tts();
+    cat.voices
         .iter()
         .find(|v| v.language == norm && v.default_for_language)
-        .unwrap_or(&VOICES[0])
+        .cloned()
+        .unwrap_or_else(|| cat.voices.into_iter().next().unwrap())
 }
 
 pub(crate) fn normalize_language(lang: &str) -> &'static str {
@@ -533,29 +501,30 @@ fn save_tts_settings(settings: &Settings, tts: &TtsSettings) -> Result<(), CoreE
     })
 }
 
-pub(crate) fn active_model_id(settings: &Settings, lang: &str) -> &'static str {
+pub(crate) fn active_model_id(settings: &Settings, lang: &str) -> String {
     let norm = normalize_language(lang);
     let saved = load_tts_settings(settings);
+    let cat = load_effective_tts(settings);
     if let Some(choice) = saved.active_models.get(norm) {
-        if let Some(spec) = find_model(choice) {
+        if let Some(spec) = find_model_in(&cat.models, choice) {
             if spec.language == norm {
                 return spec.id;
             }
         }
     }
-    MODELS
+    cat.models
         .iter()
         .find(|m| m.language == norm && m.default_for_language)
-        .map(|m| m.id)
-        .unwrap_or("portuguese_24l")
+        .map(|m| m.id.clone())
+        .unwrap_or_else(|| "portuguese_24l".into())
 }
 
 pub(crate) fn model_dir(settings: &Settings, spec: &TtsModelSpec) -> PathBuf {
     settings
         .data_dir
         .join("tts-models")
-        .join(spec.engine_id)
-        .join(spec.id)
+        .join(&spec.engine_id)
+        .join(&spec.id)
 }
 
 pub(crate) fn voice_path_in(dir: &Path, filename: &str) -> PathBuf {
@@ -567,30 +536,95 @@ fn marker_state(dir: &Path) -> Option<Value> {
     serde_json::from_slice(&bytes).ok()
 }
 
-pub(crate) fn is_model_installed(settings: &Settings, spec: &TtsModelSpec) -> bool {
+fn is_valid_hex_revision(rev: &str) -> bool {
+    rev.len() == 40 && rev.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+fn model_voices_in<'a>(
+    voices: &'a [TtsVoiceSpec],
+    model_id: &str,
+) -> Vec<(&'a TtsVoiceSpec, &'a VoiceEmbedding)> {
+    voices
+        .iter()
+        .filter_map(|v| {
+            v.embeddings
+                .iter()
+                .find(|e| e.model_id == model_id)
+                .map(|e| (v, e))
+        })
+        .collect()
+}
+
+fn model_files_digest(spec: &TtsModelSpec, voices: &[TtsVoiceSpec]) -> String {
+    let mut h = Sha256::new();
+    h.update(spec.revision.as_bytes());
+    for f in &spec.files {
+        h.update(b"\0");
+        h.update(f.name.as_bytes());
+        h.update(f.size.to_le_bytes());
+        h.update(f.sha256.as_bytes());
+    }
+    for (_, e) in model_voices_in(voices, &spec.id) {
+        h.update(b"\0v:");
+        h.update(e.filename.as_bytes());
+        h.update(e.size.to_le_bytes());
+        h.update(e.sha256.as_bytes());
+    }
+    format!("{:x}", h.finalize())
+}
+
+pub(crate) fn installed_revision(
+    settings: &Settings,
+    spec: &TtsModelSpec,
+    voices: &[TtsVoiceSpec],
+) -> Option<String> {
     let dir = model_dir(settings, spec);
-    let Some(state) = marker_state(&dir) else {
-        return false;
-    };
-    if state["revision"] != spec.revision || state["terms_version"] != terms_version() {
-        return false;
+    let state = marker_state(&dir)?;
+    let rev = state["revision"].as_str()?;
+    if !is_valid_hex_revision(rev) || state["terms_version"] != terms_version() {
+        return None;
     }
     if !dir.join("config.yaml").is_file() {
-        return false;
+        return None;
     }
-    if !spec.files.iter().all(|f| dir.join(f.name).is_file()) {
-        return false;
+    if !spec.files.iter().all(|f| dir.join(&f.name).is_file()) {
+        return None;
     }
-    VOICES
+    let voices_ok = voices
         .iter()
         .flat_map(|v| v.embeddings.iter())
         .filter(|e| e.model_id == spec.id)
-        .all(|e| voice_path_in(&dir, e.filename).is_file())
+        .all(|e| voice_path_in(&dir, &e.filename).is_file());
+    voices_ok.then(|| rev.to_owned())
+}
+
+pub(crate) fn is_model_installed(
+    settings: &Settings,
+    spec: &TtsModelSpec,
+    voices: &[TtsVoiceSpec],
+) -> bool {
+    installed_revision(settings, spec, voices).is_some()
+}
+
+pub(crate) fn update_available(
+    settings: &Settings,
+    spec: &TtsModelSpec,
+    voices: &[TtsVoiceSpec],
+) -> bool {
+    let Some(rev) = installed_revision(settings, spec, voices) else {
+        return false;
+    };
+    if rev != spec.revision {
+        return true;
+    }
+    marker_state(&model_dir(settings, spec))
+        .and_then(|s| s["files_digest"].as_str().map(str::to_owned))
+        .is_some_and(|digest| digest != model_files_digest(spec, voices))
 }
 
 pub(crate) struct InstalledTtsBundle {
-    pub model_id: &'static str,
-    pub voice_id: &'static str,
+    pub model_id: String,
+    pub voice_id: String,
     pub config_path: PathBuf,
     pub voice_path: PathBuf,
 }
@@ -601,11 +635,21 @@ pub(crate) fn resolve_installed_bundle(
     requested_model: Option<&str>,
 ) -> Result<InstalledTtsBundle, CoreError> {
     let settings = load_settings()?;
+    let cat = load_effective_tts(&settings);
     let norm = normalize_language(language);
     let voice = match requested_voice {
-        Some(id) => find_voice(id)
+        Some(id) => cat
+            .voices
+            .iter()
+            .find(|v| v.id == id)
+            .cloned()
             .ok_or_else(|| error("tts_voice_unknown", "Voz de Narração desconhecida."))?,
-        None => default_voice_for_language(norm),
+        None => cat
+            .voices
+            .iter()
+            .find(|v| v.language == norm && v.default_for_language)
+            .cloned()
+            .unwrap_or_else(|| cat.voices[0].clone()),
     };
     if voice.language != norm {
         return Err(error(
@@ -615,7 +659,7 @@ pub(crate) fn resolve_installed_bundle(
     }
     let model_id = match requested_model {
         Some(id) => {
-            let m = find_model(id)
+            let m = find_model_in(&cat.models, id)
                 .ok_or_else(|| error("tts_model_unknown", "Modelo TTS desconhecido."))?;
             if m.language != norm {
                 return Err(error(
@@ -627,9 +671,9 @@ pub(crate) fn resolve_installed_bundle(
         }
         None => active_model_id(&settings, norm),
     };
-    let model = find_model(model_id)
+    let model = find_model_in(&cat.models, &model_id)
         .ok_or_else(|| error("tts_model_unknown", "Modelo TTS desconhecido."))?;
-    if !is_model_installed(&settings, model) {
+    if !is_model_installed(&settings, &model, &cat.voices) {
         return Err(error(
             "tts_model_missing",
             "Instale o modelo TTS deste idioma em Componentes antes de gerar a Narração.",
@@ -645,9 +689,9 @@ pub(crate) fn resolve_installed_bundle(
                 "A voz selecionada não é compatível com este modelo TTS.",
             )
         })?;
-    let dir = model_dir(&settings, model);
+    let dir = model_dir(&settings, &model);
     let config_path = dir.join("config.yaml");
-    let voice_path = voice_path_in(&dir, emb.filename);
+    let voice_path = voice_path_in(&dir, &emb.filename);
     if !config_path.is_file() || !voice_path.is_file() {
         return Err(error(
             "tts_model_missing",
@@ -677,8 +721,27 @@ pub(crate) fn render_local_config(spec: &TtsModelSpec, dir: &Path) -> String {
         .replace("{{TOKENIZER_PATH}}", &tok_path)
 }
 
+fn test_model_base_url() -> Option<String> {
+    if !crate::paths::is_cargo_test_binary() {
+        return None;
+    }
+    let raw = std::env::var("CLIPES_TEST_MODEL_BASE_URL").ok()?;
+    let url = reqwest::Url::parse(raw.trim()).ok()?;
+    let loopback =
+        url.scheme() == "http" && matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "::1"));
+    loopback.then(|| raw.trim().trim_end_matches('/').to_owned())
+}
+
 /// Redirecionamentos só para Hugging Face e GitHub Releases, sempre por HTTPS.
 pub(crate) fn allowed_redirect(url: &reqwest::Url) -> bool {
+    if let Some(base) = test_model_base_url().and_then(|raw| reqwest::Url::parse(&raw).ok()) {
+        if url.scheme() == base.scheme()
+            && url.host_str() == base.host_str()
+            && url.port_or_known_default() == base.port_or_known_default()
+        {
+            return true;
+        }
+    }
     let host = url.host_str().unwrap_or("");
     url.scheme() == "https"
         && ([
@@ -711,26 +774,16 @@ fn model_source_url(spec: &TtsModelSpec) -> String {
     )
 }
 
-fn model_voices(model_id: &str) -> Vec<(&'static TtsVoiceSpec, &'static VoiceEmbedding)> {
-    VOICES
-        .iter()
-        .filter_map(|v| {
-            v.embeddings
-                .iter()
-                .find(|e| e.model_id == model_id)
-                .map(|e| (v, e))
-        })
-        .collect()
-}
-
 pub fn catalog_json() -> Result<Value, CoreError> {
     let settings = load_settings()?;
+    let cat = load_effective_tts(&settings);
     let active_pt = active_model_id(&settings, "pt");
     let active_en = active_model_id(&settings, "en");
     let component_installed = pocket_tts_executable().is_ok();
     let tv = terms_version();
 
-    let engines: Vec<Value> = ENGINES
+    let engines: Vec<Value> = cat
+        .engines
         .iter()
         .map(|e| {
             json!({
@@ -749,19 +802,20 @@ pub fn catalog_json() -> Result<Value, CoreError> {
         })
         .collect();
 
-    let models: Vec<Value> = MODELS
+    let models: Vec<Value> = cat
+        .models
         .iter()
         .map(|m| {
             let weights_size: u64 = m.files.iter().map(|f| f.size).sum();
-            let voices = model_voices(m.id);
+            let voices = model_voices_in(&cat.voices, &m.id);
             let voices_size: u64 = voices.iter().map(|(_, e)| e.size).sum();
             let dir = model_dir(&settings, m);
-            let installed = is_model_installed(&settings, m);
+            let installed_rev = installed_revision(&settings, m, &cat.voices);
+            let installed = installed_rev.is_some();
+            let update_avail = update_available(&settings, m, &cat.voices);
             let state = marker_state(&dir);
-            let terms_accepted = state
-                .as_ref()
-                .is_some_and(|s| s["terms_version"] == tv);
-            let active = match m.language {
+            let terms_accepted = state.as_ref().is_some_and(|s| s["terms_version"] == tv);
+            let active = match m.language.as_str() {
                 "pt" => m.id == active_pt,
                 "en" => m.id == active_en,
                 _ => m.default_for_language,
@@ -790,6 +844,8 @@ pub fn catalog_json() -> Result<Value, CoreError> {
                 "lightweight": m.lightweight,
                 "active": active,
                 "installed": installed,
+                "installedRevision": installed_rev,
+                "updateAvailable": update_avail,
                 "termsAccepted": terms_accepted,
                 "repo": m.repo,
                 "revision": m.revision,
@@ -803,16 +859,18 @@ pub fn catalog_json() -> Result<Value, CoreError> {
         })
         .collect();
 
-    let voices: Vec<Value> = VOICES
+    let voices: Vec<Value> = cat
+        .voices
         .iter()
         .map(|v| {
             let installed_models: Vec<&str> = v
                 .embeddings
                 .iter()
                 .filter(|e| {
-                    find_model(e.model_id).is_some_and(|m| is_model_installed(&settings, m))
+                    find_model_in(&cat.models, &e.model_id)
+                        .is_some_and(|m| is_model_installed(&settings, &m, &cat.voices))
                 })
-                .map(|e| e.model_id)
+                .map(|e| e.model_id.as_str())
                 .collect();
             json!({
                 "id": v.id,
@@ -824,13 +882,17 @@ pub fn catalog_json() -> Result<Value, CoreError> {
                 "license": v.license,
                 "attribution": v.attribution,
                 "sourceUrl": v.source_url,
-                "models": v.embeddings.iter().map(|e| e.model_id).collect::<Vec<_>>(),
+                "models": v.embeddings.iter().map(|e| e.model_id.as_str()).collect::<Vec<_>>(),
                 "installedModels": installed_models,
             })
         })
         .collect();
 
     Ok(json!({
+        "catalogVersion": cat.active.manifest.version,
+        "catalogSource": cat.active.source.as_str(),
+        "catalogWarning": cat.active.warning.map(|w| w.message),
+        "catalogWarningCode": cat.active.warning.map(|w| w.code),
         "componentInstalled": component_installed,
         "activeModels": {
             "pt": active_pt,
@@ -851,9 +913,11 @@ fn cmd_choose_model(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .as_str()
         .or_else(|| v["id"].as_str())
         .ok_or_else(|| error("tts_model_unknown", "Modelo TTS desconhecido."))?;
-    let spec = find_model(model_id)
+    let settings = load_settings()?;
+    let cat = load_effective_tts(&settings);
+    let spec = find_model_in(&cat.models, model_id)
         .ok_or_else(|| error("tts_model_unknown", "Modelo TTS desconhecido."))?;
-    let language = v["language"].as_str().unwrap_or(spec.language);
+    let language = v["language"].as_str().unwrap_or(&spec.language);
     let norm = normalize_language(language);
     if spec.language != norm {
         return Err(error(
@@ -861,10 +925,8 @@ fn cmd_choose_model(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             "O modelo TTS escolhido não pertence a este idioma.",
         ));
     }
-    let settings = load_settings()?;
     let mut tts = load_tts_settings(&settings);
-    tts.active_models
-        .insert(norm.to_owned(), spec.id.to_owned());
+    tts.active_models.insert(norm.to_owned(), spec.id.clone());
     save_tts_settings(&settings, &tts)?;
     catalog_json()
 }
@@ -883,9 +945,10 @@ fn cmd_download(v: Value, events: &mut EventSink<'_>) -> CommandResult {
         ));
     }
     let id = v["id"].as_str().unwrap_or("");
-    let spec =
-        find_model(id).ok_or_else(|| error("unknown_component", "Modelo TTS indisponível."))?;
     let settings = load_settings()?;
+    let cat = load_effective_tts(&settings);
+    let spec = find_model_in(&cat.models, id)
+        .ok_or_else(|| error("unknown_component", "Modelo TTS indisponível."))?;
     let job_key = format!("tts:{id}");
     let flag = Arc::new(AtomicBool::new(false));
     {
@@ -895,7 +958,15 @@ fn cmd_download(v: Value, events: &mut EventSink<'_>) -> CommandResult {
         }
         map.insert(job_key.clone(), flag.clone());
     }
-    let result = download_model(spec, &settings, &flag, &job_key, events);
+    let result = download_model(
+        &spec,
+        &cat.voices,
+        cat.active.manifest.version,
+        &settings,
+        &flag,
+        &job_key,
+        events,
+    );
     if result.as_ref().is_err_and(|e| e.code != "cancelled") {
         crate::diagnostic::record(crate::diagnostic::DiagnosticEvent::ComponentFailure);
     }
@@ -912,24 +983,49 @@ fn cmd_cancel(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     Ok(json!({}))
 }
 
+fn download_url(orig: &str, model_id: &str, filename: &str) -> String {
+    if let Some(base) = test_model_base_url() {
+        return format!("{base}/tts/{model_id}/{filename}");
+    }
+    orig.to_owned()
+}
+
 fn download_model(
     spec: &TtsModelSpec,
+    all_voices: &[TtsVoiceSpec],
+    catalog_version: u64,
     settings: &Settings,
     cancel: &AtomicBool,
     job_key: &str,
     events: &mut EventSink<'_>,
 ) -> CommandResult {
     let client = http_client()?;
-    let root = settings.data_dir.join("tts-models").join(spec.engine_id);
+    let root = settings.data_dir.join("tts-models").join(&spec.engine_id);
     let stage = root.join(format!("{}.part", spec.id));
+    let digest = model_files_digest(spec, all_voices);
+    let stage_marker = stage.join(STAGE_DIGEST);
+    if stage.exists() {
+        let same_stage = fs::read_to_string(&stage_marker)
+            .ok()
+            .is_some_and(|s| s.trim() == digest);
+        if !same_stage {
+            let _ = fs::remove_dir_all(&stage);
+        }
+    }
     fs::create_dir_all(stage.join("voices")).map_err(|_| {
         error(
             "download",
             "Não foi possível preparar a pasta do modelo TTS.",
         )
     })?;
+    fs::write(&stage_marker, &digest).map_err(|_| {
+        error(
+            "download",
+            "Não foi possível preparar a pasta do modelo TTS.",
+        )
+    })?;
 
-    let voices = model_voices(spec.id);
+    let voices = model_voices_in(all_voices, &spec.id);
     let total: u64 = spec
         .files
         .iter()
@@ -939,14 +1035,15 @@ fn download_model(
         .max(1);
     let mut done = 0u64;
 
-    for file in spec.files {
+    for file in &spec.files {
         let base = done;
+        let url = download_url(&file.url, &spec.id, &file.name);
         fetch_with(
             &client,
-            file.url,
-            file.sha256,
+            &url,
+            &file.sha256,
             file.size,
-            &stage.join(file.name),
+            &stage.join(&file.name),
             cancel,
             |pct| {
                 events(ProgressEvent {
@@ -966,13 +1063,13 @@ fn download_model(
 
     for (_, emb) in &voices {
         let base = done;
-        let url = emb.url();
+        let url = download_url(&emb.url, &spec.id, &emb.filename);
         fetch_with(
             &client,
             &url,
-            emb.sha256,
+            &emb.sha256,
             emb.size,
-            &voice_path_in(&stage, emb.filename),
+            &voice_path_in(&stage, &emb.filename),
             cancel,
             |pct| {
                 events(ProgressEvent {
@@ -989,18 +1086,16 @@ fn download_model(
         .map_err(sanitize_download_error)?;
         done += emb.size;
     }
+    let _ = fs::remove_file(&stage_marker);
 
     let dir = model_dir(settings, spec);
-    let _ = fs::remove_dir_all(&dir);
-    fs::rename(&stage, &dir)
-        .map_err(|_| error("install", "Não foi possível instalar o modelo TTS."))?;
-    fs::write(dir.join("config.yaml"), render_local_config(spec, &dir)).map_err(|_| {
-        error(
-            "install",
-            "Não foi possível gravar a configuração do modelo TTS.",
-        )
-    })?;
-
+    let backup = root.join(format!("{}.old", spec.id));
+    let _ = fs::remove_dir_all(&backup);
+    let had_existing = dir.exists();
+    if had_existing {
+        fs::rename(&dir, &backup)
+            .map_err(|_| error("install", "Não foi possível instalar o modelo TTS."))?;
+    }
     let accepted_at = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
@@ -1009,16 +1104,39 @@ fn download_model(
         "id": spec.id,
         "repo": spec.repo,
         "revision": spec.revision,
+        "files_digest": digest,
+        "catalog_version": catalog_version,
         "terms_accepted_at": accepted_at,
         "terms_version": terms_version(),
-        "voices": voices.iter().map(|(v, _)| v.id).collect::<Vec<_>>(),
+        "voices": voices.iter().map(|(v, _)| v.id.as_str()).collect::<Vec<_>>(),
     });
-    fs::write(dir.join(MARKER), serde_json::to_vec_pretty(&state).unwrap()).map_err(|_| {
-        error(
-            "install",
-            "Não foi possível registrar o estado do modelo TTS.",
-        )
-    })?;
+    let install_res = (|| -> Result<(), CoreError> {
+        fs::rename(&stage, &dir)
+            .map_err(|_| error("install", "Não foi possível instalar o modelo TTS."))?;
+        fs::write(dir.join("config.yaml"), render_local_config(spec, &dir)).map_err(|_| {
+            error(
+                "install",
+                "Não foi possível gravar a configuração do modelo TTS.",
+            )
+        })?;
+        fs::write(dir.join(MARKER), serde_json::to_vec_pretty(&state).unwrap()).map_err(|_| {
+            error(
+                "install",
+                "Não foi possível registrar o estado do modelo TTS.",
+            )
+        })?;
+        Ok(())
+    })();
+    if let Err(err) = install_res {
+        let _ = fs::remove_dir_all(&dir);
+        if had_existing {
+            let _ = fs::rename(&backup, &dir);
+        }
+        return Err(err);
+    }
+    if had_existing {
+        let _ = fs::remove_dir_all(&backup);
+    }
 
     events(ProgressEvent {
         project: None,
@@ -1042,20 +1160,26 @@ mod tests {
 
     #[test]
     fn catalog_models_are_pinned_commercial_cc_by_and_exclude_nc_voices() {
-        for m in MODELS {
+        let cat = from_manifest(ActiveCatalog {
+            manifest: embedded_catalog().clone(),
+            source: crate::components::catalog::CatalogSource::Embedded,
+            embedded_version: 1,
+            warning: None,
+        });
+        for m in &cat.models {
             assert_eq!(m.license, "CC-BY-4.0");
             assert_eq!(m.revision.len(), 40);
-            for f in m.files {
+            for f in &m.files {
                 assert!(f.size > 0);
                 assert_eq!(f.sha256.len(), 64);
                 assert!(f.sha256.bytes().all(|b| b.is_ascii_hexdigit()));
                 assert!(f.url.starts_with("https://huggingface.co/"));
-                assert!(f.url.contains(m.revision));
+                assert!(f.url.contains(&m.revision));
             }
         }
-        for v in VOICES {
-            assert!(matches!(v.license, "CC-BY-4.0" | "CC0-1.0"));
-            assert!(!matches!(v.id, "rafael" | "cosette" | "jean"));
+        for v in &cat.voices {
+            assert!(matches!(v.license.as_str(), "CC-BY-4.0" | "CC0-1.0"));
+            assert!(!matches!(v.id.as_str(), "rafael" | "cosette" | "jean"));
             assert!(!v.embeddings.is_empty());
         }
     }
@@ -1075,10 +1199,16 @@ mod tests {
 
     #[test]
     fn local_config_uses_forward_slashes_and_local_paths() {
+        let cat = from_manifest(ActiveCatalog {
+            manifest: embedded_catalog().clone(),
+            source: crate::components::catalog::CatalogSource::Embedded,
+            embedded_version: 1,
+            warning: None,
+        });
         let dir = PathBuf::from(
             r"C:\Users\Teste\AppData\Local\Clipes\tts-models\pocket-tts\portuguese_24l",
         );
-        let yaml = render_local_config(&MODELS[0], &dir);
+        let yaml = render_local_config(&cat.models[0], &dir);
         assert!(yaml.contains("weights_path: 'C:/Users/Teste/AppData/Local/Clipes/tts-models/pocket-tts/portuguese_24l/model.safetensors'"));
         assert!(yaml.contains("tokenizer_path: 'C:/Users/Teste/AppData/Local/Clipes/tts-models/pocket-tts/portuguese_24l/tokenizer.json'"));
         assert!(!yaml.contains("hf://"));

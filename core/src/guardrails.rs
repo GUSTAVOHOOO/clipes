@@ -153,6 +153,46 @@ fn run_video_kind(c: &rusqlite::Connection, run_id: i64) -> VideoKind {
     .unwrap_or_default()
 }
 
+fn resolve_single_clip_id(
+    explicit_clip_id: Option<i64>,
+    candidate_id: Option<i64>,
+    source_id: i64,
+    start_id: Option<i64>,
+    end_id: Option<i64>,
+) -> Option<i64> {
+    if explicit_clip_id.is_some() {
+        return explicit_clip_id;
+    }
+    if let Some(cid) = candidate_id {
+        return resolve_candidate_clip_id(cid, None);
+    }
+    let (s, e) = (start_id?, end_id?);
+    projects::with_reader(|c| {
+        c.query_row(
+            "SELECT id FROM clip_edits WHERE identity=?1",
+            [format!("source:{source_id}:{s}:{e}")],
+            |r| r.get(0),
+        )
+        .optional()
+    })
+    .ok()
+    .flatten()
+}
+
+fn clip_audio_summary(clip_id: Option<i64>) -> crate::audio::GuardrailAudioSummary {
+    let Some(cid) = clip_id else {
+        return crate::audio::GuardrailAudioSummary::default();
+    };
+    let Ok(ids) = crate::editor::edits::audio_asset_ids_for_clip(cid) else {
+        return crate::audio::GuardrailAudioSummary::default();
+    };
+    if ids.is_empty() {
+        return crate::audio::GuardrailAudioSummary::default();
+    }
+    projects::with_reader(|c| crate::audio::guardrail_summary_for_assets(c, &ids))
+        .unwrap_or_default()
+}
+
 fn check_single(v: &Value, ack: bool) -> CommandResult {
     let source_id = v["source_id"]
         .as_i64()
@@ -265,6 +305,8 @@ fn check_single(v: &Value, ack: bool) -> CommandResult {
         json!({ "applicable": false })
     };
 
+    let resolved_clip = resolve_single_clip_id(clip_id, candidate_id, source_id, start_id, end_id);
+    let audio_summary = clip_audio_summary(resolved_clip);
     let has_direct = video_kind == VideoKind::Direct;
     let over60s = duration_us > SHORT_CLAIM_LIMIT_US;
     Ok(json!({
@@ -290,6 +332,11 @@ fn check_single(v: &Value, ack: bool) -> CommandResult {
         },
         "script": script_json,
         "narration": narration_json,
+        "audio": {
+            "hasAudio": audio_summary.has_audio,
+            "assetCount": audio_summary.asset_count,
+            "unverifiedCount": audio_summary.unverified_count,
+        },
     }))
 }
 
@@ -351,6 +398,7 @@ fn check_batch(scope: &str, v: &Value, ack: bool) -> CommandResult {
             "permission": perm,
             "script": { "applicable": false },
             "narration": { "applicable": false },
+            "audio": { "hasAudio": false, "cutsWithAudio": 0, "cutsWithUnverifiedAudio": 0, "unverifiedCount": 0 },
         }));
     }
 
@@ -367,6 +415,9 @@ fn check_batch(scope: &str, v: &Value, ack: bool) -> CommandResult {
     let mut freeze_tail_count = 0usize;
     let mut long_freeze_tail_count = 0usize;
     let mut max_freeze_tail_us = 0i64;
+    let mut cuts_with_audio = 0usize;
+    let mut cuts_with_unverified_audio = 0usize;
+    let mut total_unverified_audio = 0usize;
 
     let mut perm_cache: HashMap<i64, PermissionInfo> = HashMap::new();
     let mut kind_cache: HashMap<i64, VideoKind> = HashMap::new();
@@ -432,6 +483,15 @@ fn check_batch(scope: &str, v: &Value, ack: bool) -> CommandResult {
         if dur > SHORT_CLAIM_LIMIT_US {
             over60s_count += 1;
         }
+        let resolved_clip = resolve_candidate_clip_id(cut.candidate_id, cut.clip_id);
+        let cut_audio = clip_audio_summary(resolved_clip);
+        if cut_audio.has_audio {
+            cuts_with_audio += 1;
+            if cut_audio.unverified_count > 0 {
+                cuts_with_unverified_audio += 1;
+                total_unverified_audio += cut_audio.unverified_count;
+            }
+        }
     }
 
     let video_kind = match (has_direct, has_transformed) {
@@ -486,6 +546,12 @@ fn check_batch(scope: &str, v: &Value, ack: bool) -> CommandResult {
             })
         } else {
             json!({ "applicable": false })
+        },
+        "audio": {
+            "hasAudio": cuts_with_audio > 0,
+            "cutsWithAudio": cuts_with_audio,
+            "cutsWithUnverifiedAudio": cuts_with_unverified_audio,
+            "unverifiedCount": total_unverified_audio,
         },
     }))
 }

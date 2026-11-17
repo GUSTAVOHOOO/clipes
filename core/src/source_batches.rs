@@ -588,9 +588,36 @@ fn item_json(batch: &Batch, item: &Item) -> Value {
         .ok(),
         _ => None,
     };
+    let reset_at_ms = (item.state == "paused" && item.error.as_deref() == Some("provider_daily_limit"))
+        .then(|| {
+            projects::with_reader(|c| {
+                if let Some(run) = item.run {
+                    c.query_row(
+                        "SELECT json_extract(j.result,'$.resetAtMs') FROM selection_windows w JOIN jobs j ON j.id=w.job_id WHERE w.run_id=?1 AND json_extract(j.result,'$.code')='provider_daily_limit' AND json_extract(j.result,'$.resetAtMs') IS NOT NULL ORDER BY w.idx LIMIT 1",
+                        [run],
+                        |r| r.get::<_, Option<i64>>(0),
+                    )
+                    .optional()
+                } else if let Some(job) = item.job {
+                    c.query_row(
+                        "SELECT json_extract(result,'$.resetAtMs') FROM jobs WHERE id=?1",
+                        [job],
+                        |r| r.get::<_, Option<i64>>(0),
+                    )
+                    .optional()
+                } else {
+                    Ok(None)
+                }
+            })
+            .ok()
+            .flatten()
+            .flatten()
+            .and_then(|v| u64::try_from(v).ok())
+        })
+        .flatten();
     json!({
         "position": item.position, "sourceId": item.source_id, "name": name,
-        "state": item.state, "error": item.error, "transcriptionJob": item.job,
+        "state": item.state, "error": item.error, "resetAtMs": reset_at_ms, "transcriptionJob": item.job,
         "selectionRun": item.run, "progress": progress, "engine": batch.engine,
     })
 }
