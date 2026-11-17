@@ -1,13 +1,17 @@
-use clipes_core::dispatch;
+use clipes_core::{dispatch, projects::with_writer};
 use serde_json::json;
 use std::{
     fs,
     process::Command,
+    sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
 
+static TEST_LOCK: Mutex<()> = Mutex::new(());
+
 #[test]
 fn local_source_lifecycle() {
+    let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     if Command::new("ffmpeg").arg("-version").output().is_err()
         || Command::new("ffprobe").arg("-version").output().is_err()
     {
@@ -100,6 +104,48 @@ fn local_source_lifecycle() {
         2
     );
     assert_eq!(run("sources.import",json!({"project":project,"path":media,"permission":{"status":"granted","who":"A"},"audio_track":2})).unwrap_err().code,"invalid_permission");
+    assert_eq!(
+        run(
+            "sources.permission.set",
+            json!({"project":project,"id":id,"permission":{"status":"granted","who":"A"}})
+        )
+        .unwrap_err()
+        .code,
+        "invalid_permission"
+    );
+    assert_eq!(
+        run(
+            "sources.permission.set",
+            json!({"project":project,"id":id,"permission":{"status":"granted","who":"   ","where":"Email","scope":"cortes"}})
+        )
+        .unwrap_err()
+        .code,
+        "invalid_permission"
+    );
+    assert_eq!(
+        run(
+            "sources.permission.set",
+            json!({"project":project,"id":999999,"permission":{"status":"none"}})
+        )
+        .unwrap_err()
+        .code,
+        "source_missing"
+    );
+    let granted = run(
+        "sources.permission.set",
+        json!({"project":project,"id":id,"permission":{"status":"granted","who":"  Criador  ","where":" Email ","scope":" cortes, tradução "}}),
+    )
+    .unwrap();
+    assert_eq!(
+        granted["permission"],
+        json!({"status":"granted","who":"Criador","where":"Email","scope":"cortes, tradução"})
+    );
+    let reverted = run(
+        "sources.permission.set",
+        json!({"project":project,"id":id,"permission":{"status":"none"}}),
+    )
+    .unwrap();
+    assert_eq!(reverted["permission"], json!({"status":"none"}));
     run(
         "sources.hash",
         json!({"project":project,"id":id,"job":"test-hash"}),
@@ -308,8 +354,232 @@ fn local_source_lifecycle() {
             .unwrap()["language"],
         "en"
     );
+    // Alterar Permissão mesmo quando a Fonte está offline.
+    fs::remove_file(&moved).unwrap();
+    let offline_updated = run(
+        "sources.permission.set",
+        json!({"project":reopened["path"],"id":unverified_id,"permission":{"status":"granted","who":"Canal Offline","where":"DM","scope":"cortes"}}),
+    )
+    .unwrap();
+    assert_eq!(offline_updated["status"], "offline");
+    assert_eq!(offline_updated["permission"]["who"], "Canal Offline");
     run("projects.close", json!({})).unwrap();
     std::env::remove_var("CLIPES_FFPROBE");
+    std::env::remove_var("CLIPES_DATA_DIR");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn permission_set_reflects_in_packaging_translation_and_guardrails() {
+    let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let root = std::env::temp_dir().join(format!(
+        "clipes-source-perm-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&root).unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", root.join("data"));
+    let run = |name, args| dispatch(name, args, &mut |_| {});
+
+    assert_eq!(
+        run(
+            "sources.permission.set",
+            json!({"project": root.join("Canal.clipes"), "id": 1, "permission": {"status": "none"}})
+        )
+        .unwrap_err()
+        .code,
+        "project_not_open"
+    );
+
+    let project = run(
+        "projects.create",
+        json!({"parent": root, "name": "CanalPerm"}),
+    )
+    .unwrap();
+    let project_path = project["path"].as_str().unwrap();
+
+    assert_eq!(
+        run(
+            "sources.permission.set",
+            json!({"project": root.join("Outro.clipes"), "id": 1, "permission": {"status": "none"}})
+        )
+        .unwrap_err()
+        .code,
+        "invalid_project"
+    );
+
+    let (source_id, candidate_id) = with_writer(|c| {
+        c.execute(
+            "INSERT INTO sources(path,size,duration_us,partial_hash,metadata,permission,audio_track,origin_url) VALUES ('C:/videos/perm.mp4',1,30000000,'h','{}','{\"status\":\"none\"}',0,'https://example.com/watch?v=perm')",
+            [],
+        )?;
+        let source_id = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,state,resume_us,duration_us) VALUES (?1,0,'local','m','r','c','complete',30000000,30000000)",
+            [source_id],
+        )?;
+        let transcript_id = c.last_insert_rowid();
+        for (pos, text, start_us, end_us) in [
+            (0, "Primeira", 0, 4_000_000),
+            (1, " frase.", 4_100_000, 10_000_000),
+            (2, "Segunda", 11_000_000, 15_000_000),
+            (3, " frase.", 15_100_000, 21_000_000),
+        ] {
+            c.execute(
+                "INSERT INTO transcript_words(transcript_id,position,kind,text,start_us,end_us,language) VALUES (?1,?2,'word',?3,?4,?5,'pt')",
+                (transcript_id, pos, text, start_us, end_us),
+            )?;
+        }
+        c.execute(
+            "INSERT INTO selection_runs(transcript_id,task_version,prompt_sha256,profile,state,batch,min_us,max_us,weights,plan_state,windows_total,video_kind) VALUES (?1,1,'h','p','completed','',20000000,180000000,'[]','full',1,'direct')",
+            [transcript_id],
+        )?;
+        let run_id = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO selection_candidates(run_id,rank,start_id,end_id,start_us,end_us,axes,total_centi,title,windows,adjust) VALUES (?1,1,1,2,0,21000000,'{}',800,'Corte','[0]',NULL)",
+            [run_id],
+        )?;
+        let candidate_id = c.last_insert_rowid();
+        Ok((source_id, candidate_id))
+    })
+    .unwrap();
+
+    run("transcription.segment", json!({"source_id": source_id})).unwrap();
+    run(
+        "selection.decide",
+        json!({"candidate": candidate_id, "decision": "approved"}),
+    )
+    .unwrap();
+    let clip = run(
+        "editor.open",
+        json!({"source_id": source_id, "start_id": 1, "end_id": 2}),
+    )
+    .unwrap();
+    let clip_id = clip["clipId"].as_i64().unwrap();
+
+    run(
+        "provider.configure",
+        json!({"endpoint": "http://127.0.0.1:9/v1", "kind": "openai", "model": "fake-model", "context": 32768}),
+    )
+    .unwrap();
+
+    // 1. Inicialmente sem Permissão: sem crédito no Empacotamento, tradução bloqueada e guarda-corpos sem permissão.
+    let pack0 = run("packaging.get", json!({"candidate": candidate_id})).unwrap();
+    assert_eq!(pack0["credit"]["text"], json!(null));
+    assert_eq!(pack0["credit"]["warning"], "no_permission");
+    let tr0 = run("translation.get", json!({"clip_id": clip_id})).unwrap();
+    assert_eq!(tr0["permitted"], false);
+    assert_eq!(
+        tr0["permissionError"]["code"],
+        "translation_permission_required"
+    );
+    assert_eq!(
+        run("translation.estimate", json!({"clip_id": clip_id}))
+            .unwrap_err()
+            .code,
+        "translation_permission_required"
+    );
+    let gr0 = run(
+        "guardrails.check",
+        json!({"scope": "single", "source_id": source_id, "candidate_id": candidate_id}),
+    )
+    .unwrap();
+    assert_eq!(gr0["permission"]["status"], "none");
+    assert_eq!(gr0["permission"]["missingCount"], 1);
+    let gr0_batch = run("guardrails.check", json!({"scope": "project"})).unwrap();
+    assert_eq!(gr0_batch["permission"]["status"], "none");
+    assert_eq!(gr0_batch["permission"]["missingCount"], 1);
+
+    // 2. Registrar Permissão sem escopo "tradução": Empacotamento e guarda-corpos refletem; tradução pede atualização.
+    run(
+        "sources.permission.set",
+        json!({"project": project_path, "id": source_id, "permission": {"status": "granted", "who": "Criador Inicial", "where": "Discord", "scope": "cortes diretos"}}),
+    )
+    .unwrap();
+    let pack1 = run("packaging.get", json!({"candidate": candidate_id})).unwrap();
+    assert_eq!(
+        pack1["credit"]["text"],
+        "Crédito: vídeo original de Criador Inicial.\nFonte: https://example.com/watch?v=perm"
+    );
+    assert_eq!(pack1["credit"]["warning"], json!(null));
+    let tr1 = run("translation.get", json!({"clip_id": clip_id})).unwrap();
+    assert_eq!(tr1["permitted"], false);
+    assert!(tr1["permissionError"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("Atualize a Permissão"));
+    let gr1 = run(
+        "guardrails.check",
+        json!({"scope": "single", "source_id": source_id, "candidate_id": candidate_id}),
+    )
+    .unwrap();
+    assert_eq!(gr1["permission"]["status"], "granted");
+    assert_eq!(gr1["permission"]["who"], "Criador Inicial");
+    assert_eq!(gr1["permission"]["where"], "Discord");
+    assert_eq!(gr1["permission"]["scope"], "cortes diretos");
+    assert_eq!(gr1["permission"]["grantedCount"], 1);
+    let gr1_batch = run(
+        "guardrails.check",
+        json!({"scope": "source", "source_id": source_id}),
+    )
+    .unwrap();
+    assert_eq!(gr1_batch["permission"]["status"], "granted");
+    assert_eq!(gr1_batch["permission"]["grantedCount"], 1);
+
+    // 3. Editar Permissão para incluir "tradução" e novo "who": todos os três módulos refletem imediatamente.
+    run(
+        "sources.permission.set",
+        json!({"project": project_path, "id": source_id, "permission": {"status": "granted", "who": "Criador Atualizado", "where": "Email", "scope": "cortes, tradução"}}),
+    )
+    .unwrap();
+    let pack2 = run("packaging.get", json!({"candidate": candidate_id})).unwrap();
+    assert_eq!(
+        pack2["credit"]["text"],
+        "Crédito: vídeo original de Criador Atualizado.\nFonte: https://example.com/watch?v=perm"
+    );
+    let tr2 = run("translation.get", json!({"clip_id": clip_id})).unwrap();
+    assert_eq!(tr2["permitted"], true);
+    assert_eq!(tr2["permissionError"], json!(null));
+    let est = run("translation.estimate", json!({"clip_id": clip_id})).unwrap();
+    assert_eq!(est["targetLanguage"], "en");
+    let gr2 = run(
+        "guardrails.check",
+        json!({"scope": "single", "source_id": source_id, "candidate_id": candidate_id}),
+    )
+    .unwrap();
+    assert_eq!(gr2["permission"]["who"], "Criador Atualizado");
+    assert_eq!(gr2["permission"]["where"], "Email");
+    assert_eq!(gr2["permission"]["scope"], "cortes, tradução");
+
+    // 4. Voltar para "none": remove crédito, bloqueia tradução e atualiza guarda-corpos.
+    run(
+        "sources.permission.set",
+        json!({"project": project_path, "id": source_id, "permission": {"status": "none"}}),
+    )
+    .unwrap();
+    let pack3 = run("packaging.get", json!({"candidate": candidate_id})).unwrap();
+    assert_eq!(pack3["credit"]["text"], json!(null));
+    assert_eq!(pack3["credit"]["warning"], "no_permission");
+    let tr3 = run("translation.get", json!({"clip_id": clip_id})).unwrap();
+    assert_eq!(tr3["permitted"], false);
+    assert_eq!(
+        run("translation.estimate", json!({"clip_id": clip_id}))
+            .unwrap_err()
+            .code,
+        "translation_permission_required"
+    );
+    let gr3 = run(
+        "guardrails.check",
+        json!({"scope": "single", "source_id": source_id, "candidate_id": candidate_id}),
+    )
+    .unwrap();
+    assert_eq!(gr3["permission"]["status"], "none");
+    assert_eq!(gr3["permission"]["missingCount"], 1);
+
+    run("projects.close", json!({})).unwrap();
     std::env::remove_var("CLIPES_DATA_DIR");
     fs::remove_dir_all(root).unwrap();
 }

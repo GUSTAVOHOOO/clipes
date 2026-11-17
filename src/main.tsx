@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { isTauri } from '@tauri-apps/api/core';
 import { PanelLeft, PanelRight } from 'lucide-react';
 import { ComandosProvider, useComandos } from '@/lib/comandos';
 import { LanguageContext, useText, type Language } from '@/lib/i18n';
+import { initMediaTransport } from '@/lib/media';
 import { iniciarTema } from '@/lib/tema';
 import { drawers } from '@/lib/drawers';
 import { Paleta, GatilhoPaleta } from '@/components/shell/Paleta';
@@ -55,4 +57,11 @@ function App() {
   return <LanguageContext.Provider value={language}><ComandosProvider><Shell language={language} setLanguage={setLanguage}/></ComandosProvider></LanguageContext.Provider>;
 }
 iniciarTema();
-createRoot(document.getElementById('root')!).render(<App />);
+const rootEl = document.getElementById('root')!;
+if (isTauri()) {
+  void initMediaTransport().then(() => {
+    createRoot(rootEl).render(<App />);
+  });
+} else {
+  createRoot(rootEl).render(<App />);
+}

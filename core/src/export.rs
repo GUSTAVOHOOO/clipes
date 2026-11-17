@@ -44,6 +44,24 @@ pub(crate) struct FrozenCaptionWord {
     pub(crate) sentence_id: Option<i64>,
 }
 
+fn is_default_override(o: &WordOverride) -> bool {
+    *o == WordOverride::default()
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub(crate) struct FrozenOutputCaptionWord {
+    pub(crate) text: String,
+    pub(crate) start_us: i64,
+    pub(crate) end_us: i64,
+    pub(crate) position: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) sentence_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) sentence_key: Option<(i64, i64)>,
+    #[serde(default, skip_serializing_if = "is_default_override")]
+    pub(crate) overrides: WordOverride,
+}
+
 #[derive(Serialize, Deserialize)]
 pub(crate) struct StartRequest {
     #[serde(flatten)]
@@ -61,6 +79,8 @@ pub(crate) struct StartRequest {
     pub(crate) resolved_crop_plan: Option<ResolvedCropPlan>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) resolved_captions: Option<Vec<FrozenCaptionWord>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) resolved_output_captions: Option<Box<(String, i64, Vec<FrozenOutputCaptionWord>)>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) resolved_narration_starts: Option<std::collections::BTreeMap<i64, i64>>,
     // Só o lote (#64) com `confirmed: true` ativa a substituição atômica de destino existente.
@@ -91,18 +111,22 @@ pub(crate) struct Target {
     pub(crate) start_us: i64,
     pub(crate) end_us: i64,
     pub(crate) output_duration_us: i64,
+    pub(crate) captions_duration_us: i64,
     pub(crate) words: Vec<CaptionWord>,
     pub(crate) styled: Vec<StyledWord>,
     pub(crate) source_starts: Vec<i64>,
     pub(crate) source_ends: Vec<i64>,
     pub(crate) sentence_ids: Vec<Option<i64>>,
+    pub(crate) sentence_keys: Vec<Option<(i64, i64)>>,
     pub(crate) segments: Vec<KeptSegment>,
     pub(crate) active_cuts: Vec<(i64, i64)>,
     pub(crate) transcript: i64,
     pub(crate) crop: Vec<CropSegment>,
     pub(crate) crop_plan: Option<ResolvedCropPlan>,
     pub(crate) caption_track: &'static str,
+    pub(crate) available_tracks: Vec<&'static str>,
     pub(crate) target_language: Option<String>,
+    pub(crate) narration_summary: Option<crate::narration_align::NarrationTrackSummary>,
 }
 
 impl Target {
@@ -124,6 +148,25 @@ impl Target {
             )
             .collect()
     }
+    fn frozen_output_captions(&self) -> (String, i64, Vec<FrozenOutputCaptionWord>) {
+        let words = self
+            .styled
+            .iter()
+            .zip(self.sentence_ids.iter().zip(self.sentence_keys.iter()))
+            .map(
+                |(w, (&sentence_id, &sentence_key))| FrozenOutputCaptionWord {
+                    text: w.word.text.clone(),
+                    start_us: w.word.start_us,
+                    end_us: w.word.end_us,
+                    position: w.position,
+                    sentence_id,
+                    sentence_key,
+                    overrides: w.overrides.clone(),
+                },
+            )
+            .collect();
+        (self.caption_track.into(), self.captions_duration_us, words)
+    }
     fn missing_glyphs(&self, style: &Style) -> Vec<captions::MissingGlyph> {
         let font_bytes = style.font_bytes();
         captions::check_words_glyphs(
@@ -131,7 +174,7 @@ impl Target {
                 .iter()
                 .zip(self.source_starts.iter().zip(&self.sentence_ids))
                 .filter(|(w, _)| {
-                    w.word.start_us < self.output_duration_us
+                    w.word.start_us < self.captions_duration_us
                         && !w.overrides.hidden.unwrap_or(false)
                 })
                 .map(
@@ -187,13 +230,15 @@ pub(crate) fn target(
     frozen: Option<FrozenTarget>,
     frozen_captions: Option<&[FrozenCaptionWord]>,
 ) -> Result<Target, CoreError> {
-    target_with(request, frozen, frozen_captions, true)
+    target_with(request, frozen, frozen_captions, None, None, true)
 }
 
-fn target_with(
+pub(crate) fn target_with(
     request: &ExportRequest,
     frozen: Option<FrozenTarget>,
     frozen_captions: Option<&[FrozenCaptionWord]>,
+    frozen_output: Option<&(String, i64, Vec<FrozenOutputCaptionWord>)>,
+    track_override: Option<&str>,
     resolve_candidate_edit: bool,
 ) -> Result<Target, CoreError> {
     let clip_id = if resolve_candidate_edit {
@@ -240,7 +285,24 @@ fn target_with(
             return Err(candidate_error());
         }
     }
-    let active_lang = if frozen_captions.is_none() {
+    let narration_data = if frozen_captions.is_none() && frozen_output.is_none() {
+        match request.candidate_id {
+            Some(cid) => crate::narration_align::narration_captions_for_cut(cid, request.clip_id)?,
+            None => None,
+        }
+    } else {
+        None
+    };
+    let saved_track = if frozen_captions.is_none() && frozen_output.is_none() {
+        request
+            .candidate_id
+            .map(crate::narration_align::saved_track_for_candidate)
+            .transpose()?
+            .flatten()
+    } else {
+        None
+    };
+    let active_lang = if frozen_captions.is_none() && frozen_output.is_none() {
         request
             .clip_id
             .map(crate::translation::active_translated_language)
@@ -249,9 +311,50 @@ fn target_with(
     } else {
         None
     };
-    let translated_sentences = match (request.clip_id, active_lang.as_deref()) {
-        (Some(clip_id), Some(lang)) => Some(crate::translation::translated_map(clip_id, lang)?),
-        _ => None,
+    let has_translation_rows = matches!(
+        (request.clip_id, active_lang.as_deref()),
+        (Some(_), Some(_))
+    );
+    let requested_track = track_override.or(saved_track.as_deref());
+    let chosen_track: &'static str = if let Some((track, _, _)) = frozen_output {
+        if track == "narration" {
+            "narration"
+        } else {
+            "original"
+        }
+    } else if frozen_captions.is_some() {
+        "translated"
+    } else if requested_track == Some("narration") && narration_data.is_some() {
+        "narration"
+    } else if requested_track == Some("translated") && has_translation_rows {
+        "translated"
+    } else if requested_track == Some("original") {
+        "original"
+    } else if narration_data
+        .as_ref()
+        .is_some_and(|n| n.summary.has_narration)
+    {
+        "narration"
+    } else if has_translation_rows {
+        "translated"
+    } else {
+        "original"
+    };
+    let mut available_tracks = Vec::new();
+    if narration_data.is_some() {
+        available_tracks.push("narration");
+    }
+    available_tracks.push("original");
+    if has_translation_rows {
+        available_tracks.push("translated");
+    }
+    let translated_sentences = if chosen_track == "translated" {
+        match (request.clip_id, active_lang.as_deref()) {
+            (Some(clip_id), Some(lang)) => Some(crate::translation::translated_map(clip_id, lang)?),
+            _ => None,
+        }
+    } else {
+        None
     };
     projects::with_reader(|c| {
         let border:Option<(i64,i64,i64,i64)>=c.query_row("SELECT a.start_us,b.end_us,a.first_position,b.last_position FROM sentences a JOIN sentences b ON a.transcript_id=b.transcript_id JOIN transcripts t ON t.id=a.transcript_id WHERE a.transcript_id=?1 AND a.id=?2 AND b.id=?3 AND b.end_us<=t.duration_us",(transcript,request.start_id,request.end_id),|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).optional()?;
@@ -290,12 +393,37 @@ fn target_with(
         let mut source_starts = Vec::new();
         let mut source_ends = Vec::new();
         let mut sentence_ids = Vec::new();
-        let caption_track = if frozen_captions.is_some() || translated_sentences.is_some() {
-            "translated"
-        } else {
-            "original"
-        };
-        if let Some(frozen_words) = frozen_captions {
+        let mut sentence_keys: Vec<Option<(i64, i64)>> = Vec::new();
+        let mut captions_duration_us = splice.output_duration_us;
+        let caption_track = chosen_track;
+        if let Some((_, frozen_dur, frozen_words)) = frozen_output {
+            captions_duration_us = (*frozen_dur).max(splice.output_duration_us);
+            for w in frozen_words {
+                let mapped_src_start = if w.start_us <= splice.output_duration_us {
+                    splice.output_to_source(w.start_us)
+                } else {
+                    end_us
+                };
+                let mapped_src_end = if w.end_us <= splice.output_duration_us {
+                    splice.output_to_source(w.end_us)
+                } else {
+                    end_us
+                };
+                source_starts.push(mapped_src_start);
+                source_ends.push(mapped_src_end);
+                sentence_ids.push(w.sentence_id);
+                sentence_keys.push(w.sentence_key);
+                styled.push(StyledWord {
+                    word: CaptionWord {
+                        text: w.text.clone(),
+                        start_us: w.start_us,
+                        end_us: w.end_us,
+                    },
+                    position: w.position,
+                    overrides: w.overrides.clone(),
+                });
+            }
+        } else if let Some(frozen_words) = frozen_captions {
             for (idx, w) in frozen_words.iter().enumerate() {
                 let cs = if clamp {
                     w.start_us.max(start_us)
@@ -472,6 +600,28 @@ fn target_with(
                 });
             }
         }
+        let mut narration_summary = narration_data.as_ref().map(|n| n.summary.clone());
+        if chosen_track == "narration" {
+            if let Some(ref narration) = narration_data {
+                captions_duration_us = narration.total_duration_us.max(splice.output_duration_us);
+                let merged = crate::narration_align::merge_narration_and_source_words(
+                    narration,
+                    styled,
+                    source_starts,
+                    source_ends,
+                    sentence_ids,
+                    &splice,
+                    end_us,
+                );
+                styled = merged.styled;
+                source_starts = merged.source_starts;
+                source_ends = merged.source_ends;
+                sentence_ids = merged.sentence_ids;
+                sentence_keys = merged.sentence_keys;
+            }
+        } else if sentence_keys.is_empty() && !styled.is_empty() {
+            sentence_keys = vec![None; styled.len()];
+        }
         let crop_plan = edited
             .as_ref()
             .filter(|doc| doc.crop.has_explicit_crop())
@@ -494,18 +644,22 @@ fn target_with(
             start_us,
             end_us,
             output_duration_us: splice.output_duration_us,
+            captions_duration_us,
             words,
             styled,
             source_starts,
             source_ends,
             sentence_ids,
+            sentence_keys,
             segments: splice.segments,
             active_cuts,
             transcript,
             crop,
             crop_plan,
             caption_track,
+            available_tracks,
             target_language: active_lang,
+            narration_summary: narration_summary.take(),
         }))
     })?
 }
@@ -520,12 +674,18 @@ pub(crate) fn current_path() -> Result<PathBuf, CoreError> {
 
 fn cmd_captions(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let _project = projects::start_job()?;
+    let track_override = v["track"].as_str().map(str::to_owned);
     let mut request = parse(v)?;
     request.clip_id = resolve_clip_id(&request)?;
     let style = style_for_clip(request.clip_id)?;
-    let target = target(&request, None, None)?;
+    let target = target_with(&request, None, None, None, track_override.as_deref(), true)?;
     let words = captions::sanitize(&target.words)?;
-    let prepared = caption_style::prepare(&target.styled, &style, target.output_duration_us)?;
+    let prepared = caption_style::prepare_with_sentences(
+        &target.styled,
+        &target.sentence_keys,
+        &style,
+        target.captions_duration_us,
+    )?;
     let missing = target.missing_glyphs(&style);
     let editable: Vec<_> = target
         .styled
@@ -545,7 +705,7 @@ fn cmd_captions(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         })
         .collect();
     Ok(
-        json!({"ass":prepared.ass,"lines":captions::layout(&words),"start_us":target.start_us,"end_us":target.end_us,"durationUs":target.output_duration_us,"segments":target.segments,"cues":prepared.cues,"style":prepared.style,"emojiRemoved":prepared.emoji_removed,"words":editable,"transcriptId":target.transcript,"missingGlyphs":missing,"track":target.caption_track,"targetLanguage":target.target_language}),
+        json!({"ass":prepared.ass,"lines":captions::layout(&words),"start_us":target.start_us,"end_us":target.end_us,"durationUs":target.captions_duration_us,"segments":target.segments,"cues":prepared.cues,"style":prepared.style,"emojiRemoved":prepared.emoji_removed,"words":editable,"transcriptId":target.transcript,"missingGlyphs":missing,"track":target.caption_track,"availableTracks":target.available_tracks,"targetLanguage":target.target_language,"narrationSummary":target.narration_summary}),
     )
 }
 
@@ -582,6 +742,8 @@ pub(crate) fn prepare_start_request(
     request.resolved_crop_plan = resolved.crop_plan.clone();
     request.resolved_captions =
         (resolved.caption_track == "translated").then(|| resolved.frozen_captions());
+    request.resolved_output_captions = (resolved.caption_track == "narration")
+        .then(|| Box::new(resolved.frozen_output_captions()));
     request.resolved_narration_starts = request
         .cut
         .clip_id
@@ -794,10 +956,17 @@ pub(crate) fn run(
             &request.cut,
             frozen,
             request.resolved_captions.as_deref(),
+            request.resolved_output_captions.as_deref(),
+            None,
             false,
         )?;
         check_target_glyphs(&target, &style)?;
-        let prepared = caption_style::prepare(&target.styled, &style, target.output_duration_us)?;
+        let prepared = caption_style::prepare_with_sentences(
+            &target.styled,
+            &target.sentence_keys,
+            &style,
+            target.captions_duration_us,
+        )?;
         let narration = resolve_narration_render(
             request.cut.candidate_id,
             request.cut.clip_id,

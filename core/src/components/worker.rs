@@ -74,6 +74,10 @@ const FILES: &[(&str, &[u8])] = &[
         "src/clipes_worker/transcribe.py",
         include_bytes!("../../../worker/src/clipes_worker/transcribe.py"),
     ),
+    (
+        "src/clipes_worker/align.py",
+        include_bytes!("../../../worker/src/clipes_worker/align.py"),
+    ),
 ];
 
 fn worker_dir(settings: &Settings) -> PathBuf {
@@ -138,7 +142,7 @@ pub(super) fn uv_version_for(settings: &Settings) -> Option<String> {
 }
 
 /// O worker está instalado (ambiente criado e estado gravado)?
-pub(super) fn installed(settings: &Settings) -> bool {
+pub(crate) fn installed(settings: &Settings) -> bool {
     let worker = worker_dir(settings);
     state_path(&worker).is_file() && venv_python(&worker).is_file()
 }
@@ -319,6 +323,106 @@ fn write_project(worker: &Path) -> Result<PathBuf, CoreError> {
     Ok(project)
 }
 
+static PROJECT_SYNC_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn is_embedded_file(project: &Path, path: &Path) -> bool {
+    let Ok(rel) = path.strip_prefix(project) else {
+        return false;
+    };
+    let rel_str = rel.to_string_lossy().replace('\\', "/");
+    FILES.iter().any(|(name, _)| *name == rel_str)
+}
+
+fn remove_stale_src_files(project: &Path, dir: &Path) -> Result<bool, CoreError> {
+    if !dir.is_dir() {
+        return Ok(false);
+    }
+    let mut removed = false;
+    for entry in fs::read_dir(dir).map_err(|_| install_failed())? {
+        let entry = entry.map_err(|_| install_failed())?;
+        let path = entry.path();
+        if path.file_name().is_some_and(|n| n == "__pycache__") {
+            continue;
+        }
+        if path.is_dir() {
+            if remove_stale_src_files(project, &path)? {
+                removed = true;
+            }
+            if fs::read_dir(&path)
+                .map(|mut d| d.next().is_none())
+                .unwrap_or(false)
+            {
+                let _ = fs::remove_dir(&path);
+            }
+        } else if !is_embedded_file(project, &path) {
+            fs::remove_file(&path).map_err(|_| install_failed())?;
+            removed = true;
+        }
+    }
+    Ok(removed)
+}
+
+fn clear_pycache(dir: &Path) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        if path.file_name().is_some_and(|n| n == "__pycache__") {
+            let _ = fs::remove_dir_all(&path);
+        } else {
+            clear_pycache(&path);
+        }
+    }
+}
+
+/// Compara os arquivos embutidos em `FILES` com `worker/project/` e ressincroniza
+/// o que divergir ou faltar após atualizações do aplicativo, sem apagar a venv.
+fn sync_project_files(worker: &Path) -> Result<bool, CoreError> {
+    let _guard = PROJECT_SYNC_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let project = worker.join("project");
+    fs::create_dir_all(&project).map_err(|_| install_failed())?;
+    let mut changed = false;
+    for (name, bytes) in FILES {
+        let target = project.join(name);
+        let matches = fs::read(&target)
+            .map(|disk| Sha256::digest(&disk) == Sha256::digest(bytes))
+            .unwrap_or(false);
+        if !matches {
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent).map_err(|_| install_failed())?;
+            }
+            fs::write(&target, bytes).map_err(|_| install_failed())?;
+            changed = true;
+        }
+    }
+    if remove_stale_src_files(&project, &project.join("src"))? {
+        changed = true;
+    }
+    if changed {
+        clear_pycache(&project.join("src"));
+    }
+    let state_file = state_path(worker);
+    if state_file.is_file() {
+        let expected_hash = files_sha256();
+        if let Ok(bytes) = fs::read(&state_file) {
+            if let Ok(mut state) = serde_json::from_slice::<Value>(&bytes) {
+                if state.is_object() && state["files_sha256"] != json!(expected_hash) {
+                    state["files_sha256"] = json!(expected_hash);
+                    let encoded = serde_json::to_vec_pretty(&state).unwrap();
+                    let part = state_file.with_extension("json.part");
+                    fs::write(&part, &encoded).map_err(|_| install_failed())?;
+                    fs::rename(&part, &state_file).map_err(|_| install_failed())?;
+                }
+            }
+        }
+    }
+    Ok(changed)
+}
+
 /// Inicia o worker instalado (handshake feito). Usado pelo status e pelas
 /// etapas de ML que o núcleo orquestra.
 pub(crate) fn start_worker() -> Result<WorkerClient, CoreError> {
@@ -331,6 +435,7 @@ pub(crate) fn start_worker() -> Result<WorkerClient, CoreError> {
             "O worker de ML não está instalado; instale-o em Componentes.",
         ));
     }
+    sync_project_files(&worker)?;
     let src = worker.join("project").join("src");
     let venv = worker.join("venv");
     WorkerClient::start(python, ["-m", "clipes_worker"], |c: &mut Command| {
@@ -466,16 +571,21 @@ fn status(_: Value, _: &mut EventSink<'_>) -> CommandResult {
     let Some(state) = state.filter(|_| venv_python(&worker).is_file()) else {
         return Ok(json!({"installed": false, "gpu": has_nvidia_gpu()}));
     };
-    let outdated = state["lock_sha256"] != json!(lock_sha256())
-        || state["files_sha256"] != json!(files_sha256());
-    Ok(match start_worker() {
+    let started = start_worker();
+    let current_state = fs::read(state_path(&worker))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+        .unwrap_or(state);
+    let outdated = current_state["lock_sha256"] != json!(lock_sha256())
+        || current_state["files_sha256"] != json!(files_sha256());
+    Ok(match started {
         Ok(client) => {
             let handshake = client.handshake().clone();
             client.shutdown();
-            json!({"installed": true, "outdated": outdated, "cuda": state["cuda"], "gpu": has_nvidia_gpu(), "uv": state["uv"], "handshake": handshake})
+            json!({"installed": true, "outdated": outdated, "cuda": current_state["cuda"], "gpu": has_nvidia_gpu(), "uv": current_state["uv"], "handshake": handshake})
         }
         Err(e) => {
-            json!({"installed": true, "outdated": outdated, "cuda": state["cuda"], "gpu": has_nvidia_gpu(), "uv": state["uv"], "error": {"code": e.code, "message": e.message}})
+            json!({"installed": true, "outdated": outdated, "cuda": current_state["cuda"], "gpu": has_nvidia_gpu(), "uv": current_state["uv"], "error": {"code": e.code, "message": e.message}})
         }
     })
 }
@@ -582,5 +692,25 @@ mod tests {
         assert!(project.starts_with(root.path()));
         assert!(project.join("uv.lock").is_file());
         assert!(project.join("src/clipes_worker/server.py").is_file());
+    }
+
+    #[test]
+    fn sync_project_files_is_noop_when_up_to_date_and_overwrites_on_mismatch() {
+        let root = tempfile::tempdir().unwrap();
+        let project = write_project(root.path()).unwrap();
+        let pycache = project.join("src/clipes_worker/__pycache__");
+        fs::create_dir_all(&pycache).unwrap();
+        fs::write(pycache.join("server.cpython-312.pyc"), b"compiled").unwrap();
+
+        assert!(!sync_project_files(root.path()).unwrap());
+        assert!(pycache.join("server.cpython-312.pyc").is_file());
+
+        let server = project.join("src/clipes_worker/server.py");
+        let original = fs::read(&server).unwrap();
+        fs::write(&server, b"# stale\n").unwrap();
+
+        assert!(sync_project_files(root.path()).unwrap());
+        assert_eq!(fs::read(&server).unwrap(), original);
+        assert!(!pycache.exists());
     }
 }

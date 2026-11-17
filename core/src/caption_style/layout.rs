@@ -51,6 +51,28 @@ pub fn prepare(
     style: &Style,
     duration_us: i64,
 ) -> Result<Prepared, CoreError> {
+    prepare_inner(input, None, style, duration_us)
+}
+
+/// Como [`prepare`], mas garante que nenhum bloco de legenda cruze uma fronteira de Frase (#81).
+pub fn prepare_with_sentences(
+    input: &[StyledWord],
+    sentence_keys: &[Option<(i64, i64)>],
+    style: &Style,
+    duration_us: i64,
+) -> Result<Prepared, CoreError> {
+    if sentence_keys.len() != input.len() {
+        return Err(super::invalid());
+    }
+    prepare_inner(input, Some(sentence_keys), style, duration_us)
+}
+
+fn prepare_inner(
+    input: &[StyledWord],
+    sentence_keys: Option<&[Option<(i64, i64)>]>,
+    style: &Style,
+    duration_us: i64,
+) -> Result<Prepared, CoreError> {
     style.validate()?;
     if duration_us <= 0 {
         return Err(super::invalid());
@@ -58,12 +80,15 @@ pub fn prepare(
     for w in input {
         w.overrides.validate()?;
     }
-    let visible: Vec<&StyledWord> = input
+    let visible: Vec<(&StyledWord, Option<(i64, i64)>)> = input
         .iter()
-        .filter(|w| !w.overrides.hidden.unwrap_or(false))
+        .enumerate()
+        .filter(|(_, w)| !w.overrides.hidden.unwrap_or(false))
+        .map(|(idx, w)| (w, sentence_keys.and_then(|keys| keys[idx])))
         .collect();
-    let raw: Vec<CaptionWord> = visible.iter().map(|w| w.word.clone()).collect();
+    let raw: Vec<CaptionWord> = visible.iter().map(|(w, _)| w.word.clone()).collect();
     let clean = captions::sanitize(&raw)?;
+    let mut keys = Vec::new();
     let words: Vec<_> = clean
         .iter()
         .filter_map(|word| {
@@ -71,9 +96,10 @@ pub fn prepare(
             if text.is_empty() || word.start_us >= duration_us {
                 return None;
             }
-            let original = visible
+            let (original, sentence_key) = visible
                 .iter()
-                .find(|w| w.word.start_us >= word.start_us && w.word.start_us < word.end_us)?;
+                .find(|(w, _)| w.word.start_us >= word.start_us && w.word.start_us < word.end_us)?;
+            keys.push(*sentence_key);
             Some(VisibleWord {
                 text,
                 start_us: word.start_us / ASS_TICK_US * ASS_TICK_US,
@@ -111,7 +137,11 @@ pub fn prepare(
             } else {
                 size(next) <= max_chars || balanced(next, max_chars).is_some()
             };
-            if !fits || words[end].start_us - words[end - 1].end_us > 800_000 {
+            let same_sentence = match (keys[end - 1], keys[end]) {
+                (Some(a), Some(b)) => a == b,
+                _ => true,
+            };
+            if !fits || !same_sentence || words[end].start_us - words[end - 1].end_us > 800_000 {
                 break;
             }
             end += 1;
@@ -137,7 +167,10 @@ pub fn prepare(
         ass,
         cues,
         style: style.clone(),
-        emoji_removed: visible.iter().filter(|w| has_emoji(&w.word.text)).count(),
+        emoji_removed: visible
+            .iter()
+            .filter(|(w, _)| has_emoji(&w.word.text))
+            .count(),
     })
 }
 fn color(c: &str) -> String {

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
+import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { Captions, Crop, Languages, PanelLeft, PanelRight, Scissors, X } from 'lucide-react';
 import { coreDispatch, type ExportRequest } from '@/lib/core';
+import { mediaUrl } from '@/lib/media';
 import { useText } from '@/lib/i18n';
 import { useComandos } from '@/lib/comandos';
 import { Button } from '@/components/ui/Button';
@@ -65,7 +66,6 @@ const texts = {
 };
 
 const errorCode = (e: unknown) => (typeof e === 'object' && e !== null && 'code' in e ? String(e.code) : '');
-const mediaUrl = (id: string) => (isTauri() ? convertFileSrc(id, 'clipes-media') : `/__clipes-media__/${id}`);
 const borderClock = (us: number) => `${clock(us)}.${String(Math.floor((us % 1_000_000) / 1000)).padStart(3, '0')}`;
 const ROW = { thumbs: 54, wave: 40, sentences: 56, narration: 44 } as const;
 
@@ -677,7 +677,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
       </GavetaBorda>
       <GavetaBorda lado="dir" g={right} rotulo={view === 'captions' ? t.captions : view === 'silences' ? t.silences : view === 'crop' ? t.crop : view === 'translation' ? t.translation : t.borders}>
         {view === 'captions' ? <><CabecalhoGaveta acoes={<Button tamanho="sm" onClick={right.fechar}>{t.close.replace(/ .*/, '')}</Button>}><h3 className="font-semibold">{t.captions}</h3></CabecalhoGaveta>
-          {opened && <CaptionPanel data={captions.data} clipId={opened.clipId} sourceId={request.source_id} refresh={captions.refresh} loadError={captions.error} />}</> : view === 'silences' ? <>
+          {opened && <CaptionPanel data={captions.data} clipId={opened.clipId} sourceId={request.source_id} candidateId={request.candidate_id} refresh={captions.refresh} loadError={captions.error} />}</> : view === 'silences' ? <>
           <CabecalhoGaveta acoes={<Button tamanho="sm" onClick={right.fechar}>{t.close.replace(/ .*/, '')}</Button>}><h3 className="font-semibold">{t.silences}</h3></CabecalhoGaveta>
           <SilencesPanel
             silences={silencesView}

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { openCutPreview } from './CutPreview';
 import { openEditor } from '@/features/editor/Editor';
-import { CandidateReview } from './CandidateReview';
+import { CandidateReview, type CandidateChat } from './CandidateReview';
 import { BatchExport } from '@/features/export/BatchExport';
 import { clock, fill, message } from './selectionFormat';
 import { CHANNEL_PROFILE_UPDATED_EVENT, type ChannelProfileData } from './ChannelProfile';
@@ -17,7 +17,7 @@ type Estimate = { kind: string; windows: number; inputTokens: number; minMicroUs
 type Weight = { key: string; weight: number };
 type Preview = { paid: boolean; videoKind?: VideoKind; profile?: string; plan?: { state: 'full' | 'reduced'; windows: unknown[] }; weights?: Weight[]; estimate: Estimate };
 type Axis = { score: number; why: string };
-type Candidate = { id: number; rank: number; startId: number; endId: number; startUs: number; endUs: number; axes: Record<string, Axis>; total: number; title: string; windows: number[]; adjusted: boolean; adjust: { extendedBefore?: number; extendedAfter?: number; trimmedEnd?: number } | null; profile?: string; revision?: number };
+type Candidate = { id: number; rank: number; startId: number; endId: number; startUs: number; endUs: number; axes: Record<string, Axis>; total: number; title: string; windows: number[]; adjusted: boolean; adjust: { extendedBefore?: number; extendedAfter?: number; trimmedEnd?: number } | null; chat?: CandidateChat[]; profile?: string; revision?: number };
 type Win = { index: number; startUs: number; endUs: number; state: string; code: string | null };
 type ChatStatus = { state: 'none' | 'available' | 'absent'; canFetch: boolean; peaks: number; job: { state: string } | null };
 type EnergyStatus = { measured: boolean; marks: { high: number; peak: number }; job: { id?: number; state: string; progress?: number } | null };
