@@ -274,13 +274,19 @@ try {
       for (;;) {
         const status = await invoke('proxy.status', { key: proxy.key });
         if (status.state === 'ready') {
+          const mediaBase = await window.__TAURI_INTERNALS__.invoke('media_base_url');
+          const toMediaUrl = resource => (mediaBase
+            ? `${mediaBase.replace(/\/+$/, '')}/${resource}`
+            : window.__TAURI_INTERNALS__.convertFileSrc(resource, 'clipes-media'));
           return {
             project,
             source,
             proxy,
+            mediaTransport: mediaBase ? 'loopback' : 'scheme',
+            mediaBase,
             generationMs: performance.now() - started,
-            proxyUrl: window.__TAURI_INTERNALS__.convertFileSrc(`proxy/${proxy.key}`, 'clipes-media'),
-            sourceUrl: window.__TAURI_INTERNALS__.convertFileSrc(`source/${source.id}`, 'clipes-media'),
+            proxyUrl: toMediaUrl(`proxy/${proxy.key}`),
+            sourceUrl: toMediaUrl(`source/${source.id}`),
           };
         }
         if (status.state !== 'running' && status.state !== 'queued') {
@@ -294,13 +300,15 @@ try {
     },
     [{ dataDir, cacheDir, root, sourcePath }],
   );
+  const redactUrl = value => (typeof value === 'string' ? value.replace(/\/[0-9a-f]{64}\//, '/<token>/') : value);
   report.steps.proxyGeneration = {
     ok: true,
+    mediaTransport: setupRes.mediaTransport,
     generationMs: Math.round(setupRes.generationMs),
     windowStartUs: setupRes.proxy.windowStartUs,
     windowEndUs: setupRes.proxy.windowEndUs,
-    proxyUrl: setupRes.proxyUrl,
-    sourceUrl: setupRes.sourceUrl,
+    proxyUrl: redactUrl(setupRes.proxyUrl),
+    sourceUrl: redactUrl(setupRes.sourceUrl),
   };
 
   // 3. Semear transcrição sintética no project.sqlite e segmentar Frases via núcleo
@@ -426,11 +434,15 @@ try {
   if (screenshotDir) {
     await wd.screenshot(join(screenshotDir, 'cut-preview-linux.png')).catch(() => {});
   }
-  report.steps.uiCutPreview = uiPreview;
+  report.steps.uiCutPreview = {
+    ...uiPreview,
+    src: redactUrl(uiPreview.src),
+    transportLoopback: typeof uiPreview.src === 'string' && uiPreview.src.startsWith('http://127.0.0.1:'),
+  };
 
-  // 5. Medir busca (seek) em Source e Proxy no WebKitGTK (mesmo protocolo do #58)
+  // 5. Medir busca (seek) em Source e Proxy no WebKitGTK + validar segurança do servidor loopback
   const mediaFetchDiag = await wd.execAsync(
-    async ({ proxyUrl }) => {
+    async ({ proxyUrl, mediaBase, proxyKey }) => {
       const probeFetch = async (url, headers = {}) => {
         try {
           const res = await fetch(url, { headers });
@@ -438,20 +450,24 @@ try {
           return {
             ok: res.ok,
             status: res.status,
-            headers: Object.fromEntries(res.headers.entries()),
+            acao: res.headers.get('access-control-allow-origin'),
             bytes: buf.byteLength,
           };
         } catch (e) {
           return { ok: false, error: e instanceof Error ? e.message : String(e) };
         }
       };
+      const origin = new URL(proxyUrl).origin;
       return {
         whole: await probeFetch(proxyUrl),
         range0: await probeFetch(proxyUrl, { Range: 'bytes=0-1023' }),
-        plainPath: await probeFetch(proxyUrl.replace('%2F', '/')),
+        noToken: await probeFetch(`${origin}/proxy/${proxyKey}`),
+        wrongToken: await probeFetch(`${origin}/${'0'.repeat(64)}/proxy/${proxyKey}`),
+        traversal: await probeFetch(`${mediaBase}/proxy/../../secret`),
+        listing: await probeFetch(`${mediaBase}/`),
       };
     },
-    [{ proxyUrl: setupRes.proxyUrl }],
+    [{ proxyUrl: setupRes.proxyUrl, mediaBase: setupRes.mediaBase, proxyKey: setupRes.proxy.key }],
   );
   report.steps.mediaFetchDiag = mediaFetchDiag;
 
@@ -579,10 +595,10 @@ try {
   );
 
   const formatSeries = s => {
-    if (!s.playable) return s;
+    if (!s.playable) return { ...s, url: redactUrl(s.url) };
     return {
       playable: true,
-      url: s.url,
+      url: redactUrl(s.url),
       videoWidth: s.videoWidth,
       videoHeight: s.videoHeight,
       duration: s.duration,
@@ -597,120 +613,7 @@ try {
     hasRvfc: seekEval.hasRvfc,
     source: formatSeries(seekEval.source),
     proxy: formatSeries(seekEval.proxy),
-    driverLogDuringClipesMedia: driverLogs
-      .join('')
-      .split('\n')
-      .filter(l => l.trim() && !l.includes('paused true'))
-      .slice(-80)
-      .join('\n'),
   };
-
-  // Se clipes-media:// falhou no WebKitGTK, testa HTTP loopback para isolar codec vs URI scheme
-  if (!seekEval.proxy.playable) {
-    const http = await import('node:http');
-    const fsSync = await import('node:fs');
-    const proxyKey = setupRes.proxy.key;
-    const proxyFile = join(cacheDir, 'proxies', proxyKey, 'proxy.mp4');
-    const stat = fsSync.statSync(proxyFile);
-    const srv = http.createServer((req, res) => {
-      const range = req.headers.range;
-      if (range && range.startsWith('bytes=')) {
-        const [sStr, eStr] = range.slice(6).split('-');
-        const start = Number(sStr || 0);
-        const end = eStr ? Math.min(Number(eStr), stat.size - 1) : stat.size - 1;
-        res.writeHead(206, {
-          'Content-Type': 'video/mp4',
-          'Accept-Ranges': 'bytes',
-          'Content-Range': `bytes ${start}-${end}/${stat.size}`,
-          'Content-Length': end - start + 1,
-          'Access-Control-Allow-Origin': '*',
-        });
-        fsSync.createReadStream(proxyFile, { start, end }).pipe(res);
-      } else {
-        res.writeHead(200, {
-          'Content-Type': 'video/mp4',
-          'Accept-Ranges': 'bytes',
-          'Content-Length': stat.size,
-          'Access-Control-Allow-Origin': '*',
-        });
-        fsSync.createReadStream(proxyFile).pipe(res);
-      }
-    });
-    await new Promise(resolve => srv.listen(0, '127.0.0.1', resolve));
-    const httpPort = srv.address().port;
-    try {
-      const httpSeek = await wd.execAsync(
-        async ({ url }) => {
-          document.body.replaceChildren();
-          const video = document.createElement('video');
-          video.muted = true;
-          video.preload = 'auto';
-          video.playsInline = true;
-          video.src = url;
-          document.body.append(video);
-          const loaded = await new Promise(resolve => {
-            const timer = setTimeout(() => resolve({ ok: false, reason: 'timeout' }), 15_000);
-            video.onloadeddata = () => { clearTimeout(timer); resolve({ ok: true, videoWidth: video.videoWidth, videoHeight: video.videoHeight, duration: video.duration }); };
-            video.onerror = () => { clearTimeout(timer); resolve({ ok: false, reason: 'error', errorCode: video.error?.code ?? null, networkState: video.networkState }); };
-          });
-          if (!loaded.ok) return { playable: false, ...loaded };
-          await video.play();
-          await new Promise(r => setTimeout(r, 100));
-          video.pause();
-          const hasRvfc = typeof video.requestVideoFrameCallback === 'function';
-          let seed = 58;
-          const targets = Array.from({ length: 100 }, () => {
-            seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-            return 1 + (seed / 4294967296) * 247;
-          });
-          const seekOne = target => new Promise((resolve, reject) => {
-            const started = performance.now();
-            let seekedMs = null;
-            let rvfcHandle = null;
-            let done = false;
-            const finish = payload => {
-              if (done) return;
-              done = true;
-              clearTimeout(timer);
-              if (rvfcHandle !== null && hasRvfc) video.cancelVideoFrameCallback(rvfcHandle);
-              video.removeEventListener('seeked', onSeeked);
-              resolve(payload);
-            };
-            const timer = setTimeout(() => reject(new Error(`Timeout seek ${target}`)), 10_000);
-            const onSeeked = () => { seekedMs = performance.now() - started; };
-            video.addEventListener('seeked', onSeeked, { once: true });
-            const observe = (_, info) => {
-              if (Math.abs(info.mediaTime - target) <= 0.05) {
-                finish({ targetSeconds: target, mediaTime: info.mediaTime, seekedMs, rvfcMs: performance.now() - started });
-              } else {
-                rvfcHandle = video.requestVideoFrameCallback(observe);
-              }
-            };
-            rvfcHandle = video.requestVideoFrameCallback(observe);
-            video.currentTime = target;
-          });
-          await seekOne(0.5);
-          const samples = [];
-          for (const t of targets) samples.push(await seekOne(t));
-          return { playable: true, ...loaded, samples };
-        },
-        [{ url: `http://127.0.0.1:${httpPort}/proxy.mp4` }],
-      );
-      report.steps.webkitHttpLoopbackDiag = httpSeek.playable
-        ? {
-            playable: true,
-            videoWidth: httpSeek.videoWidth,
-            videoHeight: httpSeek.videoHeight,
-            duration: httpSeek.duration,
-            n: httpSeek.samples.length,
-            seeked: summarizeSamples(httpSeek.samples, 'seekedMs'),
-            rvfc: summarizeSamples(httpSeek.samples, 'rvfcMs'),
-          }
-        : httpSeek;
-    } finally {
-      srv.close();
-    }
-  }
 
   // 6. Export de Corte com legenda + detecção de encoder (deve escolher libx264 sem NVENC)
   const encoderBefore = await wd.execAsync(async () => {
@@ -840,23 +743,27 @@ try {
     },
   };
 
-  const previewViaSchemeOk = Boolean(report.steps.uiCutPreview?.playOk) && Boolean(report.steps.webkitPreviewBenchmark?.proxy?.playable);
-  const previewKnownIssue246 =
-    report.steps.mediaFetchDiag?.whole?.status === 206 &&
-    report.steps.mediaFetchDiag?.range0?.status === 206 &&
-    report.steps.webkitPreviewBenchmark?.canPlayH264 === 'probably' &&
-    report.steps.webkitPreviewBenchmark?.proxy?.errorCode === 4 &&
-    Boolean(report.steps.webkitHttpLoopbackDiag?.playable) &&
-    report.steps.webkitHttpLoopbackDiag?.rvfc?.n === 100;
+  const previewOk =
+    Boolean(report.steps.uiCutPreview?.playOk) &&
+    Boolean(report.steps.uiCutPreview?.transportLoopback) &&
+    Boolean(report.steps.webkitPreviewBenchmark?.proxy?.playable) &&
+    report.steps.webkitPreviewBenchmark?.proxy?.n === 100 &&
+    Boolean(report.steps.webkitPreviewBenchmark?.source?.playable) &&
+    report.steps.webkitPreviewBenchmark?.source?.n === 100;
 
-  if (previewKnownIssue246) {
-    report.steps.webkitPreviewBenchmark.knownIssue = 'https://github.com/GUSTAVOHOOO/clipes/issues/246';
-  }
+  const loopbackSecurityOk =
+    report.steps.mediaFetchDiag?.whole?.status === 200 &&
+    report.steps.mediaFetchDiag?.range0?.status === 206 &&
+    report.steps.mediaFetchDiag?.noToken?.status === 403 &&
+    report.steps.mediaFetchDiag?.wrongToken?.status === 403 &&
+    report.steps.mediaFetchDiag?.traversal?.status === 404 &&
+    report.steps.mediaFetchDiag?.listing?.status === 404;
 
   report.passed =
     Boolean(report.steps.appLaunch?.ok) &&
     Boolean(report.steps.proxyGeneration?.ok) &&
-    (previewViaSchemeOk || previewKnownIssue246) &&
+    previewOk &&
+    loopbackSecurityOk &&
     Boolean(report.steps.exportWithCaptions?.ok) &&
     Boolean(report.steps.x264Fallback?.ok);
 } catch (error) {
