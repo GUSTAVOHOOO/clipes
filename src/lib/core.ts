@@ -295,22 +295,28 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
           if (r) durationUs = (r.end - r.start + 1) * 10_000_000;
         }
         const over60s = durationUs > 60_000_000;
-        const scriptView = hasTransformed ? (scriptMockDispatch('script.get', { candidate: a.candidate_id ?? 1 }) as { current?: { blocks?: unknown[]; pending?: number } | null; narrationAllowed?: boolean }) : null;
+        const montageInfo = typeof (a as { clip_id?: number }).clip_id === 'number'
+          ? (editorEditsMock('editor.montage.get', { clip_id: (a as { clip_id?: number }).clip_id }) as { montage?: { freezeTailUs?: number } | null } | undefined)
+          : undefined;
+        const freezeTailUs = montageInfo?.montage?.freezeTailUs ?? 0;
+        const effectiveTransformed = hasTransformed || freezeTailUs > 0 || !!montageInfo?.montage;
+        const effectiveKind = effectiveTransformed ? 'transformed' : videoKind;
+        const scriptView = effectiveTransformed ? (scriptMockDispatch('script.get', { candidate: a.candidate_id ?? 1 }) as { current?: { blocks?: unknown[]; pending?: number } | null; narrationAllowed?: boolean }) : null;
         return {
           scope: 'single',
           directMonetizationAck: ack,
-          needsDirectNotice: !ack && hasDirect,
-          videoKind,
-          hasDirect,
-          hasTransformed,
+          needsDirectNotice: !ack && effectiveKind === 'direct',
+          videoKind: effectiveKind,
+          hasDirect: effectiveKind === 'direct',
+          hasTransformed: effectiveTransformed,
           totalCuts: 1,
           durationUs,
           over60s,
           over60sCount: over60s ? 1 : 0,
           shortClaimLimitUs: 60_000_000,
           permission: { status: granted ? 'granted' : 'none', grantedCount: granted ? 1 : 0, missingCount: granted ? 0 : 1, totalCount: 1, who: permObj?.who ?? null, where: permObj?.where ?? null, scope: permObj?.scope ?? null },
-          script: hasTransformed ? { applicable: true, exists: !!scriptView?.current, approved: !!scriptView?.narrationAllowed, pendingBlocks: scriptView?.current?.pending ?? 0, totalBlocks: scriptView?.current?.blocks?.length ?? 0 } : { applicable: false },
-          narration: hasTransformed ? (() => { const g = narrationGenerated.get(a.candidate_id ?? 1) ?? []; return { applicable: true, hasTts: g.length > 0, generatedBlocks: g.length, totalBlocks: scriptView?.current?.blocks?.length ?? 0, voices: [...new Set(g.map(x => x.voiceId))] }; })() : { applicable: false },
+          script: effectiveTransformed ? { applicable: true, exists: !!scriptView?.current, approved: !!scriptView?.narrationAllowed, pendingBlocks: scriptView?.current?.pending ?? 0, totalBlocks: scriptView?.current?.blocks?.length ?? 0 } : { applicable: false },
+          narration: effectiveTransformed ? (() => { const g = narrationGenerated.get(a.candidate_id ?? 1) ?? []; return { applicable: true, hasTts: g.length > 0, generatedBlocks: g.length, totalBlocks: scriptView?.current?.blocks?.length ?? 0, voices: [...new Set(g.map(x => x.voiceId))], freezeTailUs, longFreezeTail: freezeTailUs > 5_000_000 }; })() : { applicable: false },
         } as T;
       }
       const totalCuts = selectionFlag('export-batch-empty') || (scope === 'source' && !selectionMock.run) ? 0 : 2;
@@ -334,7 +340,24 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (sourceTest && new URLSearchParams(location.search).has('batch-test')) { const handled = batchMockDispatch(name, args); if (handled !== undefined) return handled as T; }
     if (name.startsWith('thumbnail.')) { const handled = thumbnailMockDispatch(name, args); if (handled !== undefined) return handled as T; }
     if (name.startsWith('script.') || name.startsWith('angles.')) { const handled = scriptMockDispatch(name, args); if (handled !== undefined) return handled as T; }
-    if (name.startsWith('packaging.')) { const handled = packagingMockDispatch(name, args); if (handled !== undefined) return handled as T; }
+    if (name.startsWith('packaging.')) {
+      const candidate = (args as { candidate?: number }).candidate ?? 1;
+      const scriptDoc = scriptMockDispatch('script.get', { candidate }) as { narrationAllowed: boolean; current: { blocks: { id: number; position: number; title: string }[] } | null };
+      const generated = narrationGenerated.get(candidate) ?? [];
+      const blocks = (scriptDoc.current?.blocks ?? []).map(b => ({
+        id: b.id,
+        position: b.position,
+        title: b.title,
+        durationUs: generated.find(g => g.blockId === b.id)?.durationUs ?? null,
+      }));
+      const kind = selectionMock.run?.videoKind ?? channelProfileMock.videoKind;
+      const handled = packagingMockDispatch(name, args, {
+        videoKind: kind === 'transformed' ? 'transformed' : 'direct',
+        scriptAllowed: scriptDoc.narrationAllowed,
+        blocks,
+      });
+      if (handled !== undefined) return handled as T;
+    }
     if (name === 'jobs.list') return (sourceTest ? jobItems : []) as T;
     if (name === 'jobs.cancel' && (args as { id: number }).id === 99) { transcribeMock = { ...transcribeMock, job: { id: 99, state: 'cancelled', progress: 40 } }; return null as T; }
     if (sourceTest && name === 'jobs.estimate') return { safety: 'paid', estimate: { kind: 'unknown' } } as T;
@@ -400,9 +423,10 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         const modelId = ttsActiveModels.pt;
         const blocks = s.current?.blocks ?? [];
         const existing = narrationGenerated.get(a.candidate) ?? [];
+        const blockDurationUs = selectionFlag('packaging-chapters') ? 12_000_000 : 3_200_000;
         const next = blocks.map(b => (a.block === undefined || b.id === a.block)
-          ? { blockId: b.id, voiceId, modelId, durationUs: 3_200_000 }
-          : (existing.find(e => e.blockId === b.id) ?? { blockId: b.id, voiceId, modelId, durationUs: 3_200_000 }));
+          ? { blockId: b.id, voiceId, modelId, durationUs: blockDurationUs }
+          : (existing.find(e => e.blockId === b.id) ?? { blockId: b.id, voiceId, modelId, durationUs: blockDurationUs }));
         narrationGenerated.set(a.candidate, next);
         return { job: 790, candidate: a.candidate } as T;
       }
