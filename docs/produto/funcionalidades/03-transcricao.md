@@ -108,6 +108,7 @@ Quando a Transcrição termina, o núcleo segmenta as palavras em Frases com IDs
 - **Mock TS:** sim, `src/lib/core.ts` (`hardwareMockDispatch`).
 - **US (#26):** US-10, US-11.
 - **Código:** `core/src/components/hardware.rs:1089`
+- **Mudança decidida, ainda não implementada (#279):** o agrupamento passa a ter modo automático e manual. No automático, fica ligado na CPU e desligado na GPU. A tela de hardware do front v2 precisa de um aviso curto explicando o motivo: na CPU o agrupamento acelera a Transcrição em ~18%; na GPU usa ~1 GB a mais de VRAM sem ganho medido (benchmark do #162). A entrada e a saída deste comando vão mudar com o #279; confira o código antes de implementar a tela.
 
 ### `transcription.hardware.diagnostic`
 - **O que faz:** Devolve o registro técnico bruto mais recente da sonda de hardware (incluindo tentativas de lote seguro `batch`, `vram_free_mib` e `ct2_version`) para fins de diagnóstico.
