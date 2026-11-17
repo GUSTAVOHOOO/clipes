@@ -847,6 +847,10 @@ try {
   await chatSelection.getByRole('button', { name: 'Selecionar Cortes' }).click();
   await chatSelection.getByText(/Seleção com janelas pendentes/).waitFor({ timeout: 15000 });
   assert.match(await chatSelection.innerText(), /3 picos entraram na seleção como indício, não como prova/);
+  await chatSelection.locator('[data-candidate="1"] [data-chat-peak="3.1"]').getByText(/chat 3,1× acima do normal · risadas/).waitFor();
+  await chatSelection.locator('[data-detail="1"] [data-chat-peak="3.1"]').getByText(/chat 3,1× acima do normal · risadas · 01:35/).waitFor();
+  await chatSelection.locator('[data-candidate="2"] [data-chat-peak="2.4"]').getByText(/chat 2,4× acima do normal/).waitFor();
+  assert.equal(await chatSelection.locator('[data-candidate="3"] [data-chat-peak]').count(), 0);
   await page.goto(`${url}?source-test=1&transcript-test=1&chat-local=1`);
   const localSelection = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
   await localSelection.getByRole('button', { name: 'Selecionar Cortes' }).waitFor();
@@ -1091,6 +1095,14 @@ try {
   const kindEn = await kindChecks(KIND_EN);
   await page.screenshot({ path: 'shots/selection-video-kind-en.png', fullPage: true });
   assert.match(await kindEn.group.innerText(), /Direct Clip/);
+  await page.goto(`${url}?source-test=1&transcript-test=1&selection-chat=1`);
+  const enChatSelection = page.getByRole('region', { name: 'Clip selection' }).first();
+  await enChatSelection.getByRole('button', { name: 'Select Clips' }).click();
+  await enChatSelection.getByText(/Selection with pending windows/).waitFor({ timeout: 15000 });
+  await enChatSelection.locator('[data-candidate="1"] [data-chat-peak="3.1"]').getByText(/chat 3\.1× above normal · laughter/).waitFor();
+  await enChatSelection.locator('[data-detail="1"] [data-chat-peak="3.1"]').getByText(/chat 3\.1× above normal · laughter · 01:35/).waitFor();
+  await enChatSelection.locator('[data-candidate="2"] [data-chat-peak="2.4"]').getByText(/chat 2\.4× above normal/).waitFor();
+  assert.equal(await enChatSelection.locator('[data-candidate="3"] [data-chat-peak]').count(), 0);
   await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
   await page.goto(`${url}?source-test=1&groq-retry-test=1`);
   const uncertainAudio = page.locator('li').filter({hasText:'/test/downloaded.mp4'}).first();
