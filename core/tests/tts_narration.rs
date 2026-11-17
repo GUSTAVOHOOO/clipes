@@ -6,11 +6,7 @@
 //!   regeneração de bloco único, cancelamento via `jobs.cancel`, `media::serve` e checklist #76.
 
 use clipes_core::{
-    dispatch,
-    media::serve,
-    montage,
-    projects::with_writer,
-    tts::block_durations_for_candidate,
+    dispatch, media::serve, montage, projects::with_writer, tts::block_durations_for_candidate,
     CoreError,
 };
 use serde_json::{json, Value};
@@ -52,7 +48,12 @@ fn build_fake_pocket_tts(dir: &Path) -> PathBuf {
     fake
 }
 
-fn install_fake_tts_model(data_dir: &Path, model_id: &str, voice_files: &[&str], terms_version: &str) {
+fn install_fake_tts_model(
+    data_dir: &Path,
+    model_id: &str,
+    voice_files: &[&str],
+    terms_version: &str,
+) {
     let dir = data_dir
         .join("tts-models")
         .join("pocket-tts")
@@ -60,7 +61,11 @@ fn install_fake_tts_model(data_dir: &Path, model_id: &str, voice_files: &[&str],
     fs::create_dir_all(dir.join("voices")).unwrap();
     fs::write(dir.join("model.safetensors"), b"fake-weights").unwrap();
     fs::write(dir.join("tokenizer.json"), b"{}").unwrap();
-    fs::write(dir.join("config.yaml"), "weights_path: 'model.safetensors'\n").unwrap();
+    fs::write(
+        dir.join("config.yaml"),
+        "weights_path: 'model.safetensors'\n",
+    )
+    .unwrap();
     for vf in voice_files {
         fs::write(dir.join("voices").join(vf), b"fake-voice-safetensors").unwrap();
     }
@@ -197,7 +202,10 @@ fn headless_narration_gate_synthesis_durations_edit_invalidation_and_guardrails(
     let comp_dir = data_dir.join("components");
     fs::create_dir_all(&comp_dir).unwrap();
     build_fake_pocket_tts(&comp_dir);
-    assert_eq!(call("components.pocket_tts.status", json!({}))["installed"], true);
+    assert_eq!(
+        call("components.pocket_tts.status", json!({}))["installed"],
+        true
+    );
 
     install_fake_tts_model(
         &data_dir,
@@ -332,7 +340,10 @@ fn headless_narration_gate_synthesis_durations_edit_invalidation_and_guardrails(
     assert_eq!(after_regen["job"]["state"], "completed");
     assert_eq!(after_regen["blocks"][1]["audio"]["stale"], false);
     assert_eq!(after_regen["blocks"][1]["audio"]["modelId"], "portuguese");
-    assert_eq!(after_regen["blocks"][0]["audio"]["modelId"], "portuguese_24l");
+    assert_eq!(
+        after_regen["blocks"][0]["audio"]["modelId"],
+        "portuguese_24l"
+    );
     assert_eq!(block_durations_for_candidate(candidate).unwrap().len(), 3);
 
     // Persiste ao fechar e reabrir o Projeto, e alimenta a montagem (#204) com durações reais.
@@ -340,7 +351,9 @@ fn headless_narration_gate_synthesis_durations_edit_invalidation_and_guardrails(
     call("projects.open", json!({"path": project["path"]}));
     let reopened_durations = block_durations_for_candidate(candidate).unwrap();
     assert_eq!(reopened_durations.len(), 3);
-    let plan = montage::plan_for_clip(None, candidate, &[]).unwrap().unwrap();
+    let plan = montage::plan_for_clip(None, candidate, &[])
+        .unwrap()
+        .unwrap();
     assert!(!plan.uses_estimated_durations);
     assert_eq!(plan.blocks.len(), 3);
     for (idx, b) in plan.blocks.iter().enumerate() {

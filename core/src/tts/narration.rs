@@ -129,24 +129,18 @@ pub(crate) fn parse_wav_info(path: &Path) -> Result<WavInfo, CoreError> {
         pos = body_start.saturating_add(padded);
     }
 
-    let ch = channels.filter(|&c| c > 0).ok_or_else(|| {
-        error(
-            "narration_failed",
-            "Cabeçalho WAV sem canais válidos.",
-        )
-    })?;
+    let ch = channels
+        .filter(|&c| c > 0)
+        .ok_or_else(|| error("narration_failed", "Cabeçalho WAV sem canais válidos."))?;
     let sr = sample_rate.filter(|&r| r > 0).ok_or_else(|| {
         error(
             "narration_failed",
             "Cabeçalho WAV sem taxa de amostragem válida.",
         )
     })?;
-    let data = data_bytes.filter(|&d| d > 0).ok_or_else(|| {
-        error(
-            "narration_failed",
-            "O áudio gerado da Narração está vazio.",
-        )
-    })?;
+    let data = data_bytes
+        .filter(|&d| d > 0)
+        .ok_or_else(|| error("narration_failed", "O áudio gerado da Narração está vazio."))?;
 
     let computed_byte_rate = byte_rate
         .filter(|&b| b > 0)
@@ -157,8 +151,8 @@ pub(crate) fn parse_wav_info(path: &Path) -> Result<WavInfo, CoreError> {
         })
         .ok_or_else(|| error("narration_failed", "Taxa de bytes WAV inválida."))?;
 
-    let duration_us = ((u128::from(data) * 1_000_000) / u128::from(computed_byte_rate))
-        .max(1) as i64;
+    let duration_us =
+        ((u128::from(data) * 1_000_000) / u128::from(computed_byte_rate)).max(1) as i64;
     let sha256 = format!("{:x}", Sha256::digest(&bytes));
     Ok(WavInfo {
         duration_us,
@@ -247,12 +241,9 @@ fn read_latest_script_in(
 
 fn project_root_dir() -> Result<PathBuf, CoreError> {
     let cur = crate::dispatch("projects.current", json!({}), &mut |_| {})?;
-    let path = cur["path"].as_str().ok_or_else(|| {
-        error(
-            "project_not_open",
-            "Nenhum Projeto aberto.",
-        )
-    })?;
+    let path = cur["path"]
+        .as_str()
+        .ok_or_else(|| error("project_not_open", "Nenhum Projeto aberto."))?;
     Ok(PathBuf::from(path))
 }
 
@@ -399,35 +390,67 @@ fn candidate_arg(v: &Value) -> Result<i64, CoreError> {
         .ok_or_else(|| error("candidate_not_found", "Candidato não encontrado."))
 }
 
+struct JobRow {
+    id: i64,
+    state: String,
+    progress: i64,
+    code: Option<String>,
+    block_id: Option<i64>,
+    voice_id: String,
+    model_id: String,
+}
+
 fn read_job_json(c: &Connection, candidate_id: i64) -> rusqlite::Result<(bool, Value)> {
-    let row: Option<(i64, String, i64, Option<String>, Option<i64>, String, String)> = c
+    let row = c
         .query_row(
             "SELECT j.id, j.state, j.progress, json_extract(j.result,'$.code'), n.block_id, n.voice_id, n.model_id
              FROM narration_jobs n JOIN jobs j ON j.id=n.job_id
              WHERE n.candidate_id=?1
              ORDER BY j.id DESC LIMIT 1",
             [candidate_id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?)),
+            |r| {
+                Ok(JobRow {
+                    id: r.get(0)?,
+                    state: r.get(1)?,
+                    progress: r.get(2)?,
+                    code: r.get(3)?,
+                    block_id: r.get(4)?,
+                    voice_id: r.get(5)?,
+                    model_id: r.get(6)?,
+                })
+            },
         )
         .optional()?;
     match row {
-        Some((id, state, progress, code, block_id, voice_id, model_id)) => {
-            let busy = matches!(state.as_str(), "queued" | "running");
+        Some(r) => {
+            let busy = matches!(r.state.as_str(), "queued" | "running");
             Ok((
                 busy,
                 json!({
-                    "id": id,
-                    "state": state,
-                    "progress": progress,
-                    "code": code,
-                    "blockId": block_id,
-                    "voiceId": voice_id,
-                    "modelId": model_id,
+                    "id": r.id,
+                    "state": r.state,
+                    "progress": r.progress,
+                    "code": r.code,
+                    "blockId": r.block_id,
+                    "voiceId": r.voice_id,
+                    "modelId": r.model_id,
                 }),
             ))
         }
         None => Ok((false, Value::Null)),
     }
+}
+
+struct AudioRow {
+    id: i64,
+    ver_id: i64,
+    voice_id: String,
+    model_id: String,
+    rel: String,
+    dur: i64,
+    sr: i64,
+    ch: i64,
+    bytes: i64,
 }
 
 fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
@@ -474,32 +497,42 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let mut blocks_json = Vec::new();
     projects::with_reader(|c| {
         for b in &latest.blocks {
-            let row: Option<(i64, i64, String, String, String, i64, i64, i64, i64)> = c
+            let row = c
                 .query_row(
                     "SELECT id, version_id, voice_id, model_id, audio_rel_path, duration_us, sample_rate, channels, bytes
                      FROM narration_blocks WHERE block_id=?1 ORDER BY id DESC LIMIT 1",
                     [b.block_id],
-                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?)),
+                    |r| {
+                        Ok(AudioRow {
+                            id: r.get(0)?,
+                            ver_id: r.get(1)?,
+                            voice_id: r.get(2)?,
+                            model_id: r.get(3)?,
+                            rel: r.get(4)?,
+                            dur: r.get(5)?,
+                            sr: r.get(6)?,
+                            ch: r.get(7)?,
+                            bytes: r.get(8)?,
+                        })
+                    },
                 )
                 .optional()?;
             let audio_json = match row {
-                Some((id, ver_id, voice_id, model_id, rel, dur, sr, ch, bytes))
-                    if resolve_rel_path(&project, &rel).is_some() =>
-                {
-                    let stale = Some(ver_id) != b.version_id;
+                Some(r) if resolve_rel_path(&project, &r.rel).is_some() => {
+                    let stale = Some(r.ver_id) != b.version_id;
                     if !stale {
-                        total_duration_us += dur;
+                        total_duration_us += r.dur;
                     }
                     json!({
-                        "id": id,
-                        "versionId": ver_id,
-                        "voiceId": voice_id,
-                        "modelId": model_id,
-                        "relPath": rel,
-                        "durationUs": dur,
-                        "sampleRate": sr,
-                        "channels": ch,
-                        "bytes": bytes,
+                        "id": r.id,
+                        "versionId": r.ver_id,
+                        "voiceId": r.voice_id,
+                        "modelId": r.model_id,
+                        "relPath": r.rel,
+                        "durationUs": r.dur,
+                        "sampleRate": r.sr,
+                        "channels": r.ch,
+                        "bytes": r.bytes,
                         "stale": stale,
                     })
                 }
@@ -548,7 +581,8 @@ fn enqueue_narration(v: &Value, block_id: Option<i64>) -> CommandResult {
     let voice_req = v["voiceId"].as_str();
     let model_req = v["modelId"].as_str();
     let chosen_voice = preferred_voice_for(&latest.language, voice_req)?;
-    let bundle = catalog::resolve_installed_bundle(&latest.language, Some(&chosen_voice), model_req)?;
+    let bundle =
+        catalog::resolve_installed_bundle(&latest.language, Some(&chosen_voice), model_req)?;
     let quantize = v["quantize"].as_bool().unwrap_or(true);
 
     let busy: bool = projects::with_reader(|c| {
@@ -610,8 +644,7 @@ fn cmd_regenerate_block(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 fn synthesize_block(
     job_id: i64,
     exe: &Path,
-    config_path: &Path,
-    voice_path: &Path,
+    bundle: &catalog::InstalledTtsBundle,
     quantize: bool,
     text: &str,
     out_wav: &Path,
@@ -631,9 +664,9 @@ fn synthesize_block(
     let mut args: Vec<std::ffi::OsString> = vec![
         "generate".into(),
         "--config".into(),
-        config_path.as_os_str().to_owned(),
+        bundle.config_path.as_os_str().to_owned(),
         "--voice".into(),
-        voice_path.as_os_str().to_owned(),
+        bundle.voice_path.as_os_str().to_owned(),
         "--text".into(),
         "-".into(),
         "--output-path".into(),
@@ -742,32 +775,24 @@ pub fn run(job_id: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreErr
     for (idx, block) in targets.into_iter().enumerate() {
         preview::check(job_id, stop)?;
         let version_id = block.version_id.ok_or_else(|| {
-            error("script_not_approved", "Bloco sem texto aprovado para narrar.")
+            error(
+                "script_not_approved",
+                "Bloco sem texto aprovado para narrar.",
+            )
         })?;
         let text = block
             .narration_text
             .as_deref()
             .map(str::trim)
             .filter(|s| !s.is_empty())
-            .ok_or_else(|| {
-                error("script_not_approved", "Bloco sem texto para narrar.")
-            })?;
+            .ok_or_else(|| error("script_not_approved", "Bloco sem texto para narrar."))?;
 
         let rel_path = format!(
             "narrations/c{candidate_id}/b{}-v{version_id}.wav",
             block.block_id
         );
         let out_wav = project.join(&rel_path);
-        let info = synthesize_block(
-            job_id,
-            &exe,
-            &bundle.config_path,
-            &bundle.voice_path,
-            quantize,
-            text,
-            &out_wav,
-            stop,
-        )?;
+        let info = synthesize_block(job_id, &exe, &bundle, quantize, text, &out_wav, stop)?;
 
         projects::with_writer(|c| {
             c.execute(

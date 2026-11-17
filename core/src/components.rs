@@ -210,7 +210,10 @@ pub(crate) fn pocket_tts_version(exe: &Path) -> Option<String> {
         .and_then(|child| child.wait_with_output())
         .ok()?;
     let text = String::from_utf8_lossy(&output.stdout);
-    let version = text.strip_prefix("pocket-tts ")?.split_whitespace().next()?;
+    let version = text
+        .strip_prefix("pocket-tts ")?
+        .split_whitespace()
+        .next()?;
     (output.status.success()
         && !version.is_empty()
         && version.bytes().all(|b| b.is_ascii_digit() || b == b'.'))
@@ -1327,7 +1330,9 @@ mod pocket_tts_tests {
             header.set_size(contents.len() as u64);
             header.set_mode(0o755);
             header.set_cksum();
-            archive.append_data(&mut header, entry_name, contents).unwrap();
+            archive
+                .append_data(&mut header, entry_name, contents)
+                .unwrap();
             archive.into_inner().unwrap().finish().unwrap();
         }
     }

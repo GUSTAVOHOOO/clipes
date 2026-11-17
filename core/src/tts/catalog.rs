@@ -29,9 +29,8 @@ const HF_MIRROR_REPO: &str = "kyutai/pocket-tts-without-voice-cloning";
 const HF_MIRROR_REVISION: &str = "a7056f505a4a8ca72d8b5fb1440071d6f1a35739";
 
 /// URL base única dos assets de embeddings de voz publicados nas releases do Clipes.
-/// Placeholder até o coordenador devolver a URL definitiva publicada.
 const VOICE_RELEASE_BASE_URL: &str =
-    "https://github.com/GUSTAVOHOOO/clipes/releases/download/tts-voices-placeholder";
+    "https://github.com/GUSTAVOHOOO/clipes/releases/download/tts-voices-1";
 
 /// Texto oficial de uso proibido publicado por Kyutai no cartão do Pocket TTS.
 pub(crate) const PROHIBITED_USE_EN: &str = "Prohibited use: Use of our model must comply with all applicable laws and regulations and must not result in, involve, or facilitate any illegal, harmful, deceptive, fraudulent, or unauthorized activity. Prohibited uses include, without limitation, voice impersonation or cloning without explicit and lawful consent; misinformation, disinformation, or deception (including fake news, fraudulent calls, or presenting generated content as genuine recordings of real people or events); and the generation of unlawful, harmful, libelous, abusive, harassing, discriminatory, hateful, or privacy-invasive content. We disclaim all liability for any non-compliant use.";
@@ -513,13 +512,25 @@ fn load_tts_settings(settings: &Settings) -> TtsSettings {
 fn save_tts_settings(settings: &Settings, tts: &TtsSettings) -> Result<(), CoreError> {
     let path = tts_settings_path(settings);
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|_| error("settings", "Não foi possível salvar as preferências de TTS."))?;
+        fs::create_dir_all(parent).map_err(|_| {
+            error(
+                "settings",
+                "Não foi possível salvar as preferências de TTS.",
+            )
+        })?;
     }
-    let bytes = serde_json::to_vec_pretty(tts)
-        .map_err(|_| error("settings", "Não foi possível serializar as preferências de TTS."))?;
-    fs::write(path, bytes)
-        .map_err(|_| error("settings", "Não foi possível salvar as preferências de TTS."))
+    let bytes = serde_json::to_vec_pretty(tts).map_err(|_| {
+        error(
+            "settings",
+            "Não foi possível serializar as preferências de TTS.",
+        )
+    })?;
+    fs::write(path, bytes).map_err(|_| {
+        error(
+            "settings",
+            "Não foi possível salvar as preferências de TTS.",
+        )
+    })
 }
 
 pub(crate) fn active_model_id(settings: &Settings, lang: &str) -> &'static str {
@@ -592,9 +603,8 @@ pub(crate) fn resolve_installed_bundle(
     let settings = load_settings()?;
     let norm = normalize_language(language);
     let voice = match requested_voice {
-        Some(id) => find_voice(id).ok_or_else(|| {
-            error("tts_voice_unknown", "Voz de Narração desconhecida.")
-        })?,
+        Some(id) => find_voice(id)
+            .ok_or_else(|| error("tts_voice_unknown", "Voz de Narração desconhecida."))?,
         None => default_voice_for_language(norm),
     };
     if voice.language != norm {
@@ -654,7 +664,9 @@ pub(crate) fn resolve_installed_bundle(
 
 fn yaml_escape_path(path: &Path) -> String {
     // Normaliza separadores para `/` para o parser YAML do pocket-tts no Windows não tratar `\`.
-    path.to_string_lossy().replace('\\', "/").replace('\'', "''")
+    path.to_string_lossy()
+        .replace('\\', "/")
+        .replace('\'', "''")
 }
 
 pub(crate) fn render_local_config(spec: &TtsModelSpec, dir: &Path) -> String {
@@ -669,9 +681,14 @@ pub(crate) fn render_local_config(spec: &TtsModelSpec, dir: &Path) -> String {
 pub(crate) fn allowed_redirect(url: &reqwest::Url) -> bool {
     let host = url.host_str().unwrap_or("");
     url.scheme() == "https"
-        && (["huggingface.co", "hf.co", "github.com", "githubusercontent.com"]
-            .iter()
-            .any(|root| host == *root || host.ends_with(&format!(".{root}"))))
+        && ([
+            "huggingface.co",
+            "hf.co",
+            "github.com",
+            "githubusercontent.com",
+        ]
+        .iter()
+        .any(|root| host == *root || host.ends_with(&format!(".{root}"))))
 }
 
 fn http_client() -> Result<reqwest::blocking::Client, CoreError> {
@@ -793,8 +810,7 @@ pub fn catalog_json() -> Result<Value, CoreError> {
                 .embeddings
                 .iter()
                 .filter(|e| {
-                    find_model(e.model_id)
-                        .is_some_and(|m| is_model_installed(&settings, m))
+                    find_model(e.model_id).is_some_and(|m| is_model_installed(&settings, m))
                 })
                 .map(|e| e.model_id)
                 .collect();
@@ -847,7 +863,8 @@ fn cmd_choose_model(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     }
     let settings = load_settings()?;
     let mut tts = load_tts_settings(&settings);
-    tts.active_models.insert(norm.to_owned(), spec.id.to_owned());
+    tts.active_models
+        .insert(norm.to_owned(), spec.id.to_owned());
     save_tts_settings(&settings, &tts)?;
     catalog_json()
 }
@@ -866,8 +883,8 @@ fn cmd_download(v: Value, events: &mut EventSink<'_>) -> CommandResult {
         ));
     }
     let id = v["id"].as_str().unwrap_or("");
-    let spec = find_model(id)
-        .ok_or_else(|| error("unknown_component", "Modelo TTS indisponível."))?;
+    let spec =
+        find_model(id).ok_or_else(|| error("unknown_component", "Modelo TTS indisponível."))?;
     let settings = load_settings()?;
     let job_key = format!("tts:{id}");
     let flag = Arc::new(AtomicBool::new(false));
@@ -905,8 +922,12 @@ fn download_model(
     let client = http_client()?;
     let root = settings.data_dir.join("tts-models").join(spec.engine_id);
     let stage = root.join(format!("{}.part", spec.id));
-    fs::create_dir_all(stage.join("voices"))
-        .map_err(|_| error("download", "Não foi possível preparar a pasta do modelo TTS."))?;
+    fs::create_dir_all(stage.join("voices")).map_err(|_| {
+        error(
+            "download",
+            "Não foi possível preparar a pasta do modelo TTS.",
+        )
+    })?;
 
     let voices = model_voices(spec.id);
     let total: u64 = spec
@@ -973,8 +994,12 @@ fn download_model(
     let _ = fs::remove_dir_all(&dir);
     fs::rename(&stage, &dir)
         .map_err(|_| error("install", "Não foi possível instalar o modelo TTS."))?;
-    fs::write(dir.join("config.yaml"), render_local_config(spec, &dir))
-        .map_err(|_| error("install", "Não foi possível gravar a configuração do modelo TTS."))?;
+    fs::write(dir.join("config.yaml"), render_local_config(spec, &dir)).map_err(|_| {
+        error(
+            "install",
+            "Não foi possível gravar a configuração do modelo TTS.",
+        )
+    })?;
 
     let accepted_at = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -988,8 +1013,12 @@ fn download_model(
         "terms_version": terms_version(),
         "voices": voices.iter().map(|(v, _)| v.id).collect::<Vec<_>>(),
     });
-    fs::write(dir.join(MARKER), serde_json::to_vec_pretty(&state).unwrap())
-        .map_err(|_| error("install", "Não foi possível registrar o estado do modelo TTS."))?;
+    fs::write(dir.join(MARKER), serde_json::to_vec_pretty(&state).unwrap()).map_err(|_| {
+        error(
+            "install",
+            "Não foi possível registrar o estado do modelo TTS.",
+        )
+    })?;
 
     events(ProgressEvent {
         project: None,
@@ -1036,7 +1065,9 @@ mod tests {
         let ok = |u: &str| allowed_redirect(&u.parse().unwrap());
         assert!(ok("https://huggingface.co/x"));
         assert!(ok("https://cdn-lfs.hf.co/x"));
-        assert!(ok("https://github.com/GUSTAVOHOOO/clipes/releases/download/x/y"));
+        assert!(ok(
+            "https://github.com/GUSTAVOHOOO/clipes/releases/download/x/y"
+        ));
         assert!(ok("https://release-assets.githubusercontent.com/x"));
         assert!(!ok("http://github.com/x"));
         assert!(!ok("https://example.com/github.com"));
@@ -1044,7 +1075,9 @@ mod tests {
 
     #[test]
     fn local_config_uses_forward_slashes_and_local_paths() {
-        let dir = PathBuf::from(r"C:\Users\Teste\AppData\Local\Clipes\tts-models\pocket-tts\portuguese_24l");
+        let dir = PathBuf::from(
+            r"C:\Users\Teste\AppData\Local\Clipes\tts-models\pocket-tts\portuguese_24l",
+        );
         let yaml = render_local_config(&MODELS[0], &dir);
         assert!(yaml.contains("weights_path: 'C:/Users/Teste/AppData/Local/Clipes/tts-models/pocket-tts/portuguese_24l/model.safetensors'"));
         assert!(yaml.contains("tokenizer_path: 'C:/Users/Teste/AppData/Local/Clipes/tts-models/pocket-tts/portuguese_24l/tokenizer.json'"));

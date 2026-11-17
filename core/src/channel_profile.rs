@@ -211,9 +211,11 @@ pub(crate) fn default_language() -> Result<String, CoreError> {
 /// Voz de Narração configurada no Perfil de canal (#79), se houver.
 pub(crate) fn configured_narration_voice() -> Result<Option<String>, CoreError> {
     match projects::with_reader(|c| {
-        c.query_row("SELECT narration_voice FROM channel_profile WHERE id=1", [], |r| {
-            r.get::<_, Option<String>>(0)
-        })
+        c.query_row(
+            "SELECT narration_voice FROM channel_profile WHERE id=1",
+            [],
+            |r| r.get::<_, Option<String>>(0),
+        )
         .optional()
     }) {
         Ok(Some(Some(voice))) if crate::tts::is_valid_voice(&voice) => Ok(Some(voice)),
