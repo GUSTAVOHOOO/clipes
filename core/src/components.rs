@@ -31,25 +31,31 @@ struct Component {
 
 fn manifest() -> Vec<Component> {
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-    let assets = [("ffmpeg", "N-128889-g88c46fce27", "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-11-13-12-43/ffmpeg-N-128889-g88c46fce27-win64-gpl.zip", "35fa1c17eeead1f572072b134458788caf71c4a7fbce9e0bb2f3c41032959531", 201952396), ("yt-dlp", "2026.11.04.232659", "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/2026.11.04.232659/yt-dlp.exe", "85c8d440422108bee7ecd11e584d56cc04fb3bd1a0b3200bdc8a66d5c5a985fc", 23587638), ("uv", "0.13.8", "https://github.com/astral-sh/uv/releases/download/0.13.8/uv-x86_64-pc-windows-msvc.zip", "529e78a9cec6cd7e3e014f7ecd8bda0c113969d4ed0f2efeedb85c30943325b8", 15529884), ("deno", "2.9.8", "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-pc-windows-msvc.zip", "cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf", 42917472)];
+    let assets = [
+        ("ffmpeg", "N-128889-g88c46fce27", "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-11-13-12-43/ffmpeg-N-128889-g88c46fce27-win64-gpl.zip", "35fa1c17eeead1f572072b134458788caf71c4a7fbce9e0bb2f3c41032959531", 201952396),
+        ("yt-dlp", "2026.11.04.232659", "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/2026.11.04.232659/yt-dlp.exe", "85c8d440422108bee7ecd11e584d56cc04fb3bd1a0b3200bdc8a66d5c5a985fc", 23587638),
+        ("uv", "0.13.8", "https://github.com/astral-sh/uv/releases/download/0.13.8/uv-x86_64-pc-windows-msvc.zip", "529e78a9cec6cd7e3e014f7ecd8bda0c113969d4ed0f2efeedb85c30943325b8", 15529884),
+        ("deno", "2.9.8", "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-pc-windows-msvc.zip", "cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf", 42917472),
+        ("pocket-tts", "3.3.0", "https://github.com/kyutai-labs/pocket-tts/releases/download/v4.0.1/pocket-tts-3.3.0-x86_64-pc-windows-msvc.zip", "98753041f2e65744b989776f87bccb93f1f574a08afe1890c5427ec94cd6309c", 7914990),
+    ];
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    let assets = [("ffmpeg", "N-128889-g88c46fce27", "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-11-13-12-43/ffmpeg-N-128889-g88c46fce27-linux64-gpl.tar.xz", "efa8f93583e84d5a1036e7e08e19db9f03ca637d7620ed58b0ecca39e9e34323", 157401784), ("yt-dlp", "2026.11.04.232659", "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/2026.11.04.232659/yt-dlp_linux", "16e96c02ffefd0bd1fe8ae6cc943b16c96e575c29eed7038d15213034437bc34", 41179568), ("uv", "0.13.8", "https://github.com/astral-sh/uv/releases/download/0.13.8/uv-x86_64-unknown-linux-gnu.tar.gz", "5acfd9177cfecf0bf87578f059728215ccc884388988f55f7a65041b57387d91", 16855069), ("deno", "2.9.8", "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-unknown-linux-gnu.zip", "e890975bc2549807bbcc0b584ffafda72cc7c93349dd99c80483dd784f6c4609", 41963064)];
+    let assets = [
+        ("ffmpeg", "N-128889-g88c46fce27", "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-11-13-12-43/ffmpeg-N-128889-g88c46fce27-linux64-gpl.tar.xz", "efa8f93583e84d5a1036e7e08e19db9f03ca637d7620ed58b0ecca39e9e34323", 157401784),
+        ("yt-dlp", "2026.11.04.232659", "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/2026.11.04.232659/yt-dlp_linux", "16e96c02ffefd0bd1fe8ae6cc943b16c96e575c29eed7038d15213034437bc34", 41179568),
+        ("uv", "0.13.8", "https://github.com/astral-sh/uv/releases/download/0.13.8/uv-x86_64-unknown-linux-gnu.tar.gz", "5acfd9177cfecf0bf87578f059728215ccc884388988f55f7a65041b57387d91", 16855069),
+        ("deno", "2.9.8", "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-unknown-linux-gnu.zip", "e890975bc2549807bbcc0b584ffafda72cc7c93349dd99c80483dd784f6c4609", 41963064),
+        ("pocket-tts", "3.3.0", "https://github.com/kyutai-labs/pocket-tts/releases/download/v4.0.1/pocket-tts-3.3.0-x86_64-unknown-linux-gnu.tar.gz", "9abff0aa138a804e44052952d8c3bdaae247fb267ca8f4b83fe178897d1a0559", 8641335),
+    ];
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    let assets = [(
-        "deno",
-        "2.9.8",
-        "https://github.com/denoland/deno/releases/download/v2.9.8/deno-aarch64-apple-darwin.zip",
-        "9f0bf660393da2eaff044cdc7444cb08c73f235849b61d224d825a194ce7c98e",
-        38770795,
-    )];
+    let assets = [
+        ("deno", "2.9.8", "https://github.com/denoland/deno/releases/download/v2.9.8/deno-aarch64-apple-darwin.zip", "9f0bf660393da2eaff044cdc7444cb08c73f235849b61d224d825a194ce7c98e", 38770795),
+        ("pocket-tts", "3.3.0", "https://github.com/kyutai-labs/pocket-tts/releases/download/v4.0.1/pocket-tts-3.3.0-aarch64-apple-darwin.tar.gz", "ee9ca6c7c000ee72c5846e3a8ba01d08f56636d94a614d2259c3f12b8fd69afa", 7696220),
+    ];
     #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
-    let assets = [(
-        "deno",
-        "2.9.8",
-        "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-apple-darwin.zip",
-        "4b2f5edd2639b7470f034238b321d7002d8dfb4726d8558f52c17afac370eb2c",
-        42797031,
-    )];
+    let assets = [
+        ("deno", "2.9.8", "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-apple-darwin.zip", "4b2f5edd2639b7470f034238b321d7002d8dfb4726d8558f52c17afac370eb2c", 42797031),
+        ("pocket-tts", "3.3.0", "https://github.com/kyutai-labs/pocket-tts/releases/download/v4.0.1/pocket-tts-3.3.0-x86_64-apple-darwin.tar.gz", "f04baa94d4fc47a689cc9f11ca2b0ba869dc002f9e78e15d387c6ecaeb1d654b", 8376592),
+    ];
     #[cfg(not(any(
         all(target_os = "windows", target_arch = "x86_64"),
         all(target_os = "linux", target_arch = "x86_64"),
@@ -69,7 +75,7 @@ fn manifest() -> Vec<Component> {
                 "ffmpeg" => "GPL-3.0-or-later",
                 // Licença dupla "Apache-2.0 OR MIT"; adotamos a Apache-2.0 do projeto.
                 "uv" => "Apache-2.0",
-                "deno" => "MIT",
+                "deno" | "pocket-tts" => "MIT",
                 _ => "Unlicense",
             },
             build_source_url: if id == "ffmpeg" { Some("https://github.com/FFmpeg-Builds/FFmpeg-Builds/tree/autobuild-2026-11-13-12-43") } else { None },
@@ -77,6 +83,7 @@ fn manifest() -> Vec<Component> {
                 "ffmpeg" => "https://github.com/FFmpeg/FFmpeg/tree/88c46fce27",
                 "uv" => "https://github.com/astral-sh/uv/tree/0.13.8",
                 "deno" => "https://github.com/denoland/deno/tree/v2.9.8",
+                "pocket-tts" => "https://github.com/kyutai-labs/pocket-tts/tree/v4.0.1",
                 _ => "https://github.com/yt-dlp/yt-dlp-nightly-builds/tree/2026.11.04.232659",
             },
         })
@@ -95,7 +102,7 @@ fn manifest_command(_: Value, _: &mut EventSink<'_>) -> CommandResult {
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Settings {
-    data_dir: PathBuf,
+    pub(crate) data_dir: PathBuf,
     cache_dir: PathBuf,
     cache_limit_bytes: u64,
     ffmpeg_path: Option<PathBuf>,
@@ -121,7 +128,7 @@ fn default_settings() -> Result<Settings, CoreError> {
         ffmpeg_path: None,
     })
 }
-fn load_settings() -> Result<Settings, CoreError> {
+pub(crate) fn load_settings() -> Result<Settings, CoreError> {
     let p = settings_path()?;
     match fs::read(p) {
         Ok(data) => serde_json::from_slice(&data).map_err(|e| error("settings", e)),
@@ -190,6 +197,51 @@ fn deno_status(_: Value, _: &mut EventSink<'_>) -> CommandResult {
         json!({"installed": version.is_some(), "version": version, "pinned": pinned, "outdated": outdated}),
     )
 }
+pub(crate) fn pocket_tts_file(settings: &Settings) -> PathBuf {
+    settings.data_dir.join("components").join(if cfg!(windows) {
+        "pocket-tts.exe"
+    } else {
+        "pocket-tts"
+    })
+}
+/// Versão do `pocket-tts` que o executável informa (`pocket-tts 3.3.0`), sem caminhos.
+pub(crate) fn pocket_tts_version(exe: &Path) -> Option<String> {
+    let output = crate::process::spawn(exe, ["--version"], None)
+        .and_then(|child| child.wait_with_output())
+        .ok()?;
+    let text = String::from_utf8_lossy(&output.stdout);
+    let version = text.strip_prefix("pocket-tts ")?.split_whitespace().next()?;
+    (output.status.success()
+        && !version.is_empty()
+        && version.bytes().all(|b| b.is_ascii_digit() || b == b'.'))
+    .then(|| version.to_owned())
+}
+/// Caminho absoluto do `pocket-tts` instalado como Componente (#79).
+pub(crate) fn pocket_tts_executable() -> Result<PathBuf, CoreError> {
+    let settings = load_settings()
+        .map_err(|_| error("component_missing", "Componente pocket-tts indisponível"))?;
+    let file = pocket_tts_file(&settings);
+    if !file.is_file() {
+        return Err(error(
+            "component_missing",
+            "Instale o Componente pocket-tts em Componentes.",
+        ));
+    }
+    std::path::absolute(file)
+        .map_err(|_| error("component_missing", "Componente pocket-tts indisponível"))
+}
+fn pocket_tts_status(_: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let pinned = manifest()
+        .into_iter()
+        .find(|c| c.id == "pocket-tts")
+        .map(|c| c.version);
+    let file = pocket_tts_file(&load_settings()?);
+    let version = file.is_file().then(|| pocket_tts_version(&file)).flatten();
+    let outdated = version.is_some() && version.as_deref() != pinned;
+    Ok(
+        json!({"installed": version.is_some(), "version": version, "pinned": pinned, "outdated": outdated}),
+    )
+}
 pub(crate) fn ytdlp_version(exe: &Path) -> String {
     update::installed(exe).unwrap_or_else(|_| "indisponível".into())
 }
@@ -237,6 +289,10 @@ fn diagnostic_components_for(settings: &Settings) -> String {
                 "deno" => Some(deno_file(settings))
                     .filter(|exe| exe.is_file())
                     .and_then(|exe| deno_version(&exe))
+                    .unwrap_or_else(|| "não instalado".into()),
+                "pocket-tts" => Some(pocket_tts_file(settings))
+                    .filter(|exe| exe.is_file())
+                    .and_then(|exe| pocket_tts_version(&exe))
                     .unwrap_or_else(|| "não instalado".into()),
                 _ => "indisponível".into(),
             };
@@ -361,7 +417,7 @@ fn ffmpeg_system(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 }
 
 static JOBS: OnceLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = OnceLock::new();
-fn jobs() -> &'static Mutex<HashMap<String, Arc<AtomicBool>>> {
+pub(crate) fn jobs() -> &'static Mutex<HashMap<String, Arc<AtomicBool>>> {
     JOBS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 fn cancel(v: Value, _: &mut EventSink<'_>) -> CommandResult {
@@ -460,7 +516,7 @@ fn fetch(
         .map_err(|e| error("download", e))?;
     fetch_with(&client, url, sha, size, path, cancelled, progress)
 }
-fn fetch_with(
+pub(crate) fn fetch_with(
     client: &reqwest::blocking::Client,
     url: &str,
     sha: &str,
@@ -556,6 +612,9 @@ fn install(item: &Component, part: &Path, exe: &Path) -> Result<(), CoreError> {
     }
     if item.id == "deno" {
         return install_deno(part, exe);
+    }
+    if item.id == "pocket-tts" {
+        return install_pocket_tts(part, exe);
     }
     let probe = exe.with_file_name(probe_name());
     let tmp_exe = exe.with_extension("installing");
@@ -722,6 +781,70 @@ fn install_deno(part: &Path, exe: &Path) -> Result<(), CoreError> {
     }
     result
 }
+/// Extrai só o executável `pocket-tts` do arquivo oficial (zip no Windows, tar.gz no Linux/macOS).
+fn install_pocket_tts(part: &Path, exe: &Path) -> Result<(), CoreError> {
+    let tmp = exe.with_extension("installing");
+    let name = if cfg!(windows) {
+        "pocket-tts.exe"
+    } else {
+        "pocket-tts"
+    };
+    let result = (|| {
+        let mut found = false;
+        if cfg!(windows) {
+            let mut zip = zip::ZipArchive::new(File::open(part).map_err(|e| error("install", e))?)
+                .map_err(|e| error("install", e))?;
+            let index = (0..zip.len())
+                .find(|i| {
+                    zip.by_index(*i)
+                        .map(|f| {
+                            f.name()
+                                .is_ok_and(|p| p == name || p.ends_with(&format!("/{name}")))
+                        })
+                        .unwrap_or(false)
+                })
+                .ok_or_else(|| error("install", "Executável pocket-tts ausente"))?;
+            let mut src = zip.by_index(index).map_err(|e| error("install", e))?;
+            io::copy(
+                &mut src,
+                &mut File::create(&tmp).map_err(|e| error("install", e))?,
+            )
+            .map_err(|e| error("install", e))?;
+            found = true;
+        } else {
+            let decoder =
+                flate2::read::GzDecoder::new(File::open(part).map_err(|e| error("install", e))?);
+            let mut archive = tar::Archive::new(decoder);
+            for entry in archive.entries().map_err(|e| error("install", e))? {
+                let mut entry = entry.map_err(|e| error("install", e))?;
+                let path = entry
+                    .path()
+                    .map_err(|e| error("install", e))?
+                    .to_string_lossy()
+                    .into_owned();
+                if entry.header().entry_type().is_file()
+                    && (path == name || path.ends_with(&format!("/{name}")))
+                {
+                    io::copy(
+                        &mut entry,
+                        &mut File::create(&tmp).map_err(|e| error("install", e))?,
+                    )
+                    .map_err(|e| error("install", e))?;
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if !found {
+            return Err(error("install", "Executável pocket-tts ausente"));
+        }
+        promote(&tmp, exe)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    result
+}
 fn promote(tmp: &Path, exe: &Path) -> Result<(), CoreError> {
     #[cfg(unix)]
     {
@@ -736,6 +859,7 @@ fn promote(tmp: &Path, exe: &Path) -> Result<(), CoreError> {
 }
 
 inventory::submit! { CommandRegistration { name: "components.deno.status", execute: deno_status } }
+inventory::submit! { CommandRegistration { name: "components.pocket_tts.status", execute: pocket_tts_status } }
 inventory::submit! { CommandRegistration { name: "components.ffmpeg.status", execute: ffmpeg_status } }
 inventory::submit! { CommandRegistration { name: "components.manifest", execute: manifest_command } }
 inventory::submit! { CommandRegistration { name: "components.download", execute: download } }
@@ -1146,6 +1270,119 @@ mod deno_tests {
         // Reinstalar (atualização) substitui o executável anterior.
         install_deno(&good, &exe).unwrap();
         assert_eq!(deno_version(&exe).as_deref(), Some("2.9.8"));
+        fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod pocket_tts_tests {
+    use super::*;
+
+    fn root() -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "clipes-79-ptts-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    }
+
+    fn build_fake(root: &Path) -> PathBuf {
+        let fake = root.join(if cfg!(windows) {
+            "fake-pocket-tts.exe"
+        } else {
+            "fake-pocket-tts"
+        });
+        let rustc = PathBuf::from(env!("CARGO")).with_file_name(if cfg!(windows) {
+            "rustc.exe"
+        } else {
+            "rustc"
+        });
+        assert!(std::process::Command::new(rustc)
+            .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fake_pocket_tts.rs"))
+            .arg("-o")
+            .arg(&fake)
+            .status()
+            .unwrap()
+            .success());
+        fake
+    }
+
+    fn archive_with(path: &Path, entry_name: &str, contents: &[u8]) {
+        if cfg!(windows) {
+            let mut zip = zip::ZipWriter::new(File::create(path).unwrap());
+            zip.start_file(entry_name, zip::write::SimpleFileOptions::default())
+                .unwrap();
+            zip.write_all(contents).unwrap();
+            zip.finish().unwrap();
+        } else {
+            let encoder = flate2::write::GzEncoder::new(
+                File::create(path).unwrap(),
+                flate2::Compression::default(),
+            );
+            let mut archive = tar::Builder::new(encoder);
+            let mut header = tar::Header::new_gnu();
+            header.set_size(contents.len() as u64);
+            header.set_mode(0o755);
+            header.set_cksum();
+            archive.append_data(&mut header, entry_name, contents).unwrap();
+            archive.into_inner().unwrap().finish().unwrap();
+        }
+    }
+
+    #[test]
+    fn manifest_pins_pocket_tts_with_mit_license_per_platform() {
+        let item = manifest()
+            .into_iter()
+            .find(|c| c.id == "pocket-tts")
+            .unwrap();
+        assert_eq!(item.license, "MIT");
+        assert_eq!(item.version, "3.3.0");
+        assert!(item
+            .url
+            .starts_with("https://github.com/kyutai-labs/pocket-tts/releases/download/v4.0.1/"));
+        assert_eq!(item.sha256.len(), 64);
+        assert!(item.sha256.bytes().all(|b| b.is_ascii_hexdigit()));
+        assert_eq!(
+            item.source_url,
+            "https://github.com/kyutai-labs/pocket-tts/tree/v4.0.1"
+        );
+    }
+
+    #[test]
+    fn fake_pocket_tts_installs_reports_version_and_hides_paths() {
+        let root = root();
+        let dir = root.join("components");
+        fs::create_dir_all(&dir).unwrap();
+        let fake = build_fake(&root);
+        let settings = Settings {
+            data_dir: root.clone(),
+            cache_dir: root.join("cache"),
+            cache_limit_bytes: 1,
+            ffmpeg_path: None,
+        };
+        assert!(diagnostic_components_for(&settings).contains("pocket-tts: não instalado"));
+        let exe = pocket_tts_file(&settings);
+        assert!(!exe.is_file());
+        let name = if cfg!(windows) {
+            "pocket-tts-3.3.0-x86_64-pc-windows-msvc/pocket-tts.exe"
+        } else {
+            "pocket-tts-3.3.0-x86_64-unknown-linux-gnu/pocket-tts"
+        };
+        let bad = dir.join("bad-archive");
+        archive_with(&bad, "LICENSE", b"MIT");
+        assert_eq!(install_pocket_tts(&bad, &exe).unwrap_err().code, "install");
+        assert!(!exe.is_file() && !exe.with_extension("installing").exists());
+
+        let good = dir.join("good-archive");
+        archive_with(&good, name, &fs::read(&fake).unwrap());
+        install_pocket_tts(&good, &exe).unwrap();
+        assert_eq!(pocket_tts_version(&exe).as_deref(), Some("3.3.0"));
+        let report = diagnostic_components_for(&settings);
+        assert!(report.contains("pocket-tts: 3.3.0"));
+        assert!(!report.contains(root.to_str().unwrap()));
         fs::remove_dir_all(root).unwrap();
     }
 }
