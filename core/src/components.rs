@@ -108,22 +108,13 @@ pub(crate) struct Settings {
     ffmpeg_path: Option<PathBuf>,
 }
 fn settings_path() -> Result<PathBuf, CoreError> {
-    if let Some(dir) = std::env::var_os("CLIPES_DATA_DIR") {
-        return Ok(PathBuf::from(dir).join("component-settings.json"));
-    }
-    Ok(dirs::config_local_dir()
-        .ok_or_else(|| error("settings", "Diretório local indisponível"))?
-        .join("Clipes")
-        .join("settings.json"))
+    crate::paths::component_settings_file()
 }
 fn default_settings() -> Result<Settings, CoreError> {
-    let dir = std::env::var_os("CLIPES_DATA_DIR")
-        .map(PathBuf::from)
-        .or_else(|| dirs::data_local_dir().map(|p| p.join("Clipes")))
-        .ok_or_else(|| error("settings", "Diretório local indisponível"))?;
+    let dirs = crate::paths::app_dirs()?;
     Ok(Settings {
-        cache_dir: dir.join("cache"),
-        data_dir: dir,
+        cache_dir: dirs.cache_dir,
+        data_dir: dirs.data_dir,
         cache_limit_bytes: 10_000_000_000,
         ffmpeg_path: None,
     })

@@ -58,9 +58,7 @@ impl DiagnosticEvent {
     }
 }
 fn log_dir() -> Option<PathBuf> {
-    std::env::var_os("CLIPES_DATA_DIR")
-        .map(PathBuf::from)
-        .or_else(|| dirs::data_local_dir().map(|p| p.join("Clipes")))
+    crate::paths::data_dir().ok()
 }
 pub fn record(event: DiagnosticEvent) {
     if let Some(dir) = log_dir() {

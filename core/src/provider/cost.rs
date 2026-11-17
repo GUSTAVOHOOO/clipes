@@ -33,18 +33,8 @@ fn embedded() -> Table {
     serde_json::from_str(EMBEDDED).expect("embedded price table is valid")
 }
 fn overrides_path() -> Result<PathBuf, CoreError> {
-    if let Some(dir) = std::env::var_os("CLIPES_DATA_DIR") {
-        return Ok(PathBuf::from(dir).join("provider-prices.json"));
-    }
-    #[cfg(test)]
-    return Ok(std::env::temp_dir().join(format!(
-        "clipes-price-overrides-test-{}.json",
-        std::process::id()
-    )));
-    #[cfg(not(test))]
-    directories::ProjectDirs::from("io", "github.gustavohooo", "clipes")
-        .map(|p| p.config_dir().join("provider-prices.json"))
-        .ok_or_else(|| error("settings", "Could not locate settings directory"))
+    crate::paths::config_file("provider-prices.json")
+        .map_err(|_| error("settings", "Could not locate settings directory"))
 }
 fn read_overrides() -> Result<Overrides, CoreError> {
     match fs::read(overrides_path()?) {
