@@ -10,6 +10,7 @@ import { testEditorCrop } from './editor-crop.mjs';
 import { testEditorMontage } from './editor-montage.mjs';
 import { testTranslation, testTranslationBlocked } from './translation-ui.mjs';
 import { testTtsComponents, testTtsNarrationLocked, testTtsNarrationUnlocked } from './tts-ui.mjs';
+import { testPackagingChapters } from './packaging-chapters-ui.mjs';
 const socket = createServer();
 await new Promise(resolve => socket.listen(0, '127.0.0.1', resolve));
 const port = socket.address().port;
@@ -1256,6 +1257,7 @@ try {
   await testEditorSilencesPreview(page, url);
   await testEditorCrop(page, url);
   await testEditorMontage(page, url);
+  await testPackagingChapters(page, url);
   // Export em lote (#64): por Fonte na Seleção e por Projeto, progresso ponderado, cancelamento, sobrescrita e falha isolada.
   await page.goto(`${url}?source-test=1&transcript-test=1`);
   const batchSel = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
