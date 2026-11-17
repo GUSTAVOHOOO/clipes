@@ -338,18 +338,6 @@ fn handle_connection(mut stream: TcpStream, token: &str) {
         };
 
         let close = req.close;
-        let Some(without_slash) = req.target.strip_prefix('/') else {
-            let _ = write_simple_response(&mut stream, 403, &[], None, true);
-            return;
-        };
-        let (candidate_token, resource) =
-            without_slash.split_once('/').unwrap_or((without_slash, ""));
-
-        if !constant_time_eq(candidate_token.as_bytes(), token.as_bytes()) {
-            let _ = write_simple_response(&mut stream, 403, &[], None, true);
-            return;
-        }
-
         if req.invalid_origin {
             let _ = write_simple_response(&mut stream, 403, &[], None, true);
             return;
@@ -362,6 +350,18 @@ fn handle_connection(mut stream: TcpStream, token: &str) {
             }
             None => None,
         };
+
+        let Some(without_slash) = req.target.strip_prefix('/') else {
+            let _ = write_simple_response(&mut stream, 403, &[], allowed_origin, true);
+            return;
+        };
+        let (candidate_token, resource) =
+            without_slash.split_once('/').unwrap_or((without_slash, ""));
+
+        if !constant_time_eq(candidate_token.as_bytes(), token.as_bytes()) {
+            let _ = write_simple_response(&mut stream, 403, &[], allowed_origin, true);
+            return;
+        }
 
         let io_res = match req.method {
             "OPTIONS" => write_simple_response(&mut stream, 204, &[], allowed_origin, close),
@@ -550,22 +550,45 @@ mod tests {
         let addr = srv.local_addr();
         let token = &srv.token;
 
-        // 1. Sem token ou token errado -> 403, sem CORS aberto.
-        for req in [
-            "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n".to_string(),
-            format!("GET /proxy/{key} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"),
-            format!(
-                "GET /{}/proxy/{key} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
-                "00".repeat(32)
+        // 1. Sem token ou token errado -> 403, sem CORS aberto (só ecoa origem permitida do app).
+        for (req, expected_acao) in [
+            (
+                "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n".to_string(),
+                None,
             ),
-            format!(
-                "GET /{}/proxy/{key} HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: tauri://localhost\r\nConnection: close\r\n\r\n",
-                "ff".repeat(32)
+            (
+                format!("GET /proxy/{key} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"),
+                None,
+            ),
+            (
+                format!(
+                    "GET /{}/proxy/{key} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
+                    "00".repeat(32)
+                ),
+                None,
+            ),
+            (
+                format!(
+                    "GET /{}/proxy/{key} HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: https://evil.example\r\nConnection: close\r\n\r\n",
+                    "ff".repeat(32)
+                ),
+                None,
+            ),
+            (
+                format!(
+                    "GET /{}/proxy/{key} HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: tauri://localhost\r\nConnection: close\r\n\r\n",
+                    "ff".repeat(32)
+                ),
+                Some("tauri://localhost"),
             ),
         ] {
             let res = send_raw(addr, &req);
             assert_eq!(res.status, 403, "{req}");
-            assert_eq!(res.header("access-control-allow-origin"), None, "{req}");
+            assert_eq!(
+                res.header("access-control-allow-origin"),
+                expected_acao,
+                "{req}"
+            );
         }
 
         // 2. Path traversal, listagem e arquivos fora do Projeto/cache -> 404.

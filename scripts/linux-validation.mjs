@@ -463,13 +463,27 @@ try {
         range0: await probeFetch(proxyUrl, { Range: 'bytes=0-1023' }),
         noToken: await probeFetch(`${origin}/proxy/${proxyKey}`),
         wrongToken: await probeFetch(`${origin}/${'0'.repeat(64)}/proxy/${proxyKey}`),
-        traversal: await probeFetch(`${mediaBase}/proxy/../../secret`),
+        traversal: await probeFetch(`${mediaBase}/proxy/%2e%2e%2f%2e%2e%2fsecret`),
         listing: await probeFetch(`${mediaBase}/`),
       };
     },
     [{ proxyUrl: setupRes.proxyUrl, mediaBase: setupRes.mediaBase, proxyKey: setupRes.proxy.key }],
   );
-  report.steps.mediaFetchDiag = mediaFetchDiag;
+  const probeRawHttp = async (url, headers = {}) => {
+    const res = await fetch(url, { headers });
+    await res.arrayBuffer();
+    return { status: res.status, acao: res.headers.get('access-control-allow-origin') };
+  };
+  const loopbackOrigin = new URL(setupRes.proxyUrl).origin;
+  const rawSecurityDiag = {
+    noToken: await probeRawHttp(`${loopbackOrigin}/proxy/${setupRes.proxy.key}`),
+    wrongToken: await probeRawHttp(`${loopbackOrigin}/${'0'.repeat(64)}/proxy/${setupRes.proxy.key}`),
+    evilOrigin: await probeRawHttp(setupRes.proxyUrl, { Origin: 'https://evil.example' }),
+    allowedOrigin: await probeRawHttp(setupRes.proxyUrl, { Origin: 'tauri://localhost' }),
+    traversal: await probeRawHttp(`${setupRes.mediaBase}/proxy/%2e%2e%2f%2e%2e%2fsecret`),
+    listing: await probeRawHttp(`${setupRes.mediaBase}/`),
+  };
+  report.steps.mediaFetchDiag = { ...mediaFetchDiag, rawSecurityDiag };
 
   const seekEval = await wd.execAsync(
     async ({ proxyUrl, sourceUrl, windowStartUs }) => {
@@ -757,7 +771,17 @@ try {
     report.steps.mediaFetchDiag?.noToken?.status === 403 &&
     report.steps.mediaFetchDiag?.wrongToken?.status === 403 &&
     report.steps.mediaFetchDiag?.traversal?.status === 404 &&
-    report.steps.mediaFetchDiag?.listing?.status === 404;
+    report.steps.mediaFetchDiag?.listing?.status === 404 &&
+    report.steps.mediaFetchDiag?.rawSecurityDiag?.noToken?.status === 403 &&
+    report.steps.mediaFetchDiag?.rawSecurityDiag?.noToken?.acao === null &&
+    report.steps.mediaFetchDiag?.rawSecurityDiag?.wrongToken?.status === 403 &&
+    report.steps.mediaFetchDiag?.rawSecurityDiag?.wrongToken?.acao === null &&
+    report.steps.mediaFetchDiag?.rawSecurityDiag?.evilOrigin?.status === 403 &&
+    report.steps.mediaFetchDiag?.rawSecurityDiag?.evilOrigin?.acao === null &&
+    report.steps.mediaFetchDiag?.rawSecurityDiag?.allowedOrigin?.status === 200 &&
+    report.steps.mediaFetchDiag?.rawSecurityDiag?.allowedOrigin?.acao === 'tauri://localhost' &&
+    report.steps.mediaFetchDiag?.rawSecurityDiag?.traversal?.status === 404 &&
+    report.steps.mediaFetchDiag?.rawSecurityDiag?.listing?.status === 404;
 
   report.passed =
     Boolean(report.steps.appLaunch?.ok) &&
