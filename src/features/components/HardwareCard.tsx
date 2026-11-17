@@ -11,7 +11,7 @@ type Option = Config & { enabled: boolean; reason: string | null; installed: boo
 type Gpu = { name: string; driver: string; total_mib: number; free_mib: number };
 type Ram = { total: number; available: number };
 type Probe = { measured_at: number; verified: boolean; chosen: Config };
-type Grouping = { enabled: boolean; size: number; measured_size: number | null };
+type Grouping = { enabled: boolean; mode: 'auto' | 'manual'; size: number; measured_size: number | null };
 export type HardwareStatus = { gpu: Gpu | null; ram: Ram | null; cuda: boolean; no_compatible_gpu: boolean; effective: Config; manual: boolean; fallback_reason?: string | null; probe: Probe | null; options: Option[]; worker_installed: boolean };
 type Progress = { job: string; percentage: number; message: string };
 function message(error: unknown) { return typeof error === 'object' && error !== null && 'message' in error ? String(error.message) : String(error); }
@@ -56,9 +56,9 @@ export function HardwareCard() {
       setGrouping(await coreDispatch<Grouping>('transcription.grouping', {}));
     } catch (e) { setNote(message(e)); }
   }
-  async function toggleGrouping(enabled: boolean) {
+  async function toggleGrouping(arg: { enabled: boolean } | { auto: true }) {
     setNote('');
-    try { setGrouping(await coreDispatch<Grouping>('transcription.grouping', { enabled })); }
+    try { setGrouping(await coreDispatch<Grouping>('transcription.grouping', arg)); }
     catch (e) { setNote(message(e)); }
   }
   const label = (c: Config) => `${c.model === 'whisper-turbo' ? t.turbo : t.small} · ${c.device === 'cuda' ? t.gpu : t.cpu} · ${c.compute_type}`;
@@ -90,9 +90,10 @@ export function HardwareCard() {
         {status.manual && <Button disabled={probing} onClick={() => void choose('auto')}>{t.reset}</Button>}
       </div>
       {grouping && <label className="mt-3 flex items-start gap-3 text-sm">
-        <input type="checkbox" role="switch" className="foco mt-1" checked={grouping.enabled} disabled={probing} onChange={e => void toggleGrouping(e.target.checked)} />
-        <span><strong>{t.groupingLabel}</strong><span className="mt-1 block text-fg-2">{t.groupingHelp.replace('{size}', String(groupingTargetSize))}</span></span>
+        <input type="checkbox" role="switch" className="foco mt-1" checked={grouping.enabled} disabled={probing} onChange={e => void toggleGrouping({ enabled: e.target.checked })} />
+        <span><strong>{t.groupingLabel}</strong><span className="mt-1 block text-fg-2">{t.groupingHelp.replace('{size}', String(groupingTargetSize))} {grouping.mode === 'auto' ? t.groupingAutoNote : t.groupingManualNote}</span></span>
       </label>}
+      {grouping?.mode === 'manual' && <div className="mt-2"><Button disabled={probing} onClick={() => void toggleGrouping({ auto: true })}>{t.groupingReset}</Button></div>}
     </>}
     {note && <p className="mt-2" role="status">{note}</p>}
     <div className="mt-3 flex items-center gap-3">

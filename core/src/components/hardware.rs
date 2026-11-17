@@ -229,10 +229,11 @@ pub(crate) fn measured_group_size(settings: &Settings, config: &Config) -> Optio
 ///
 /// 1 (um trecho por chamada, o comportamento anterior) com a opção desligada. Ligada, na GPU é
 /// o lote seguro medido pela sonda (#50) para a precisão em uso, ou 1 se não houve medição; em
-/// CPU é o lote do benchmark (8).
+/// CPU é o lote do benchmark (8). Sem escolha manual vale o automático (#279): ligado na CPU,
+/// desligado na GPU.
 pub(crate) fn group_size(settings: &Settings, config: &Config) -> u32 {
     let store = read_store(settings);
-    if !store.group_vad {
+    if !store.group_vad_enabled(config) {
         return 1;
     }
     if config.device == "cpu" {
@@ -440,9 +441,19 @@ pub(crate) struct Store {
     pub probes: Vec<ProbeRecord>,
     #[serde(default)]
     pub rates: Vec<RateRecord>,
-    /// Agrupar trechos de VAD numa chamada (#162). Desligado por padrão até o ganho estar medido.
+    /// Escolha manual do agrupamento de trechos de VAD (#162): `None` é o automático (#279),
+    /// ligado na CPU e desligado na GPU. O antigo campo `group_vad: bool` não distinguia escolha
+    /// de padrão (o store é reescrito inteiro em qualquer gravação), então é lido e ignorado:
+    /// arquivos antigos voltam ao automático.
     #[serde(default)]
-    pub group_vad: bool,
+    pub group_vad_choice: Option<bool>,
+}
+
+impl Store {
+    /// Agrupamento efetivo para a configuração em uso: a escolha manual vence o automático.
+    pub(crate) fn group_vad_enabled(&self, config: &Config) -> bool {
+        self.group_vad_choice.unwrap_or(config.device == "cpu")
+    }
 }
 
 fn store_path(settings: &Settings) -> PathBuf {
@@ -1068,19 +1079,26 @@ fn diagnostic_text() -> String {
 inventory::submit! { CommandRegistration { name: "transcription.hardware.status", execute: status } }
 inventory::submit! { CommandRegistration { name: "transcription.hardware.probe", execute: probe } }
 inventory::submit! { CommandRegistration { name: "transcription.hardware.choose", execute: choose } }
-/// `{enabled}` liga ou desliga o agrupamento de trechos de VAD (#162); sem argumentos só consulta.
+/// `{enabled}` liga ou desliga à mão o agrupamento de trechos de VAD (#162); `{auto: true}` volta
+/// ao automático (#279: ligado na CPU, desligado na GPU); sem argumentos só consulta.
 fn grouping(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let invalid = || error("invalid_grouping", "Opção de agrupamento inválida.");
     let settings = load_settings()?;
     let mut store = read_store(&settings);
-    if let Some(enabled) = v.get("enabled") {
-        store.group_vad = enabled
-            .as_bool()
-            .ok_or_else(|| error("invalid_grouping", "Opção de agrupamento inválida."))?;
+    let choice = match (v.get("enabled"), v.get("auto")) {
+        (None, None) => None,
+        (Some(e), None) => Some(Some(e.as_bool().ok_or_else(invalid)?)),
+        (None, Some(a)) if a.as_bool() == Some(true) => Some(None),
+        _ => return Err(invalid()),
+    };
+    if let Some(choice) = choice {
+        store.group_vad_choice = choice;
         write_store(&settings, &mut store)?;
     }
     let config = effective(&settings);
     Ok(json!({
-        "enabled": store.group_vad,
+        "enabled": store.group_vad_enabled(&config),
+        "mode": if store.group_vad_choice.is_some() { "manual" } else { "auto" },
         "size": group_size(&settings, &config),
         "measured_size": measured_group_size(&settings, &config),
     }))

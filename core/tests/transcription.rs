@@ -1020,7 +1020,7 @@ fn grouping_is_off_by_default_and_one_span_is_sent_per_call() {
     let state = run("transcription.grouping", json!({})).unwrap();
     assert_eq!(
         state,
-        json!({"enabled": false, "size": 1, "measured_size": 4})
+        json!({"enabled": false, "mode": "auto", "size": 1, "measured_size": 4})
     );
     transcribe_to_the_end(&env);
     assert!(groups(&env).iter().all(|g| g == "1"), "{:?}", groups(&env));
@@ -1034,12 +1034,12 @@ fn enabled_grouping_uses_the_measured_safe_batch_and_keeps_blocks_unchanged() {
     let state = run("transcription.grouping", json!({"enabled": true})).unwrap();
     assert_eq!(
         state,
-        json!({"enabled": true, "size": 4, "measured_size": 4})
+        json!({"enabled": true, "mode": "manual", "size": 4, "measured_size": 4})
     );
     // Persiste em disco e pode ser alternado de volta para desligado.
     assert_eq!(
         run("transcription.grouping", json!({})).unwrap(),
-        json!({"enabled": true, "size": 4, "measured_size": 4})
+        json!({"enabled": true, "mode": "manual", "size": 4, "measured_size": 4})
     );
     let source = transcribe_to_the_end(&env);
     assert!(groups(&env).iter().all(|g| g == "4"), "{:?}", groups(&env));
@@ -1048,13 +1048,89 @@ fn enabled_grouping_uses_the_measured_safe_batch_and_keeps_blocks_unchanged() {
     assert!(run("transcription.grouping", json!({"enabled": "sim"})).is_err());
     assert_eq!(
         run("transcription.grouping", json!({"enabled": false})).unwrap(),
-        json!({"enabled": false, "size": 1, "measured_size": 4})
+        json!({"enabled": false, "mode": "manual", "size": 1, "measured_size": 4})
     );
     let store: Value = serde_json::from_slice(
         &fs::read(env.root.path().join("data/transcription-hardware.json")).unwrap(),
     )
     .unwrap();
-    assert_eq!(store["group_vad"], false);
+    assert_eq!(store["group_vad_choice"], false);
+}
+
+#[test]
+fn grouping_is_on_by_default_on_cpu_and_the_manual_choice_wins_in_both_directions() {
+    let env = Env::with_gpu(25, None);
+    env.install_models();
+    let auto_on = json!({"enabled": true, "mode": "auto", "size": 8, "measured_size": null});
+    assert_eq!(run("transcription.grouping", json!({})).unwrap(), auto_on);
+    transcribe_to_the_end(&env);
+    assert!(groups(&env).iter().all(|g| g == "8"), "{:?}", groups(&env));
+    // Escolha manual de desligar vence o automático; `{auto: true}` volta ao padrão.
+    assert_eq!(
+        run("transcription.grouping", json!({"enabled": false})).unwrap(),
+        json!({"enabled": false, "mode": "manual", "size": 1, "measured_size": null})
+    );
+    assert_eq!(
+        run("transcription.grouping", json!({"auto": true})).unwrap(),
+        auto_on
+    );
+}
+
+#[test]
+fn grouping_auto_is_off_on_gpu_and_the_manual_choice_wins_and_can_return_to_auto() {
+    let env = Env::with_gpu(25, Some(FAKE_GPU));
+    env.install_models();
+    gpu_with_measured_batch(&env, 4);
+    let auto_off = json!({"enabled": false, "mode": "auto", "size": 1, "measured_size": 4});
+    assert_eq!(run("transcription.grouping", json!({})).unwrap(), auto_off);
+    assert_eq!(
+        run("transcription.grouping", json!({"enabled": true})).unwrap(),
+        json!({"enabled": true, "mode": "manual", "size": 4, "measured_size": 4})
+    );
+    assert_eq!(
+        run("transcription.grouping", json!({"auto": true})).unwrap(),
+        auto_off
+    );
+    let store: Value = serde_json::from_slice(
+        &fs::read(env.root.path().join("data/transcription-hardware.json")).unwrap(),
+    )
+    .unwrap();
+    assert!(store["group_vad_choice"].is_null());
+}
+
+#[test]
+fn old_store_with_group_vad_false_is_read_as_auto() {
+    let env = Env::with_gpu(25, None);
+    env.install_models();
+    run("transcription.hardware.status", json!({})).unwrap();
+    fs::write(
+        env.root.path().join("data/transcription-hardware.json"),
+        json!({"group_vad": false}).to_string(),
+    )
+    .unwrap();
+    assert_eq!(
+        run("transcription.grouping", json!({})).unwrap(),
+        json!({"enabled": true, "mode": "auto", "size": 8, "measured_size": null})
+    );
+}
+
+#[test]
+fn invalid_grouping_input_is_a_typed_error_and_changes_nothing() {
+    let env = Env::with_gpu(25, None);
+    env.install_models();
+    for bad in [
+        json!({"enabled": "sim"}),
+        json!({"auto": false}),
+        json!({"auto": "sim"}),
+        json!({"auto": true, "enabled": true}),
+    ] {
+        let err = run("transcription.grouping", bad).unwrap_err();
+        assert_eq!(err.code, "invalid_grouping");
+    }
+    assert_eq!(
+        run("transcription.grouping", json!({})).unwrap()["mode"],
+        "auto"
+    );
 }
 
 #[test]
@@ -1506,7 +1582,7 @@ fn auto_probe_runs_once_before_first_local_transcription_and_caches_result() {
     );
     assert_eq!(
         run("transcription.grouping", json!({})).unwrap(),
-        json!({"enabled": false, "size": 1, "measured_size": null})
+        json!({"enabled": false, "mode": "auto", "size": 1, "measured_size": null})
     );
     let source1 = env.import(0);
     env.start(source1).unwrap();
@@ -1520,7 +1596,7 @@ fn auto_probe_runs_once_before_first_local_transcription_and_caches_result() {
     );
     assert_eq!(
         run("transcription.grouping", json!({})).unwrap(),
-        json!({"enabled": false, "size": 1, "measured_size": 8})
+        json!({"enabled": false, "mode": "auto", "size": 1, "measured_size": 8})
     );
     let hw = run("transcription.hardware.status", json!({})).unwrap();
     assert_eq!(hw["effective"]["compute_type"], "int8_float16");
