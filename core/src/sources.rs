@@ -196,15 +196,28 @@ fn cancel(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     }
     Ok(json!({}))
 }
-fn permission(v: &Value) -> Result<(), CoreError> {
+fn normalize_permission(v: &Value) -> Result<Value, CoreError> {
     match v["status"].as_str() {
-        Some("none") => Ok(()),
-        Some("granted")
-            if ["who", "where", "scope"]
-                .iter()
-                .all(|k| v[*k].as_str().is_some_and(|s| !s.trim().is_empty())) =>
-        {
-            Ok(())
+        Some("none") => Ok(json!({ "status": "none" })),
+        Some("granted") => {
+            let field = |k: &str| {
+                v[k].as_str()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_owned)
+            };
+            match (field("who"), field("where"), field("scope")) {
+                (Some(who), Some(where_text), Some(scope)) => Ok(json!({
+                    "status": "granted",
+                    "who": who,
+                    "where": where_text,
+                    "scope": scope,
+                })),
+                _ => Err(err(
+                    "invalid_permission",
+                    "Registre a Permissão ou informe que não há permissão",
+                )),
+            }
         }
         _ => Err(err(
             "invalid_permission",
@@ -237,7 +250,7 @@ fn parse_optional_language(value: Option<&Value>) -> Result<String, CoreError> {
 
 fn import(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     let _job = project_job(&v)?;
-    permission(&v["permission"])?;
+    let perm = normalize_permission(&v["permission"])?;
     let language = parse_optional_language(v.get("language"))?;
     let origin_url = match v.get("origin_url") {
         None | Some(Value::Null) => None,
@@ -322,7 +335,7 @@ fn import(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     let modified = modified(&resolve_path(&v, &path.to_string_lossy())?)?;
     let id = projects::with_writer(|conn| {
         let tx = conn.transaction()?;
-        tx.execute("INSERT INTO sources(path,size,duration_us,partial_hash,full_hash,metadata,permission,audio_track,modified,origin_url,language) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",params![path.to_string_lossy(),size as i64,dur,part,full_hash,metadata.to_string(),v["permission"].to_string(),audio,modified,origin_url,language])?;
+        tx.execute("INSERT INTO sources(path,size,duration_us,partial_hash,full_hash,metadata,permission,audio_track,modified,origin_url,language) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",params![path.to_string_lossy(),size as i64,dur,part,full_hash,metadata.to_string(),perm.to_string(),audio,modified,origin_url,language])?;
         let id = tx.last_insert_rowid();
         tx.execute(
             "INSERT INTO jobs(kind,safety,state,source_id) VALUES ('preview','local','queued',?1)",
@@ -578,6 +591,24 @@ fn set_language(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     get(&v, id)
 }
 
+fn set_permission(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let _job = project_job(&v)?;
+    let id = v["id"]
+        .as_i64()
+        .ok_or_else(|| err("source_missing", "Fonte não encontrada"))?;
+    let perm = normalize_permission(&v["permission"])?;
+    let updated = projects::with_writer(|conn| {
+        conn.execute(
+            "UPDATE sources SET permission=?1 WHERE id=?2",
+            params![perm.to_string(), id],
+        )
+    })?;
+    if updated == 0 {
+        return Err(err("source_missing", "Fonte não encontrada"));
+    }
+    get(&v, id)
+}
+
 inventory::submit! {CommandRegistration{name:"sources.import",execute:import}}
 inventory::submit! {CommandRegistration{name:"sources.inspect",execute:inspect}}
 inventory::submit! {CommandRegistration{name:"sources.list",execute:list}}
@@ -585,3 +616,4 @@ inventory::submit! {CommandRegistration{name:"sources.hash",execute:hash_source}
 inventory::submit! {CommandRegistration{name:"sources.relocate",execute:relocate}}
 inventory::submit! {CommandRegistration{name:"sources.cancel",execute:cancel}}
 inventory::submit! {CommandRegistration{name:"sources.language.set",execute:set_language}}
+inventory::submit! {CommandRegistration{name:"sources.permission.set",execute:set_permission}}

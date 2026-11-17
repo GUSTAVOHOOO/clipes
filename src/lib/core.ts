@@ -9,10 +9,10 @@ import { exportMock } from '@/features/export/mock';
  */
 export type ExportRequest = { source_id: number; start_id: number; end_id: number; candidate_id?: number; clip_id?: number };
 import { batchMockDispatch } from './batchMock';
-import { packagingMockDispatch } from './packagingMock';
+import { packagingMockDispatch, setPackagingMockPermission } from './packagingMock';
 import { thumbnailMockDispatch } from './thumbnailMock';
 import { scriptMockDispatch } from './scriptMock';
-import { translationMockDispatch } from './translationMock';
+import { translationMockDispatch, setTranslationMockPermission } from './translationMock';
 
 const groqRetryTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('groq-retry-test');
 const denoMock = { installed: false };
@@ -234,10 +234,11 @@ function selectionMockDispatch(name: string, args: object): unknown {
     const made = (w: number[]) => (run.redoProfile && w.includes(0) ? run.redoProfile : 'legacy');
     const windows = states.map((state, index) => ({ index, firstId: index * 90 + 1, lastId: index * 90 + 90, startUs: index * 720_000_000, endUs: index * 720_000_000 + 900_000_000, jobId: index + 1, state, code: state === 'cancelled' ? 'cancelled' : state === 'failed' ? 'verification_failed' : null }));
     const done = states.filter(s => s === 'completed').length;
+    const withChat = selectionFlag('selection-chat');
     const candidates = run.ticks === 1 && !run.cancelled ? [] : [
-      { id: 1, rank: 0, startId: 10, endId: 14, startUs: 90_000_000, endUs: 140_000_000, axes: selectionAxes([9, 8, 7, 9, 8], run.videoKind), total: 8.35, title: 'A virada do jogo', windows: [0, 1], adjusted: false, adjust: null, profile: made([0, 1]), revision: run.revision ?? 1 },
-      { id: 2, rank: 1, startId: 40, endId: 41, startUs: 390_000_000, endUs: 410_000_000, axes: selectionAxes([8, 6, 7, 9, 5], run.videoKind), total: 7.1, title: '', windows: [0], adjusted: true, adjust: { extendedAfter: 1 }, profile: made([0]), revision: run.revision ?? 1 },
-      { id: 3, rank: 2, startId: 200, endId: 203, startUs: 1_990_000_000, endUs: 2_030_000_000, axes: selectionAxes([4, 4, 4, 4, 4], run.videoKind), total: 4, title: 'Piada longa', windows: [2], adjusted: true, adjust: { trimmedEnd: 3 }, profile: made([2]), revision: run.revision ?? 1 },
+      { id: 1, rank: 0, startId: 10, endId: 14, startUs: 90_000_000, endUs: 140_000_000, axes: selectionAxes([9, 8, 7, 9, 8], run.videoKind), total: 8.35, title: 'A virada do jogo', windows: [0, 1], adjusted: false, adjust: null, chat: withChat ? [{ ratio: 3.1, reaction: 'laugh', atUs: 95_000_000 }] : [], profile: made([0, 1]), revision: run.revision ?? 1 },
+      { id: 2, rank: 1, startId: 40, endId: 41, startUs: 390_000_000, endUs: 410_000_000, axes: selectionAxes([8, 6, 7, 9, 5], run.videoKind), total: 7.1, title: '', windows: [0], adjusted: true, adjust: { extendedAfter: 1 }, chat: withChat ? [{ ratio: 2.4, reaction: null, atUs: 395_000_000 }] : [], profile: made([0]), revision: run.revision ?? 1 },
+      { id: 3, rank: 2, startId: 200, endId: 203, startUs: 1_990_000_000, endUs: 2_030_000_000, axes: selectionAxes([4, 4, 4, 4, 4], run.videoKind), total: 4, title: 'Piada longa', windows: [2], adjusted: true, adjust: { trimmedEnd: 3 }, chat: [], profile: made([2]), revision: run.revision ?? 1 },
     ];
     return { run: { id: 1, state: run.state, videoKind: run.videoKind, summary: { energy: selectionFlag('selection-energy') ? { measured: true, high: 4, peak: 2 } : { measured: false }, chat: selectionFlag('selection-chat') ? { available: true, peaks: 3 } : { available: false } }, weights: weightsOf(run.videoKind), budgetPause: null, createdAt: '2026-11-15T12:00:00Z', counts: { windows: 4, completed: done, failed: states.filter(s => s === 'failed' || s === 'cancelled').length, kept: candidates.length, discarded: 0, merged: 1 } }, windows, candidates };
   }
@@ -327,6 +328,8 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         } as T;
       }
       const totalCuts = selectionFlag('export-batch-empty') || (scope === 'source' && !selectionMock.run) ? 0 : 2;
+      const batchSrc = sourceItems.find(s => s.id === (a.source_id ?? 1)) ?? sourceItems[0];
+      const batchGranted = batchSrc?.permission?.status === 'granted';
       return {
         scope,
         directMonetizationAck: ack,
@@ -339,7 +342,9 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         over60s: false,
         over60sCount: 0,
         shortClaimLimitUs: 60_000_000,
-        permission: { status: 'none', grantedCount: 0, missingCount: totalCuts, totalCount: totalCuts },
+        permission: totalCuts === 0
+          ? { status: 'none', grantedCount: 0, missingCount: 0, totalCount: 0 }
+          : { status: batchGranted ? 'granted' : 'none', grantedCount: batchGranted ? totalCuts : 0, missingCount: batchGranted ? 0 : totalCuts, totalCount: totalCuts },
         script: hasTransformed && totalCuts > 0 ? { applicable: true, transformedCount: totalCuts, approvedCount: 0, unapprovedCount: totalCuts } : { applicable: false },
         narration: hasTransformed && totalCuts > 0 ? { applicable: true, hasTts: false, ttsCutCount: 0, transformedCount: totalCuts } : { applicable: false },
       } as T;
@@ -383,6 +388,20 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (sourceTest && name === 'sources.inspect') return {format:{duration:'12'},streams:[{index:0,codec_type:'audio',codec_name:'aac'}]} as T;
     if (sourceTest && name === 'sources.import') { const a=args as {path:string;permission:{status:string};origin_url?:string;language?:string}; const item={id:4,path:a.path,status:'available',available:true,verified:true,language:a.language??channelProfileMock.language,permission:a.permission}; sourceItems.push(item); return {...item,origin_url:a.origin_url} as T; }
     if (sourceTest && name === 'sources.language.set') { const { id, language } = args as { id: number; language: string }; sourceItems = sourceItems.map(item => item.id === id ? { ...item, language } : item); return sourceItems.find(item => item.id === id) as T; }
+    if (sourceTest && name === 'sources.permission.set') {
+      const { id, permission } = args as { id: number; permission: { status: string; who?: string; where?: string; scope?: string } };
+      if (permission?.status !== 'none' && !(permission?.status === 'granted' && permission.who?.trim() && permission.where?.trim() && permission.scope?.trim())) {
+        throw { code: 'invalid_permission', message: 'Registre a Permissão ou informe que não há permissão' };
+      }
+      const normalized = permission.status === 'none'
+        ? { status: 'none' }
+        : { status: 'granted', who: permission.who!.trim(), where: permission.where!.trim(), scope: permission.scope!.trim() };
+      if (!sourceItems.some(item => item.id === id)) throw { code: 'source_missing', message: 'Fonte não encontrada' };
+      sourceItems = sourceItems.map(item => item.id === id ? { ...item, permission: normalized } : item);
+      setPackagingMockPermission(normalized);
+      setTranslationMockPermission(id, normalized);
+      return sourceItems.find(item => item.id === id) as T;
+    }
 
     if (sourceTest && (name === 'sources.hash' || name === 'sources.relocate')) {
       const { id, confirmed } = args as { id: number; confirmed?: boolean };

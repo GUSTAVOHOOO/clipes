@@ -500,6 +500,21 @@ try {
   assert.match(await changedDialog.innerText(), /hash completo não confere com o original/);
   await changedDialog.getByRole('button', {name:'Cancelar'}).click();
   assert.match(await mismatchRow.innerText(), /Fonte alterada/);
+  await changedRow.getByRole('button', { name: 'Registrar permissão' }).click();
+  const permEditor = changedRow.locator('[data-permission-editor="1"]');
+  await permEditor.waitFor();
+  await permEditor.getByLabel('Permissão').selectOption('granted');
+  assert.equal(await permEditor.getByRole('button', { name: 'Salvar permissão' }).isDisabled(), true);
+  await permEditor.getByLabel('Quem autorizou').fill('Streamer Exemplo');
+  await permEditor.getByLabel('Onde').fill('Email');
+  await permEditor.getByLabel('Escopo (inclua tradução, se autorizada)').fill('cortes diretos');
+  await permEditor.getByRole('button', { name: 'Salvar permissão' }).click();
+  await permEditor.waitFor({ state: 'detached' });
+  await changedRow.locator('[data-source-permission="1"]').getByText(/Tenho permissão: Streamer Exemplo · Email · cortes diretos/).waitFor();
+  await changedRow.getByRole('button', { name: 'Editar permissão' }).click();
+  await permEditor.getByLabel('Permissão').selectOption('none');
+  await permEditor.getByRole('button', { name: 'Salvar permissão' }).click();
+  await changedRow.locator('[data-source-permission="1"]').getByText(/Sem permissão/).waitFor();
   await page.goto(`${url}?assistant-test=1`);
   const wizard = page.getByRole('dialog', {name:'Escolha como o Clipes vai usar IA'});
   await wizard.waitFor();
@@ -832,6 +847,10 @@ try {
   await chatSelection.getByRole('button', { name: 'Selecionar Cortes' }).click();
   await chatSelection.getByText(/Seleção com janelas pendentes/).waitFor({ timeout: 15000 });
   assert.match(await chatSelection.innerText(), /3 picos entraram na seleção como indício, não como prova/);
+  await chatSelection.locator('[data-candidate="1"] [data-chat-peak="3.1"]').getByText(/chat 3,1× acima do normal · risadas/).waitFor();
+  await chatSelection.locator('[data-detail="1"] [data-chat-peak="3.1"]').getByText(/chat 3,1× acima do normal · risadas · 01:35/).waitFor();
+  await chatSelection.locator('[data-candidate="2"] [data-chat-peak="2.4"]').getByText(/chat 2,4× acima do normal/).waitFor();
+  assert.equal(await chatSelection.locator('[data-candidate="3"] [data-chat-peak]').count(), 0);
   await page.goto(`${url}?source-test=1&transcript-test=1&chat-local=1`);
   const localSelection = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
   await localSelection.getByRole('button', { name: 'Selecionar Cortes' }).waitFor();
@@ -1076,6 +1095,14 @@ try {
   const kindEn = await kindChecks(KIND_EN);
   await page.screenshot({ path: 'shots/selection-video-kind-en.png', fullPage: true });
   assert.match(await kindEn.group.innerText(), /Direct Clip/);
+  await page.goto(`${url}?source-test=1&transcript-test=1&selection-chat=1`);
+  const enChatSelection = page.getByRole('region', { name: 'Clip selection' }).first();
+  await enChatSelection.getByRole('button', { name: 'Select Clips' }).click();
+  await enChatSelection.getByText(/Selection with pending windows/).waitFor({ timeout: 15000 });
+  await enChatSelection.locator('[data-candidate="1"] [data-chat-peak="3.1"]').getByText(/chat 3\.1× above normal · laughter/).waitFor();
+  await enChatSelection.locator('[data-detail="1"] [data-chat-peak="3.1"]').getByText(/chat 3\.1× above normal · laughter · 01:35/).waitFor();
+  await enChatSelection.locator('[data-candidate="2"] [data-chat-peak="2.4"]').getByText(/chat 2\.4× above normal/).waitFor();
+  assert.equal(await enChatSelection.locator('[data-candidate="3"] [data-chat-peak]').count(), 0);
   await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
   await page.goto(`${url}?source-test=1&groq-retry-test=1`);
   const uncertainAudio = page.locator('li').filter({hasText:'/test/downloaded.mp4'}).first();
@@ -1331,6 +1358,86 @@ try {
   await conflictBatch.getByText(/Concluído com falhas · 100%/).waitFor({ timeout: 10000 });
   assert.match(await conflictBatch.innerText(), /1 de 2 Cortes exportados · 1 com falha/);
   assert.match(await conflictBatch.innerText(), /Não foi possível exportar o Corte\./);
+  // Permissão após importação (#254): registrar/editar na Fonte reflete imediatamente no Empacotamento, Tradução e Guarda-corpos.
+  await page.goto(`${url}?source-test=1&transcript-test=1&editor-test=1&packaging-nopermission=1&translation-nopermission=1`);
+  const permSel = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
+  await permSel.getByRole('button', { name: 'Selecionar Cortes' }).click();
+  const permReview = permSel.getByRole('group', { name: 'Revisão dos candidatos' });
+  await permReview.waitFor({ timeout: 15000 });
+  await permReview.focus();
+  await page.keyboard.press('a');
+  const permPack = permReview.locator('[data-packaging]');
+  await permPack.getByRole('button', { name: 'Gerar título, descrição e tags' }).click();
+  await permPack.locator('[data-credit-warning]').waitFor();
+  const projectGuardrails = page.getByRole('region', { name: 'Export em lote' }).locator('[data-guardrails-checklist]');
+  await projectGuardrails.locator('summary').click();
+  assert.match(await projectGuardrails.locator('[data-guardrails-item="permission"]').innerText(), /0 de 2 Cortes com Permissão/);
+  await permReview.getByRole('button', { name: 'Abrir no editor' }).click();
+  let permEditorView = page.getByRole('region', { name: 'Editor do Corte', exact: true });
+  await permEditorView.waitFor();
+  let permGuardrails = permEditorView.locator('[data-guardrails-checklist]');
+  await permGuardrails.locator('summary').click();
+  assert.match(await permGuardrails.locator('[data-guardrails-item="permission"]').innerText(), /sem permissão registrada/);
+  await permEditorView.getByRole('button', { name: /^Tradução/ }).click();
+  let permTranslation = permEditorView.getByRole('dialog', { name: 'Tradução', exact: true });
+  await permTranslation.locator('[data-translation-blocked]').waitFor();
+  await page.keyboard.press('Escape');
+  await permTranslation.waitFor({ state: 'hidden' });
+  await permEditorView.getByRole('button', { name: 'Fechar editor', exact: true }).click();
+  await permEditorView.waitFor({ state: 'detached' });
+
+  const permSourceRow = page.locator('li').filter({ hasText: '/test/changed.mp4' });
+  await permSourceRow.getByRole('button', { name: 'Registrar permissão' }).click();
+  const inlinePermEditor = permSourceRow.locator('[data-permission-editor="1"]');
+  await inlinePermEditor.getByLabel('Permissão').selectOption('granted');
+  await inlinePermEditor.getByLabel('Quem autorizou').fill('Canal Autorizado');
+  await inlinePermEditor.getByLabel('Onde').fill('Discord');
+  await inlinePermEditor.getByLabel('Escopo (inclua tradução, se autorizada)').fill('cortes, tradução');
+  await inlinePermEditor.getByRole('button', { name: 'Salvar permissão' }).click();
+  await inlinePermEditor.waitFor({ state: 'detached' });
+  await permPack.locator('[data-credit]').waitFor();
+  assert.match(await permPack.locator('[data-credit]').innerText(), /Canal Autorizado/);
+  assert.equal(await permPack.locator('[data-credit-warning]').count(), 0);
+  await projectGuardrails.getByText(/2 de 2 Cortes com Permissão/).waitFor();
+  await permReview.getByRole('button', { name: 'Abrir no editor' }).click();
+  permEditorView = page.getByRole('region', { name: 'Editor do Corte', exact: true });
+  await permEditorView.waitFor();
+  permGuardrails = permEditorView.locator('[data-guardrails-checklist]');
+  await permGuardrails.locator('summary').click();
+  await permGuardrails.getByText(/Canal Autorizado · Discord/).waitFor();
+  await permEditorView.getByRole('button', { name: /^Tradução/ }).click();
+  permTranslation = permEditorView.getByRole('dialog', { name: 'Tradução', exact: true });
+  await permTranslation.waitFor();
+  assert.equal(await permTranslation.locator('[data-translation-blocked]').count(), 0);
+  await permTranslation.getByRole('button', { name: 'Traduzir legenda' }).waitFor();
+  await page.keyboard.press('Escape');
+  await permTranslation.waitFor({ state: 'hidden' });
+  await permEditorView.getByRole('button', { name: 'Fechar editor', exact: true }).click();
+  await permEditorView.waitFor({ state: 'detached' });
+
+  await permSourceRow.getByRole('button', { name: 'Editar permissão' }).click();
+  await inlinePermEditor.getByLabel('Quem autorizou').fill('Canal Sem Tradução');
+  await inlinePermEditor.getByLabel('Escopo (inclua tradução, se autorizada)').fill('cortes diretos');
+  await inlinePermEditor.getByRole('button', { name: 'Salvar permissão' }).click();
+  await inlinePermEditor.waitFor({ state: 'detached' });
+  await permPack.locator('[data-credit]').getByText(/Canal Sem Tradução/).waitFor();
+  await permReview.getByRole('button', { name: 'Abrir no editor' }).click();
+  permEditorView = page.getByRole('region', { name: 'Editor do Corte', exact: true });
+  await permEditorView.waitFor();
+  await permEditorView.getByRole('button', { name: /^Tradução/ }).click();
+  permTranslation = permEditorView.getByRole('dialog', { name: 'Tradução', exact: true });
+  await permTranslation.locator('[data-translation-blocked]').waitFor();
+  await page.keyboard.press('Escape');
+  await permTranslation.waitFor({ state: 'hidden' });
+  await permEditorView.getByRole('button', { name: 'Fechar editor', exact: true }).click();
+  await permEditorView.waitFor({ state: 'detached' });
+
+  await permSourceRow.getByRole('button', { name: 'Editar permissão' }).click();
+  await inlinePermEditor.getByLabel('Permissão').selectOption('none');
+  await inlinePermEditor.getByRole('button', { name: 'Salvar permissão' }).click();
+  await inlinePermEditor.waitFor({ state: 'detached' });
+  await permPack.locator('[data-credit-warning]').waitFor();
+  await projectGuardrails.getByText(/0 de 2 Cortes com Permissão/).waitFor();
 
   // Ticket #251: Ollama nativo no Assistente, "Usar chave de API" -> Preferências (Provedor) e atalho para Componentes.
   await page.goto(`${url}?assistant-test=1`);
@@ -1373,6 +1480,43 @@ try {
   await downloadedMissing.getByRole('alert').getByText(/Instale o Componente FFmpeg/).waitFor();
   await downloadedMissing.getByRole('button', { name: 'Abrir Componentes' }).first().click();
   await page.getByRole('heading', { name: 'Componentes' }).waitFor();
+
+  // Ticket #255: abertura offline no UpdateNotice ignora falhas de rede e preserva falhas reais de assinatura.
+  await page.evaluate(() => sessionStorage.removeItem('clipes.mock-update-installed'));
+  for (const offlineQuery of ['?updater-test=offline', '?updater-test=release-not-found']) {
+    await page.goto(`${url}${offlineQuery}`);
+    await page.getByRole('heading', { name: 'Projetos' }).waitFor();
+    await page.waitForTimeout(150);
+    assert.equal(await page.getByRole('dialog', { name: 'Atualização disponível' }).count(), 0);
+    assert.equal(await page.getByText('Não foi possível atualizar').count(), 0);
+  }
+
+  const offlinePage = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+  offlinePage.on('pageerror', e => errors.push(e.message));
+  offlinePage.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+  await offlinePage.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'onLine', { get: () => false, configurable: true });
+  });
+  await offlinePage.goto(url);
+  await offlinePage.getByRole('heading', { name: 'Projetos' }).waitFor();
+  await offlinePage.waitForTimeout(150);
+  assert.equal(await offlinePage.getByRole('dialog', { name: 'Atualização disponível' }).count(), 0);
+  assert.equal(await offlinePage.getByText('Não foi possível atualizar').count(), 0);
+  await offlinePage.close();
+
+  await page.goto(`${url}?updater-test=invalid-signature`);
+  await page.getByText('Não foi possível atualizar').waitFor();
+  assert.match(await page.getByRole('alert').innerText(), /Atualizações sem assinatura válida são recusadas/);
+
+  await page.goto(`${url}?updater-test=install-network-error`);
+  await page.getByRole('dialog', { name: 'Atualização disponível' }).getByRole('button', { name: 'Atualizar agora' }).click();
+  await page.getByText('Não foi possível atualizar').waitFor();
+  assert.doesNotMatch(await page.getByRole('alert').innerText(), /Atualizações sem assinatura válida são recusadas/);
+
+  await page.goto(`${url}?updater-test=install-invalid-signature`);
+  await page.getByRole('dialog', { name: 'Atualização disponível' }).getByRole('button', { name: 'Atualizar agora' }).click();
+  await page.getByText('Não foi possível atualizar').waitFor();
+  assert.match(await page.getByRole('alert').innerText(), /Atualizações sem assinatura válida são recusadas/);
 
   assert.deepEqual(errors, []);
   console.log('UI keyboard, preferences, about, drawer and screenshots: OK');
