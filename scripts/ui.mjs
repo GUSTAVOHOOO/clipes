@@ -10,6 +10,7 @@ import { testEditorCrop } from './editor-crop.mjs';
 import { testEditorMontage, testEditorDucking } from './editor-montage.mjs';
 import { testTranslation, testTranslationBlocked } from './translation-ui.mjs';
 import { testTtsComponents, testTtsNarrationLocked, testTtsNarrationUnlocked, testNarrationDeviationAndTrack } from './tts-ui.mjs';
+import { testTeleprompterRecording } from './record-ui.mjs';
 import { testPackagingChapters } from './packaging-chapters-ui.mjs';
 const socket = createServer();
 await new Promise(resolve => socket.listen(0, '127.0.0.1', resolve));
@@ -1326,6 +1327,7 @@ try {
   await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
   await testTranslationBlocked(page, url);
   await testNarrationDeviationAndTrack(page, url);
+  await testTeleprompterRecording(page, url);
   await testEditorBorders(page, url);
   await testEditorSilencesPreview(page, url);
   await testEditorCrop(page, url);

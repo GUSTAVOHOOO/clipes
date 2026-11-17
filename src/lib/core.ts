@@ -32,7 +32,7 @@ type MockBlockAlignment = {
   spokenText: string | null;
   wordCount: number;
 };
-const narrationGenerated = new Map<number, { blockId: number; voiceId: string; modelId: string; durationUs: number; alignment: MockBlockAlignment }[]>();
+const narrationGenerated = new Map<number, { blockId: number; voiceId: string; modelId: string; engineId?: string; trimmed?: boolean; durationUs: number; alignment: MockBlockAlignment }[]>();
 const sourceTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('source-test');
 const componentsMissing = typeof location !== 'undefined' && new URLSearchParams(location.search).has('components-missing');
 const budgetTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('budget-test');
@@ -350,7 +350,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
           shortClaimLimitUs: 60_000_000,
           permission: { status: granted ? 'granted' : 'none', grantedCount: granted ? 1 : 0, missingCount: granted ? 0 : 1, totalCount: 1, who: permObj?.who ?? null, where: permObj?.where ?? null, scope: permObj?.scope ?? null },
           script: effectiveTransformed ? { applicable: true, exists: !!scriptView?.current, approved: !!scriptView?.narrationAllowed, pendingBlocks: scriptView?.current?.pending ?? 0, totalBlocks: scriptView?.current?.blocks?.length ?? 0 } : { applicable: false },
-          narration: effectiveTransformed ? (() => { const g = narrationGenerated.get(a.candidate_id ?? 1) ?? []; return { applicable: true, hasTts: g.length > 0, generatedBlocks: g.length, totalBlocks: scriptView?.current?.blocks?.length ?? 0, voices: [...new Set(g.map(x => x.voiceId))], freezeTailUs, longFreezeTail: freezeTailUs > 5_000_000 }; })() : { applicable: false },
+          narration: effectiveTransformed ? (() => { const g = (narrationGenerated.get(a.candidate_id ?? 1) ?? []).filter(x => (x.engineId ?? 'pocket-tts') === 'pocket-tts'); return { applicable: true, hasTts: g.length > 0, generatedBlocks: g.length, totalBlocks: scriptView?.current?.blocks?.length ?? 0, voices: [...new Set(g.map(x => x.voiceId))], freezeTailUs, longFreezeTail: freezeTailUs > 5_000_000 }; })() : { applicable: false },
         } as T;
       }
       const totalCuts = selectionFlag('export-batch-empty') || (scope === 'source' && !selectionMock.run) ? 0 : 2;
@@ -466,9 +466,12 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       return { id: a.id } as T;
     }
     if (name === 'tts.models.cancel') return {} as T;
-    if (name === 'narration.get' || name === 'narration.generate' || name === 'narration.regenerate_block' || name === 'narration.align' || name === 'narration.align_block' || name === 'narration.review') {
-      const a = args as { candidate: number; block?: number; voiceId?: string; choice?: 'script' | 'spoken' };
+    if (name === 'narration.get' || name === 'narration.generate' || name === 'narration.regenerate_block' || name === 'narration.align' || name === 'narration.align_block' || name === 'narration.review' || name === 'narration.record_block' || name === 'narration.trim_block' || name === 'narration.discard_draft') {
+      const a = args as { candidate: number; block?: number; voiceId?: string; choice?: 'script' | 'spoken'; audioBase64?: string };
       const s = scriptMockDispatch('script.get', { candidate: a.candidate }) as { narrationAllowed: boolean; current: { blocks: { id: number; position: number; title: string; narration: string | null }[] } | null };
+      const recordNoWorker = typeof location !== 'undefined' && new URLSearchParams(location.search).has('record-no-worker');
+      const recordNoSpeech = typeof location !== 'undefined' && new URLSearchParams(location.search).has('record-no-speech');
+      const vadReady = !componentsMissing && !recordNoWorker;
       const defaultAlign = (text: string | null, idx: number): MockBlockAlignment => {
         const deviationMode = typeof location !== 'undefined' && new URLSearchParams(location.search).has('narration-deviation');
         const wordCount = (text ?? '').trim().split(/\s+/).filter(Boolean).length || 4;
@@ -477,6 +480,62 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         }
         return { status: 'aligned', choice: null, activeTrack: 'script', substitutions: 0, insertions: 0, deletions: 0, maxConsecutiveInsertions: 0, errorCode: null, modelId: 'whisper-turbo', spokenText: null, wordCount };
       };
+      if (name === 'narration.discard_draft') {
+        return { candidate: a.candidate, blockId: a.block ?? 0, discarded: true } as T;
+      }
+      if (name === 'narration.record_block') {
+        if (!s.narrationAllowed) throw { code: 'script_not_approved', message: 'Aprove o Roteiro.' };
+        if (recordNoSpeech) throw { code: 'no_speech_detected', message: 'Nenhuma fala detectada na gravação.', usage: { hasDraft: true, durationUs: 1_500_000 } };
+        const blocks = s.current?.blocks ?? [];
+        const idx = blocks.findIndex(b => b.id === a.block);
+        const target = blocks[idx];
+        if (!target) throw { code: 'block_not_found', message: 'Bloco não encontrado.' };
+        const existing = narrationGenerated.get(a.candidate) ?? [];
+        const trimmed = vadReady;
+        const durationUs = trimmed ? 2_400_000 : 3_500_000;
+        const entry = {
+          blockId: target.id,
+          voiceId: 'recorded',
+          modelId: trimmed ? 'silero-vad' : 'untrimmed',
+          engineId: 'recorded',
+          trimmed,
+          durationUs,
+          alignment: vadReady ? defaultAlign(target.narration, idx) : { status: 'pending' as const, choice: null, activeTrack: null, substitutions: 0, insertions: 0, deletions: 0, maxConsecutiveInsertions: 0, errorCode: null, modelId: '', spokenText: null, wordCount: 0 },
+        };
+        const next = existing.some(e => e.blockId === target.id)
+          ? existing.map(e => (e.blockId === target.id ? entry : e))
+          : [...existing, entry];
+        narrationGenerated.set(a.candidate, next);
+        return {
+          candidate: a.candidate,
+          blockId: target.id,
+          narrationId: target.id,
+          versionId: 1,
+          engineId: 'recorded',
+          voiceId: 'recorded',
+          modelId: entry.modelId,
+          relPath: `narrations/c${a.candidate}/b${target.id}-v1.wav`,
+          durationUs,
+          sampleRate: 24000,
+          channels: 1,
+          bytes: 115244,
+          trimmed,
+          warningCode: trimmed ? null : 'vad_unavailable',
+          warning: trimmed ? null : 'Aparo de silêncio indisponível: instale o worker.',
+        } as T;
+      }
+      if (name === 'narration.trim_block') {
+        if (!vadReady) throw { code: 'worker_missing', message: 'Instale o worker.' };
+        const blocks = s.current?.blocks ?? [];
+        const idx = blocks.findIndex(b => b.id === a.block);
+        const target = blocks[idx];
+        const existing = narrationGenerated.get(a.candidate) ?? [];
+        const hit = existing.find(e => e.blockId === a.block);
+        if (!hit || !target) throw { code: 'narration_missing', message: 'Gravação não encontrada.' };
+        const updated = { ...hit, modelId: 'silero-vad', trimmed: true, durationUs: 2_400_000, alignment: defaultAlign(target.narration, idx) };
+        narrationGenerated.set(a.candidate, existing.map(e => (e.blockId === a.block ? updated : e)));
+        return { candidate: a.candidate, blockId: target.id, trimmed: true, durationUs: 2_400_000 } as T;
+      }
       if (name === 'narration.generate' || name === 'narration.regenerate_block') {
         if (!s.narrationAllowed) throw { code: 'script_not_approved', message: 'Aprove o Roteiro.' };
         const voiceId = a.voiceId ?? channelProfileMock.narrationVoice ?? '13063';
@@ -485,8 +544,8 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         const existing = narrationGenerated.get(a.candidate) ?? [];
         const blockDurationUs = selectionFlag('packaging-chapters') ? 12_000_000 : 3_200_000;
         const next = blocks.map((b, idx) => (a.block === undefined || b.id === a.block)
-          ? { blockId: b.id, voiceId, modelId, durationUs: blockDurationUs, alignment: defaultAlign(b.narration, idx) }
-          : (existing.find(e => e.blockId === b.id) ?? { blockId: b.id, voiceId, modelId, durationUs: blockDurationUs, alignment: defaultAlign(b.narration, idx) }));
+          ? { blockId: b.id, voiceId, modelId, engineId: 'pocket-tts', trimmed: true, durationUs: blockDurationUs, alignment: defaultAlign(b.narration, idx) }
+          : (existing.find(e => e.blockId === b.id) ?? { blockId: b.id, voiceId, modelId, engineId: 'pocket-tts', trimmed: true, durationUs: blockDurationUs, alignment: defaultAlign(b.narration, idx) }));
         narrationGenerated.set(a.candidate, next);
         return { job: 790, candidate: a.candidate } as T;
       }
@@ -513,14 +572,14 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         const hit = list.find(x => x.blockId === b.id);
         return {
           blockId: b.id, position: b.position, title: b.title, versionId: 1, narrationText: b.narration,
-          audio: hit ? { id: b.id, versionId: 1, voiceId: hit.voiceId, modelId: hit.modelId, relPath: `narrations/c${a.candidate}/b${b.id}-v1.wav`, durationUs: hit.durationUs, sampleRate: 24000, channels: 1, bytes: 153644, stale: false } : null,
+          audio: hit ? { id: b.id, versionId: 1, voiceId: hit.voiceId, modelId: hit.modelId, engineId: hit.engineId ?? 'pocket-tts', relPath: `narrations/c${a.candidate}/b${b.id}-v1.wav`, durationUs: hit.durationUs, sampleRate: 24000, channels: 1, bytes: 153644, stale: false, trimmed: hit.trimmed ?? true } : null,
           alignment: hit ? hit.alignment : null,
         };
       });
       return {
         candidate: a.candidate, narrationAllowed: s.narrationAllowed, gateReason: s.narrationAllowed ? null : 'pending_blocks',
         language: 'pt', defaultVoiceId: channelProfileMock.narrationVoice ?? '13063', activeModelId: ttsActiveModels.pt,
-        busy: false, job: null, alignBusy: false, alignJob: null, alignPrerequisitesReady: true,
+        busy: false, job: null, alignBusy: false, alignJob: null, alignPrerequisitesReady: !componentsMissing, vadReady,
         blocks, totalDurationUs: blocks.reduce((acc, b) => acc + (b.audio?.durationUs ?? 0), 0),
       } as T;
     }
