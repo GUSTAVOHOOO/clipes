@@ -29,7 +29,7 @@ A resolução central fica em [`core/src/paths.rs`](../../core/src/paths.rs) usa
 | Chaves de API | Secret Service (`keyring`) | Serviços `io.github.gustavohooo.clipes.provider` e `io.github.gustavohooo.clipes.transcription` |
 | Projetos | Pasta escolhida pelo usuário | `<Nome>.clipes/` |
 
-O `.deb` declara `libwebkit2gtk-4.1-0`, `libgtk-3-0`, `gstreamer1.0-plugins-good`, `gstreamer1.0-plugins-bad` e `gstreamer1.0-libav` em `Depends`. O **AppImage** usa `bundleMediaFramework: false` (não embute GStreamer nem `libav`, alinhado ao [ADR-0003](../adr/0003-licenca-apache-ffmpeg-sob-demanda-e-politica-de-modelos.md)) e depende dos plugins GStreamer do host; em Debian/Ubuntu limpo, instale `sudo apt install gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav`.
+O `.deb` declara `gstreamer1.0-plugins-good`, `gstreamer1.0-plugins-bad` e `gstreamer1.0-libav` em `bundle.linux.deb.depends` (o Tauri acrescenta `libwebkit2gtk-4.1-0` e `libgtk-3-0` automaticamente). O **AppImage** usa `bundleMediaFramework: false` (embute apenas as bibliotecas-base GStreamer trazidas pelo WebKitGTK, sem plugins nem `libav`, alinhado ao [ADR-0003](../adr/0003-licenca-apache-ffmpeg-sob-demanda-e-politica-de-modelos.md)) e depende dos plugins GStreamer do host; em Debian/Ubuntu limpo, instale `sudo apt install gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav`.
 
 ### macOS (quando aplicável)
 
