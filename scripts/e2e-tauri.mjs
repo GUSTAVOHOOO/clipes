@@ -407,7 +407,13 @@ function createUi(browser) {
       scopeSelector: options.scopeSelector ?? null,
     });
     const current = await browser.execute(target => Boolean(target.checked), el);
-    if (current !== desired) await el.click();
+    if (current !== desired) {
+      await el.click();
+      await browser.waitUntil(
+        async () => (await browser.execute(target => Boolean(target.checked), el)) === desired,
+        { timeout: 5_000, interval: 50, timeoutMsg: `Checkbox "${label}" não mudou para ${desired}` },
+      );
+    }
   }
 
   async function isChecked(label, options = {}) {
@@ -588,6 +594,9 @@ async function withTauriSession(config, callback) {
   } else {
     delete childEnv.CLIPES_FAKE_WORKER_MODE;
   }
+  if (config.webview2UserDataDir) {
+    childEnv.WEBVIEW2_USER_DATA_FOLDER = config.webview2UserDataDir;
+  }
 
   const driverLogs = [];
   const driverProc = spawn(config.tauriDriverPath, args, {
@@ -605,7 +614,7 @@ async function withTauriSession(config, callback) {
       hostname: '127.0.0.1',
       port: driverPort,
       logLevel: 'error',
-      connectionRetryTimeout: 60_000,
+      connectionRetryTimeout: 90_000,
       connectionRetryCount: 2,
       capabilities: {
         browserName: 'wry',
@@ -647,7 +656,7 @@ async function withTauriSession(config, callback) {
       }
     }
     await killProcessTree(driverProc);
-    await sleep(300);
+    await sleep(1_000);
   }
 }
 
@@ -1149,9 +1158,15 @@ async function main() {
       ...fixtures,
     };
 
-    await withTauriSession({ ...sharedConfig, workerMode: '' }, ui => runSession1(ui, ctx));
+    await withTauriSession(
+      { ...sharedConfig, workerMode: '', webview2UserDataDir: path.join(tempRoot, 'webview2-1') },
+      ui => runSession1(ui, ctx),
+    );
     await stageModelsInstalled(dataDir);
-    await withTauriSession({ ...sharedConfig, workerMode: 'transcribe' }, ui => runSession2(ui, ctx));
+    await withTauriSession(
+      { ...sharedConfig, workerMode: 'transcribe', webview2UserDataDir: path.join(tempRoot, 'webview2-2') },
+      ui => runSession2(ui, ctx),
+    );
 
     logStep('Suíte E2E Tauri (Sessões 1 e 2) concluída com sucesso: OK');
   } finally {
