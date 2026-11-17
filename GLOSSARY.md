@@ -109,3 +109,21 @@ _Evitar_: agente, prompt, chamada (a chamada é só um passo da tarefa)
 **Somente local** (Local Only)
 Restrição que proíbe enviar texto para fora da máquina. Vale por tarefa e como veto por Projeto: só proíbe, nunca escolhe Provedor. Local quer dizer só loopback; servidor na rede local e CLIs não contam.
 _Evitar_: modo offline, modo privado
+
+## Enquadramento e edição
+
+**Reenquadramento** (Reframing)
+Conversão de uma Fonte 16:9 para o quadro 9:16 de um Corte, como uma timeline de keyframes de crop. A análise automática só sugere; as correções do usuário ficam separadas e não são apagadas quando a análise é refeita.
+_Evitar_: crop sozinho (crop é o retângulo de cada keyframe, não o processo), enquadramento automático
+
+**Layout** (Layout)
+Forma como a Fonte é arranjada no quadro 9:16 de um Corte. Os cinco da v1: rosto, Fit/centro, jogo + webcam, duas pessoas empilhadas e tela cheia com área de interesse.
+_Evitar_: template, modelo
+
+**Tela dividida** (Split Screen)
+Layout em que o quadro 9:16 mostra duas regiões da Fonte ao mesmo tempo, uma sobre a outra, cada uma com seu próprio crop. Na v1 são os Layouts jogo + webcam (câmera de um lado, gameplay do outro) e duas pessoas empilhadas. A tela dividida é o resultado visual; o Reenquadramento é o que calcula o crop de cada região.
+_Evitar_: B-roll (é outra coisa), picture-in-picture (a webcam sobreposta ao jogo, sem dividir o quadro)
+
+**B-roll** (B-roll)
+Imagem de cobertura (stock, gerada ou de outro trecho) que entra sobre ou no lugar da imagem principal para ilustrar o que está sendo dito. Não divide a tela e não vem da mesma Fonte. Fora da v1.
+_Evitar_: tela dividida, imagem de apoio

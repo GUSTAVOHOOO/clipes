@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { isTauri } from '@tauri-apps/api/core';
 import { coreDispatch } from '@/lib/core';
+import { confirmAction } from '@/lib/desktop';
 import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -42,7 +43,7 @@ export function Components() {
     listen<Progress>('core-progress', e => { if ((e.payload.stage === 'download' || e.payload.stage === 'update')) setProgress(e.payload.percentage); }).then(fn => { unlisten = fn; });
     return () => unlisten?.();
   }, []);
-  async function download(id: string) { if (!window.confirm(t.confirm)) return; setBusy(id); setProgress(0); setStatus(''); try { const result = await coreDispatch<{path:string}>('components.download', { id, confirmed: true }); if (id === 'ffmpeg') setSettings(previous => previous && { ...previous, ffmpeg_path: result.path }); await refreshFfmpegStatus(); await refreshYtdlp(); setStatus(t.installed); } catch (e) { setStatus(message(e)); } finally { setBusy(null); } }
+  async function download(id: string) { if (!confirmAction(t.confirm)) return; setBusy(id); setProgress(0); setStatus(''); try { const result = await coreDispatch<{path:string}>('components.download', { id, confirmed: true }); if (id === 'ffmpeg') setSettings(previous => previous && { ...previous, ffmpeg_path: result.path }); await refreshFfmpegStatus(); await refreshYtdlp(); setStatus(t.installed); } catch (e) { setStatus(message(e)); } finally { setBusy(null); } }
   async function updateYtdlp(){setConfirmUpdate(false);setBusy('yt-dlp');setProgress(0);setStatus('');try{await coreDispatch('components.ytdlp.update',{confirmed:true});await refreshYtdlp();setStatus(t.updated);}catch(e){setStatus(message(e));}finally{setBusy(null);}}
   async function save() { if (!settings) return; try { const updated = await coreDispatch<Settings>('components.settings.set', settings); setSettings(updated); setPath(updated.ffmpeg_path ?? ''); await refreshFfmpegStatus(); setStatus(t.saved); } catch (e) { setStatus(message(e)); } }
   async function useSystem() { try { const result = await coreDispatch<{version:string}>('components.ffmpeg.system', { path: path || 'ffmpeg' }); setStatus(result.version); setSettings(await coreDispatch<Settings>('components.settings.get', {})); await refreshFfmpegStatus(); } catch (e) { setStatus(message(e)); } }

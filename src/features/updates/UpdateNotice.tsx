@@ -5,6 +5,7 @@ import { Dialog as D } from '@base-ui/react/dialog';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { check, type Update } from '@tauri-apps/plugin-updater';
 import { Button } from '@/components/ui/Button';
+import { getUpdaterBehavior, shouldMockUpdater } from '@/lib/desktop';
 import { useText } from '@/lib/i18n';
 import { textos } from './texts';
 import {
@@ -22,15 +23,14 @@ type Estado =
   | { kind: 'installed' }
   | { kind: 'error'; reason: string; signature: boolean };
 
-const mock = import.meta.env.VITE_UPDATER_MOCK === 'available';
-
 async function verificar(auto: boolean): Promise<{ update: Update | null; currentVersion: string }> {
-  if (!mock && !isTauri()) return { update: null, currentVersion: '' };
+  const behavior = getUpdaterBehavior();
+  if (behavior === 'off') return { update: null, currentVersion: '' };
   if (auto && typeof navigator !== 'undefined' && navigator.onLine === false) {
     return { update: null, currentVersion: '' };
   }
-  const currentVersion = mock ? '0.1.0' : await getVersion();
-  if (mock) {
+  const currentVersion = isTauri() ? await getVersion() : '0.1.0';
+  if (behavior === 'mock-available') {
     const scenario = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('updater-test') : null;
     if (scenario === 'offline') {
       throw new Error('error sending request for url (https://github.com/GUSTAVOHOOO/clipes/releases/latest/download/latest.json): client error (Connect)');
@@ -92,7 +92,7 @@ export function UpdateNotice() {
     setEstado({ kind: 'installing' });
     try {
       await estado.update.downloadAndInstall();
-      if (mock) {
+      if (shouldMockUpdater()) {
         sessionStorage.setItem('clipes.mock-update-installed', '1');
         setEstado({ kind: 'installed' });
       }

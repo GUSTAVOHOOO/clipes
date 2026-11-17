@@ -98,6 +98,7 @@ pub use transcription::SUPPORTED_LANGUAGES;
 pub mod translation;
 pub mod tts;
 mod url_import;
+pub(crate) mod vault;
 mod version;
 pub mod worker;
 

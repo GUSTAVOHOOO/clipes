@@ -82,6 +82,8 @@ A casca usa os tokens e componentes Foco, sem dados demonstrativos. Os textos fi
 
 Para executar a interface no navegador com o núcleo simulado, use `VITE_CORE_MOCK=1 bun run dev` (no PowerShell, `$env:VITE_CORE_MOCK='1'; bun run dev`). O núcleo real continua sendo usado pelo Tauri. Para verificar teclado, telas, console e capturas, instale o Chromium com `bunx playwright install chromium` e execute `bun run test:ui`; as capturas ficam em `shots/`. Os tokens da interface são verificados por `bun run test:contrast`.
 
+Para exercitar o aplicativo desktop real ponta a ponta (WebView nativa, IPC do Tauri e `clipes-core` em Rust, com `CLIPES_DATA_DIR` e cofre isolados), instale o `tauri-driver` (`cargo install tauri-driver --locked`), prepare o driver nativo com `bun run e2e:setup` e execute `bun run test:e2e`; as capturas ficam em `shots-e2e/`. Consulte [Testes E2E](docs/contribuindo/testes-e2e.md) para os pré-requisitos de Windows e Linux, a fronteira nativa `src/lib/desktop.ts` e a depuração de falhas.
+
 ## Projetos e migrações
 
 Cada Projeto é uma pasta `.clipes` com `project.sqlite`; a biblioteca local é apenas um índice recuperado ao abrir a pasta. Recentes ausentes permanecem listados como indisponíveis. O núcleo é o único escritor; SQLite usa WAL e FTS5. Tempos usam `projects::Microseconds` em µs inteiros.

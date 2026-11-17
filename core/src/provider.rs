@@ -511,24 +511,20 @@ mod settings {
     }
     #[cfg(not(test))]
     fn vault_set(account: &str, key: &str) -> Result<(), CoreError> {
-        keyring::Entry::new("io.github.gustavohooo.clipes.provider", account)
-            .and_then(|e| e.set_password(key))
+        crate::vault::set("io.github.gustavohooo.clipes.provider", account, key)
             .map_err(|_| error("vault", "Could not save key in system vault"))
     }
     #[cfg(not(test))]
     fn vault_get(account: &str) -> Result<String, CoreError> {
-        keyring::Entry::new("io.github.gustavohooo.clipes.provider", account)
-            .and_then(|e| e.get_password())
-            .map_err(|_| error("vault", "Could not read key from system vault"))
+        crate::vault::get("io.github.gustavohooo.clipes.provider", account)
+            .ok()
+            .flatten()
+            .ok_or_else(|| error("vault", "Could not read key from system vault"))
     }
     #[cfg(not(test))]
     fn vault_remove(account: &str) -> Result<(), CoreError> {
-        match keyring::Entry::new("io.github.gustavohooo.clipes.provider", account)
-            .and_then(|e| e.delete_credential())
-        {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(_) => Err(error("vault", "Could not remove key from system vault")),
-        }
+        crate::vault::remove("io.github.gustavohooo.clipes.provider", account)
+            .map_err(|_| error("vault", "Could not remove key from system vault"))
     }
     #[cfg(test)]
     static FAKE_VAULT: std::sync::LazyLock<Mutex<std::collections::HashMap<String, String>>> =
