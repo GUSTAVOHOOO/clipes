@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { Captions, PanelLeft, PanelRight, Scissors, X } from 'lucide-react';
+import { Captions, Crop, PanelLeft, PanelRight, Scissors, X } from 'lucide-react';
 import { coreDispatch, type ExportRequest } from '@/lib/core';
 import { useText } from '@/lib/i18n';
 import { useComandos } from '@/lib/comandos';
@@ -9,14 +9,15 @@ import { Button } from '@/components/ui/Button';
 import { Kbd } from '@/components/ui/Kbd';
 import { ExportButton } from '@/features/export/ExportButton';
 import { CabecalhoGaveta, GavetaBorda, Puxador, ZonaBorda, useGaveta } from '@/components/shell/Gaveta';
-import { CutPreview, previewSeekEvent, type PreviewSeekEvent } from '@/features/projects/CutPreview';
+import { CutPreview, previewSeekEvent, type PreviewProxyInfo, type PreviewSeekEvent } from '@/features/projects/CutPreview';
 import { clock, fill } from '@/features/projects/selectionFormat';
 import { PX_PER_SEC, neighborStart, nextRate, pxToUs, sentenceAt, usToPx, visiblePx, visibleSentences, visibleThumbs, type SilencesState, type TimelineSentence } from './timelineMath';
 import { CaptionPanel } from '@/features/captions/CaptionPanel';
 import { useCaptions } from '@/features/captions/useCaptions';
 import { BorderHandles, type Adjustment, type Edge } from './BorderHandles';
 import { SilencesPanel } from './SilencesPanel';
-import type { ClipCrop, CropSegment } from './cropMath';
+import { CropPanel, type CropAnswer } from './CropPanel';
+import { resolveCrop, type ClipCrop, type CropKeyframe } from './cropMath';
 
 export const editorOpenEvent = 'clipes-editor-open';
 /** Abre o editor num Corte: candidato aprovado ou par de Frases da Fonte. O núcleo valida as bordas. */
@@ -29,7 +30,7 @@ type Timeline = { state: 'queued' | 'running' | 'ready' | 'failed' | 'cancelled'
 
 const texts = {
   'pt-BR': {
-    title: 'Editor do Corte', close: 'Fechar editor', timeline: 'Timeline do Corte', transcript: 'Transcrição do editor', borders: 'Bordas do Corte', captions: 'Legenda', silences: 'Silêncios',
+    title: 'Editor do Corte', close: 'Fechar editor', timeline: 'Timeline do Corte', transcript: 'Transcrição do editor', borders: 'Bordas do Corte', captions: 'Legenda', silences: 'Silêncios', crop: 'Enquadrar',
     markIn: 'Marcar entrada', markOut: 'Marcar saída', back: 'Voltar', pause: 'Pausar', forward: 'Avançar', rate: 'Velocidade', export: 'Exportar', exportNeedsCandidate: 'Abra um candidato aprovado para exportar.',
     shortcuts: 'Atalhos', hintPlay: 'voltar · pausar · avançar', hintMark: 'entrada · saída (Frase inteira)', hintFrame: 'quadro', hintSentence: 'Frase anterior/próxima', hintDrawers: 'gavetas',
     duration: 'Duração {value}', start: 'Entrada', end: 'Saída', startEarlier: 'Estender início', startLater: 'Encurtar início', endEarlier: 'Encurtar fim', endLater: 'Estender fim',
@@ -37,10 +38,11 @@ const texts = {
     undo: 'Desfazer', redo: 'Refazer', sentence: '1 Frase', saveFailed: 'Não foi possível salvar o Corte. Tente fechar o editor de novo.',
     note: 'Arraste as alças para encaixar em Frase. Segure Alt para ajustar por quadro. As edições são salvas automaticamente.',
     silenceActive: 'Silêncio removido ({ms} ms) — clique para reverter', silenceReverted: 'Silêncio revertido ({ms} ms) — clique para reaplicar',
-    errors: { adjust_empty: 'O Corte precisa manter ao menos uma Frase.', adjust_too_short: 'O Corte ficaria abaixo da duração mínima.', adjust_too_long: 'O Corte ficaria acima da duração máxima.', unknown_sentence_id: 'Frase desconhecida.', invalid_range: 'Intervalo do Corte inválido.', invalid_silence_threshold: 'O limite de silêncio deve ficar entre 300 ms e 2000 ms.', invalid_silence_interval: 'Trecho de silêncio inválido.', candidate_not_found: 'Candidato não encontrado.', transcript_missing: 'Transcrição não encontrada.', source_not_found: 'Fonte não encontrada.', default: 'Não foi possível abrir o editor.' } as Record<string, string>,
+    cropKeyframe: 'Keyframe de enquadramento em {time}',
+    errors: { adjust_empty: 'O Corte precisa manter ao menos uma Frase.', adjust_too_short: 'O Corte ficaria abaixo da duração mínima.', adjust_too_long: 'O Corte ficaria acima da duração máxima.', unknown_sentence_id: 'Frase desconhecida.', invalid_range: 'Intervalo do Corte inválido.', invalid_silence_threshold: 'O limite de silêncio deve ficar entre 300 ms e 2000 ms.', invalid_silence_interval: 'Trecho de silêncio inválido.', invalid_crop: 'Enquadramento inválido.', candidate_not_found: 'Candidato não encontrado.', transcript_missing: 'Transcrição não encontrada.', source_not_found: 'Fonte não encontrada.', default: 'Não foi possível abrir o editor.' } as Record<string, string>,
   },
   en: {
-    title: 'Clip editor', close: 'Close editor', timeline: 'Clip timeline', transcript: 'Editor Transcript', borders: 'Clip borders', captions: 'Captions', silences: 'Silences',
+    title: 'Clip editor', close: 'Close editor', timeline: 'Clip timeline', transcript: 'Editor Transcript', borders: 'Clip borders', captions: 'Captions', silences: 'Silences', crop: 'Framing',
     markIn: 'Mark in', markOut: 'Mark out', back: 'Reverse', pause: 'Pause', forward: 'Forward', rate: 'Speed', export: 'Export', exportNeedsCandidate: 'Open an approved candidate to export.',
     shortcuts: 'Shortcuts', hintPlay: 'reverse · pause · forward', hintMark: 'in · out (whole Sentence)', hintFrame: 'frame', hintSentence: 'previous/next Sentence', hintDrawers: 'drawers',
     duration: 'Duration {value}', start: 'In', end: 'Out', startEarlier: 'Extend start', startLater: 'Shorten start', endEarlier: 'Shorten end', endLater: 'Extend end',
@@ -48,7 +50,8 @@ const texts = {
     undo: 'Undo', redo: 'Redo', sentence: '1 Sentence', saveFailed: 'Could not save the Clip. Try closing the editor again.',
     note: 'Drag handles to snap to Sentences. Hold Alt to adjust by frame. Edits are saved automatically.',
     silenceActive: 'Removed silence ({ms} ms) — click to revert', silenceReverted: 'Reverted silence ({ms} ms) — click to reapply',
-    errors: { adjust_empty: 'The Clip must keep at least one Sentence.', adjust_too_short: 'The Clip would fall below the minimum duration.', adjust_too_long: 'The Clip would exceed the maximum duration.', unknown_sentence_id: 'Unknown Sentence.', invalid_range: 'Invalid Clip range.', invalid_silence_threshold: 'Silence threshold must be between 300 ms and 2000 ms.', invalid_silence_interval: 'Invalid silence interval.', candidate_not_found: 'Candidate not found.', transcript_missing: 'Transcript not found.', source_not_found: 'Source not found.', default: 'Could not open the editor.' } as Record<string, string>,
+    cropKeyframe: 'Framing keyframe at {time}',
+    errors: { adjust_empty: 'The Clip must keep at least one Sentence.', adjust_too_short: 'The Clip would fall below the minimum duration.', adjust_too_long: 'The Clip would exceed the maximum duration.', unknown_sentence_id: 'Unknown Sentence.', invalid_range: 'Invalid Clip range.', invalid_silence_threshold: 'Silence threshold must be between 300 ms and 2000 ms.', invalid_silence_interval: 'Invalid silence interval.', invalid_crop: 'Invalid crop.', candidate_not_found: 'Candidate not found.', transcript_missing: 'Transcript not found.', source_not_found: 'Source not found.', default: 'Could not open the editor.' } as Record<string, string>,
   },
 };
 
@@ -76,7 +79,9 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
   const [startId, setStartId] = useState(request.start_id);
   const [endId, setEndId] = useState(request.end_id);
   const [range, setRange] = useState<{ startUs: number; endUs: number } | null>(null);
-  const [crop, setCrop] = useState<CropSegment[] | null>(null);
+  const [cropState, setCropState] = useState<ClipCrop | null>(null);
+  const [draftCropEdits, setDraftCropEdits] = useState<CropKeyframe[] | null>(null);
+  const [proxyInfo, setProxyInfo] = useState<PreviewProxyInfo | null>(null);
   const [sentences, setSentences] = useState<TimelineSentence[]>([]);
   const [error, setError] = useState('');
   const [sourceUs, setSourceUs] = useState(0);
@@ -93,8 +98,8 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
   const operations = useRef<Promise<void>>(Promise.resolve());
   const left = useGaveta();
   const right = useGaveta();
-  const [view, setView] = useState<'borders' | 'captions' | 'silences'>('borders');
-  const openRight = useCallback((next: 'borders' | 'captions' | 'silences') => { if (right.aberta && view !== next) setView(next); else { setView(next); right.alternar(); } }, [right, view]);
+  const [view, setView] = useState<'borders' | 'captions' | 'silences' | 'crop'>('borders');
+  const openRight = useCallback((next: 'borders' | 'captions' | 'silences' | 'crop') => { if (right.aberta && view !== next) setView(next); else { setView(next); right.alternar(); } }, [right, view]);
   const captionRequest = useMemo(() => opened && range ? { source_id: request.source_id, start_id: startId, end_id: endId, candidate_id: request.candidate_id, clip_id: opened.clipId, start_us: range.startUs, end_us: range.endUs } : null, [opened, range, request.source_id, request.candidate_id, startId, endId]);
   const captions = useCaptions(captionRequest, captionRevision);
   const scroller = useRef<HTMLDivElement>(null);
@@ -127,7 +132,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
       }
       committed.current = info; setHistory(info); setSilences(info.silences ?? null);
       setStartId(info.request.start_id); setEndId(info.request.end_id);
-      setOpened(info); setSentences(all); setRange({ startUs: info.startUs, endUs: info.endUs }); setCrop(info.crop?.resolved?.length ? info.crop.resolved : null); setSourceUs(info.startUs);
+      setOpened(info); setSentences(all); setRange({ startUs: info.startUs, endUs: info.endUs }); setCropState(info.crop ?? null); setDraftCropEdits(null); setSourceUs(info.startUs);
       requestAnimationFrame(() => { if (scroller.current) scroller.current.scrollLeft = Math.max(0, usToPx(info.startUs, info.windowStartUs) - 80); });
     }).catch(e => { if (alive) setError(errorCode(e)); });
     return () => { alive = false; };
@@ -186,8 +191,43 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
     setStartId(answer.request.start_id); setEndId(answer.request.end_id);
     setRange({ startUs: answer.startUs, endUs: answer.endUs }); setHistory(answer);
     setSilences(answer.silences ?? null);
-    if (answer.crop) setCrop(answer.crop.resolved.length ? answer.crop.resolved : null);
+    if (answer.crop) setCropState(answer.crop);
   }, []);
+  const applyCropAnswer = useCallback((ans: CropAnswer) => {
+    if (!committed.current) return;
+    const next: Edited = {
+      ...committed.current,
+      revision: ans.revision,
+      undoCount: ans.undoCount,
+      redoCount: ans.redoCount,
+      crop: { suggested: ans.suggested, edits: ans.edits, resolved: ans.resolved, hasCrop: ans.hasCrop },
+    };
+    committed.current = next;
+    display(next);
+    setError('');
+  }, [display]);
+  const commitCropEdits = useCallback((edits: CropKeyframe[]) => {
+    const seq = ++sequence.current;
+    operations.current = operations.current.then(async () => {
+      if (!committed.current) return;
+      const ans = await coreDispatch<CropAnswer>('editor.crop.set_edits', { clip_id: committed.current.clipId, edits });
+      if (seq === sequence.current) applyCropAnswer(ans);
+      else if (committed.current) {
+        committed.current = {
+          ...committed.current,
+          revision: ans.revision,
+          undoCount: ans.undoCount,
+          redoCount: ans.redoCount,
+          crop: { suggested: ans.suggested, edits: ans.edits, resolved: ans.resolved, hasCrop: ans.hasCrop },
+        };
+      }
+    }).catch(err => {
+      if (seq === sequence.current) {
+        if (committed.current) display(committed.current);
+        setError(errorCode(err) || 'default');
+      }
+    });
+  }, [applyCropAnswer, display]);
   // Serializa as mutações e descarta respostas de prévias ultrapassadas pelo mouseup.
   const edit = useCallback((name: string, args: Record<string, unknown>, preview = false, edge?: Edge) => {
     const seq = ++sequence.current;
@@ -214,6 +254,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
   const adjust = useCallback((edge: Edge, args: Adjustment, preview = false) => edit('editor.adjust', { edge, ...args }, preview, edge), [edit]);
   const cancelPreview = useCallback((edge?: Edge) => {
     ++sequence.current;
+    setDraftCropEdits(null);
     if (committed.current) { display(committed.current); if (edge) seek(edge === 'start' ? committed.current.startUs : committed.current.endUs); }
   }, [display, seek]);
   const close = useCallback(() => {
@@ -234,6 +275,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
     { id: 'editor-shorten-start', titulo: `${t.startLater} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+→', executar: () => moveEdge('start', 1) },
     { id: 'editor-shorten-end', titulo: `${t.endEarlier} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+↑', executar: () => moveEdge('end', -1) },
     { id: 'editor-extend-end', titulo: `${t.endLater} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+↓', executar: () => moveEdge('end', 1) },
+    { id: 'editor-crop', titulo: t.crop, grupo: t.title, dica: 'F', executar: () => { left.fechar(); openRight('crop'); } },
   ]);
 
   // Atalhos do editor não capturam campos de texto nem camadas abertas.
@@ -262,6 +304,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
       if (key === ']' && !inLayer?.closest('aside[data-lado="esq"]')) { take(); left.fechar(); openRight('borders'); return; }
       if ((key === 'c' || key === 'C') && !inLayer) { take(); left.fechar(); openRight('captions'); return; }
       if ((key === 's' || key === 'S') && !inLayer) { take(); left.fechar(); openRight('silences'); return; }
+      if ((key === 'f' || key === 'F') && (!inLayer || inLayer.matches('aside[data-lado="dir"]'))) { take(); left.fechar(); openRight('crop'); return; }
       if (key === 'Escape') {
         if (left.aberta || right.aberta) { take(); left.fechar(); right.fechar(); } else if (!inLayer) { take(); close(); }
         return;
@@ -347,6 +390,14 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
     effectiveDurationUs: range ? range.endUs - range.startUs : 0,
   }, [silences, range]);
   const visibleSilences = useMemo(() => (silences?.intervals ?? []).filter(i => usToPx(i.endUs, windowStartUs) >= visible[0] && usToPx(i.startUs, windowStartUs) <= visible[1]), [silences, windowStartUs, visible]);
+  const effectiveCrop = useMemo<ClipCrop>(() => {
+    const base = cropState ?? { suggested: null, edits: [], resolved: [], hasCrop: false };
+    if (!draftCropEdits) return base;
+    const resolved = resolveCrop(base.suggested, draftCropEdits);
+    return { suggested: base.suggested, edits: draftCropEdits, resolved, hasCrop: resolved.length > 0 };
+  }, [cropState, draftCropEdits]);
+  const crop = useMemo(() => (effectiveCrop.resolved.length ? effectiveCrop.resolved : null), [effectiveCrop.resolved]);
+  const visibleCropKeyframes = useMemo(() => effectiveCrop.edits.filter(k => { const px = usToPx(k.timeUs, windowStartUs); return px >= visible[0] && px <= visible[1]; }), [effectiveCrop.edits, windowStartUs, visible]);
 
   return <section role="region" aria-label={t.title} data-start-id={startId} data-end-id={endId} data-start-us={range?.startUs} data-end-us={range?.endUs} data-window-start-us={opened?.windowStartUs} data-undo-count={history.undoCount} data-source-us={Math.round(sourceUs)} data-rate={rate} data-silences-removed-us={silencesView.removedUs}
     className="fixed inset-0 flex flex-col overflow-hidden bg-canvas text-fg" style={{ zIndex: 'var(--z-scrim)' }}>
@@ -363,10 +414,10 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
     <div className="relative flex min-h-0 flex-1 flex-col">
       <ZonaBorda lado="esq" g={left} /><ZonaBorda lado="dir" g={right} />
       <Puxador lado="esq" g={left} itens={[{ id: 'transcript', rotulo: t.transcript, atalho: '[', icone: <PanelLeft size={16} />, onClick: () => { right.fechar(); left.alternar(); } }]} />
-      <Puxador lado="dir" g={right} itens={[{ id: 'borders', rotulo: t.borders, atalho: ']', icone: <PanelRight size={16} />, onClick: () => { left.fechar(); openRight('borders'); } }, { id: 'captions', rotulo: t.captions, atalho: 'C', icone: <Captions size={16} />, onClick: () => { left.fechar(); openRight('captions'); } }, { id: 'silences', rotulo: t.silences, atalho: 'S', icone: <Scissors size={16} />, onClick: () => { left.fechar(); openRight('silences'); } }]} />
+      <Puxador lado="dir" g={right} itens={[{ id: 'borders', rotulo: t.borders, atalho: ']', icone: <PanelRight size={16} />, onClick: () => { left.fechar(); openRight('borders'); } }, { id: 'captions', rotulo: t.captions, atalho: 'C', icone: <Captions size={16} />, onClick: () => { left.fechar(); openRight('captions'); } }, { id: 'silences', rotulo: t.silences, atalho: 'S', icone: <Scissors size={16} />, onClick: () => { left.fechar(); openRight('silences'); } }, { id: 'crop', rotulo: t.crop, atalho: 'F', icone: <Crop size={16} />, onClick: () => { left.fechar(); openRight('crop'); } }]} />
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4"><div className="m-auto flex flex-col items-center gap-3">
         {!opened && !error && <p aria-live="polite" className="text-fg-2">{t.loading}</p>}
-        {opened && <div style={{ width: 'min(18rem, 22vh)' }}><CutPreview sourceId={request.source_id} startUs={opened.startUs} endUs={opened.endUs} rate={rate} onSourceTime={us => setSourceUs(us)} captions={captions.data} skipIntervals={activeSilences} crop={crop} /></div>}
+        {opened && <div style={{ width: 'min(18rem, 22vh)' }}><CutPreview sourceId={request.source_id} startUs={opened.startUs} endUs={opened.endUs} rate={rate} onSourceTime={us => setSourceUs(us)} onProxyChange={setProxyInfo} captions={captions.data} skipIntervals={activeSilences} crop={crop} /></div>}
         {opened && <div className="flex flex-wrap items-center justify-center gap-2" role="group" aria-label={t.shortcuts}>
           <Button tamanho="sm" onClick={() => setRate(nextRate(rate, 'j'))} atalho="J">{t.back.replace(/ \(.\)$/, '')}</Button>
           <Button tamanho="sm" onClick={() => setRate(0)} atalho="K">{t.pause.replace(/ \(.\)$/, '')}</Button>
@@ -392,7 +443,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
         </p>}
         <div ref={scroller} className="relative overflow-x-auto overflow-y-hidden" style={{ height: ROW.thumbs + ROW.wave + ROW.sentences + 14 }}
           onClick={e => {
-            if ((e.target as Element).closest('[data-editor-sentence],[data-silence-cut]') || !scroller.current) return;
+            if ((e.target as Element).closest('[data-editor-sentence],[data-silence-cut],[data-timeline-crop-kf]') || !scroller.current) return;
             const rect = scroller.current.getBoundingClientRect();
             seek(pxToUs(e.clientX - rect.left + scroller.current.scrollLeft, windowStartUs));
           }}>
@@ -425,6 +476,13 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
               </button>)}
             </div>
             {range && opened && <BorderHandles startUs={range.startUs} endUs={range.endUs} windowStartUs={windowStartUs} fps={opened.fps} labels={{ start: t.start, end: t.end }} adjust={adjust} cancel={cancelPreview} pause={() => setRate(0)} />}
+            {visibleCropKeyframes.map(k => {
+              const label = fill(t.cropKeyframe, { time: borderClock(k.timeUs) });
+              return <button key={k.timeUs} type="button" data-timeline-crop-kf={k.timeUs} aria-label={label} title={label}
+                onClick={e => { e.stopPropagation(); setRate(0); seek(k.timeUs); }}
+                className="foco absolute top-1 z-10 size-3 -translate-x-1/2 rotate-45 rounded-[2px] border border-line-strong bg-accent hover:scale-110"
+                style={{ left: usToPx(k.timeUs, windowStartUs) }} />;
+            })}
             <div aria-hidden data-playhead className="pointer-events-none absolute inset-y-0 w-0.5 bg-fg" style={{ left: usToPx(sourceUs, windowStartUs) }} />
           </div>
         </div>
@@ -438,7 +496,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
             <span className="mr-2 font-mono text-xs text-fg-3">{clock(s.startUs)}</span>{s.text}</button></li>)}
         </ol>
       </GavetaBorda>
-      <GavetaBorda lado="dir" g={right} rotulo={view === 'captions' ? t.captions : view === 'silences' ? t.silences : t.borders}>
+      <GavetaBorda lado="dir" g={right} rotulo={view === 'captions' ? t.captions : view === 'silences' ? t.silences : view === 'crop' ? t.crop : t.borders}>
         {view === 'captions' ? <><CabecalhoGaveta acoes={<Button tamanho="sm" onClick={right.fechar}>{t.close.replace(/ .*/, '')}</Button>}><h3 className="font-semibold">{t.captions}</h3></CabecalhoGaveta>
           {opened && <CaptionPanel data={captions.data} clipId={opened.clipId} sourceId={request.source_id} refresh={captions.refresh} loadError={captions.error} />}</> : view === 'silences' ? <>
           <CabecalhoGaveta acoes={<Button tamanho="sm" onClick={right.fechar}>{t.close.replace(/ .*/, '')}</Button>}><h3 className="font-semibold">{t.silences}</h3></CabecalhoGaveta>
@@ -450,7 +508,26 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
             onRevertAll={() => edit('editor.silences.revert_all', {})}
             onApplyAll={() => edit('editor.silences.apply_all', {})}
             onSeek={us => { setRate(0); seek(us); }}
-          /></> : <>
+          /></> : view === 'crop' ? <>
+          <CabecalhoGaveta acoes={<Button tamanho="sm" onClick={right.fechar}>{t.close.replace(/ .*/, '')}</Button>}><h3 className="font-semibold">{t.crop}</h3></CabecalhoGaveta>
+          {opened && range && (
+            <CropPanel
+              clipId={opened.clipId}
+              sourceId={request.source_id}
+              range={range}
+              sourceUs={sourceUs}
+              fps={opened.fps}
+              rate={rate}
+              proxy={proxyInfo}
+              crop={effectiveCrop}
+              busy={closing}
+              onPreviewEdits={setDraftCropEdits}
+              onCommitEdits={commitCropEdits}
+              onSuggestionApplied={applyCropAnswer}
+              onSeek={seek}
+              onPause={() => setRate(0)}
+            />
+          )}</> : <>
         <CabecalhoGaveta acoes={<Button tamanho="sm" onClick={right.fechar}>{t.close.replace(/ .*/, '')}</Button>}><h3 className="font-semibold">{t.borders}</h3></CabecalhoGaveta>
         <div className="flex flex-col gap-3 overflow-y-auto p-3 text-sm">
           <section aria-label={t.start}><h4 className="text-xs text-fg-2">{t.start} · #{startId}</h4><p>{startSentence?.text}</p>

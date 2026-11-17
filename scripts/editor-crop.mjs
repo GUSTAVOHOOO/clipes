@@ -68,7 +68,62 @@ async function exerciseEditorCrop(page, url) {
   // Segmento 2 (3630s..3660s): corte seco para x=maxX (proxy 150s).
   await checkAt(150.0, maxX, 'corte seco na troca de cena');
 
+  // Abre a gaveta Enquadrar com F, arrasta o crop sobre a Fonte 16:9 e cria keyframes (#71).
+  await page.keyboard.press('f');
+  const cropDrawer = editor.getByRole('dialog', { name: 'Enquadrar', exact: true });
+  await cropDrawer.waitFor();
+  const sourceBox = cropDrawer.locator('[data-crop-source]');
+  const handle = cropDrawer.locator('[data-crop-handle]');
+  await handle.waitFor();
+
+  // Posiciona no meio do segmento 1 (proxy 130s = 3610s) e arrasta o crop para a direita.
+  await video.evaluate(v => { v.currentTime = 130; });
+  await page.waitForFunction(() => Math.abs(Number(document.querySelector('[data-source-us]')?.getAttribute('data-source-us')) - 3610_000_000) < 50_000);
+  const srcRect = await sourceBox.boundingBox();
+  const hRect = await handle.boundingBox();
+  await page.mouse.move(hRect.x + hRect.width / 2, hRect.y + hRect.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(srcRect.x + srcRect.width * 0.72, hRect.y + hRect.height / 2, { steps: 6 });
+  assert.equal(await editor.getAttribute('data-undo-count'), '0', 'prévia do arrasto de crop não cria passo');
+  const previewRectX = await video.evaluate(v => Number((v.dataset.cropRect ?? '0').split(',')[0]));
+  assert.ok(previewRectX > 0.35, `preview reflete o arrasto antes do mouseup (x=${previewRectX})`);
+  await page.mouse.up();
+  await page.waitForFunction(() => document.querySelector('[data-undo-count="1"]'));
+  assert.equal(await cropDrawer.locator('[data-crop-keyframe]').count(), 1, 'mouseup cria 1 keyframe manual');
+
+  // Segmento 2 (não editado) mantém a sugestão automática (x = maxX).
+  await checkAt(150.0, maxX, 'segmento 2 não editado preserva sugestão');
+
+  // Segundo keyframe manual em 3620s (proxy 140s) + corte seco manual.
+  await video.evaluate(v => { v.currentTime = 140; });
+  await page.waitForFunction(() => Math.abs(Number(document.querySelector('[data-source-us]')?.getAttribute('data-source-us')) - 3620_000_000) < 50_000);
+  await handle.focus();
+  await page.keyboard.press('Home');
+  await page.waitForFunction(() => document.querySelector('[data-undo-count="2"]'));
+  assert.equal(await cropDrawer.locator('[data-crop-keyframe]').count(), 2);
+  await checkAt(135.0, previewRectX * 0.5, 'pan linear entre keyframes manuais');
+
+  const secondKf = cropDrawer.locator('[data-crop-keyframe]').nth(1);
+  await secondKf.getByRole('button', { name: 'Corte seco', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('[data-undo-count="3"]'));
+  await checkAt(139.9, previewRectX, 'corte seco manual segura valor anterior até o corte');
+  await checkAt(140.0, 0, 'corte seco manual salta no limite');
+
+  // Undo e redo pelo mecanismo do editor funcionam para crop.
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => document.querySelector('[data-undo-count="2"]'));
+  await page.keyboard.press('Control+Shift+z');
+  await page.waitForFunction(() => document.querySelector('[data-undo-count="3"]'));
+
+  // Refazer análise atualiza sugestão (segmento 2 passa a 0.75*maxX) sem apagar keyframes manuais.
+  await cropDrawer.getByRole('button', { name: 'Refazer análise', exact: true }).click();
+  await checkAt(150.0, maxX * 0.75, 'refazer análise atualiza segmento não editado');
+  assert.equal(await cropDrawer.locator('[data-crop-keyframe]').count(), 2, 'refazer análise preserva correções manuais');
+  await checkAt(140.0, 0, 'segmento editado mantém correção manual após refazer análise');
+
   await page.screenshot({ path: 'shots/editor-crop.png' });
+  await page.keyboard.press('Escape');
+  await cropDrawer.waitFor({ state: 'hidden' });
   await editor.getByRole('button', { name: 'Fechar editor', exact: true }).click();
   await editor.waitFor({ state: 'detached' });
 }
