@@ -87,6 +87,8 @@ pub struct BlockRequest<'a> {
     pub audio: &'a Path,
     /// Último bloco da Fonte: não há bloco seguinte para receber uma fala cortada.
     pub final_block: bool,
+    /// Idioma fixo da Fonte (código ISO-639-1), quando definido.
+    pub language: Option<&'a str>,
 }
 
 /// O que produz a Transcrição (GLOSSARY: Motor de transcrição). Trocável: o local usa o
@@ -181,6 +183,9 @@ impl TranscriptionEngine for LocalEngine {
             });
             if group > 1 {
                 params["group_size"] = json!(group);
+            }
+            if let Some(language) = request.language {
+                params["language"] = json!(language);
             }
             let result = self.client.run("transcribe", params, cancel, &mut |event| {
                 if let WorkerEvent::Progress { percentage, .. } = event {
@@ -397,6 +402,13 @@ pub fn run_with(
             "A Fonte está indisponível ou foi alterada.",
         ));
     }
+    let language: String = projects::with_reader(|c| {
+        c.query_row(
+            "SELECT language FROM sources WHERE id=?1",
+            [source_id],
+            |r| r.get(0),
+        )
+    })?;
     let wav = work.join(format!("job-{id}.wav"));
     let mut last_percentage = u8::MAX;
     loop {
@@ -442,6 +454,7 @@ pub fn run_with(
                 &BlockRequest {
                     audio: &wav,
                     final_block,
+                    language: Some(&language),
                 },
                 &flag,
                 &mut |percent| {
@@ -627,7 +640,7 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         preview::source(source, Path::new(v["project"].as_str().unwrap_or_default()))?;
     let existing = projects::with_reader(|c| {
         c.query_row(
-            "SELECT id,state,engine,model FROM transcripts WHERE source_id=?1 AND audio_track=?2",
+            "SELECT id,state,engine,model,resume_us FROM transcripts WHERE source_id=?1 AND audio_track=?2",
             (source, track),
             |r| {
                 Ok((
@@ -635,11 +648,26 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                     r.get::<_, String>(1)?,
                     r.get::<_, String>(2)?,
                     r.get::<_, String>(3)?,
+                    r.get::<_, i64>(4)?,
                 ))
             },
         )
         .optional()
     })?;
+    let requested_language = match v.get("language") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(
+            groq::language_code(s.trim())
+                .ok_or_else(|| error("invalid_language", "Selecione um idioma válido."))?,
+        ),
+        _ => return Err(error("invalid_language", "Selecione um idioma válido.")),
+    };
+    let current_language: String = projects::with_reader(|c| {
+        c.query_row("SELECT language FROM sources WHERE id=?1", [source], |r| {
+            r.get(0)
+        })
+    })?;
+    let language_change = requested_language.filter(|&lang| lang != current_language);
     let engine = match v.get("engine") {
         None | Some(Value::Null) => existing.as_ref().map_or("local", |t| t.2.as_str()),
         Some(Value::String(e)) if e == "local" || e == "groq" => e.as_str(),
@@ -668,6 +696,12 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             "Uma Transcrição completa não permite trocar o Motor.",
         ));
     }
+    if language_change.is_some() && existing.as_ref().is_some_and(|t| t.1 == "complete") {
+        return Err(error(
+            "transcript_complete",
+            "Uma Transcrição completa não permite alterar o idioma.",
+        ));
+    }
     if existing.as_ref().is_some_and(|t| t.1 == "complete") {
         return Ok(
             json!({"transcript_id":existing.as_ref().unwrap().0,"state":"complete","job_id":null}),
@@ -680,10 +714,20 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         c.query_row(
         "SELECT id,state FROM jobs WHERE kind='transcription' AND source_id=?1 AND state IN ('queued','running','uncertain') ORDER BY id DESC LIMIT 1",[source],|r|Ok((r.get(0)?,r.get(1)?))).optional()
     })?;
-    if switching && active.is_some() {
+    if (switching || language_change.is_some()) && active.is_some() {
         return Err(error(
             "transcription_busy",
-            "Encerre a tarefa antes de trocar o Motor.",
+            if language_change.is_some() && !switching {
+                "Encerre a tarefa antes de alterar o idioma."
+            } else {
+                "Encerre a tarefa antes de trocar o Motor."
+            },
+        ));
+    }
+    if language_change.is_some() && existing.as_ref().is_some_and(|t| t.4 > 0) {
+        return Err(error(
+            "transcript_partial",
+            "Não é possível alterar o idioma após iniciar a Transcrição.",
         ));
     }
     if active.as_ref().is_some_and(|j| j.1 == "uncertain") {
@@ -700,7 +744,7 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         e.usage = Some(loss(existing.as_ref().unwrap().0)?);
         return Err(e);
     }
-    if let Some((transcript, _, _, _)) = existing
+    if let Some((transcript, _, _, _, _)) = existing
         .as_ref()
         .filter(|_| !switching && active.is_none() && v["retry_confirmed"] != true)
     {
@@ -744,6 +788,9 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     };
     let (transcript, state, job) = projects::with_writer(|conn| {
         let tx = conn.transaction()?;
+        if let Some(lang) = language_change {
+            tx.execute("UPDATE sources SET language=?1 WHERE id=?2", (lang, source))?;
+        }
         if switching {
             crate::caption_style::store::stage_remap(&tx, existing.as_ref().unwrap().0)?;
             tx.execute(
@@ -792,6 +839,11 @@ fn loss(transcript: i64) -> Result<Value, CoreError> {
 fn status(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let source = source_id(&v)?;
     projects::with_reader(|c| {
+        let language: Option<String> = c
+            .query_row("SELECT language FROM sources WHERE id=?1", [source], |r| {
+                r.get(0)
+            })
+            .optional()?;
         let transcript = c
             .query_row(
                 "SELECT t.id, t.state, t.resume_us, t.duration_us, t.model, t.engine, (SELECT COUNT(*) FROM transcript_words w WHERE w.transcript_id=t.id AND w.kind='word') FROM transcripts t WHERE t.source_id=?1 ORDER BY t.id LIMIT 1",
@@ -808,7 +860,7 @@ fn status(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                 |r| Ok(json!({"id": r.get::<_, i64>(0)?, "state": r.get::<_, String>(1)?, "progress": r.get::<_, i64>(2)?})),
             )
             .optional()?;
-        Ok(json!({"transcript": transcript, "job": job}))
+        Ok(json!({"language": language, "transcript": transcript, "job": job}))
     })
 }
 
@@ -854,6 +906,7 @@ mod groq_tests;
 
 mod estimate;
 mod groq;
+pub use groq::language_code;
 pub use groq::GroqEngine;
 
 /// Códigos ISO-639-1 (duas letras minúsculas) aceitos pela transcrição (Whisper tokenizer,

@@ -298,3 +298,82 @@ def test_group_size_is_forwarded_and_validated():
     for bad in (0, 33, True, "2"):
         replies = run({**base, "group_size": bad}, {"transcribe": task})
         assert replies[-1]["code"] == "invalid_message"
+
+
+# ---- Idioma fixo por Fonte (#195) ----
+
+
+def test_fixed_language_skips_detection_one_by_one():
+    seen = []
+
+    def fail_detect(_chunk):
+        pytest.fail("detect_language não deve ser chamado com language fixo")
+
+    def fake_transcribe(_chunk, language, batch):
+        seen.append(language)
+        return [(" olá", 0.0, 0.2), ("mundo", 0.3, 0.5)]
+
+    task = transcribe_task(
+        loader=lambda *_: Transcriber(
+            lambda a: SPANS, fail_detect, fake_transcribe
+        ),
+        reader=lambda p: [0.0] * 160000,
+    )
+    replies = run(
+        {"audio": "a.wav", "final": True, "batch_size": 1, "language": "pt", "model": MODEL},
+        {"transcribe": task},
+    )
+    result = [m for m in replies if m["type"] == "result"][0]["data"]
+    assert seen == ["pt"] * len(SPANS)
+    assert len(result["words"]) == 2 * len(SPANS)
+    assert all(w["language"] == "pt" for w in result["words"])
+
+
+def test_fixed_language_skips_detection_and_batches_without_splitting_when_grouped():
+    calls = []
+
+    def fail_detect(_chunk):
+        pytest.fail("detect_language não deve ser chamado com language fixo")
+
+    def clips(audio, clip_list, language, batch):
+        calls.append((len(clip_list), language, batch))
+        for clip in clip_list:
+            yield " palavra", clip["start"] + 0.1, clip["start"] + 0.3
+
+    task = transcribe_task(
+        loader=lambda *_: Transcriber(
+            lambda a: SPANS,
+            fail_detect,
+            lambda *_: pytest.fail("caminho agrupado não usa chamada por trecho"),
+            transcribe_clips=clips,
+        ),
+        reader=lambda p: [0.0] * 160000,
+    )
+    replies = run(
+        {
+            "audio": "a.wav",
+            "final": True,
+            "batch_size": 1,
+            "group_size": 4,
+            "language": "en",
+            "model": MODEL,
+        },
+        {"transcribe": task},
+    )
+    result = [m for m in replies if m["type"] == "result"][0]["data"]
+    assert calls == [(4, "en", 4), (1, "en", 4)]
+    assert len(result["words"]) == len(SPANS)
+    assert all(w["language"] == "en" for w in result["words"])
+
+
+@pytest.mark.parametrize("bad_lang", ["", "xx", "PT", "pt-BR", 123, True])
+def test_invalid_language_is_rejected_before_loading(bad_lang):
+    task = transcribe_task(
+        loader=lambda *_: pytest.fail("não deve carregar o modelo"),
+        reader=lambda p: [0.0],
+    )
+    replies = run(
+        {"audio": "a.wav", "final": True, "batch_size": 1, "language": bad_lang, "model": MODEL},
+        {"transcribe": task},
+    )
+    assert replies[-1]["code"] == "invalid_message"

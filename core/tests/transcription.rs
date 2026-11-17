@@ -87,6 +87,8 @@ impl Env {
         std::env::remove_var("CLIPES_FAKE_WORKER_CRASH");
         std::env::remove_var("CLIPES_FAKE_WORKER_HOLD");
         std::env::remove_var("CLIPES_FAKE_TRANSCRIBE_LOG");
+        std::env::remove_var("CLIPES_FAKE_LANGUAGE_LOG");
+        std::env::remove_var("CLIPES_FAKE_SILENT_BLOCKS");
         std::env::remove_var("CLIPES_FAKE_GROUP_OOM");
         run("components.settings.set", json!({"data_dir":data,"cache_dir":root.path().join("cache"),"cache_limit_bytes":1_000_000,"ffmpeg_path":fake})).unwrap();
 
@@ -1076,4 +1078,277 @@ fn out_of_memory_with_a_group_of_one_is_still_a_typed_failure() {
     env.start(source).unwrap();
     env.wait_transcribe("failed");
     assert_eq!(groups(&env), ["2", "1"]);
+}
+
+// ---- Idioma fixo por Fonte (#195) ----
+
+#[test]
+fn fixed_source_language_is_sent_to_every_block_across_crash_and_resume() {
+    let env = Env::new(25);
+    env.install_models();
+    let lang_log = env.root.path().join("language.log");
+    std::env::set_var("CLIPES_FAKE_LANGUAGE_LOG", &lang_log);
+    let media = env.root.path().join("source-en.mp4");
+    fs::write(&media, b"media").unwrap();
+    let imported = run(
+        "sources.import",
+        json!({"project":env.project,"path":media,"permission":{"status":"none"},"audio_track":0,"language":"en"}),
+    )
+    .unwrap();
+    assert_eq!(imported["language"], "en");
+    let source = imported["id"].as_i64().unwrap();
+    assert_eq!(env.status(source)["language"], "en");
+
+    let crash = env.root.path().join("crash");
+    fs::write(&crash, b"1").unwrap();
+    std::env::set_var("CLIPES_FAKE_WORKER_CRASH", &crash);
+    env.start(source).unwrap();
+    env.wait_transcribe("failed");
+    assert_eq!(env.status(source)["transcript"]["resume_us"], 8_000_000);
+
+    env.start(source).unwrap();
+    env.wait_transcribe("completed");
+
+    let sent: Vec<String> = fs::read_to_string(&lang_log)
+        .unwrap()
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    assert!(sent.len() >= 3, "{sent:?}");
+    assert!(sent.iter().all(|l| l == "en"), "{sent:?}");
+
+    let rows = env.rows(source);
+    let words: Vec<_> = rows.iter().filter(|r| r["kind"] == "word").collect();
+    assert_eq!(words.len(), 25);
+    assert!(words.iter().all(|w| w["language"] == "en"));
+    let sentences = run("transcription.sentences", json!({"source_id":source})).unwrap();
+    assert!(sentences
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|s| s["language"] == "en"));
+}
+
+#[test]
+fn silence_only_first_block_keeps_fixed_language_on_subsequent_blocks() {
+    let env = Env::new(20);
+    env.install_models();
+    let lang_log = env.root.path().join("language-silent.log");
+    std::env::set_var("CLIPES_FAKE_LANGUAGE_LOG", &lang_log);
+    std::env::set_var("CLIPES_FAKE_SILENT_BLOCKS", "1");
+    let media = env.root.path().join("source-es.mp4");
+    fs::write(&media, b"media").unwrap();
+    let source = run(
+        "sources.import",
+        json!({"project":env.project,"path":media,"permission":{"status":"none"},"audio_track":0,"language":"es"}),
+    )
+    .unwrap()["id"]
+        .as_i64()
+        .unwrap();
+    env.start(source).unwrap();
+    env.wait_transcribe("completed");
+
+    let sent: Vec<String> = fs::read_to_string(&lang_log)
+        .unwrap()
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(sent, ["es", "es"]);
+    let rows = env.rows(source);
+    assert_eq!(rows[0]["kind"], "silence");
+    assert_eq!(rows[0]["start_us"], 0);
+    // Bloco 1 (0..10 s só silêncio) se funde com o silêncio inicial do bloco 2 (10..10,1 s).
+    assert_eq!(rows[0]["end_us"], 10_100_000);
+    let words: Vec<_> = rows.iter().filter(|r| r["kind"] == "word").collect();
+    assert_eq!(words.len(), 10);
+    assert!(words.iter().all(|w| w["language"] == "es"));
+}
+
+#[test]
+fn source_language_is_editable_before_start_and_locked_after_progress() {
+    let env = Env::new(25);
+    env.install_models();
+    let source = env.import(0);
+    assert_eq!(env.status(source)["language"], "pt");
+
+    assert_eq!(
+        run(
+            "sources.language.set",
+            json!({"project":env.project,"id":source,"language":"invalid-code"}),
+        )
+        .unwrap_err()
+        .code,
+        "invalid_language"
+    );
+
+    let updated = run(
+        "sources.language.set",
+        json!({"project":env.project,"id":source,"language":"fr"}),
+    )
+    .unwrap();
+    assert_eq!(updated["language"], "fr");
+    assert_eq!(env.status(source)["language"], "fr");
+
+    let hold = env.root.path().join("hold");
+    fs::write(&hold, b"1").unwrap();
+    std::env::set_var("CLIPES_FAKE_WORKER_HOLD", &hold);
+    let started = run(
+        "transcription.start",
+        json!({"project":env.project,"source_id":source,"language":"de"}),
+    )
+    .unwrap();
+    assert_eq!(env.status(source)["language"], "de");
+    wait("transcrição em andamento", || {
+        env.job_state("transcription")
+            .is_some_and(|(s, _)| s == "running")
+    });
+    assert_eq!(
+        run(
+            "sources.language.set",
+            json!({"project":env.project,"id":source,"language":"it"}),
+        )
+        .unwrap_err()
+        .code,
+        "transcription_busy"
+    );
+    let crash = env.root.path().join("crash");
+    fs::write(&crash, b"1").unwrap();
+    std::env::set_var("CLIPES_FAKE_WORKER_CRASH", &crash);
+    run("jobs.cancel", json!({"id":started["job_id"]})).unwrap();
+    fs::remove_file(&hold).unwrap();
+    env.wait_transcribe("cancelled");
+
+    // 0 blocos gravados: ainda permite editar antes de retomar com blocos.
+    assert_eq!(env.status(source)["transcript"]["resume_us"], 0);
+    run(
+        "sources.language.set",
+        json!({"project":env.project,"id":source,"language":"it"}),
+    )
+    .unwrap();
+    assert_eq!(env.status(source)["language"], "it");
+
+    // Após gravar o 1º bloco, trava o idioma como fixo da Fonte.
+    env.start(source).unwrap();
+    env.wait_transcribe("failed");
+    assert_eq!(env.status(source)["transcript"]["resume_us"], 8_000_000);
+    assert_eq!(
+        run(
+            "sources.language.set",
+            json!({"project":env.project,"id":source,"language":"es"}),
+        )
+        .unwrap_err()
+        .code,
+        "transcript_partial"
+    );
+
+    env.start(source).unwrap();
+    env.wait_transcribe("completed");
+    assert_eq!(
+        run(
+            "sources.language.set",
+            json!({"project":env.project,"id":source,"language":"es"}),
+        )
+        .unwrap_err()
+        .code,
+        "transcript_complete"
+    );
+    assert!(env
+        .rows(source)
+        .iter()
+        .filter(|r| r["kind"] == "word")
+        .all(|w| w["language"] == "it"));
+}
+
+#[test]
+fn groq_engine_sends_fixed_source_language_in_every_block() {
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        sync::atomic::AtomicBool,
+    };
+    let env = Env::new(25);
+    let media = env.root.path().join("source-groq-en.mp4");
+    fs::write(&media, b"media").unwrap();
+    let source = run(
+        "sources.import",
+        json!({"project":env.project,"path":media,"permission":{"status":"none"},"audio_track":0,"language":"en"}),
+    )
+    .unwrap()["id"]
+        .as_i64()
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let endpoint = format!(
+        "http://{}/audio/transcriptions",
+        listener.local_addr().unwrap()
+    );
+    let server = std::thread::spawn(move || {
+        for _ in 0..3 {
+            let (mut socket, _) = listener.accept().unwrap();
+            socket.set_nonblocking(false).unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut bytes = Vec::new();
+            let mut buf = [0; 4096];
+            loop {
+                let n = socket.read(&mut buf).unwrap();
+                assert!(n > 0);
+                bytes.extend_from_slice(&buf[..n]);
+                if let Some(end) = bytes.windows(4).position(|w| w == b"\r\n\r\n") {
+                    let len = String::from_utf8_lossy(&bytes[..end])
+                        .lines()
+                        .find_map(|l| {
+                            l.to_lowercase()
+                                .strip_prefix("content-length: ")
+                                .and_then(|s| s.parse::<usize>().ok())
+                        })
+                        .unwrap();
+                    if bytes.len() >= end + 4 + len {
+                        break;
+                    }
+                }
+            }
+            let request = String::from_utf8_lossy(&bytes);
+            assert!(
+                request.contains("name=\"language\"\r\n\r\nen\r\n")
+                    || request.contains("name=\"language\"\n\nen\n"),
+                "campo language=en ausente no multipart"
+            );
+            let body = r#"{"language":"english","words":[{"word":"hello","start":0.1,"end":0.5}]}"#;
+            write!(
+                socket,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .unwrap();
+        }
+    });
+    let job = env.paid_job(source);
+    let client =
+        clipes_core::worker::WorkerClient::start(FAKE_WORKER, ["--scenario", "unused"], |_| {})
+            .unwrap();
+    let mut engine = clipes_core::transcription::GroqEngine::with_worker(
+        client,
+        "fake-key".into(),
+        endpoint,
+        env.root.path().join(exe("fake-ffmpeg")),
+        Duration::from_secs(5),
+    );
+    clipes_core::transcription::run_with(
+        &mut engine,
+        job,
+        source,
+        Path::new(&env.project),
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    server.join().unwrap();
+    let words: Vec<_> = env
+        .rows(source)
+        .into_iter()
+        .filter(|r| r["kind"] == "word")
+        .collect();
+    assert_eq!(words.len(), 3);
+    assert!(words.iter().all(|w| w["language"] == "en"));
 }

@@ -173,6 +173,16 @@ fn transcribe_worker() {
                     );
                     continue;
                 }
+                if let Some(log) = std::env::var_os("CLIPES_FAKE_LANGUAGE_LOG") {
+                    if message["task"] == "transcribe" {
+                        let mut file = fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(log)
+                            .unwrap();
+                        writeln!(file, "{}", params["language"].as_str().unwrap_or("")).unwrap();
+                    }
+                }
                 if let Some(log) = std::env::var_os("CLIPES_FAKE_TRANSCRIBE_LOG") {
                     if message["task"] == "transcribe" {
                         let mut file = fs::OpenOptions::new()
@@ -222,7 +232,13 @@ fn transcribe_worker() {
                     );
                     continue;
                 }
+                let silent_blocks = std::env::var("CLIPES_FAKE_SILENT_BLOCKS")
+                    .ok()
+                    .and_then(|n| n.parse::<usize>().ok())
+                    .unwrap_or(0);
                 let covered = if params["final"] == true {
+                    seconds
+                } else if requests <= silent_blocks {
                     seconds
                 } else {
                     (seconds - 2.0).max(1.0)
@@ -239,17 +255,26 @@ fn transcribe_worker() {
                     &mut out,
                     serde_json::json!({"v":1,"type":"progress","id":id,"stage":"transcribing","percentage":50,"message":"Transcrevendo"}),
                 );
-                let words: Vec<Value> = (0..covered.floor() as i64)
-                    .map(|k| serde_json::json!({"text":"palavra","start_us":k * 1_000_000 + 100_000,"end_us":k * 1_000_000 + 500_000,"language":"pt"}))
-                    .collect();
-                let silences: Vec<Value> = (0..covered.floor() as i64)
-                    .flat_map(|k| {
-                        [
-                            serde_json::json!({"start_us":k * 1_000_000,"end_us":k * 1_000_000 + 100_000}),
-                            serde_json::json!({"start_us":k * 1_000_000 + 500_000,"end_us":(k + 1) * 1_000_000}),
-                        ]
-                    })
-                    .collect();
+                let lang = params["language"].as_str().unwrap_or("pt");
+                let (words, silences) = if requests <= silent_blocks {
+                    (
+                        Vec::new(),
+                        vec![serde_json::json!({"start_us": 0, "end_us": (covered * 1e6) as i64})],
+                    )
+                } else {
+                    let words: Vec<Value> = (0..covered.floor() as i64)
+                        .map(|k| serde_json::json!({"text":"palavra","start_us":k * 1_000_000 + 100_000,"end_us":k * 1_000_000 + 500_000,"language":lang}))
+                        .collect();
+                    let silences: Vec<Value> = (0..covered.floor() as i64)
+                        .flat_map(|k| {
+                            [
+                                serde_json::json!({"start_us":k * 1_000_000,"end_us":k * 1_000_000 + 100_000}),
+                                serde_json::json!({"start_us":k * 1_000_000 + 500_000,"end_us":(k + 1) * 1_000_000}),
+                            ]
+                        })
+                        .collect();
+                    (words, silences)
+                };
                 send(
                     &mut out,
                     serde_json::json!({"v":1,"type":"result","id":id,"data":{"covered_us":(covered * 1e6) as i64,"words":words,"silences":silences}}),

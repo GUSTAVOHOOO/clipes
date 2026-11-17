@@ -87,3 +87,32 @@ fn cinema_balances_lines_and_emoji_never_reaches_either_renderer() {
     assert!(lengths[0].abs_diff(lengths[1]) <= 10);
     assert!(prepared.ass.contains(r"\N"));
 }
+
+#[test]
+fn hidden_words_are_omitted_from_cues_and_ass_without_merging_into_neighbors() {
+    let mut input = words();
+    input[1].word.text = "fala😀".into();
+    input[1].word.end_us = 950_000; // sobrepõe input[2], mas oculta não deve se fundir
+    input[1].overrides.hidden = Some(true);
+    let prepared = prepare(&input, &Style::preset(Preset::Vertical), 3_000_000).unwrap();
+    assert_eq!(prepared.emoji_removed, 0);
+    let visible: Vec<_> = prepared
+        .cues
+        .iter()
+        .flat_map(|c| &c.lines)
+        .flatten()
+        .map(|w| w.text.as_str())
+        .collect();
+    assert_eq!(
+        visible,
+        ["Uma", "curta", "com", "legenda", "bem", "legível."]
+    );
+    assert!(!prepared.ass.contains("fala"));
+
+    for w in &mut input {
+        w.overrides.hidden = Some(true);
+    }
+    let all_hidden = prepare(&input, &Style::preset(Preset::Vertical), 3_000_000).unwrap();
+    assert!(all_hidden.cues.is_empty());
+    assert!(!all_hidden.ass.contains("Dialogue:"));
+}

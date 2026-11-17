@@ -64,9 +64,32 @@ fn local_source_lifecycle() {
     let source=run("sources.import",json!({"project":project,"path":media,"permission":{"status":"none"},"audio_track":2,"copy":false})).unwrap();
     let id = source["id"].as_i64().unwrap();
     assert_eq!(source["permission"]["status"], "none");
+    assert_eq!(source["language"], "pt");
     assert_eq!(source["available"], true);
     assert_eq!(source["metadata"]["streams"][0]["width"], 64);
     assert_eq!(source["audio_track"], 2);
+    assert_eq!(
+        run("sources.import",json!({"project":project,"path":media,"permission":{"status":"none"},"audio_track":2,"language":"xx"})).unwrap_err().code,
+        "invalid_language"
+    );
+    let spanish = run("sources.import",json!({"project":project,"path":media,"permission":{"status":"none"},"audio_track":2,"language":"Spanish"})).unwrap();
+    assert_eq!(spanish["language"], "es");
+    let spanish_id = spanish["id"].as_i64().unwrap();
+    let updated = run(
+        "sources.language.set",
+        json!({"project":project,"id":spanish_id,"language":"en"}),
+    )
+    .unwrap();
+    assert_eq!(updated["language"], "en");
+    // Padrão herdado do Perfil de canal (#72 + #195) quando `language` é omitido.
+    run("channel_profile.set", json!({"language": "fr"})).unwrap();
+    let inherited = run(
+        "sources.import",
+        json!({"project":project,"path":media,"permission":{"status":"none"},"audio_track":2}),
+    )
+    .unwrap();
+    assert_eq!(inherited["language"], "fr");
+    run("channel_profile.set", json!({"language": "pt"})).unwrap();
     assert_eq!(
         source["metadata"]["streams"]
             .as_array()
@@ -276,6 +299,15 @@ fn local_source_lifecycle() {
         .find(|s| s["id"] == copied["id"])
         .unwrap();
     assert_eq!(copy["available"], true);
+    assert_eq!(
+        items
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["id"] == spanish_id)
+            .unwrap()["language"],
+        "en"
+    );
     run("projects.close", json!({})).unwrap();
     std::env::remove_var("CLIPES_FFPROBE");
     std::env::remove_var("CLIPES_DATA_DIR");
