@@ -3,6 +3,7 @@ import { Dialog as D } from '@base-ui/react/dialog';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { coreDispatch } from '@/lib/core';
+import { useComandosCtx } from '@/lib/comandos';
 import { useText } from '@/lib/i18n';
 import { texts as cliTexts } from '@/features/provider/CliSettings';
 import { texts } from './texts';
@@ -16,9 +17,10 @@ type Detection = { ollama: Server; lmStudio: Server; llamaCpp: Server; codex: { 
 const SERVERS = [['ollama', 'Ollama'], ['lmStudio', 'LM Studio'], ['llamaCpp', 'llama.cpp']] as const;
 
 /** Abre sozinho na primeira execução e quando o usuário pede nas Preferências. */
-export function Assistant() {
+export function Assistant({ onOpenProviderPreferences }: { onOpenProviderPreferences?: () => void } = {}) {
   const t = useText(texts);
   const cli = useText(cliTexts);
+  const commands = useComandosCtx();
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<AssistantStatus | null>(null);
   const [detection, setDetection] = useState<Detection | null>(null);
@@ -50,10 +52,20 @@ export function Assistant() {
   const finish = (skipped: boolean) => run(async () => { await coreDispatch('assistant.complete', { skipped }); setOpen(false); });
   const useEndpoint = (server: Server, name: string) => run(async () => {
     const model = models[name] ?? server.models[0] ?? '';
-    await coreDispatch('provider.configure', { kind: 'openai', endpoint: server.endpoint, model, nativeSchema: false });
+    await coreDispatch('provider.configure', { kind: name === 'ollama' ? 'ollama' : 'openai', endpoint: server.endpoint, model, nativeSchema: false });
     await coreDispatch('assistant.default.set', { choice: 'endpoint' });
   });
-  const useApi = () => run(async () => { await coreDispatch('assistant.default.set', { choice: 'endpoint' }); setMessage(t.apiNext); });
+  const useApi = () => run(async () => {
+    await coreDispatch('assistant.default.set', { choice: 'endpoint' });
+    await coreDispatch('assistant.complete', { skipped: false });
+    setOpen(false);
+    if (onOpenProviderPreferences) {
+      onOpenProviderPreferences();
+    } else {
+      commands.lista().find(c => c.id === 'preferences')?.executar?.();
+      requestAnimationFrame(() => document.getElementById('provider-title')?.scrollIntoView({ block: 'start' }));
+    }
+  });
   const activateCli = (kind: 'codex' | 'claude' | 'opencode') => run(async () => {
     await coreDispatch('provider.cli.configure', { kind, ...(kind === 'opencode' ? { model: openCodeModel.trim() } : {}) });
     await coreDispatch('provider.cli.confirm', { kind, ...(kind === 'opencode' ? { model: openCodeModel.trim() } : {}) });

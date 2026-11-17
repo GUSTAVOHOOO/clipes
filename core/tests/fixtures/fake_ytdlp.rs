@@ -52,7 +52,7 @@ fn main() {
         let url = &args[end + 1];
         if url.ends_with("chat-fail") { eprintln!("secret path must not escape"); std::process::exit(1); }
         if url.ends_with("chat-hang") { thread::sleep(Duration::from_secs(30)); }
-        if url.ends_with("chat-replay") {
+        if url.ends_with("chat-replay") || url.ends_with("chat-replay-deno") {
             let i = args.iter().position(|a| a == "-o").unwrap();
             let target = args[i + 1].replace("%(id)s", "video123").replace("%(ext)s", "live_chat.json");
             fs::copy(env::var("CLIPES_FAKE_CHAT_FILE").unwrap(), target).unwrap();

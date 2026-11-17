@@ -100,7 +100,7 @@ fn manifest_command(_: Value, _: &mut EventSink<'_>) -> CommandResult {
     Ok(json!(manifest()))
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct Settings {
     pub(crate) data_dir: PathBuf,
     cache_dir: PathBuf,
@@ -251,11 +251,7 @@ fn diagnostic_components_for(settings: &Settings) -> String {
                 "ffmpeg" => match &settings.ffmpeg_path {
                     None => "não instalado".to_string(),
                     Some(path) => {
-                        let managed = settings.data_dir.join("components").join(if cfg!(windows) {
-                            "ffmpeg.exe"
-                        } else {
-                            "ffmpeg"
-                        });
+                        let managed = managed_ffmpeg(&settings.data_dir);
                         if path == &managed {
                             if managed_incomplete(settings) {
                                 "não instalado".into()
@@ -302,6 +298,16 @@ fn diagnostic_components() -> String {
 }
 inventory::submit! { crate::diagnostic::DiagnosticField { kind: crate::diagnostic::DiagnosticKind::Components, value: diagnostic_components } }
 
+fn ffmpeg_name() -> &'static str {
+    if cfg!(windows) {
+        "ffmpeg.exe"
+    } else {
+        "ffmpeg"
+    }
+}
+fn managed_ffmpeg(data_dir: &Path) -> PathBuf {
+    data_dir.join("components").join(ffmpeg_name())
+}
 fn probe_name() -> &'static str {
     if cfg!(windows) {
         "ffprobe.exe"
@@ -313,11 +319,7 @@ fn managed_incomplete(settings: &Settings) -> bool {
     let Some(path) = &settings.ffmpeg_path else {
         return false;
     };
-    let managed = settings.data_dir.join("components").join(if cfg!(windows) {
-        "ffmpeg.exe"
-    } else {
-        "ffmpeg"
-    });
+    let managed = managed_ffmpeg(&settings.data_dir);
     path == &managed && (!path.is_file() || !path.with_file_name(probe_name()).is_file())
 }
 pub(crate) fn ffprobe_executable(ffmpeg: Option<&Path>) -> Result<PathBuf, CoreError> {
@@ -333,18 +335,7 @@ pub(crate) fn ffprobe_executable(ffmpeg: Option<&Path>) -> Result<PathBuf, CoreE
         .map(|p| p.with_file_name(probe_name()))
         .filter(|p| p.is_file());
     let managed = settings.ffmpeg_path.as_deref() == ffmpeg
-        && ffmpeg
-            == Some(
-                settings
-                    .data_dir
-                    .join("components")
-                    .join(if cfg!(windows) {
-                        "ffmpeg.exe"
-                    } else {
-                        "ffmpeg"
-                    })
-                    .as_path(),
-            );
+        && ffmpeg == Some(managed_ffmpeg(&settings.data_dir).as_path());
     let mut candidates = Vec::new();
     if let Some(path) = sibling {
         candidates.push(path);
@@ -369,7 +360,17 @@ pub(crate) fn ffprobe_executable(ffmpeg: Option<&Path>) -> Result<PathBuf, CoreE
     ))
 }
 fn ffmpeg_status(_: Value, _: &mut EventSink<'_>) -> CommandResult {
-    Ok(json!({"incomplete":managed_incomplete(&load_settings()?)}))
+    let settings = load_settings()?;
+    let incomplete = managed_incomplete(&settings);
+    let installed = !incomplete
+        && settings.ffmpeg_path.as_ref().is_some_and(|p| {
+            if p.is_absolute() || p.components().count() > 1 {
+                p.is_file()
+            } else {
+                true
+            }
+        });
+    Ok(json!({"incomplete": incomplete, "installed": installed}))
 }
 fn save_settings(s: &Settings) -> Result<(), CoreError> {
     let p = settings_path()?;
@@ -379,14 +380,36 @@ fn save_settings(s: &Settings) -> Result<(), CoreError> {
 fn settings_get(_: Value, _: &mut EventSink<'_>) -> CommandResult {
     Ok(json!(load_settings()?))
 }
+fn revalidate_ffmpeg_on_data_dir_change(
+    next: &mut Settings,
+    previous: Option<&Settings>,
+    default_data_dir: Option<&Path>,
+) {
+    let was_managed = next.ffmpeg_path.as_deref().is_some_and(|path| {
+        previous
+            .filter(|prev| prev.data_dir != next.data_dir)
+            .is_some_and(|prev| path == managed_ffmpeg(&prev.data_dir))
+            || default_data_dir
+                .filter(|dir| *dir != next.data_dir)
+                .is_some_and(|dir| path == managed_ffmpeg(dir))
+    });
+    if !was_managed {
+        return;
+    }
+    let candidate = managed_ffmpeg(&next.data_dir);
+    next.ffmpeg_path = candidate.is_file().then_some(candidate);
+}
 fn settings_set(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let s: Settings = serde_json::from_value(v).map_err(|e| error("invalid_settings", e))?;
+    let mut s: Settings = serde_json::from_value(v).map_err(|e| error("invalid_settings", e))?;
     if !s.data_dir.is_absolute() || !s.cache_dir.is_absolute() || s.cache_limit_bytes == 0 {
         return Err(error(
             "invalid_settings",
             "Caminhos absolutos e limite positivo são obrigatórios",
         ));
     }
+    let previous = load_settings().ok();
+    let default_data_dir = crate::paths::data_dir().ok();
+    revalidate_ffmpeg_on_data_dir_change(&mut s, previous.as_ref(), default_data_dir.as_deref());
     save_settings(&s)?;
     Ok(json!(s))
 }
@@ -1176,6 +1199,29 @@ mod diagnostic_tests {
         assert!(result.contains(&format!("ffmpeg: {version}")));
         assert!(result.contains("yt-dlp: 2027.01.01.000000"));
         assert!(!result.contains(root.to_str().unwrap()));
+
+        // Troca de data_dir revalida ffmpeg_path gerenciado em vez de rotulá-lo como sistema.
+        let other = root.join("other-data");
+        let mut moved = settings.clone();
+        moved.data_dir = other.clone();
+        revalidate_ffmpeg_on_data_dir_change(&mut moved, Some(&settings), Some(root.as_path()));
+        assert!(moved.ffmpeg_path.is_none());
+        assert!(diagnostic_components_for(&moved).contains("ffmpeg: não instalado"));
+
+        let moved_ffmpeg = managed_ffmpeg(&other);
+        fs::create_dir_all(moved_ffmpeg.parent().unwrap()).unwrap();
+        fs::write(&moved_ffmpeg, b"ffmpeg").unwrap();
+        fs::write(moved_ffmpeg.with_file_name(probe_name()), b"ffprobe").unwrap();
+        let mut moved_ready = settings.clone();
+        moved_ready.data_dir = other;
+        revalidate_ffmpeg_on_data_dir_change(
+            &mut moved_ready,
+            Some(&settings),
+            Some(root.as_path()),
+        );
+        assert_eq!(moved_ready.ffmpeg_path.as_ref(), Some(&moved_ffmpeg));
+        assert!(diagnostic_components_for(&moved_ready).contains(&format!("ffmpeg: {version}")));
+
         fs::remove_dir_all(root).unwrap();
     }
 }

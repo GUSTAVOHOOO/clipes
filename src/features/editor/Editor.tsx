@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
+import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { Captions, Crop, Languages, PanelLeft, PanelRight, Scissors, X } from 'lucide-react';
 import { coreDispatch, type ExportRequest } from '@/lib/core';
+import { mediaUrl } from '@/lib/media';
 import { useText } from '@/lib/i18n';
 import { useComandos } from '@/lib/comandos';
 import { Button } from '@/components/ui/Button';
@@ -34,7 +35,7 @@ type Timeline = { state: 'queued' | 'running' | 'ready' | 'failed' | 'cancelled'
 const texts = {
   'pt-BR': {
     title: 'Editor do Corte', close: 'Fechar editor', timeline: 'Timeline do Corte', transcript: 'Transcrição do editor', borders: 'Bordas do Corte', captions: 'Legenda', silences: 'Silêncios', crop: 'Enquadrar', translation: 'Tradução',
-    markIn: 'Marcar entrada', markOut: 'Marcar saída', back: 'Voltar', pause: 'Pausar', forward: 'Avançar', rate: 'Velocidade', export: 'Exportar', exportNeedsCandidate: 'Abra um candidato aprovado para exportar.',
+    markIn: 'Marcar entrada', markOut: 'Marcar saída', back: 'Voltar', play: 'Reproduzir', pause: 'Pausar', forward: 'Avançar', spaceHint: 'Espaço / K', rate: 'Velocidade', export: 'Exportar', exportNeedsCandidate: 'Abra um candidato aprovado para exportar.',
     shortcuts: 'Atalhos', hintPlay: 'voltar · pausar · avançar', hintMark: 'entrada · saída (Frase inteira)', hintFrame: 'quadro', hintSentence: 'Frase anterior/próxima', hintDrawers: 'gavetas',
     duration: 'Duração {value}', start: 'Entrada', end: 'Saída', startEarlier: 'Estender início', startLater: 'Encurtar início', endEarlier: 'Encurtar fim', endLater: 'Estender fim',
     loading: 'Abrindo o editor…', timelinePreparing: 'Preparando miniaturas e onda…', timelineFailed: 'Não foi possível gerar as miniaturas e a onda.', cancel: 'Cancelar', retry: 'Gerar de novo',
@@ -49,7 +50,7 @@ const texts = {
   },
   en: {
     title: 'Clip editor', close: 'Close editor', timeline: 'Clip timeline', transcript: 'Editor Transcript', borders: 'Clip borders', captions: 'Captions', silences: 'Silences', crop: 'Framing', translation: 'Translation',
-    markIn: 'Mark in', markOut: 'Mark out', back: 'Reverse', pause: 'Pause', forward: 'Forward', rate: 'Speed', export: 'Export', exportNeedsCandidate: 'Open an approved candidate to export.',
+    markIn: 'Mark in', markOut: 'Mark out', back: 'Reverse', play: 'Play', pause: 'Pause', forward: 'Forward', spaceHint: 'Space / K', rate: 'Speed', export: 'Export', exportNeedsCandidate: 'Open an approved candidate to export.',
     shortcuts: 'Shortcuts', hintPlay: 'reverse · pause · forward', hintMark: 'in · out (whole Sentence)', hintFrame: 'frame', hintSentence: 'previous/next Sentence', hintDrawers: 'drawers',
     duration: 'Duration {value}', start: 'In', end: 'Out', startEarlier: 'Extend start', startLater: 'Shorten start', endEarlier: 'Shorten end', endLater: 'Extend end',
     loading: 'Opening the editor…', timelinePreparing: 'Preparing thumbnails and waveform…', timelineFailed: 'Could not generate thumbnails and waveform.', cancel: 'Cancel', retry: 'Generate again',
@@ -65,7 +66,6 @@ const texts = {
 };
 
 const errorCode = (e: unknown) => (typeof e === 'object' && e !== null && 'code' in e ? String(e.code) : '');
-const mediaUrl = (id: string) => (isTauri() ? convertFileSrc(id, 'clipes-media') : `/__clipes-media__/${id}`);
 const borderClock = (us: number) => `${clock(us)}.${String(Math.floor((us % 1_000_000) / 1000)).padStart(3, '0')}`;
 const ROW = { thumbs: 54, wave: 40, sentences: 56, narration: 44 } as const;
 
@@ -115,6 +115,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
   const captions = useCaptions(captionRequest, captionRevision);
   const scroller = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
   const state = useRef({ sourceUs: 0, rate: 0, startId, endId, sentences, opened, fps: 30 });
   state.current = { sourceUs, rate, startId, endId, sentences, opened, fps: opened?.fps ?? 30 };
   useEffect(() => {
@@ -348,13 +349,25 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
   }, [mark]);
   const moveEdge = useCallback((edge: Edge, delta: number) => adjust(edge, { sentence_delta: delta }), [adjust]);
   useComandos([
-    { id: 'editor-undo', titulo: t.undo, grupo: t.title, dica: 'Ctrl+Z', executar: () => edit('editor.undo', {}), desabilitado: !history.undoCount },
-    { id: 'editor-redo', titulo: t.redo, grupo: t.title, dica: 'Ctrl+Shift+Z / Ctrl+Y', executar: () => edit('editor.redo', {}), desabilitado: !history.redoCount },
-    { id: 'editor-extend-start', titulo: `${t.startEarlier} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+←', executar: () => moveEdge('start', -1) },
-    { id: 'editor-shorten-start', titulo: `${t.startLater} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+→', executar: () => moveEdge('start', 1) },
-    { id: 'editor-shorten-end', titulo: `${t.endEarlier} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+↑', executar: () => moveEdge('end', -1) },
-    { id: 'editor-extend-end', titulo: `${t.endLater} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+↓', executar: () => moveEdge('end', 1) },
+    { id: 'editor-transcript', titulo: t.transcript, grupo: t.title, dica: '[', executar: () => { right.fechar(); left.alternar(); } },
+    { id: 'editor-borders', titulo: t.borders, grupo: t.title, dica: ']', executar: () => { left.fechar(); openRight('borders'); } },
+    { id: 'editor-captions', titulo: t.captions, grupo: t.title, dica: 'C', executar: () => { left.fechar(); openRight('captions'); } },
+    { id: 'editor-silences', titulo: t.silences, grupo: t.title, dica: 'S', executar: () => { left.fechar(); openRight('silences'); } },
     { id: 'editor-crop', titulo: t.crop, grupo: t.title, dica: 'F', executar: () => { left.fechar(); openRight('crop'); } },
+    { id: 'editor-translation', titulo: t.translation, grupo: t.title, dica: 'T', executar: () => { left.fechar(); openRight('translation'); } },
+    { id: 'editor-play-pause', titulo: rate === 0 ? t.play : t.pause, grupo: t.title, dica: t.spaceHint, executar: () => setRate(rate === 0 ? 1 : 0), desabilitado: !opened },
+    { id: 'editor-back', titulo: t.back, grupo: t.title, dica: 'J', executar: () => setRate(nextRate(rate, 'j')), desabilitado: !opened },
+    { id: 'editor-forward', titulo: t.forward, grupo: t.title, dica: 'L', executar: () => setRate(nextRate(rate, 'l')), desabilitado: !opened },
+    { id: 'editor-mark-in', titulo: t.markIn, grupo: t.title, dica: 'I', executar: () => markAtPlayhead('start'), desabilitado: !opened || closing },
+    { id: 'editor-mark-out', titulo: t.markOut, grupo: t.title, dica: 'O', executar: () => markAtPlayhead('end'), desabilitado: !opened || closing },
+    { id: 'editor-undo', titulo: t.undo, grupo: t.title, dica: 'Ctrl+Z', executar: () => edit('editor.undo', {}), desabilitado: !history.undoCount || closing },
+    { id: 'editor-redo', titulo: t.redo, grupo: t.title, dica: 'Ctrl+Shift+Z / Ctrl+Y', executar: () => edit('editor.redo', {}), desabilitado: !history.redoCount || closing },
+    { id: 'editor-extend-start', titulo: `${t.startEarlier} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+←', executar: () => moveEdge('start', -1), desabilitado: !opened || closing },
+    { id: 'editor-shorten-start', titulo: `${t.startLater} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+→', executar: () => moveEdge('start', 1), desabilitado: !opened || closing },
+    { id: 'editor-shorten-end', titulo: `${t.endEarlier} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+↑', executar: () => moveEdge('end', -1), desabilitado: !opened || closing },
+    { id: 'editor-extend-end', titulo: `${t.endLater} · ${t.sentence}`, grupo: t.title, dica: 'Ctrl+Shift+↓', executar: () => moveEdge('end', 1), desabilitado: !opened || closing },
+    { id: 'editor-export', titulo: t.export, grupo: t.title, executar: () => headerRef.current?.querySelector<HTMLButtonElement>('[data-export-trigger]')?.click(), desabilitado: request.candidate_id === undefined || !opened || closing },
+    { id: 'editor-close', titulo: t.close, grupo: t.title, dica: 'Esc', executar: close, desabilitado: closing },
   ]);
 
   // Atalhos do editor não capturam campos de texto nem camadas abertas.
@@ -524,7 +537,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
 
   return <section role="region" aria-label={t.title} data-start-id={startId} data-end-id={endId} data-start-us={range?.startUs} data-end-us={range?.endUs} data-window-start-us={opened?.windowStartUs} data-undo-count={history.undoCount} data-source-us={Math.round(sourceUs)} data-rate={rate} data-silences-removed-us={silencesView.removedUs} data-montage-freeze-tail-us={montage?.freezeTailUs ?? 0} data-montage-total-duration-us={montage?.totalDurationUs ?? 0}
     className="fixed inset-0 flex flex-col overflow-hidden bg-canvas text-fg" style={{ zIndex: 'var(--z-scrim)' }}>
-    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-line px-4">
+    <header ref={headerRef} className="flex h-12 shrink-0 items-center gap-3 border-b border-line px-4">
       <h2 className="text-base font-semibold">{t.title}</h2>
       {range && <span className="font-mono text-xs text-fg-2">{borderClock(range.startUs)} – {borderClock(range.endUs)} · {fill(t.duration, { value: clock(silencesView.removedUs > 0 ? silencesView.effectiveDurationUs : range.endUs - range.startUs) })}{silencesView.removedUs > 0 ? ` (-${Math.round(silencesView.removedUs / 1000)} ms)` : ''}</span>}
       <div className="flex-1" />
@@ -540,7 +553,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
       <Puxador lado="dir" g={right} itens={[{ id: 'borders', rotulo: t.borders, atalho: ']', icone: <PanelRight size={16} />, onClick: () => { left.fechar(); openRight('borders'); } }, { id: 'captions', rotulo: t.captions, atalho: 'C', icone: <Captions size={16} />, onClick: () => { left.fechar(); openRight('captions'); } }, { id: 'silences', rotulo: t.silences, atalho: 'S', icone: <Scissors size={16} />, onClick: () => { left.fechar(); openRight('silences'); } }, { id: 'crop', rotulo: t.crop, atalho: 'F', icone: <Crop size={16} />, onClick: () => { left.fechar(); openRight('crop'); } }, { id: 'translation', rotulo: t.translation, atalho: 'T', icone: <Languages size={16} />, onClick: () => { left.fechar(); openRight('translation'); } }]} />
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4"><div className="m-auto flex flex-col items-center gap-3">
         {!opened && !error && <p aria-live="polite" className="text-fg-2">{t.loading}</p>}
-        {opened && <div style={{ width: 'min(18rem, 22vh)' }}><CutPreview sourceId={request.source_id} startUs={opened.startUs} endUs={opened.endUs} rate={rate} onSourceTime={us => setSourceUs(us)} onProxyChange={setProxyInfo} captions={captions.data} skipIntervals={activeSilences} crop={crop} cropPlan={cropPlan} montage={montage} keptSegments={silencesView.segments} clipStartUs={range?.startUs} clipEndUs={range?.endUs} /></div>}
+        {opened && range && <div style={{ width: 'min(18rem, 22vh)' }}><CutPreview sourceId={request.source_id} startUs={range.startUs} endUs={range.endUs} rate={rate} onSourceTime={us => setSourceUs(us)} onProxyChange={setProxyInfo} captions={captions.data} skipIntervals={activeSilences} crop={crop} cropPlan={cropPlan} montage={montage} keptSegments={silencesView.segments} clipStartUs={range.startUs} clipEndUs={range.endUs} /></div>}
         {opened && <div className="flex flex-wrap items-center justify-center gap-2" role="group" aria-label={t.shortcuts}>
           <Button tamanho="sm" onClick={() => setRate(nextRate(rate, 'j'))} atalho="J">{t.back.replace(/ \(.\)$/, '')}</Button>
           <Button tamanho="sm" onClick={() => setRate(0)} atalho="K">{t.pause.replace(/ \(.\)$/, '')}</Button>
@@ -664,7 +677,7 @@ export function Editor({ request, onClose }: { request: ExportRequest; onClose: 
       </GavetaBorda>
       <GavetaBorda lado="dir" g={right} rotulo={view === 'captions' ? t.captions : view === 'silences' ? t.silences : view === 'crop' ? t.crop : view === 'translation' ? t.translation : t.borders}>
         {view === 'captions' ? <><CabecalhoGaveta acoes={<Button tamanho="sm" onClick={right.fechar}>{t.close.replace(/ .*/, '')}</Button>}><h3 className="font-semibold">{t.captions}</h3></CabecalhoGaveta>
-          {opened && <CaptionPanel data={captions.data} clipId={opened.clipId} sourceId={request.source_id} refresh={captions.refresh} loadError={captions.error} />}</> : view === 'silences' ? <>
+          {opened && <CaptionPanel data={captions.data} clipId={opened.clipId} sourceId={request.source_id} candidateId={request.candidate_id} refresh={captions.refresh} loadError={captions.error} />}</> : view === 'silences' ? <>
           <CabecalhoGaveta acoes={<Button tamanho="sm" onClick={right.fechar}>{t.close.replace(/ .*/, '')}</Button>}><h3 className="font-semibold">{t.silences}</h3></CabecalhoGaveta>
           <SilencesPanel
             silences={silencesView}

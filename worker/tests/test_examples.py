@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from clipes_worker.align import Aligner, align_task
 from clipes_worker.protocol import WorkerError
 from clipes_worker.server import Server
 from clipes_worker.tasks import Task
@@ -69,7 +70,18 @@ def block_tasks():
         ),
         reader=lambda path: [0.0] * 160000,
     )
-    return {"transcribe": task, "vad": vad_task(spans=spans, reader=lambda path: [0.0] * 160000)}
+    align = align_task(
+        loader=lambda directory, device, compute_type: Aligner(
+            lambda audio: [{"start": 16000, "end": 48000}],
+            lambda chunk, language, batch: [(" Olá", 0.1, 0.4), ("mundo.", 0.5, 0.9)],
+            lambda chunk, text, language: [
+                {"word": " Olá", "start": 0.12, "end": 0.38, "probability": 0.95},
+                {"word": " mundo.", "start": 0.48, "end": 0.88, "probability": 0.97},
+            ],
+        ),
+        reader=lambda path: [0.0] * 48000,
+    )
+    return {"transcribe": task, "vad": vad_task(spans=spans, reader=lambda path: [0.0] * 160000), "align": align}
 
 
 class Pipe:
@@ -119,7 +131,7 @@ def test_worker_follows_example_conversation(path):
     pipe = Pipe()
     result = {}
     thread = threading.Thread(
-        target=lambda: result.update(code=Server(pipe, pipe, block_tasks() if path.stem in ("transcribe-block", "vad-block") else fake_tasks()).serve()), daemon=True
+        target=lambda: result.update(code=Server(pipe, pipe, block_tasks() if path.stem in ("transcribe-block", "vad-block", "align-block") else fake_tasks()).serve()), daemon=True
     )
     thread.start()
     for entry in load(path):

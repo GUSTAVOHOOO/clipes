@@ -283,7 +283,7 @@ fn is_age_restricted(probe: &Probe) -> bool {
     probe.age_limit.is_some_and(|a| a >= 18) && probe.availability == "needs_auth"
 }
 /// `--js-runtimes deno:<caminho absoluto>`, só quando o Componente está instalado.
-fn js_runtime_args(deno: Option<&Path>) -> Vec<OsString> {
+pub(crate) fn js_runtime_args(deno: Option<&Path>) -> Vec<OsString> {
     let Some(deno) = deno else {
         return Vec::new();
     };

@@ -14,13 +14,20 @@ export function setDefaultCaptionStyleMock(style: Style): Style {
   projectDefault = { ...style, revision: (projectDefault?.revision ?? 0) + 1 };
   return { ...projectDefault };
 }
+type CaptionTrack = 'narration' | 'original' | 'translated';
 const styles = new Map<number, Style>();
 const overrides = new Map<number, Override>();
+const savedTracks = new Map<number, CaptionTrack>();
 const emoji = /[\u200d\ufe0e\ufe0f\u20e3\u00a9\u00ae\u2300-\u23ff\u2600-\u27ff\u{1f000}-\u{1faff}]/u;
 const unsupportedGlyph = /[\u3000-\u9fff\uac00-\ud7af\uf900-\ufaff]/u;
 
 export function captionsMock(name: string, a: Record<string, any>, textOf: (position: number) => string): unknown {
   if (name === 'captions.remap_status') return { discarded: 0 };
+  if (name === 'captions.track.set') {
+    const tr = a.track as CaptionTrack;
+    if (typeof a.clip_id === 'number') savedTracks.set(a.clip_id, tr);
+    return { clipId: a.clip_id ?? null, candidateId: a.candidate_id ?? null, track: tr };
+  }
   if (!name.startsWith('captions.') && name !== 'export.captions') return undefined;
   const current = (clip: number) => { let s = styles.get(clip); if (!s) { s = { ...(projectDefault ?? base('vertical')), revision: 0 }; styles.set(clip, s); } return s; };
   if (name === 'captions.style.get') return current(a.clip_id);
@@ -33,12 +40,28 @@ export function captionsMock(name: string, a: Record<string, any>, textOf: (posi
   if (name === 'captions.style.default') { projectDefault = { ...current(a.clip_id) }; return projectDefault; }
   if (name === 'captions.override') { if (Object.keys(a.overrides).length) overrides.set(a.position, a.overrides); else overrides.delete(a.position); return { position: a.position, overrides: a.overrides }; }
   if (name === 'captions.overrides') return [...overrides].map(([position, o]) => ({ position, overrides: o }));
-  const style = current(a.clip_id);
+  const style = typeof a.clip_id === 'number' ? current(a.clip_id) : getDefaultCaptionStyleMock();
   const startBase = a.start_us ?? 0;
   const endBase = a.end_us ?? startBase + 4_500_000;
   const splice = getMockClipSplice(a.clip_id, startBase, endBase);
   const translated = getMockActiveTranslation(a.clip_id);
-  const rawWords = translated
+  const narrationTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('narration-captions');
+  const availableTracks: CaptionTrack[] = [
+    ...(narrationTest ? (['narration'] as CaptionTrack[]) : []),
+    'original',
+    ...(translated ? (['translated'] as CaptionTrack[]) : []),
+  ];
+  const explicitTrack = typeof a.clip_id === 'number' ? savedTracks.get(a.clip_id) : undefined;
+  const activeTrack: CaptionTrack = explicitTrack && availableTracks.includes(explicitTrack)
+    ? explicitTrack
+    : (translated ? 'translated' : (narrationTest ? 'narration' : 'original'));
+  const rawWords = activeTrack === 'narration'
+    ? [
+        { position: -1, text: 'Texto', startUs: 0, endUs: 450_000, sourceStartUs: startBase, overrides: {} },
+        { position: -2, text: ' narrado', startUs: 460_000, endUs: 980_000, sourceStartUs: startBase + 460_000, overrides: {} },
+        { position: -3, text: ' alinhado.', startUs: 990_000, endUs: 1_550_000, sourceStartUs: startBase + 990_000, overrides: {} },
+      ]
+    : (activeTrack === 'translated' && translated)
     ? (() => {
         const out: { position: number; text: string; startUs: number; endUs: number; sourceStartUs: number; overrides: Override }[] = [];
         let idx = 0;
@@ -92,5 +115,10 @@ export function captionsMock(name: string, a: Record<string, any>, textOf: (posi
     const slice = visible.slice(i, i + 3);
     cues.push({ startUs: slice[0].startUs, endUs: slice[slice.length - 1].endUs, lines: [slice] });
   }
-  return { ass: '', style, cues, emojiRemoved: words.filter(w => emoji.test(w.text)).length, words, transcriptId: 1, start_us: startBase, end_us: endBase, durationUs: splice.effectiveDurationUs, segments: splice.segments, lines: [], missingGlyphs };
+  return {
+    ass: '', style, cues, emojiRemoved: words.filter(w => emoji.test(w.text)).length, words, transcriptId: 1,
+    start_us: startBase, end_us: endBase, durationUs: splice.effectiveDurationUs, segments: splice.segments,
+    lines: [], missingGlyphs, track: activeTrack, availableTracks,
+    narrationSummary: narrationTest ? { hasNarration: true, alignedBlocks: 1, pendingBlocks: 0, needsReviewBlocks: 0, staleBlocks: 0 } : null,
+  };
 }

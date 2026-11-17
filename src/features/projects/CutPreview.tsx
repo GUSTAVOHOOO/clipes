@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
+import { isTauri } from '@tauri-apps/api/core';
 import { coreDispatch } from '@/lib/core';
+import { mediaUrl as buildMediaUrl } from '@/lib/media';
 import { useText } from '@/lib/i18n';
 import { Button } from '@/components/ui/Button';
 import { CaptionOverlay } from '@/features/captions/CaptionOverlay';
@@ -29,23 +30,31 @@ const texts = {
   'pt-BR': {
     title: 'Preview do Corte', video: 'Vídeo do preview em 9:16 com barras', play: 'Reproduzir', pause: 'Pausar', seek: 'Posição no preview', cancel: 'Cancelar preview', retry: 'Gerar de novo', close: 'Fechar preview',
     preparing: 'Preparando o preview do Corte', queued: 'Preview na fila', running: 'Gerando o preview', failed: 'Não foi possível gerar o preview.', cancelled: 'Preview cancelado.', outside: 'Esse trecho fica fora do preview deste Corte (a janela vai até 2 min antes e depois).', playError: 'O vídeo do preview não pôde ser tocado.', error: 'Não foi possível preparar o preview.',
+    missingCodec: 'Faltam codecs GStreamer para H.264/AAC no sistema (comum no AppImage). Instale: sudo apt install gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav',
     code: { source_offline: 'A Fonte está offline: reconecte ou relocalize a Fonte para ver o preview.', source_changed: 'A Fonte foi alterada: verifique a identidade dela antes do preview.', component_missing: 'Instale o Componente FFmpeg para gerar o preview.', clip_too_long: 'O Corte é longo demais para o preview.', invalid_range: 'Intervalo do Corte inválido.' } as Record<string, string>,
   },
   en: {
     title: 'Clip preview', video: '9:16 preview video with bars', play: 'Play', pause: 'Pause', seek: 'Preview position', cancel: 'Cancel preview', retry: 'Generate again', close: 'Close preview',
     preparing: 'Preparing the Clip preview', queued: 'Preview queued', running: 'Generating the preview', failed: 'Could not generate the preview.', cancelled: 'Preview cancelled.', outside: 'That part is outside this Clip’s preview (the window spans 2 min before and after).', playError: 'The preview video could not be played.', error: 'Could not prepare the preview.',
+    missingCodec: 'GStreamer codecs for H.264/AAC are missing on this system (common with AppImage). Install: sudo apt install gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav',
     code: { source_offline: 'The Source is offline: reconnect or relocate the Source to see the preview.', source_changed: 'The Source was changed: verify its identity before the preview.', component_missing: 'Install the FFmpeg Component to generate the preview.', clip_too_long: 'The Clip is too long for the preview.', invalid_range: 'Invalid Clip range.' } as Record<string, string>,
   },
 };
+function isLinuxMissingH264(): boolean {
+  if (typeof navigator === 'undefined' || typeof document === 'undefined') return false;
+  const platform = `${navigator.platform ?? ''} ${navigator.userAgent ?? ''}`;
+  if (!/linux/i.test(platform) || /android/i.test(platform)) return false;
+  const probe = document.createElement('video');
+  return typeof probe.canPlayType === 'function' && probe.canPlayType('video/mp4; codecs="avc1.42E01E"') === '';
+}
 function clock(us: number) { const s = Math.max(0, Math.floor(us / 1_000_000)); const h = Math.floor(s / 3600); const m = String(Math.floor(s / 60) % 60).padStart(2, '0'); const ss = String(s % 60).padStart(2, '0'); return h > 0 ? `${h}:${m}:${ss}` : `${m}:${ss}`; }
 function code(error: unknown) { return typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : ''; }
 /** Tempo da Fonte (µs) para o do proxy (s); `null` fora da janela. Igual a `proxy::to_proxy_us` do núcleo. */
 export function toProxySeconds(sourceUs: number, windowStartUs: number, windowEndUs: number): number | null {
   return sourceUs >= windowStartUs && sourceUs <= windowEndUs ? (sourceUs - windowStartUs) / 1_000_000 : null;
 }
-const clipesMediaUrl = (resource: string) => (isTauri() ? convertFileSrc(resource, 'clipes-media') : `/__clipes-media__/${resource}`);
-const mediaUrl = (key: string) => clipesMediaUrl(`proxy/${key}`);
-const narrationMediaUrl = (id: number) => clipesMediaUrl(`narration/${id}`);
+const mediaUrl = (key: string) => buildMediaUrl(`proxy/${key}`);
+const narrationMediaUrl = (id: number) => buildMediaUrl(`narration/${id}`);
 
 export type SkipInterval = { startUs: number; endUs: number };
 
@@ -71,6 +80,7 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
   const duckGainRef = useRef(1);
   const tailRef = useRef({ active: false, tailUs: 0, lastTs: 0 });
   const pending = useRef<number | null>(null);
+  const loadedWindow = useRef<{ sourceId: number; windowStartUs: number; windowEndUs: number } | null>(null);
   const [proxy, setProxy] = useState<Proxy | null>(null);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
   const [notice, setNotice] = useState('');
@@ -79,6 +89,7 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
   const [duckState, setDuckState] = useState<{ active: boolean; blockId: number | null; gain: number }>({ active: false, blockId: null, gain: 1 });
   const [time, setTime] = useState(0);
   const [lastSeekUs, setLastSeekUs] = useState<number | null>(null);
+  const [missingH264] = useState(isLinuxMissingH264);
 
   const effectiveClipStartUs = clipStartUs ?? startUs;
   const effectiveClipEndUs = clipEndUs ?? endUs;
@@ -110,19 +121,27 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
     setError(null); setNotice('');
     try {
       const next = await coreDispatch<Proxy>('proxy.request', { source_id: sourceId, start_us: startUs, end_us: endUs });
-      if (active()) setProxy(next);
+      if (active()) {
+        loadedWindow.current = next.state === 'failed' || next.state === 'cancelled'
+          ? null
+          : { sourceId, windowStartUs: next.windowStartUs, windowEndUs: next.windowEndUs };
+        setProxy(next);
+      }
     } catch (e) {
-      if (active()) { setProxy(null); setError({ code: code(e), message: typeof e === 'object' && e !== null && 'message' in e ? String(e.message) : '' }); }
+      if (active()) { loadedWindow.current = null; setProxy(null); setError({ code: code(e), message: typeof e === 'object' && e !== null && 'message' in e ? String(e.message) : '' }); }
     }
   }, [sourceId, startUs, endUs]);
   useEffect(() => {
+    const win = loadedWindow.current;
+    if (win && win.sourceId === sourceId && startUs >= win.windowStartUs && endUs <= win.windowEndUs) return;
+    loadedWindow.current = null;
     let alive = true;
     tailRef.current = { active: false, tailUs: 0, lastTs: 0 };
     duckGainRef.current = 1;
     setProxy(null); setPlaying(false); setTailActive(false); setDuckState({ active: false, blockId: null, gain: 1 }); setTime(0); setLastSeekUs(null); pending.current = null;
     void request(() => alive);
     return () => { alive = false; };
-  }, [request]);
+  }, [sourceId, startUs, endUs, request]);
 
   useEffect(() => {
     onProxyChange?.(proxy ? { state: proxy.state, key: proxy.key, windowStartUs: proxy.windowStartUs, windowEndUs: proxy.windowEndUs } : null);
@@ -137,8 +156,13 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
     const sync = () => {
       coreDispatch<Status>('proxy.status', { key: proxy.key }).then(next => {
         if (!alive) return;
-        if (next.state === 'missing') void request(() => alive);
-        else setProxy(current => (current && current.key === next.key ? { ...current, ...next } : current));
+        if (next.state === 'missing') {
+          loadedWindow.current = null;
+          void request(() => alive);
+        } else {
+          if (next.state === 'failed' || next.state === 'cancelled') loadedWindow.current = null;
+          setProxy(current => (current && current.key === next.key ? { ...current, ...next } : current));
+        }
       }).catch(() => { if (alive) setError({ code: '', message: '' }); });
     };
     if (isTauri()) listen('core-progress', sync).then(fn => { if (alive) unlisten = fn; else fn(); }).catch(() => {});
@@ -466,7 +490,7 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
         if (!tailRef.current.active) { setPlaying(false); syncNarrationAndDuck(0, true); }
         if (proxy) publishTime(proxy.windowStartUs + e.currentTarget.currentTime * 1_000_000);
       }} onEnded={() => { setPlaying(false); syncNarrationAndDuck(0, true); }}
-      onError={() => { if (isTauri()) setNotice(t.playError); }} />
+      onError={() => { if (isTauri() && !missingH264) setNotice(t.playError); }} />
   );
   return <section aria-label={t.title} data-preview-state={proxy?.state ?? (error ? 'error' : 'loading')} data-seek-us={lastSeekUs ?? undefined} data-crop-active={hasCrop ? 'true' : undefined} data-crop-layout={cropPlan?.layout} data-split-ratio={isDual ? splitRatio.toFixed(4) : undefined} data-ducking={hasNarration ? (duckState.active ? 'true' : 'false') : undefined} data-duck-gain={hasNarration ? duckState.gain.toFixed(3) : undefined} data-narration-active-block={duckState.blockId ?? undefined} data-freeze-tail-active={tailActive ? 'true' : undefined} className="flex w-full max-w-[18rem] flex-col gap-2 text-sm">
     {!proxy && !error && <p aria-live="polite" className="text-fg-2">{t.preparing}</p>}
@@ -512,6 +536,7 @@ export function CutPreview({ sourceId, startUs, endUs, rate, onSourceTime, onPro
         />
       ))}
       <input type="range" aria-label={t.seek} min={0} max={windowSeconds} step={0.01} value={Math.min(time, windowSeconds)} onChange={e => seekProxy(Number(e.target.value))} className="w-full" />
+      {missingH264 && <p role="alert" data-missing-h264-codec className="rounded-md border border-line bg-warning-subtle p-3 text-fg">{t.missingCodec}</p>}
     </>}
     {notice && <p role="status" className="text-fg-2">{notice}</p>}
   </section>;
@@ -531,7 +556,7 @@ export function CutPreviewPanel({ sourceId }: { sourceId: number }) {
   }, [sourceId]);
   if (!cut) return null;
   return <div className="mt-3 flex flex-col gap-2">
-    <CutPreview sourceId={cut.sourceId} startUs={cut.startUs} endUs={cut.endUs} />
+    <CutPreview key={`${cut.sourceId}:${cut.startUs}:${cut.endUs}`} sourceId={cut.sourceId} startUs={cut.startUs} endUs={cut.endUs} />
     <div><Button tamanho="sm" onClick={() => setCut(null)}>{t.close}</Button></div>
   </div>;
 }

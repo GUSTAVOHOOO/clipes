@@ -256,3 +256,28 @@ fn candidate_marks_list_one_entry_per_peak_in_the_span() {
     assert_eq!(all[0]["reaction"], "laugh");
     assert!(candidate_marks(&marks, &frases, 2, 2).len() <= 1);
 }
+
+#[test]
+fn deno_component_is_passed_to_chat_fetch_only_when_installed() {
+    let deno = Path::new(if cfg!(windows) {
+        r"C:\x\deno.exe"
+    } else {
+        "/x/deno"
+    });
+    let template = Path::new(if cfg!(windows) {
+        r"C:\tmp\%(id)s.%(ext)s"
+    } else {
+        "/tmp/%(id)s.%(ext)s"
+    });
+    let with = fetch_args("https://example.com/v", template, Some(deno));
+    let out = with.iter().position(|a| a == "-o").unwrap();
+    assert_eq!(with[out + 1], template.as_os_str());
+    let i = with.iter().position(|a| a == "--js-runtimes").unwrap();
+    let mut expected = std::ffi::OsString::from("deno:");
+    expected.push(deno);
+    assert_eq!(with[i + 1], expected);
+    assert!(i < with.iter().position(|a| a == "--").unwrap());
+    assert!(!fetch_args("https://example.com/v", template, None)
+        .iter()
+        .any(|a| a == "--js-runtimes"));
+}

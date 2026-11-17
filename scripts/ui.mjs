@@ -9,7 +9,7 @@ import { testEditorSilencesPanel, testEditorSilencesPreview } from './editor-sil
 import { testEditorCrop } from './editor-crop.mjs';
 import { testEditorMontage, testEditorDucking } from './editor-montage.mjs';
 import { testTranslation, testTranslationBlocked } from './translation-ui.mjs';
-import { testTtsComponents, testTtsNarrationLocked, testTtsNarrationUnlocked } from './tts-ui.mjs';
+import { testTtsComponents, testTtsNarrationLocked, testTtsNarrationUnlocked, testNarrationDeviationAndTrack } from './tts-ui.mjs';
 import { testPackagingChapters } from './packaging-chapters-ui.mjs';
 import { testThumbnailPreview } from './thumbnail-preview-ui.mjs';
 const socket = createServer();
@@ -112,8 +112,18 @@ try {
   await page.screenshot({ path: 'shots/hardware.png', fullPage: true });
   await hardwareCard.getByRole('button', { name: 'Voltar ao automático' }).click();
   await hardwareCard.getByText(/\(automática\)/).waitFor();
+  await hardwareCard.getByText('Lote seguro medido na GPU: ainda não medido (padrão 1).').waitFor();
+  const groupingSwitch = hardwareCard.getByRole('switch', { name: /Agrupar trechos de VAD/ });
+  assert.equal(await groupingSwitch.isChecked(), false);
+  await hardwareCard.getByText(/ganho típico de 0% a 10%/).waitFor();
   await hardwareCard.getByRole('button', { name: 'Medir hardware' }).click();
   await hardwareCard.getByText('Medição concluída.').waitFor();
+  await hardwareCard.getByText('Lote seguro medido na GPU: 8 trechos.').waitFor();
+  await groupingSwitch.check();
+  assert.equal(await groupingSwitch.isChecked(), true);
+  await hardwareCard.getByText(/Agrupa até 8 trechos consecutivos/).waitFor();
+  await groupingSwitch.uncheck();
+  assert.equal(await groupingSwitch.isChecked(), false);
 
   await testTtsComponents(page);
 
@@ -428,6 +438,8 @@ try {
   await downloadedRow.getByText(/Estimativa: cerca de 3 h 52 min/).waitFor();
   assert.match(await downloadedRow.innerText(), /É uma estimativa, não uma garantia/);
   assert.equal(await downloadedRow.getByText('Sem GPU compatível, a Transcrição pode demorar.').count(), 0);
+  await downloadedRow.getByText('Agrupamento por VAD: desligado (ajuste em Componentes).').waitFor();
+  assert.equal(await downloadedRow.getByRole('switch').count(), 0);
   await downloadedRow.getByRole('button', {name:'Transcrever'}).click();
   await downloadedRow.getByText('Transcrevendo: 40%').waitFor();
   await downloadedRow.getByRole('button', {name:'Cancelar transcrição'}).click();
@@ -501,6 +513,21 @@ try {
   assert.match(await changedDialog.innerText(), /hash completo não confere com o original/);
   await changedDialog.getByRole('button', {name:'Cancelar'}).click();
   assert.match(await mismatchRow.innerText(), /Fonte alterada/);
+  await changedRow.getByRole('button', { name: 'Registrar permissão' }).click();
+  const permEditor = changedRow.locator('[data-permission-editor="1"]');
+  await permEditor.waitFor();
+  await permEditor.getByLabel('Permissão').selectOption('granted');
+  assert.equal(await permEditor.getByRole('button', { name: 'Salvar permissão' }).isDisabled(), true);
+  await permEditor.getByLabel('Quem autorizou').fill('Streamer Exemplo');
+  await permEditor.getByLabel('Onde').fill('Email');
+  await permEditor.getByLabel('Escopo (inclua tradução, se autorizada)').fill('cortes diretos');
+  await permEditor.getByRole('button', { name: 'Salvar permissão' }).click();
+  await permEditor.waitFor({ state: 'detached' });
+  await changedRow.locator('[data-source-permission="1"]').getByText(/Tenho permissão: Streamer Exemplo · Email · cortes diretos/).waitFor();
+  await changedRow.getByRole('button', { name: 'Editar permissão' }).click();
+  await permEditor.getByLabel('Permissão').selectOption('none');
+  await permEditor.getByRole('button', { name: 'Salvar permissão' }).click();
+  await changedRow.locator('[data-source-permission="1"]').getByText(/Sem permissão/).waitFor();
   await page.goto(`${url}?assistant-test=1`);
   const wizard = page.getByRole('dialog', {name:'Escolha como o Clipes vai usar IA'});
   await wizard.waitFor();
@@ -811,6 +838,13 @@ try {
   assert.equal(await offline.locator('video').count(), 0, 'Fonte offline: nada é gerado nem tocado');
   assert.equal(await offline.getByRole('progressbar').count(), 0);
   assert.match(await selection.innerText(), /Energia do áudio não medida/);
+  await page.goto(`${url}?source-test=1&transcript-test=1&selection-energy-queued=1`);
+  const queuedEnergy = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
+  await queuedEnergy.getByText(/Energia do áudio na fila/).waitFor();
+  assert.equal(await queuedEnergy.getByRole('button', { name: 'Selecionar Cortes' }).isDisabled(), false);
+  await page.goto(`${url}?source-test=1&transcript-test=1&selection-energy-running=1`);
+  const runningEnergy = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
+  await runningEnergy.getByText(/Medindo a energia do áudio \(45%\)/).waitFor();
   await page.goto(`${url}?source-test=1&transcript-test=1&selection-energy=1`);
   const energySelection = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
   await energySelection.getByRole('button', { name: 'Selecionar Cortes' }).click();
@@ -826,6 +860,10 @@ try {
   await chatSelection.getByRole('button', { name: 'Selecionar Cortes' }).click();
   await chatSelection.getByText(/Seleção com janelas pendentes/).waitFor({ timeout: 15000 });
   assert.match(await chatSelection.innerText(), /3 picos entraram na seleção como indício, não como prova/);
+  await chatSelection.locator('[data-candidate="1"] [data-chat-peak="3.1"]').getByText(/chat 3,1× acima do normal · risadas/).waitFor();
+  await chatSelection.locator('[data-detail="1"] [data-chat-peak="3.1"]').getByText(/chat 3,1× acima do normal · risadas · 01:35/).waitFor();
+  await chatSelection.locator('[data-candidate="2"] [data-chat-peak="2.4"]').getByText(/chat 2,4× acima do normal/).waitFor();
+  assert.equal(await chatSelection.locator('[data-candidate="3"] [data-chat-peak]').count(), 0);
   await page.goto(`${url}?source-test=1&transcript-test=1&chat-local=1`);
   const localSelection = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
   await localSelection.getByRole('button', { name: 'Selecionar Cortes' }).waitFor();
@@ -1070,6 +1108,14 @@ try {
   const kindEn = await kindChecks(KIND_EN);
   await page.screenshot({ path: 'shots/selection-video-kind-en.png', fullPage: true });
   assert.match(await kindEn.group.innerText(), /Direct Clip/);
+  await page.goto(`${url}?source-test=1&transcript-test=1&selection-chat=1`);
+  const enChatSelection = page.getByRole('region', { name: 'Clip selection' }).first();
+  await enChatSelection.getByRole('button', { name: 'Select Clips' }).click();
+  await enChatSelection.getByText(/Selection with pending windows/).waitFor({ timeout: 15000 });
+  await enChatSelection.locator('[data-candidate="1"] [data-chat-peak="3.1"]').getByText(/chat 3\.1× above normal · laughter/).waitFor();
+  await enChatSelection.locator('[data-detail="1"] [data-chat-peak="3.1"]').getByText(/chat 3\.1× above normal · laughter · 01:35/).waitFor();
+  await enChatSelection.locator('[data-candidate="2"] [data-chat-peak="2.4"]').getByText(/chat 2\.4× above normal/).waitFor();
+  assert.equal(await enChatSelection.locator('[data-candidate="3"] [data-chat-peak]').count(), 0);
   await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
   await page.goto(`${url}?source-test=1&groq-retry-test=1`);
   const uncertainAudio = page.locator('li').filter({hasText:'/test/downloaded.mp4'}).first();
@@ -1093,6 +1139,8 @@ try {
   await page.screenshot({path:'shots/estimate-cpu.png',fullPage:true});
   await cpuRow.getByRole('button',{name:'Usar o Motor Groq'}).click();
   assert.equal(await cpuRow.getByLabel('Motor de transcrição').inputValue(), 'groq');
+  await page.goto(`${url}?source-test=1&hardware-probe-fallback=1`);
+  await page.locator('li').filter({hasText:'/test/downloaded.mp4'}).first().getByText('A verificação automática da GPU falhou; a Transcrição local caiu para a CPU.').waitFor();
   // Estado do perfil para a seleção de Cortes (#146): três estados, em PT-BR e EN, só informativo.
   for (const L of [
     { lang: 'pt-BR', prefs: 'Preferências', add: 'Adicionar perfil', name: 'Nome do perfil', endpoint: 'Endereço da API', model: 'Modelo', ctx: 'Contexto em tokens (opcional)', save: 'Salvar perfil', edit: 'Editar',
@@ -1175,8 +1223,8 @@ try {
   }
   // Editor do Corte (#61): teclado, sincronização com o preview, virtualização e capturas, PT e EN, com o núcleo simulado.
   for (const L of [
-    { lang: 'pt-BR', title: 'Editor do Corte', close: 'Fechar editor', timeline: 'Timeline do Corte', transcript: 'Transcrição do editor', borders: 'Bordas do Corte', error: 'O Corte ficaria abaixo da duração mínima.', hint: 'voltar · pausar · avançar' },
-    { lang: 'en', title: 'Clip editor', close: 'Close editor', timeline: 'Clip timeline', transcript: 'Editor Transcript', borders: 'Clip borders', error: 'The Clip would fall below the minimum duration.', hint: 'reverse · pause · forward' },
+    { lang: 'pt-BR', title: 'Editor do Corte', close: 'Fechar editor', timeline: 'Timeline do Corte', transcript: 'Transcrição do editor', borders: 'Bordas do Corte', captions: 'Legenda', silences: 'Silêncios', crop: 'Enquadrar', translation: 'Tradução', play: 'Reproduzir', pause: 'Pausar', back: 'Voltar', forward: 'Avançar', markIn: 'Marcar entrada', markOut: 'Marcar saída', export: 'Exportar', palette: 'Paleta de comandos', error: 'O Corte ficaria abaixo da duração mínima.', hint: 'voltar · pausar · avançar' },
+    { lang: 'en', title: 'Clip editor', close: 'Close editor', timeline: 'Clip timeline', transcript: 'Editor Transcript', borders: 'Clip borders', captions: 'Captions', silences: 'Silences', crop: 'Framing', translation: 'Translation', play: 'Play', pause: 'Pause', back: 'Reverse', forward: 'Forward', markIn: 'Mark in', markOut: 'Mark out', export: 'Export', palette: 'Command palette', error: 'The Clip would fall below the minimum duration.', hint: 'reverse · pause · forward' },
   ]) {
     await page.evaluate(lang => localStorage.setItem('clipes.language', lang), L.lang);
     await page.goto(`${url}?source-test=1&transcript-test=1&editor-test=1`);
@@ -1249,11 +1297,36 @@ try {
     await testTranslation(page, editor, L.lang);
     assert.match(await editor.innerText(), new RegExp(L.hint), 'atalhos visíveis junto dos controles');
     for (const key of ['J', 'K', 'L', 'I', 'O']) assert.ok((await editor.locator('kbd', { hasText: new RegExp(`^${key}$`) }).count()) > 0, `tecla ${key} visível`);
-    await editor.getByRole('button', { name: L.close, exact: true }).click();
+    // Paleta Ctrl+K dentro do Editor (#248): gavetas, transporte, entrada/saída, exportar e fechar.
+    await page.keyboard.press('Control+k');
+    const editorPalette = page.getByRole('dialog', { name: L.palette });
+    await editorPalette.waitFor();
+    for (const label of [L.transcript, L.borders, L.captions, L.silences, L.crop, L.translation, L.play, L.back, L.forward, L.markIn, L.markOut, L.export, L.close]) {
+      assert.ok((await editorPalette.getByRole('option', { name: new RegExp(label) }).count()) > 0, `comando ${label} presente no Ctrl+K`);
+    }
+    await editorPalette.getByRole('option', { name: new RegExp(`^${L.play}`) }).click();
+    await editorPalette.waitFor({ state: 'hidden' });
+    await page.waitForFunction(() => document.querySelector('[data-rate="1"]'));
+    await page.keyboard.press('Control+k');
+    await editorPalette.waitFor();
+    await editorPalette.getByRole('option', { name: new RegExp(`^${L.pause}`) }).click();
+    await editorPalette.waitFor({ state: 'hidden' });
+    await page.waitForFunction(() => document.querySelector('[data-rate="0"]'));
+    await page.keyboard.press('Control+k');
+    await editorPalette.waitFor();
+    await editorPalette.getByRole('option', { name: new RegExp(`^${L.captions}`) }).click();
+    const paletteCaptions = editor.getByRole('dialog', { name: L.captions, exact: true });
+    await paletteCaptions.waitFor();
+    await page.keyboard.press('Escape');
+    await paletteCaptions.waitFor({ state: 'hidden' });
+    await page.keyboard.press('Control+k');
+    await editorPalette.waitFor();
+    await editorPalette.getByRole('option', { name: new RegExp(`^${L.close}`) }).click();
     await editor.waitFor({ state: 'detached' });
   }
   await page.evaluate(() => localStorage.setItem('clipes.language', 'pt-BR'));
   await testTranslationBlocked(page, url);
+  await testNarrationDeviationAndTrack(page, url);
   await testEditorBorders(page, url);
   await testEditorSilencesPreview(page, url);
   await testEditorCrop(page, url);
@@ -1302,6 +1375,205 @@ try {
   await conflictBatch.getByText(/Concluído com falhas · 100%/).waitFor({ timeout: 10000 });
   assert.match(await conflictBatch.innerText(), /1 de 2 Cortes exportados · 1 com falha/);
   assert.match(await conflictBatch.innerText(), /Não foi possível exportar o Corte\./);
+  // Aviso de codecs GStreamer ausentes no Linux (#247): checa canPlayType vazio e exibe comando apt fixo.
+  const codecPage = await browser.newPage();
+  codecPage.on('pageerror', err => errors.push(err.message));
+  codecPage.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+  try {
+    await codecPage.addInitScript(() => {
+      Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
+      HTMLMediaElement.prototype.canPlayType = type => (type.includes('avc1.42E01E') ? '' : 'maybe');
+    });
+    await codecPage.goto(`${url}?source-test=1&transcript-test=1`);
+    await codecPage.getByRole('dialog', { name: 'Atualização disponível' }).getByRole('button', { name: 'Agora não' }).click();
+    await codecPage.getByText(/Transcrição pronta/).first().waitFor({ timeout: 10000 });
+    await codecPage.evaluate(() => window.dispatchEvent(new CustomEvent('clipes-preview-open', { detail: { sourceId: 1, startUs: 1_000_000, endUs: 2_000_000 } })));
+    const missingPreview = codecPage.getByRole('region', { name: 'Preview do Corte' });
+    await missingPreview.getByRole('button', { name: 'Reproduzir' }).waitFor({ timeout: 10000 });
+    await missingPreview.locator('[data-missing-h264-codec]').waitFor({ timeout: 10000 });
+    const missingText = await missingPreview.locator('[data-missing-h264-codec]').innerText();
+    assert.match(missingText, /sudo apt install gstreamer1\.0-plugins-good gstreamer1\.0-plugins-bad gstreamer1\.0-libav/);
+  } finally {
+    await codecPage.close();
+  }
+  const okCodecPage = await browser.newPage();
+  okCodecPage.on('pageerror', err => errors.push(err.message));
+  okCodecPage.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+  try {
+    await okCodecPage.addInitScript(() => {
+      Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
+      HTMLMediaElement.prototype.canPlayType = type => (type.includes('avc1.42E01E') ? 'probably' : '');
+    });
+    await okCodecPage.goto(`${url}?source-test=1&transcript-test=1`);
+    await okCodecPage.getByRole('dialog', { name: 'Atualização disponível' }).getByRole('button', { name: 'Agora não' }).click();
+    await okCodecPage.getByText(/Transcrição pronta/).first().waitFor({ timeout: 10000 });
+    await okCodecPage.evaluate(() => window.dispatchEvent(new CustomEvent('clipes-preview-open', { detail: { sourceId: 1, startUs: 1_000_000, endUs: 2_000_000 } })));
+    const readyPreview = okCodecPage.getByRole('region', { name: 'Preview do Corte' });
+    await readyPreview.getByRole('button', { name: 'Reproduzir' }).waitFor({ timeout: 10000 });
+    assert.equal(await readyPreview.locator('[data-missing-h264-codec]').count(), 0);
+  } finally {
+    await okCodecPage.close();
+  }
+  // Permissão após importação (#254): registrar/editar na Fonte reflete imediatamente no Empacotamento, Tradução e Guarda-corpos.
+  await page.goto(`${url}?source-test=1&transcript-test=1&editor-test=1&packaging-nopermission=1&translation-nopermission=1`);
+  const permSel = page.getByRole('region', { name: 'Seleção de Cortes' }).first();
+  await permSel.getByRole('button', { name: 'Selecionar Cortes' }).click();
+  const permReview = permSel.getByRole('group', { name: 'Revisão dos candidatos' });
+  await permReview.waitFor({ timeout: 15000 });
+  await permReview.focus();
+  await page.keyboard.press('a');
+  const permPack = permReview.locator('[data-packaging]');
+  await permPack.getByRole('button', { name: 'Gerar título, descrição e tags' }).click();
+  await permPack.locator('[data-credit-warning]').waitFor();
+  const projectGuardrails = page.getByRole('region', { name: 'Export em lote' }).locator('[data-guardrails-checklist]');
+  await projectGuardrails.locator('summary').click();
+  assert.match(await projectGuardrails.locator('[data-guardrails-item="permission"]').innerText(), /0 de 2 Cortes com Permissão/);
+  await permReview.getByRole('button', { name: 'Abrir no editor' }).click();
+  let permEditorView = page.getByRole('region', { name: 'Editor do Corte', exact: true });
+  await permEditorView.waitFor();
+  let permGuardrails = permEditorView.locator('[data-guardrails-checklist]');
+  await permGuardrails.locator('summary').click();
+  assert.match(await permGuardrails.locator('[data-guardrails-item="permission"]').innerText(), /sem permissão registrada/);
+  await permEditorView.getByRole('button', { name: /^Tradução/ }).click();
+  let permTranslation = permEditorView.getByRole('dialog', { name: 'Tradução', exact: true });
+  await permTranslation.locator('[data-translation-blocked]').waitFor();
+  await page.keyboard.press('Escape');
+  await permTranslation.waitFor({ state: 'hidden' });
+  await permEditorView.getByRole('button', { name: 'Fechar editor', exact: true }).click();
+  await permEditorView.waitFor({ state: 'detached' });
+
+  const permSourceRow = page.locator('li').filter({ hasText: '/test/changed.mp4' });
+  await permSourceRow.getByRole('button', { name: 'Registrar permissão' }).click();
+  const inlinePermEditor = permSourceRow.locator('[data-permission-editor="1"]');
+  await inlinePermEditor.getByLabel('Permissão').selectOption('granted');
+  await inlinePermEditor.getByLabel('Quem autorizou').fill('Canal Autorizado');
+  await inlinePermEditor.getByLabel('Onde').fill('Discord');
+  await inlinePermEditor.getByLabel('Escopo (inclua tradução, se autorizada)').fill('cortes, tradução');
+  await inlinePermEditor.getByRole('button', { name: 'Salvar permissão' }).click();
+  await inlinePermEditor.waitFor({ state: 'detached' });
+  await permPack.locator('[data-credit]').waitFor();
+  assert.match(await permPack.locator('[data-credit]').innerText(), /Canal Autorizado/);
+  assert.equal(await permPack.locator('[data-credit-warning]').count(), 0);
+  await projectGuardrails.getByText(/2 de 2 Cortes com Permissão/).waitFor();
+  await permReview.getByRole('button', { name: 'Abrir no editor' }).click();
+  permEditorView = page.getByRole('region', { name: 'Editor do Corte', exact: true });
+  await permEditorView.waitFor();
+  permGuardrails = permEditorView.locator('[data-guardrails-checklist]');
+  await permGuardrails.locator('summary').click();
+  await permGuardrails.getByText(/Canal Autorizado · Discord/).waitFor();
+  await permEditorView.getByRole('button', { name: /^Tradução/ }).click();
+  permTranslation = permEditorView.getByRole('dialog', { name: 'Tradução', exact: true });
+  await permTranslation.waitFor();
+  assert.equal(await permTranslation.locator('[data-translation-blocked]').count(), 0);
+  await permTranslation.getByRole('button', { name: 'Traduzir legenda' }).waitFor();
+  await page.keyboard.press('Escape');
+  await permTranslation.waitFor({ state: 'hidden' });
+  await permEditorView.getByRole('button', { name: 'Fechar editor', exact: true }).click();
+  await permEditorView.waitFor({ state: 'detached' });
+
+  await permSourceRow.getByRole('button', { name: 'Editar permissão' }).click();
+  await inlinePermEditor.getByLabel('Quem autorizou').fill('Canal Sem Tradução');
+  await inlinePermEditor.getByLabel('Escopo (inclua tradução, se autorizada)').fill('cortes diretos');
+  await inlinePermEditor.getByRole('button', { name: 'Salvar permissão' }).click();
+  await inlinePermEditor.waitFor({ state: 'detached' });
+  await permPack.locator('[data-credit]').getByText(/Canal Sem Tradução/).waitFor();
+  await permReview.getByRole('button', { name: 'Abrir no editor' }).click();
+  permEditorView = page.getByRole('region', { name: 'Editor do Corte', exact: true });
+  await permEditorView.waitFor();
+  await permEditorView.getByRole('button', { name: /^Tradução/ }).click();
+  permTranslation = permEditorView.getByRole('dialog', { name: 'Tradução', exact: true });
+  await permTranslation.locator('[data-translation-blocked]').waitFor();
+  await page.keyboard.press('Escape');
+  await permTranslation.waitFor({ state: 'hidden' });
+  await permEditorView.getByRole('button', { name: 'Fechar editor', exact: true }).click();
+  await permEditorView.waitFor({ state: 'detached' });
+
+  await permSourceRow.getByRole('button', { name: 'Editar permissão' }).click();
+  await inlinePermEditor.getByLabel('Permissão').selectOption('none');
+  await inlinePermEditor.getByRole('button', { name: 'Salvar permissão' }).click();
+  await inlinePermEditor.waitFor({ state: 'detached' });
+  await permPack.locator('[data-credit-warning]').waitFor();
+  await projectGuardrails.getByText(/0 de 2 Cortes com Permissão/).waitFor();
+
+  // Ticket #251: Ollama nativo no Assistente, "Usar chave de API" -> Preferências (Provedor) e atalho para Componentes.
+  await page.goto(`${url}?assistant-test=1`);
+  const ollamaWizard = page.getByRole('dialog', { name: 'Escolha como o Clipes vai usar IA' });
+  await ollamaWizard.waitFor();
+  await ollamaWizard.getByRole('button', { name: 'Usar Ollama' }).click();
+  await ollamaWizard.getByText('Provedor padrão escolhido: API ou modelo local configurado').waitFor();
+  await ollamaWizard.getByRole('button', { name: 'Concluir' }).click();
+  await ollamaWizard.waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: 'Preferências' }).click();
+  const providerSection = page.locator('section[aria-labelledby="provider-title"]');
+  await providerSection.waitFor();
+  assert.equal(await providerSection.getByLabel('Tipo de provedor').inputValue(), 'ollama');
+  assert.equal(await providerSection.getByLabel('Endereço da API').inputValue(), 'http://127.0.0.1:11434');
+  assert.equal(await providerSection.getByLabel('Modelo', { exact: true }).inputValue(), 'llama3:8b');
+  const mainProfile = page.locator('section[aria-labelledby="profiles-title"]').getByRole('article', { name: 'Principal' });
+  await mainProfile.waitFor();
+  assert.match(await mainProfile.innerText(), /ollama · llama3:8b/);
+  assert.match(await mainProfile.innerText(), /http:\/\/127\.0\.0\.1:11434(?!\/v1)/);
+
+  await page.goto(`${url}?assistant-test=1`);
+  const apiWizard = page.getByRole('dialog', { name: 'Escolha como o Clipes vai usar IA' });
+  await apiWizard.waitFor();
+  await apiWizard.getByRole('button', { name: 'Usar chave de API' }).click();
+  await apiWizard.waitFor({ state: 'hidden' });
+  await page.getByRole('heading', { name: 'Preferências' }).waitFor();
+  await page.locator('#provider-title').waitFor();
+  assert.equal(await page.getByLabel('Padrão para todas as tarefas').inputValue(), 'endpoint');
+  const providerVisible = await page.locator('#provider-title').evaluate(el => {
+    const r = el.getBoundingClientRect();
+    return r.top >= 0 && r.bottom <= window.innerHeight;
+  });
+  assert.equal(providerVisible, true, 'Provedor section should be scrolled into view');
+
+  await page.goto(`${url}?source-test=1&components-missing=1`);
+  await page.getByText(/FFmpeg e o Motor de transcrição local ainda não estão instalados/).waitFor();
+  const downloadedMissing = page.locator('li').filter({ hasText: '/test/downloaded.mp4' });
+  await downloadedMissing.getByText(/FFmpeg e o Motor de transcrição local não estão instalados/).waitFor();
+  await downloadedMissing.getByRole('button', { name: 'Transcrever' }).click();
+  await downloadedMissing.getByRole('alert').getByText(/Instale o Componente FFmpeg/).waitFor();
+  await downloadedMissing.getByRole('button', { name: 'Abrir Componentes' }).first().click();
+  await page.getByRole('heading', { name: 'Componentes' }).waitFor();
+
+  // Ticket #255: abertura offline no UpdateNotice ignora falhas de rede e preserva falhas reais de assinatura.
+  await page.evaluate(() => sessionStorage.removeItem('clipes.mock-update-installed'));
+  for (const offlineQuery of ['?updater-test=offline', '?updater-test=release-not-found']) {
+    await page.goto(`${url}${offlineQuery}`);
+    await page.getByRole('heading', { name: 'Projetos' }).waitFor();
+    await page.waitForTimeout(150);
+    assert.equal(await page.getByRole('dialog', { name: 'Atualização disponível' }).count(), 0);
+    assert.equal(await page.getByText('Não foi possível atualizar').count(), 0);
+  }
+
+  const offlinePage = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+  offlinePage.on('pageerror', e => errors.push(e.message));
+  offlinePage.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+  await offlinePage.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'onLine', { get: () => false, configurable: true });
+  });
+  await offlinePage.goto(url);
+  await offlinePage.getByRole('heading', { name: 'Projetos' }).waitFor();
+  await offlinePage.waitForTimeout(150);
+  assert.equal(await offlinePage.getByRole('dialog', { name: 'Atualização disponível' }).count(), 0);
+  assert.equal(await offlinePage.getByText('Não foi possível atualizar').count(), 0);
+  await offlinePage.close();
+
+  await page.goto(`${url}?updater-test=invalid-signature`);
+  await page.getByText('Não foi possível atualizar').waitFor();
+  assert.match(await page.getByRole('alert').innerText(), /Atualizações sem assinatura válida são recusadas/);
+
+  await page.goto(`${url}?updater-test=install-network-error`);
+  await page.getByRole('dialog', { name: 'Atualização disponível' }).getByRole('button', { name: 'Atualizar agora' }).click();
+  await page.getByText('Não foi possível atualizar').waitFor();
+  assert.doesNotMatch(await page.getByRole('alert').innerText(), /Atualizações sem assinatura válida são recusadas/);
+
+  await page.goto(`${url}?updater-test=install-invalid-signature`);
+  await page.getByRole('dialog', { name: 'Atualização disponível' }).getByRole('button', { name: 'Atualizar agora' }).click();
+  await page.getByText('Não foi possível atualizar').waitFor();
+  assert.match(await page.getByRole('alert').innerText(), /Atualizações sem assinatura válida são recusadas/);
+
   assert.deepEqual(errors, []);
   console.log('UI keyboard, preferences, about, drawer and screenshots: OK');
 } finally { await browser?.close(); server.kill(); }

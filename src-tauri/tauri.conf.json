@@ -21,6 +21,18 @@
         "installMode": "currentUser",
         "languages": ["PortugueseBR", "English"]
       }
+    },
+    "linux": {
+      "deb": {
+        "depends": [
+          "gstreamer1.0-plugins-good",
+          "gstreamer1.0-plugins-bad",
+          "gstreamer1.0-libav"
+        ]
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
     }
   },
   "plugins": {

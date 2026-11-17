@@ -1,4 +1,25 @@
+#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+mod media_server;
+
 use tauri::Emitter;
+
+struct MediaTransport {
+    #[cfg(target_os = "linux")]
+    server: media_server::MediaServer,
+}
+
+#[tauri::command]
+fn media_base_url(transport: tauri::State<'_, MediaTransport>) -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        return Some(transport.server.base_url());
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = transport;
+        None
+    }
+}
 
 #[tauri::command]
 async fn core_dispatch(
@@ -22,6 +43,21 @@ async fn core_dispatch(
 /// Protocolo `clipes-media`: o núcleo decide o que servir (`clipes_core::media::serve`); aqui só
 /// se traduz a requisição HTTP. O recurso é um id opaco, nunca um caminho (#58).
 fn media_response(request: &tauri::http::Request<Vec<u8>>) -> tauri::http::Response<Vec<u8>> {
+    let origin = request
+        .headers()
+        .get("origin")
+        .and_then(|value| value.to_str().ok());
+    if let Some(orig) = origin {
+        if !media_server::is_allowed_origin(orig) {
+            return tauri::http::Response::builder()
+                .status(403)
+                .header("Cache-Control", "no-store")
+                .header("X-Content-Type-Options", "nosniff")
+                .header("Content-Length", "0")
+                .body(Vec::new())
+                .unwrap_or_else(|_| tauri::http::Response::new(Vec::new()));
+        }
+    }
     let range = request
         .headers()
         .get("range")
@@ -31,6 +67,11 @@ fn media_response(request: &tauri::http::Request<Vec<u8>>) -> tauri::http::Respo
     for (name, value) in &served.headers {
         response = response.header(*name, value);
     }
+    if let Some(orig) = origin {
+        response = response
+            .header("Access-Control-Allow-Origin", orig)
+            .header("Vary", "Origin");
+    }
     let head = request.method() == tauri::http::Method::HEAD;
     response
         .body(if head { Vec::new() } else { served.body })
@@ -38,7 +79,13 @@ fn media_response(request: &tauri::http::Request<Vec<u8>>) -> tauri::http::Respo
 }
 
 fn main() {
+    let transport = MediaTransport {
+        #[cfg(target_os = "linux")]
+        server: media_server::MediaServer::start()
+            .expect("failed to start Linux media loopback server"),
+    };
     tauri::Builder::default()
+        .manage(transport)
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 match clipes_core::dispatch("editor.flush", serde_json::json!({}), &mut |_| {}) {
@@ -79,7 +126,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .invoke_handler(tauri::generate_handler![core_dispatch])
+        .invoke_handler(tauri::generate_handler![core_dispatch, media_base_url])
         .run(tauri::generate_context!())
         .expect("failed to run Clipes");
 }

@@ -11,7 +11,7 @@ Núcleo → worker:
 | `type` | Campos | Efeito |
 | --- | --- | --- |
 | `hello` | `protocol` | Primeira mensagem. O worker responde `handshake`, ou `error` `protocol_mismatch` e encerra. |
-| `request` | `id`, `task`, `params` | Pede uma tarefa (`transcribe`, `vad`, `probe`, `reframe` ou `tts`). O `id` é texto único por pedido. |
+| `request` | `id`, `task`, `params` | Pede uma tarefa (`transcribe`, `align`, `vad`, `probe`, `reframe` ou `tts`). O `id` é texto único por pedido. |
 | `cancel` | `id` | Cancela o pedido `id`, em andamento ou ainda na fila. |
 | `shutdown` | — | O worker libera o modelo e encerra. |
 
@@ -43,6 +43,14 @@ Com `group_size` > 1 (#162), trechos consecutivos de VAD vão juntos, até `grou
 
 Parâmetros do Motor, do benchmark #32: VAD Silero com limiar 0,75 e silêncio mínimo de 200 ms, idioma detectado em cada trecho de VAD, `BatchedInferencePipeline`, beam 5, `word_timestamps=True`, tarefa `transcribe` (nunca traduz) e timestamps de palavra nativos, sem alinhamento (#102). Desvio do benchmark: `max_speech_duration_s=30`, porque o pipeline com `vad_filter=False` levanta `RuntimeError` num trecho de 30 s ou mais.
 
+### Tarefa `align`
+
+Alinha por palavra um WAV de Narração (PCM 16 bits, 16 kHz, mono) contra o texto do Roteiro (#81).
+
+`params`: `audio` (caminho do WAV 16 kHz mono), `text` (texto não vazio do bloco do Roteiro), `language` (código ISO-639-1 obrigatório), `batch_size` (1 a 32, padrão 1) e `model` (como em `transcribe`).
+
+`result.data`: `spoken_words` (`text`, `start_us`, `end_us` obtidos de `transcribe` com `word_timestamps=True`, para o núcleo detectar desvios contra o Roteiro), `script_words` (`text`, `start_us`, `end_us`, `probability` obtidos por alinhamento forçado `find_alignment` em janelas de até 30 s) e `silences` (`start_us`, `end_us`).
+
 ### Tarefa `vad`
 
 Recebe `audio` (WAV PCM 16 kHz mono) e `final`. Retorna `covered_us`, `spans` e `silences` com tempos relativos em microssegundos, seguindo o mesmo VAD e regra de borda da tarefa `transcribe`. O Silero é distribuído no pacote faster-whisper e não exige download do modelo Whisper.
@@ -72,6 +80,7 @@ O worker mantém no máximo um modelo carregado. Ao trocar de modelo, libera o a
 | `protocol-mismatch.jsonl` | `hello` com protocolo desconhecido (lado do worker). |
 | `vad-block.jsonl` | Fronteiras e silêncios da tarefa `vad`. |
 | `transcribe-block.jsonl` | Dois blocos de `transcribe`: o primeiro deixa a fala final para o segundo (`covered_us` menor que o bloco). |
+| `align-block.jsonl` | Alinhamento de Narração (`align`) devolvendo `spoken_words`, `script_words` e `silences`. |
 
 Para mudar o protocolo, aumente `PROTOCOL_VERSION` nos dois lados, atualize os exemplos e esta página.
 
