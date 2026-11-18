@@ -270,4 +270,27 @@ describe('mock TS da Onda 6 (jobs.*, export.batch.*, diagnostic.*, transcription
     const hwVazio = await coreDispatch<null>('transcription.hardware.diagnostic', {})
     expect(hwVazio).toBeNull()
   })
+
+  it('compatibilidade V1: ?source-test=1&budget-test=1 expõe budget_cost, cost_unknown e cota do plano em jobs.list', async () => {
+    window.history.replaceState(null, '', '/?source-test=1&budget-test=1')
+    await coreDispatch('projects.open', { path: '/projetos/Demo.clipes' })
+    const jobs = await coreDispatch<
+      Array<{
+        id: number
+        state: string
+        budgetPause: string | null
+        taskCost: { costLabel: string | null } | null
+        batchCost: { costLabel: string | null } | null
+      }>
+    >('jobs.list', {})
+
+    expect(jobs.some((j) => j.state === 'queued' && j.budgetPause === 'budget_cost')).toBe(true)
+    expect(jobs.some((j) => j.state === 'queued' && j.budgetPause === 'cost_unknown')).toBe(true)
+    expect(
+      jobs.some((j) => (j.batchCost?.costLabel ?? j.taskCost?.costLabel) === 'custo desconhecido'),
+    ).toBe(true)
+    expect(
+      jobs.some((j) => (j.batchCost?.costLabel ?? j.taskCost?.costLabel) === 'consome a cota do plano'),
+    ).toBe(true)
+  })
 })

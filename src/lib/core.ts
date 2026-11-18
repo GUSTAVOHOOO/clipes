@@ -293,7 +293,7 @@ const isAbsolutePathMock = (value: unknown): value is string =>
 const ytdlpMock = { installed: !componentsMissing, version: '2026.11.01' };
 let workerInstalledMock = !componentsMissing;
 uvMock.installed = !componentsMissing;
-const budgetTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('budget-test');
+const budgetTest = () => hasSearchFlag('budget-test');
 const isTranscriptTest = () => hasSearchFlag('transcript-test');
 const isHardwareCpuMode = () => hasSearchFlag('hardware-cpu');
 const isHardwareProbeFallbackMode = () => hasSearchFlag('hardware-probe-fallback');
@@ -480,7 +480,7 @@ function createInitialJobItems(): JobItemMock[] {
       cost: null,
       batch: 'sources-3',
       profile: 'legacy',
-      budgetPause: budgetTest ? 'budget_cost' : 'cost_unknown',
+      budgetPause: 'cost_unknown',
       taskCost: unknownBatchCost,
       profileCost: null,
       batchCost: unknownBatchCost,
@@ -539,6 +539,28 @@ function createInitialJobItems(): JobItemMock[] {
       profileCost: null,
       batchCost: null,
     },
+    ...(budgetTest()
+      ? [
+          {
+            id: 7,
+            kind: 'ai:selection',
+            safety: 'paid' as const,
+            state: 'queued' as const,
+            attempts: 1,
+            checkpoint: null,
+            progress: 0,
+            project: 'demo',
+            outcome: null,
+            cost: null,
+            batch: null,
+            profile: 'legacy',
+            budgetPause: 'budget_cost',
+            taskCost: selectionCost,
+            profileCost: null,
+            batchCost: null,
+          },
+        ]
+      : []),
   ];
 }
 
