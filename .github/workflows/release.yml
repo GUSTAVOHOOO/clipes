@@ -20,7 +20,7 @@ jobs:
             bundles: nsis
             path: target/release/bundle/nsis/*.exe
             artifact: windows-nsis
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             bundles: appimage,deb
             path: |
               target/release/bundle/appimage/*.AppImage
@@ -48,6 +48,29 @@ jobs:
           else
             bun run tauri build --bundles ${{ matrix.bundles }}
           fi
+      - name: Smoke do AppImage e do .deb em Ubuntu 22.04 e 24.04 limpos
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke && cp target/release/bundle/appimage/*.AppImage smoke/app.AppImage && cp target/release/bundle/deb/*.deb smoke/app.deb
+          cat > smoke/run.sh <<'SH'
+          set -u
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq >/dev/null
+          apt-get install -y -qq xvfb xauth dbus-x11 libfribidi0 libfontconfig1 libharfbuzz0b libegl1 libgl1 libgles2 >/dev/null 2>&1
+          cd /tmp && cp /smoke/app.AppImage a && chmod +x a && ./a --appimage-extract >/dev/null
+          bin=$(ls squashfs-root/usr/bin | head -1)
+          if ldd "squashfs-root/usr/bin/$bin" 2>&1 | grep -E 'not found'; then echo "AppImage: biblioteca faltando"; exit 1; fi
+          cd squashfs-root; rc=0; timeout 20 xvfb-run -a dbus-launch ./AppRun >/tmp/ai.log 2>&1 || rc=$?
+          if [ "$rc" -ne 124 ]; then echo "AppImage saiu com rc=$rc"; cat /tmp/ai.log; exit 1; fi
+          apt-get install -y -qq /smoke/app.deb >/dev/null 2>&1
+          pkg=$(dpkg-deb -f /smoke/app.deb Package); exe=$(dpkg -L "$pkg" | grep -E '^/usr/bin/' | head -1)
+          rc=0; timeout 20 xvfb-run -a dbus-launch "$exe" >/tmp/deb.log 2>&1 || rc=$?
+          if [ "$rc" -ne 124 ]; then echo ".deb saiu com rc=$rc"; cat /tmp/deb.log; exit 1; fi
+          echo "ok: $(. /etc/os-release; echo $PRETTY_NAME)"
+          SH
+          for img in ubuntu:22.04 ubuntu:24.04; do docker run --rm -v "$PWD/smoke:/smoke:ro" "$img" bash /smoke/run.sh; done
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
