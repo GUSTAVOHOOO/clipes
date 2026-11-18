@@ -1,0 +1,598 @@
+import { ProvedorDicas, ProvedorToast } from '@ds'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import type { ReactNode } from 'react'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { ErroCore } from '~/core/cliente'
+import { criarFila, type Fila } from '~/core/progresso'
+import type { FonteProjeto } from '~/stores/fontesProjeto'
+import type { ResumoRunSelecao } from '~/stores/selecaoProjeto'
+import { DetalheCandidato, type CandidatoDetalhe } from '~/telas/cortes/DetalheCandidato'
+
+const chamarMock = vi.fn()
+let filaTeste: Fila = criarFila(() => 'demo')
+
+vi.mock('~/core/cliente', async () => {
+  const atual = await vi.importActual<typeof import('~/core/cliente')>('~/core/cliente')
+  return {
+    ...atual,
+    chamar: (...args: unknown[]) => chamarMock(...args),
+  }
+})
+
+vi.mock('~/core/progresso', async () => {
+  const atual = await vi.importActual<typeof import('~/core/progresso')>('~/core/progresso')
+  return {
+    ...atual,
+    useFila: () => atual.useFila(filaTeste),
+  }
+})
+
+beforeAll(() => {
+  if (typeof globalThis.ResizeObserver === 'undefined') {
+    globalThis.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+  }
+  if (!HTMLElement.prototype.scrollIntoView) {
+    HTMLElement.prototype.scrollIntoView = () => {}
+  }
+  if (!Element.prototype.getAnimations) {
+    Element.prototype.getAnimations = () => []
+  }
+})
+
+afterEach(() => {
+  vi.clearAllMocks()
+  window.location.hash = ''
+})
+
+function envolver(ui: ReactNode) {
+  return (
+    <ProvedorDicas>
+      <ProvedorToast>{ui}</ProvedorToast>
+    </ProvedorDicas>
+  )
+}
+
+const FONTE_DISPONIVEL: FonteProjeto = {
+  id: 4,
+  path: 'C:/videos/live-ep42.mp4',
+  status: 'available',
+  available: true,
+  verified: true,
+  audio_track: 0,
+  origin_url: 'https://youtube.com/watch?v=abc',
+  language: 'pt',
+  permission: { status: 'granted', who: 'Criador X', where: 'YouTube', scope: 'Cortes com crédito' },
+}
+
+const RUN_DIRETO: ResumoRunSelecao = {
+  id: 1,
+  state: 'completed',
+  minUs: 20_000_000,
+  maxUs: 60_000_000,
+  planState: 'full',
+  revision: 2,
+  revisions: [1, 2],
+  videoKind: 'direct',
+  weights: [
+    { key: 'hook', weight: 0.3 },
+    { key: 'selfContained', weight: 0.2 },
+    { key: 'energy', weight: 0.2 },
+    { key: 'value', weight: 0.15 },
+    { key: 'closing', weight: 0.15 },
+  ],
+}
+
+const RUN_TRANSFORMADO: ResumoRunSelecao = {
+  ...RUN_DIRETO,
+  videoKind: 'transformed',
+  weights: [
+    { key: 'hook', weight: 0.2 },
+    { key: 'commentary', weight: 0.3 },
+    { key: 'energy', weight: 0.15 },
+    { key: 'value', weight: 0.15 },
+    { key: 'selfContained', weight: 0.1 },
+    { key: 'closing', weight: 0.1 },
+  ],
+}
+
+const CANDIDATO_BASE: CandidatoDetalhe = {
+  id: 101,
+  rank: 0,
+  startId: 10,
+  endId: 14,
+  startUs: 90_000_000,
+  endUs: 140_000_000,
+  total: 8.8,
+  title: 'A virada do jogo',
+  windows: [0, 1],
+  profile: 'forte',
+  revision: 2,
+  adjusted: true,
+  adjust: { extendedBefore: 1, trimmedEnd: 2 },
+  chat: [{ ratio: 3.1, reaction: 'laugh', atUs: 95_000_000 }],
+  axes: {
+    hook: { score: 9.2, why: 'Abre com tensão imediata.' },
+    selfContained: { score: 8.5, why: 'História fechada no trecho.' },
+    energy: { score: 8.0, why: 'Ritmo alto na fala.' },
+    value: { score: 8.8, why: 'Lição clara ao final.' },
+    closing: { score: 8.4, why: 'Termina na frase de impacto.' },
+    commentary: { score: 9.4, why: 'Abre espaço claro para análise e comentário.' },
+  },
+  status: 'pending',
+  startText: 'Primeira frase 10 do Corte.',
+  endText: 'Última frase 14 do Corte.',
+  moves: {
+    startEarlier: true,
+    startLater: true,
+    endEarlier: false,
+    endLater: true,
+  },
+}
+
+describe('DetalheCandidato (Coluna direita C.2)', () => {
+  it('inicia <EixosNota> recolhido e, em Vídeo transformado, exibe Espaço para comentário (30%) em 1º ao expandir', async () => {
+    const user = userEvent.setup()
+    filaTeste = criarFila(() => 'demo')
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'proxy.request') {
+        return {
+          state: 'ready',
+          key: '0004abab',
+          job: null,
+          progress: 100,
+          error: null,
+          windowStartUs: 0,
+          windowEndUs: 260_000_000,
+        }
+      }
+      if (cmd === 'proxy.map_time') return { proxyUs: 90_000_000 }
+      return {}
+    })
+
+    render(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_TRANSFORMADO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={CANDIDATO_BASE}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+
+    const toggleEixos = screen.getByRole('button', { name: /Ver os 6 eixos/i })
+    expect(toggleEixos).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(toggleEixos)
+    expect(toggleEixos).toHaveAttribute('aria-expanded', 'true')
+
+    const termos = screen.getAllByRole('term')
+    expect(termos[0].textContent).toContain('Espaço para comentário')
+    expect(termos[0].textContent).toContain('30%')
+
+    // Picos de chat e ajuste de seleção visíveis
+    expect(screen.getByText(/chat 3,1× acima do normal/i)).toBeInTheDocument()
+    expect(screen.getByText(/risadas/i)).toBeInTheDocument()
+    expect(screen.getByText(/Bordas ajustadas na seleção/i)).toBeInTheDocument()
+  })
+
+  it('mostra <Progresso> via core-progress e "Cancelar preview" (jobs.cancel) durante proxy queued/running mantendo revisão interativa', async () => {
+    const user = userEvent.setup()
+    filaTeste = criarFila(() => 'demo')
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'proxy.request') {
+        return {
+          state: 'running',
+          key: '0004abab',
+          job: 7,
+          progress: 25,
+          error: null,
+          windowStartUs: 0,
+          windowEndUs: 260_000_000,
+        }
+      }
+      if (cmd === 'proxy.status') {
+        return { state: 'ready', key: '0004abab', job: 7, progress: 100, error: null }
+      }
+      if (cmd === 'proxy.map_time') return { proxyUs: 90_000_000 }
+      if (cmd === 'jobs.cancel') return null
+      return {}
+    })
+
+    render(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_DIRETO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={CANDIDATO_BASE}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+
+    expect(await screen.findByRole('button', { name: /Cancelar preview/i })).toBeInTheDocument()
+
+    // Enquanto proxy roda, Nota, bordas e decisões continuam 100% habilitadas
+    expect(screen.getByRole('button', { name: /Aprovar/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Rejeitar/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Recuar início/i })).toBeEnabled()
+
+    // Progresso atualiza via core-progress (sem setInterval)
+    act(() => {
+      filaTeste.aplicar({
+        job: '7',
+        project: 'demo',
+        stage: 'proxy',
+        percentage: 68,
+        message: 'Gerando preview',
+        error: null,
+      })
+    })
+    expect(screen.getByText('68%')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Cancelar preview/i }))
+    expect(chamarMock).toHaveBeenCalledWith('jobs.cancel', { id: 7 })
+  })
+
+  it('transiciona para <PlayerProxy> 9:16 com mediaUrl("proxy/" + key) quando core-progress conclui o proxy', async () => {
+    filaTeste = criarFila(() => 'demo')
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'proxy.request') {
+        return {
+          state: 'queued',
+          key: '0004cdcd',
+          job: 17,
+          progress: 0,
+          error: null,
+          windowStartUs: 0,
+          windowEndUs: 260_000_000,
+        }
+      }
+      if (cmd === 'proxy.status') {
+        return { state: 'ready', key: '0004cdcd', job: 17, progress: 100, error: null }
+      }
+      return {}
+    })
+
+    render(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_DIRETO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={CANDIDATO_BASE}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+
+    expect(await screen.findByRole('button', { name: /Cancelar preview/i })).toBeInTheDocument()
+
+    act(() => {
+      filaTeste.aplicar({
+        job: '17',
+        project: 'demo',
+        stage: 'complete',
+        percentage: 100,
+        message: 'Preview concluído.',
+        error: null,
+      })
+    })
+
+    await waitFor(() => {
+      expect(chamarMock).toHaveBeenCalledWith('proxy.status', { key: '0004cdcd' })
+    })
+    const img = await screen.findByRole('img', { name: /Quadro do Corte/i })
+    expect(img).toHaveAttribute('src', '/__clipes-media__/proxy/0004cdcd')
+  })
+
+  it('exibe fallback acionável em source_offline e component_missing mantendo Nota, bordas e decisões funcionais', async () => {
+    const user = userEvent.setup()
+    filaTeste = criarFila(() => 'demo')
+    const aoRelocalizarFonte = vi.fn()
+    chamarMock.mockRejectedValueOnce(new ErroCore('source_offline', 'Fonte offline.'))
+
+    const { rerender } = render(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_DIRETO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={CANDIDATO_BASE}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+          aoRelocalizarFonte={aoRelocalizarFonte}
+        />,
+      ),
+    )
+
+    const btnRelocalizar = await screen.findByRole('button', { name: /Ir para Fontes e relocalizar/i })
+    await user.click(btnRelocalizar)
+    expect(aoRelocalizarFonte).toHaveBeenCalledWith(4)
+
+    // Decisões e texto seguem funcionais
+    expect(screen.getByRole('button', { name: /Aprovar/i })).toBeEnabled()
+    expect(screen.getByText('Primeira frase 10 do Corte.')).toBeInTheDocument()
+
+    // Agora simula component_missing (FFmpeg ausente) em outro candidato
+    chamarMock.mockRejectedValueOnce(new ErroCore('component_missing', 'Falta o FFmpeg.'))
+    rerender(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_DIRETO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={{ ...CANDIDATO_BASE, id: 102 }}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+
+    expect(await screen.findByText(/Falta o FFmpeg para gerar o preview 9:16/i)).toBeInTheDocument()
+    const btnComp = screen.getByRole('button', { name: /Instalar componente/i })
+    await user.click(btnComp)
+    expect(window.location.hash).toBe('#/config/componentes')
+  })
+
+  it('respeita moves.* nos botões ±1 Frase, exibe startText/endText (#307) e erro adjust_too_short inline em role="alert"', async () => {
+    const user = userEvent.setup()
+    filaTeste = criarFila(() => 'demo')
+    chamarMock.mockResolvedValue({
+      state: 'ready',
+      key: '0004abab',
+      job: null,
+      progress: 100,
+      error: null,
+      windowStartUs: 0,
+      windowEndUs: 260_000_000,
+    })
+
+    const aoAjustar = vi.fn()
+    render(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_DIRETO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={CANDIDATO_BASE}
+          erroAjuste={new ErroCore('adjust_too_short', 'Menor que 20 s.')}
+          aoDecidir={vi.fn()}
+          aoAjustar={aoAjustar}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+
+    expect(screen.getByText('Primeira frase 10 do Corte.')).toBeInTheDocument()
+    expect(screen.getByText('Última frase 14 do Corte.')).toBeInTheDocument()
+    expect(screen.getByText(/20 s – 1 min/i)).toBeInTheDocument()
+
+    const recuarInicio = screen.getByRole('button', { name: /Recuar início 1 Frase/i })
+    const recuarFim = screen.getByRole('button', { name: /Recuar fim 1 Frase/i })
+    expect(recuarInicio).toBeEnabled()
+    expect(recuarFim).toBeDisabled() // moves.endEarlier === false
+
+    await user.click(recuarInicio)
+    expect(aoAjustar).toHaveBeenCalledWith(101, 'start', -1)
+
+    const alerta = screen.getByRole('alert')
+    expect(alerta).toHaveTextContent(/abaixo da duração mínima/i)
+  })
+
+  it('cumpre a Regra da Luz Única (único primário por estado) e carrega <ChecklistGuardaCorpos>, ack_direct_notice, angles.get e #292 após aprovação', async () => {
+    const user = userEvent.setup()
+    filaTeste = criarFila(() => 'demo')
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'proxy.request') {
+        return {
+          state: 'ready',
+          key: '0004abab',
+          job: null,
+          progress: 100,
+          error: null,
+          windowStartUs: 0,
+          windowEndUs: 260_000_000,
+        }
+      }
+      if (cmd === 'proxy.map_time') return { proxyUs: 90_000_000 }
+      if (cmd === 'guardrails.check') {
+        return {
+          scope: 'single',
+          directMonetizationAck: false,
+          needsDirectNotice: true,
+          videoKind: 'direct',
+          over60s: false,
+          permission: { status: 'granted', who: 'Criador X', where: 'YouTube', scope: 'Cortes' },
+        }
+      }
+      if (cmd === 'guardrails.ack_direct_notice') return { directMonetizationAck: true }
+      if (cmd === 'angles.get') {
+        return {
+          angles: [],
+          generation: null,
+          selected: null,
+          busy: false,
+          job: null,
+        }
+      }
+      return {}
+    })
+
+    const { rerender } = render(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_DIRETO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={CANDIDATO_BASE}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+
+    // Pendente: Aprovar é o único botão primário (bg-sinal); Abrir no editor está desabilitado; sem ChecklistGuardaCorpos
+    const btnAprovar = screen.getByRole('button', { name: /Aprovar/i })
+    const btnAbrirEditor = screen.getByRole('button', { name: /Abrir no editor/i })
+    expect(btnAprovar.className).toContain('bg-sinal')
+    expect(btnAbrirEditor).toBeDisabled()
+    expect(btnAbrirEditor).toHaveAccessibleDescription(/Aprove este candidato para editar ou exportar/i)
+    expect(screen.queryByRole('region', { name: /Antes de exportar/i })).not.toBeInTheDocument()
+
+    // Botão #292 em Corte direto fica desabilitado e sua Dica cita #292
+    const btnConverter = screen.getByRole('button', { name: /Converter em Vídeo transformado/i })
+    expect(btnConverter).toBeDisabled()
+    await user.hover(btnConverter.parentElement!)
+    expect(await screen.findByText(/#292/)).toBeInTheDocument()
+
+    // Aprovado (Corte direto): Abrir no editor vira o único primário; Aprovado vira secundário; ChecklistGuardaCorpos aparece
+    rerender(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_DIRETO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={{ ...CANDIDATO_BASE, status: 'approved' }}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+
+    const btnAprovado = screen.getByRole('button', { name: /Aprovado/i })
+    const btnAbrirEditorAtivo = screen.getByRole('button', { name: /Abrir no editor/i })
+    expect(btnAprovado).toHaveAttribute('aria-pressed', 'true')
+    expect(btnAprovado.className).not.toContain('bg-sinal')
+    expect(btnAbrirEditorAtivo).toBeEnabled()
+    expect(btnAbrirEditorAtivo.className).toContain('bg-sinal')
+
+    const checklist = await screen.findByRole('region', { name: /Antes de exportar/i })
+    const checkboxDireto = within(checklist).getByRole('checkbox', {
+      name: /Corte direto pode não monetizar/i,
+    })
+    await user.click(checkboxDireto)
+    expect(chamarMock).toHaveBeenCalledWith('guardrails.ack_direct_notice', {})
+
+    // Aprovado em Vídeo transformado: chama angles.get e exibe orientação de Transformar
+    rerender(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_TRANSFORMADO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={{ ...CANDIDATO_BASE, status: 'approved' }}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+
+    await waitFor(() => {
+      expect(chamarMock).toHaveBeenCalledWith('angles.get', { candidate: 101 })
+    })
+    expect(
+      await screen.findByText(/Próximo passo no Editor: escolher Ângulo → aprovar Roteiro → gerar Narração/i),
+    ).toBeInTheDocument()
+
+    // Com ângulo já selecionado em angles.get, exibe o nome do ângulo escolhido
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'proxy.request') {
+        return {
+          state: 'ready',
+          key: '0004abab',
+          job: null,
+          progress: 100,
+          error: null,
+          windowStartUs: 0,
+          windowEndUs: 260_000_000,
+        }
+      }
+      if (cmd === 'guardrails.check') {
+        return {
+          scope: 'single',
+          directMonetizationAck: true,
+          needsDirectNotice: false,
+          over60s: false,
+          permission: { status: 'granted', who: 'Criador X', where: 'YouTube', scope: 'Cortes' },
+        }
+      }
+      if (cmd === 'angles.get') {
+        return {
+          angles: [{ name: 'Foco no risco', promise: 'Mostra o que mudou.' }],
+          generation: 1,
+          selected: { name: 'Foco no risco', promise: 'Mostra o que mudou.' },
+          busy: false,
+          job: null,
+        }
+      }
+      return {}
+    })
+
+    rerender(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_TRANSFORMADO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={{ ...CANDIDATO_BASE, id: 109, status: 'approved' }}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+
+    expect(await screen.findByText(/Ângulo escolhido: Foco no risco/i)).toBeInTheDocument()
+  })
+
+  it('renderiza <Transporte> com role="toolbar" e timecode tabular', async () => {
+    filaTeste = criarFila(() => 'demo')
+    chamarMock.mockResolvedValue({
+      state: 'ready',
+      key: '0004abab',
+      job: null,
+      progress: 100,
+      error: null,
+      windowStartUs: 0,
+      windowEndUs: 260_000_000,
+    })
+
+    render(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_DIRETO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={CANDIDATO_BASE}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+
+    const toolbar = screen.getByRole('toolbar', { name: /Controles de reprodução/i })
+    expect(toolbar).toBeInTheDocument()
+    expect(within(toolbar).getByRole('button', { name: /Reproduzir/i })).toBeInTheDocument()
+    expect(within(toolbar).getByRole('button', { name: /Ir para Entrada/i })).toBeInTheDocument()
+  })
+})
