@@ -579,7 +579,7 @@ describe('ConfigComponentes (#/config/componentes)', () => {
     resolver({ id: 'portuguese_24l' })
   })
 
-  it('desabilita download automático com Dica citando #301 quando ausente do manifesto', async () => {
+  it('desabilita download automático com Dica quando ausente do manifesto', async () => {
     const user = userEvent.setup()
     mockComponentesPadrao((cmd) => {
       if (cmd === 'components.manifest') {
@@ -597,7 +597,9 @@ describe('ConfigComponentes (#/config/componentes)', () => {
     const btnFfmpeg = within(cardFfmpeg).getByRole('button', { name: /Baixar FFmpeg/i })
     expect(btnFfmpeg).toBeDisabled()
     await user.hover(btnFfmpeg.parentElement!)
-    expect(await screen.findByText(/#301/)).toBeInTheDocument()
+    const dica = await screen.findByText(/Download automático indisponível nesta plataforma/i)
+    expect(dica).toBeInTheDocument()
+    expect(dica).not.toHaveTextContent(/#[0-9]{3}/)
   })
 
   it('aba Pastas e Armazenamento exibe aviso obrigatório de data_dir antes de salvar', async () => {
@@ -644,5 +646,38 @@ describe('ConfigComponentes (#/config/componentes)', () => {
     await user.click(screen.getByRole('tab', { name: /Vozes TTS/i }))
     const sumTts = (await screen.findByText('Texto original em inglês')).closest('summary')
     expect(sumTts?.className).toContain('min-h-6')
+  })
+
+  it('UI-12: não expõe códigos de issue (#301/#307) nem rótulo "Instalado (test)" no mock de yt-dlp', async () => {
+    const user = userEvent.setup()
+    vi.stubEnv('VITE_CORE_MOCK', '1')
+    const ytdlpRealMock = await coreDispatch<{ installed: boolean; version?: string }>(
+      'components.ytdlp.status',
+      {},
+    )
+    expect(ytdlpRealMock.installed).toBe(true)
+    expect(ytdlpRealMock.version).not.toBe('test')
+
+    mockComponentesPadrao((cmd) => {
+      if (cmd === 'components.manifest') {
+        return MANIFESTO_COMPLETO.filter((m) => m.id !== 'ffmpeg' && m.id !== 'yt-dlp')
+      }
+      if (cmd === 'components.ffmpeg.status') return { installed: false, incomplete: false }
+      if (cmd === 'components.ytdlp.status') return ytdlpRealMock
+      return undefined
+    })
+    render(envolver(<ConfigComponentes projetoAberto={null} />))
+
+    await user.click(await screen.findByRole('tab', { name: /Componentes e Modelos/i }))
+    expect(screen.queryByText(/#[0-9]{3}/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Instalado \(test\)/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/Disponível em breve|CUDA\/CPU/i)).toBeInTheDocument()
+
+    const cardFfmpeg = screen.getByRole('region', { name: /FFmpeg/i })
+    const btnFfmpeg = within(cardFfmpeg).getByRole('button', { name: /Baixar FFmpeg/i })
+    await user.hover(btnFfmpeg.parentElement!)
+    const dica = await screen.findByText(/Download automático indisponível nesta plataforma/i)
+    expect(dica).toBeInTheDocument()
+    expect(screen.queryByText(/#[0-9]{3}/)).not.toBeInTheDocument()
   })
 })

@@ -23,11 +23,12 @@ test.describe('Configurações: Provedores e Custos', () => {
     }))
     expect(rolagem).toEqual({ altura: true, largura: true })
 
-    // Botão Remover desabilitado em legacy (#305) e timeouts globais desabilitados (#305)
+    // Botão Remover desabilitado em legacy e timeouts globais desabilitados (pendência #305 em comentário)
     const cartaoLegacy = page.getByRole('region', { name: 'Perfil Principal' })
     await expect(cartaoLegacy).toBeVisible()
     await expect(cartaoLegacy.getByRole('button', { name: 'Remover' })).toBeDisabled()
-    await expect(cartaoLegacy).toContainText('#305')
+    await expect(cartaoLegacy).toContainText(/disponível em breve/i)
+    await expect(cartaoLegacy).not.toContainText('#305')
 
     const blocoTimeouts = page.getByRole('region', { name: 'Timeouts globais de provider.json' })
     await expect(blocoTimeouts.getByLabel('Timeout global remoto (s)')).toBeDisabled()

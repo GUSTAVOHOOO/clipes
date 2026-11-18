@@ -54,7 +54,7 @@ const OPCOES_ESCALA: { valor: '100' | '115'; rotulo: string }[] = [
 
 const OPCOES_IDIOMA: OpcaoSelect<Preferencias['idioma']>[] = [
   { valor: 'pt', rotulo: 'Português (Brasil)' },
-  { valor: 'en', rotulo: 'English' },
+  { valor: 'en', rotulo: 'English', descricao: 'Em preparação', desabilitada: true },
 ]
 
 const OPCOES_WCAG: { valor: ModoTeclasUnicas; titulo: string; detalhe: string }[] = [
@@ -95,14 +95,20 @@ export function ConfigAparencia({ projetoAberto }: ConfigAparenciaProps) {
 
   const atualizarPrefs = useCallback(
     (parcial: Partial<Preferencias>) => {
-      mudarPrefs(parcial)
+      // Enquanto não houver tradução EN, mantém idioma em PT-BR e não altera <html lang>.
+      const parcialSeguro = parcial.idioma === 'en' ? { ...parcial, idioma: 'pt' as const } : parcial
+      mudarPrefs(parcialSeguro)
       const proximo: Preferencias = {
         ...prefs,
-        ...parcial,
-        atalhos: parcial.atalhos !== undefined ? parcial.atalhos : prefs.atalhos,
+        ...parcialSeguro,
+        idioma: 'pt',
+        atalhos: parcialSeguro.atalhos !== undefined ? parcialSeguro.atalhos : prefs.atalhos,
       }
-      if (parcial.modoTeclasUnicas !== undefined && parcial.teclasUnicas === undefined) {
-        proximo.teclasUnicas = parcial.modoTeclasUnicas !== 'desligadas'
+      if (
+        parcialSeguro.modoTeclasUnicas !== undefined &&
+        parcialSeguro.teclasUnicas === undefined
+      ) {
+        proximo.teclasUnicas = parcialSeguro.modoTeclasUnicas !== 'desligadas'
       }
       aplicarPreferencias(proximo)
     },
@@ -110,7 +116,7 @@ export function ConfigAparencia({ projetoAberto }: ConfigAparenciaProps) {
   )
 
   useEffect(() => {
-    aplicarPreferencias(prefs)
+    aplicarPreferencias({ ...prefs, idioma: 'pt' })
   }, [prefs])
 
   const comandoEmCaptura = useMemo(
@@ -398,8 +404,10 @@ export function ConfigAparencia({ projetoAberto }: ConfigAparenciaProps) {
                     <Select
                       {...props}
                       rotulo="Idioma"
-                      valor={prefs.idioma}
-                      aoMudar={(idioma) => atualizarPrefs({ idioma })}
+                      valor={prefs.idioma === 'en' ? 'pt' : prefs.idioma}
+                      aoMudar={(idioma) => {
+                        if (idioma === 'pt') atualizarPrefs({ idioma })
+                      }}
                       opcoes={OPCOES_IDIOMA}
                     />
                   )}

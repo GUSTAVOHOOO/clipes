@@ -189,8 +189,9 @@ const ABAS: Array<Aba<AbaComponentes> & { rotulo: string }> = [
   { valor: 'armazenamento', rotulo: 'Pastas e Armazenamento' },
 ]
 
-const DICA_301 =
-  'Download automático indisponível nesta plataforma; aguarda manifesto macOS (#301).'
+// Pendência de manifesto macOS (#301)
+const DICA_INDISPONIVEL_PLATAFORMA =
+  'Download automático indisponível nesta plataforma; disponível em breve.'
 
 function normalizarErro(erro: unknown): ErroCore {
   if (erro instanceof ErroCore) return erro
@@ -235,7 +236,7 @@ function traduzirErroComponentes(erro: ErroCore): { titulo: string; explicacao?:
           'O arquivo do yt-dlp não passou na verificação de integridade. Reinstale para continuar.',
       }
     case 'unknown_component':
-      return { titulo: DICA_301 }
+      return { titulo: DICA_INDISPONIVEL_PLATAFORMA }
     case 'download':
     case 'hash_mismatch':
       return {
@@ -593,7 +594,7 @@ export function ConfigComponentes({ projetoAberto }: { projetoAberto: string | n
     const item = manifestoPorId.get(id)
     if (!item && !jaInstalado) {
       return (
-        <Dica texto={DICA_301}>
+        <Dica texto={DICA_INDISPONIVEL_PLATAFORMA}>
           <span tabIndex={0} className="inline-flex">
             <Botao variante="secundario" tamanho="p" icone={<Download />} disabled>
               {rotulo}
@@ -1167,7 +1168,8 @@ export function ConfigComponentes({ projetoAberto }: { projetoAberto: string | n
                         titulo: 'Instalar ambiente Python isolado (Worker)?',
                         descricao:
                           'Prepara o ambiente isolado de Transcrição local e detecção facial.',
-                        notaTamanho: 'Tamanho variável conforme ambiente CUDA/CPU (#307)',
+                        // Tamanho varia por CUDA/CPU (#307)
+                        notaTamanho: 'Tamanho variável conforme ambiente CUDA/CPU',
                         licenca: item.license,
                         origem: dominioDe(item.source_url),
                         destino: config?.data_dir,
@@ -1180,8 +1182,9 @@ export function ConfigComponentes({ projetoAberto }: { projetoAberto: string | n
                   )}
                 </div>
 
+                {/* Tamanho varia por CUDA/CPU (#307) */}
                 <p className="text-pequeno text-t3">
-                  Tamanho variável conforme ambiente CUDA/CPU (#307).
+                  Tamanho variável conforme ambiente CUDA/CPU.
                 </p>
 
                 {workerStatus.handshake && (

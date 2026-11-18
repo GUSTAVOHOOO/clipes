@@ -344,7 +344,7 @@ export function FormPerfilProvedor({
           )}
 
           {!editando && (
-            <Campo rotulo="Modelo rápido (preset)">
+            <Campo rotulo="Modelo rápido">
               {(props) => (
                 <Select
                   {...props}

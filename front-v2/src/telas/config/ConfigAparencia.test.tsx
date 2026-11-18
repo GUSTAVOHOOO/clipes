@@ -173,4 +173,21 @@ describe('ConfigAparencia (#/config/aparencia)', () => {
     expect(salvo.modoTeclasUnicas).toBe('ativas')
     expect(salvo.atalhos).toEqual({})
   })
+
+  it('UI-13: mantém English desabilitado com "Em preparação" e não altera document.documentElement.lang', async () => {
+    const user = userEvent.setup()
+    renderTela()
+
+    expect(document.documentElement.lang).toBe('pt-BR')
+
+    const comboIdioma = screen.getByRole('combobox', { name: 'Idioma' })
+    await user.click(comboIdioma)
+
+    const opcaoEn = await screen.findByRole('option', { name: /English/i })
+    expect(opcaoEn).toHaveAttribute('aria-disabled', 'true')
+    expect(within(opcaoEn).getByText('Em preparação')).toBeInTheDocument()
+
+    await user.click(opcaoEn)
+    expect(document.documentElement.lang).toBe('pt-BR')
+  })
 })

@@ -99,9 +99,10 @@ function normalizarErro(erro: unknown): ErroCore {
 function traduzirErroPasso1(erro: ErroCore): { titulo: string; explicacao?: string } {
   switch (erro.code) {
     case 'unknown_component':
+      // Pendência de manifesto macOS (#301)
       return {
         titulo:
-          'A instalação automática do motor ainda não está disponível neste sistema operacional (#301).',
+          'A instalação automática do motor ainda não está disponível neste sistema operacional.',
       }
     case 'download':
     case 'hash_mismatch':
@@ -395,7 +396,8 @@ export function PassoEssencial({ aoAvancar, aoPular, pulando }: PassoEssencialPr
                 ~{tamanho(itemFfmpeg.size)} · {itemFfmpeg.license}
               </span>
             ) : (
-              <span className="text-t3">Use um FFmpeg instalado no sistema (#301).</span>
+              // Pendência de manifesto macOS (#301)
+              <span className="text-t3">Use um FFmpeg instalado no sistema.</span>
             )}
           </p>
 
@@ -423,7 +425,8 @@ export function PassoEssencial({ aoAvancar, aoPular, pulando }: PassoEssencialPr
               {itemFfmpeg ? (
                 botaoBaixarFfmpeg
               ) : (
-                <Dica texto="Download automático indisponível nesta plataforma; aguarda manifesto macOS (#301).">
+                // Pendência de manifesto macOS (#301)
+                <Dica texto="Download automático indisponível nesta plataforma; disponível em breve.">
                   <span tabIndex={0} className="inline-flex">
                     {botaoBaixarFfmpeg}
                   </span>
@@ -483,7 +486,8 @@ export function PassoEssencial({ aoAvancar, aoPular, pulando }: PassoEssencialPr
             <p className="text-pequeno text-t2">
               Recomendado: <strong className="font-medio text-t1">{modeloRecomendado.label}</strong>{' '}
               <span className="num text-t3">({tamanho(modeloRecomendado.size)})</span> ·{' '}
-              <span className="text-t3">Tamanho variável conforme ambiente CUDA/CPU (#307)</span>
+              {/* Tamanho varia por CUDA/CPU (#307) */}
+              <span className="text-t3">Tamanho variável conforme ambiente CUDA/CPU</span>
             </p>
           )}
 
@@ -525,7 +529,8 @@ export function PassoEssencial({ aoAvancar, aoPular, pulando }: PassoEssencialPr
           <div className="flex flex-wrap items-center gap-2">
             {!motorPronto &&
               (!workerStatus.installed && !itemUv ? (
-                <Dica texto="Download automático indisponível nesta plataforma; aguarda manifesto macOS (#301).">
+                // Pendência de manifesto macOS (#301)
+                <Dica texto="Download automático indisponível nesta plataforma; disponível em breve.">
                   <span tabIndex={0} className="inline-flex">
                     {botaoInstalarMotor}
                   </span>
@@ -613,7 +618,8 @@ export function PassoEssencial({ aoAvancar, aoPular, pulando }: PassoEssencialPr
         titulo="Instalar motor e modelo recomendados?"
         descricao={
           modeloRecomendado
-            ? `Modelo: ${modeloRecomendado.label} (${tamanho(modeloRecomendado.size)} · ${modeloRecomendado.license}). Tamanho variável conforme ambiente CUDA/CPU (#307).`
+            ? // Tamanho varia por CUDA/CPU (#307)
+              `Modelo: ${modeloRecomendado.label} (${tamanho(modeloRecomendado.size)} · ${modeloRecomendado.license}). Tamanho variável conforme ambiente CUDA/CPU.`
             : 'Instala ambiente Python isolado e modelo recomendado.'
         }
         rotuloConfirmar="Confirmar instalação"

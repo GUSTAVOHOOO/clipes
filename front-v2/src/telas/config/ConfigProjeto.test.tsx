@@ -389,4 +389,18 @@ describe('ConfigProjeto (#/config/projeto)', () => {
       })
     })
   })
+
+  it('UI-11: usa Estilo de legenda do GLOSSARY e não expõe o termo proibido preset', async () => {
+    render(
+      envolver(
+        <ConfigProjeto
+          projetoAberto="meu-canal"
+          projeto={{ id: 'meu-canal', name: 'Meu Canal', path: '/videos/MeuCanal.clipes' }}
+        />,
+      ),
+    )
+
+    expect(await screen.findByRole('combobox', { name: 'Estilo de legenda' })).toBeInTheDocument()
+    expect(screen.queryByText(/\bpreset\b/i)).not.toBeInTheDocument()
+  })
 })
