@@ -733,11 +733,11 @@ export function ConfigProjeto({ projetoAberto, projeto, fila: filaProp }: Config
                     </span>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-3">
-                    <Campo rotulo="Preset de legenda">
+                    <Campo rotulo="Estilo de legenda">
                       {(props) => (
                         <Select
                           {...props}
-                          rotulo="Preset de legenda"
+                          rotulo="Estilo de legenda"
                           valor={captionStyle.preset}
                           aoMudar={(preset) => setCaptionStyle({ ...captionStyle, preset })}
                           opcoes={OPCOES_PRESET_LEGENDA}
