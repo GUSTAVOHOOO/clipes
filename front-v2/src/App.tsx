@@ -16,6 +16,7 @@ import { ConfigExportacao } from '~/telas/config/ConfigExportacao'
 import { ConfigProjeto } from '~/telas/config/ConfigProjeto'
 import { ConfigProvedores } from '~/telas/config/ConfigProvedores'
 import { ConfiguracoesLayout } from '~/telas/config/ConfiguracoesLayout'
+import { Fontes } from '~/telas/fontes/Fontes'
 import { Inicio } from '~/telas/inicio/Inicio'
 
 const TITULOS_CONFIG: Record<SecaoConfig, string> = {
@@ -204,6 +205,18 @@ function AppRoteado({
     return (
       <Shell rota={rota} projeto={projeto} somenteLocal={somenteLocal}>
         <Assistente passo={rota.passo} />
+      </Shell>
+    )
+  }
+
+  if (rota.tela === 'fontes') {
+    return (
+      <Shell rota={rota} projeto={projeto} somenteLocal={somenteLocal}>
+        <Fontes
+          projetoId={rota.projeto}
+          projetoPath={projeto?.path ?? null}
+          sub={rota.sub}
+        />
       </Shell>
     )
   }

@@ -505,9 +505,10 @@ export function EntradaFonte({
             definirModo(v)
             setErro(null)
           }}
+          className="shrink-0 whitespace-nowrap"
           opcoes={[
-            { valor: 'local', rotulo: 'Arquivo local' },
-            { valor: 'url', rotulo: 'URL (VOD)' },
+            { valor: 'local', rotulo: <span className="whitespace-nowrap">Arquivo local</span> },
+            { valor: 'url', rotulo: <span className="whitespace-nowrap">URL (VOD)</span> },
           ]}
         />
       </div>
