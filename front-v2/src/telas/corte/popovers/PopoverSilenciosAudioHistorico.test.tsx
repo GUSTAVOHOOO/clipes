@@ -423,12 +423,12 @@ describe('<PopoverHistorico>', () => {
     filaTeste = criarFila(() => '/projetos/demo.clipes')
   })
 
-  it('exibe undo/redo, Salvar agora chama editor.flush e snapshots em somente leitura com Dica citando #294', async () => {
+  it('exibe undo/redo, Salvar agora chama editor.flush e snapshots em somente leitura com Dica sem número de ticket (UI-12)', async () => {
     const user = userEvent.setup()
     const store = await prepararSessao()
     const snap = store.obterSnapshot()
 
-    render(
+    const { container } = render(
       envolver(
         <PopoverHistorico
           estadoEditor={{
@@ -462,6 +462,9 @@ describe('<PopoverHistorico>', () => {
     expect(btnRestaurar).toBeDisabled()
 
     await user.hover(btnRestaurar.parentElement!)
-    expect(await screen.findByText(/#294/)).toBeInTheDocument()
+    const dica = await screen.findByText('Restaurar um ponto salvo ainda não está disponível.')
+    expect(dica).toBeInTheDocument()
+    expect(dica.textContent).not.toMatch(/#\d+/)
+    expect(container.textContent).not.toMatch(/#\d+/)
   })
 })

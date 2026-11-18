@@ -119,7 +119,7 @@ export function PopoverHistorico({
                     {snap.silences?.intervals?.length ?? 0}
                   </div>
                 </div>
-                <Dica texto="Restauração direta de snapshot aguarda comando editor.snapshots.restore no núcleo (#294).">
+                <Dica texto="Restaurar um ponto salvo ainda não está disponível.">
                   <span tabIndex={0} className="inline-flex">
                     <Botao tamanho="p" disabled>
                       Restaurar
