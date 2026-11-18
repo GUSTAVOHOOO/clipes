@@ -1,4 +1,4 @@
-// Fixture determinística do contrato #70/#77/#66/#71/#78/#204, só usada com VITE_CORE_MOCK + editor-test.
+// Fixture determinística do contrato #70/#77/#66/#71/#78/#204 para VITE_CORE_MOCK.
 import type { ExportRequest } from './core';
 import {
   sourceToSplicedUs,
@@ -55,7 +55,34 @@ type Snapshot = {
   soundtrack: MockSoundtrackEdit | null;
   sfx: MockSfxEdit[];
 };
-type Clip = { id: number; request: ExportRequest; range: Range; silences: MockSilences | null; undo: Snapshot[]; redo: Snapshot[]; revision: number; crop: CropDoc; narrationStarts: Record<number, number>; soundtrack: MockSoundtrackEdit | null; sfx: MockSfxEdit[]; nextSfxId: number };
+type PersistedSnapshot = {
+  snapshot_id: number;
+  schemaVersion: number;
+  revision: number;
+  original: ExportRequest;
+  range: { startId: number; endId: number; startUs: number; endUs: number };
+  silences: MockSilences | null;
+  crop: CropDoc;
+  narrationStarts: Record<number, number>;
+  soundtrack: MockSoundtrackEdit | null;
+  sfx: MockSfxEdit[];
+};
+type Clip = {
+  id: number;
+  request: ExportRequest;
+  range: Range;
+  silences: MockSilences | null;
+  undo: Snapshot[];
+  redo: Snapshot[];
+  revision: number;
+  crop: CropDoc;
+  narrationStarts: Record<number, number>;
+  soundtrack: MockSoundtrackEdit | null;
+  sfx: MockSfxEdit[];
+  nextSfxId: number;
+  dirty: boolean;
+  snapshots: PersistedSnapshot[];
+};
 type ReframeJob = {
   id: number;
   job: number;
@@ -66,16 +93,40 @@ type ReframeJob = {
   splitRatio: number | null;
   polls: number;
   revision: number;
+  state: 'queued' | 'running' | 'completed' | 'cancelled';
   timeline: SuggestedCrop | null;
   secondaryTimeline: SuggestedCrop | null;
+  timer: ReturnType<typeof setTimeout> | null;
 };
+
+type EditorMockHooks = {
+  emitProgress?: (evento: {
+    job: string;
+    project?: string | null;
+    stage: string;
+    percentage: number;
+    message: string;
+    error: { code: string; message: string } | null;
+  }) => void;
+  getProjectId?: () => string | null;
+  isTransformedCandidate?: (candidateId?: number) => boolean;
+  hasNarrationAudio?: (candidateId?: number) => boolean;
+  getTranscriptIdForSource?: (sourceId: number) => number;
+};
+
+let hooks: EditorMockHooks = {};
+
+export function configureEditorMockHooks(next: EditorMockHooks): void {
+  hooks = { ...hooks, ...next };
+}
 
 const clips = new Map<string, Clip>();
 const audioAssets = new Map<number, AudioAsset>();
 let nextAudioAssetId = 1;
 const reframeJobs = new Map<number, ReframeJob>();
 let nextReframeId = 1;
-const fail = (code: string) => { throw { code }; };
+let nextSnapshotId = 1;
+const fail = (code: string, message?: string) => { throw message ? { code, message } : { code }; };
 const ids = (r: Range) => ({ start_id: Math.floor(r.startUs / 10_000_000) + 1, end_id: Math.ceil(r.endUs / 10_000_000) });
 const cloneSilences = (s: MockSilences | null): MockSilences | null => s ? { thresholdUs: s.thresholdUs, intervals: s.intervals.map(i => ({ ...i })) } : null;
 const cloneEdits = (edits: CropKeyframe[]): CropKeyframe[] => edits.map(k => ({ ...k }));
@@ -83,9 +134,24 @@ const cloneStarts = (starts: Record<number, number>): Record<number, number> => 
 const cloneSoundtrack = (st: MockSoundtrackEdit | null): MockSoundtrackEdit | null => st ? { ...st } : null;
 const cloneSfx = (list: MockSfxEdit[]): MockSfxEdit[] => list.map(s => ({ ...s, anchor: { ...s.anchor } }));
 const cloneDual = (d: DualCropPanels | null): DualCropPanels | null => d ? { top: { suggested: d.top.suggested, edits: cloneEdits(d.top.edits) }, bottom: { suggested: d.bottom.suggested, edits: cloneEdits(d.bottom.edits) } } : null;
-const cropTest = () => typeof location !== 'undefined' && new URLSearchParams(location.search).has('crop-test');
-const montageTest = () => typeof location !== 'undefined' && new URLSearchParams(location.search).has('montage-test');
-const duckTest = () => typeof location !== 'undefined' && new URLSearchParams(location.search).has('duck-test');
+const hasFlag = (name: string) => typeof location !== 'undefined' && (
+  new URLSearchParams(location.search).has(name) ||
+  (location.hash.includes('?') && new URLSearchParams(location.hash.slice(location.hash.indexOf('?') + 1)).has(name))
+);
+const readEstado = () => {
+  if (typeof location === 'undefined') return null;
+  const hash = location.hash ?? '';
+  const qIdx = hash.indexOf('?');
+  if (qIdx >= 0) {
+    const v = new URLSearchParams(hash.slice(qIdx + 1)).get('estado');
+    if (v) return v;
+  }
+  return new URLSearchParams(location.search).get('estado');
+};
+const isLegacySourceTest = () => hasFlag('source-test');
+const isLegacyCropFlag = () => isLegacySourceTest() && hasFlag('crop-test');
+const isLegacyMontageFlag = () => isLegacySourceTest() && hasFlag('montage-test');
+const isLegacyDuckFlag = () => isLegacySourceTest() && hasFlag('duck-test');
 
 const MOCK_BLOCK_GAP_US = 300_000;
 const MOCK_LONG_FREEZE_US = 5_000_000;
@@ -95,9 +161,122 @@ const MOCK_SCRIPT_BLOCKS = [
   { blockId: 103, position: 3, title: 'Fecho', refs: [], durationUs: 15_000_000 },
 ];
 
-function resolveMockMontage(r: Range, s: MockSilences | null, starts: Record<number, number>): MontageState | null {
-  if (!montageTest()) return null;
+function buildPersistedSnapshot(c: Clip): PersistedSnapshot {
+  const b = ids(c.range);
+  return {
+    snapshot_id: nextSnapshotId++,
+    schemaVersion: 2,
+    revision: c.revision,
+    original: { ...c.request },
+    range: { startId: b.start_id, endId: b.end_id, startUs: c.range.startUs, endUs: c.range.endUs },
+    silences: cloneSilences(c.silences),
+    crop: {
+      layout: c.crop.layout,
+      splitRatio: c.crop.splitRatio,
+      suggested: c.crop.suggested,
+      edits: cloneEdits(c.crop.edits),
+      gameplayWebcam: cloneDual(c.crop.gameplayWebcam),
+      twoPeople: cloneDual(c.crop.twoPeople),
+    },
+    narrationStarts: cloneStarts(c.narrationStarts),
+    soundtrack: cloneSoundtrack(c.soundtrack),
+    sfx: cloneSfx(c.sfx),
+  };
+}
+
+function createV1SeededClip(): Clip {
+  const range: Range = { startUs: 390_000_000, endUs: 410_000_000 };
+  const request: ExportRequest = { source_id: 5, start_id: 40, end_id: 41, candidate_id: 202 };
+  const clip: Clip = {
+    id: 1,
+    request,
+    range,
+    silences: detectMockSilences(range, 600_000),
+    undo: [],
+    redo: [],
+    revision: 2,
+    crop: {
+      layout: 'face',
+      splitRatio: null,
+      suggested: exampleCrop(range.startUs, range.endUs),
+      edits: [{ timeUs: range.startUs, x: 0.25, y: 0, width: 0.31640625, height: 1 }],
+      gameplayWebcam: null,
+      twoPeople: null,
+    },
+    narrationStarts: {},
+    soundtrack: null,
+    sfx: [],
+    nextSfxId: 1,
+    dirty: false,
+    snapshots: [],
+  };
+  clip.snapshots.push(buildPersistedSnapshot(clip));
+  return clip;
+}
+
+export function resetEditorMockState(): void {
+  for (const j of reframeJobs.values()) {
+    if (j.timer) clearTimeout(j.timer);
+  }
+  reframeJobs.clear();
+  clips.clear();
+  audioAssets.clear();
+  nextAudioAssetId = 1;
+  nextReframeId = 1;
+  nextSnapshotId = 1;
+  if (!isLegacySourceTest()) {
+    const seeded = createV1SeededClip();
+    clips.set(`candidate:${seeded.request.candidate_id}`, seeded);
+  }
+}
+
+export function cancelReframeJobMock(jobId: number): boolean {
+  const item = [...reframeJobs.values()].find(j => j.job === jobId);
+  if (!item) return false;
+  if (item.timer) {
+    clearTimeout(item.timer);
+    item.timer = null;
+  }
+  item.state = 'cancelled';
+  hooks.emitProgress?.({
+    job: String(item.job),
+    project: hooks.getProjectId?.() ?? null,
+    stage: 'failed',
+    percentage: 0,
+    message: 'Análise de enquadramento cancelada.',
+    error: { code: 'cancelled', message: 'Análise de enquadramento cancelada.' },
+  });
+  return true;
+}
+
+export function getMockClipInfo(clipId: number | undefined): { sourceId: number; transcriptId: number; hasNarration: boolean } | null {
+  if (typeof clipId !== 'number') return null;
+  const c = [...clips.values()].find(item => item.id === clipId);
+  if (!c) return null;
+  const sourceId = c.request.source_id;
+  const transcriptId = hooks.getTranscriptIdForSource?.(sourceId) ?? sourceId;
+  const isTransformed = Boolean(hooks.isTransformedCandidate?.(c.request.candidate_id));
+  const hasNarration = Boolean(hooks.hasNarrationAudio?.(c.request.candidate_id)) || (isTransformed && c.request.candidate_id === 201);
+  return { sourceId, transcriptId, hasNarration };
+}
+
+function hasMontageForClip(request: ExportRequest): boolean {
+  if (isLegacyMontageFlag()) return true;
+  if (isLegacySourceTest()) return false;
+  return Boolean(hooks.isTransformedCandidate?.(request.candidate_id));
+}
+
+function hasDuckAudioForClip(request: ExportRequest): boolean {
+  if (isLegacyDuckFlag()) return true;
+  if (isLegacySourceTest()) return false;
+  if (hooks.hasNarrationAudio?.(request.candidate_id)) return true;
+  return request.candidate_id === 201;
+}
+
+function resolveMockMontage(r: Range, s: MockSilences | null, starts: Record<number, number>, request: ExportRequest): MontageState | null {
+  if (!hasMontageForClip(request)) return null;
   const splice = buildMockSplice(r, s);
+  const withAudio = hasDuckAudioForClip(request);
   const blocks: MontageBlock[] = [];
   const warnings: MontageWarning[] = [];
   let prevEnd: number | null = null;
@@ -137,7 +316,7 @@ function resolveMockMontage(r: Range, s: MockSilences | null, starts: Record<num
       pushedUs,
       overflowUs,
       sourceStartUs,
-      audioId: duckTest() ? b.blockId : null,
+      audioId: withAudio ? b.blockId : null,
     });
   }
   const narrationEndUs = prevEnd ?? 0;
@@ -308,9 +487,10 @@ function resolveMockAudioMix(
   starts: Record<number, number>,
   st: MockSoundtrackEdit | null,
   sfxList: MockSfxEdit[],
+  request: ExportRequest,
 ): AudioMixState {
   const splice = buildMockSplice(r, s);
-  const montage = resolveMockMontage(r, s, starts);
+  const montage = resolveMockMontage(r, s, starts, request);
   const totalDurationUs = montage ? montage.totalDurationUs : splice.effectiveDurationUs;
 
   const rawSpeech: SpeechInterval[] = [];
@@ -440,30 +620,86 @@ const snapshotOf = (c: Clip): Snapshot => ({
   sfx: cloneSfx(c.sfx),
 });
 
+const echoRequest = (req: ExportRequest, r: Range) => {
+  const base: ExportRequest = { source_id: req.source_id, ...ids(r) };
+  if (typeof req.candidate_id === 'number') base.candidate_id = req.candidate_id;
+  return base;
+};
+
 const answer = (c: Clip, r = c.range, s = c.silences, crop = c.crop, ns = c.narrationStarts, st = c.soundtrack, sfx = c.sfx) => ({
   clipId: c.id,
   schemaVersion: 2,
-  request: { ...c.request, ...ids(r) },
+  request: echoRequest(c.request, r),
   ...r,
   revision: c.revision,
   undoCount: c.undo.length,
   redoCount: c.redo.length,
   silences: silencesView(r, s),
   crop: cropView(crop, r),
-  montage: resolveMockMontage(r, s, ns),
-  audioMix: resolveMockAudioMix(r, s, ns, st, sfx),
+  montage: resolveMockMontage(r, s, ns, c.request),
+  audioMix: resolveMockAudioMix(r, s, ns, st, sfx, c.request),
 });
 
+function populateReframeResult(item: ReframeJob): void {
+  if (item.timeline) return;
+  if (item.layout === 'gameplay_webcam' || item.layout === 'two_people') {
+    const dual = exampleDualCrop(item.layout, item.startUs, item.endUs, item.splitRatio, item.revision);
+    item.timeline = dual.primary;
+    item.secondaryTimeline = dual.secondary;
+  } else {
+    item.timeline = exampleCrop(item.startUs, item.endUs, item.revision);
+    item.secondaryTimeline = null;
+  }
+  item.state = 'completed';
+}
+
 export function editorEditsMock(name: string, a: Record<string, unknown>): unknown {
-  if (name === 'editor.flush') return null;
+  if (name === 'editor.flush') {
+    if (readEstado() === 'erro-flush') {
+      hooks.emitProgress?.({
+        job: 'editor',
+        project: null,
+        stage: 'editor_save_failed',
+        percentage: 0,
+        message: 'Não foi possível salvar o Corte.',
+        error: { code: 'project_write', message: 'Erro simulado de gravação em disco.' },
+      });
+      throw { code: 'project_write', message: 'Erro simulado de gravação em disco.' };
+    }
+    const project = hooks.getProjectId?.() ?? null;
+    for (const c of clips.values()) {
+      if (!c.dirty) continue;
+      c.dirty = false;
+      c.snapshots = [buildPersistedSnapshot(c), ...c.snapshots].slice(0, 20);
+      hooks.emitProgress?.({
+        job: `editor:${c.id}`,
+        project,
+        stage: 'editor_saved',
+        percentage: 100,
+        message: 'Corte salvo.',
+        error: null,
+      });
+    }
+    return null;
+  }
+  if (name === 'editor.snapshots') {
+    const c = [...clips.values()].find(item => item.id === a.clip_id);
+    if (!c) return fail('invalid_clip', 'Este Corte não está aberto ou não foi encontrado.');
+    return c.snapshots.slice(0, 20);
+  }
   if (name === 'editor.open') {
-    const request = a as ExportRequest;
-    const key = request.candidate_id ? `candidate:${request.candidate_id}` : `${request.source_id}:${request.start_id}:${request.end_id}`;
+    const raw = a as ExportRequest;
+    const hasCandidate = typeof raw.candidate_id === 'number';
+    const request: ExportRequest = hasCandidate
+      ? { source_id: raw.source_id, start_id: raw.start_id, end_id: raw.end_id, candidate_id: raw.candidate_id }
+      : { source_id: raw.source_id, start_id: raw.start_id, end_id: raw.end_id };
+    const key = hasCandidate ? `candidate:${request.candidate_id}` : `${request.source_id}:${request.start_id}:${request.end_id}`;
     let c = clips.get(key);
     if (!c) {
       const startUs = (request.start_id - 1) * 10_000_000, endUs = request.end_id * 10_000_000;
+      const nextId = clips.size === 0 ? 1 : Math.max(...[...clips.values()].map(item => item.id)) + 1;
       c = {
-        id: clips.size + 1,
+        id: nextId,
         request,
         range: { startUs, endUs },
         silences: null,
@@ -473,7 +709,7 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
         crop: {
           layout: null,
           splitRatio: null,
-          suggested: cropTest() ? exampleCrop(startUs, endUs) : null,
+          suggested: isLegacyCropFlag() ? exampleCrop(startUs, endUs) : null,
           edits: [],
           gameplayWebcam: null,
           twoPeople: null,
@@ -482,6 +718,8 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
         soundtrack: null,
         sfx: [],
         nextSfxId: 1,
+        dirty: false,
+        snapshots: [],
       };
       clips.set(key, c);
     }
@@ -497,15 +735,35 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
     let existing = [...reframeJobs.values()].find(j => j.source === source && j.startUs === startUs && j.endUs === endUs);
     if (!existing) {
       const id = nextReframeId++;
-      existing = { id, job: 6000 + id, source, startUs, endUs, layout, splitRatio, polls: 0, revision: force ? 2 : 1, timeline: null, secondaryTimeline: null };
+      existing = { id, job: 6000 + id, source, startUs, endUs, layout, splitRatio, polls: 0, revision: force ? 2 : 1, state: 'queued', timeline: null, secondaryTimeline: null, timer: null };
       reframeJobs.set(id, existing);
     } else if (force || existing.layout !== layout || existing.splitRatio !== splitRatio) {
+      if (existing.timer) clearTimeout(existing.timer);
       existing.polls = 0;
       existing.layout = layout;
       existing.splitRatio = splitRatio;
       existing.revision += 1;
+      existing.state = 'queued';
       existing.timeline = null;
       existing.secondaryTimeline = null;
+      existing.timer = null;
+    }
+    if (!existing.timeline) {
+      const target = existing;
+      const project = hooks.getProjectId?.() ?? null;
+      target.state = 'running';
+      hooks.emitProgress?.({ job: String(target.job), project, stage: 'reframe_proxy', percentage: 15, message: 'Preparando análise de enquadramento', error: null });
+      target.timer = setTimeout(() => {
+        if (target.state === 'cancelled') return;
+        hooks.emitProgress?.({ job: String(target.job), project, stage: 'reframe_scenes', percentage: 50, message: 'Detectando cenas', error: null });
+        target.timer = setTimeout(() => {
+          if (target.state === 'cancelled') return;
+          hooks.emitProgress?.({ job: String(target.job), project, stage: 'reframe_faces', percentage: 85, message: 'Analisando rostos', error: null });
+          populateReframeResult(target);
+          target.timer = null;
+          hooks.emitProgress?.({ job: String(target.job), project, stage: 'complete', percentage: 100, message: 'Enquadramento sugerido pronto', error: null });
+        }, 12);
+      }, 12);
     }
     return {
       id: existing.id, job: existing.job, source: existing.source, startUs: existing.startUs, endUs: existing.endUs,
@@ -517,20 +775,15 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
     const item = reframeJobs.get(Number(a.id));
     if (!item) return fail('reframe_not_found');
     item.polls += 1;
-    if (!item.timeline && item.polls >= 1) {
-      if (item.layout === 'gameplay_webcam' || item.layout === 'two_people') {
-        const dual = exampleDualCrop(item.layout, item.startUs, item.endUs, item.splitRatio, item.revision);
-        item.timeline = dual.primary;
-        item.secondaryTimeline = dual.secondary;
-      } else {
-        item.timeline = exampleCrop(item.startUs, item.endUs, item.revision);
-        item.secondaryTimeline = null;
-      }
+    if (!item.timeline && item.polls >= 1 && item.state !== 'cancelled') {
+      populateReframeResult(item);
     }
     return {
       id: item.id, job: item.job, source: item.source, startUs: item.startUs, endUs: item.endUs,
       layout: item.layout, splitRatio: item.splitRatio, timeline: item.timeline, secondaryTimeline: item.secondaryTimeline,
-      error: null, state: item.timeline ? 'completed' : 'running', progress: item.timeline ? 100 : 50,
+      error: item.state === 'cancelled' ? { code: 'cancelled', message: 'Cancelado.' } : null,
+      state: item.state === 'cancelled' ? 'cancelled' : item.timeline ? 'completed' : 'running',
+      progress: item.timeline ? 100 : 50,
     };
   }
   if (name.startsWith('editor.crop.')) {
@@ -558,6 +811,7 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
         c.crop.layout = layout;
         c.crop.splitRatio = nextRatio;
         c.revision++;
+        c.dirty = true;
       }
       return cropReply();
     }
@@ -576,9 +830,10 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
           c.crop.suggested = job.timeline;
         }
         c.revision++;
+        c.dirty = true;
         return cropReply();
       }
-      c.crop.suggested = (a.suggested as SuggestedCrop | null) ?? null; c.revision++;
+      c.crop.suggested = (a.suggested as SuggestedCrop | null) ?? null; c.revision++; c.dirty = true;
       return cropReply();
     }
     if (name === 'editor.crop.set_edits') {
@@ -592,6 +847,7 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
           c.redo = [];
           c.crop.edits = nextEdits;
           c.revision++;
+          c.dirty = true;
         }
         return cropReply();
       }
@@ -613,18 +869,19 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
         c.crop.layout = targetLayout;
         c.crop[slotKey] = nextDual;
         c.revision++;
+        c.dirty = true;
       }
       return cropReply();
     }
-    if (name === 'editor.crop.example') { c.crop.suggested = exampleCrop(c.range.startUs, c.range.endUs); c.revision++; return cropReply(); }
+    if (name === 'editor.crop.example') { c.crop.suggested = exampleCrop(c.range.startUs, c.range.endUs); c.revision++; c.dirty = true; return cropReply(); }
   }
   if (name === 'editor.montage.get' || name === 'editor.montage.set_start') {
     const c = [...clips.values()].find(item => item.id === a.clip_id);
     if (!c) return fail('invalid_clip');
     if (name === 'editor.montage.get') {
-      return { clipId: c.id, schemaVersion: 2, revision: c.revision, undoCount: c.undo.length, redoCount: c.redo.length, montage: resolveMockMontage(c.range, c.silences, c.narrationStarts) };
+      return { clipId: c.id, schemaVersion: 2, revision: c.revision, undoCount: c.undo.length, redoCount: c.redo.length, montage: resolveMockMontage(c.range, c.silences, c.narrationStarts, c.request) };
     }
-    const currentMontage = resolveMockMontage(c.range, c.silences, c.narrationStarts);
+    const currentMontage = resolveMockMontage(c.range, c.silences, c.narrationStarts, c.request);
     const blockId = Number(a.block_id);
     const idx = currentMontage?.blocks.findIndex(b => b.blockId === blockId) ?? -1;
     if (!currentMontage || idx < 0) return fail('block_not_found');
@@ -650,6 +907,7 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
       c.redo = [];
       c.narrationStarts = nextStarts;
       c.revision++;
+      c.dirty = true;
     }
     return answer(c);
   }
@@ -724,7 +982,7 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
         revision: c.revision,
         undoCount: c.undo.length,
         redoCount: c.redo.length,
-        audioMix: resolveMockAudioMix(c.range, c.silences, c.narrationStarts, c.soundtrack, c.sfx),
+        audioMix: resolveMockAudioMix(c.range, c.silences, c.narrationStarts, c.soundtrack, c.sfx, c.request),
       };
     }
     if (name === 'editor.audio.soundtrack.clear') {
@@ -733,6 +991,7 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
         pushUndo();
         c.soundtrack = null;
         c.revision++;
+        c.dirty = true;
       }
       return answer(c);
     }
@@ -748,9 +1007,9 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
         nextSt = {
           assetId,
           startUs: typeof a.start_us === 'number' ? Math.max(0, a.start_us) : (prev?.startUs ?? 0),
-          volume: typeof a.volume === 'number' ? a.volume : (prev?.volume ?? 0.25),
-          fadeInUs: typeof a.fade_in_us === 'number' ? Math.max(0, a.fade_in_us) : (prev?.fadeInUs ?? 500_000),
-          fadeOutUs: typeof a.fade_out_us === 'number' ? Math.max(0, a.fade_out_us) : (prev?.fadeOutUs ?? 800_000),
+          volume: typeof a.volume === 'number' ? a.volume : (prev?.volume ?? 0.30),
+          fadeInUs: typeof a.fade_in_us === 'number' ? Math.max(0, a.fade_in_us) : (prev?.fadeInUs ?? 0),
+          fadeOutUs: typeof a.fade_out_us === 'number' ? Math.max(0, a.fade_out_us) : (prev?.fadeOutUs ?? 0),
           loopToFit: typeof a.loop_to_fit === 'boolean' ? a.loop_to_fit : (prev?.loopToFit ?? true),
         };
       }
@@ -758,6 +1017,7 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
       pushUndo();
       c.soundtrack = nextSt;
       c.revision++;
+      c.dirty = true;
       return answer(c);
     }
     if (name === 'editor.audio.sfx.add') {
@@ -768,7 +1028,7 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
         id: c.nextSfxId++,
         assetId,
         anchor,
-        volume: typeof a.volume === 'number' ? a.volume : 0.85,
+        volume: typeof a.volume === 'number' ? a.volume : 0.80,
         fadeInUs: typeof a.fade_in_us === 'number' ? a.fade_in_us : 0,
         fadeOutUs: typeof a.fade_out_us === 'number' ? a.fade_out_us : 0,
       };
@@ -777,6 +1037,7 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
       pushUndo();
       c.sfx = nextSfx;
       c.revision++;
+      c.dirty = true;
       return answer(c);
     }
     if (name === 'editor.audio.sfx.update') {
@@ -798,6 +1059,7 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
       pushUndo();
       c.sfx = nextList;
       c.revision++;
+      c.dirty = true;
       return answer(c);
     }
     if (name === 'editor.audio.sfx.remove') {
@@ -807,6 +1069,7 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
       pushUndo();
       c.sfx = nextList;
       c.revision++;
+      c.dirty = true;
       return answer(c);
     }
   }
@@ -839,6 +1102,7 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
       c.soundtrack = cloneSoundtrack(next.soundtrack);
       c.sfx = cloneSfx(next.sfx);
       c.revision++;
+      c.dirty = true;
     }
     return answer(c);
   }
@@ -849,6 +1113,7 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
     pushUndo();
     c.silences = next;
     c.revision++;
+    c.dirty = true;
     return answer(c);
   }
   if (name === 'editor.silences.toggle') {
@@ -862,6 +1127,7 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
       pushUndo();
       c.silences = next;
       c.revision++;
+      c.dirty = true;
     }
     return answer(c);
   }
@@ -874,6 +1140,7 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
         pushUndo();
         c.silences = next;
         c.revision++;
+        c.dirty = true;
       }
     }
     return answer(c);
@@ -898,7 +1165,7 @@ export function editorEditsMock(name: string, a: Record<string, unknown>): unkno
   const clipped = c.silences ? { thresholdUs: c.silences.thresholdUs, intervals: c.silences.intervals.filter(i => i.gapStartUs >= next.startUs && i.gapEndUs <= next.endUs) } : null;
   if (a.preview) return answer(c, next, clipped);
   if (next.startUs !== c.range.startUs || next.endUs !== c.range.endUs) {
-    pushUndo(); c.range = next; c.silences = clipped; c.revision++;
+    pushUndo(); c.range = next; c.silences = clipped; c.revision++; c.dirty = true;
   }
   return answer(c);
 }

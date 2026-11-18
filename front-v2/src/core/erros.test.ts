@@ -351,4 +351,91 @@ describe('mapeador de erros (erros.ts)', () => {
     expect(tipoInvalido.titulo).toContain('Corte direto')
     expect(tipoInvalido.titulo).toContain('Vídeo transformado')
   })
+
+  it('cobre todos os 35 códigos do Pacote D (Editor, Crop, Áudio, Tradução, Proxy e Exportação)', () => {
+    const codigosPacoteD = [
+      'invalid_clip',
+      'unknown_sentence_id',
+      'invalid_range',
+      'clip_too_long',
+      'adjust_empty',
+      'adjust_too_short',
+      'adjust_too_long',
+      'invalid_silence_threshold',
+      'invalid_silence_interval',
+      'invalid_crop',
+      'reframe_not_found',
+      'translation_permission_required',
+      'language_required',
+      'translation_missing',
+      'translation_empty',
+      'invalid_audio_kind',
+      'invalid_audio',
+      'audio_asset_missing',
+      'attribution_required',
+      'sfx_not_found',
+      'block_not_found',
+      'invalid_montage',
+      'proxy_not_ready',
+      'proxy_failed',
+      'export_exists',
+      'export_destination',
+      'export_glyph_missing',
+      'export_ass_missing',
+      'export_font_missing',
+      'export_failed',
+      'export_bounds',
+      'export_candidate',
+      'project_write',
+      'nothing_to_undo',
+      'nothing_to_redo',
+    ]
+
+    for (const codigo of codigosPacoteD) {
+      expect(TABELA_ERROS[codigo], `código ausente na TABELA_ERROS: ${codigo}`).toBeDefined()
+      const msg = mensagemDeErro(new ErroCore(codigo, 'detalhe'))
+      expect(msg.titulo).not.toBe('Algo deu errado nesta operação.')
+      expect(msg.titulo.length).toBeGreaterThan(5)
+    }
+  })
+
+  it('mapeia tradução e ações de recuperação específicas do Pacote D', () => {
+    const exportExists = mensagemDeErro(new ErroCore('export_exists', ''))
+    expect(exportExists.titulo).toMatch(/existe um arquivo/i)
+
+    const exportDest = mensagemDeErro(new ErroCore('export_destination', ''))
+    expect(exportDest.titulo).toMatch(/\.mp4/i)
+
+    const exportGlyph = mensagemDeErro(new ErroCore('export_glyph_missing', ''))
+    expect(exportGlyph.titulo).toMatch(/fonte da legenda/i)
+    expect(exportGlyph.recuperacao?.rotulo).toMatch(/Transcrição/i)
+
+    const exportAss = mensagemDeErro(new ErroCore('export_ass_missing', ''))
+    expect(exportAss.titulo).toMatch(/renderizar/i)
+    expect(exportAss.recuperacao?.rota).toBe('#/relatos')
+
+    const audioMissing = mensagemDeErro(new ErroCore('audio_asset_missing', ''))
+    expect(audioMissing.titulo).toMatch(/trilha sonora|efeito sonoro/i)
+    expect(audioMissing.recuperacao?.rotulo).toMatch(/Áudio/i)
+
+    const attrReq = mensagemDeErro(new ErroCore('attribution_required', ''))
+    expect(attrReq.titulo).toMatch(/atribuição/i)
+    expect(attrReq.titulo).toMatch(/CC-BY/i)
+
+    const proxyFail = mensagemDeErro(new ErroCore('proxy_failed', ''))
+    expect(proxyFail.titulo).toMatch(/prévia/i)
+    expect(proxyFail.recuperacao?.rotulo).toMatch(/prévia/i)
+
+    const transPerm = mensagemDeErro(new ErroCore('translation_permission_required', ''))
+    expect(transPerm.titulo).toMatch(/Permissão/i)
+    expect(transPerm.titulo).toMatch(/tradução/i)
+
+    const projWrite = mensagemDeErro(new ErroCore('project_write', ''))
+    expect(projWrite.titulo).toMatch(/disco/i)
+    expect(projWrite.recuperacao?.rota).toBe('#/config/componentes')
+
+    const conflict = mensagemDeErro(new ErroCore('caption_style_conflict', ''))
+    expect(conflict.titulo).toMatch(/recarregue/i)
+    expect(conflict.recuperacao).toEqual({ rotulo: 'Recarregar estilo', acao: 'recarregar' })
+  })
 })

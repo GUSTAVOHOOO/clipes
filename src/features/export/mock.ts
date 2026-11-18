@@ -1,5 +1,15 @@
 // Só o harness de navegador usa este módulo; o desktop sempre chama o núcleo.
-type Mock = { job: number; state: string; progress: number; started: number; error: { code: string } | null; encoder: string | null; encoderFallback: { from: string; reason: string } | null };
+type Mock = {
+  job: number;
+  state: 'queued' | 'running' | 'completed' | 'cancelled' | 'failed';
+  progress: number;
+  output: string;
+  started: number;
+  error: { code: string; message?: string } | null;
+  encoder: string | null;
+  encoderFallback: { from: string; reason: string } | null;
+  timer?: ReturnType<typeof setTimeout> | null;
+};
 type BatchItemMock = {
   position: number; sourceId: number; candidateId: number; clipId: number | null; jobId: number | null;
   title: string; filename: string; durationUs: number;
@@ -10,6 +20,25 @@ type BatchMock = {
   id: number; scope: 'source' | 'project'; sourceId: number | null; outputDir: string;
   state: 'running' | 'completed' | 'cancelled'; started: number; items: BatchItemMock[];
 };
+
+type ExportMockHooks = {
+  emitProgress?: (evento: {
+    job: string;
+    project?: string | null;
+    stage: string;
+    percentage: number;
+    message: string;
+    error: { code: string; message: string } | null;
+  }) => void;
+  getProjectId?: () => string | null;
+};
+
+let hooks: ExportMockHooks = {};
+
+export function configureExportMockHooks(next: ExportMockHooks): void {
+  hooks = { ...hooks, ...next };
+}
+
 let serial = 5900;
 let batchSerial = 6400;
 const jobs = new Map<number, Mock>();
@@ -40,6 +69,33 @@ function hasExportFlag(flag: string): boolean {
   const qIdx = hash.indexOf('?');
   return qIdx >= 0 && new URLSearchParams(hash.slice(qIdx + 1)).has(flag);
 }
+function isFallbackActive(): boolean {
+  return readExportEstado() === 'fallback' || hasExportFlag('export-fallback');
+}
+function formatExportStatus(item: Mock) {
+  if (item.state === 'running' && hasExportFlag('source-test') && Date.now() - item.started > 1500) {
+    item.state = 'completed';
+    item.progress = 100;
+    item.encoder = isFallbackActive() ? 'libx264' : 'h264_nvenc';
+    item.encoderFallback = isFallbackActive() ? { from: 'h264_nvenc', reason: 'encoder_failed' } : null;
+  }
+  const fallback =
+    item.state === 'completed' && isFallbackActive()
+      ? (item.encoderFallback ?? { from: 'h264_nvenc', reason: 'encoder_failed' })
+      : item.encoderFallback;
+  const effectiveEncoder =
+    item.state === 'completed' && isFallbackActive() ? 'libx264' : item.encoder;
+  return {
+    job: item.job,
+    state: item.state,
+    progress: item.progress,
+    output: item.output,
+    error: item.error,
+    encoder: effectiveEncoder,
+    encoderFallback: fallback,
+  };
+}
+
 const encoderView = () => {
   const estado = readExportEstado();
   const noFfmpeg = estado === 'erro' || hasExportFlag('components-missing') || hasExportFlag('encoder-no-ffmpeg');
@@ -189,8 +245,8 @@ export function exportMock(
   }
   if (name === 'export.start') {
     if (!a.start_id || !a.end_id) throw { code: 'export_bounds' };
-    if (new URLSearchParams(location.search).has('export-exists')) throw { code: 'export_exists' };
-    if (new URLSearchParams(location.search).has('export-glyph-missing') && !corrected?.(a.source_id ?? 1, 10)) {
+    if (hasExportFlag('export-exists')) throw { code: 'export_exists' };
+    if (hasExportFlag('export-glyph-missing') && !corrected?.(a.source_id ?? 1, 10)) {
       throw {
         code: 'export_glyph_missing',
         message: 'A fonte da legenda (Noto Sans) não tem glifo para “来” (U+6765, Frase 1) em “来”. Corrija a palavra na Transcrição.',
@@ -201,13 +257,70 @@ export function exportMock(
       };
     }
     const job = ++serial;
-    jobs.set(job, { job, state: 'running', progress: 35, started: Date.now(), error: null, encoder: null, encoderFallback: null });
+    const output = typeof a.output === 'string' && a.output.trim() ? a.output.trim() : '/test/exports/corte.mp4';
+    const item: Mock = {
+      job,
+      state: 'running',
+      progress: 35,
+      output,
+      started: Date.now(),
+      error: null,
+      encoder: null,
+      encoderFallback: null,
+      timer: null,
+    };
+    jobs.set(job, item);
+    const project = hooks.getProjectId?.() ?? null;
+    hooks.emitProgress?.({
+      job: String(job),
+      project,
+      stage: 'export',
+      percentage: 35,
+      message: 'Exportando Corte',
+      error: null,
+    });
+    const finishDelay = hasExportFlag('source-test') ? 1500 : 35;
+    item.timer = setTimeout(() => {
+      item.timer = null;
+      if (item.state === 'cancelled') return;
+      const fallbackActive = isFallbackActive();
+      item.state = 'completed';
+      item.progress = 100;
+      item.encoder = fallbackActive ? 'libx264' : 'h264_nvenc';
+      item.encoderFallback = fallbackActive ? { from: 'h264_nvenc', reason: 'encoder_failed' } : null;
+      hooks.emitProgress?.({
+        job: String(job),
+        project,
+        stage: 'complete',
+        percentage: 100,
+        message: 'Corte exportado.',
+        error: null,
+      });
+    }, finishDelay);
     return { job, state: 'queued' };
   }
+  if (name === 'export.status') {
+    const item = jobs.get(a.job ?? a.id ?? -1);
+    if (!item) throw { code: 'invalid_job', message: 'Tarefa inválida.' };
+    return formatExportStatus(item);
+  }
   const item = jobs.get(a.job ?? a.id ?? -1);
-  if (!item) throw { code: 'invalid_job' };
-  if (name === 'jobs.cancel') item.state = 'cancelled';
-  if (item.state === 'running' && Date.now() - item.started > 1500) { item.state = 'completed'; item.progress = 100; item.encoder = 'h264_nvenc'; }
-  if (item.state === 'completed' && new URLSearchParams(location.search).has('export-fallback')) return { ...item, encoder: 'libx264', encoderFallback: { from: 'h264_nvenc', reason: 'encoder_failed' } };
-  return item;
+  if (!item) throw { code: 'invalid_job', message: 'Tarefa inválida.' };
+  if (name === 'jobs.cancel') {
+    if (item.timer) {
+      clearTimeout(item.timer);
+      item.timer = null;
+    }
+    item.state = 'cancelled';
+    item.progress = 0;
+    hooks.emitProgress?.({
+      job: String(item.job),
+      project: hooks.getProjectId?.() ?? null,
+      stage: 'failed',
+      percentage: 0,
+      message: 'Exportação cancelada.',
+      error: { code: 'cancelled', message: 'Exportação cancelada.' },
+    });
+  }
+  return formatExportStatus(item);
 }
