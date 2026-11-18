@@ -55,14 +55,19 @@ test.describe('Tela Configurador e Acompanhamento de Seleção (#/projeto/:id/co
     await expect(alertaErro.getByRole('button', { name: 'Escolher Perfil local' })).toBeVisible()
     await expect(alertaErro.getByRole('button', { name: 'Ver veto do Projeto' })).toBeVisible()
 
-    // 3. ?estado=parcial com janela uncertain -> bloqueia retomada (#290) e resolve via DialogoResolverIncerteza
+    // 3. ?estado=parcial com janela uncertain -> bloqueia retomada sem expor ticket e resolve via DialogoResolverIncerteza
     await page.evaluate(() => {
       window.location.hash = '#/projeto/demo/cortes?estado=parcial'
     })
     const bannerIncerta = page.getByRole('alert')
     await expect(bannerIncerta).toContainText(/Chamada paga incerta/i)
+    await expect(bannerIncerta).not.toContainText(/#\d+/)
     const btnRetomar = page.getByRole('button', { name: 'Retomar janelas pendentes' })
     await expect(btnRetomar).toBeDisabled()
+    await btnRetomar.locator('..').hover()
+    const tooltipIncerta = page.getByText(/Há janela incerta nesta execução; resolva na Fila antes de retomar\./i)
+    await expect(tooltipIncerta).toBeVisible()
+    await expect(tooltipIncerta).not.toContainText(/#\d+/)
 
     await bannerIncerta.getByRole('button', { name: 'Resolver na Fila' }).click()
     const dlgIncerteza = page.getByRole('alertdialog')

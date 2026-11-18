@@ -1,7 +1,7 @@
 import { Esqueleto, EstadoTela, ProvedorDicas, ProvedorToast, useToast } from '@ds'
 import { useCallback, useEffect, useRef } from 'react'
 import { ProvedorAtalhos } from '~/comandos/atalhos'
-import { criarFila, iniciarProgresso } from '~/core/progresso'
+import { definirProjetoDaFila, iniciarProgresso } from '~/core/progresso'
 import { aplicarPreferencias } from '~/preferencias/aplicarPreferencias'
 import { usePreferencias } from '~/preferencias/preferencias'
 import type { Rota, SecaoConfig } from '~/rotas/rotas'
@@ -317,13 +317,17 @@ function AppRoteado({
   )
 }
 
-let projetoAtivoNaFila: string | null = null
-const filaApp = criarFila(() => projetoAtivoNaFila)
-
 function AppInterno() {
   const { projeto, somenteLocal, carregando } = useProjetoAtual()
   const [preferencias] = usePreferencias()
-  projetoAtivoNaFila = projeto ? (projeto.id ?? projeto.name) : null
+  const projetoId = projeto ? (projeto.id ?? projeto.name) : null
+
+  useEffect(() => {
+    definirProjetoDaFila(projetoId)
+    return () => {
+      definirProjetoDaFila(null)
+    }
+  }, [projetoId])
 
   useEffect(() => {
     aplicarPreferencias(preferencias)
@@ -337,7 +341,7 @@ function AppInterno() {
   useEffect(() => {
     let parar = () => {}
     let cancelado = false
-    iniciarProgresso(filaApp)
+    iniciarProgresso()
       .then((fn) => {
         if (cancelado) fn()
         else parar = fn

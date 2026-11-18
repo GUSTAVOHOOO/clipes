@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { coreDispatch } from '@core'
+import { coreDispatch, emitirProgressoMock } from '@core'
 import { BannerErroCore, Botao, caixaCampo, Entrada, EstadoTela, Segmentado, Select } from '@ds'
 import { App } from '~/App'
 
@@ -72,6 +72,28 @@ describe('App', () => {
     const h1 = await screen.findByRole('heading', { level: 1, name: 'Exportação' })
     expect(h1).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+  })
+
+  it('propaga eventos core-progress do Projeto ativo para BarraStatus via fila padrão única', async () => {
+    vi.stubEnv('VITE_CORE_MOCK', '1')
+    window.history.replaceState(null, '', '/?source-test=1#/projeto/test-project/exportacao')
+    render(<App />)
+
+    await screen.findByRole('heading', { level: 1, name: 'Exportação' })
+
+    act(() => {
+      emitirProgressoMock({
+        job: '91',
+        project: 'test-project',
+        stage: 'selection:window',
+        percentage: 55,
+        message: 'Janela 2 de 4',
+        error: null,
+      })
+    })
+
+    expect(await screen.findByText('Janela 2 de 4')).toBeInTheDocument()
+    expect(screen.getByText('55%')).toBeInTheDocument()
   })
 })
 

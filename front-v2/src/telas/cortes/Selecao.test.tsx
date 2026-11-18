@@ -504,7 +504,7 @@ describe('Tela Configurador e Acompanhamento de Seleção (#/projeto/:id/cortes)
     expect(within(alertaTransc).getByRole('button', { name: /Abrir Transcrição/i })).toBeInTheDocument()
   })
 
-  it('em execução parcial com janela uncertain, bloqueia "Retomar janelas pendentes" com <Dica> citando #290 e abre <DialogoResolverIncerteza>', async () => {
+  it('em execução parcial com janela uncertain, bloqueia "Retomar janelas pendentes" com <Dica> sem expor ticket (UI-12) e abre <DialogoResolverIncerteza>', async () => {
     const user = userEvent.setup()
     const janelasIncertas = criarJanelasPadrao().map((w) =>
       w.index === 2
@@ -547,11 +547,20 @@ describe('Tela Configurador e Acompanhamento de Seleção (#/projeto/:id/cortes)
     const btnRetomar = screen.getByRole('button', { name: /Retomar janelas pendentes/i })
     expect(btnRetomar).toBeDisabled()
 
-    // Dica acessível citando #290 ao focar o gatilho envolvente do botão desabilitado
+    // Dica acessível ao focar o gatilho envolvente do botão desabilitado, sem referência de ticket (#\d+)
     const gatilhoDica = btnRetomar.closest('[tabindex="0"]') as HTMLElement
     expect(gatilhoDica).not.toBeNull()
     await user.hover(gatilhoDica)
-    expect(await screen.findByText(/#290/)).toBeInTheDocument()
+    const dicaTexto = await screen.findByText(
+      /Há janela incerta nesta execução; resolva na Fila antes de retomar\./i,
+    )
+    expect(dicaTexto).toBeInTheDocument()
+    expect(dicaTexto.textContent ?? '').not.toMatch(/#\d+/)
+
+    // Varredura UI-12 no texto renderizado e na Dica (excluindo o identificador "Execução #<id>")
+    expect(alerta.textContent ?? '').not.toMatch(/#\d+/)
+    const textoSemExecucaoId = (document.body.textContent ?? '').replace(/Execução(?::\s*|\s+)#\d+/g, '')
+    expect(textoSemExecucaoId).not.toMatch(/#\d+/)
 
     // Resolver na Fila abre <DialogoResolverIncerteza> e chama jobs.estimate
     const btnResolver = within(alerta).getByRole('button', { name: /Resolver na Fila/i })

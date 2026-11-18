@@ -622,7 +622,8 @@ export function AcompanhamentoSelecao({
             {Math.max(0, totalJanelas - janelasConcluidas)} pendente(s).
           </p>
           {temIncerta ? (
-            <Dica texto="Há janela incerta nesta execução; resolva na Fila antes de retomar (#290).">
+            /* Bloqueado enquanto existir janela incerta sem resolução na Fila (#290) */
+            <Dica texto="Há janela incerta nesta execução; resolva na Fila antes de retomar.">
               <span tabIndex={0} className="inline-flex">
                 <Botao tamanho="p" variante="secundario" disabled>
                   Retomar janelas pendentes
