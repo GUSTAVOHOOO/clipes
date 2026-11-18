@@ -7,6 +7,7 @@ import { useRota } from '~/rotas/useRota'
 import { ComEstado, useEstadoForcado } from '~/shell/EstadoForcado'
 import { Shell, useProjetoAtual, type ProjetoAtual } from '~/shell/Shell'
 import { Assistente } from '~/telas/assistente/Assistente'
+import { ConfiguracoesLayout } from '~/telas/config/ConfiguracoesLayout'
 import { Inicio } from '~/telas/inicio/Inicio'
 
 const TITULOS_CONFIG: Record<SecaoConfig, string> = {
@@ -196,8 +197,22 @@ function AppRoteado({
 
   const placeholder = <PlaceholderTela rota={rota} />
 
-  return (
-    <Shell rota={rota} projeto={projeto} somenteLocal={somenteLocal}>
+  const conteudo =
+    rota.tela === 'config' ? (
+      <ConfiguracoesLayout
+        secao={rota.secao}
+        projetoAberto={projetoAberto}
+        titulo={TITULOS_CONFIG[rota.secao]}
+      >
+        <ComEstado
+          estado={forcado ?? 'pronto'}
+          carregando={<Esqueleto variante="painel" />}
+          vazio={placeholder}
+        >
+          {placeholder}
+        </ComEstado>
+      </ConfiguracoesLayout>
+    ) : (
       <ComEstado
         estado={forcado ?? 'pronto'}
         carregando={<Esqueleto variante="painel" />}
@@ -205,6 +220,11 @@ function AppRoteado({
       >
         {placeholder}
       </ComEstado>
+    )
+
+  return (
+    <Shell rota={rota} projeto={projeto} somenteLocal={somenteLocal}>
+      {conteudo}
     </Shell>
   )
 }

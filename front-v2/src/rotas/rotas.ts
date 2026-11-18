@@ -197,7 +197,7 @@ export function resolver(hash: string, ctx: Contexto): Resolucao {
     if (secaoTipada === 'projeto' && !ctx.projetoAberto) {
       return {
         redirecionar: '#/config/provedores',
-        aviso: 'Abra um Projeto para configurar o Projeto atual.',
+        aviso: 'Abra um Projeto para editar estas configurações.',
       }
     }
     return { rota: { tela: 'config', secao: secaoTipada } }

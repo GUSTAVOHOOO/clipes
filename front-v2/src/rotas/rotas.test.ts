@@ -83,8 +83,10 @@ describe('resolver rotas', () => {
 
   it('guarda #/config/projeto sem Projeto aberto mas mantém #/config/custos acessível', () => {
     const res = resolver('#/config/projeto', semProjeto)
-    expect(res).toMatchObject({ redirecionar: '#/config/provedores' })
-    expect('redirecionar' in res && res.aviso).toBeTruthy()
+    expect(res).toEqual({
+      redirecionar: '#/config/provedores',
+      aviso: 'Abra um Projeto para editar estas configurações.',
+    })
 
     expect(resolver('#/config/projeto', comCanal)).toEqual({
       rota: { tela: 'config', secao: 'projeto' },
