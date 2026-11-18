@@ -399,6 +399,73 @@ describe('mapeador de erros (erros.ts)', () => {
     }
   })
 
+  it('cobre todos os 55 códigos do Pacote E (Transformar, Narração, TTS, Capa e Empacotamento)', () => {
+    const codigosPacoteE = [
+      'angle_invalid',
+      'angle_change_confirmation',
+      'edit_invalid',
+      'invalid_edit',
+      'nothing_to_edit',
+      'nothing_to_approve',
+      'generation_in_progress',
+      'suggestion_in_progress',
+      'generating',
+      'no_script',
+      'pending_blocks',
+      'import_in_progress',
+      'import_unsupported_format',
+      'import_file_too_large',
+      'import_duration_too_short',
+      'import_duration_too_long',
+      'import_no_audio_stream',
+      'import_unsupported_codec',
+      'import_empty_file',
+      'import_failed',
+      'import_file_missing',
+      'import_invalid_audio',
+      'invalid_recording_audio',
+      'recording_too_large',
+      'narration_record_failed',
+      'narration_failed',
+      'narration_missing',
+      'narration_not_recorded',
+      'narration_align_failed',
+      'narration_cleanup_failed',
+      'cleanup_not_applicable',
+      'invalid_cleanup_state',
+      'alignment_missing',
+      'invalid_review_choice',
+      'tts_model_missing',
+      'tts_model_unknown',
+      'tts_model_language_mismatch',
+      'tts_voice_unknown',
+      'tts_voice_language_mismatch',
+      'tts_voice_unsupported',
+      'terms_acceptance_required',
+      'ffmpeg_missing',
+      'instant_out_of_cut',
+      'no_instant',
+      'thumbnail_exists',
+      'thumbnail_destination',
+      'thumbnail_failed',
+      'chapter_delimiters_missing',
+      'chapters_require_transformed',
+      'chapters_unavailable',
+      'narration_required',
+      'too_few_chapters',
+      'block_not_found',
+      'language_required',
+      'export_glyph_missing',
+    ]
+
+    for (const codigo of codigosPacoteE) {
+      expect(TABELA_ERROS[codigo], `código ausente na TABELA_ERROS: ${codigo}`).toBeDefined()
+      const msg = mensagemDeErro(new ErroCore(codigo, 'detalhe'))
+      expect(msg.titulo).not.toBe('Algo deu errado nesta operação.')
+      expect(msg.titulo.length).toBeGreaterThan(5)
+    }
+  })
+
   it('mapeia tradução e ações de recuperação específicas do Pacote D', () => {
     const exportExists = mensagemDeErro(new ErroCore('export_exists', ''))
     expect(exportExists.titulo).toMatch(/existe um arquivo/i)
@@ -437,5 +504,43 @@ describe('mapeador de erros (erros.ts)', () => {
     const conflict = mensagemDeErro(new ErroCore('caption_style_conflict', ''))
     expect(conflict.titulo).toMatch(/recarregue/i)
     expect(conflict.recuperacao).toEqual({ rotulo: 'Recarregar estilo', acao: 'recarregar' })
+  })
+
+  it('mapeia mensagens e recuperações específicas do Pacote E', () => {
+    const angleInvalid = mensagemDeErro(new ErroCore('angle_invalid', ''))
+    expect(angleInvalid.titulo).toMatch(/60/)
+    expect(angleInvalid.titulo).toMatch(/200/)
+
+    const ttsMissing = mensagemDeErro(new ErroCore('tts_model_missing', ''))
+    expect(ttsMissing.titulo).toMatch(/TTS/i)
+    expect(ttsMissing.recuperacao?.acao).toBe('instalar-componente')
+
+    const importFmt = mensagemDeErro(new ErroCore('import_unsupported_format', ''))
+    expect(importFmt.titulo).toMatch(/\.wav/i)
+
+    const cleanupFail = mensagemDeErro(new ErroCore('narration_cleanup_failed', ''))
+    expect(cleanupFail.titulo).toMatch(/FFmpeg/i)
+    expect(cleanupFail.recuperacao?.rota).toBe('#/config/componentes')
+
+    const outOfCut = mensagemDeErro(new ErroCore('instant_out_of_cut', ''))
+    expect(outOfCut.titulo).toMatch(/Corte/)
+
+    const thumbExists = mensagemDeErro(new ErroCore('thumbnail_exists', ''))
+    expect(thumbExists.titulo).toMatch(/arquivo/i)
+
+    const delimMissing = mensagemDeErro(new ErroCore('chapter_delimiters_missing', ''))
+    expect(delimMissing.titulo).toMatch(/delimitadores|marcadores/i)
+
+    const chapReq = mensagemDeErro(new ErroCore('chapters_require_transformed', ''))
+    expect(chapReq.titulo).toMatch(/Vídeo transformado/)
+
+    const glyphMissing = mensagemDeErro(new ErroCore('export_glyph_missing', ''))
+    expect(glyphMissing.titulo).toMatch(/fonte/i)
+
+    const genInProg = mensagemDeErro(new ErroCore('generation_in_progress', ''))
+    expect(genInProg.recuperacao).toEqual({ rotulo: 'Abrir Fila de Jobs', acao: 'abrir-fila' })
+
+    const termsReq = mensagemDeErro(new ErroCore('terms_acceptance_required', ''))
+    expect(termsReq.recuperacao?.acao).toBe('aceitar-termos')
   })
 })
