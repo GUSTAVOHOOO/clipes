@@ -29,6 +29,17 @@ test.describe('Tela Lista e Entrada de Fontes (#/projeto/:id/fontes)', () => {
     })
     await expect(page.getByText('Nenhuma Fonte importada ainda')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Importar primeira Fonte' })).toBeVisible()
+    await expect(page.locator('button.bg-sinal')).toHaveCount(1)
+
+    // UI-40b: alternar EntradaFonte para URL (VOD) em ?estado=vazio mantém apenas 1 bg-sinal
+    await page.getByRole('radio', { name: /URL \(VOD\)/i }).click()
+    await expect(page.locator('button.bg-sinal')).toHaveCount(1)
+    await expect(page.getByRole('button', { name: 'Baixar por URL' })).toHaveClass(/bg-sinal/)
+    await expect(page.getByRole('button', { name: 'Importar primeira Fonte' })).not.toHaveClass(
+      /bg-sinal/,
+    )
+    await page.getByRole('radio', { name: /Arquivo local/i }).click()
+    await expect(page.locator('button.bg-sinal')).toHaveCount(1)
 
     // ?estado=carregando
     await page.evaluate(() => {

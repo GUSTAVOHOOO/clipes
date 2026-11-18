@@ -14,6 +14,7 @@ import {
   type ColunaGrade,
   type TomStatus,
 } from '@ds'
+import { ArrowRight } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
@@ -339,11 +340,12 @@ export function ListaLotes({
                   <Botao
                     tamanho="p"
                     variante="secundario"
+                    icone={<ArrowRight />}
                     onClick={() => {
                       window.location.hash = `#/projeto/${encProjeto}/cortes?fonte=${item.sourceId}&run=${item.selectionRun}`
                     }}
                   >
-                    Revisar Cortes →
+                    Revisar Cortes
                   </Botao>
                 )}
 

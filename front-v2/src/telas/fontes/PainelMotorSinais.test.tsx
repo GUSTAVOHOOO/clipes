@@ -670,4 +670,53 @@ describe('<PainelMotorSinais>', () => {
     })
     expect(within(resumo).getByText('< US$ 0,01')).toBeInTheDocument()
   })
+
+  it('UI-41: durante transcrição em andamento, prioriza Blocos de 10 min antes do Motor e recolhe VAD para manter Pausar / Cancelar acima da dobra', async () => {
+    mockBase({
+      'transcription.blocks': () => [
+        { start_us: 0, end_us: 600_000_000, device: 'cuda', compute_type: 'int8_float16' },
+      ],
+    })
+
+    const rodando: TranscriptStatusFonte = {
+      language: 'pt',
+      transcript: {
+        id: 4,
+        state: 'running',
+        resume_us: 600_000_000,
+        duration_us: 3_600_000_000,
+        model: 'whisper-turbo',
+        engine: 'local',
+        words: 0,
+      },
+      job: { id: 99, state: 'running', progress: 25, code: null },
+    }
+
+    render(
+      envolver(
+        <PainelMotorSinais
+          projetoPath="/projetos/Demo.clipes"
+          fonte={FONTE_DISPONIVEL}
+          transcriptStatus={rodando}
+          aoAtualizarStatus={vi.fn(async () => {})}
+        />,
+      ),
+    )
+
+    const secBlocos = await screen.findByRole('region', { name: 'Blocos de 10 min' })
+    const secMotor = screen.getByRole('region', { name: 'Motor de transcrição' })
+    expect(
+      secBlocos.compareDocumentPosition(secMotor) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+
+    const btnPausar = within(secBlocos).getByRole('button', {
+      name: /Pausar \/ Cancelar mantendo blocos salvos/i,
+    })
+    expect(btnPausar).toBeVisible()
+
+    const resumoVad = screen.getByText(/Agrupamento de trechos \(VAD\)/i)
+    const detailsVad = resumoVad.closest('details')
+    expect(detailsVad).not.toBeNull()
+    expect(detailsVad?.hasAttribute('open')).toBe(false)
+  })
 })

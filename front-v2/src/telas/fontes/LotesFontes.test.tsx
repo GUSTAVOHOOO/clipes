@@ -840,4 +840,33 @@ describe('Tela Lotes de Fontes (#/projeto/:id/fontes?sub=lotes)', () => {
     expect(within(resumoSel2).getByText('Perfil configurado')).toBeInTheDocument()
     expect(within(resumoSel2).getByText('Custo desconhecido')).toBeInTheDocument()
   })
+
+  it('UI-40a: mantém apenas um botão bg-sinal quando há Fontes e nenhum lote criado (Luz Única)', async () => {
+    const user = userEvent.setup()
+    mockBase({ fontes: FONTES_LOTES, lotes: [] })
+    const { container } = render(
+      envolver(<LotesFontes projetoId="demo" projetoPath="/projetos/Demo.clipes" store={store} />),
+    )
+
+    expect(await screen.findByText(/Nenhum lote executado neste Projeto ainda/i)).toBeInTheDocument()
+    const botoesSinal = Array.from(container.querySelectorAll<HTMLButtonElement>('button.bg-sinal'))
+    expect(botoesSinal).toHaveLength(1)
+    expect(botoesSinal[0]).toHaveTextContent(/Iniciar lote/i)
+
+    const btnFocar = screen.getByRole('button', { name: 'Focar seleção de Fontes' })
+    expect(btnFocar).not.toHaveClass('bg-sinal')
+    await user.click(btnFocar)
+    expect(screen.getByRole('checkbox', { name: /Live_12_11_final\.mp4/i })).toHaveFocus()
+  })
+
+  it('UI-42: botão Revisar Cortes usa ícone ArrowRight sem seta literal → no rótulo', async () => {
+    mockBase({ fontes: FONTES_LOTES, lotes: [LOTE_ATTENTION] })
+    render(
+      envolver(<LotesFontes projetoId="demo" projetoPath="/projetos/Demo.clipes" store={store} />),
+    )
+
+    const btnRevisar = await screen.findByRole('button', { name: 'Revisar Cortes' })
+    expect(btnRevisar.textContent?.trim()).toBe('Revisar Cortes')
+    expect(btnRevisar.querySelector('svg')).not.toBeNull()
+  })
 })

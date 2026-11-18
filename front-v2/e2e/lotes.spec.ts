@@ -21,6 +21,10 @@ test.describe('Tela Lotes de Fontes (#/projeto/:id/fontes?sub=lotes)', () => {
       window.location.hash = '#/projeto/meu-canal-de-cortes/fontes?sub=lotes&estado=vazio'
     })
     await expect(page.getByText('Nenhum lote executado neste Projeto ainda.')).toBeVisible()
+    await expect(page.locator('button.bg-sinal')).toHaveCount(1)
+    await expect(page.getByRole('button', { name: 'Focar seleção de Fontes' })).not.toHaveClass(
+      /bg-sinal/,
+    )
     await page.getByRole('button', { name: 'Focar seleção de Fontes' }).click()
 
     // ?estado=carregando

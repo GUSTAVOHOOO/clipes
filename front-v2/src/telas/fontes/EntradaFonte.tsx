@@ -130,6 +130,7 @@ export type EntradaFonteProps = {
   refPrimeiroControle?: RefObject<HTMLInputElement | null>
   modo?: ModoEntradaFonte
   aoMudarModo?: (modo: ModoEntradaFonte) => void
+  aoMudarCtaPrimarioAtivo?: (ativo: boolean) => void
 }
 
 /** Painel de entrada e pré-inspeção de Fonte (arquivo local ou URL VOD com JIT). */
@@ -141,6 +142,7 @@ export function EntradaFonte({
   refPrimeiroControle,
   modo: modoProp,
   aoMudarModo,
+  aoMudarCtaPrimarioAtivo,
 }: EntradaFonteProps) {
   const toast = useToast()
   const jobs = useFila()
@@ -459,6 +461,12 @@ export function EntradaFonte({
   }, [jobFonteAtivo, jobs])
 
   const jitInlineAberto = modo === 'url' && mostrarJit
+  const ctaPrimarioAtivo = modo === 'url' || Boolean(inspecao)
+
+  useEffect(() => {
+    aoMudarCtaPrimarioAtivo?.(ctaPrimarioAtivo)
+  }, [aoMudarCtaPrimarioAtivo, ctaPrimarioAtivo])
+
   const traducaoErro = erro ? mensagemDeErro(erro) : null
   const copiaTravada = !originUrl && copiarParaProjeto && copiaEmAndamento
   const podeImportar =

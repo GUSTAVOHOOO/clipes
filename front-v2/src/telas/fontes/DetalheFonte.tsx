@@ -10,7 +10,7 @@ import {
   tcLongo,
   useToast,
 } from '@ds'
-import { ArrowLeft, RefreshCw, ShieldCheck, Wrench } from 'lucide-react'
+import { ArrowLeft, ArrowRight, RefreshCw, ShieldCheck, Wrench } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { CampoPermissao, permissaoValida } from '~/componentes/CampoPermissao'
 import { PlayerReferenciaFonte } from '~/componentes/PlayerReferenciaFonte'
@@ -487,13 +487,14 @@ export function DetalheFonte({
 
         <Botao
           variante={pronta ? 'primario' : 'secundario'}
+          icone={<ArrowRight />}
           className="ml-auto"
           disabled={!pronta}
           onClick={() => {
             window.location.hash = `#/projeto/${encProjeto}/cortes?fonte=${fonteEfetiva.id}`
           }}
         >
-          Selecionar Cortes →
+          Selecionar Cortes
         </Botao>
       </header>
 

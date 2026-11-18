@@ -198,9 +198,12 @@ test.describe('Tela Detalhe da Fonte e Transcrição (#/projeto/:id/fontes/:font
     await page.getByRole('tab', { name: /Privacidade \(Somente local\)/i }).click()
     await page.getByRole('switch', { name: /Somente local/i }).click()
 
+    await page.setViewportSize({ width: 1366, height: 768 })
     await page.evaluate(() => {
       window.location.hash = '#/projeto/meu-canal-de-cortes/fontes/4'
     })
+    await page.getByRole('button', { name: /Medir amostra 30 s/i }).click()
+    await expect(page.getByText(/ETA estimado:/i)).toBeVisible()
     await page.getByRole('button', { name: /Refazer transcrição/i }).click()
     await expect(page.getByText(/Transcrição em andamento/i)).toBeVisible()
 
@@ -208,6 +211,17 @@ test.describe('Tela Detalhe da Fonte e Transcrição (#/projeto/:id/fontes/:font
       name: /Pausar \/ Cancelar mantendo blocos salvos/i,
     })
     await expect(btnCancelar).toBeVisible()
+    // UI-41: em 1366x768, Pausar / Cancelar fica acima da dobra da coluna esquerda sem exigir rolagem
+    const visibilidadeCancelar = await btnCancelar.evaluate((el) => {
+      const rect = el.getBoundingClientRect()
+      const parentScroll = el.closest('.overflow-y-auto')
+      const pRect = parentScroll ? parentScroll.getBoundingClientRect() : null
+      return {
+        naViewport: rect.top >= 0 && rect.bottom <= window.innerHeight,
+        naColuna: pRect ? rect.top >= pRect.top - 1 && rect.bottom <= pRect.bottom + 1 : true,
+      }
+    })
+    expect(visibilidadeCancelar).toEqual({ naViewport: true, naColuna: true })
     await btnCancelar.click()
 
     await expect(page.getByText(/Transcrição parcial salva até/i)).toBeVisible()
