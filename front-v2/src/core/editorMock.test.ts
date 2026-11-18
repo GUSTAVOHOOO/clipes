@@ -23,9 +23,7 @@ describe('mock TS completo do Editor, Legendas, Reframe, Tradução, Áudio e Ex
   it('Demo.clipes traz Corte direto, Vídeo transformado, Corte V1 com edições e Corte avulso sem query flags', async () => {
     const runs4 = await coreDispatch<Array<{ id: number; videoKind: string }>>('selection.list', { source_id: 4 })
     expect(runs4.some((r) => r.videoKind === 'direct')).toBe(true)
-
-    const runs5 = await coreDispatch<Array<{ id: number; videoKind: string }>>('selection.list', { source_id: 5 })
-    expect(runs5.some((r) => r.videoKind === 'transformed')).toBe(true)
+    expect(runs4.some((r) => r.videoKind === 'transformed')).toBe(true)
 
     // Corte direto
     const direto = await coreDispatch<{ clipId: number; montage: unknown }>('editor.open', {
@@ -39,7 +37,7 @@ describe('mock TS completo do Editor, Legendas, Reframe, Tradução, Áudio e Ex
 
     // Vídeo transformado com montagem existente
     const transformado = await coreDispatch<{ clipId: number; montage: { blocks: unknown[] } | null }>('editor.open', {
-      source_id: 5,
+      source_id: 4,
       start_id: 10,
       end_id: 14,
       candidate_id: 201,
@@ -49,7 +47,7 @@ describe('mock TS completo do Editor, Legendas, Reframe, Tradução, Áudio e Ex
 
     // Corte V1 com edições pré-existentes e snapshots
     const v1 = await coreDispatch<{ clipId: number; crop: { layout: string | null } }>('editor.open', {
-      source_id: 5,
+      source_id: 4,
       start_id: 40,
       end_id: 41,
       candidate_id: 202,

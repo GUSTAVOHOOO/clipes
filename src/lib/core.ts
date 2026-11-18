@@ -314,8 +314,6 @@ if (groqRetryTest || componentsMissing || hardwareCpuMode || hardwareProbeFallba
 } else {
   sourceItems.push({ id: 4, path: '/test/Live_12_11_final.mp4', status: 'available', available: true, verified: true, audio_track: 1, origin_url: 'https://www.youtube.com/watch?v=live1211', language: 'pt', permission: { status: 'granted', who: 'Criador Exemplo', where: 'Discord', scope: 'cortes e tradução' }, metadata: makeSourceMetadata('3600.0') });
   transcriptsBySource.set(4, { transcript: { id: 4, engine: 'local', model: 'whisper-turbo', state: 'complete', resume_us: 3_600_000_000, duration_us: 3_600_000_000, words: 30000 }, job: null });
-  sourceItems.push({ id: 5, path: '/test/Vod_Transformado.mp4', status: 'available', available: true, verified: true, audio_track: 1, origin_url: 'https://www.youtube.com/watch?v=vodtrans', language: 'pt', permission: { status: 'granted', who: 'Criador Transformado', where: 'YouTube', scope: 'cortes e tradução' }, metadata: makeSourceMetadata('3600.0') });
-  transcriptsBySource.set(5, { transcript: { id: 5, engine: 'local', model: 'whisper-turbo', state: 'complete', resume_us: 3_600_000_000, duration_us: 3_600_000_000, words: 30000 }, job: null });
 }
 function requireProjectMock(args: object): ProjectMock {
   const active = getActiveProjectMock();
@@ -766,8 +764,8 @@ function createInitialTransformedRun(): MockSelectionRun {
   const candidates = buildCandidatesForRevision(1, 'transformed', 'forte', true, 200);
   return {
     id: 2,
-    sourceId: 5,
-    transcriptId: 5,
+    sourceId: 4,
+    transcriptId: 4,
     state: 'completed',
     videoKind: 'transformed',
     minUs: 20_000_000,
@@ -778,7 +776,7 @@ function createInitialTransformedRun(): MockSelectionRun {
     revisions: [1],
     activeRevision: 1,
     budgetPause: null,
-    createdAt: '2026-11-16T12:00:00Z',
+    createdAt: '2026-11-14T12:00:00Z',
     ticks: 2,
     cancelled: false,
     redone: false,
@@ -1435,9 +1433,10 @@ function selectionMockDispatch(name: string, args: object): unknown {
     if (!st?.transcript && !isTranscriptTest()) {
       throw { code: 'transcript_missing', message: 'Transcrição não encontrada.' };
     }
+    const ordemDemo = (r: MockSelectionRun) => (r.id >= 3 ? 1000 + r.id : r.id === 1 ? 2 : 1);
     return [...selectionRuns.values()]
       .filter((r) => r.sourceId === sid)
-      .sort((a, b) => b.id - a.id)
+      .sort((a, b) => ordemDemo(b) - ordemDemo(a))
       .map(formatRunHead);
   }
 
@@ -1830,7 +1829,9 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       const a = args as { scope?: string; source_id?: number; candidate_id?: number; start_id?: number; end_id?: number };
       const scope = a.scope ?? 'single';
       const ack = channelProfileMock.directMonetizationAck;
-      const latestRun = !hasSearchFlag('source-test') ? [...selectionRuns.values()].at(-1) : undefined;
+      const latestRun = !hasSearchFlag('source-test')
+        ? ([...selectionRuns.values()].filter((r) => r.id >= 3).at(-1) ?? selectionRuns.get(1))
+        : undefined;
       const candidateHit = typeof a.candidate_id === 'number' && !hasSearchFlag('source-test')
         ? findRunAndCandidateById(a.candidate_id)
         : null;
