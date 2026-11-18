@@ -69,6 +69,7 @@ fn local_source_lifecycle() {
     let id = source["id"].as_i64().unwrap();
     assert_eq!(source["permission"]["status"], "none");
     assert_eq!(source["language"], "pt");
+    assert_eq!(source["transcript_state"], "none");
     assert_eq!(source["available"], true);
     assert_eq!(source["metadata"]["streams"][0]["width"], 64);
     assert_eq!(source["audio_track"], 2);
@@ -582,4 +583,126 @@ fn permission_set_reflects_in_packaging_translation_and_guardrails() {
     run("projects.close", json!({})).unwrap();
     std::env::remove_var("CLIPES_DATA_DIR");
     fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn sources_list_and_mutating_responses_expose_transcript_state() {
+    let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let root = tempfile::tempdir().unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", root.path().join("data"));
+    let run = |name, args| dispatch(name, args, &mut |_| {});
+
+    let project = run(
+        "projects.create",
+        json!({"parent": root.path(), "name": "CanalEstado"}),
+    )
+    .unwrap();
+    let project_path = project["path"].as_str().unwrap().to_owned();
+
+    let (s_none, s_queued, s_running_partial, s_partial, s_failed_zero, s_complete) =
+        with_writer(|c| {
+            let insert_source = |name: &str| -> rusqlite::Result<i64> {
+                c.execute(
+                    "INSERT INTO sources(path,size,duration_us,partial_hash,metadata,permission,audio_track) VALUES (?1,1,30000000,'h','{}','{\"status\":\"none\"}',0)",
+                    [format!("C:/videos/{name}")],
+                )?;
+                Ok(c.last_insert_rowid())
+            };
+
+            let s_none = insert_source("none.mp4")?;
+
+            let s_queued = insert_source("queued.mp4")?;
+            c.execute(
+                "INSERT INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,state,resume_us,duration_us) VALUES (?1,0,'local','m','r','c','running',0,30000000)",
+                [s_queued],
+            )?;
+            c.execute(
+                "INSERT INTO jobs(kind,safety,state,source_id) VALUES ('transcription','local','queued',?1)",
+                [s_queued],
+            )?;
+
+            let s_running_partial = insert_source("running_partial.mp4")?;
+            c.execute(
+                "INSERT INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,state,resume_us,duration_us) VALUES (?1,0,'local','m','r','c','running',10000000,30000000)",
+                [s_running_partial],
+            )?;
+            c.execute(
+                "INSERT INTO jobs(kind,safety,state,source_id) VALUES ('transcription','local','running',?1)",
+                [s_running_partial],
+            )?;
+
+            let s_partial = insert_source("partial.mp4")?;
+            c.execute(
+                "INSERT INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,state,resume_us,duration_us) VALUES (?1,0,'local','m','r','c','running',10000000,30000000)",
+                [s_partial],
+            )?;
+            c.execute(
+                "INSERT INTO jobs(kind,safety,state,source_id) VALUES ('transcription','local','cancelled',?1)",
+                [s_partial],
+            )?;
+
+            let s_failed_zero = insert_source("failed_zero.mp4")?;
+            c.execute(
+                "INSERT INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,state,resume_us,duration_us) VALUES (?1,0,'local','m','r','c','running',0,30000000)",
+                [s_failed_zero],
+            )?;
+            c.execute(
+                "INSERT INTO jobs(kind,safety,state,source_id) VALUES ('transcription','local','failed',?1)",
+                [s_failed_zero],
+            )?;
+
+            let s_complete = insert_source("complete.mp4")?;
+            c.execute(
+                "INSERT INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,state,resume_us,duration_us) VALUES (?1,0,'local','m','r','c','complete',30000000,30000000)",
+                [s_complete],
+            )?;
+            c.execute(
+                "INSERT INTO jobs(kind,safety,state,source_id) VALUES ('transcription','local','completed',?1)",
+                [s_complete],
+            )?;
+
+            Ok((
+                s_none,
+                s_queued,
+                s_running_partial,
+                s_partial,
+                s_failed_zero,
+                s_complete,
+            ))
+        })
+        .unwrap();
+
+    let list = run("sources.list", json!({"project": project_path})).unwrap();
+    let items = list.as_array().unwrap();
+    let state_of = |id: i64| -> String {
+        items.iter().find(|item| item["id"] == id).unwrap()["transcript_state"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+
+    assert_eq!(state_of(s_none), "none");
+    assert_eq!(state_of(s_queued), "running");
+    assert_eq!(state_of(s_running_partial), "running");
+    assert_eq!(state_of(s_partial), "partial");
+    assert_eq!(state_of(s_failed_zero), "none");
+    assert_eq!(state_of(s_complete), "complete");
+
+    // Retornos de comandos que delegam para fn get também expõem transcript_state.
+    let lang_updated = run(
+        "sources.language.set",
+        json!({"project": project_path, "id": s_none, "language": "en"}),
+    )
+    .unwrap();
+    assert_eq!(lang_updated["transcript_state"], "none");
+
+    let perm_updated = run(
+        "sources.permission.set",
+        json!({"project": project_path, "id": s_complete, "permission": {"status": "granted", "who": "Autor", "where": "YT", "scope": "cortes"}}),
+    )
+    .unwrap();
+    assert_eq!(perm_updated["transcript_state"], "complete");
+
+    run("projects.close", json!({})).unwrap();
+    std::env::remove_var("CLIPES_DATA_DIR");
 }

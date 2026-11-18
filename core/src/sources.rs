@@ -363,9 +363,43 @@ struct SourceRow {
     language: String,
 }
 
+/// Resume o estado da Transcrição da Fonte na sua faixa de áudio:
+/// - `"complete"`: linha em `transcripts` com `state = 'complete'`.
+/// - `"running"`: há job `transcription` em `queued` ou `running` para a Fonte.
+/// - `"partial"`: sem job ativo, mas `transcripts` já avançou (`resume_us > 0`).
+/// - `"none"`: sem transcrição nem progresso salvo.
+fn transcript_state(
+    conn: &rusqlite::Connection,
+    source_id: i64,
+    audio_track: i64,
+) -> rusqlite::Result<&'static str> {
+    let transcript: Option<(String, i64)> = conn
+        .query_row(
+            "SELECT state, resume_us FROM transcripts WHERE source_id=?1 AND audio_track=?2",
+            (source_id, audio_track),
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    if transcript.as_ref().is_some_and(|(s, _)| s == "complete") {
+        return Ok("complete");
+    }
+    let active_job: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM jobs WHERE kind='transcription' AND source_id=?1 AND state IN ('queued','running'))",
+        [source_id],
+        |r| r.get(0),
+    )?;
+    if active_job {
+        return Ok("running");
+    }
+    if transcript.is_some_and(|(_, resume_us)| resume_us > 0) {
+        return Ok("partial");
+    }
+    Ok("none")
+}
+
 fn get(v: &Value, id: i64) -> CommandResult {
-    let row = projects::with_reader(|conn| {
-        conn.query_row(
+    let (row, transcript_state) = projects::with_reader(|conn| {
+        let row = conn.query_row(
             "SELECT path,metadata,permission,audio_track,full_hash,size,partial_hash,modified,origin_url,language FROM sources WHERE id=?1",
             [id],
             |r| {
@@ -382,7 +416,9 @@ fn get(v: &Value, id: i64) -> CommandResult {
                     language: r.get(9)?,
                 })
             },
-        )
+        )?;
+        let transcript_state = transcript_state(conn, id, row.audio_track)?;
+        Ok((row, transcript_state))
     })
     .map_err(|_| err("source_missing", "Fonte não encontrada"))?;
     let resolved = resolve_path(v, &row.path)?;
@@ -397,7 +433,7 @@ fn get(v: &Value, id: i64) -> CommandResult {
         "changed"
     };
     Ok(
-        json!({"id":id,"status":state,"available":state=="available","path":resolved,"metadata":serde_json::from_str::<Value>(&row.metadata).unwrap_or(Value::Null),"permission":serde_json::from_str::<Value>(&row.permission).unwrap_or(Value::Null),"audio_track":row.audio_track,"verified":row.full_hash.is_some(),"origin_url":row.origin_url,"language":row.language}),
+        json!({"id":id,"status":state,"available":state=="available","path":resolved,"metadata":serde_json::from_str::<Value>(&row.metadata).unwrap_or(Value::Null),"permission":serde_json::from_str::<Value>(&row.permission).unwrap_or(Value::Null),"audio_track":row.audio_track,"verified":row.full_hash.is_some(),"origin_url":row.origin_url,"language":row.language,"transcript_state":transcript_state}),
     )
 }
 fn list(v: Value, _: &mut EventSink<'_>) -> CommandResult {
