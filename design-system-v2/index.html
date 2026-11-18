@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="pt-BR" data-tema="escuro">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clipes · Design system v2</title>
+    <script>
+      // tema antes da primeira pintura: ?tema=claro|escuro, depois a última escolha
+      try {
+        var t = new URLSearchParams(location.search).get('tema') || localStorage.getItem('clipes-ds-tema')
+        if (t === 'claro' || t === 'escuro') document.documentElement.dataset.tema = t
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="raiz"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

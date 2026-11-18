@@ -1,0 +1,91 @@
+/* Base do front v2: a moldura não rola, o texto é Inter 13 px e as superfícies do navegador
+   (seleção, foco, barra de rolagem, cursor de texto) também seguem os tokens. */
+@import '@fontsource-variable/inter';
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+  html,
+  body {
+    margin: 0;
+    height: 100%;
+  }
+  body {
+    background: var(--chao);
+    color: var(--t1);
+    font-family: var(--fonte);
+    font-size: 13px;
+    line-height: 1.45;
+    font-feature-settings: 'cv11', 'ss01';
+    -webkit-font-smoothing: antialiased;
+    caret-color: var(--sinal);
+  }
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+  h1,
+  h2,
+  h3,
+  h4,
+  p {
+    margin: 0;
+  }
+  ::selection {
+    background: var(--sinal-suave);
+    color: var(--t1);
+  }
+  ::placeholder {
+    color: var(--t3);
+    opacity: 1;
+  }
+  :focus-visible {
+    outline: 2px solid var(--foco);
+    outline-offset: 2px;
+    border-radius: var(--radius-controle);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--linha) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--linha);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  a {
+    color: inherit;
+    text-underline-offset: 3px;
+  }
+  kbd {
+    font-family: var(--fonte);
+  }
+}
+
+/* Utilitários do sistema */
+@utility num {
+  font-variant-numeric: tabular-nums;
+}
+/* foco desenhado por dentro, para itens colados em bordas de lista e de rolagem */
+@utility foco-interno {
+  &:focus-visible {
+    outline: 2px solid var(--foco);
+    outline-offset: -2px;
+  }
+}
+/* a marca de seleção: 2 px de sinal na borda esquerda, só onde está o trabalho */
+@utility marcado {
+  box-shadow: inset 2px 0 0 var(--sinal);
+}

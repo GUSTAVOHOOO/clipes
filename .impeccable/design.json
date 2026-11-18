@@ -1,0 +1,175 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-18T00:00:00-03:00",
+  "title": "Design System: Clipes",
+  "extensions": {
+    "colorMeta": {
+      "chao": { "role": "neutral", "displayName": "Chão", "canonical": "#0f1012", "tonalRamp": ["#0f1012", "#141518", "#1a1b1f", "#202126", "#24252a", "#6e6e76", "#8a8a92", "#ececee"] },
+      "area": { "role": "neutral", "displayName": "Área", "canonical": "#141518" },
+      "elevado": { "role": "neutral", "displayName": "Elevado", "canonical": "#1a1b1f" },
+      "hover": { "role": "neutral", "displayName": "Hover", "canonical": "#202126" },
+      "linha": { "role": "neutral", "displayName": "Linha", "canonical": "#24252a" },
+      "linha-forte": { "role": "neutral", "displayName": "Linha forte", "canonical": "#6e6e76" },
+      "t1": { "role": "neutral", "displayName": "Texto principal", "canonical": "#ececee" },
+      "t2": { "role": "neutral", "displayName": "Texto secundário", "canonical": "#a1a1a8" },
+      "t3": { "role": "neutral", "displayName": "Texto terciário", "canonical": "#8a8a92" },
+      "sinal": { "role": "primary", "displayName": "Laranja-sinal", "canonical": "#ff5a1f", "tonalRamp": ["#2a0d02", "#5a1c05", "#8f2d08", "#c93f0c", "#e2480e", "#ff5a1f", "#ff8a5c", "#ffd3c2"] },
+      "sinal-texto": { "role": "primary", "displayName": "Sinal como texto", "canonical": "#ff6a33" },
+      "sinal-suave": { "role": "primary", "displayName": "Sinal suave", "canonical": "rgb(255 90 31 / 0.14)" },
+      "no-sinal": { "role": "primary", "displayName": "Texto sobre o sinal", "canonical": "#160700" },
+      "foco": { "role": "primary", "displayName": "Foco", "canonical": "#ff5a1f" },
+      "erro": { "role": "error", "displayName": "Erro discreto", "canonical": "#f47a7a" },
+      "veu": { "role": "neutral", "displayName": "Véu", "canonical": "rgb(0 0 0 / 0.52)" },
+      "chao-claro": { "role": "neutral", "displayName": "Chão (claro)", "canonical": "#f6f6f7", "tonalRamp": ["#17171a", "#4a4a52", "#63636b", "#82828a", "#dcdce0", "#e3e3e6", "#ededef", "#f6f6f7"] },
+      "sinal-claro": { "role": "primary", "displayName": "Laranja-sinal (claro)", "canonical": "#e2480e" },
+      "erro-claro": { "role": "error", "displayName": "Erro discreto (claro)", "canonical": "#b42323" }
+    },
+    "typographyMeta": {
+      "titulo": { "displayName": "Título", "purpose": "Título de diálogo, de estado de tela e do Corte em revisão na Bancada." },
+      "campo": { "displayName": "Campo", "purpose": "A entrada da Paleta." },
+      "base": { "displayName": "Base", "purpose": "Corpo da UI, botões m/g, itens de menu, Frases da Transcrição." },
+      "pequeno": { "displayName": "Pequeno", "purpose": "Rótulos de campo, status, dicas, campos de texto, barra de status, botões p." },
+      "micro": { "displayName": "Micro", "purpose": "Kbd, título de grupo de menu, marcas de tempo da régua." }
+    },
+    "shadows": [
+      { "name": "flutuante", "value": "0 12px 32px rgb(0 0 0 / 0.45), inset 0 1px 0 rgb(255 255 255 / 0.03)", "valueClaro": "0 12px 32px rgb(20 20 30 / 0.16), 0 1px 3px rgb(20 20 30 / 0.08)", "purpose": "Popover, menu, dica, select, diálogo. Só camadas flutuantes." },
+      { "name": "toast", "value": "0 8px 24px rgb(0 0 0 / 0.45)", "valueClaro": "0 8px 24px rgb(20 20 30 / 0.16)", "purpose": "Toasts no canto inferior direito." },
+      { "name": "marca", "value": "inset 2px 0 0 var(--sinal)", "purpose": "Marca de seleção: 2 px de sinal na borda esquerda." }
+    ],
+    "motion": [
+      { "name": "dur-rapida", "value": "120ms", "purpose": "Cor de itens, abas, segmentos." },
+      { "name": "dur-base", "value": "150ms", "purpose": "Botões, campos, entrada e saída de camadas flutuantes." },
+      { "name": "dur-lenta", "value": "220ms", "purpose": "Toast e barra de progresso." },
+      { "name": "ease-saida", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Curva única de saída exponencial." },
+      { "name": "pulso", "value": "pulso 1.6s cubic-bezier(0.16, 1, 0.3, 1) infinite", "purpose": "Progresso indeterminado e Skeleton; para com reduced-motion." }
+    ],
+    "breakpoints": [
+      { "name": "marca-compacta", "value": "1300px" },
+      { "name": "editor-largo", "value": "1440px" }
+    ],
+    "alturas": [
+      { "name": "altura-topo", "value": "40px" },
+      { "name": "altura-subtopo", "value": "44px" },
+      { "name": "altura-rodape", "value": "28px" },
+      { "name": "altura-barra", "value": "36px" },
+      { "name": "altura-controle", "value": "28px" },
+      { "name": "altura-controle-p", "value": "24px" }
+    ],
+    "camadas": [
+      { "name": "z-palco", "value": "1" },
+      { "name": "z-popover", "value": "300" },
+      { "name": "z-toast", "value": "400" },
+      { "name": "z-dialogo", "value": "500" },
+      { "name": "z-tooltip", "value": "600" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Botão primário",
+      "kind": "button",
+      "refersTo": "botao-primario",
+      "description": "A única ação primária da tela, em laranja-sinal.",
+      "html": "<button class=\"ds-btn ds-btn-primario\">Exportar</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 0; border-radius: 4px; font: 13px/1.45 'Inter Variable', Inter, system-ui, sans-serif; cursor: pointer; transition: background-color 150ms cubic-bezier(0.16,1,0.3,1), color 150ms cubic-bezier(0.16,1,0.3,1), filter 150ms cubic-bezier(0.16,1,0.3,1); } .ds-btn:focus-visible { outline: 2px solid var(--foco, #ff5a1f); outline-offset: 2px; } .ds-btn-primario { background: var(--sinal, #ff5a1f); color: var(--no-sinal, #160700); font-weight: 600; } .ds-btn-primario:hover { filter: brightness(1.08); } .ds-btn-primario:active { filter: brightness(0.95); }"
+    },
+    {
+      "name": "Botão secundário",
+      "kind": "button",
+      "refersTo": "botao-secundario",
+      "description": "Ação comum num degrau elevado.",
+      "html": "<button class=\"ds-btn2\">Rejeitar</button>",
+      "css": ".ds-btn2 { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border: 0; border-radius: 4px; background: var(--elevado, #1a1b1f); color: var(--t1, #ececee); font: 13px/1.45 'Inter Variable', Inter, system-ui, sans-serif; cursor: pointer; transition: background-color 150ms cubic-bezier(0.16,1,0.3,1); } .ds-btn2:hover { background: var(--hover, #202126); } .ds-btn2:focus-visible { outline: 2px solid var(--foco, #ff5a1f); outline-offset: 2px; }"
+    },
+    {
+      "name": "Botão de perigo",
+      "kind": "button",
+      "refersTo": "botao-perigo",
+      "description": "Perigo é texto vermelho discreto sobre o degrau elevado, sem fundo vermelho.",
+      "html": "<button class=\"ds-btn-perigo\">Apagar Corte</button>",
+      "css": ".ds-btn-perigo { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border: 0; border-radius: 4px; background: var(--elevado, #1a1b1f); color: var(--erro, #f47a7a); font: 13px/1.45 'Inter Variable', Inter, system-ui, sans-serif; cursor: pointer; transition: background-color 150ms cubic-bezier(0.16,1,0.3,1); } .ds-btn-perigo:hover { background: var(--hover, #202126); } .ds-btn-perigo:focus-visible { outline: 2px solid var(--foco, #ff5a1f); outline-offset: 2px; }"
+    },
+    {
+      "name": "Campo de texto",
+      "kind": "input",
+      "refersTo": "campo",
+      "description": "Degrau elevado sem borda; foco em 2 px de sinal colado ao campo.",
+      "html": "<input class=\"ds-campo\" placeholder=\"Filtrar fala do Corte…\" />",
+      "css": ".ds-campo { width: 260px; height: 28px; padding: 0 10px; border: 0; border-radius: 4px; background: var(--elevado, #1a1b1f); color: var(--t1, #ececee); font: 12px/1.45 'Inter Variable', Inter, system-ui, sans-serif; outline: none; transition: background-color 150ms cubic-bezier(0.16,1,0.3,1); } .ds-campo::placeholder { color: var(--t3, #8a8a92); } .ds-campo:hover { background: var(--hover, #202126); } .ds-campo:focus-visible { background: var(--elevado, #1a1b1f); outline: 2px solid var(--foco, #ff5a1f); outline-offset: 0; }"
+    },
+    {
+      "name": "Abas",
+      "kind": "nav",
+      "refersTo": "aba-ativa",
+      "description": "Abas de texto; a ativa sobe um degrau, sem sublinhado.",
+      "html": "<div class=\"ds-abas\" role=\"tablist\"><button class=\"ds-aba\" aria-selected=\"true\">Editar</button><button class=\"ds-aba\">Transformar</button><button class=\"ds-aba\">Empacotar</button></div>",
+      "css": ".ds-abas { display: flex; gap: 2px; } .ds-aba { height: 28px; padding: 0 10px; border: 0; border-radius: 4px; background: transparent; color: var(--t3, #8a8a92); font: 13px/1.45 'Inter Variable', Inter, system-ui, sans-serif; cursor: pointer; transition: color 120ms cubic-bezier(0.16,1,0.3,1); } .ds-aba:hover { color: var(--t2, #a1a1a8); } .ds-aba[aria-selected=\"true\"] { background: var(--elevado, #1a1b1f); color: var(--t1, #ececee); } .ds-aba:focus-visible { outline: 2px solid var(--foco, #ff5a1f); outline-offset: 2px; }"
+    },
+    {
+      "name": "Status",
+      "kind": "chip",
+      "description": "Estado = ícone + palavra cinza; o tom só escolhe o ícone.",
+      "html": "<span class=\"ds-status\"><svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M20 6 9 17l-5-5\"/></svg>Aprovado</span>",
+      "css": ".ds-status { display: inline-flex; align-items: center; gap: 4px; color: var(--t3, #8a8a92); font: 12px/1.45 'Inter Variable', Inter, system-ui, sans-serif; white-space: nowrap; }"
+    },
+    {
+      "name": "Item de Corte selecionado",
+      "kind": "custom",
+      "refersTo": "item-lista-selecionado",
+      "description": "Seleção = degrau elevado + 2 px de sinal à esquerda; Nota em número tabular forte.",
+      "html": "<div class=\"ds-item ds-item-sel\"><div><p class=\"ds-item-titulo\">O erro de depender de um único cliente</p><p class=\"ds-item-meta\">00:12:31 · 48 s</p></div><span class=\"ds-item-nota\">8,4</span></div><div class=\"ds-item\"><div><p class=\"ds-item-titulo\">Por que eu parei de vender barato</p><p class=\"ds-item-meta\">00:31:07 · 52 s</p></div><span class=\"ds-item-nota\">7,9</span></div>",
+      "css": ".ds-item { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; width: 340px; padding: 8px 16px; border-radius: 4px; font: 13px/1.45 'Inter Variable', Inter, system-ui, sans-serif; color: var(--t1, #ececee); cursor: pointer; transition: background-color 120ms cubic-bezier(0.16,1,0.3,1); } .ds-item p { margin: 0; } .ds-item:hover { background: var(--elevado, #1a1b1f); } .ds-item-sel { background: var(--elevado, #1a1b1f); box-shadow: inset 2px 0 0 var(--sinal, #ff5a1f); } .ds-item-meta { margin-top: 2px; font-size: 12px; color: var(--t3, #8a8a92); font-variant-numeric: tabular-nums; } .ds-item-nota { font-weight: 600; font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Kbd",
+      "kind": "custom",
+      "refersTo": "kbd",
+      "description": "Atalho visível, micro 11 px num degrau acima do fundo.",
+      "html": "<kbd class=\"ds-kbd\">Ctrl K</kbd>",
+      "css": ".ds-kbd { display: inline-flex; align-items: center; height: 18px; padding: 0 5px; border-radius: 3px; background: var(--elevado, #1a1b1f); color: var(--t3, #8a8a92); font: 500 11px/1 'Inter Variable', Inter, system-ui, sans-serif; font-variant-numeric: tabular-nums; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Ilha de edição, uma luz acesa",
+    "overview": "O Clipes é uma ilha de edição com a luz baixa: tudo é grafite e cinza, e uma única luz laranja marca onde está o trabalho (a agulha da timeline, o item selecionado, a ação primária da tela). A UI é densa, com texto base de 13 px, controles de 28 px e uma grade de 4 px. A densidade fica legível porque a separação vem do espaço e de degraus de superfície, quase nunca de bordas ou caixas.\n\nMinimalismo com revelação progressiva. Toda informação continua existindo, mas só o que a tarefa atual pede fica à vista; o resto fica a um clique ou uma tecla: \"Ver os 5 eixos\", \"+3 faixas\", popovers da barra de ações, painel recolhível com `Ctrl [`, Paleta com `Ctrl K`. Estado é ícone e palavra cinza, nunca selo colorido. O vídeo é o conteúdo: o quadro 9:16 é preto e a cor da legenda pertence ao vídeo, não ao app.\n\nO tema escuro é o padrão (`:root` e `[data-tema='escuro']`); o claro (`[data-tema='claro']`) tem os mesmos papéis. O contraste dos dois é conferido por `design-system-v2/scripts/contraste.ts`: texto com pelo menos 4,5:1; sinal, foco e `linha-forte` com pelo menos 3:1.",
+    "keyCharacteristics": [
+      "Grafite em quatro degraus (chão, área, elevado, hover) e três cinzas de texto.",
+      "Um único laranja-sinal, raro e com função.",
+      "Separação por espaço e degrau; borda de 1 px só onde é inevitável.",
+      "Sombra só em camadas flutuantes.",
+      "Estado = ícone + palavra cinza; erro = texto vermelho discreto, sem fundo.",
+      "Números sempre tabulares; teclado em primeiro plano (atalhos visíveis em `Kbd`).",
+      "Movimento curto (120 a 220 ms) com saída exponencial; some com `prefers-reduced-motion`."
+    ],
+    "rules": [
+      { "name": "A Regra da Luz Única", "body": "O sinal só aparece onde está o trabalho: agulha, marca de seleção, o único primário da tela, a palavra falada, o foco, o caret e a tesoura da marca. Qualquer outro uso de laranja é um erro.", "section": "colors" },
+      { "name": "A Regra do Estado Cinza", "body": "Estado é ícone + palavra em `t3` (ou `t2` quando forte). O tom (`neutro`, `info`, `sucesso`, `aviso`, `perigo`, `rodando`, `pausado`, `pendente`) escolhe só o ícone, nunca a cor.", "section": "colors" },
+      { "name": "A Regra do Erro Sem Fundo", "body": "O vermelho `erro` aparece como texto ou ícone: mensagem do `Campo`, `BannerErroCore`, toast de erro, botão e item de menu de perigo. Nunca pinta um fundo.", "section": "colors" },
+      { "name": "A Regra da Cor do Vídeo", "body": "O que está dentro do quadro 9:16 (preto, legenda branca, palavra ativa amarela `#ffd23f`) é conteúdo do vídeo e fica fora da paleta do app.", "section": "colors" },
+      { "name": "A Regra do Número Tabular", "body": "Timecode, duração, contador, custo e Nota usam `num`. Números que mudam não podem fazer a linha dançar.", "section": "typography" },
+      { "name": "A Regra dos Três Cinzas", "body": "Hierarquia de texto se faz com `t1`, `t2` e `t3`. Um quarto cinza ou um texto colorido para \"destacar\" não entra.", "section": "typography" },
+      { "name": "A Regra do Degrau", "body": "Separe áreas por espaço e por um degrau de superfície (chão → área → elevado). Borda só onde é inevitável: 1 px de `linha` sob a barra superior, sobre a timeline e sob a entrada da Paleta.", "section": "layout" },
+      { "name": "A Regra da Sombra Flutuante", "body": "Só o que flutua tem sombra. Painel, lista, banner e cartão ficam planos e se distinguem pelo degrau.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do usar um único botão primário (`sinal`) por tela, na ação que fecha a tarefa.",
+      "Do marcar seleção com degrau `elevado` + 2 px de `sinal` à esquerda (`marcado`).",
+      "Do mostrar estado como ícone + palavra em `t3`, com `Status`.",
+      "Do separar áreas por espaço e degrau de superfície; usar `linha` só nas divisórias já existentes.",
+      "Do usar `num` em todo timecode, duração, contador, custo e Nota.",
+      "Do dar a todo `BotaoIcone` uma `Dica` com nome e atalho, e mostrar atalhos com `Kbd`.",
+      "Do esconder o secundário atrás de um clique ou tecla (recolhido, popover, \"+N faixas\") em vez de apagá-lo.",
+      "Do escrever a Nota como texto (\"Nota 8,4\" + motivo).",
+      "Do conferir os dois temas com `bun scripts/contraste.ts` ao mexer em cor."
+    ],
+    "donts": [
+      "Don't usar laranja fora da agulha, da marca de seleção, do primário, da palavra falada, do foco e da marca do app.",
+      "Don't pintar fundo de vermelho: perigo é texto `erro` sobre `elevado`.",
+      "Don't fazer selos, pílulas ou badges coloridos para estado, tipo de vídeo ou Nota.",
+      "Don't pôr sombra em painel, lista ou cartão; sombra é só de camada flutuante.",
+      "Don't cercar áreas com borda ou caixa quando um degrau de superfície resolve.",
+      "Don't colocar um segundo primário na tela nem um painel fixo à direita no Editor.",
+      "Don't trazer a cor da legenda (amarelo da palavra ativa) para a UI do app.",
+      "Don't criar valores fora da escala (tamanho de texto, raio, espaço) quando um token serve."
+    ]
+  }
+}

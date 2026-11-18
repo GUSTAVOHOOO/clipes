@@ -1,0 +1,173 @@
+/* Tokens do front v2 do Clipes.
+   Mundo: Linear/Raycast (grafite, respiro, quase sem bordas) + Teenage Engineering
+   (grade rígida, um único laranja-sinal). Toda cor fora do sinal é cinza.
+   Nomes semânticos (papel), nunca por valor. O tema escuro é o padrão; o claro
+   ([data-tema="claro"]) tem os mesmos papéis. Contraste conferido por scripts/contraste.ts. */
+
+@layer base {
+  :root,
+  [data-tema='escuro'] {
+    color-scheme: dark;
+
+    /* superfícies: um degrau por área, nada de caixas */
+    --chao: #0f1012; /* fundo da janela */
+    --area: #141518; /* uma área de trabalho (painel), um degrau acima */
+    --elevado: #1a1b1f; /* popover, linha selecionada, campo */
+    --hover: #202126; /* passagem do ponteiro e item realçado */
+    --linha: #24252a; /* divisória rara, 1 px */
+    --linha-forte: #6e6e76; /* contorno de controle que precisa de 3:1 (checkbox, trilho) */
+
+    /* texto: três cinzas fazem a hierarquia */
+    --t1: #ececee; /* principal */
+    --t2: #a1a1a8; /* secundário */
+    --t3: #8a8a92; /* terciário, dicas, timecodes em repouso */
+
+    /* a única cor */
+    --sinal: #ff5a1f; /* playhead, marca de seleção, ação primária da tela */
+    --sinal-texto: #ff6a33; /* sinal usado como texto (palavra falada) */
+    --sinal-suave: rgb(255 90 31 / 0.14);
+    --no-sinal: #160700; /* texto sobre o sinal */
+    --foco: #ff5a1f;
+
+    /* erro discreto: só em mensagens de erro acionáveis (texto, nunca fundo) */
+    --erro: #f47a7a;
+
+    --veu: rgb(0 0 0 / 0.52); /* atrás de diálogo e paleta */
+    --sombra-flutuante: 0 12px 32px rgb(0 0 0 / 0.45), inset 0 1px 0 rgb(255 255 255 / 0.03);
+    --sombra-toast: 0 8px 24px rgb(0 0 0 / 0.45);
+  }
+
+  [data-tema='claro'] {
+    color-scheme: light;
+
+    --chao: #f6f6f7;
+    --area: #ededef;
+    --elevado: #ffffff;
+    --hover: #e3e3e6;
+    --linha: #dcdce0;
+    --linha-forte: #82828a;
+
+    --t1: #17171a;
+    --t2: #4a4a52;
+    --t3: #63636b;
+
+    --sinal: #e2480e;
+    --sinal-texto: #b83a0b;
+    --sinal-suave: rgb(226 72 14 / 0.12);
+    --no-sinal: #160700;
+    --foco: #c93f0c;
+
+    --erro: #b42323;
+
+    --veu: rgb(20 20 24 / 0.32);
+    --sombra-flutuante: 0 12px 32px rgb(20 20 30 / 0.16), 0 1px 3px rgb(20 20 30 / 0.08);
+    --sombra-toast: 0 8px 24px rgb(20 20 30 / 0.16);
+  }
+
+  :root {
+    /* tipografia */
+    --fonte: 'Inter Variable', 'Inter', system-ui, sans-serif;
+
+    /* movimento: curto e com saída exponencial; some com prefers-reduced-motion */
+    --dur-rapida: 120ms;
+    --dur-base: 150ms;
+    --dur-lenta: 220ms;
+    --ease-saida: cubic-bezier(0.16, 1, 0.3, 1);
+
+    /* camadas */
+    --z-palco: 1;
+    --z-popover: 300;
+    --z-toast: 400;
+    --z-dialogo: 500;
+    --z-tooltip: 600;
+
+    /* medidas fixas da moldura */
+    --altura-topo: 40px;
+    --altura-subtopo: 44px;
+    --altura-rodape: 28px;
+    --altura-controle: 28px;
+    --altura-controle-p: 24px;
+    --altura-barra: 36px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --dur-rapida: 0.01ms;
+      --dur-base: 0.01ms;
+      --dur-lenta: 0.01ms;
+    }
+  }
+}
+
+/* Ponte para o Tailwind 4: cada papel vira utilitário (bg-area, text-t2, rounded-controle…). */
+@theme inline {
+  --color-*: initial;
+  --color-chao: var(--chao);
+  --color-area: var(--area);
+  --color-elevado: var(--elevado);
+  --color-hover: var(--hover);
+  --color-linha: var(--linha);
+  --color-linha-forte: var(--linha-forte);
+  --color-t1: var(--t1);
+  --color-t2: var(--t2);
+  --color-t3: var(--t3);
+  --color-sinal: var(--sinal);
+  --color-sinal-texto: var(--sinal-texto);
+  --color-sinal-suave: var(--sinal-suave);
+  --color-no-sinal: var(--no-sinal);
+  --color-foco: var(--foco);
+  --color-erro: var(--erro);
+  --color-veu: var(--veu);
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-preto: #000;
+  --color-branco: #fff;
+
+  --font-sans: var(--fonte);
+
+  /* escala de texto em px: a UI é densa e a base é 13 px */
+  --text-*: initial;
+  --text-micro: 11px;
+  --text-micro--line-height: 1.3;
+  --text-pequeno: 12px;
+  --text-pequeno--line-height: 1.45;
+  --text-base: 13px;
+  --text-base--line-height: 1.45;
+  --text-campo: 14px;
+  --text-campo--line-height: 1.4;
+  --text-titulo: 16px;
+  --text-titulo--line-height: 1.3;
+  --text-destaque: 20px;
+  --text-destaque--line-height: 1.25;
+
+  --font-weight-normal: 400;
+  --font-weight-medio: 500;
+  --font-weight-forte: 600;
+
+  /* espaçamento: grade de 4 px (p-1 = 4 px, p-2 = 8 px, p-3 = 12 px, p-4 = 16 px) */
+  --spacing: 4px;
+
+  --radius-*: initial;
+  --radius-mini: 3px; /* kbd, pista da timeline, bloco */
+  --radius-controle: 4px; /* botão, campo, item */
+  --radius-area: 6px; /* painel, popover, quadro 9:16 */
+  --radius-full: 999px;
+
+  --shadow-*: initial;
+  --shadow-flutuante: var(--sombra-flutuante);
+  --shadow-toast: var(--sombra-toast);
+  --shadow-marca: inset 2px 0 0 var(--sinal); /* marca de seleção: 2 px de sinal */
+
+  --ease-saida: var(--ease-saida);
+  --animate-pulso: pulso 1.6s var(--ease-saida) infinite;
+
+  @keyframes pulso {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.55;
+    }
+  }
+}

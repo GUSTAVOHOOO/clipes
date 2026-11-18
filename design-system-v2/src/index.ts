@@ -1,0 +1,5 @@
+// API pública do design system v2. Estilos: import '@clipes/design-system-v2/estilos.css'
+export * from './primitivas'
+export * from './componentes'
+export { cn } from './lib/cn'
+export * from './lib/formato'
