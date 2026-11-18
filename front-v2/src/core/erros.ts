@@ -105,6 +105,10 @@ export const TABELA_ERROS: Record<string, MensagemErro> = {
     titulo: 'A resposta do Provedor demorou e não sabemos se a chamada foi cobrada.',
     recuperacao: { rotulo: 'Abrir Fila de Jobs', acao: 'abrir-fila' },
   },
+  window_uncertain: {
+    titulo: 'Há uma Janela da Seleção com resultado incerto; resolva na Fila de Jobs antes de retomar ou refazer.',
+    recuperacao: { rotulo: 'Abrir Fila de Jobs', acao: 'abrir-fila' },
+  },
   budget_calls: entradaOrcamento,
   budget_cost: entradaOrcamento,
   budget_tokens: entradaOrcamento,
