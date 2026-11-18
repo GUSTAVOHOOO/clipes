@@ -786,13 +786,14 @@ export function ConfigProvedores({ projetoAberto, aoAtualizar }: ConfigProvedore
                         Editar
                       </Botao>
                       {ehLegacy ? (
-                        <Dica texto="Remoção do perfil legado aguarda suporte no núcleo (#305).">
+                        // Pendência no núcleo (#305)
+                        <Dica texto="Remoção do perfil legado disponível em breve.">
                           <span tabIndex={0} className="inline-flex">
                             <Botao
                               tamanho="p"
                               variante="perigo"
                               disabled
-                              title="Remoção do perfil legado aguarda suporte no núcleo (#305)."
+                              title="Remoção do perfil legado disponível em breve."
                             >
                               Remover
                             </Botao>
@@ -828,8 +829,9 @@ export function ConfigProvedores({ projetoAberto, aoAtualizar }: ConfigProvedore
                       </span>
                     )}
                     {ehLegacy && (
+                      // Pendência no núcleo (#305)
                       <span className="text-micro text-t3">
-                        Remoção do perfil legado aguarda suporte no núcleo (#305).
+                        Remoção do perfil legado disponível em breve.
                       </span>
                     )}
                   </div>
@@ -956,11 +958,11 @@ export function ConfigProvedores({ projetoAberto, aoAtualizar }: ConfigProvedore
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-pequeno font-medio text-t1">Timeouts globais</span>
               <span className="text-micro text-t3">
-                Timeouts globais aguardam comando no núcleo (#305); ajuste por perfil.
+                Edição global disponível em breve; ajuste por perfil.
               </span>
             </div>
             <div className="grid max-w-md grid-cols-2 gap-3">
-              <Dica texto="Timeouts globais aguardam comando no núcleo (#305); ajuste por perfil.">
+              <Dica texto="Edição de timeouts globais disponível em breve; ajuste por perfil.">
                 <div>
                   <Campo rotulo="Timeout global remoto (s)">
                     {(props) => (
@@ -976,7 +978,7 @@ export function ConfigProvedores({ projetoAberto, aoAtualizar }: ConfigProvedore
                   </Campo>
                 </div>
               </Dica>
-              <Dica texto="Timeouts globais aguardam comando no núcleo (#305); ajuste por perfil.">
+              <Dica texto="Edição de timeouts globais disponível em breve; ajuste por perfil.">
                 <div>
                   <Campo rotulo="Timeout global local (s)">
                     {(props) => (

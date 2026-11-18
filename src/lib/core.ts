@@ -225,7 +225,7 @@ const ffmpegMock = { installed: !componentsMissing && !assistantTestInit, incomp
 const componentSettingsMock = { data_dir: '/test/data', cache_dir: '/test/cache', cache_limit_bytes: 10_000_000_000 };
 const isAbsolutePathMock = (value: unknown): value is string =>
   typeof value === 'string' && /^(\/|[A-Za-z]:[\\/]|\\\\)/.test(value.trim());
-const ytdlpMock = { installed: !componentsMissing, version: 'test' };
+const ytdlpMock = { installed: !componentsMissing, version: '2026.11.01' };
 let workerInstalledMock = !componentsMissing;
 uvMock.installed = !componentsMissing;
 const budgetTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('budget-test');

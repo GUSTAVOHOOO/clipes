@@ -260,7 +260,7 @@ describe('Tela Assistente de Primeiro Uso (#/assistente)', () => {
     expect(detalhes).not.toBeNull()
     expect(within(detalhes!).getByText(/int8_float16/i)).toBeInTheDocument()
     expect(within(detalhes!).getByText(/handshake/i)).toBeInTheDocument()
-    expect(screen.getByText(/Tamanho variável conforme ambiente CUDA\/CPU \(#307\)/i)).toBeInTheDocument()
+    expect(screen.getByText(/Tamanho variável conforme ambiente CUDA\/CPU$/i)).toBeInTheDocument()
   })
 
   it('Baixar FFmpeg abre <ConfirmDialog> com tamanho/licença, Esc cancela e confirmar chama components.download', async () => {
@@ -384,7 +384,7 @@ describe('Tela Assistente de Primeiro Uso (#/assistente)', () => {
     expect(window.location.hash).toBe('#/assistente?passo=2')
   })
 
-  it('Passo 1 desabilita download com Dica #301 quando FFmpeg ausente do manifesto', async () => {
+  it('Passo 1 desabilita download com Dica quando FFmpeg ausente do manifesto', async () => {
     const user = userEvent.setup()
     mockPasso1({
       ffmpegInstalled: false,
@@ -395,7 +395,9 @@ describe('Tela Assistente de Primeiro Uso (#/assistente)', () => {
     const btnFfmpeg = await screen.findByRole('button', { name: /Baixar FFmpeg/i })
     expect(btnFfmpeg).toBeDisabled()
     await user.hover(btnFfmpeg.parentElement as HTMLElement)
-    expect(await screen.findByText(/#301/)).toBeInTheDocument()
+    const dica = await screen.findByText(/Download automático indisponível nesta plataforma/i)
+    expect(dica).toBeInTheDocument()
+    expect(dica).not.toHaveTextContent(/#[0-9]{3}/)
   })
 
   it('Passo 2 empty (nenhum servidor/CLI) destaca Configurar chave de API e exigência de consentimento remoto', async () => {
@@ -597,5 +599,22 @@ describe('Tela Assistente de Primeiro Uso (#/assistente)', () => {
     for (const r of radios) {
       expect(r.className).toContain('min-h-6')
     }
+  })
+
+  it('UI-12: Passo 1 não expõe referências de issue (#301/#307) em textos nem dicas', async () => {
+    const user = userEvent.setup()
+    mockPasso1({
+      ffmpegInstalled: false,
+      manifesto: MANIFESTO_PADRAO.filter((m) => m.id !== 'ffmpeg'),
+    })
+
+    render(envolver(<Assistente passo={1} />))
+    const btnFfmpeg = await screen.findByRole('button', { name: /Baixar FFmpeg/i })
+    expect(screen.queryByText(/#[0-9]{3}/)).not.toBeInTheDocument()
+
+    await user.hover(btnFfmpeg.parentElement as HTMLElement)
+    const dica = await screen.findByText(/Download automático indisponível nesta plataforma/i)
+    expect(dica).toBeInTheDocument()
+    expect(screen.queryByText(/#[0-9]{3}/)).not.toBeInTheDocument()
   })
 })

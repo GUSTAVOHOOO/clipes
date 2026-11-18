@@ -497,21 +497,23 @@ describe('ConfigProvedores', () => {
     })
   })
 
-  it('desabilita Remover em perfil legacy e timeouts globais citando #305', async () => {
+  it('desabilita Remover em perfil legacy e timeouts globais sem expor código de issue', async () => {
     mockPadrao()
     render(envolver(<ConfigProvedores projetoAberto="canal-1" />))
 
     const cartaoLegacy = await screen.findByRole('region', { name: /Perfil Principal/i })
     const btnRemoverLegacy = within(cartaoLegacy).getByRole('button', { name: 'Remover' })
     expect(btnRemoverLegacy).toBeDisabled()
-    expect(cartaoLegacy).toHaveTextContent(/#305/)
+    expect(cartaoLegacy).toHaveTextContent(/disponível em breve/i)
+    expect(cartaoLegacy).not.toHaveTextContent(/#305/)
 
     const blocoTimeouts = screen.getByRole('region', { name: /Timeouts globais/i })
     const inputRemoto = within(blocoTimeouts).getByLabelText(/Timeout global remoto/i)
     const inputLocal = within(blocoTimeouts).getByLabelText(/Timeout global local/i)
     expect(inputRemoto).toBeDisabled()
     expect(inputLocal).toBeDisabled()
-    expect(blocoTimeouts).toHaveTextContent(/#305/)
+    expect(blocoTimeouts).toHaveTextContent(/disponível em breve/i)
+    expect(blocoTimeouts).not.toHaveTextContent(/#305/)
   })
 
   it('permite navegação por setas em TabelaGrade, oculta segredo salvo e exibe Experimental no Claude CLI', async () => {
@@ -598,5 +600,22 @@ describe('ConfigProvedores', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Reabrir assistente inicial' }))
     expect(window.location.hash).toBe('#/assistente?passo=1&retorno=config')
+  })
+
+  it('UI-11 e UI-12: usa Modelo rápido sem preset no modal e não expõe referência de issue (#305) na tela', async () => {
+    const user = userEvent.setup()
+    mockPadrao()
+    render(envolver(<ConfigProvedores projetoAberto="canal-1" />))
+
+    const cartaoLegacy = await screen.findByRole('region', { name: /Perfil Principal/i })
+    expect(cartaoLegacy).not.toHaveTextContent(/#[0-9]{3}/)
+    expect(within(cartaoLegacy).getByRole('button', { name: 'Remover' })).toBeDisabled()
+    expect(screen.getByRole('region', { name: /Timeouts globais/i })).not.toHaveTextContent(/#[0-9]{3}/)
+    expect(document.body.innerHTML).not.toMatch(/#[0-9]{3}/)
+
+    await user.click(screen.getByRole('button', { name: 'Novo Perfil' }))
+    const dialogo = await screen.findByRole('dialog', { name: 'Novo Perfil de Provedor' })
+    expect(within(dialogo).getByRole('combobox', { name: 'Modelo rápido' })).toBeInTheDocument()
+    expect(within(dialogo).queryByText(/\bpreset\b/i)).not.toBeInTheDocument()
   })
 })
