@@ -1115,21 +1115,88 @@ function selectionMockDispatch(name: string, args: object): unknown {
     return { state: 'queued', job: jobId };
   }
 
+  // Modo legado v1 (?source-test=1) para preservar 100% os testes de UI da v1 (`scripts/ui.mjs`)
+  if (hasSearchFlag('source-test')) {
+    if (name === 'selection.estimate' && asked.run && asked.profileId) {
+      if (selectionFlag('selection-localonly') && asked.profileId === 'forte') throw { code: 'local_only_violation', message: 'local only' };
+      const remote = asked.profileId === 'forte';
+      return {
+        profile: { id: asked.profileId, label: remote ? 'Forte remoto' : 'Leve local', model: remote ? 'forte-1' : 'leve-1' },
+        paid: remote,
+        leavesMachine: remote,
+        windows: asked.windows ?? [],
+        estimate: remote
+          ? { kind: 'usd', units: 1, windows: 1, inputTokens: 9000, minMicroUsd: 2400, maxMicroUsd: 9800 }
+          : { kind: 'zero', units: 1, windows: 1, inputTokens: 9000, minMicroUsd: 0, maxMicroUsd: 0 },
+      };
+    }
+    if (name === 'selection.estimate') {
+      if (selectionFlag('selection-blocked')) throw { code: 'context_too_small', message: 'O contexto efetivo de 4096 tokens (definido por você no perfil) não comporta a janela mínima. Aumente o contexto no Perfil de Provedor ou escolha outro perfil.' };
+      const kind = asked.videoKind ?? 'direct';
+      return {
+        paid,
+        profile: 'legacy',
+        videoKind: kind,
+        plan: { state: 'full', windows: [{}, {}, {}, {}], contextTokens: 32768 },
+        weights: weightsOf(kind),
+        estimate: { kind: paid ? 'usd' : 'zero', windows: 4, inputTokens: 40000, minMicroUsd: paid ? 1200 : 0, maxMicroUsd: paid ? 5400 : 0 },
+      };
+    }
+    if (name === 'selection.redo' && asked.profileId) {
+      if (selectionFlag('selection-uncertain')) throw { code: 'window_uncertain', message: 'incerta' };
+      if (asked.profileId === 'forte' && !asked.confirmed) throw { code: 'confirmation_required', message: 'confirmação obrigatória' };
+      const current = selectionMock.run;
+      if (current) { current.redoProfile = asked.profileId; current.revision = 2; }
+      return { run: 1, windows: asked.windows ?? [], profile: { id: asked.profileId } };
+    }
+    const run = selectionMock.run;
+    if (name === 'selection.list') return run ? [{ id: run.id, state: run.state, createdAt: '2026-11-15T12:00:00Z', videoKind: run.videoKind, weights: weightsOf(run.videoKind), budgetPause: null, counts: { windows: 4, completed: 0, failed: 0, kept: 0, discarded: 0, merged: 0 } }] : [];
+    if (name === 'selection.start') {
+      if (paid && !asked.confirmed) throw { code: 'confirmation_required', message: 'confirmação obrigatória' };
+      const kind = asked.videoKind ?? 'direct';
+      selectionMock.run = { id: 1, ticks: 0, state: 'running', cancelled: false, redone: false, videoKind: kind };
+      return { run: 1, videoKind: kind, windows: 4, planState: 'full', weights: weightsOf(kind) };
+    }
+    if (name === 'selection.cancel') { if (run) { run.cancelled = true; run.state = 'partial'; } return null; }
+    if (name === 'selection.redo' || name === 'selection.resume') {
+      if (paid && !asked.confirmed) throw { code: 'confirmation_required', message: 'confirmação obrigatória' };
+      if (run) { run.redone = true; run.state = 'completed'; run.cancelled = false; }
+      return { run: 1, windows: [2] };
+    }
+    if (name === 'selection.review' || name === 'selection.decide' || name === 'selection.adjust' || name === 'selection.undo') return selectionReviewMock(name, args);
+    if (name === 'selection.get' && run) {
+      run.ticks += 1;
+      const failing = !run.redone && !run.cancelled && run.ticks > 1;
+      if (run.ticks > 1 && !run.cancelled && run.state === 'running') run.state = failing ? 'partial' : 'completed';
+      const states = run.cancelled ? ['completed', 'cancelled', 'cancelled', 'cancelled'] : run.ticks === 1 ? ['completed', 'running', 'queued', 'queued'] : ['completed', 'completed', failing ? 'failed' : 'completed', 'completed'];
+      if (selectionFlag('selection-uncertain') && run.ticks > 1) states[0] = 'uncertain';
+      const made = (w: number[]) => (run.redoProfile && w.includes(0) ? run.redoProfile : 'legacy');
+      const windows = states.map((state, index) => ({ index, firstId: index * 90 + 1, lastId: index * 90 + 90, startUs: index * 720_000_000, endUs: index * 720_000_000 + 900_000_000, jobId: index + 1, state, code: state === 'cancelled' ? 'cancelled' : state === 'failed' ? 'verification_failed' : null }));
+      const done = states.filter(s => s === 'completed').length;
+      const withChat = selectionFlag('selection-chat');
+      const candidates = run.ticks === 1 && !run.cancelled ? [] : [
+        { id: 1, rank: 0, startId: 10, endId: 14, startUs: 90_000_000, endUs: 140_000_000, axes: selectionAxes([9, 8, 7, 9, 8], run.videoKind), total: 8.35, title: 'A virada do jogo', windows: [0, 1], adjusted: false, adjust: null, chat: withChat ? [{ ratio: 3.1, reaction: 'laugh', atUs: 95_000_000 }] : [], profile: made([0, 1]), revision: run.revision ?? 1 },
+        { id: 2, rank: 1, startId: 40, endId: 41, startUs: 390_000_000, endUs: 410_000_000, axes: selectionAxes([8, 6, 7, 9, 5], run.videoKind), total: 7.1, title: '', windows: [0], adjusted: true, adjust: { extendedAfter: 1 }, chat: withChat ? [{ ratio: 2.4, reaction: null, atUs: 395_000_000 }] : [], profile: made([0]), revision: run.revision ?? 1 },
+        { id: 3, rank: 2, startId: 200, endId: 203, startUs: 1_990_000_000, endUs: 2_030_000_000, axes: selectionAxes([4, 4, 4, 4, 4], run.videoKind), total: 4, title: 'Piada longa', windows: [2], adjusted: true, adjust: { trimmedEnd: 3 }, chat: [], profile: made([2]), revision: run.revision ?? 1 },
+      ];
+      return { run: { id: 1, state: run.state, videoKind: run.videoKind, summary: { energy: selectionFlag('selection-energy') ? { measured: true, high: 4, peak: 2 } : { measured: false }, chat: selectionFlag('selection-chat') ? { available: true, peaks: 3 } : { available: false } }, weights: weightsOf(run.videoKind), budgetPause: null, createdAt: '2026-11-15T12:00:00Z', counts: { windows: 4, completed: done, failed: states.filter(s => s === 'failed' || s === 'cancelled').length, kept: candidates.length, discarded: 0, merged: 1 } }, windows, candidates };
+    }
+    throw { code: 'run_not_found', message: 'Execução de seleção não encontrada.' };
+  }
+
   // Modo 3 (refazer com outro Perfil): selection.estimate { run, windows, profileId }
   if (name === 'selection.estimate' && asked.run && asked.profileId) {
     ensureSelectionDemoInitialized();
-    const runObj = hasSearchFlag('source-test') ? null : selectionRuns.get(asked.run);
-    if (!hasSearchFlag('source-test')) {
-      if (!runObj) throw { code: 'run_not_found', message: 'Execução de seleção não encontrada.' };
-      const efetivo = applyParcialOverlay(runObj);
-      const wanted = Array.isArray(asked.windows) ? asked.windows : [];
-      if (wanted.length === 0) throw { code: 'windows_required', message: 'Escolha a(s) Janela(s) da seleção a refazer.' };
-      for (const idx of wanted) {
-        const w = efetivo.windows.find((win) => win.index === idx);
-        if (!w) throw { code: 'window_not_found', message: 'Janela da seleção não encontrada.' };
-        if (w.state === 'uncertain') throw { code: 'window_uncertain', message: 'A chamada desta Janela tem resultado incerto: resolva a incerteza antes de refazer com outro perfil.' };
-        if (w.state === 'queued' || w.state === 'running') throw { code: 'window_not_redoable', message: 'Só uma Janela concluída, que falhou ou foi cancelada pode ser refeita.' };
-      }
+    const runObj = selectionRuns.get(asked.run);
+    if (!runObj) throw { code: 'run_not_found', message: 'Execução de seleção não encontrada.' };
+    const efetivo = applyParcialOverlay(runObj);
+    const wanted = Array.isArray(asked.windows) ? asked.windows : [];
+    if (wanted.length === 0) throw { code: 'windows_required', message: 'Escolha a(s) Janela(s) da seleção a refazer.' };
+    for (const idx of wanted) {
+      const w = efetivo.windows.find((win) => win.index === idx);
+      if (!w) throw { code: 'window_not_found', message: 'Janela da seleção não encontrada.' };
+      if (w.state === 'uncertain') throw { code: 'window_uncertain', message: 'A chamada desta Janela tem resultado incerto: resolva a incerteza antes de refazer com outro perfil.' };
+      if (w.state === 'queued' || w.state === 'running') throw { code: 'window_not_redoable', message: 'Só uma Janela concluída, que falhou ou foi cancelada pode ser refeita.' };
     }
     const route = resolveSelectionRouteMock(asked.profileId);
     const veto = selectionFlag('selection-localonly') || (Boolean(getActiveProjectMock()) && projectVetoMock) || Boolean(assistantMock.localOnly.selection);
@@ -1137,22 +1204,19 @@ function selectionMockDispatch(name: string, args: object): unknown {
       throw { code: 'local_only_violation', message: 'Bloqueado pelo modo Somente local.' };
     }
     const windows = asked.windows ?? [];
-    const estimate = hasSearchFlag('source-test')
-      ? (route.local ? { kind: 'zero', units: 1, windows: 1, inputTokens: 9000, minMicroUsd: 0, maxMicroUsd: 0 } : { kind: 'usd', units: 1, windows: 1, inputTokens: 9000, minMicroUsd: 2400, maxMicroUsd: 9800 })
-      : estimateForRoute(route, Math.max(1, windows.length));
     return {
       profile: route.profile,
       paid: !route.local,
       leavesMachine: !route.local,
       windows,
-      estimate,
+      estimate: estimateForRoute(route, Math.max(1, windows.length)),
     };
   }
 
   // Modo 2 (retomar janelas pendentes): selection.estimate { run }
   if (name === 'selection.estimate' && asked.run && !asked.profileId) {
     ensureSelectionDemoInitialized();
-    const runObj = hasSearchFlag('source-test') ? null : selectionRuns.get(asked.run);
+    const runObj = selectionRuns.get(asked.run);
     if (runObj) {
       const efetivo = applyParcialOverlay(runObj);
       if (efetivo.windows.some((w) => w.state === 'uncertain')) {
@@ -1171,7 +1235,7 @@ function selectionMockDispatch(name: string, args: object): unknown {
   if (name === 'selection.estimate') {
     if (selectionFlag('selection-blocked')) throw { code: 'context_too_small', message: 'O contexto efetivo de 4096 tokens (definido por você no perfil) não comporta a janela mínima. Aumente o contexto no Perfil de Provedor ou escolha outro perfil.' };
     const sid = asked.source_id ?? 4;
-    if (!hasSearchFlag('source-test') && !isTranscriptTest()) {
+    if (!isTranscriptTest()) {
       const st = transcriptsBySource.get(sid);
       if (!st?.transcript) throw { code: 'transcript_missing', message: 'Transcrição não encontrada.' };
       if (st.transcript.state !== 'complete') throw { code: 'transcript_incomplete', message: 'A Transcrição ainda não foi concluída.' };
@@ -1190,14 +1254,10 @@ function selectionMockDispatch(name: string, args: object): unknown {
     if (veto && !route.local) {
       throw { code: 'local_only_violation', message: 'Bloqueado pelo modo Somente local.' };
     }
-    const isPaid = hasSearchFlag('source-test') ? paid : (paid || !route.local);
-    const estimate = hasSearchFlag('source-test')
-      ? { kind: paid ? 'usd' : 'zero', windows: 4, inputTokens: 40000, minMicroUsd: paid ? 1200 : 0, maxMicroUsd: paid ? 5400 : 0 }
-      : estimateForRoute(route, 4);
     const energyOn = selectionFlag('selection-energy') || energyMeasuredSources.has(sid);
     const chatOn = selectionFlag('selection-chat') || chatFetchedSources.has(sid) || chatMock.fetched;
     return {
-      paid: isPaid,
+      paid: paid || !route.local,
       profile: route.profile.id,
       minUs,
       maxUs,
@@ -1216,52 +1276,8 @@ function selectionMockDispatch(name: string, args: object): unknown {
       weights: weightsOf(kind),
       energy: energyOn ? { measured: true, high: 4, peak: 2 } : { measured: false },
       chat: chatOn ? { available: true, peaks: 3, marked: 2 } : { available: false },
-      estimate,
+      estimate: estimateForRoute(route, 4),
     };
-  }
-
-  // Modo legado v1 (?source-test=1) para preservar 100% os testes de UI da v1 (`scripts/ui.mjs`)
-  if (hasSearchFlag('source-test')) {
-    if (name === 'selection.redo' && asked.profileId) {
-      if (selectionFlag('selection-uncertain')) throw { code: 'window_uncertain', message: 'incerta' };
-      if (asked.profileId === 'forte' && !asked.confirmed) throw { code: 'confirmation_required', message: 'confirmação obrigatória' };
-      const current = selectionMock.run;
-      if (current) { current.redoProfile = asked.profileId; current.revision = 2; }
-      return { run: 1, windows: asked.windows ?? [], profile: { id: asked.profileId } };
-    }
-    const run = selectionMock.run;
-    if (name === 'selection.list') return run ? [{ id: run.id, state: run.state, createdAt: '2026-11-15T12:00:00Z', videoKind: run.videoKind, weights: weightsOf(run.videoKind), budgetPause: null, minUs: 20_000_000, maxUs: 60_000_000, planState: 'full', revision: run.revision ?? 1, revisions: run.revision && run.revision > 1 ? [1, run.revision] : [1], counts: { windows: 4, completed: 0, failed: 0, kept: 0, discarded: 0, merged: 0 } }] : [];
-    if (name === 'selection.start') {
-      if (paid && !asked.confirmed) throw { code: 'confirmation_required', message: 'confirmação obrigatória' };
-      const kind = asked.videoKind ?? 'direct';
-      selectionMock.run = { id: 1, ticks: 0, state: 'running', cancelled: false, redone: false, videoKind: kind };
-      return { run: 1, videoKind: kind, minUs: 20_000_000, maxUs: 60_000_000, windows: 4, planState: 'full', weights: weightsOf(kind) };
-    }
-    if (name === 'selection.cancel') { if (run) { run.cancelled = true; run.state = 'partial'; } return null; }
-    if (name === 'selection.redo' || name === 'selection.resume') {
-      if (paid && !asked.confirmed) throw { code: 'confirmation_required', message: 'confirmação obrigatória' };
-      if (run) { run.redone = true; run.state = 'completed'; run.cancelled = false; }
-      return { run: 1, windows: [2] };
-    }
-    if (name === 'selection.review' || name === 'selection.decide' || name === 'selection.adjust' || name === 'selection.undo') return selectionReviewMock(name, args);
-    if (name === 'selection.get' && run) {
-      run.ticks += 1;
-      const failing = !run.redone && !run.cancelled && run.ticks > 1;
-      if (run.ticks > 1 && !run.cancelled && run.state === 'running') run.state = failing ? 'partial' : 'completed';
-      const states = run.cancelled ? ['completed', 'cancelled', 'cancelled', 'cancelled'] : run.ticks === 1 ? ['completed', 'running', 'queued', 'queued'] : ['completed', 'completed', failing ? 'failed' : 'completed', 'completed'];
-      if (selectionFlag('selection-uncertain') && run.ticks > 1) states[0] = 'uncertain';
-      const made = (w: number[]) => (run.redoProfile && w.includes(0) ? run.redoProfile : 'legacy');
-      const windows = states.map((state, index) => ({ index, firstId: index * 90 + 1, lastId: index * 90 + 90, startUs: index * 720_000_000, endUs: index * 720_000_000 + 900_000_000, jobId: index + 1, state, code: state === 'cancelled' ? 'cancelled' : state === 'failed' ? 'verification_failed' : state === 'uncertain' ? 'timeout_uncertain' : null, resetAtMs: null, profile: made([index]) }));
-      const done = states.filter(s => s === 'completed').length;
-      const withChat = selectionFlag('selection-chat');
-      const candidates = run.ticks === 1 && !run.cancelled ? [] : [
-        { id: 1, rank: 0, startId: 10, endId: 14, startUs: 90_000_000, endUs: 140_000_000, axes: selectionAxes([9, 8, 7, 9, 8], run.videoKind), total: 8.35, title: 'A virada do jogo', windows: [0, 1], adjusted: false, adjust: null, chat: withChat ? [{ ratio: 3.1, reaction: 'laugh', atUs: 95_000_000 }] : [], profile: made([0, 1]), revision: run.revision ?? 1 },
-        { id: 2, rank: 1, startId: 40, endId: 41, startUs: 390_000_000, endUs: 410_000_000, axes: selectionAxes([8, 6, 7, 9, 5], run.videoKind), total: 7.1, title: '', windows: [0], adjusted: true, adjust: { extendedAfter: 1 }, chat: withChat ? [{ ratio: 2.4, reaction: null, atUs: 395_000_000 }] : [], profile: made([0]), revision: run.revision ?? 1 },
-        { id: 3, rank: 2, startId: 200, endId: 203, startUs: 1_990_000_000, endUs: 2_030_000_000, axes: selectionAxes([4, 4, 4, 4, 4], run.videoKind), total: 4, title: 'Piada longa', windows: [2], adjusted: true, adjust: { trimmedEnd: 3 }, chat: [], profile: made([2]), revision: run.revision ?? 1 },
-      ];
-      return { run: { id: 1, state: run.state, videoKind: run.videoKind, minUs: 20_000_000, maxUs: 60_000_000, planState: 'full', revision: run.revision ?? 1, revisions: run.revision && run.revision > 1 ? [1, run.revision] : [1], summary: { energy: selectionFlag('selection-energy') ? { measured: true, high: 4, peak: 2 } : { measured: false }, chat: selectionFlag('selection-chat') ? { available: true, peaks: 3 } : { available: false } }, weights: weightsOf(run.videoKind), budgetPause: null, createdAt: '2026-11-15T12:00:00Z', counts: { windows: 4, completed: done, failed: states.filter(s => s === 'failed' || s === 'cancelled').length, kept: candidates.length, discarded: 0, merged: 1 } }, windows, candidates };
-    }
-    throw { code: 'run_not_found', message: 'Execução de seleção não encontrada.' };
   }
 
   ensureSelectionDemoInitialized();
@@ -1727,9 +1743,9 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
           audio: { hasAudio: usedIds.size > 0, assetCount: usedIds.size, unverifiedCount: audioInfo?.unverifiedCount ?? 0 },
         } as T;
       }
-      const hasRunsForScope = Boolean(selectionMock.run) || (!hasSearchFlag('source-test') && (scope === 'project' ? selectionRuns.size > 0 : [...selectionRuns.values()].some((r) => r.sourceId === (a.source_id ?? 4))));
+      const hasRunsForScope = Boolean(selectionMock.run) || (!hasSearchFlag('source-test') && (scope === 'project' ? selectionRuns.size > 0 : [...selectionRuns.values()].some((r) => r.sourceId === (a.source_id ?? 1))));
       const totalCuts = selectionFlag('export-batch-empty') || (scope === 'source' && !hasRunsForScope) ? 0 : 2;
-      const batchSrc = sourceItems.find(s => s.id === (a.source_id ?? 4)) ?? sourceItems[0];
+      const batchSrc = sourceItems.find(s => s.id === (a.source_id ?? 1)) ?? sourceItems[0];
       const batchGranted = batchSrc?.permission?.status === 'granted';
       return {
         scope,
