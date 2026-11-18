@@ -2,12 +2,16 @@ import { Esqueleto, EstadoTela, ProvedorDicas, ProvedorToast, useToast } from '@
 import { useCallback, useEffect, useRef } from 'react'
 import { ProvedorAtalhos } from '~/comandos/atalhos'
 import { iniciarProgresso } from '~/core/progresso'
+import { aplicarPreferencias } from '~/preferencias/aplicarPreferencias'
+import { usePreferencias } from '~/preferencias/preferencias'
 import type { Rota, SecaoConfig } from '~/rotas/rotas'
 import { useRota } from '~/rotas/useRota'
 import { ComEstado, useEstadoForcado } from '~/shell/EstadoForcado'
 import { Shell, useProjetoAtual, type ProjetoAtual } from '~/shell/Shell'
 import { Assistente } from '~/telas/assistente/Assistente'
+import { ConfigAparencia } from '~/telas/config/ConfigAparencia'
 import { ConfigCustos } from '~/telas/config/ConfigCustos'
+import { ConfigProjeto } from '~/telas/config/ConfigProjeto'
 import { ConfigProvedores } from '~/telas/config/ConfigProvedores'
 import { ConfiguracoesLayout } from '~/telas/config/ConfiguracoesLayout'
 import { Inicio } from '~/telas/inicio/Inicio'
@@ -210,6 +214,10 @@ function AppRoteado({
         <ConfigProvedores projetoAberto={projetoAberto} />
       ) : rota.secao === 'custos' ? (
         <ConfigCustos projetoAberto={projetoAberto} />
+      ) : rota.secao === 'aparencia' ? (
+        <ConfigAparencia projetoAberto={projetoAberto} />
+      ) : rota.secao === 'projeto' ? (
+        <ConfigProjeto projetoAberto={projetoAberto} projeto={projeto} />
       ) : (
         <ConfiguracoesLayout
           secao={rota.secao}
@@ -244,6 +252,16 @@ function AppRoteado({
 
 function AppInterno() {
   const { projeto, somenteLocal, carregando } = useProjetoAtual()
+  const [preferencias] = usePreferencias()
+
+  useEffect(() => {
+    aplicarPreferencias(preferencias)
+    if (preferencias.tema !== 'sistema' || typeof window.matchMedia !== 'function') return
+    const media = window.matchMedia('(prefers-color-scheme: light)')
+    const aoMudar = () => aplicarPreferencias(preferencias)
+    media.addEventListener?.('change', aoMudar)
+    return () => media.removeEventListener?.('change', aoMudar)
+  }, [preferencias])
 
   useEffect(() => {
     let parar = () => {}
