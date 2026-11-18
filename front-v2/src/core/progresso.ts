@@ -36,15 +36,28 @@ export type SalvamentoEditor = EstadoSalvamentoEditor & {
   limparErro: () => void
 }
 
+export type JobExterno = {
+  id: string
+  etapa: string
+  percentual: number
+  mensagem: string
+  estado: EstadoJob
+  erro?: { code: string; message: string }
+}
+
 export type Fila = {
   aplicar(e: EventoProgresso): void
   jobs(): Job[]
   assinar(fn: () => void): () => void
+  sincronizarExterno?(itens: readonly JobExterno[]): void
+  limparProjeto?(): void
 }
 
 type RegistroJob = {
   job: Job
   vistoDesdeZero: boolean
+  origem: 'evento' | 'externo'
+  escopoProjeto: boolean
 }
 
 type CanalSalvamento = {
@@ -192,8 +205,82 @@ export function criarFila(
       proximo.etaMs = Math.round((decorrido * (100 - percentual)) / percentual)
     }
 
-    mapa.set(e.job, { job: proximo, vistoDesdeZero })
+    const escopoProjeto =
+      anterior?.escopoProjeto ?? (e.project !== undefined && e.project !== null)
+    mapa.set(e.job, { job: proximo, vistoDesdeZero, origem: 'evento', escopoProjeto })
     notificar()
+  }
+
+  function sincronizarExterno(itens: readonly JobExterno[]) {
+    const idsRecebidos = new Set<string>()
+    let mudou = false
+
+    for (const item of itens) {
+      if (!item.id || item.id === '0') continue
+      idsRecebidos.add(item.id)
+      const bruto = Number.isFinite(item.percentual) ? Math.min(100, Math.max(0, item.percentual)) : 0
+      const anterior = mapa.get(item.id)
+
+      // Nunca regride nem sobrescreve um job já acompanhado ao vivo por core-progress em estado terminal
+      if (anterior && anterior.origem === 'evento' && anterior.job.estado !== 'rodando') {
+        continue
+      }
+
+      const percentual = anterior ? Math.max(anterior.job.percentual, bruto) : bruto
+      const mesmoEstado =
+        anterior &&
+        anterior.job.etapa === item.etapa &&
+        anterior.job.percentual === percentual &&
+        anterior.job.mensagem === item.mensagem &&
+        anterior.job.estado === item.estado &&
+        anterior.job.erro?.code === item.erro?.code
+
+      if (mesmoEstado) continue
+
+      const proximo: Job = {
+        id: item.id,
+        etapa: item.etapa,
+        percentual,
+        mensagem: item.mensagem,
+        estado: item.estado,
+        inicioMs: anterior ? anterior.job.inicioMs : agora(),
+      }
+      if (item.erro) {
+        proximo.erro = { code: item.erro.code, message: item.erro.message }
+      }
+
+      mapa.set(item.id, {
+        job: proximo,
+        vistoDesdeZero: anterior ? anterior.vistoDesdeZero : false,
+        origem: anterior?.origem ?? 'externo',
+        escopoProjeto: true,
+      })
+      mudou = true
+    }
+
+    for (const [id, registro] of Array.from(mapa.entries())) {
+      if (registro.origem === 'externo' && !idsRecebidos.has(id)) {
+        mapa.delete(id)
+        mudou = true
+      }
+    }
+
+    if (mudou) {
+      notificar()
+    }
+  }
+
+  function limparProjeto() {
+    let mudou = false
+    for (const [id, registro] of Array.from(mapa.entries())) {
+      if (registro.escopoProjeto) {
+        mapa.delete(id)
+        mudou = true
+      }
+    }
+    if (mudou) {
+      notificar()
+    }
   }
 
   function jobs(): Job[] {
@@ -207,7 +294,7 @@ export function criarFila(
     }
   }
 
-  const fila: Fila = { aplicar, jobs, assinar }
+  const fila: Fila = { aplicar, jobs, assinar, sincronizarExterno, limparProjeto }
   canaisSalvamento.set(fila, canalSalvamento)
   return fila
 }
@@ -219,7 +306,8 @@ export function definirProjetoDaFila(id: string | null): void {
   projetoDaFila = id
 }
 
-const filaPadrao: Fila = criarFila(() => projetoDaFila)
+export const filaPadrao: Fila = criarFila(() => projetoDaFila)
+export const filaPadraoExportada: Fila = filaPadrao
 let filaDestinoTauri: Fila = filaPadrao
 
 function canalDe(fila: Fila): CanalSalvamento | undefined {
