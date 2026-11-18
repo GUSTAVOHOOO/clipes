@@ -78,6 +78,51 @@ fn media_response(request: &tauri::http::Request<Vec<u8>>) -> tauri::http::Respo
         .unwrap_or_else(|_| tauri::http::Response::new(Vec::new()))
 }
 
+trait CloseTarget {
+    fn prevent_close(&mut self);
+    fn emit_close_requested(&mut self);
+    fn emit_save_failed(&mut self, event: clipes_core::ProgressEvent);
+}
+
+struct TauriCloseTarget<'a> {
+    window: &'a tauri::Window,
+    api: &'a tauri::CloseRequestApi,
+}
+
+impl CloseTarget for TauriCloseTarget<'_> {
+    fn prevent_close(&mut self) {
+        self.api.prevent_close();
+    }
+
+    fn emit_close_requested(&mut self) {
+        let _ = self.window.emit("app-close-requested", ());
+    }
+
+    fn emit_save_failed(&mut self, event: clipes_core::ProgressEvent) {
+        let _ = self.window.emit("core-progress", event);
+    }
+}
+
+/// Coordena `CloseRequested` executando `editor.flush` sincronamente antes de delegar o fechamento à WebView.
+fn handle_close_requested<F, T>(flush: F, target: &mut T)
+where
+    F: FnOnce() -> clipes_core::CommandResult,
+    T: CloseTarget,
+{
+    target.prevent_close();
+    match flush() {
+        Ok(_) => target.emit_close_requested(),
+        Err(error) => target.emit_save_failed(clipes_core::ProgressEvent {
+            job: "editor".into(),
+            project: None,
+            stage: "editor_save_failed".into(),
+            percentage: 0,
+            message: "Não foi possível salvar o Corte.".into(),
+            error: Some(error),
+        }),
+    }
+}
+
 fn main() {
     let transport = MediaTransport {
         #[cfg(target_os = "linux")]
@@ -88,23 +133,11 @@ fn main() {
         .manage(transport)
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                match clipes_core::dispatch("editor.flush", serde_json::json!({}), &mut |_| {}) {
-                    Ok(_) => (),
-                    Err(error) => {
-                        api.prevent_close();
-                        let _ = window.emit(
-                            "core-progress",
-                            clipes_core::ProgressEvent {
-                                job: "editor".into(),
-                                project: None,
-                                stage: "editor_save_failed".into(),
-                                percentage: 0,
-                                message: "Não foi possível salvar o Corte.".into(),
-                                error: Some(error),
-                            },
-                        );
-                    }
-                }
+                let mut target = TauriCloseTarget { window, api };
+                handle_close_requested(
+                    || clipes_core::dispatch("editor.flush", serde_json::json!({}), &mut |_| {}),
+                    &mut target,
+                );
             }
         })
         .register_asynchronous_uri_scheme_protocol("clipes-media", |_ctx, request, responder| {
@@ -129,4 +162,59 @@ fn main() {
         .invoke_handler(tauri::generate_handler![core_dispatch, media_base_url])
         .run(tauri::generate_context!())
         .expect("failed to run Clipes");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Default)]
+    struct FakeCloseTarget {
+        prevented: usize,
+        close_requested_emitted: usize,
+        save_failed_events: Vec<clipes_core::ProgressEvent>,
+    }
+
+    impl CloseTarget for FakeCloseTarget {
+        fn prevent_close(&mut self) {
+            self.prevented += 1;
+        }
+
+        fn emit_close_requested(&mut self) {
+            self.close_requested_emitted += 1;
+        }
+
+        fn emit_save_failed(&mut self, event: clipes_core::ProgressEvent) {
+            self.save_failed_events.push(event);
+        }
+    }
+
+    #[test]
+    fn close_requested_with_flush_ok_prevents_close_and_emits_app_close_requested() {
+        let mut target = FakeCloseTarget::default();
+        handle_close_requested(|| Ok(serde_json::json!({})), &mut target);
+
+        assert_eq!(target.prevented, 1);
+        assert_eq!(target.close_requested_emitted, 1);
+        assert!(target.save_failed_events.is_empty());
+    }
+
+    #[test]
+    fn close_requested_with_flush_err_prevents_close_and_emits_save_failed_without_app_close_requested() {
+        let mut target = FakeCloseTarget::default();
+        let err = clipes_core::CoreError {
+            code: "io_error".into(),
+            message: "disco cheio".into(),
+            usage: None,
+        };
+        handle_close_requested(|| Err(err.clone()), &mut target);
+
+        assert_eq!(target.prevented, 1);
+        assert_eq!(target.close_requested_emitted, 0);
+        assert_eq!(target.save_failed_events.len(), 1);
+        assert_eq!(target.save_failed_events[0].job, "editor");
+        assert_eq!(target.save_failed_events[0].stage, "editor_save_failed");
+        assert_eq!(target.save_failed_events[0].percentage, 0);
+        assert_eq!(target.save_failed_events[0].error.as_ref(), Some(&err));
+    }
 }
