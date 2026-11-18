@@ -1,9 +1,8 @@
 //! Ângulo antes do Roteiro (#153). `angles` herda a rota e o veto de `script`.
 //! A fila aplica cancelamento, orçamento, custo e auditoria; a escolha é sempre humana.
 use crate::{
-    ai_task::{self, AiTask, Budget, TaskInput, Violation},
-    jobs::{self, Safety},
-    packaging, projects, provider,
+    ai_task::{AiTask, Budget, TaskInput, Violation},
+    jobs, packaging, projects,
     selection::ApprovedCut,
     sentences, CommandRegistration, CommandResult, CoreError, EventSink,
 };
@@ -244,59 +243,20 @@ fn input(cut: &ApprovedCut, v: &Value) -> Result<TaskInput, CoreError> {
     })
 }
 
-fn route() -> Result<(String, Safety), CoreError> {
-    Ok(match provider::routed(Some(TASK_ID), None)? {
-        provider::Routed::Cli(name) => (name, Safety::Paid),
-        provider::Routed::Api { profile, local } => {
-            (profile.id, if local { Safety::Local } else { Safety::Paid })
-        }
-    })
-}
-
-fn estimate(input: &TaskInput, safety: Safety) -> Value {
-    let unknown = json!({"kind":"unknown","minMicroUsd":null,"maxMicroUsd":null});
-    let Some(task) = ai_task::find(TASK_ID) else {
-        return unknown;
-    };
-    let Ok((target, profile)) =
-        jobs::route_of_profile(TASK_ID, matches!(safety, Safety::Paid), None)
-    else {
-        return unknown;
-    };
-    let Ok((wire, _)) = ai_task::check_definition(task) else {
-        return unknown;
-    };
-    let request = provider::StructuredRequest {
-        instruction: ai_task::normalized_prompt(PROMPT),
-        transcript: input.transcript.clone(),
-        estimate_hint: input.estimate_hint.clone(),
-        schema: wire,
-        native_schema: false,
-        max_output_tokens: Some(task.budget.max_output_tokens),
-    };
-    provider::cost::estimate_for(&target, &profile, &request).unwrap_or(unknown)
-}
-
 fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let cut = context(&v)?;
-    let (profile, safety) = route()?;
-    Ok(
-        json!({"paid":matches!(safety,Safety::Paid),"profile":profile,"estimate":estimate(&input(&cut,&v)?,safety)}),
-    )
+    let route = jobs::resolve_route(TASK_ID, None)?;
+    let input = input(&cut, &v)?;
+    Ok(json!({
+        "paid": route.paid(),
+        "profile": route.profile.id,
+        "estimate": jobs::estimate_units(TASK_ID, &[input], route.safety, None),
+    }))
 }
 
 fn cmd_generate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let cut = context(&v)?;
-    let (_, safety) = route()?;
     let input = input(&cut, &v)?;
-    if matches!(safety, Safety::Paid) && v["confirmed"] != true {
-        return Err(CoreError {
-            code: "confirmation_required".into(),
-            message: "Confirme o custo estimado antes de sugerir ângulos com o Provedor pago."
-                .into(),
-            usage: Some(json!({"estimate":estimate(&input,safety)})),
-        });
-    }
     let doc = document(&cut)?;
     if doc["busy"] == true {
         return Err(error(
@@ -305,7 +265,16 @@ fn cmd_generate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         ));
     }
     let batch = format!("angles-{}-{}-{}", cut.run, cut.identity.0, cut.identity.1);
-    let job = jobs::enqueue_ai_in_batch(TASK_ID, &input, safety, Some(&batch))?;
+    let (_, job_ids) = jobs::enqueue_checked(jobs::EnqueueAiRequest {
+        task_id: TASK_ID,
+        profile_id: None,
+        batch: Some(&batch),
+        inputs: &[input],
+        confirmed: v["confirmed"] == true,
+        confirmation_message:
+            "Confirme o custo estimado antes de sugerir ângulos com o Provedor pago.",
+    })?;
+    let job = job_ids[0];
     projects::with_writer(|c| {
         c.execute("INSERT INTO angle_generations(job_id,run_id,cand_start_id,cand_end_id) VALUES (?1,?2,?3,?4)",(job,cut.run,cut.identity.0,cut.identity.1))?;
         Ok(())
@@ -319,7 +288,8 @@ fn document(cut: &ApprovedCut) -> CommandResult {
         let rows = q.query_map((cut.run,cut.identity.0,cut.identity.1),|r| {
             let result: Option<String> = r.get(3)?;
             let result: Option<Value> = result.and_then(|s|serde_json::from_str(&s).ok());
-            Ok(json!({"id":r.get::<_,i64>(0)?,"jobId":r.get::<_,i64>(1)?,"state":r.get::<_,String>(2)?,"data":result.as_ref().map(|v|v["data"].clone()),"code":packaging::job_code(&result),"violations":packaging::violation_codes(&result)}))
+            let codes = jobs::outcome_codes(result.as_ref());
+            Ok(json!({"id":r.get::<_,i64>(0)?,"jobId":r.get::<_,i64>(1)?,"state":r.get::<_,String>(2)?,"data":result.as_ref().map(|v|v["data"].clone()),"code":codes.code,"violations":codes.violations}))
         })?.collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(rows)
     })?;

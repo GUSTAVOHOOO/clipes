@@ -10,7 +10,7 @@ use crate::{
     chat::{self, ChatMarks},
     energy::{self, EnergyLevel, EnergyMarks},
     jobs::{self, Safety},
-    projects, provider, selection_windows,
+    projects, selection_windows,
     sentences::{self, Marks, Sentence},
     CommandRegistration, CommandResult, CoreError, EventSink,
 };
@@ -422,8 +422,7 @@ struct Setup {
     frases: Vec<Sentence>,
     range: Range,
     kind: VideoKind,
-    safety: Safety,
-    profile: String,
+    route: jobs::AiRoute,
     plan: selection_windows::Plan,
     /// Marcas de energia do áudio (#54): `None` se a energia não foi medida; a execução roda
     /// sem marcas e o resumo diz isso. Decidido uma vez, em `selection.start`.
@@ -433,16 +432,10 @@ struct Setup {
     chat: Option<ChatMarks>,
 }
 
-/// Rota da seleção, com os dois vetos "somente local" (por tarefa e por Projeto) aplicados
-/// antes de qualquer envio: devolve o id do perfil e se a chamada é paga.
-pub(crate) fn route_safety() -> Result<(String, Safety), CoreError> {
-    Ok(match provider::routed(Some(TASK_ID), None)? {
-        provider::Routed::Cli(name) => (name, Safety::Paid),
-        provider::Routed::Api { profile, local } => {
-            (profile.id, if local { Safety::Local } else { Safety::Paid })
-        }
-    })
-}
+const CONFIRMATION_MESSAGE: &str =
+    "Esta seleção usa um Provedor pago: confirme o custo estimado antes de começar.";
+const REDO_CONFIRMATION_MESSAGE: &str =
+    "Refazer com este perfil envia o texto a um Provedor pago: confirme o perfil e o custo estimado antes de começar.";
 
 impl Setup {
     fn marks(&self) -> Marks {
@@ -467,7 +460,7 @@ fn prepare(transcript: i64, range: Range, kind: VideoKind) -> Result<Setup, Core
             "A Transcrição não tem Frases para selecionar.",
         ));
     }
-    let (profile, safety) = route_safety()?;
+    let route = jobs::resolve_route(TASK_ID, None)?;
     let (wire, _) = ai_task::check_definition(task_for(kind)).map_err(CoreError::from)?;
     let instruction = ai_task::normalized_prompt(prompt_for(kind));
     let marks = energy::load_marks(transcript)?;
@@ -494,8 +487,7 @@ fn prepare(transcript: i64, range: Range, kind: VideoKind) -> Result<Setup, Core
         frases,
         range,
         kind,
-        safety,
-        profile,
+        route,
         plan,
         marks,
         chat,
@@ -508,13 +500,6 @@ fn state_label(state: selection_windows::PlanState) -> &'static str {
         selection_windows::PlanState::Reduced => "reduced",
         selection_windows::PlanState::Blocked => "blocked",
     }
-}
-
-/// Soma a estimativa do #40 das Janelas informadas; `kind` e valores como em
-/// `provider.cost.estimate`. Custo desconhecido nunca vira zero. É a mesma soma de "refazer
-/// com outro perfil" (`jobs::redo`), com a rota da Tarefa do tipo de vídeo.
-fn estimate_inputs(video: VideoKind, inputs: &[TaskInput], safety: Safety) -> Value {
-    jobs::redo::estimate_inputs(task_for(video).id, inputs, safety, None)
 }
 
 /// Estado da energia do áudio numa execução: se foi medida e quantas Frases têm cada marca.
@@ -539,15 +524,6 @@ fn chat_json(marks: Option<&ChatMarks>) -> Value {
     }
 }
 
-fn confirmation_required(estimate: Value) -> CoreError {
-    CoreError {
-        code: "confirmation_required".into(),
-        message: "Esta seleção usa um Provedor pago: confirme o custo estimado antes de começar."
-            .into(),
-        usage: Some(json!({"estimate": estimate})),
-    }
-}
-
 fn windows_json(setup: &Setup) -> Vec<Value> {
     setup
         .plan
@@ -568,16 +544,13 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         if let Some(profile) = explicit_profile(&v)? {
             return profile_redo_preview(run, &profile, &v);
         }
-        let (_, safety) = route_safety()?;
+        let route = jobs::resolve_route(TASK_ID, None)?;
         let kind = read_run(run)?.kind;
         let inputs = redo_inputs(run, &v)?;
-        let estimate = estimate_inputs(
-            kind,
-            &inputs.iter().map(|i| i.1.clone()).collect::<Vec<_>>(),
-            safety,
-        );
+        let list: Vec<TaskInput> = inputs.iter().map(|i| i.1.clone()).collect();
+        let estimate = jobs::estimate_units(task_for(kind).id, &list, route.safety, None);
         return Ok(
-            json!({"paid": matches!(safety, Safety::Paid), "videoKind": kind.as_str(), "estimate": estimate}),
+            json!({"paid": route.paid(), "videoKind": kind.as_str(), "estimate": estimate}),
         );
     }
     let s = setup(&v)?;
@@ -594,8 +567,8 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         })
         .collect();
     Ok(json!({
-        "paid": matches!(s.safety, Safety::Paid),
-        "profile": s.profile,
+        "paid": s.route.paid(),
+        "profile": s.route.profile.id,
         "minUs": s.range.min_us,
         "maxUs": s.range.max_us,
         "plan": {
@@ -607,7 +580,7 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         "weights": weights_json(s.kind),
         "energy": energy_json(s.marks.as_ref()),
         "chat": chat_json(s.chat.as_ref()),
-        "estimate": estimate_inputs(s.kind, &inputs, s.safety),
+        "estimate": jobs::estimate_units(task_for(s.kind).id, &inputs, s.route.safety, None),
     }))
 }
 
@@ -663,10 +636,14 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             )
         })
         .collect();
-    if matches!(s.safety, Safety::Paid) && v["confirmed"] != true {
-        return Err(confirmation_required(estimate_inputs(
-            s.kind, &inputs, s.safety,
-        )));
+    if s.route.paid() && v["confirmed"] != true {
+        let estimate = jobs::estimate_units(task_for(s.kind).id, &inputs, s.route.safety, None);
+        return Err(jobs::confirmation_error(
+            &s.route,
+            estimate,
+            false,
+            CONFIRMATION_MESSAGE,
+        ));
     }
     let definition = task_for(s.kind);
     let run = projects::with_writer(|c| {
@@ -677,7 +654,7 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                 s.transcript,
                 definition.version,
                 definition.prompt_sha256,
-                &s.profile,
+                &s.route.profile.id,
                 s.range.min_us,
                 s.range.max_us,
                 weights_json(s.kind).to_string(),
@@ -696,7 +673,7 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         for (i, w) in s.plan.windows.iter().enumerate() {
             tx.execute(
                 "INSERT INTO selection_windows(run_id,idx,first_id,last_id,start_us,end_us,profile) VALUES (?1,?2,?3,?4,?5,?6,?7)",
-                (run, i as i64, w.first_id, w.last_id, w.start_us, w.end_us, &s.profile),
+                (run, i as i64, w.first_id, w.last_id, w.start_us, w.end_us, &s.route.profile.id),
             )?;
         }
         tx.commit()?;
@@ -707,59 +684,47 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .enumerate()
         .map(|(i, t)| (i as i64, t))
         .collect();
-    enqueue_windows(
-        run,
-        &pending,
-        &Dest {
-            safety: s.safety,
-            profile: &s.profile,
-            explicit: false,
-        },
-    )?;
+    enqueue_windows(run, &pending, None, true, CONFIRMATION_MESSAGE)?;
     Ok(
         json!({"run": run, "batch": batch_for(run), "videoKind": s.kind.as_str(), "minUs": s.range.min_us, "maxUs": s.range.max_us, "windows": s.plan.windows.len(), "planState": state_label(s.plan.state), "weights": weights_json(s.kind)}),
     )
 }
 
-/// Para onde vão as Janelas enfileiradas: o perfil que gera o resultado (gravado na Janela) e,
-/// só no "refazer com outro perfil" (#126), o perfil explícito do job. Sem `explicit`, o job
-/// segue a rota da Tarefa e o padrão nunca muda.
-struct Dest<'a> {
-    safety: Safety,
-    profile: &'a str,
-    explicit: bool,
-}
-
 fn enqueue_windows(
     run: i64,
     windows: &[(i64, TaskInput)],
-    dest: &Dest<'_>,
-) -> Result<(), CoreError> {
+    profile_id: Option<&str>,
+    confirmed: bool,
+    confirmation_message: &str,
+) -> Result<jobs::AiRoute, CoreError> {
     let batch = batch_for(run);
     let task = task_for(read_run(run)?.kind).id;
-    for (idx, input) in windows {
-        let job = jobs::enqueue_ai_with_profile(
-            task,
-            input,
-            dest.safety,
-            Some(&batch),
-            dest.explicit.then_some(dest.profile),
-        )?;
-        projects::with_writer(|c| {
+    let inputs: Vec<TaskInput> = windows.iter().map(|w| w.1.clone()).collect();
+    let (route, job_ids) = jobs::enqueue_checked(jobs::EnqueueAiRequest {
+        task_id: task,
+        profile_id,
+        batch: Some(&batch),
+        inputs: &inputs,
+        confirmed,
+        confirmation_message,
+    })?;
+    let explicit = i64::from(profile_id.is_some());
+    projects::with_writer(|c| {
+        for ((idx, _), job) in windows.iter().zip(&job_ids) {
             // Refazer com perfil sobre uma Janela concluída guarda o resultado dela: se o novo
             // job falhar, os candidatos dela não somem.
             c.execute(
                 "UPDATE selection_windows SET prev_job_id=CASE WHEN ?5=1 AND (SELECT state FROM jobs WHERE id=job_id)='completed' THEN job_id ELSE prev_job_id END, prev_profile=CASE WHEN ?5=1 AND (SELECT state FROM jobs WHERE id=job_id)='completed' THEN profile ELSE prev_profile END, job_id=?3, profile=?4, redo=?5, attempts=attempts+1 WHERE run_id=?1 AND idx=?2",
-                (run, idx, job, dest.profile, i64::from(dest.explicit)),
+                (run, idx, job, &route.profile.id, explicit),
             )?;
-            c.execute(
-                "UPDATE selection_runs SET state='running' WHERE id=?1",
-                [run],
-            )?;
-            Ok(())
-        })?;
-    }
-    Ok(())
+        }
+        c.execute(
+            "UPDATE selection_runs SET state='running' WHERE id=?1",
+            [run],
+        )?;
+        Ok(())
+    })?;
+    Ok(route)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -835,17 +800,9 @@ impl WindowRow {
     }
     /// Código fixo do erro do job (nunca texto do modelo); só aceita o formato esperado.
     fn code(&self, fallback: &str) -> String {
-        self.result
-            .as_ref()
-            .and_then(|r| r["code"].as_str())
-            .filter(|c| {
-                !c.is_empty()
-                    && c.len() <= 48
-                    && c.chars()
-                        .all(|ch| ch.is_ascii_lowercase() || ch == '_' || ch.is_ascii_digit())
-            })
-            .unwrap_or(fallback)
-            .to_owned()
+        jobs::outcome_codes(self.result.as_ref())
+            .code
+            .unwrap_or_else(|| fallback.to_owned())
     }
     fn reset_at_ms(&self) -> Option<u64> {
         matches!(self.outcome(), Outcome::Failed(_))
@@ -1346,7 +1303,7 @@ pub(crate) fn batch_resume_prepare(run: i64, confirmed: bool) -> Result<Vec<i64>
     if uncertain_jobs.is_empty() {
         return Ok(Vec::new());
     }
-    let (_, safety) = route_safety()?;
+    let route = jobs::resolve_route(TASK_ID, None)?;
     let has_paid_uncertain = projects::with_reader(|c| {
         let mut q = c.prepare(
             "SELECT 1 FROM selection_windows w JOIN jobs j ON j.id=w.job_id WHERE w.run_id=?1 AND j.state='uncertain' AND j.safety='paid' LIMIT 1",
@@ -1354,13 +1311,14 @@ pub(crate) fn batch_resume_prepare(run: i64, confirmed: bool) -> Result<Vec<i64>
         q.exists([run])
     })?;
     let inputs = window_inputs_for(run, &json!({"run": run}), true)?;
-    if (matches!(safety, Safety::Paid) || has_paid_uncertain) && !confirmed {
+    if (route.paid() || has_paid_uncertain) && !confirmed {
         let list: Vec<TaskInput> = inputs.iter().map(|i| i.1.clone()).collect();
-        return Err(confirmation_required(estimate_inputs(
-            row.kind,
-            &list,
-            Safety::Paid,
-        )));
+        return Err(jobs::confirmation_error(
+            &route,
+            jobs::estimate_units(task_for(row.kind).id, &list, Safety::Paid, None),
+            false,
+            CONFIRMATION_MESSAGE,
+        ));
     }
     Ok(uncertain_jobs)
 }
@@ -1385,21 +1343,13 @@ fn parse_run_id(v: &Value) -> Result<i64, CoreError> {
 }
 
 fn resume_run(run: i64, v: &Value) -> CommandResult {
-    let kind = read_run(run)?.kind;
-    let (profile, safety) = route_safety()?;
     let inputs = redo_inputs(run, v)?;
-    if matches!(safety, Safety::Paid) && v["confirmed"] != true {
-        let list: Vec<TaskInput> = inputs.iter().map(|i| i.1.clone()).collect();
-        return Err(confirmation_required(estimate_inputs(kind, &list, safety)));
-    }
     enqueue_windows(
         run,
         &inputs,
-        &Dest {
-            safety,
-            profile: &profile,
-            explicit: false,
-        },
+        None,
+        v["confirmed"] == true,
+        CONFIRMATION_MESSAGE,
     )?;
     Ok(json!({"run": run, "windows": inputs.iter().map(|i| i.0).collect::<Vec<_>>()}))
 }
@@ -1449,7 +1399,7 @@ fn profile_redo_plan(
     run: i64,
     profile: &str,
     v: &Value,
-) -> Result<(jobs::redo::Route, Vec<(i64, TaskInput)>), CoreError> {
+) -> Result<(jobs::AiRoute, Vec<(i64, TaskInput)>), CoreError> {
     read_run(run)?;
     let wanted: Vec<i64> = v["windows"]
         .as_array()
@@ -1487,7 +1437,7 @@ fn profile_redo_plan(
         })?;
         inputs.push((*idx, source.input));
     }
-    let route = jobs::redo::route(TASK_ID, profile)?;
+    let route = jobs::resolve_route(TASK_ID, Some(profile))?;
     Ok((route, inputs))
 }
 
@@ -1495,8 +1445,8 @@ fn profile_redo_plan(
 fn profile_redo_preview(run: i64, profile: &str, v: &Value) -> CommandResult {
     let (route, inputs) = profile_redo_plan(run, profile, v)?;
     let list: Vec<TaskInput> = inputs.iter().map(|i| i.1.clone()).collect();
-    let estimate = jobs::redo::estimate_inputs(TASK_ID, &list, route.safety, Some(profile));
-    let mut preview = jobs::redo::preview(&route, estimate);
+    let estimate = jobs::estimate_units(TASK_ID, &list, route.safety, Some(profile));
+    let mut preview = route.preview(estimate);
     preview["windows"] = json!(inputs.iter().map(|i| i.0).collect::<Vec<_>>());
     Ok(preview)
 }
@@ -1505,23 +1455,13 @@ fn profile_redo_preview(run: i64, profile: &str, v: &Value) -> CommandResult {
 /// do lote vale e pausa), grava o perfil na Janela e deixa o resultado entrar como uma nova
 /// revisão da execução. Perfil pago pede confirmação antes de qualquer envio.
 fn redo_with_profile(run: i64, profile: &str, v: &Value) -> CommandResult {
-    let (route, inputs) = profile_redo_plan(run, profile, v)?;
-    if route.paid() && v["confirmed"] != true {
-        let list: Vec<TaskInput> = inputs.iter().map(|i| i.1.clone()).collect();
-        let estimate = jobs::redo::estimate_inputs(TASK_ID, &list, route.safety, Some(profile));
-        return Err(jobs::redo::confirmation_required(jobs::redo::preview(
-            &route, estimate,
-        )));
-    }
-    let id = route.profile["id"].as_str().unwrap_or(profile).to_owned();
-    enqueue_windows(
+    let (_, inputs) = profile_redo_plan(run, profile, v)?;
+    let route = enqueue_windows(
         run,
         &inputs,
-        &Dest {
-            safety: route.safety,
-            profile: &id,
-            explicit: true,
-        },
+        Some(profile),
+        v["confirmed"] == true,
+        REDO_CONFIRMATION_MESSAGE,
     )?;
     Ok(json!({
         "run": run,

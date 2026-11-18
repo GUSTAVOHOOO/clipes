@@ -17,7 +17,7 @@ use crate::{
     ai_task::{self, AiTask, Budget, TaskInput, Violation},
     jobs::{self, Safety},
     packaging::{self, Lang},
-    projects, provider,
+    projects,
     sentences::{self, Sentence},
     CommandRegistration, CommandResult, CoreError, EventSink,
 };
@@ -688,41 +688,6 @@ fn block_input(
     }
 }
 
-fn route_safety(task: &str, profile: Option<&str>) -> Result<(String, Safety), CoreError> {
-    Ok(match provider::routed(Some(task), profile)? {
-        provider::Routed::Cli(name) => (name, Safety::Paid),
-        provider::Routed::Api { profile, local } => {
-            (profile.id, if local { Safety::Local } else { Safety::Paid })
-        }
-    })
-}
-
-fn estimate_of(
-    task_id: &str,
-    input: &TaskInput,
-    safety: Safety,
-    profile_id: Option<&str>,
-) -> Value {
-    let paid = matches!(safety, Safety::Paid);
-    let unknown = json!({"kind": "unknown", "minMicroUsd": null, "maxMicroUsd": null});
-    let definition = task(task_id);
-    let Ok((target, profile)) = jobs::route_of_profile(task_id, paid, profile_id) else {
-        return unknown;
-    };
-    let Ok((wire, _)) = ai_task::check_definition(definition) else {
-        return unknown;
-    };
-    let request = provider::StructuredRequest {
-        estimate_hint: input.estimate_hint.clone(),
-        instruction: ai_task::normalized_prompt(definition.prompt),
-        transcript: input.transcript.clone(),
-        schema: wire,
-        native_schema: false,
-        max_output_tokens: Some(definition.budget.max_output_tokens),
-    };
-    provider::cost::estimate_for(&target, &profile, &request).unwrap_or(unknown)
-}
-
 /// Custo da cadeia inteira: o esboço mais de `MIN_BLOCKS` a `MAX_BLOCKS` textos.
 fn chain_estimate(outline: &Value, block: &Value) -> Value {
     let unknown = json!({"kind": "unknown", "minMicroUsd": null, "maxMicroUsd": null});
@@ -770,14 +735,8 @@ fn worst_block_input(frases: &[Sentence], lang: Lang) -> TaskInput {
     )
 }
 
-fn confirmation_required(estimate: Value) -> CoreError {
-    CoreError {
-        code: "confirmation_required".into(),
-        message: "Este Roteiro usa um Provedor pago: confirme o custo estimado antes de gerar."
-            .into(),
-        usage: Some(json!({"estimate": estimate})),
-    }
-}
+const CONFIRMATION_MESSAGE: &str =
+    "Este Roteiro usa um Provedor pago: confirme o custo estimado antes de gerar.";
 
 /// `script.estimate {candidate, language?, block?}`: idioma e custo estimado. Com `block`, o de
 /// regenerar esse bloco; sem ele, o da cadeia inteira (esboço e textos).
@@ -786,7 +745,7 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     crate::angles::required(&cut.cut)?;
     let lang = pick_language(&cut, &v)?;
     let chosen = profile_arg(&v);
-    let (profile, safety) = route_safety(
+    let route = jobs::resolve_route(
         if v["block"].is_null() {
             TASK_ID
         } else {
@@ -796,18 +755,18 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     )?;
     let mut worst = worst_block_input(&cut.cut.sentences, lang);
     crate::angles::add_to_input(&mut worst, &cut.cut, true)?;
-    let block = estimate_of(BLOCK_TASK_ID, &worst, safety, chosen.as_deref());
+    let block = jobs::estimate_units(BLOCK_TASK_ID, &[worst], route.safety, chosen.as_deref());
     let estimate = if v["block"].is_null() {
         let mut input = outline_input(&cut.cut.sentences, lang);
         crate::angles::add_to_input(&mut input, &cut.cut, true)?;
-        let outline = estimate_of(TASK_ID, &input, safety, None);
+        let outline = jobs::estimate_units(TASK_ID, &[input], route.safety, None);
         chain_estimate(&outline, &block)
     } else {
         block
     };
     Ok(json!({
-        "paid": matches!(safety, Safety::Paid),
-        "profile": profile,
+        "paid": route.paid(),
+        "profile": route.profile.id,
         "language": lang.code(),
         "estimate": estimate,
     }))
@@ -827,17 +786,20 @@ fn cmd_generate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let cut = context(candidate_arg(&v)?)?;
     let (_, angle) = crate::angles::required(&cut.cut)?;
     let lang = pick_language(&cut, &v)?;
-    let (profile, safety) = route_safety(TASK_ID, None)?;
+    let route = jobs::resolve_route(TASK_ID, None)?;
     let mut input = outline_input(&cut.cut.sentences, lang);
     crate::angles::add_to_input(&mut input, &cut.cut, true)?;
-    if matches!(safety, Safety::Paid) && v["confirmed"] != true {
+    if route.paid() && v["confirmed"] != true {
         let mut worst = worst_block_input(&cut.cut.sentences, lang);
         crate::angles::add_to_input(&mut worst, &cut.cut, true)?;
-        let block = estimate_of(BLOCK_TASK_ID, &worst, safety, None);
-        return Err(confirmation_required(chain_estimate(
-            &estimate_of(TASK_ID, &input, safety, None),
-            &block,
-        )));
+        let block = jobs::estimate_units(BLOCK_TASK_ID, &[worst], route.safety, None);
+        let outline = jobs::estimate_units(TASK_ID, &[input], route.safety, None);
+        return Err(jobs::confirmation_error(
+            &route,
+            chain_estimate(&outline, &block),
+            false,
+            CONFIRMATION_MESSAGE,
+        ));
     }
     let (run, (start, end)) = (cut.cut.run, cut.cut.identity);
     materialize(run, (start, end))?;
@@ -851,16 +813,21 @@ fn cmd_generate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         ));
     }
     let definition = task(TASK_ID);
-    let job = jobs::enqueue_ai_in_batch(TASK_ID, &input, safety, Some(&batch_of(&cut)))?;
-    let safety_text = if matches!(safety, Safety::Paid) {
-        "paid"
-    } else {
-        "local"
-    };
+    let batch = batch_of(&cut);
+    let (_, job_ids) = jobs::enqueue_checked(jobs::EnqueueAiRequest {
+        task_id: TASK_ID,
+        profile_id: None,
+        batch: Some(&batch),
+        inputs: &[input],
+        confirmed: true,
+        confirmation_message: CONFIRMATION_MESSAGE,
+    })?;
+    let job = job_ids[0];
+    let safety_text = if route.paid() { "paid" } else { "local" };
     projects::with_writer(|c| {
         c.execute(
             "INSERT INTO script_generations(job_id,run_id,cand_start_id,cand_end_id,language,task_version,prompt_sha256,profile,safety,angle) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
-            (job, run, start, end, lang.code(), definition.version, definition.prompt_sha256, &profile, safety_text, angle.to_string()),
+            (job, run, start, end, lang.code(), definition.version, definition.prompt_sha256, &route.profile.id, safety_text, angle.to_string()),
         )?;
         Ok(())
     })?;
@@ -877,24 +844,15 @@ fn outlined(block: &Block) -> Outlined {
     }
 }
 
-fn enqueue_version(
+fn record_block_version(
     cut: &Cut,
     block: &Block,
     kind: &str,
-    input: &TaskInput,
-    safety: Safety,
+    job: i64,
     profile: &str,
-    profile_id: Option<&str>,
 ) -> Result<i64, CoreError> {
     let definition = task(BLOCK_TASK_ID);
     let (angle_revision, _) = crate::angles::required(&cut.cut)?;
-    let job = jobs::enqueue_ai_with_profile(
-        BLOCK_TASK_ID,
-        input,
-        safety,
-        Some(&batch_of(cut)),
-        profile_id,
-    )?;
     projects::with_writer(|c| {
         c.execute(
             "INSERT INTO script_block_versions(block_id,kind,job_id,task_version,prompt_sha256,profile,angle_revision) VALUES (?1,?2,?3,?4,?5,?6,?7)",
@@ -902,6 +860,18 @@ fn enqueue_version(
         )?;
         Ok(job)
     })
+}
+
+fn enqueue_version(
+    cut: &Cut,
+    block: &Block,
+    kind: &str,
+    input: &TaskInput,
+    safety: Safety,
+    profile: &str,
+) -> Result<i64, CoreError> {
+    let job = jobs::enqueue_ai_in_batch(BLOCK_TASK_ID, input, safety, Some(&batch_of(cut)))?;
+    record_block_version(cut, block, kind, job, profile)
 }
 
 /// Anda a cadeia: depois que o esboço termina, enfileira o texto de cada bloco que ainda não
@@ -941,7 +911,7 @@ fn advance(cut: &Cut) -> Result<(), CoreError> {
             }
             let mut input = block_input(&cut.cut.sentences, lang, &outline, i, (None, None), max);
             crate::angles::add_to_input(&mut input, &cut.cut, true)?;
-            enqueue_version(cut, block, "generated", &input, safety, &gen.profile, None)?;
+            enqueue_version(cut, block, "generated", &input, safety, &gen.profile)?;
         }
     }
     Ok(())
@@ -991,11 +961,12 @@ fn limits_json() -> Value {
 }
 
 fn job_json(state: &Option<String>, result: &Option<Value>, id: i64) -> Value {
+    let codes = jobs::outcome_codes(result.as_ref());
     json!({
         "id": id,
         "state": state,
-        "code": packaging::job_code(result),
-        "violations": packaging::violation_codes(result),
+        "code": codes.code,
+        "violations": codes.violations,
     })
 }
 
@@ -1442,7 +1413,6 @@ fn cmd_regenerate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     crate::angles::required(&cut.cut)?;
     let lang = Lang::parse(&gen.language).unwrap_or(Lang::Pt);
     let chosen = profile_arg(&v);
-    let (profile, safety) = route_safety(BLOCK_TASK_ID, chosen.as_deref())?;
     let index = gen
         .blocks
         .iter()
@@ -1462,23 +1432,16 @@ fn cmd_regenerate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         room.min(MAX_NARRATION_CHARS),
     );
     crate::angles::add_to_input(&mut input, &cut.cut, true)?;
-    if matches!(safety, Safety::Paid) && v["confirmed"] != true {
-        return Err(confirmation_required(estimate_of(
-            BLOCK_TASK_ID,
-            &input,
-            safety,
-            chosen.as_deref(),
-        )));
-    }
-    let job = enqueue_version(
-        &cut,
-        block,
-        "regenerated",
-        &input,
-        safety,
-        &profile,
-        chosen.as_deref(),
-    )?;
+    let batch = batch_of(&cut);
+    let (route, job_ids) = jobs::enqueue_checked(jobs::EnqueueAiRequest {
+        task_id: BLOCK_TASK_ID,
+        profile_id: chosen.as_deref(),
+        batch: Some(&batch),
+        inputs: &[input],
+        confirmed: v["confirmed"] == true,
+        confirmation_message: CONFIRMATION_MESSAGE,
+    })?;
+    let job = record_block_version(&cut, block, "regenerated", job_ids[0], &route.profile.id)?;
     Ok(json!({"job": job, "block": block.id}))
 }
 

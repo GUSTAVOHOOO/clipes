@@ -11,7 +11,7 @@
 //! número de caracteres dentro de `[start_us, end_us]`.
 use crate::{
     ai_task::{self, AiTask, Budget, TaskInput, Violation},
-    jobs::{self, Safety},
+    jobs,
     packaging::{self, Lang},
     projects, provider, selection_windows,
     sentences::{self, Sentence},
@@ -555,15 +555,6 @@ fn clip_context(clip_id: i64) -> Result<ClipContext, CoreError> {
     })
 }
 
-fn route_safety() -> Result<(String, Safety), CoreError> {
-    Ok(match provider::routed(Some(TASK_ID), None)? {
-        provider::Routed::Cli(name) => (name, Safety::Paid),
-        provider::Routed::Api { profile, local } => {
-            (profile.id, if local { Safety::Local } else { Safety::Paid })
-        }
-    })
-}
-
 fn percent(value: u64, pct: u64) -> u64 {
     (u128::from(value) * u128::from(pct) / 100) as u64
 }
@@ -1067,12 +1058,13 @@ fn document(ctx: &ClipContext) -> Result<Value, CoreError> {
             .query_map([id], |r| {
                 let result: Option<String> = r.get(3)?;
                 let parsed = result.and_then(|s| serde_json::from_str::<Value>(&s).ok());
+                let codes = jobs::outcome_codes(parsed.as_ref());
                 Ok(json!({
                     "id": r.get::<_, i64>(0)?,
                     "batchIndex": r.get::<_, i64>(1)?,
                     "state": r.get::<_, String>(2)?,
-                    "code": crate::packaging::job_code(&parsed),
-                    "violations": crate::packaging::violation_codes(&parsed),
+                    "code": codes.code,
+                    "violations": codes.violations,
                 }))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -1173,11 +1165,6 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     document(&ctx)
 }
 
-fn estimate_batches(batches: &[PlannedBatch], safety: Safety) -> Value {
-    let inputs: Vec<TaskInput> = batches.iter().map(|b| b.input.clone()).collect();
-    jobs::redo::estimate_inputs(TASK_ID, &inputs, safety, None)
-}
-
 fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let _guard = projects::start_job()?;
     let ctx = clip_context(clip_id_arg(&v)?)?;
@@ -1185,12 +1172,13 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         return Err(permission_error(&ctx.permission));
     }
     let (source_lang, target_lang) = resolve_languages(&ctx.sentences, &v)?;
-    let (profile, safety) = route_safety()?;
+    let route = jobs::resolve_route(TASK_ID, None)?;
     let (batches, context_tokens) = plan_batches(&ctx.sentences, source_lang, target_lang)?;
-    let estimate = estimate_batches(&batches, safety);
+    let inputs: Vec<TaskInput> = batches.iter().map(|b| b.input.clone()).collect();
+    let estimate = jobs::estimate_units(TASK_ID, &inputs, route.safety, None);
     Ok(json!({
-        "paid": matches!(safety, Safety::Paid),
-        "profile": profile,
+        "paid": route.paid(),
+        "profile": route.profile.id,
         "sourceLanguage": source_lang.code(),
         "targetLanguage": target_lang.code(),
         "batches": batches.len(),
@@ -1220,16 +1208,19 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             "Já há uma tradução em andamento para este Corte.",
         ));
     }
-    let (profile, safety) = route_safety()?;
+    let route = jobs::resolve_route(TASK_ID, None)?;
     let (batches, _) = plan_batches(&ctx.sentences, source_lang, target_lang)?;
-    if matches!(safety, Safety::Paid) && v["confirmed"] != true {
-        return Err(CoreError {
-            code: "confirmation_required".into(),
-            message:
-                "Esta tradução usa um Provedor pago: confirme o custo estimado antes de começar."
-                    .into(),
-            usage: Some(json!({"estimate": estimate_batches(&batches, safety)})),
-        });
+    let inputs: Vec<TaskInput> = batches.iter().map(|b| b.input.clone()).collect();
+    const CONFIRMATION_MESSAGE: &str =
+        "Esta tradução usa um Provedor pago: confirme o custo estimado antes de começar.";
+    if route.paid() && v["confirmed"] != true {
+        let estimate = jobs::estimate_units(TASK_ID, &inputs, route.safety, None);
+        return Err(jobs::confirmation_error(
+            &route,
+            estimate,
+            false,
+            CONFIRMATION_MESSAGE,
+        ));
     }
     let definition = task();
     let run_id = projects::with_writer(|c| {
@@ -1241,7 +1232,7 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                 target_lang.code(),
                 definition.version,
                 definition.prompt_sha256,
-                &profile,
+                &route.profile.id,
                 batches.len() as i64,
             ),
         )?;
@@ -1254,9 +1245,15 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         Ok(run_id)
     })?;
     let batch_label = format!("translation-{run_id}");
-    let mut job_ids = Vec::with_capacity(batches.len());
-    for (idx, b) in batches.iter().enumerate() {
-        let job_id = jobs::enqueue_ai_in_batch(TASK_ID, &b.input, safety, Some(&batch_label))?;
+    let (_, job_ids) = jobs::enqueue_checked(jobs::EnqueueAiRequest {
+        task_id: TASK_ID,
+        profile_id: None,
+        batch: Some(&batch_label),
+        inputs: &inputs,
+        confirmed: true,
+        confirmation_message: CONFIRMATION_MESSAGE,
+    })?;
+    for ((idx, b), job_id) in batches.iter().enumerate().zip(&job_ids) {
         let ids_json = serde_json::to_string(&b.sentence_ids).unwrap_or_else(|_| "[]".into());
         projects::with_writer(|c| {
             c.execute(
@@ -1265,7 +1262,6 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             )?;
             Ok(())
         })?;
-        job_ids.push(job_id);
     }
     projects::with_writer(|c| {
         c.execute(
