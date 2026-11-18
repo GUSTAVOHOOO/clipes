@@ -571,4 +571,103 @@ describe('<PainelMotorSinais>', () => {
     expect(within(dialog).getByText(/15 min/i)).toBeInTheDocument()
     expect(within(dialog).getByText(/US\$\s*0,02/i)).toBeInTheDocument()
   })
+
+  it('UI-24: radios do Motor, Detalhes técnicos e links de configuração aplicam alvo mínimo >= 24 px (min-h-6)', async () => {
+    const user = userEvent.setup()
+    mockBase({
+      'transcription.groq.info': () => ({
+        endpoint: 'https://api.groq.com/openai/v1/audio/transcriptions',
+        model: 'whisper-large-v3-turbo',
+        configured: false,
+        confirmed: false,
+        local_only: false,
+        prices: { minimum_seconds: 10 },
+      }),
+    })
+
+    render(
+      envolver(
+        <PainelMotorSinais
+          projetoPath="/projetos/Demo.clipes"
+          fonte={FONTE_DISPONIVEL}
+          transcriptStatus={{ language: 'pt', transcript: null, job: null }}
+          aoAtualizarStatus={vi.fn(async () => {})}
+        />,
+      ),
+    )
+
+    const radioLocal = await screen.findByRole('radio', { name: /Local — US\$ 0,00/i })
+    const radioGroq = screen.getByRole('radio', { name: /Groq remoto/i })
+    expect(radioLocal.className).toContain('min-h-6')
+    expect(radioGroq.className).toContain('min-h-6')
+
+    const summaryDetalhes = screen.getByText('Detalhes técnicos').closest('summary')
+    expect(summaryDetalhes).not.toBeNull()
+    expect(summaryDetalhes!.className).toContain('min-h-6')
+
+    const linkComponentes = screen.getByRole('link', { name: /Configurar componentes e hardware/i })
+    expect(linkComponentes.className).toContain('min-h-6')
+
+    await user.click(radioGroq)
+    const linkChaveGroq = await screen.findByRole('link', { name: /Configurar chave do Groq/i })
+    expect(linkChaveGroq.className).toContain('min-h-6')
+  })
+
+  it('UI-27b: oculta o cartão "Blocos de 10 min" quando transcript é null e não há job rodando', async () => {
+    mockBase({
+      'transcription.blocks': () => [
+        { start_us: 0, end_us: 600_000_000, device: 'cuda', compute_type: 'int8_float16' },
+      ],
+    })
+
+    render(
+      envolver(
+        <PainelMotorSinais
+          projetoPath="/projetos/Demo.clipes"
+          fonte={FONTE_DISPONIVEL}
+          transcriptStatus={{ language: 'pt', transcript: null, job: null }}
+          aoAtualizarStatus={vi.fn(async () => {})}
+        />,
+      ),
+    )
+
+    expect(await screen.findByText(/Local — US\$ 0,00/i)).toBeInTheDocument()
+    expect(screen.queryByText('Blocos de 10 min')).not.toBeInTheDocument()
+    expect(screen.queryByText(/blocos salvos/i)).not.toBeInTheDocument()
+  })
+
+  it('UI-28: radio Groq remoto e <ResumoCustoPrivacidade> exibem "< US$ 0,01" para microvalores positivos < 1 centavo', async () => {
+    const user = userEvent.setup()
+    mockBase({
+      'transcription.groq.estimate': () => ({
+        kind: 'usd',
+        usd: 0.00012,
+        minMicroUsd: 120,
+        maxMicroUsd: 240,
+        audio_us: 10_000_000,
+        hourly_usd: 0.04,
+      }),
+    })
+
+    render(
+      envolver(
+        <PainelMotorSinais
+          projetoPath="/projetos/Demo.clipes"
+          fonte={FONTE_DISPONIVEL}
+          transcriptStatus={{ language: 'pt', transcript: null, job: null }}
+          aoAtualizarStatus={vi.fn(async () => {})}
+        />,
+      ),
+    )
+
+    const radioGroq = await screen.findByRole('radio', { name: /Groq remoto/i })
+    expect(radioGroq).toHaveTextContent('< US$ 0,01')
+    expect(radioGroq).not.toHaveTextContent(/~US\$ 0,00/)
+
+    await user.click(radioGroq)
+    const resumo = await screen.findByRole('region', {
+      name: /Resumo de custo e privacidade: Transcrição Groq/i,
+    })
+    expect(within(resumo).getByText('< US$ 0,01')).toBeInTheDocument()
+  })
 })

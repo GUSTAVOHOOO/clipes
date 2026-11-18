@@ -3,7 +3,7 @@
 import { Cloud, Cpu, HardDrive, ShieldCheck, Terminal } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/cn'
-import { usd } from '@/lib/formato'
+import { faixaUsd, usd } from '@/lib/formato'
 import { Checkbox } from '@/primitivas/Escolhas'
 
 export interface ResumoCustoPrivacidadeProps {
@@ -42,7 +42,7 @@ export function ResumoCustoPrivacidade(p: ResumoCustoPrivacidadeProps) {
     if (e.kind === 'zero') return 'US$ 0,00'
     if (e.kind === 'plan_quota') return 'Consome cota do plano'
     if (e.kind === 'unknown') return 'Custo desconhecido'
-    return `~${usd(e.minMicroUsd)} – ${usd(e.maxMicroUsd)}`
+    return faixaUsd(e.minMicroUsd, e.maxMicroUsd)
   })()
   const detalheCusto =
     p.estimativa.kind === 'usd'

@@ -328,7 +328,7 @@ describe('Tela DetalheFonte (#/projeto/:id/fontes/:fonteId)', () => {
     vi.clearAllMocks()
   })
 
-  it('guarda de rota: redireciona para #/projeto/:id/fontes com alerta quando :fonteId não existe', async () => {
+  it('guarda de rota: redireciona para #/projeto/:id/fontes com toast de aviso (não sucesso) quando :fonteId não existe', async () => {
     mockBase({ fontes: [FONTE_PRONTA] })
 
     render(
@@ -340,9 +340,13 @@ describe('Tela DetalheFonte (#/projeto/:id/fontes/:fonteId)', () => {
     await waitFor(() => {
       expect(window.location.hash).toBe('#/projeto/demo/fontes')
     })
-    expect(
-      await screen.findByText(/A Fonte selecionada não foi encontrada neste Projeto/i),
-    ).toBeInTheDocument()
+    const tituloToast = await screen.findByText(
+      /A Fonte selecionada não foi encontrada neste Projeto/i,
+    )
+    expect(tituloToast).toBeInTheDocument()
+    const toastRoot = tituloToast.closest('[class*="rounded-controle"]')
+    expect(toastRoot?.querySelector('.lucide-triangle-alert')).not.toBeNull()
+    expect(toastRoot?.querySelector('.lucide-check')).toBeNull()
   })
 
   it('cobre todos os estados §6: loading, empty pré-transcrição, error, ready, job_running e partial com resume_us > 0', async () => {
@@ -615,6 +619,134 @@ describe('Tela DetalheFonte (#/projeto/:id/fontes/:fonteId)', () => {
     await user.keyboard('{Control>}{Shift>}z{/Shift}{/Control}')
     await waitFor(() => {
       expect(chamarMock).toHaveBeenCalledWith('transcription.redo', {})
+    })
+  })
+
+  it('UI-26: pré-transcrição respeita a Regra da Luz Única com apenas 1 botão bg-sinal e mantém foco no Motor', async () => {
+    const user = userEvent.setup()
+    mockBase({ transcriptState: 'none' })
+
+    render(
+      envolver(
+        <DetalheFonte projetoId="demo" projetoPath="/projetos/Demo.clipes" fonteId="4" />,
+      ),
+    )
+
+    expect(await screen.findByText(/Esta Fonte ainda não foi transcrita/i)).toBeInTheDocument()
+    const botoesSinal = document.querySelectorAll('button.bg-sinal')
+    expect(botoesSinal).toHaveLength(1)
+    expect(botoesSinal[0]).toHaveTextContent(/Iniciar transcrição/i)
+
+    const btnFocarMotor = screen.getByRole('button', { name: /Focar configuração do Motor/i })
+    expect(btnFocarMotor.className).not.toContain('bg-sinal')
+    await user.click(btnFocarMotor)
+    await waitFor(() => {
+      expect(screen.getByRole('radio', { name: /Local — US\$ 0,00/i })).toHaveFocus()
+    })
+  })
+
+  it('UI-23: retomarParcial no banner parcial trata retry, confirmation_required e engine_change_confirmation com <ConfirmDialog>', async () => {
+    const user = userEvent.setup()
+    let modoErro: 'retry' | 'consent' | 'replace' = 'retry'
+    let confirmadoGroq = false
+    mockBase({
+      overrides: {
+        'transcription.status': (args) => ({
+          language: 'pt',
+          transcript: {
+            id: (args as { source_id: number }).source_id,
+            state: 'running',
+            resume_us: 1_200_000_000,
+            duration_us: 3_600_000_000,
+            model: 'whisper-large-v3-turbo',
+            engine: 'groq',
+            words: 0,
+          },
+          job: null,
+        }),
+        'transcription.groq.info': () => ({
+          endpoint: 'https://api.groq.com/openai/v1/audio/transcriptions',
+          model: 'whisper-large-v3-turbo',
+          configured: true,
+          confirmed: true,
+          local_only: false,
+          prices: { minimum_seconds: 10 },
+        }),
+        'transcription.groq.confirm': () => {
+          confirmadoGroq = true
+          return { confirmed: true }
+        },
+        'transcription.start': (args) => {
+          const a = args as { retry_confirmed?: boolean; replace_confirmed?: boolean }
+          if (modoErro === 'retry' && !a.retry_confirmed) {
+            throw new ErroCore('transcription_retry_confirmation', 'Confirme retry', {
+              estimate: { usd: 0.02 },
+            })
+          }
+          if (modoErro === 'consent' && !confirmadoGroq) {
+            throw new ErroCore('confirmation_required', 'Confirme envio remoto')
+          }
+          if (modoErro === 'replace' && !a.replace_confirmed) {
+            throw new ErroCore('engine_change_confirmation', 'Confirme troca de motor', {
+              blocks: 2,
+              paid_audio_us: 600_000_000,
+              paid_usd: 0.01,
+            })
+          }
+          return { transcript_id: 4, state: 'running', job_id: 99, warnings: [] }
+        },
+      },
+    })
+
+    render(
+      envolver(
+        <DetalheFonte projetoId="demo" projetoPath="/projetos/Demo.clipes" fonteId="4" />,
+      ),
+    )
+
+    const bannerParcial = await screen.findByRole('status')
+    const btnRetomarBanner = within(bannerParcial).getByRole('button', {
+      name: /Retomar de 00:20:00/i,
+    })
+
+    // 1) transcription_retry_confirmation
+    await user.click(btnRetomarBanner)
+    const dlgRetry = await screen.findByRole('alertdialog')
+    expect(within(dlgRetry).getByText(/Repetir chamada paga no Groq/i)).toBeInTheDocument()
+    await user.click(within(dlgRetry).getByRole('button', { name: /Repetir chamada/i }))
+    await waitFor(() => {
+      expect(chamarMock).toHaveBeenCalledWith(
+        'transcription.start',
+        expect.objectContaining({ retry_confirmed: true, engine: 'groq' }),
+      )
+    })
+
+    // 2) confirmation_required
+    modoErro = 'consent'
+    await user.click(btnRetomarBanner)
+    const dlgConsent = await screen.findByRole('alertdialog')
+    expect(within(dlgConsent).getByText(/Confirmar envio remoto para o Groq/i)).toBeInTheDocument()
+    await user.click(within(dlgConsent).getByRole('button', { name: /Confirmar envio/i }))
+    await waitFor(() => {
+      expect(chamarMock).toHaveBeenCalledWith('transcription.groq.confirm', {
+        endpoint: 'https://api.groq.com/openai/v1/audio/transcriptions',
+        confirmed: true,
+      })
+    })
+
+    // 3) engine_change_confirmation
+    modoErro = 'replace'
+    await user.click(btnRetomarBanner)
+    const dlgReplace = await screen.findByRole('alertdialog')
+    expect(
+      within(dlgReplace).getByText(/Trocar Motor e descartar progresso parcial/i),
+    ).toBeInTheDocument()
+    await user.click(within(dlgReplace).getByRole('button', { name: /Trocar Motor e recomeçar/i }))
+    await waitFor(() => {
+      expect(chamarMock).toHaveBeenCalledWith(
+        'transcription.start',
+        expect.objectContaining({ replace_confirmed: true, engine: 'groq' }),
+      )
     })
   })
 })

@@ -127,7 +127,13 @@ function ListaToasts() {
       className="flex items-center gap-2 rounded-controle bg-elevado py-2 pr-1.5 pl-3 text-pequeno text-t2 shadow-toast transition-[opacity,translate] duration-(--dur-lenta) ease-saida data-ending-style:opacity-0 data-starting-style:translate-y-2 data-starting-style:opacity-0"
     >
       <To.Content className="flex min-w-0 flex-1 items-center gap-2">
-        {t.type === 'erro' ? <CircleX className="size-[14px] shrink-0 stroke-[1.75] text-erro" aria-hidden /> : <Check className="size-[14px] shrink-0 stroke-[1.75] text-t3" aria-hidden />}
+        {t.type === 'erro' ? (
+          <CircleX className="size-[14px] shrink-0 stroke-[1.75] text-erro" aria-hidden />
+        ) : t.type === 'aviso' ? (
+          <AlertTriangle className="size-[14px] shrink-0 stroke-[1.75] text-t3" aria-hidden />
+        ) : (
+          <Check className="size-[14px] shrink-0 stroke-[1.75] text-t3" aria-hidden />
+        )}
         <div className="min-w-0 flex-1">
           <To.Title className="text-t1" />
           <To.Description className="text-t3" />

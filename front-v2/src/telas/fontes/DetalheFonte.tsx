@@ -30,7 +30,7 @@ import {
   type IdiomaOpcao,
 } from '~/telas/fontes/EntradaFonte'
 import { LeitorTranscricao } from '~/telas/fontes/LeitorTranscricao'
-import { PainelMotorSinais } from '~/telas/fontes/PainelMotorSinais'
+import { PainelMotorSinais, type MotorEscolha } from '~/telas/fontes/PainelMotorSinais'
 
 export type DetalheFonteProps = {
   projetoId: string
@@ -90,6 +90,7 @@ export function DetalheFonte({
   >(null)
 
   const motorRef = useRef<HTMLButtonElement | null>(null)
+  const iniciarTranscricaoRef = useRef<((opcoes?: { engine?: MotorEscolha }) => Promise<void>) | null>(null)
   const redirecionadoRef = useRef(false)
   const toastRef = useRef(toast)
   toastRef.current = toast
@@ -116,7 +117,10 @@ export function DetalheFonte({
       if (!encontrada) {
         if (!redirecionadoRef.current && forcado !== 'carregando' && forcado !== 'erro') {
           redirecionadoRef.current = true
-          toastRef.current.add({ title: 'A Fonte selecionada não foi encontrada neste Projeto.' })
+          toastRef.current.add({
+            type: 'aviso',
+            title: 'A Fonte selecionada não foi encontrada neste Projeto.',
+          })
           window.location.hash = `#/projeto/${encProjeto}/fontes`
         }
         setFonte(null)
@@ -282,16 +286,8 @@ export function DetalheFonte({
   const retomarParcial = async () => {
     if (!fonte || !projetoPath || !statusEfetivo?.transcript) return
     setErroLeitor(null)
-    try {
-      await chamar('transcription.start', {
-        project: projetoPath,
-        source_id: fonte.id,
-        engine: statusEfetivo.transcript.engine,
-      })
-      await atualizarStatus()
-    } catch (err) {
-      setErroLeitor(paraErroCore(err))
-    }
+    const engine: MotorEscolha = statusEfetivo.transcript.engine === 'groq' ? 'groq' : 'local'
+    await iniciarTranscricaoRef.current?.({ engine })
   }
 
   if (forcado === 'carregando' || carregando) {
@@ -522,6 +518,7 @@ export function DetalheFonte({
               }
             }}
             aoFocarMotorRef={motorRef}
+            aoRegistrarIniciarRef={iniciarTranscricaoRef}
           />
         </aside>
 
@@ -547,7 +544,7 @@ export function DetalheFonte({
                 tipo="vazio"
                 titulo="Esta Fonte ainda não foi transcrita."
                 descricao="Escolha o Motor ao lado (Local grátis ou Groq remoto) e clique em Iniciar transcrição."
-                acaoPrimaria={{
+                acaoSecundaria={{
                   rotulo: 'Focar configuração do Motor',
                   aoAcionar: () => motorRef.current?.focus(),
                 }}
