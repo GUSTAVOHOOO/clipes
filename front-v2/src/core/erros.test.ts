@@ -466,6 +466,40 @@ describe('mapeador de erros (erros.ts)', () => {
     }
   })
 
+  it('cobre todos os códigos do Pacote F (Exportação, Fila, Relatos e Sobre)', () => {
+    const codigosPacoteF = [
+      'export_batch_empty',
+      'export_destination',
+      'export_ass_missing',
+      'export_font_missing',
+      'export_glyph_missing',
+      'audio_asset_missing',
+      'export_exists',
+      'export_bounds',
+      'export_candidate',
+      'export_failed',
+      'batch_not_found',
+      'job_uncertain',
+      'job_not_redoable',
+      'task_version_changed',
+      'invalid_profile',
+      'uncertain_job',
+      'invalid_budget',
+      'invalid_job_state',
+      'invalid_job',
+      'invalid_path',
+      'invalid_text',
+      'settings',
+    ]
+
+    for (const codigo of codigosPacoteF) {
+      expect(TABELA_ERROS[codigo], `código ausente na TABELA_ERROS: ${codigo}`).toBeDefined()
+      const msg = mensagemDeErro(new ErroCore(codigo, 'detalhe'))
+      expect(msg.titulo).not.toBe('Algo deu errado nesta operação.')
+      expect(msg.titulo.length).toBeGreaterThan(5)
+    }
+  })
+
   it('mapeia tradução e ações de recuperação específicas do Pacote D', () => {
     const exportExists = mensagemDeErro(new ErroCore('export_exists', ''))
     expect(exportExists.titulo).toMatch(/existe um arquivo/i)
@@ -549,5 +583,41 @@ describe('mapeador de erros (erros.ts)', () => {
     expect(cancelado.titulo).not.toBe('Algo deu errado nesta operação.')
     expect(cancelado.titulo).toMatch(/cancelad/i)
     expect(cancelado.recuperacao).toBeUndefined()
+  })
+
+  it('mapeia mensagens e recuperações específicas do Pacote F', () => {
+    const emptyBatch = mensagemDeErro(new ErroCore('export_batch_empty', ''))
+    expect(emptyBatch.titulo).toMatch(/Cortes aprovados/i)
+    expect(emptyBatch.recuperacao?.rotulo).toBe('Ir para Cortes')
+
+    const batchNotFound = mensagemDeErro(new ErroCore('batch_not_found', ''))
+    expect(batchNotFound.titulo).toMatch(/lote/i)
+    expect(batchNotFound.recuperacao?.acao).toBe('recarregar')
+
+    const jobUncertain = mensagemDeErro(new ErroCore('job_uncertain', ''))
+    expect(jobUncertain.titulo).toMatch(/incerto/i)
+    expect(jobUncertain.recuperacao?.acao).toBe('abrir-fila')
+
+    const notRedoable = mensagemDeErro(new ErroCore('job_not_redoable', ''))
+    expect(notRedoable.titulo).toMatch(/refazer/i)
+
+    const taskChanged = mensagemDeErro(new ErroCore('task_version_changed', ''))
+    expect(taskChanged.titulo).toMatch(/Tarefa de IA/i)
+
+    const invalidJobState = mensagemDeErro(new ErroCore('invalid_job_state', ''))
+    expect(invalidJobState.titulo).toMatch(/estado/i)
+
+    const invalidPath = mensagemDeErro(new ErroCore('invalid_path', ''))
+    expect(invalidPath.titulo).toMatch(/\.txt/i)
+
+    const invalidText = mensagemDeErro(new ErroCore('invalid_text', ''))
+    expect(invalidText.titulo).toMatch(/vazio/i)
+
+    const settingsErr = mensagemDeErro(new ErroCore('settings', ''))
+    expect(settingsErr.titulo).toMatch(/sonda de hardware/i)
+    expect(settingsErr.recuperacao?.acao).toBe('recarregar')
+
+    const exportDest = mensagemDeErro(new ErroCore('export_destination', ''))
+    expect(exportDest.recuperacao?.acao).toBe('escolher-pasta')
   })
 })

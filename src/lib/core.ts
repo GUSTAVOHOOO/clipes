@@ -2,7 +2,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { cancelReframeJobMock, configureEditorMockHooks, editorEditsMock, getMockClipInfo, resetEditorMockState } from './editorEditsMock';
 import { captionsMock, getDefaultCaptionStyleMock, resetCaptionsMockState, setDefaultCaptionStyleMock } from './captionsMock';
 import { version } from '../../package.json';
-import { configureExportMockHooks, exportMock } from '@/features/export/mock';
+import { configureExportMockHooks, exportMock, resetExportMockState } from '@/features/export/mock';
 
 /** Contrato do Corte para export, compartilhado pela revisão e pelo editor (#61).
  * `export.start` recebe estes campos mais `output` (caminho MP4 escolhido no diálogo).
@@ -293,7 +293,7 @@ const isAbsolutePathMock = (value: unknown): value is string =>
 const ytdlpMock = { installed: !componentsMissing, version: '2026.11.01' };
 let workerInstalledMock = !componentsMissing;
 uvMock.installed = !componentsMissing;
-const budgetTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('budget-test');
+const budgetTest = () => hasSearchFlag('budget-test');
 const isTranscriptTest = () => hasSearchFlag('transcript-test');
 const isHardwareCpuMode = () => hasSearchFlag('hardware-cpu');
 const isHardwareProbeFallbackMode = () => hasSearchFlag('hardware-probe-fallback');
@@ -353,15 +353,224 @@ let sourceItems: SourceMockItem[] = [
   { id: 3, path: '/test/mismatch.mp4', status: 'changed', available: false, verified: true, audio_track: 1, origin_url: null, language: 'pt', permission: { status: 'none' }, metadata: makeSourceMetadata('1800.0') },
 ];
 let urlSettingsMock = {terms_accepted:false, download_dir:'/test/downloads'};
-let jobItems = [
-  { id: 1, kind: 'preview', state: 'running', progress: 42, project: 'test-project' },
-  { id: 2, kind: 'ai:example', safety: 'paid', state: 'uncertain', progress: 0, project: 'test-project' },
-  ...(budgetTest ? [
-    { id: 3, kind: 'ai:selection', state: 'queued', progress: 0, project: 'test-project', budgetPause: 'budget_cost', taskCost: {costLabel: null} },
-    { id: 4, kind: 'ai:selection', state: 'queued', progress: 0, project: 'test-project', budgetPause: 'cost_unknown', taskCost: {costLabel: 'custo desconhecido'} },
-    { id: 5, kind: 'ai:script', state: 'completed', progress: 100, project: 'test-project', budgetPause: null, taskCost: {costLabel: 'consome a cota do plano'} },
-  ] : []),
-];
+type JobCostSummaryMock = {
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  microUsd: number;
+  audioMicroUsd: number;
+  unknownCostCalls: number;
+  planQuotaCalls: number;
+  durationMs: number;
+  costLabel: string | null;
+};
+
+type JobItemMock = {
+  id: number;
+  kind: string;
+  safety: 'local' | 'paid';
+  state: 'queued' | 'running' | 'uncertain' | 'completed' | 'cancelled' | 'failed';
+  attempts: number;
+  checkpoint: string | null;
+  progress: number;
+  project: string;
+  outcome: string | null;
+  cost: string | null;
+  batch: string | null;
+  profile: string | null;
+  budgetPause: string | null;
+  taskCost: JobCostSummaryMock | null;
+  profileCost: JobCostSummaryMock | null;
+  batchCost: JobCostSummaryMock | null;
+};
+
+function createInitialJobItems(): JobItemMock[] {
+  const selectionCost: JobCostSummaryMock = {
+    calls: 8,
+    inputTokens: 32_000,
+    outputTokens: 10_100,
+    microUsd: 420_000,
+    audioMicroUsd: 0,
+    unknownCostCalls: 0,
+    planQuotaCalls: 0,
+    durationMs: 12_000,
+    costLabel: null,
+  };
+  const unknownBatchCost: JobCostSummaryMock = {
+    calls: 4,
+    inputTokens: 18_000,
+    outputTokens: 2_400,
+    microUsd: 0,
+    audioMicroUsd: 0,
+    unknownCostCalls: 1,
+    planQuotaCalls: 0,
+    durationMs: 8_000,
+    costLabel: 'custo desconhecido',
+  };
+  const scriptCost: JobCostSummaryMock = {
+    calls: 1,
+    inputTokens: 0,
+    outputTokens: 0,
+    microUsd: 0,
+    audioMicroUsd: 0,
+    unknownCostCalls: 0,
+    planQuotaCalls: 1,
+    durationMs: 4_800,
+    costLabel: 'consome a cota do plano',
+  };
+  const packagingCost: JobCostSummaryMock = {
+    calls: 2,
+    inputTokens: 6_400,
+    outputTokens: 920,
+    microUsd: 40_000,
+    audioMicroUsd: 0,
+    unknownCostCalls: 0,
+    planQuotaCalls: 0,
+    durationMs: 3_100,
+    costLabel: null,
+  };
+
+  return [
+    {
+      id: 1,
+      kind: 'preview',
+      safety: 'local',
+      state: 'running',
+      attempts: 1,
+      checkpoint: null,
+      progress: 42,
+      project: 'demo',
+      outcome: null,
+      cost: null,
+      batch: null,
+      profile: null,
+      budgetPause: null,
+      taskCost: null,
+      profileCost: null,
+      batchCost: null,
+    },
+    {
+      id: 2,
+      kind: 'ai:selection',
+      safety: 'paid',
+      state: 'uncertain',
+      attempts: 1,
+      checkpoint: null,
+      progress: 0,
+      project: 'demo',
+      outcome: 'uncertain',
+      cost: 'unknown',
+      batch: null,
+      profile: 'legacy',
+      budgetPause: null,
+      taskCost: selectionCost,
+      profileCost: selectionCost,
+      batchCost: null,
+    },
+    {
+      id: 3,
+      kind: 'ai:selection',
+      safety: 'paid',
+      state: 'queued',
+      attempts: 1,
+      checkpoint: null,
+      progress: 0,
+      project: 'demo',
+      outcome: null,
+      cost: null,
+      batch: 'sources-3',
+      profile: 'legacy',
+      budgetPause: 'cost_unknown',
+      taskCost: unknownBatchCost,
+      profileCost: null,
+      batchCost: unknownBatchCost,
+    },
+    {
+      id: 4,
+      kind: 'ai:script',
+      safety: 'paid',
+      state: 'completed',
+      attempts: 1,
+      checkpoint: null,
+      progress: 100,
+      project: 'demo',
+      outcome: 'ok',
+      cost: 'consome a cota do plano',
+      batch: null,
+      profile: 'codex',
+      budgetPause: null,
+      taskCost: scriptCost,
+      profileCost: scriptCost,
+      batchCost: null,
+    },
+    {
+      id: 5,
+      kind: 'ai:packaging',
+      safety: 'paid',
+      state: 'failed',
+      attempts: 2,
+      checkpoint: null,
+      progress: 0,
+      project: 'demo',
+      outcome: 'invalid_json',
+      cost: '0.0400',
+      batch: null,
+      profile: 'legacy',
+      budgetPause: null,
+      taskCost: packagingCost,
+      profileCost: packagingCost,
+      batchCost: null,
+    },
+    {
+      id: 6,
+      kind: 'transcription',
+      safety: 'local',
+      state: 'completed',
+      attempts: 1,
+      checkpoint: null,
+      progress: 100,
+      project: 'demo',
+      outcome: 'ok',
+      cost: null,
+      batch: null,
+      profile: null,
+      budgetPause: null,
+      taskCost: null,
+      profileCost: null,
+      batchCost: null,
+    },
+    ...(budgetTest()
+      ? [
+          {
+            id: 7,
+            kind: 'ai:selection',
+            safety: 'paid' as const,
+            state: 'queued' as const,
+            attempts: 1,
+            checkpoint: null,
+            progress: 0,
+            project: 'demo',
+            outcome: null,
+            cost: null,
+            batch: null,
+            profile: 'legacy',
+            budgetPause: 'budget_cost',
+            taskCost: selectionCost,
+            profileCost: null,
+            batchCost: null,
+          },
+        ]
+      : []),
+  ];
+}
+
+let jobItems: JobItemMock[] = createInitialJobItems();
+let nextJobIdMock = 100;
+
+function resetJobsMockState(): void {
+  jobItems = createInitialJobItems();
+  nextJobIdMock = 100;
+}
 type TranscriptStateMock = {
   transcript: { id: number; engine: string; model: string; state: string; resume_us: number; duration_us: number; words: number } | null;
   job: { id: number; state: string; progress: number; code?: string | null } | null;
@@ -557,7 +766,42 @@ function hardwareMockDispatch(name: string, args: object): unknown {
       () => {},
     ).then(() => ({ ...effective, load_s: 5, rate, estimate_s: seconds, low_s: seconds * 0.7, high_s: seconds * 1.5, sample_start_us: 9e9, sample_us: 30e6, cached: false, measured_at: 1790000000, cpu, warnings: effective.model === 'whisper-turbo' && cpu ? ['low_ram'] : [] }));
   }
-        const options = [['whisper-turbo', 'cuda', 'int8_float16'], ['whisper-turbo', 'cuda', 'float16'], ['whisper-turbo', 'cuda', 'int8'], ['whisper-turbo', 'cpu', 'int8'], ['whisper-small', 'cpu', 'int8']].map(([model, device, compute_type]) => ({ model, device, compute_type, installed: !componentsMissing && (model === 'whisper-small' ? modelInstalledRevs.has('whisper-small') : modelInstalledRevs.has('whisper-turbo')), enabled: !(cpuFlag && device === 'cuda'), reason: cpuFlag && device === 'cuda' ? 'no_cuda' : null }));
+  if (name === 'transcription.hardware.diagnostic') {
+    if (readEstadoParam() === 'vazio') return null;
+    return {
+      key: {
+        gpu: cpuFlag ? null : 'NVIDIA GeForce RTX 3050 Laptop GPU',
+        driver: cpuFlag ? null : '616.92',
+        ct2_version: '4.5.0',
+        model: effective.model,
+        app_version: version,
+      },
+      chosen: effective,
+      verified: true,
+      attempts: cpuFlag
+        ? [{ device: 'cpu', compute_type: 'int8', batch_size: 1, ok: true }]
+        : [
+            { device: 'cuda', compute_type: 'int8_float16', batch_size: 1, ok: true },
+            { device: 'cuda', compute_type: 'int8_float16', batch_size: 8, ok: true },
+          ],
+      batch: cpuFlag
+        ? null
+        : {
+            compute_type: 'int8_float16',
+            tested: [
+              [4, true],
+              [8, true],
+            ],
+            max_safe: 8,
+            origin: 'probe',
+            measured_at: 1790000000,
+          },
+      vram_free_mib: cpuFlag ? null : 3962,
+      measured_at: 1790000000,
+      fallback_reason: fallbackCpu ? 'gpu_probe_failed' : null,
+    };
+  }
+  const options = [['whisper-turbo', 'cuda', 'int8_float16'], ['whisper-turbo', 'cuda', 'float16'], ['whisper-turbo', 'cuda', 'int8'], ['whisper-turbo', 'cpu', 'int8'], ['whisper-small', 'cpu', 'int8']].map(([model, device, compute_type]) => ({ model, device, compute_type, installed: !componentsMissing && (model === 'whisper-small' ? modelInstalledRevs.has('whisper-small') : modelInstalledRevs.has('whisper-turbo')), enabled: !(cpuFlag && device === 'cuda'), reason: cpuFlag && device === 'cuda' ? 'no_cuda' : null }));
         return {
           gpu: cpuFlag ? null : { name: 'NVIDIA GeForce RTX 3050 Laptop GPU', driver: '616.92', total_mib: 4096, free_mib: 3962 },
           ram: { total: 16 * GIB, available: 9 * GIB }, cuda: !cpuFlag, no_compatible_gpu: cpu, effective, manual: hardwareMock.manual !== null,
@@ -1125,6 +1369,7 @@ function resetSelectionMockState() {
   resetCaptionsMockState();
   resetTranslationMockState();
   seedDemoTransformarEmpacotarState();
+  resetExportMockState();
 }
 
 function ensureSelectionDemoInitialized() {
@@ -1972,7 +2217,7 @@ function selectionMockDispatch(name: string, args: object): unknown {
 export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   if (import.meta.env.VITE_CORE_MOCK === '1' && !isTauri()) {
     if (name === 'jobs.cancel' && cancelReframeJobMock((args as { id: number }).id)) return null as T;
-    if ((name.startsWith('export.') && name !== 'export.captions') || (name === 'jobs.cancel' && (args as {id: number}).id >= 5900)) return exportMock(name, args, (source, pos) => mockCorrected.has(`${source}:${pos}`)) as T;
+    if ((name.startsWith('export.') && name !== 'export.captions') || (name === 'jobs.cancel' && (args as {id: number}).id >= 5900)) return exportMock(name, args, (source, pos) => mockCorrected.has(`${source}:${pos}`), { project: getActiveProjectMock(), emitProgress: emitirProgressoMock }) as T;
     if (name === 'transcription.groq.info') {
       return {
         endpoint: 'https://api.groq.com/openai/v1/audio/transcriptions',
@@ -2011,7 +2256,38 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'transcription.groq.key.set') { groqKeyConfigured = true; return {configured:true} as T; }
     if (name === 'transcription.groq.key.remove') { groqKeyConfigured = false; return {configured:false} as T; }
     if (name === 'transcription.groq.key.test') return {ok:true} as T;
-    if (name === 'diagnostic.get') return { text: "Clipes: 1.0.0\nSistema operacional: indisponível" } as T;
+    if (name === 'diagnostic.get') {
+      const cpu = isHardwareCpuMode();
+      const encoderInfo = exportMock('export.encoder.status', {}) as { effective?: string };
+      const lines = [
+        `Clipes: ${version}`,
+        'Sistema operacional: windows',
+        'Etapa da falha: componente',
+        'Avisos e erros: [2026-11-18T17:00:00Z] encoder: fallback h264_nvenc -> libx264',
+        `Componentes: ffmpeg=${ffmpegMock.installed ? 'ok' : 'ausente'}, yt-dlp=${ytdlpMock.installed ? 'ok' : 'ausente'}, deno=${denoMock.installed ? 'ok' : 'ausente'}`,
+        `GPU / VRAM: ${cpu ? 'indisponível (CPU)' : 'NVIDIA GeForce RTX 3050 Laptop GPU (3962/4096 MiB)'}`,
+        `Encoder: ${encoderInfo.effective ?? 'libx264'} (fallback: libx264)`,
+        `Motor de transcrição: ${cpu ? 'local (whisper-small cpu int8)' : 'local (whisper-turbo cuda int8_float16)'}`,
+        `Provedor: ${providerMock.kind} (${providerMock.model || 'não configurado'})`,
+        'Calibração de tokens: fator=1.00',
+        'Versão da tarefa: selection=3',
+        'Hash do prompt: e00332d06248cff669ccb8922aae9d50190a7e30715630e566c4943941469b8a',
+        `Contexto efetivo (tokens): ${providerMock.context ?? 8192}`,
+        `Origem do contexto efetivo: ${providerMock.context ? 'user' : 'fallback'}`,
+      ];
+      return { text: lines.join('\n') } as T;
+    }
+    if (name === 'diagnostic.export') {
+      const a = args as { path?: unknown; text?: unknown };
+      const rawPath = typeof a.path === 'string' ? a.path.trim() : '';
+      if (!rawPath || !isAbsolutePathMock(rawPath) || !rawPath.toLowerCase().endsWith('.txt')) {
+        throw { code: 'invalid_path', message: 'Caminho inválido' };
+      }
+      if (typeof a.text !== 'string' || !a.text.trim()) {
+        throw { code: 'invalid_text', message: 'Texto inválido' };
+      }
+      return {} as T;
+    }
     if (name === 'projects.recent') {
       if (readEstadoParam() === 'vazio') return [] as T;
       return recentProjectsMock.map((p) => ({ ...p })) as T;
@@ -2038,6 +2314,8 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       currentProjectTouched = true;
       resetSelectionMockState();
       resetProxyMockState();
+      resetExportMockState();
+      resetJobsMockState();
       recentProjectsMock = [
         { available: true, name: created.name, path: created.path },
         ...recentProjectsMock.filter((p) => p.path !== created.path),
@@ -2074,6 +2352,8 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       currentProjectTouched = true;
       resetSelectionMockState();
       resetProxyMockState();
+      resetExportMockState();
+      resetJobsMockState();
       recentProjectsMock = [
         { available: true, name: opened.name, path: opened.path },
         ...recentProjectsMock.filter((p) => p.path !== opened.path),
@@ -2090,6 +2370,8 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       projectVetoMock = false;
       resetSelectionMockState();
       resetProxyMockState();
+      resetExportMockState();
+      resetJobsMockState();
       return null as T;
     }
     if (name === 'projects.local_only.get') {
@@ -2386,7 +2668,12 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       });
       if (handled !== undefined) return handled as T;
     }
-    if (name === 'jobs.list') return jobItems as T;
+    if (name === 'jobs.list') {
+      const active = getActiveProjectMock();
+      if (!active) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto no momento.' };
+      if (readEstadoParam() === 'vazio') return [] as T;
+      return jobItems.map((item) => ({ ...item, project: active.id })) as T;
+    }
     if (name === 'jobs.preview') {
       const active = getActiveProjectMock();
       if (!active) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
@@ -2442,14 +2729,181 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       return null as T;
     }
     if (name === 'jobs.estimate') {
-      const id = (args as { id: number }).id;
+      const id = (args as { id?: unknown }).id;
+      if (typeof id !== 'number' || !Number.isInteger(id)) {
+        throw { code: 'invalid_job', message: 'Tarefa inválida.' };
+      }
       const proxyMatch = [...proxyJobsMock.values()].find((p) => p.job === id);
       if (proxyMatch) return { safety: 'free', estimate: { kind: 'zero' } } as T;
+      const foundJob = jobItems.find((item) => item.id === id);
+      if (foundJob) {
+        if (foundJob.safety === 'local') {
+          return { safety: 'local', estimate: { kind: 'zero' } } as T;
+        }
+        if (foundJob.profile === 'codex') {
+          return { safety: 'paid', estimate: { kind: 'plan_quota' } } as T;
+        }
+        if (foundJob.cost === 'unknown') {
+          return { safety: 'paid', estimate: { kind: 'unknown' } } as T;
+        }
+        return {
+          safety: 'paid',
+          estimate: { kind: 'usd', units: 1, windows: 1, inputTokens: 9000, minMicroUsd: 300, maxMicroUsd: 1350 },
+        } as T;
+      }
       return { safety: 'paid', estimate: { kind: 'unknown' } } as T;
+    }
+    if (name === 'jobs.redo.estimate' || name === 'jobs.redo') {
+      const a = args as { id?: unknown; profileId?: unknown; confirmed?: unknown };
+      const profileId = typeof a.profileId === 'string' ? a.profileId.trim() : '';
+      if (!profileId || profileId.length > 64) {
+        throw { code: 'invalid_profile', message: 'Escolha um Perfil de Provedor.' };
+      }
+      if (typeof a.id !== 'number' || !Number.isInteger(a.id)) {
+        throw { code: 'invalid_job', message: 'Tarefa inválida.' };
+      }
+      const found = jobItems.find((item) => item.id === a.id);
+      if (!found || !found.kind.startsWith('ai:')) {
+        throw { code: 'invalid_job', message: 'Tarefa inválida.' };
+      }
+      if (found.state === 'uncertain') {
+        throw {
+          code: 'job_uncertain',
+          message: 'Esta chamada tem resultado incerto: resolva a incerteza antes de refazer com outro perfil.',
+        };
+      }
+      if (found.state !== 'completed' && found.state !== 'failed' && found.state !== 'cancelled') {
+        throw {
+          code: 'job_not_redoable',
+          message: 'Só uma unidade concluída, que falhou ou foi cancelada pode ser refeita.',
+        };
+      }
+      if (hasSearchFlag('task-version-changed')) {
+        throw {
+          code: 'task_version_changed',
+          message: 'A Tarefa de IA foi atualizada desde este job; dispare uma nova execução na tela de origem.',
+        };
+      }
+      const route = resolveSelectionRouteMock(profileId);
+      const taskKey = found.kind.slice(3).split('_')[0];
+      const active = getActiveProjectMock();
+      const veto =
+        (Boolean(active) && projectVetoMock) ||
+        Boolean(assistantMock.localOnly[taskKey]);
+      if (veto && !route.local) {
+        throw { code: 'local_only_violation', message: 'Bloqueado pelo modo Somente local.' };
+      }
+      const estimate = estimateForRoute(route, 1);
+      const leavesMachine = !route.local;
+      if (name === 'jobs.redo.estimate') {
+        return {
+          profile: route.profile,
+          paid: route.paid,
+          leavesMachine,
+          estimate,
+        } as T;
+      }
+      if (route.paid && a.confirmed !== true) {
+        throw {
+          code: 'confirmation_required',
+          message: 'Refazer com este perfil envia o texto a um Provedor pago: confirme o perfil e o custo estimado antes de começar.',
+          usage: { estimate, profile: route.profile, leavesMachine },
+        };
+      }
+      const newId = ++nextJobIdMock;
+      const newJob: JobItemMock = {
+        id: newId,
+        kind: found.kind,
+        safety: route.local ? 'local' : 'paid',
+        state: 'queued',
+        attempts: 1,
+        checkpoint: null,
+        progress: 0,
+        project: active?.id ?? found.project,
+        outcome: null,
+        cost: null,
+        batch: found.batch,
+        profile: route.profile.id,
+        budgetPause: null,
+        taskCost: found.taskCost,
+        profileCost: null,
+        batchCost: found.batchCost,
+      };
+      jobItems = [...jobItems, newJob];
+      if (active) {
+        emitirProgressoMock({
+          job: String(newId),
+          project: active.id,
+          stage: `${found.kind}:prepare`,
+          percentage: 0,
+          message: `Refazendo tarefa com ${route.profile.label}`,
+          error: null,
+        });
+      }
+      return { job: newId, profile: route.profile } as T;
+    }
+    if (name === 'jobs.result') {
+      const id = (args as { id?: unknown }).id;
+      if (typeof id !== 'number' || !Number.isInteger(id)) {
+        throw { code: 'invalid_job', message: 'Tarefa inválida.' };
+      }
+      const found = jobItems.find((item) => item.id === id);
+      if (!found) {
+        throw { code: 'invalid_job', message: 'Tarefa inválida.' };
+      }
+      if (!found.kind.startsWith('ai:')) return null as T;
+      if (found.state === 'uncertain') {
+        return { outcome: 'uncertain', code: 'interrupted', cost: 'unknown' } as T;
+      }
+      if (found.state === 'failed') {
+        return {
+          outcome: 'invalid_json',
+          code: 'invalid_json',
+          cost: found.cost ?? '0.0400',
+          calls: found.attempts,
+          usage: {
+            inputTokens: found.taskCost?.inputTokens ?? 6400,
+            outputTokens: found.taskCost?.outputTokens ?? 920,
+            calls: found.attempts,
+            costKind: 'usd',
+            microUsd: found.taskCost?.microUsd ?? 40_000,
+            durationMs: found.taskCost?.durationMs ?? 3100,
+          },
+          data: null,
+          violations: [{ code: 'invalid_json', message: 'Campo title ausente na resposta do modelo.' }],
+        } as T;
+      }
+      if (found.state === 'completed') {
+        return {
+          outcome: 'ok',
+          code: 'ok',
+          cost: found.cost ?? 'US$ 0,00',
+          calls: found.attempts,
+          usage: {
+            inputTokens: found.taskCost?.inputTokens || 4200,
+            outputTokens: found.taskCost?.outputTokens || 1150,
+            calls: found.attempts,
+            costKind: found.profile === 'codex' ? 'plan_quota' : 'usd',
+            microUsd: found.profile === 'codex' ? null : (found.taskCost?.microUsd ?? 0),
+            durationMs: found.taskCost?.durationMs ?? 4800,
+          },
+          data: {
+            blocks: [{ position: 1, title: 'Gancho inicial', narration: 'Texto sugerido do roteiro.' }],
+          },
+          violations: [],
+        } as T;
+      }
+      return null as T;
     }
     if (name === 'jobs.retry' || name === 'jobs.discard' || name === 'jobs.cancel') {
       const { id, confirmed } = args as { id: number; confirmed?: boolean };
-      if (name === 'jobs.retry' && !confirmed) throw { code: 'confirmation_required', message: 'Confirmação obrigatória' };
+      const foundJob = jobItems.find((item) => item.id === id);
+      if (name === 'jobs.retry') {
+        const local = foundJob?.safety === 'local';
+        if (!local && confirmed !== true) {
+          throw { code: 'confirmation_required', message: 'Confirmação obrigatória' };
+        }
+      }
       const active = getActiveProjectMock();
       if (name === 'jobs.cancel') {
         const activeId = active?.id ?? null;

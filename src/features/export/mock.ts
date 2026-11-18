@@ -1,35 +1,60 @@
 // Só o harness de navegador usa este módulo; o desktop sempre chama o núcleo.
+type ProgressEmitter = (evento: {
+  job: string;
+  project?: string | null;
+  stage: string;
+  percentage: number;
+  message: string;
+  error: { code: string; message: string } | null;
+}) => void;
+
+type ExportMockContext = {
+  project?: { id: string; path: string } | null;
+  emitProgress?: ProgressEmitter;
+};
+
 type Mock = {
   job: number;
   state: 'queued' | 'running' | 'completed' | 'cancelled' | 'failed';
   progress: number;
-  output: string;
   started: number;
+  output: string;
   error: { code: string; message?: string } | null;
   encoder: string | null;
   encoderFallback: { from: string; reason: string } | null;
   timer?: ReturnType<typeof setTimeout> | null;
 };
 type BatchItemMock = {
-  position: number; sourceId: number; candidateId: number; clipId: number | null; jobId: number | null;
-  title: string; filename: string; durationUs: number;
+  position: number;
+  sourceId: number;
+  runId: number;
+  candidateId: number;
+  clipId: number | null;
+  jobId: number | null;
+  title: string;
+  filename: string;
+  output: string;
+  durationUs: number;
   state: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
-  progress: number; error: { code: string; message?: string } | null;
+  progress: number;
+  error: { code: string; message?: string } | null;
+  encoder: string | null;
+  encoderFallback: { from: string; reason: string } | null;
 };
+
 type BatchMock = {
-  id: number; scope: 'source' | 'project'; sourceId: number | null; outputDir: string;
-  state: 'running' | 'completed' | 'cancelled'; started: number; items: BatchItemMock[];
+  id: number;
+  scope: 'source' | 'project';
+  sourceId: number | null;
+  outputDir: string;
+  state: 'running' | 'completed' | 'cancelled';
+  started: number;
+  items: BatchItemMock[];
+  timers: ReturnType<typeof setTimeout>[];
 };
 
 type ExportMockHooks = {
-  emitProgress?: (evento: {
-    job: string;
-    project?: string | null;
-    stage: string;
-    percentage: number;
-    message: string;
-    error: { code: string; message: string } | null;
-  }) => void;
+  emitProgress?: ProgressEmitter;
   getProjectId?: () => string | null;
 };
 
@@ -38,11 +63,12 @@ let hooks: ExportMockHooks = {};
 export function configureExportMockHooks(next: ExportMockHooks): void {
   hooks = { ...hooks, ...next };
 }
-
 let serial = 5900;
 let batchSerial = 6400;
+let v1Seeded = false;
 const jobs = new Map<number, Mock>();
 const batches = new Map<number, BatchMock>();
+
 // Encoder do #62: o mock imita o cache do núcleo (lista que passou no teste e troca manual).
 const encoder = {
   detected: false,
@@ -52,6 +78,7 @@ const encoder = {
   gpu: 'NVIDIA GeForce RTX 3050 Laptop GPU',
   detectedAt: null as number | null,
 };
+
 function readExportEstado(): string | null {
   if (typeof location === 'undefined') return null;
   const hash = location.hash ?? '';
@@ -62,6 +89,7 @@ function readExportEstado(): string | null {
   }
   return new URLSearchParams(location.search).get('estado');
 }
+
 function hasExportFlag(flag: string): boolean {
   if (typeof location === 'undefined') return false;
   if (new URLSearchParams(location.search).has(flag)) return true;
@@ -72,6 +100,7 @@ function hasExportFlag(flag: string): boolean {
 function isFallbackActive(): boolean {
   return readExportEstado() === 'fallback' || hasExportFlag('export-fallback');
 }
+
 function formatExportStatus(item: Mock) {
   if (item.state === 'running' && hasExportFlag('source-test') && Date.now() - item.started > 1500) {
     item.state = 'completed';
@@ -94,6 +123,92 @@ function formatExportStatus(item: Mock) {
     encoder: effectiveEncoder,
     encoderFallback: fallback,
   };
+}
+
+function clearBatchTimers(b: BatchMock) {
+  for (const t of b.timers) clearTimeout(t);
+  b.timers = [];
+}
+
+export function resetExportMockState(): void {
+  for (const j of jobs.values()) {
+    if (j.timer) clearTimeout(j.timer);
+  }
+  jobs.clear();
+  for (const b of batches.values()) {
+    clearBatchTimers(b);
+  }
+  batches.clear();
+  v1Seeded = false;
+}
+
+function ensureV1DemoBatchSeeded(): void {
+  if (v1Seeded || hasExportFlag('source-test')) return;
+  v1Seeded = true;
+  const id = 6399;
+  const v1Batch: BatchMock = {
+    id,
+    scope: 'project',
+    sourceId: null,
+    outputDir: '/test/exports',
+    state: 'completed',
+    started: Date.now() - 60_000,
+    timers: [],
+    items: [
+      {
+        position: 0,
+        sourceId: 4,
+        runId: 1,
+        candidateId: 102,
+        clipId: null,
+        jobId: 5891,
+        title: 'Segundo corte',
+        filename: 'Live_12_11_final-01-06m30s.mp4',
+        output: '/test/exports/Live_12_11_final-01-06m30s.mp4',
+        durationUs: 20_000_000,
+        state: 'completed',
+        progress: 100,
+        error: null,
+        encoder: 'libx264',
+        encoderFallback: { from: 'h264_nvenc', reason: 'encoder_failed' },
+      },
+      {
+        position: 1,
+        sourceId: 1,
+        runId: 1,
+        candidateId: 104,
+        clipId: null,
+        jobId: 5892,
+        title: 'Resumo final do jogo',
+        filename: 'changed-02-11m30s.mp4',
+        output: '/test/exports/changed-02-11m30s.mp4',
+        durationUs: 40_000_000,
+        state: 'failed',
+        progress: 0,
+        error: { code: 'source_changed', message: 'O arquivo da Fonte foi alterado no disco.' },
+        encoder: null,
+        encoderFallback: null,
+      },
+      {
+        position: 2,
+        sourceId: 4,
+        runId: 1,
+        candidateId: 101,
+        clipId: null,
+        jobId: 5893,
+        title: 'A virada do jogo',
+        filename: 'Live_12_11_final-03-01m30s.mp4',
+        output: '/test/exports/Live_12_11_final-03-01m30s.mp4',
+        durationUs: 50_000_000,
+        state: 'completed',
+        progress: 100,
+        error: null,
+        encoder: 'h264_nvenc',
+        encoderFallback: null,
+      },
+    ],
+  };
+  batches.set(id, v1Batch);
 }
 
 const encoderView = () => {
@@ -127,66 +242,68 @@ const encoderView = () => {
     detected_at: stale ? 1794942840 : encoder.detectedAt,
   };
 };
+
+function computeWeightedProgress(items: BatchItemMock[]): number {
+  const totalWeight = items.reduce((acc, i) => acc + Math.max(1, i.durationUs), 0) || 1;
+  const doneWeight = items.reduce((acc, i) => {
+    const pct = i.state === 'completed' || i.state === 'failed' ? 100 : i.state === 'running' ? i.progress : 0;
+    return acc + Math.max(1, i.durationUs) * pct;
+  }, 0);
+  return Math.min(100, Math.floor(doneWeight / totalWeight));
+}
+
 function batchView(b: BatchMock) {
-  if (b.state === 'running') {
-    const elapsed = Date.now() - b.started;
-    const failSecond = new URLSearchParams(location.search).has('export-batch-fail');
-    if (elapsed > 600) {
-      b.items[0].state = 'completed';
-      b.items[0].progress = 100;
-      if (b.items[1]) {
-        if (failSecond) {
-          b.items[1].state = 'failed';
-          b.items[1].progress = 0;
-          b.items[1].error = { code: 'export_failed' };
-        } else {
-          b.items[1].state = 'running';
-          b.items[1].progress = 50;
-        }
-      }
-    }
-    if (elapsed > 1400) {
-      for (const item of b.items) {
-        if (item.state === 'queued' || item.state === 'running') {
-          item.state = 'completed';
-          item.progress = 100;
-        }
-      }
-      b.state = 'completed';
-    }
-  }
   const counts = {
     total: b.items.length,
-    queued: b.items.filter(i => i.state === 'queued').length,
-    running: b.items.filter(i => i.state === 'running').length,
-    completed: b.items.filter(i => i.state === 'completed').length,
-    failed: b.items.filter(i => i.state === 'failed').length,
-    cancelled: b.items.filter(i => i.state === 'cancelled').length,
+    queued: b.items.filter((i) => i.state === 'queued').length,
+    running: b.items.filter((i) => i.state === 'running').length,
+    completed: b.items.filter((i) => i.state === 'completed').length,
+    failed: b.items.filter((i) => i.state === 'failed').length,
+    cancelled: b.items.filter((i) => i.state === 'cancelled').length,
   };
-  const totalWeight = b.items.reduce((acc, i) => acc + i.durationUs, 0) || 1;
-  const doneWeight = b.items.reduce((acc, i) => {
-    const pct = i.state === 'completed' || i.state === 'failed' ? 100 : i.state === 'running' ? i.progress : 0;
-    return acc + i.durationUs * pct;
-  }, 0);
-  const progress = Math.min(100, Math.floor(doneWeight / totalWeight));
-  const status = b.state === 'cancelled'
-    ? 'cancelled'
-    : counts.queued > 0 || counts.running > 0
-      ? 'running'
-      : counts.completed === counts.total
-        ? 'completed'
-        : counts.completed > 0
-          ? 'partial'
-          : 'failed';
-  return { id: b.id, scope: b.scope, sourceId: b.sourceId, outputDir: b.outputDir, state: b.state, status, progress, counts, items: b.items };
+  const progress = computeWeightedProgress(b.items);
+  const status =
+    b.state === 'cancelled'
+      ? 'cancelled'
+      : counts.queued > 0 || counts.running > 0
+        ? 'running'
+        : counts.completed === counts.total
+          ? 'completed'
+          : counts.completed > 0
+            ? 'partial'
+            : 'failed';
+  return {
+    id: b.id,
+    scope: b.scope,
+    sourceId: b.sourceId,
+    outputDir: b.outputDir,
+    state: b.state,
+    status,
+    progress,
+    counts,
+    items: b.items.map((i) => ({ ...i })),
+  };
 }
 
 export function exportMock(
   name: string,
   args: object,
   corrected?: (sourceId: number, position: number) => boolean,
+  ctx?: ExportMockContext,
 ): unknown {
-  const a = args as { job?: number; id?: number; output?: string; start_id?: number; end_id?: number; source_id?: number; output_dir?: string; confirmed?: boolean };
+  const a = args as {
+    job?: number;
+    id?: number;
+    project?: unknown;
+    output?: string;
+    start_id?: number;
+    end_id?: number;
+    source_id?: number;
+    output_dir?: string;
+    confirmed?: boolean;
+  };
+  const projectId = ctx?.project?.id ?? null;
+
   if (name === 'export.encoder.status') return encoderView();
   if (name === 'export.encoder.detect') {
     if (!encoderView().ffmpeg) {
@@ -207,42 +324,269 @@ export function exportMock(
     return encoderView();
   }
   if (name === 'export.settings') return { last_directory: '/test/exports' };
+
   if (name === 'export.batch.start') {
-    const params = new URLSearchParams(location.search);
-    if (params.has('export-batch-empty')) throw { code: 'export_batch_empty' };
-    if (params.has('export-batch-conflict') && !a.confirmed) throw { code: 'confirmation_required', usage: { conflicts: ['changed-01-01m30s.mp4', 'changed-02-06m30s.mp4'] } };
+    if (typeof a.project === 'string') {
+      if (ctx && ctx.project === null) {
+        throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto no momento.' };
+      }
+      if (ctx?.project && a.project !== ctx.project.path) {
+        throw { code: 'invalid_project', message: 'O Projeto não está aberto.' };
+      }
+    }
+    const estado = readExportEstado();
+    if (estado === 'vazio' || hasExportFlag('export-batch-empty')) {
+      throw { code: 'export_batch_empty', message: 'Nenhum Corte aprovado para exportar.' };
+    }
+    if (!encoderView().ffmpeg) {
+      throw { code: 'component_missing', message: 'Instale o Componente FFmpeg.' };
+    }
+    const outputDir = typeof a.output_dir === 'string' && a.output_dir.trim() ? a.output_dir.trim() : '/test/exports';
+    const temConflito = hasExportFlag('export-batch-conflict') || outputDir.toLowerCase().includes('conflit');
+    if (temConflito && !a.confirmed) {
+      throw {
+        code: 'confirmation_required',
+        message: 'Alguns arquivos já existem na pasta de saída.',
+        usage: { conflicts: ['changed-01-01m30s.mp4', 'changed-02-06m30s.mp4'] },
+      };
+    }
+
+    ensureV1DemoBatchSeeded();
     const id = ++batchSerial;
     const scope = typeof a.source_id === 'number' ? 'source' : 'project';
+    const srcId = a.source_id ?? 4;
+    const failSecond = hasExportFlag('export-batch-fail') || estado === 'parcial';
+    const useFallback = estado === 'fallback' || hasExportFlag('export-fallback');
+
     const items: BatchItemMock[] = [
-      { position: 0, sourceId: a.source_id ?? 1, candidateId: 1, clipId: null, jobId: ++serial, title: 'A virada do jogo', filename: 'changed-01-01m30s.mp4', durationUs: 2_000_000, state: 'running', progress: 40, error: null },
-      { position: 1, sourceId: a.source_id ?? 1, candidateId: 2, clipId: null, jobId: ++serial, title: 'Segundo corte', filename: 'changed-02-06m30s.mp4', durationUs: 6_000_000, state: 'queued', progress: 0, error: null },
+      {
+        position: 0,
+        sourceId: srcId,
+        runId: 1,
+        candidateId: 101,
+        clipId: null,
+        jobId: ++serial,
+        title: 'A virada do jogo',
+        filename: 'changed-01-01m30s.mp4',
+        output: `${outputDir}/changed-01-01m30s.mp4`,
+        durationUs: 2_000_000,
+        state: 'running',
+        progress: 40,
+        error: null,
+        encoder: null,
+        encoderFallback: null,
+      },
+      {
+        position: 1,
+        sourceId: srcId,
+        runId: 1,
+        candidateId: 102,
+        clipId: null,
+        jobId: ++serial,
+        title: 'Segundo corte',
+        filename: 'changed-02-06m30s.mp4',
+        output: `${outputDir}/changed-02-06m30s.mp4`,
+        durationUs: 6_000_000,
+        state: 'queued',
+        progress: 0,
+        error: null,
+        encoder: null,
+        encoderFallback: null,
+      },
     ];
-    const batch: BatchMock = { id, scope, sourceId: a.source_id ?? null, outputDir: a.output_dir ?? '/test/exports', state: 'running', started: Date.now(), items };
+
+    const batch: BatchMock = {
+      id,
+      scope,
+      sourceId: a.source_id ?? null,
+      outputDir,
+      state: 'running',
+      started: Date.now(),
+      items,
+      timers: [],
+    };
     batches.set(id, batch);
-    return batchView(batch);
+
+    const view0 = batchView(batch);
+    ctx?.emitProgress?.({
+      job: `export-batch-${id}`,
+      project: projectId,
+      stage: 'export_batch',
+      percentage: view0.progress,
+      message: 'Exportando lote de Cortes',
+      error: null,
+    });
+    if (items[0].jobId !== null) {
+      ctx?.emitProgress?.({
+        job: String(items[0].jobId),
+        project: projectId,
+        stage: 'export',
+        percentage: 40,
+        message: 'Exportando Corte 1',
+        error: null,
+      });
+    }
+
+    const t1 = setTimeout(() => {
+      if (batch.state !== 'running') return;
+      batch.items[0].state = 'completed';
+      batch.items[0].progress = 100;
+      batch.items[0].encoder = useFallback ? 'libx264' : 'h264_nvenc';
+      batch.items[0].encoderFallback = useFallback
+        ? { from: 'h264_nvenc', reason: 'encoder_failed' }
+        : null;
+
+      if (batch.items[0].jobId !== null) {
+        ctx?.emitProgress?.({
+          job: String(batch.items[0].jobId),
+          project: projectId,
+          stage: 'complete',
+          percentage: 100,
+          message: 'Corte exportado',
+          error: null,
+        });
+      }
+
+      if (batch.items[1]) {
+        if (failSecond) {
+          batch.items[1].state = 'failed';
+          batch.items[1].progress = 0;
+          batch.items[1].error = { code: 'export_failed', message: 'Falha ao renderizar no FFmpeg.' };
+          if (batch.items[1].jobId !== null) {
+            ctx?.emitProgress?.({
+              job: String(batch.items[1].jobId),
+              project: projectId,
+              stage: 'failed',
+              percentage: 0,
+              message: 'Falha na exportação do Corte',
+              error: { code: 'export_failed', message: 'Falha ao renderizar no FFmpeg.' },
+            });
+          }
+        } else {
+          batch.items[1].state = 'running';
+          batch.items[1].progress = 50;
+          if (batch.items[1].jobId !== null) {
+            ctx?.emitProgress?.({
+              job: String(batch.items[1].jobId),
+              project: projectId,
+              stage: 'export',
+              percentage: 50,
+              message: 'Exportando Corte 2',
+              error: null,
+            });
+          }
+        }
+      }
+
+      const midView = batchView(batch);
+      if (failSecond) {
+        batch.state = 'completed';
+        ctx?.emitProgress?.({
+          job: `export-batch-${id}`,
+          project: projectId,
+          stage: 'export_batch_complete',
+          percentage: 100,
+          message: 'Lote de export concluído com falhas',
+          error: null,
+        });
+      } else {
+        ctx?.emitProgress?.({
+          job: `export-batch-${id}`,
+          project: projectId,
+          stage: 'export_batch',
+          percentage: midView.progress,
+          message: 'Exportando lote de Cortes',
+          error: null,
+        });
+      }
+    }, 120);
+
+    const t2 = setTimeout(() => {
+      if (batch.state !== 'running') return;
+      for (const item of batch.items) {
+        if (item.state === 'queued' || item.state === 'running') {
+          item.state = 'completed';
+          item.progress = 100;
+          item.encoder = useFallback ? 'libx264' : 'h264_nvenc';
+          item.encoderFallback = useFallback
+            ? { from: 'h264_nvenc', reason: 'encoder_failed' }
+            : null;
+          if (item.jobId !== null) {
+            ctx?.emitProgress?.({
+              job: String(item.jobId),
+              project: projectId,
+              stage: 'complete',
+              percentage: 100,
+              message: 'Corte exportado',
+              error: null,
+            });
+          }
+        }
+      }
+      batch.state = 'completed';
+      ctx?.emitProgress?.({
+        job: `export-batch-${id}`,
+        project: projectId,
+        stage: 'export_batch_complete',
+        percentage: 100,
+        message: 'Lote de export concluído',
+        error: null,
+      });
+    }, 260);
+
+    batch.timers.push(t1, t2);
+    return view0;
   }
+
   if (name === 'export.batch.status') {
+    ensureV1DemoBatchSeeded();
     const b = batches.get(a.id ?? -1);
     if (!b) throw { code: 'batch_not_found' };
     return batchView(b);
   }
+
   if (name === 'export.batch.list') {
+    if (readExportEstado() === 'vazio') return [];
+    ensureV1DemoBatchSeeded();
     const all = [...batches.values()].reverse();
-    const filtered = typeof a.source_id === 'number' ? all.filter(b => b.scope === 'source' && b.sourceId === a.source_id) : all;
+    const filtered = typeof a.source_id === 'number' ? all.filter((b) => b.scope === 'source' && b.sourceId === a.source_id) : all;
     return filtered.map(batchView);
   }
+
   if (name === 'export.batch.cancel') {
+    ensureV1DemoBatchSeeded();
     const b = batches.get(a.id ?? -1);
     if (!b) throw { code: 'batch_not_found' };
+    clearBatchTimers(b);
     b.state = 'cancelled';
     for (const item of b.items) {
       if (item.state === 'queued' || item.state === 'running') {
         item.state = 'cancelled';
         item.progress = 0;
+        if (item.jobId !== null) {
+          ctx?.emitProgress?.({
+            job: String(item.jobId),
+            project: projectId,
+            stage: 'failed',
+            percentage: 0,
+            message: 'Exportação cancelada',
+            error: { code: 'cancelled', message: 'Exportação cancelada.' },
+          });
+        }
       }
     }
-    return batchView(b);
+    const cancelledView = batchView(b);
+    ctx?.emitProgress?.({
+      job: `export-batch-${b.id}`,
+      project: projectId,
+      stage: 'export_batch_cancelled',
+      percentage: cancelledView.progress,
+      message: 'Lote de export cancelado',
+      error: null,
+    });
+    return cancelledView;
   }
+
   if (name === 'export.start') {
     if (!a.start_id || !a.end_id) throw { code: 'export_bounds' };
     if (hasExportFlag('export-exists')) throw { code: 'export_exists' };
@@ -270,8 +614,9 @@ export function exportMock(
       timer: null,
     };
     jobs.set(job, item);
-    const project = hooks.getProjectId?.() ?? null;
-    hooks.emitProgress?.({
+    const emit = ctx?.emitProgress ?? hooks.emitProgress;
+    const project = projectId ?? hooks.getProjectId?.() ?? null;
+    emit?.({
       job: String(job),
       project,
       stage: 'export',
@@ -282,13 +627,13 @@ export function exportMock(
     const finishDelay = hasExportFlag('source-test') ? 1500 : 35;
     item.timer = setTimeout(() => {
       item.timer = null;
-      if (item.state === 'cancelled') return;
+      if (item.state !== 'running') return;
       const fallbackActive = isFallbackActive();
       item.state = 'completed';
       item.progress = 100;
       item.encoder = fallbackActive ? 'libx264' : 'h264_nvenc';
       item.encoderFallback = fallbackActive ? { from: 'h264_nvenc', reason: 'encoder_failed' } : null;
-      hooks.emitProgress?.({
+      emit?.({
         job: String(job),
         project,
         stage: 'complete',
@@ -313,9 +658,10 @@ export function exportMock(
     }
     item.state = 'cancelled';
     item.progress = 0;
-    hooks.emitProgress?.({
+    const emit = ctx?.emitProgress ?? hooks.emitProgress;
+    emit?.({
       job: String(item.job),
-      project: hooks.getProjectId?.() ?? null,
+      project: projectId ?? hooks.getProjectId?.() ?? null,
       stage: 'failed',
       percentage: 0,
       message: 'Exportação cancelada.',

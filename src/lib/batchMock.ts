@@ -287,11 +287,13 @@ export function batchMockDispatch(
     message: string,
     error: { code: string; message: string } | null = null,
   ) => {
+    const done = b.items.filter((i) => i.state === 'completed' || i.state === 'cancelled').length;
+    const pct = b.items.length > 0 ? Math.round((done / b.items.length) * 100) : 0;
     emitProgress?.({
       job: `batch-${b.id}`,
       project: projectId,
       stage,
-      percentage: 0,
+      percentage: pct,
       message,
       error,
     });
@@ -487,6 +489,9 @@ export function batchMockDispatch(
     item.error = null;
     item.progress = 10;
     emit(b, 'batch:item', 'Item retomado');
+    if (b.items.every((i) => i.state === 'completed' || i.state === 'cancelled')) {
+      emit(b, 'batch:completed', 'Lote concluído');
+    }
     return view(b);
   }
   return undefined;

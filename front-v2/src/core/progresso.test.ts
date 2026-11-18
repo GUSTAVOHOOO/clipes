@@ -363,4 +363,44 @@ describe('Fila de jobs sobre core-progress (progresso.ts)', () => {
     expect(resSalv.current.estado).toBe('ocioso')
     expect(resSalv.current.erro).toBeUndefined()
   })
+
+  it('sincronizarExterno hidrata jobs em voo para FechamentoJanela sem inventar ETA (#303) e limpa ao fechar Projeto', () => {
+    let t = 5000
+    const fila = criarFila(() => 'canal-a', () => t)
+
+    // Evento global ao vivo deve permanecer após limpar externos de Projeto
+    fila.aplicar(evento({ job: 'ffmpeg', project: null, stage: 'download', percentage: 30 }))
+
+    // Hidrata jobs ativos após reload (sem passar por 0% nesta sessão)
+    fila.sincronizarExterno?.([
+      {
+        id: '11',
+        etapa: 'export',
+        percentual: 45,
+        mensagem: 'Exportando Corte',
+        estado: 'rodando',
+      },
+      {
+        id: 'export-batch-5',
+        etapa: 'export_batch',
+        percentual: 60,
+        mensagem: 'Exportando lote',
+        estado: 'rodando',
+      },
+    ])
+
+    const job11 = fila.jobs().find((j) => j.id === '11')
+    expect(job11).toMatchObject({ id: '11', etapa: 'export', percentual: 45, estado: 'rodando' })
+    expect(job11?.etaMs).toBeUndefined()
+    expect(fila.jobs().find((j) => j.id === 'export-batch-5')?.estado).toBe('rodando')
+
+    // Mesmo se progredir depois via core-progress, não inventa ETA porque não foi visto desde 0%
+    t = 15_000
+    fila.aplicar(evento({ job: '11', project: 'canal-a', stage: 'export', percentage: 70 }))
+    expect(fila.jobs().find((j) => j.id === '11')?.etaMs).toBeUndefined()
+
+    // Ao fechar Projeto, limparProjeto remove jobs de Projeto mantendo o global ao vivo
+    fila.limparProjeto?.()
+    expect(fila.jobs().map((j) => j.id)).toEqual(['ffmpeg'])
+  })
 })
