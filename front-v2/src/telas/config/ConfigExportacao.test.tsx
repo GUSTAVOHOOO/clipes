@@ -327,4 +327,27 @@ describe('ConfigExportacao (#/config/exportacao)', () => {
       expect(chamarMock).toHaveBeenCalledWith('export.encoder.set', { encoder: null })
     })
   })
+
+  it('UI-10: Status atual e Escolha de encoder são headings h2 reais', async () => {
+    chamarMock.mockResolvedValue({
+      ffmpeg: true,
+      detected: true,
+      stale: false,
+      passed: ['h264_nvenc', 'libx264'],
+      selected: 'h264_nvenc',
+      manual: null,
+      effective: 'h264_nvenc',
+      gpu: 'RTX 3050',
+      detected_at: 1794942840,
+    })
+
+    render(envolver(<ConfigExportacao projetoAberto={null} />))
+
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Status atual' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Escolha de encoder' }),
+    ).toBeInTheDocument()
+  })
 })

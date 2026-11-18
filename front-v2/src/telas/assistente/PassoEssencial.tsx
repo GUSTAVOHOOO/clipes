@@ -347,9 +347,9 @@ export function PassoEssencial({ aoAvancar, aoPular, pulando }: PassoEssencialPr
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex flex-col gap-3 rounded-area bg-area p-4">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-titulo font-forte text-t1">
+          <h1 className="text-titulo font-forte text-t1">
             Passo 1: Essencial para transcrever e cortar
-          </h2>
+          </h1>
           {ffmpegPronto && !motorPronto && (
             <Status tom="aviso">Parcial · FFmpeg pronto</Status>
           )}
@@ -433,7 +433,7 @@ export function PassoEssencial({ aoAvancar, aoPular, pulando }: PassoEssencialPr
           )}
 
           <details className="text-pequeno text-t3">
-            <summary className="foco w-fit cursor-pointer rounded-controle hover:text-t2">
+            <summary className="foco min-h-6 w-fit cursor-pointer rounded-controle py-[3px] hover:text-t2">
               Já tenho FFmpeg instalado no computador
             </summary>
             <div className="mt-2 flex flex-wrap items-end gap-2">
@@ -495,7 +495,7 @@ export function PassoEssencial({ aoAvancar, aoPular, pulando }: PassoEssencialPr
                 onClick={() => {
                   window.location.hash = '#/config/componentes'
                 }}
-                className="foco cursor-pointer rounded-controle border-0 bg-transparent px-1 text-pequeno text-t2 underline hover:text-t1"
+                className="foco inline-flex min-h-6 cursor-pointer items-center rounded-controle border-0 bg-transparent px-1 text-pequeno text-t2 underline hover:text-t1"
               >
                 Mudar pasta de instalação
               </button>
@@ -543,7 +543,7 @@ export function PassoEssencial({ aoAvancar, aoPular, pulando }: PassoEssencialPr
               Testar meu hardware
             </Botao>
             <details className="ml-auto text-pequeno text-t3">
-              <summary className="foco w-fit cursor-pointer rounded-controle hover:text-t2">
+              <summary className="foco min-h-6 w-fit cursor-pointer rounded-controle py-[3px] hover:text-t2">
                 Detalhes técnicos
               </summary>
               <div className="mt-2 flex flex-col gap-1 rounded-controle bg-chao p-2 font-mono text-micro text-t2">
