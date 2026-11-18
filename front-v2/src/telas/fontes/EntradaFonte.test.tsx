@@ -277,7 +277,9 @@ describe('<EntradaFonte>', () => {
 
     const dialogoTermos = await screen.findByRole('alertdialog')
     expect(dialogoTermos).toHaveTextContent(/Termos do YouTube/i)
-    expect(within(dialogoTermos).getByRole('button', { name: 'Cancelar' })).toHaveFocus()
+    await waitFor(() => {
+      expect(within(dialogoTermos).getByRole('button', { name: 'Cancelar' })).toHaveFocus()
+    })
     expect(chamarMock).not.toHaveBeenCalledWith('sources.url.download', expect.anything())
 
     await user.click(within(dialogoTermos).getByRole('button', { name: /Aceitar e baixar/i }))
