@@ -4,8 +4,19 @@ import { Checkbox as C } from '@base-ui/react/checkbox'
 import { Slider as Sl } from '@base-ui/react/slider'
 import { Switch as Sw } from '@base-ui/react/switch'
 import { Check, Minus } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { isValidElement, type ReactNode } from 'react'
 import { cn } from '@/lib/cn'
+
+function semRotuloVisivel(node: ReactNode): boolean {
+  if (node == null || typeof node === 'boolean') return true
+  if (typeof node === 'string' || typeof node === 'number') return String(node).trim().length === 0
+  if (Array.isArray(node)) return node.every(semRotuloVisivel)
+  if (isValidElement<{ className?: unknown }>(node)) {
+    const cls = typeof node.props.className === 'string' ? node.props.className.split(/\s+/) : []
+    return cls.includes('sr-only')
+  }
+  return false
+}
 
 type CheckboxProps = {
   marcado: boolean | 'misto'
@@ -16,8 +27,15 @@ type CheckboxProps = {
 }
 
 export function Checkbox({ marcado, aoMudar, children, desabilitado, className }: CheckboxProps) {
+  const soLeitor = semRotuloVisivel(children)
   return (
-    <label className={cn('inline-flex min-h-6 cursor-pointer items-center gap-2 text-base text-t2 select-none has-data-disabled:pointer-events-none has-data-disabled:opacity-40', className)}>
+    <label
+      className={cn(
+        'inline-flex min-h-6 min-w-6 cursor-pointer items-center gap-2 text-base text-t2 select-none has-data-disabled:pointer-events-none has-data-disabled:opacity-40',
+        soLeitor && 'justify-center',
+        className,
+      )}
+    >
       <C.Root
         checked={marcado === true}
         indeterminate={marcado === 'misto'}

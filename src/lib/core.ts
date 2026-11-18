@@ -1184,6 +1184,48 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       setTranslationMockPermission(id, normalized);
       return sourceItems.find(item => item.id === id) as T;
     }
+    if (name === 'sources.delete') {
+      const active = getActiveProjectMock();
+      if (!active) {
+        throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto no momento.' };
+      }
+      const requestedProject = (args as { project?: unknown }).project;
+      if (requestedProject !== undefined && requestedProject !== null) {
+        if (typeof requestedProject !== 'string' || !requestedProject.trim() || requestedProject !== active.path) {
+          throw { code: 'invalid_project', message: 'O Projeto informado não corresponde ao Projeto aberto.' };
+        }
+      }
+      const id = (args as { id?: unknown }).id;
+      if (typeof id !== 'number' || !Number.isInteger(id)) {
+        throw { code: 'source_missing', message: 'Fonte não encontrada.' };
+      }
+      const existing = sourceItems.find((item) => item.id === id);
+      if (!existing) {
+        throw { code: 'source_missing', message: 'Fonte não encontrada.' };
+      }
+      const st = transcriptsBySource.get(id);
+      const jobAtivo =
+        (st?.job && ['queued', 'running', 'uncertain'].includes(st.job.state)) ||
+        activeSourceJobs.has(`source-hash-${id}`) ||
+        activeSourceJobs.has(`source-relocate-${id}`);
+      if (jobAtivo) {
+        throw { code: 'source_busy', message: 'Há uma tarefa ativa ou incerta vinculada a esta Fonte.' };
+      }
+      sourceItems = sourceItems.filter((item) => item.id !== id);
+      transcriptsBySource.delete(id);
+      energyMeasuredSources.delete(id);
+      return {
+        deleted: true,
+        id,
+        transcripts: st?.transcript ? 1 : 0,
+        cuts: 0,
+        selection_runs: 0,
+        clip_edits: 0,
+        batch_items: 0,
+        jobs: 0,
+        jobs_kept_for_costs: st?.transcript?.engine === 'groq' ? 1 : 0,
+      } as T;
+    }
 
     if (name === 'sources.hash' || name === 'sources.relocate') {
       requireProjectMock(args);
