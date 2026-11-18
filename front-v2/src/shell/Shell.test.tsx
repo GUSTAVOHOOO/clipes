@@ -376,4 +376,79 @@ describe('Shell', () => {
     fireEvent.keyDown(window, { key: '?', shiftKey: true })
     expect(await screen.findByRole('dialog', { name: /Atalhos de teclado/i })).toBeInTheDocument()
   })
+
+  it('semPaddingConteudo remove overflow-auto e p-4 do <main> e aceita statusSalvamento na BarraStatus', async () => {
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'projects.current') return { id: 'demo', name: 'Demo', path: '/projetos/Demo.clipes' }
+      if (cmd === 'projects.local_only.get') return { open: true, enabled: false }
+      if (cmd === 'projects.recent') return []
+      return null
+    })
+
+    render(
+      envolver(
+        <Shell semPaddingConteudo statusSalvamento={<span>Alterações pendentes…</span>}>
+          <div>Palco do Editor</div>
+        </Shell>,
+      ),
+    )
+
+    const main = document.querySelector('main')!
+    expect(main).not.toHaveClass('overflow-auto')
+    expect(main).not.toHaveClass('p-4')
+
+    const footer = document.querySelector('footer')!
+    expect(footer).toHaveTextContent('Alterações pendentes…')
+  })
+
+  it('editor_save_failed exibe role="alert" acionável na BarraStatus e dialog de recuperação sem duplicar app-close-requested', async () => {
+    const user = userEvent.setup()
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'projects.current') return { id: 'demo', name: 'Demo', path: '/projetos/Demo.clipes' }
+      if (cmd === 'projects.local_only.get') return { open: true, enabled: false }
+      if (cmd === 'projects.recent') return []
+      if (cmd === 'editor.flush') return null
+      return null
+    })
+
+    const fila = criarFila(() => 'demo')
+    render(
+      envolver(
+        <Shell fila={fila} statusSalvamento={<span>Salvo</span>}>
+          <div>Editor</div>
+        </Shell>,
+      ),
+    )
+
+    await screen.findByRole('button', { name: /Demo/i })
+
+    fila.aplicar({
+      job: 'editor',
+      project: null,
+      stage: 'editor_save_failed',
+      percentage: 0,
+      message: 'Não foi possível salvar o Corte.',
+      error: { code: 'project_write', message: 'Sem espaço no disco' },
+    })
+
+    const footer = document.querySelector('footer')!
+    const alertaFooter = await waitFor(() => {
+      const el = footer.querySelector('[role="alert"]')
+      expect(el).not.toBeNull()
+      return el as HTMLElement
+    })
+    expect(alertaFooter).toHaveTextContent(/Falha ao salvar/i)
+
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent(/gravar as edições no disco/i)
+
+    await user.click(screen.getByRole('button', { name: 'Tentar salvar novamente' }))
+    await waitFor(() => {
+      expect(chamarMock).toHaveBeenCalledWith('editor.flush', {})
+    })
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+      expect(footer.querySelector('[role="alert"]')).toBeNull()
+    })
+  })
 })

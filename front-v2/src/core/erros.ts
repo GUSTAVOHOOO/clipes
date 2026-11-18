@@ -94,6 +94,21 @@ const entradaIdiomaBloqueado: MensagemErro = {
   titulo: 'O idioma não pode ser alterado porque a Transcrição desta Fonte já começou ou foi concluída.',
 }
 
+const entradaPreviaFalhou: MensagemErro = {
+  titulo: 'Não foi possível preparar a prévia rápida deste trecho.',
+  recuperacao: { rotulo: 'Tentar gerar prévia novamente', acao: 'recarregar' },
+}
+
+const entradaRenderLegendaFalhou: MensagemErro = {
+  titulo: 'Não foi possível renderizar o vídeo com as legendas atuais.',
+  recuperacao: { rotulo: 'Abrir Relatos', rota: '#/relatos' },
+}
+
+const entradaCorteExportAlterado: MensagemErro = {
+  titulo: 'As bordas ou a aprovação deste Corte mudaram.',
+  recuperacao: { rotulo: 'Voltar para Cortes' },
+}
+
 /** Tabela central de tradução `CoreError.code` → mensagem humana e recuperação (§6). */
 export const TABELA_ERROS: Record<string, MensagemErro> = {
   project_not_open: {
@@ -313,6 +328,85 @@ export const TABELA_ERROS: Record<string, MensagemErro> = {
   selection_windows_failed: {
     titulo: 'Algumas Janelas da seleção falharam; refaça-as para completar a execução.',
     recuperacao: { rotulo: 'Refazer com outro Perfil', acao: 'refazer-outro-perfil' },
+  },
+  invalid_clip: {
+    titulo: 'Este Corte não está aberto ou não foi encontrado no Editor.',
+  },
+  unknown_sentence_id: {
+    titulo: 'A Frase selecionada não foi encontrada na Transcrição.',
+  },
+  invalid_range: {
+    titulo: 'As bordas precisam respeitar os limites válidos da Fonte e do Corte.',
+  },
+  clip_too_long: {
+    titulo: 'O Corte ultrapassa a duração máxima de 10 minutos para prévia e edição.',
+  },
+  invalid_silence_threshold: {
+    titulo: 'O limite de detecção de silêncio deve ficar entre 300 ms e 2000 ms.',
+  },
+  invalid_silence_interval: {
+    titulo: 'O intervalo de silêncio selecionado não é válido para este Corte.',
+  },
+  invalid_crop: {
+    titulo: 'As coordenadas ou o painel de enquadramento são inválidos.',
+  },
+  reframe_not_found: {
+    titulo: 'A análise de reenquadramento automático não foi encontrada.',
+  },
+  translation_permission_required: {
+    titulo: 'A Permissão desta Fonte não autoriza tradução. Registre o escopo de tradução na Fonte para liberar este recurso.',
+  },
+  language_required: {
+    titulo: 'O idioma do Corte não é claro. Escolha o idioma de destino: PT-BR ou EN.',
+  },
+  translation_missing: {
+    titulo: 'Gere uma tradução para este Corte antes de selecionar ou editar a faixa traduzida.',
+  },
+  translation_empty: {
+    titulo: 'O texto da legenda traduzida não pode ficar vazio.',
+  },
+  invalid_audio_kind: {
+    titulo: 'Tipo de áudio inválido: escolha música ou efeito sonoro (SFX).',
+  },
+  invalid_audio: {
+    titulo: 'Não foi possível ler este arquivo de áudio. Verifique se o formato é válido.',
+  },
+  audio_asset_missing: {
+    titulo: 'Uma trilha sonora ou efeito sonoro deste Corte não foi encontrado na pasta do Projeto.',
+    recuperacao: { rotulo: 'Abrir aba Áudio e SFX' },
+  },
+  attribution_required: {
+    titulo: 'Informe o texto de atribuição exigido pela licença CC-BY.',
+  },
+  sfx_not_found: {
+    titulo: 'O efeito sonoro selecionado não foi encontrado neste Corte.',
+  },
+  block_not_found: {
+    titulo: 'O bloco de Narração selecionado não foi encontrado.',
+  },
+  invalid_montage: {
+    titulo: 'Os tempos da montagem da Narração são inválidos para este Corte.',
+  },
+  proxy_not_ready: entradaPreviaFalhou,
+  proxy_failed: entradaPreviaFalhou,
+  export_exists: {
+    titulo: 'Já existe um arquivo com esse nome na pasta escolhida.',
+  },
+  export_destination: {
+    titulo: 'Escolha uma pasta existente e um nome terminado em .mp4.',
+  },
+  export_glyph_missing: {
+    titulo: 'A fonte da legenda não possui alguns caracteres usados no texto.',
+    recuperacao: { rotulo: 'Editar texto na Transcrição' },
+  },
+  export_ass_missing: entradaRenderLegendaFalhou,
+  export_font_missing: entradaRenderLegendaFalhou,
+  export_failed: entradaRenderLegendaFalhou,
+  export_bounds: entradaCorteExportAlterado,
+  export_candidate: entradaCorteExportAlterado,
+  project_write: {
+    titulo: 'Não foi possível gravar as edições no disco. Verifique o espaço disponível.',
+    recuperacao: { rotulo: 'Abrir Armazenamento', rota: '#/config/componentes' },
   },
 }
 

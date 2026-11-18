@@ -1,8 +1,8 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { editorEditsMock } from './editorEditsMock';
-import { captionsMock, getDefaultCaptionStyleMock, setDefaultCaptionStyleMock } from './captionsMock';
+import { cancelReframeJobMock, configureEditorMockHooks, editorEditsMock, getMockClipInfo, resetEditorMockState } from './editorEditsMock';
+import { captionsMock, getDefaultCaptionStyleMock, resetCaptionsMockState, setDefaultCaptionStyleMock } from './captionsMock';
 import { version } from '../../package.json';
-import { exportMock } from '@/features/export/mock';
+import { configureExportMockHooks, exportMock } from '@/features/export/mock';
 
 /** Contrato do Corte para export, compartilhado pela revisão e pelo editor (#61).
  * `export.start` recebe estes campos mais `output` (caminho MP4 escolhido no diálogo).
@@ -12,7 +12,7 @@ import { batchMockDispatch } from './batchMock';
 import { packagingMockDispatch, setPackagingMockPermission } from './packagingMock';
 import { thumbnailMockDispatch } from './thumbnailMock';
 import { scriptMockDispatch } from './scriptMock';
-import { translationMockDispatch, setTranslationMockPermission } from './translationMock';
+import { configureTranslationMockHooks, resetTranslationMockState, translationMockDispatch, setTranslationMockPermission } from './translationMock';
 
 export type EventoProgressoMock = {
   job: string;
@@ -582,11 +582,41 @@ type MockSelectionRun = {
   timers: ReturnType<typeof setTimeout>[];
 };
 
-let nextRunIdMock = 2;
+let nextRunIdMock = 3;
 let nextCandidateIdMock = 300;
 let nextWindowJobIdMock = 200;
 const selectionRuns = new Map<number, MockSelectionRun>();
 const selectionMock = { run: null as null | { id: number; ticks: number; state: string; cancelled: boolean; redone: boolean; videoKind: string; revision?: number; redoProfile?: string } };
+
+configureEditorMockHooks({
+  emitProgress: emitirProgressoMock,
+  getProjectId: () => getActiveProjectMock()?.id ?? null,
+  isTransformedCandidate: (candidateId) => {
+    if (typeof candidateId !== 'number') return false;
+    const hit = findRunAndCandidateById(candidateId);
+    return hit?.run.videoKind === 'transformed';
+  },
+  hasNarrationAudio: (candidateId) => {
+    if (typeof candidateId !== 'number') return false;
+    return (narrationGenerated.get(candidateId)?.length ?? 0) > 0;
+  },
+  getTranscriptIdForSource: (sourceId) => transcriptsBySource.get(sourceId)?.transcript?.id ?? sourceId,
+});
+
+configureTranslationMockHooks({
+  emitProgress: emitirProgressoMock,
+  getProjectId: () => getActiveProjectMock()?.id ?? null,
+  getClipSource: (clipId) => {
+    const info = getMockClipInfo(clipId);
+    return info ? { sourceId: info.sourceId, transcriptId: info.transcriptId } : null;
+  },
+  getSourcePermission: (sourceId) => sourceItems.find((s) => s.id === sourceId)?.permission ?? null,
+});
+
+configureExportMockHooks({
+  emitProgress: emitirProgressoMock,
+  getProjectId: () => getActiveProjectMock()?.id ?? null,
+});
 
 function buildCandidatesForRevision(
   revision: number,
@@ -717,6 +747,68 @@ function createInitialDemoRun(): MockSelectionRun {
   };
 }
 
+function createInitialTransformedRun(): MockSelectionRun {
+  const windows: MockSelectionWindow[] = [0, 1].map((index) => ({
+    index,
+    firstId: index * 90 + 1,
+    lastId: index * 90 + 90,
+    startUs: index * 720_000_000,
+    endUs: index * 720_000_000 + 900_000_000,
+    jobId: 20 + index,
+    state: 'completed',
+    code: null,
+    resetAtMs: null,
+    profile: 'forte',
+    redoFailed: null,
+  }));
+  const candidates = buildCandidatesForRevision(1, 'transformed', 'forte', true, 200);
+  return {
+    id: 2,
+    sourceId: 4,
+    transcriptId: 4,
+    state: 'completed',
+    videoKind: 'transformed',
+    minUs: 20_000_000,
+    maxUs: 60_000_000,
+    planState: 'full',
+    profile: 'forte',
+    revision: 1,
+    revisions: [1],
+    activeRevision: 1,
+    budgetPause: null,
+    createdAt: '2026-11-14T12:00:00Z',
+    ticks: 2,
+    cancelled: false,
+    redone: false,
+    energyMeasured: true,
+    chatAvailable: true,
+    parcialResolved: false,
+    windows,
+    candidatesByRevision: new Map([[1, candidates]]),
+    decisions: [
+      {
+        candStart: 10,
+        candEnd: 14,
+        kind: 'approved',
+        beforeStart: 10,
+        beforeEnd: 14,
+        afterStart: 10,
+        afterEnd: 14,
+      },
+      {
+        candStart: 40,
+        candEnd: 41,
+        kind: 'approved',
+        beforeStart: 40,
+        beforeEnd: 41,
+        afterStart: 40,
+        afterEnd: 41,
+      },
+    ],
+    timers: [],
+  };
+}
+
 function clearSelectionTimers() {
   for (const r of selectionRuns.values()) {
     for (const t of r.timers) clearTimeout(t);
@@ -727,17 +819,23 @@ function clearSelectionTimers() {
 function resetSelectionMockState() {
   clearSelectionTimers();
   selectionRuns.clear();
-  nextRunIdMock = 2;
+  nextRunIdMock = 3;
   nextCandidateIdMock = 300;
   nextWindowJobIdMock = 200;
   if (!hasSearchFlag('source-test')) {
     selectionRuns.set(1, createInitialDemoRun());
+    selectionRuns.set(2, createInitialTransformedRun());
   }
+  resetEditorMockState();
+  resetCaptionsMockState();
+  resetTranslationMockState();
 }
 
 function ensureSelectionDemoInitialized() {
   if (!hasSearchFlag('source-test') && selectionRuns.size === 0) {
     selectionRuns.set(1, createInitialDemoRun());
+    selectionRuns.set(2, createInitialTransformedRun());
+    resetEditorMockState();
   }
 }
 
@@ -1335,9 +1433,10 @@ function selectionMockDispatch(name: string, args: object): unknown {
     if (!st?.transcript && !isTranscriptTest()) {
       throw { code: 'transcript_missing', message: 'Transcrição não encontrada.' };
     }
+    const ordemDemo = (r: MockSelectionRun) => (r.id >= 3 ? 1000 + r.id : r.id === 1 ? 2 : 1);
     return [...selectionRuns.values()]
       .filter((r) => r.sourceId === sid)
-      .sort((a, b) => b.id - a.id)
+      .sort((a, b) => ordemDemo(b) - ordemDemo(a))
       .map(formatRunHead);
   }
 
@@ -1572,6 +1671,7 @@ function selectionMockDispatch(name: string, args: object): unknown {
 
 export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   if (import.meta.env.VITE_CORE_MOCK === '1' && !isTauri()) {
+    if (name === 'jobs.cancel' && cancelReframeJobMock((args as { id: number }).id)) return null as T;
     if ((name.startsWith('export.') && name !== 'export.captions') || (name === 'jobs.cancel' && (args as {id: number}).id >= 5900)) return exportMock(name, args, (source, pos) => mockCorrected.has(`${source}:${pos}`)) as T;
     if (name === 'transcription.groq.info') {
       return {
@@ -1729,7 +1829,9 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       const a = args as { scope?: string; source_id?: number; candidate_id?: number; start_id?: number; end_id?: number };
       const scope = a.scope ?? 'single';
       const ack = channelProfileMock.directMonetizationAck;
-      const latestRun = !hasSearchFlag('source-test') ? [...selectionRuns.values()].at(-1) : undefined;
+      const latestRun = !hasSearchFlag('source-test')
+        ? ([...selectionRuns.values()].filter((r) => r.id >= 3).at(-1) ?? selectionRuns.get(1))
+        : undefined;
       const candidateHit = typeof a.candidate_id === 'number' && !hasSearchFlag('source-test')
         ? findRunAndCandidateById(a.candidate_id)
         : null;
@@ -2085,7 +2187,10 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     }
     if (name === 'sources.list') {
       requireProjectMock(args);
-      return sourceItems.map((s) => ({ ...s })) as T;
+      const offlineForcado = !hasSearchFlag('source-test') && readEstadoParam() === 'offline';
+      return sourceItems.map((s) =>
+        offlineForcado ? { ...s, status: 'offline' as const, available: false } : { ...s },
+      ) as T;
     }
     if (name === 'sources.url.download') {
       requireProjectMock(args);
@@ -2931,14 +3036,15 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       return { id: a.id } as T;
     }
     if (name === 'transcription.segment') return { transcript_id: 1, sentences: 30000, changed: false } as T;
-    // Preview do Corte simulado (#58): a Fonte 2 está offline; a primeira consulta de um Corte gera (40%), a seguinte já está pronta.
-    if (editorTest && (name.startsWith('editor.') || name.startsWith('audio.') || name.startsWith('captions.') || name.startsWith('reframe.') || name === 'export.captions')) return editorMock(name, args as Record<string, number>) as T;
+    // Editor, áudio, legendas e reenquadramento disponíveis sem portão ?editor-test.
+    if (name.startsWith('editor.') || name.startsWith('audio.') || name.startsWith('captions.') || name.startsWith('reframe.') || name === 'export.captions') return editorMock(name, args as Record<string, number>) as T;
     const translated = translationMockDispatch(name, args);
     if (translated !== undefined) return translated as T;
     if (name === 'proxy.request') {
       const a = args as { source_id: number; start_us: number; end_us: number };
       const src = sourceItems.find((s) => s.id === a.source_id);
-      if (a.source_id === 2 || src?.status === 'offline') {
+      const offlineForcado = !hasSearchFlag('source-test') && readEstadoParam() === 'offline';
+      if (offlineForcado || a.source_id === 2 || src?.status === 'offline') {
         throw { code: 'source_offline', message: 'A Fonte está offline: reconecte ou relocalize a Fonte para ver o preview.' };
       }
       if (!src) throw { code: 'source_missing', message: 'Fonte não encontrada.' };
@@ -3211,12 +3317,15 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
 
 
 // Editor simulado (#61): a Frase n ocupa [(n-1)*10 s, n*10 s]; o Corte vale de 20 a 180 s; a janela do proxy é o Corte ±2 min.
-const editorTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('editor-test');
 const editorKey = 'ab'.repeat(32);
 function editorMock(name: string, a: Record<string, number>) {
   const edited = editorEditsMock(name, a);
   if (edited !== undefined) return edited;
-  const captioned = captionsMock(name, a as Record<string, any>, p => mockCorrected.get('1:' + p) ?? mockOriginal(p));
+  const captioned = captionsMock(
+    name,
+    a as Record<string, any>,
+    (p, sourceId = 1) => mockCorrected.get(`${sourceId}:${p}`) ?? mockOriginal(p),
+  );
   if (captioned !== undefined) return captioned;
   const fail = (code: string, message: string) => { throw { code, message }; };
   const range = () => {
@@ -3229,10 +3338,24 @@ function editorMock(name: string, a: Record<string, number>) {
   };
   if (name === 'editor.range') return { request: a, ...range() };
   if (name === 'editor.sentences') {
-    const first = Math.max(a.after_id + 1, Math.ceil(a.start_us / 10_000_000) + 1), last = Math.min(Math.floor(a.end_us / 10_000_000), 720);
-    return Array.from({ length: Math.max(0, Math.min(a.limit, last - first + 1)) }, (_, n) => { const id = first + n; return { id, startUs: (id - 1) * 10_000_000, endUs: id * 10_000_000, text: `Frase ${id}` }; });
+    const sid = a.source_id ?? 1;
+    const afterId = a.after_id ?? 0;
+    const limit = a.limit ?? 500;
+    const first = Math.max(afterId + 1, Math.ceil(a.start_us / 10_000_000) + 1), last = Math.min(Math.floor(a.end_us / 10_000_000), 720);
+    return Array.from({ length: Math.max(0, Math.min(limit, last - first + 1)) }, (_, n) => {
+      const id = first + n;
+      const words = mockWords(sid, id);
+      return { id, startUs: (id - 1) * 10_000_000, endUs: id * 10_000_000, text: words.map((w) => w.text).join(' ') };
+    });
   }
-  if (name === 'editor.timeline' || name === 'editor.timeline_status') return { state: 'ready', key: editorKey, job: null, progress: 100, error: null, thumbs: { id: `thumbs/${editorKey}`, count: 150, intervalUs: 2_000_000, width: 96, height: 54, columns: 20 } };
+  if (name === 'editor.timeline' || name === 'editor.timeline_status') {
+    if (name === 'editor.timeline') {
+      const proj = getActiveProjectMock()?.id ?? null;
+      emitirProgressoMock({ job: '8', project: proj, stage: 'timeline', percentage: 40, message: 'Gerando miniaturas e onda', error: null });
+      emitirProgressoMock({ job: '8', project: proj, stage: 'complete', percentage: 100, message: 'Timeline pronta', error: null });
+    }
+    return { state: 'ready', key: editorKey, job: null, progress: 100, error: null, thumbs: { id: `thumbs/${editorKey}`, count: 150, intervalUs: 2_000_000, width: 96, height: 54, columns: 20 } };
+  }
   if (name === 'editor.wave') return { blockUs: 100_000, values: Array.from({ length: 3000 }, (_, i) => 40 + Math.round(120 * Math.abs(Math.sin(i / 7)))) };
   throw new Error(`Unknown core command: ${name}`);
 }

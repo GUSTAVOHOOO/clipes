@@ -1,4 +1,4 @@
-// Tradução de legenda simulada (#75) para VITE_CORE_MOCK + editor-test.
+// Tradução de legenda simulada (#75) para VITE_CORE_MOCK.
 const flag = (name: string) => typeof location !== 'undefined' && new URLSearchParams(location.search).has(name);
 
 type TranslatedLine = { id: number; startUs: number; endUs: number; originalText: string; translatedText: string | null; edited: boolean };
@@ -9,11 +9,40 @@ type ClipTranslationState = {
   runId: number;
   lines: Map<number, { text: string; edited: boolean }>;
   sentenceRange: [number, number];
+  timer: ReturnType<typeof setTimeout> | null;
 };
 
 const clips = new Map<number, ClipTranslationState>();
 type MockPermission = { status: string; who?: string; where?: string; scope?: string };
 const permissionOverrides = new Map<number, MockPermission>();
+
+type TranslationMockHooks = {
+  emitProgress?: (evento: {
+    job: string;
+    project?: string | null;
+    stage: string;
+    percentage: number;
+    message: string;
+    error: { code: string; message: string } | null;
+  }) => void;
+  getProjectId?: () => string | null;
+  getClipSource?: (clipId: number) => { sourceId: number; transcriptId: number } | null;
+  getSourcePermission?: (sourceId: number) => MockPermission | null;
+};
+
+let hooks: TranslationMockHooks = {};
+
+export function configureTranslationMockHooks(next: TranslationMockHooks): void {
+  hooks = { ...hooks, ...next };
+}
+
+export function resetTranslationMockState(): void {
+  for (const st of clips.values()) {
+    if (st.timer) clearTimeout(st.timer);
+  }
+  clips.clear();
+  permissionOverrides.clear();
+}
 
 export function setTranslationMockPermission(sourceId: number, permission: MockPermission) {
   permissionOverrides.set(sourceId, permission);
@@ -31,9 +60,21 @@ function hasTranslationScope(scope?: string): boolean {
 }
 
 function permissionStateOf(sourceId: number): { permitted: boolean; permissionError: { code: string; message: string } | null } {
-  const override = permissionOverrides.get(sourceId);
-  if (override) {
-    if (override.status !== 'granted') {
+  const override = permissionOverrides.get(sourceId) ?? null;
+  if (!override) {
+    if (flag('translation-nopermission')) {
+      return {
+        permitted: false,
+        permissionError: { code: 'translation_permission_required', message: 'A Permissão desta Fonte não inclui o escopo “tradução”.' },
+      };
+    }
+    if (flag('source-test') || flag('editor-test')) {
+      return { permitted: true, permissionError: null };
+    }
+  }
+  const resolved = override ?? hooks.getSourcePermission?.(sourceId) ?? null;
+  if (resolved) {
+    if (resolved.status !== 'granted') {
       return {
         permitted: false,
         permissionError: {
@@ -42,7 +83,7 @@ function permissionStateOf(sourceId: number): { permitted: boolean; permissionEr
         },
       };
     }
-    if (!hasTranslationScope(override.scope)) {
+    if (!hasTranslationScope(resolved.scope)) {
       return {
         permitted: false,
         permissionError: {
@@ -53,17 +94,13 @@ function permissionStateOf(sourceId: number): { permitted: boolean; permissionEr
     }
     return { permitted: true, permissionError: null };
   }
-  const permitted = !flag('translation-nopermission');
-  return {
-    permitted,
-    permissionError: permitted ? null : { code: 'translation_permission_required', message: 'A Permissão desta Fonte não inclui o escopo “tradução”.' },
-  };
+  return { permitted: true, permissionError: null };
 }
 
 function stateOf(clipId: number): ClipTranslationState {
   let st = clips.get(clipId);
   if (!st) {
-    st = { activeTrack: 'original', targetLanguage: null, pendingPolls: 0, runId: 0, lines: new Map(), sentenceRange: [1, 3] };
+    st = { activeTrack: 'original', targetLanguage: null, pendingPolls: 0, runId: 0, lines: new Map(), sentenceRange: [1, 3], timer: null };
     clips.set(clipId, st);
   }
   return st;
@@ -78,14 +115,26 @@ export function getMockActiveTranslation(clipId: number): { activeTrack: 'origin
   };
 }
 
+function populateTranslatedLines(st: ClipTranslationState): void {
+  for (let id = st.sentenceRange[0]; id <= st.sentenceRange[1]; id++) {
+    if (!st.lines.has(id)) {
+      st.lines.set(id, {
+        text: st.targetLanguage === 'pt-BR' ? `Frase traduzida ${id}` : `Translated sentence ${id}`,
+        edited: false,
+      });
+    }
+  }
+}
+
 function buildDoc(clipId: number) {
   const st = stateOf(clipId);
   if (st.pendingPolls > 0 && --st.pendingPolls === 0) {
-    for (let id = st.sentenceRange[0]; id <= st.sentenceRange[1]; id++) {
-      st.lines.set(id, { text: st.targetLanguage === 'pt-BR' ? `Frase traduzida ${id}` : `Translated sentence ${id}`, edited: false });
-    }
+    populateTranslatedLines(st);
   }
-  const { permitted, permissionError } = permissionStateOf(1);
+  const clipSource = hooks.getClipSource?.(clipId);
+  const sourceId = clipSource?.sourceId ?? 1;
+  const transcriptId = clipSource?.transcriptId ?? sourceId;
+  const { permitted, permissionError } = permissionStateOf(sourceId);
   const languageRequired = flag('translation-language');
   const detectedLanguage = languageRequired ? null : 'pt-BR';
   const sentences: TranslatedLine[] = [];
@@ -118,8 +167,8 @@ function buildDoc(clipId: number) {
   return {
     schemaVersion: 1,
     clipId,
-    sourceId: 1,
-    transcriptId: 1,
+    sourceId,
+    transcriptId,
     permitted,
     permissionError,
     detectedLanguage,
@@ -140,9 +189,11 @@ export function translationMockDispatch(name: string, args: object): unknown {
   const a = args as { clip_id?: number; target_language?: string; source_language?: string; confirmed?: boolean; track?: string; sentence_id?: number; text?: string };
   const clipId = a.clip_id ?? 1;
   const st = stateOf(clipId);
+  const clipSource = hooks.getClipSource?.(clipId);
+  const sourceId = clipSource?.sourceId ?? 1;
   if (name === 'translation.get') return buildDoc(clipId);
   if (name === 'translation.estimate') {
-    const perm = permissionStateOf(1);
+    const perm = permissionStateOf(sourceId);
     if (!perm.permitted) throw perm.permissionError;
     const targetLanguage = a.target_language ?? (flag('translation-language') ? undefined : 'en');
     if (!targetLanguage) throw { code: 'language_required', message: 'O idioma do Corte não é claro. Escolha o idioma de destino: PT-BR ou EN.' };
@@ -158,14 +209,57 @@ export function translationMockDispatch(name: string, args: object): unknown {
     };
   }
   if (name === 'translation.start') {
-    const perm = permissionStateOf(1);
+    const perm = permissionStateOf(sourceId);
     if (!perm.permitted) throw perm.permissionError;
     const targetLanguage = (a.target_language ?? (flag('translation-language') ? undefined : 'en')) as 'pt-BR' | 'en' | undefined;
     if (!targetLanguage) throw { code: 'language_required', message: 'O idioma do Corte não é claro. Escolha o idioma de destino: PT-BR ou EN.' };
     if (flag('translation-paid') && !a.confirmed) throw { code: 'confirmation_required', message: 'Esta tradução usa um Provedor pago.' };
+    if (st.timer) {
+      clearTimeout(st.timer);
+      st.timer = null;
+    }
     st.targetLanguage = targetLanguage;
     st.runId += 1;
     st.pendingPolls = 1;
+    const jobId = st.runId;
+    const project = hooks.getProjectId?.() ?? null;
+    hooks.emitProgress?.({
+      job: String(jobId),
+      project,
+      stage: 'ai:translation:prepare',
+      percentage: 0,
+      message: 'Preparando tradução',
+      error: null,
+    });
+    hooks.emitProgress?.({
+      job: String(jobId),
+      project,
+      stage: 'ai:translation:call',
+      percentage: 10,
+      message: 'Traduzindo legendas',
+      error: null,
+    });
+    st.timer = setTimeout(() => {
+      st.timer = null;
+      st.pendingPolls = 0;
+      populateTranslatedLines(st);
+      hooks.emitProgress?.({
+        job: String(jobId),
+        project,
+        stage: 'ai:translation:verify',
+        percentage: 80,
+        message: 'Verificando tradução',
+        error: null,
+      });
+      hooks.emitProgress?.({
+        job: String(jobId),
+        project,
+        stage: 'ai:translation:done',
+        percentage: 100,
+        message: 'Tradução concluída',
+        error: null,
+      });
+    }, 15);
     return { run: st.runId, jobs: [st.runId], batches: 1, sourceLanguage: targetLanguage === 'en' ? 'pt-BR' : 'en', targetLanguage };
   }
   if (name === 'translation.track.set') {

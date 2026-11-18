@@ -8,6 +8,7 @@ import {
   definirProjetoDaFila,
   iniciarProgresso,
   useFila,
+  useSalvamentoEditor,
   type EventoProgresso,
 } from '~/core/progresso'
 
@@ -298,5 +299,68 @@ describe('Fila de jobs sobre core-progress (progresso.ts)', () => {
     definirProjetoDaFila(null)
     pararPadrao()
     vi.unstubAllEnvs()
+  })
+
+  it('isola editor_saved e editor_save_failed da Fila Global e atualiza useSalvamentoEditor()', async () => {
+    const fila = criarFila(() => 'canal-a', () => 0)
+    const { result: resFila } = renderHook(() => useFila(fila))
+    const { result: resSalv } = renderHook(() => useSalvamentoEditor(fila))
+
+    expect(resSalv.current.estado).toBe('ocioso')
+
+    act(() => {
+      fila.aplicar(
+        evento({
+          job: 'editor:1',
+          project: 'canal-a',
+          stage: 'editor_saved',
+          percentage: 100,
+          message: 'Corte salvo.',
+        }),
+      )
+    })
+
+    expect(resFila.current).toEqual([])
+    expect(resSalv.current.estado).toBe('salvo')
+    expect(resSalv.current.clipId).toBe(1)
+    expect(resSalv.current.erro).toBeUndefined()
+
+    // Evento de outro Projeto não deve interferir no estado de salvamento do Projeto ativo
+    act(() => {
+      fila.aplicar(
+        evento({
+          job: 'editor:9',
+          project: 'canal-b',
+          stage: 'editor_saved',
+          percentage: 100,
+          message: 'Outro projeto.',
+        }),
+      )
+    })
+    expect(resSalv.current.clipId).toBe(1)
+
+    act(() => {
+      fila.aplicar(
+        evento({
+          job: 'editor',
+          project: null,
+          stage: 'editor_save_failed',
+          percentage: 0,
+          message: 'Não foi possível salvar o Corte.',
+          error: { code: 'project_write', message: 'disco cheio' },
+        }),
+      )
+    })
+
+    expect(resFila.current).toEqual([])
+    expect(resSalv.current.estado).toBe('erro')
+    expect(resSalv.current.erro?.code).toBe('project_write')
+    expect(resSalv.current.erro?.detalhe).toBe('disco cheio')
+
+    act(() => {
+      resSalv.current.limparErro()
+    })
+    expect(resSalv.current.estado).toBe('ocioso')
+    expect(resSalv.current.erro).toBeUndefined()
   })
 })

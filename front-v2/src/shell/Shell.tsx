@@ -1,5 +1,7 @@
 import {
   BotaoIcone,
+  cn,
+  ConfirmDialog,
   DicaAtalho,
   Menu,
   MenuItem,
@@ -9,7 +11,7 @@ import {
   useToast,
   type Etapa,
 } from '@ds'
-import { Info, Keyboard, MessageSquareWarning, MoreHorizontal, Settings } from 'lucide-react'
+import { AlertCircle, Info, Keyboard, MessageSquareWarning, MoreHorizontal, Settings } from 'lucide-react'
 import {
   useCallback,
   useEffect,
@@ -21,9 +23,9 @@ import {
 } from 'react'
 import { flushSync } from 'react-dom'
 import { useAtalhos, usePaleta, type Atalho } from '~/comandos/atalhos'
-import { chamar, paraErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
-import { useFila, type Fila } from '~/core/progresso'
+import { useFila, useSalvamentoEditor, type Fila } from '~/core/progresso'
 import { resolver, type Rota } from '~/rotas/rotas'
 import { FechamentoJanela } from '~/shell/FechamentoJanela'
 import { FolhaAtalhos } from '~/shell/FolhaAtalhos'
@@ -199,6 +201,8 @@ export type ShellProps = {
   meio?: ReactNode
   direita?: ReactNode
   titulo?: string
+  semPaddingConteudo?: boolean
+  statusSalvamento?: ReactNode
   aoAbrirFila?: () => void
 }
 
@@ -213,6 +217,8 @@ export function Shell({
   meio,
   direita,
   titulo,
+  semPaddingConteudo = false,
+  statusSalvamento,
   aoAbrirFila,
 }: ShellProps) {
   const gerenciaProjeto = projetoProp === undefined
@@ -246,6 +252,7 @@ export function Shell({
   }, [rotaProp, resolucao, projetoAberto])
 
   const jobs = useFila(filaStore)
+  const salvamento = useSalvamentoEditor(filaStore)
   const jobsAtivos = jobs.filter((j) => j.estado === 'rodando')
   const primeiroAtivo = jobsAtivos[0]
   const resumoFila = primeiroAtivo
@@ -257,6 +264,36 @@ export function Shell({
   const mainRef = useRef<HTMLElement>(null)
   const [ajudaAtalhosAberta, setAjudaAtalhosAberta] = useState(false)
   const [recentesDisponiveis, setRecentesDisponiveis] = useState<ProjetoRecente[]>([])
+  const [dialogoErroSalvarAberto, setDialogoErroSalvarAberto] = useState(false)
+  const [salvandoAgora, setSalvandoAgora] = useState(false)
+  const [erroFlushLocal, setErroFlushLocal] = useState<ErroCore | null>(null)
+  const estadoSalvamentoAnteriorRef = useRef(salvamento.estado)
+
+  useEffect(() => {
+    const anterior = estadoSalvamentoAnteriorRef.current
+    estadoSalvamentoAnteriorRef.current = salvamento.estado
+    if (salvamento.estado === 'erro' && anterior !== 'erro') {
+      setErroFlushLocal(salvamento.erro ?? null)
+      setDialogoErroSalvarAberto(true)
+    } else if (salvamento.estado !== 'erro') {
+      setErroFlushLocal(null)
+      setDialogoErroSalvarAberto(false)
+    }
+  }, [salvamento.estado, salvamento.erro])
+
+  const tentarSalvarNovamente = useCallback(async () => {
+    setSalvandoAgora(true)
+    try {
+      await chamar('editor.flush', {})
+      setErroFlushLocal(null)
+      setDialogoErroSalvarAberto(false)
+      salvamento.limparErro()
+    } catch (erro) {
+      setErroFlushLocal(paraErroCore(erro))
+    } finally {
+      setSalvandoAgora(false)
+    }
+  }, [salvamento])
 
   const modoMinimo = rotaAtiva.tela === 'assistente'
   const etapa = etapaDaRota(rotaAtiva)
@@ -516,6 +553,26 @@ export function Shell({
     typeof navigator !== 'undefined' && /mac/i.test(navigator.platform || navigator.userAgent)
   const atalhoConfig = ehMac ? '⌘,' : 'Ctrl+,'
 
+  const erroSalvamentoAtivo = erroFlushLocal ?? salvamento.erro ?? new ErroCore('project_write', '')
+  const msgErroSalvamento = mensagemDeErro(erroSalvamentoAtivo)
+
+  const indicadorSalvamento =
+    salvamento.estado === 'erro' ? (
+      <span role="alert" className="flex items-center gap-1.5 text-erro">
+        <AlertCircle className="size-[13px] shrink-0 stroke-[1.75]" aria-hidden />
+        <span>Falha ao salvar</span>
+        <button
+          type="button"
+          onClick={() => setDialogoErroSalvarAberto(true)}
+          className="foco cursor-pointer rounded-controle border-0 bg-transparent px-1 py-0.5 text-pequeno text-erro underline hover:bg-hover"
+        >
+          Tentar novamente
+        </button>
+      </span>
+    ) : (
+      (statusSalvamento ?? (salvamento.estado === 'salvo' ? <Status tom="sucesso">Salvo</Status> : null))
+    )
+
   return (
     <Tela
       titulo={titulo ?? tituloDaRota(rotaAtiva)}
@@ -585,13 +642,18 @@ export function Shell({
         modoMinimo
           ? undefined
           : {
-              esquerda: primeiroAtivo ? (
-                <Status tom="rodando">
-                  <span className="truncate">{primeiroAtivo.mensagem || primeiroAtivo.etapa}</span>
-                  <span className="num text-t3">{Math.round(primeiroAtivo.percentual)}%</span>
-                </Status>
-              ) : (
-                <span>Sem jobs ativos</span>
+              esquerda: (
+                <>
+                  {indicadorSalvamento}
+                  {primeiroAtivo ? (
+                    <Status tom="rodando">
+                      <span className="truncate">{primeiroAtivo.mensagem || primeiroAtivo.etapa}</span>
+                      <span className="num text-t3">{Math.round(primeiroAtivo.percentual)}%</span>
+                    </Status>
+                  ) : (
+                    <span>Sem jobs ativos</span>
+                  )}
+                </>
               ),
               direita: (
                 <>
@@ -608,11 +670,28 @@ export function Shell({
         ref={mainRef}
         data-regiao="conteudo"
         tabIndex={-1}
-        className="foco-interno flex min-h-0 flex-1 flex-col overflow-auto p-4"
+        className={cn(
+          'foco-interno flex min-h-0 flex-1 flex-col',
+          semPaddingConteudo ? 'overflow-hidden' : 'overflow-auto p-4',
+        )}
       >
         {children}
       </main>
       <FechamentoJanela jobs={jobs} />
+      <ConfirmDialog
+        aberto={salvamento.estado === 'erro' && dialogoErroSalvarAberto}
+        aoMudarAberto={(proximo) => {
+          if (!salvandoAgora) setDialogoErroSalvarAberto(proximo)
+        }}
+        titulo="Falha ao salvar alterações do Editor"
+        descricao={msgErroSalvamento.titulo}
+        rotuloConfirmar="Tentar salvar novamente"
+        rotuloCancelar="Continuar editando"
+        variante="primario"
+        focoInicial="confirmar"
+        ocupado={salvandoAgora}
+        aoConfirmar={tentarSalvarNovamente}
+      />
       <FolhaAtalhos aberto={ajudaAtalhosAberta} aoMudarAberto={setAjudaAtalhosAberta} />
     </Tela>
   )
