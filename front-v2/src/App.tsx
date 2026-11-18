@@ -6,6 +6,7 @@ import type { Rota, SecaoConfig } from '~/rotas/rotas'
 import { useRota } from '~/rotas/useRota'
 import { ComEstado, useEstadoForcado } from '~/shell/EstadoForcado'
 import { Shell, useProjetoAtual, type ProjetoAtual } from '~/shell/Shell'
+import { Inicio } from '~/telas/inicio/Inicio'
 
 const TITULOS_CONFIG: Record<SecaoConfig, string> = {
   provedores: 'Provedores e Tarefas de IA',
@@ -175,6 +176,15 @@ function AppRoteado({
   const projetoAberto = projeto ? (projeto.id ?? projeto.name) : null
   const rota = useRota({ projetoAberto }, aoRedirecionar)
   const forcado = useEstadoForcado()
+
+  if (rota.tela === 'inicio') {
+    return (
+      <Shell rota={rota} projeto={projeto} somenteLocal={somenteLocal}>
+        <Inicio />
+      </Shell>
+    )
+  }
+
   const placeholder = <PlaceholderTela rota={rota} />
 
   return (

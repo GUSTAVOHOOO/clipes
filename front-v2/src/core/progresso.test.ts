@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { isTauri } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { emitirProgressoMock } from '@core'
 import { criarFila, iniciarProgresso, useFila, type EventoProgresso } from '~/core/progresso'
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -242,5 +243,22 @@ describe('Fila de jobs sobre core-progress (progresso.ts)', () => {
     parar1()
     parar2()
     expect(unlisten).toHaveBeenCalledTimes(1)
+  })
+
+  it('iniciarProgresso fora do Tauri com VITE_CORE_MOCK=1 assina o barramento simulado', async () => {
+    vi.stubEnv('VITE_CORE_MOCK', '1')
+    mockIsTauri.mockReturnValue(false)
+
+    const fila = criarFila(() => 'canal-a', () => 0)
+    const parar = await iniciarProgresso(fila)
+
+    emitirProgressoMock(evento({ job: '77', percentage: 65, message: 'Progresso mock' }))
+    expect(fila.jobs()).toHaveLength(1)
+    expect(fila.jobs()[0]).toMatchObject({ id: '77', percentual: 65, mensagem: 'Progresso mock' })
+
+    parar()
+    emitirProgressoMock(evento({ job: '77', percentage: 90, message: 'Após cancelar' }))
+    expect(fila.jobs()[0]).toMatchObject({ id: '77', percentual: 65 })
+    vi.unstubAllEnvs()
   })
 })

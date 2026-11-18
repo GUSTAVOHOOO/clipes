@@ -12,7 +12,7 @@ test.describe('Shell do front v2', () => {
 
     await expect(page).toHaveURL(/#\/inicio$/)
     await expect(page.getByText('Clipes', { exact: true })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Início e Projetos' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Projetos', exact: true })).toBeVisible()
 
     // Moldura externa não rola
     const rolagem = await page.evaluate(() => ({
@@ -33,7 +33,7 @@ test.describe('Shell do front v2', () => {
     // Rota de Projeto sem Projeto aberto volta para #/inicio
     await page.goto('/#/projeto/x/cortes')
     await expect(page).toHaveURL(/#\/inicio$/)
-    await expect(page.getByRole('heading', { name: 'Início e Projetos' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Projetos', exact: true })).toBeVisible()
 
     // ?estado=erro aciona BannerErroCore com role="alert"
     await page.goto('/#/inicio?estado=erro')

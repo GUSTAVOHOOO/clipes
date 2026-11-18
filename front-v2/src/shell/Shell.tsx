@@ -1,5 +1,6 @@
 import { DicaAtalho, Status, Tela, useToast, type Etapa } from '@ds'
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { flushSync } from 'react-dom'
 import { useAtalhos, usePaleta, type Atalho } from '~/comandos/atalhos'
 import { chamar } from '~/core/cliente'
 import { useFila, type Fila } from '~/core/progresso'
@@ -24,6 +25,22 @@ export type EstadoProjetoAtual = {
   recarregar: () => void
 }
 
+const ouvintesProjeto = new Set<(prox?: ProjetoAtual | null) => void>()
+
+/** Notifica instâncias de `useProjetoAtual` para atualizar/recarregar `projects.current` após criação/abertura/fechamento. */
+export function notificarMudancaProjeto(prox?: ProjetoAtual | null): void {
+  const aplicar = () => {
+    for (const fn of ouvintesProjeto) {
+      fn(prox)
+    }
+  }
+  if (prox !== undefined) {
+    flushSync(aplicar)
+  } else {
+    aplicar()
+  }
+}
+
 /** Consulta `projects.current` e `projects.local_only.get` no núcleo para alimentar o Shell e as guardas de rota. */
 export function useProjetoAtual(ativo = true): EstadoProjetoAtual {
   const [projeto, setProjeto] = useState<ProjetoAtual | null>(null)
@@ -36,12 +53,29 @@ export function useProjetoAtual(ativo = true): EstadoProjetoAtual {
   }, [])
 
   useEffect(() => {
+    if (!ativo) return
+    const aoNotificar = (prox?: ProjetoAtual | null) => {
+      if (prox !== undefined) {
+        setProjeto(prox)
+        if (prox === null) setSomenteLocal(false)
+      }
+      setVersao((v) => v + 1)
+    }
+    ouvintesProjeto.add(aoNotificar)
+    return () => {
+      ouvintesProjeto.delete(aoNotificar)
+    }
+  }, [ativo])
+
+  useEffect(() => {
     if (!ativo) {
       setCarregando(false)
       return
     }
     let cancelado = false
-    setCarregando(true)
+    if (versao === 0) {
+      setCarregando(true)
+    }
 
     Promise.allSettled([
       chamar<ProjetoAtual | null>('projects.current', {}),
