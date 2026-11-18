@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Direções visuais</title>
+<link rel="stylesheet" href="../kit.css">
+<style>
+  .direcao { background: var(--tela); border: 1px solid var(--borda); border-radius: 6px; padding: 16px 20px; display: grid; gap: 12px; max-width: 1500px; }
+  .direcao h2 { margin: 0; font-size: 18px; }
+  .direcao .kicker { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--texto-2); }
+  .direcao dl { display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; margin: 0; max-width: 110ch; }
+  .direcao dt { color: var(--texto-2); }
+  .direcao dd { margin: 0; }
+  .imgs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .imgs figure { margin: 0; }
+  .imgs img { width: 100%; border: 1px solid var(--borda); border-radius: 4px; display: block; background: var(--sutil); min-height: 120px; }
+  .imgs figcaption { font-size: 12px; color: var(--texto-2); margin-top: 4px; }
+  .demovidos { max-width: 1500px; font-size: 13px; color: var(--texto-2); }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+  <header class="wf-cabecalho">
+    <h1>Clipes · Direções visuais (rodada 1)</h1>
+    <p>Cada direção é o mesmo app, com as mesmas telas e controles dos wireframes aprovados. Muda só o visual: cores, tipografia, densidade e um elemento assinatura.
+      Imagens geradas pelo GPT a partir dos prompts em <span class="mono">direcoes/prompts.md</span>; são esboços de direção, não a tela final (texto pequeno pode sair imperfeito).
+      Clique numa imagem para abrir em tamanho real.</p>
+  </header>
+
+  <section class="direcao" id="A">
+    <span class="kicker">Direção A</span>
+    <h2>Sinal de Estúdio</h2>
+    <dl>
+      <dt>De onde vem</dt><dd>As luzes de estúdio de TV e transmissão: a lâmpada vermelha "NO AR", o verde de prévia, o âmbar de espera.</dd>
+      <dt>Visual</dt><dd>Fundo azul-preto de estúdio, painéis grafite, texto branco quente. Tipografia condensada de grafismo de TV para rótulos, números e timecodes; sans simples para a Transcrição.</dd>
+      <dt>Assinatura</dt><dd>Cor como luz de estado: verde = tocando/aprovado, vermelho = exportando ("NO AR"), âmbar = na fila. O que está "ao vivo" ganha uma barra acesa na borda de cima.</dd>
+      <dt>Herdado de outras ideias</dt><dd>Mudança de estado fica acesa até você ver (da direção B); ações destrutivas isoladas, longe de cliques acidentais; revisões comparadas na mesma escala.</dd>
+      <dt>Risco</dt><dd>Se as luzes aparecerem demais, a tela vira painel de controle e cansa.</dd>
+    </dl>
+    <div class="imgs">
+      <figure><a href="img/A-editor.png"><img src="img/A-editor.png" alt="Direção A, editor"></a><figcaption>Editor do Corte</figcaption></figure>
+      <figure><a href="img/A-revisao.png"><img src="img/A-revisao.png" alt="Direção A, revisão"></a><figcaption>Bancada de revisão</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="direcao" id="B">
+    <span class="kicker">Direção B</span>
+    <h2>Quadro de Partidas</h2>
+    <dl>
+      <dt>De onde vem</dt><dd>Painel de embarque de aeroporto e cartão de embarque: linhas que reordenam no lugar, números tabulares, uma cor só para o que mudou.</dd>
+      <dt>Visual</dt><dd>Alto contraste: fundo quase preto, texto branco nítido, todos os números em fonte monoespaçada; amarelo-sinal reservado só para mudanças.</dd>
+      <dt>Assinatura</dt><dd>A lista de Cortes é um quadro de partidas ordenado pela Nota; o cabeçalho do Corte é um cartão de embarque segmentado (Fonte · Entrada · Saída · Duração · Nota). O que você acabou de mudar fica aceso até seguir em frente.</dd>
+      <dt>Risco</dt><dd>Pouco ligado ao mundo das lives; pode parecer frio e "de sistema".</dd>
+    </dl>
+    <div class="imgs">
+      <figure><a href="img/B-editor.png"><img src="img/B-editor.png" alt="Direção B, editor"></a><figcaption>Editor do Corte</figcaption></figure>
+      <figure><a href="img/B-revisao.png"><img src="img/B-revisao.png" alt="Direção B, revisão"></a><figcaption>Bancada de revisão</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="direcao" id="C">
+    <span class="kicker">Direção C · escolha do Impeccable</span>
+    <h2>Estúdio de Podcast</h2>
+    <dl>
+      <dt>De onde vem</dt><dd>O estúdio de podcast à noite (Flow, Podpah), berço da cultura de cortes no Brasil.</dd>
+      <dt>Visual</dt><dd>Fundo carvão quente, painéis um degrau mais claros, âmbar de lâmpada de tungstênio para a palavra ativa, o playhead e o foco; verde-azulado discreto para o segundo falante. Uma sans humanista para tudo.</dd>
+      <dt>Assinatura</dt><dd>A fala na frente: falantes com iniciais coloridas, e a palavra dita acende como uma lâmpada, palavra por palavra, junto com o vídeo.</dd>
+      <dt>Risco</dt><dd>É a mais familiar: lembra Descript e editores de podcast.</dd>
+    </dl>
+    <div class="imgs">
+      <figure><a href="img/C-editor.png"><img src="img/C-editor.png" alt="Direção C, editor"></a><figcaption>Editor do Corte</figcaption></figure>
+      <figure><a href="img/C-revisao.png"><img src="img/C-revisao.png" alt="Direção C, revisão"></a><figcaption>Bancada de revisão</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="direcao" id="D">
+    <span class="kicker">Opção padrão</span>
+    <h2>Editor profissional clássico</h2>
+    <dl>
+      <dt>De onde vem</dt><dd>O visual que todo editor de vídeo já conhece (DaVinci Resolve, CapCut desktop), bem feito e sem invenção.</dd>
+      <dt>Visual</dt><dd>Cinza escuro neutro, um azul para seleção e ação principal, sans neutra, densidade compacta.</dd>
+      <dt>Assinatura</dt><dd>Nenhuma de propósito: a familiaridade é o ponto.</dd>
+      <dt>Risco</dt><dd>Fica igual a todo mundo; a identidade do Clipes teria de vir de outro lugar.</dd>
+    </dl>
+    <div class="imgs">
+      <figure><a href="img/D-editor.png"><img src="img/D-editor.png" alt="Opção padrão, editor"></a><figcaption>Editor do Corte</figcaption></figure>
+      <figure><a href="img/D-revisao.png"><img src="img/D-revisao.png" alt="Opção padrão, revisão"></a><figcaption>Bancada de revisão</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="demovidos">
+    <strong>Ideias consideradas e descartadas nesta rodada</strong> (dá para trazer de volta se quiser): catálogo de feira com miniaturas numeradas (virou a disciplina da grade da Mesa de prontidão), console escuro de desenvolvedor (é o padrão da categoria), mapa de parque com manchas de cor, mostruário de tipografia variável, prancha botânica de estágios.
+  </section>
+</main>
+</body>
+</html>

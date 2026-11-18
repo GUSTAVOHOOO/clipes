@@ -42,10 +42,14 @@
 <main class="wf-pagina">
 
   <header class="wf-cabecalho">
-    <h1>D3 · Inspetor do Corte: as 5 Abas</h1>
-    <p>Rota: <span class="mono">#/projeto/:id/corte/:corteId/editar</span> (Painel direito do Editor).
+    <h1>D3 · Inspetor do Corte: as 5 Abas (agora Popovers da Barra de Ações)</h1>
+    <p>Rota: <span class="mono">#/projeto/:id/corte/:corteId/editar</span>.
       Especificação: <span class="mono">telas/D-corte-editar.md</span> (Zona 3) e <span class="mono">02-consolidacao.md</span> ("Avaliação objetiva do Pacote D").
       Cada variante expõe todos os controles da aba sem cortes por rolagem, mais seus estados secundários (JIT, conflito, vazio, confirmações).</p>
+    <div class="banner" style="margin-top: 8px; font-size: 12px">
+      <strong>Nota (revisto em 17/11 após protótipos):</strong>
+      <span>No Editor (<a href="D2-editar.html">D2</a>), o antigo painel direito fixo foi removido; estas 5 abas viraram <strong>5 popovers flutuantes</strong> abertos pela barra de ações abaixo do vídeo (<strong>Enquadrar</strong>, <strong>Legenda</strong>, <strong>Silêncios</strong>, <strong>Áudio</strong>, <strong>Histórico</strong>; <kbd>Ctrl+]</kbd> abre/fecha o último usado). O conteúdo e os estados detalhados de cada um permanecem documentados abaixo.</span>
+    </div>
     <nav>
       <a href="#enquadramento">1. Enquadramento</a>
       <a href="#legendas-traducao">2. Legendas e Tradução</a>

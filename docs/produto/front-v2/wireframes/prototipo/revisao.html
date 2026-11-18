@@ -1,0 +1,1530 @@
+<!-- PROTÓTIPO DESCARTÁVEL: qual organização minimalista da Bancada de revisão o dev prefere (A lista e detalhe, B um Corte por vez, C tabela que abre) -->
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bancada de revisão · Clipes</title>
+<link rel="stylesheet" href="proto.css">
+<style>
+  /* Layout exclusivo das 3 variantes — apenas tokens de proto.css, zero cores extras */
+  [data-variant][hidden] { display: none !important; }
+  [data-variant] { height: 100vh; }
+
+  .janela { padding-bottom: 52px; } /* respiro para a barra flutuante de variantes */
+
+  /* ---------- Topo compartilhado ---------- */
+  .topo { border-bottom: 1px solid transparent; }
+  .sep-ponto { display: none; }
+  .fila-btn { color: var(--t3); font-size: 12px; }
+  .busca-trigger {
+    height: 28px; display: inline-flex; align-items: center; gap: 8px;
+    padding: 0 8px 0 10px; border: 0; border-radius: var(--r-s);
+    background: var(--area); color: var(--t3); font: inherit; cursor: pointer;
+    min-width: 176px; transition: background .15s var(--ease), color .15s var(--ease);
+  }
+  .busca-trigger:hover { background: var(--hover); color: var(--t2); }
+  .busca-trigger kbd { margin-left: auto; }
+  .busca-trigger svg { width: 14px; height: 14px; stroke-width: 1.75; flex: none; }
+
+  /* ---------- Utilitários comuns ---------- */
+  .sublinha {
+    display: flex; align-items: center; gap: 12px;
+    padding: 0 16px; height: 36px; flex: none;
+    color: var(--t3); font-size: 12px;
+  }
+  .sublinha .direita { gap: 8px; }
+  .titulo-corte {
+    font-size: 16px; font-weight: 600; line-height: 1.3;
+    color: var(--t1); margin: 0; letter-spacing: -0.01em;
+  }
+  .nota-linha { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .nota-valor { font-size: 15px; font-weight: 600; color: var(--t1); }
+  .nota-motivo { color: var(--t2); }
+
+  /* Preview 9:16 + barra de transporte calma */
+  .palco-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: none; }
+  .palco-wrap .quadro916 { width: 100%; background: #000; }
+  .progresso-trilha {
+    width: 100%; height: 14px; display: flex; align-items: center; cursor: pointer;
+  }
+  .progresso-fundo {
+    position: relative; width: 100%; height: 2px; background: var(--elevado); border-radius: 1px;
+  }
+  .progresso-preenchido {
+    position: absolute; left: 0; top: 0; bottom: 0; background: var(--t3); border-radius: 1px;
+  }
+  .progresso-playhead {
+    position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--sinal);
+    border-radius: 1px; transform: translateX(-1px);
+  }
+  .transporte {
+    width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  }
+  .transporte .tc { font-size: 12px; white-space: nowrap; }
+
+  /* Eixos da Nota */
+  .eixos-toggle {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 0;
+    border: 0; background: none; color: var(--t2); font: inherit; font-size: 12px;
+    cursor: pointer; align-self: flex-start;
+  }
+  .eixos-toggle:hover { color: var(--t1); }
+  .eixos-toggle svg { width: 14px; height: 14px; stroke-width: 1.75; }
+  .eixos-lista {
+    display: grid; gap: 6px; padding: 10px 12px; border-radius: var(--r);
+    background: var(--area);
+  }
+  .eixo-item {
+    display: grid; grid-template-columns: 148px 34px 1fr; gap: 10px;
+    align-items: baseline; font-size: 12px;
+  }
+  .eixo-nome { color: var(--t2); display: flex; justify-content: space-between; gap: 6px; }
+  .eixo-peso { color: var(--t3); }
+  .eixo-num { color: var(--t1); font-weight: 600; text-align: right; }
+  .eixo-why { color: var(--t3); }
+
+  /* Ajuste de bordas por Frase */
+  .bordas-bloco { display: grid; gap: 6px; }
+  .borda-linha {
+    display: grid; grid-template-columns: 46px 70px auto 1fr; gap: 8px;
+    align-items: center; min-width: 0;
+  }
+  .borda-rotulo { color: var(--t3); font-size: 12px; }
+  .borda-tc { color: var(--t2); font-size: 12px; }
+  .borda-btns { display: inline-flex; gap: 2px; }
+  .btn.mini { height: 24px; padding: 0 8px; font-size: 12px; background: var(--area); color: var(--t2); }
+  .btn.mini:hover { background: var(--hover); color: var(--t1); }
+  .frase-previa {
+    color: var(--t3); font-size: 12px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; min-width: 0;
+  }
+
+  .acoes-linha { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+  /* =========================================================
+     VARIANTE A · LISTA E DETALHE
+     ========================================================= */
+  .va-miolo {
+    flex: 1; min-height: 0; display: grid;
+    grid-template-columns: minmax(320px, 37%) 1fr;
+    gap: 1px; background: var(--chao); padding: 0 16px;
+  }
+  .va-lista-col {
+    background: var(--area); border-radius: var(--r);
+    display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+  }
+  .va-lista-topo {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px 8px; flex: none; font-size: 12px; color: var(--t3);
+  }
+  .va-lista {
+    flex: 1; min-height: 0; overflow-y: auto; padding: 4px 6px 8px;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .va-item {
+    width: 100%; text-align: left; border: 0; border-radius: var(--r-s);
+    background: transparent; color: var(--t1); font: inherit; cursor: pointer;
+    padding: 9px 10px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px;
+    align-items: center; transition: background .12s var(--ease);
+  }
+  .va-item:hover { background: var(--hover); }
+  .va-item.sel { background: var(--elevado); }
+  .va-item-titulo {
+    grid-column: 1; font-weight: 500; color: var(--t1);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .va-item.decidido .va-item-titulo { color: var(--t2); }
+  .va-item-meta {
+    grid-column: 1; display: flex; align-items: center; gap: 10px;
+    font-size: 12px; color: var(--t3);
+  }
+  .va-item-dir {
+    grid-column: 2; grid-row: 1 / span 2;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .va-item-nota { font-weight: 600; color: var(--t2); font-size: 13px; }
+  .va-item.sel .va-item-nota { color: var(--t1); }
+  .va-item-estado { color: var(--t3); display: inline-flex; align-items: center; width: 14px; justify-content: center; }
+  .va-item-estado svg { width: 13px; height: 13px; }
+
+  .va-detalhe-col {
+    min-height: 0; overflow-y: auto; padding: 14px 20px 16px 24px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .va-detalhe-grid {
+    display: grid; grid-template-columns: clamp(204px, 28vh, 250px) 1fr;
+    gap: 24px; align-items: start;
+  }
+  .va-info { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .va-meta-discreta {
+    display: flex; align-items: center; gap: 12px; color: var(--t3); font-size: 12px;
+  }
+
+  /* =========================================================
+     VARIANTE B · UM CORTE POR VEZ
+     ========================================================= */
+  .vb-miolo {
+    flex: 1; min-height: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: space-between;
+    padding: 4px 24px 8px; gap: 10px;
+  }
+  .vb-topo-info {
+    width: 100%; max-width: 880px; display: flex; align-items: center;
+    justify-content: space-between; color: var(--t3); font-size: 12px; flex: none;
+  }
+  .vb-palco-area {
+    flex: 1; min-height: 0; width: 100%; max-width: 880px;
+    display: grid; grid-template-columns: clamp(204px, 34vh, 276px) minmax(0, 1fr);
+    gap: clamp(24px, 4vw, 48px); align-items: center;
+  }
+  .vb-detalhe {
+    display: flex; flex-direction: column; gap: 14px; min-width: 0;
+    max-height: 100%; overflow-y: auto; padding-right: 4px;
+  }
+  .vb-tempos-bloco { display: flex; flex-direction: column; gap: 6px; }
+  .vb-fita-wrap {
+    width: 100%; max-width: 880px; flex: none;
+    display: flex; flex-direction: column; gap: 6px; padding-top: 4px;
+  }
+  .vb-fita {
+    display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 6px;
+  }
+  .vb-tile {
+    height: 36px; border: 0; border-radius: var(--r-s);
+    background: var(--area); color: var(--t2); font: inherit; font-size: 12px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;
+    position: relative; transition: background .12s var(--ease), color .12s var(--ease);
+  }
+  .vb-tile:hover { background: var(--hover); color: var(--t1); }
+  .vb-tile.sel {
+    background: var(--elevado); color: var(--t1); font-weight: 600;
+    box-shadow: inset 0 2px 0 var(--sinal);
+  }
+  .vb-tile.feito { color: var(--t3); }
+  .vb-tile svg { width: 12px; height: 12px; stroke-width: 2; }
+
+  /* =========================================================
+     VARIANTE C · TABELA QUE ABRE
+     ========================================================= */
+  .vc-miolo {
+    flex: 1; min-height: 0; display: flex; flex-direction: column;
+    padding: 0 16px;
+  }
+  .vc-cab {
+    display: grid; grid-template-columns: 64px 86px 76px 1fr 120px 28px;
+    gap: 12px; align-items: center; padding: 8px 14px;
+    color: var(--t3); font-size: 12px; flex: none;
+  }
+  .vc-ord {
+    border: 0; background: none; color: inherit; font: inherit; padding: 0;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 4px; text-align: left;
+  }
+  .vc-ord:hover { color: var(--t2); }
+  .vc-ord svg { width: 12px; height: 12px; }
+  .vc-tabela {
+    flex: 1; min-height: 0; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 4px; padding-bottom: 12px;
+  }
+  .vc-grupo {
+    border-radius: var(--r); background: transparent;
+    transition: background .12s var(--ease);
+  }
+  .vc-grupo.aberto { background: var(--area); }
+  .vc-linha {
+    width: 100%; border: 0; background: transparent; color: var(--t1); font: inherit;
+    text-align: left; cursor: pointer; padding: 9px 14px; border-radius: var(--r);
+    display: grid; grid-template-columns: 64px 86px 76px 1fr 120px 28px;
+    gap: 12px; align-items: center;
+  }
+  .vc-grupo:not(.aberto) .vc-linha:hover { background: var(--area); }
+  .vc-grupo.aberto .vc-linha { background: var(--elevado); border-radius: var(--r) var(--r) 0 0; }
+  .vc-titulo-cel {
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500;
+  }
+  .vc-grupo.decidido:not(.aberto) .vc-titulo-cel { color: var(--t2); }
+  .vc-gaveta {
+    padding: 14px 16px 16px;
+    display: grid; grid-template-columns: 132px 1fr; gap: 20px; align-items: start;
+  }
+  .vc-gaveta .legenda { font-size: 11px; line-height: 1.15; bottom: 10%; }
+  .vc-gaveta-dir { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .vc-eixos-grid {
+    display: grid; grid-template-columns: 1fr; gap: 5px;
+    padding: 8px 10px; border-radius: var(--r-s); background: var(--chao);
+  }
+  .vc-gaveta-rodape {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap;
+  }
+
+  /* =========================================================
+     PALETA CTRL+K E AVISO DISCRETO
+     ========================================================= */
+  .paleta-fundo {
+    position: fixed; inset: 0; z-index: 9000;
+    background: rgb(0 0 0 / .55); display: grid; place-items: start center;
+    padding-top: min(18vh, 140px);
+  }
+  .paleta-fundo[hidden] { display: none; }
+  .paleta {
+    width: min(520px, calc(100vw - 32px)); padding: 6px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .paleta-campo {
+    display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+    border-bottom: 1px solid var(--linha);
+  }
+  .paleta-campo svg { width: 15px; height: 15px; color: var(--t3); flex: none; }
+  .paleta-campo input {
+    flex: 1; border: 0; background: transparent; color: var(--t1); font: inherit;
+    outline: none; padding: 4px 0;
+  }
+  .paleta-campo input::placeholder { color: var(--t3); }
+  .paleta-lista { display: flex; flex-direction: column; gap: 2px; max-height: 280px; overflow-y: auto; padding-top: 4px; }
+  .paleta-item {
+    width: 100%; border: 0; border-radius: var(--r-s); background: transparent;
+    color: var(--t1); font: inherit; padding: 8px 10px; cursor: pointer;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left;
+  }
+  .paleta-item:hover, .paleta-item.ativo { background: var(--hover); }
+  .paleta-item-esq { display: flex; align-items: center; gap: 8px; }
+  .paleta-item-esq svg { width: 14px; height: 14px; color: var(--t2); }
+  .paleta-vazio { padding: 14px 10px; color: var(--t3); font-size: 12px; text-align: center; }
+
+  .aviso-discreto {
+    position: fixed; right: 20px; bottom: 20px; z-index: 8500;
+    display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+    background: var(--elevado); color: var(--t1); border-radius: var(--r);
+    box-shadow: 0 8px 24px rgb(0 0 0 / .45); font-size: 12px;
+  }
+  .aviso-discreto[hidden] { display: none; }
+  .aviso-discreto svg { width: 14px; height: 14px; color: var(--sinal); }
+
+  /* Ajustes finos para 1366x768 */
+  @media (max-height: 800px) {
+    .va-detalhe-col { padding: 10px 18px 12px 20px; gap: 12px; }
+    .va-item { padding: 7px 10px; }
+    .vb-miolo { gap: 6px; }
+    .vb-detalhe { gap: 10px; }
+    .vc-linha { padding: 7px 14px; }
+    .vc-gaveta { padding: 10px 14px 12px; gap: 16px; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- ==================== VARIANTE A: LISTA E DETALHE ==================== -->
+  <section data-variant="A">
+    <div class="janela">
+      <header class="topo">
+        <div class="marca"><i data-lucide="scissors"></i><span>Clipes</span></div>
+        <span class="projeto">Canal de Cortes</span>
+        <nav class="etapas" aria-label="Etapas">
+          <a class="etapa" href="#fontes">Fontes</a>
+          <span class="sep-ponto" aria-hidden="true">·</span>
+          <a class="etapa" href="#cortes" aria-current="page">Cortes</a>
+          <span class="sep-ponto" aria-hidden="true">·</span>
+          <a class="etapa" href="#exportacao">Exportação</a>
+        </nav>
+        <div class="direita">
+          <span class="fila-btn">Fila 1</span>
+          <button class="busca-trigger" type="button" data-acao="paleta" aria-label="Abrir comandos">
+            <i data-lucide="search"></i>
+            <span>Comandos</span>
+            <kbd>Ctrl K</kbd>
+          </button>
+        </div>
+      </header>
+
+      <div class="sublinha">
+        <span class="num" data-bind="contador">3 de 12 · 2 aprovados</span>
+        <span aria-hidden="true">·</span>
+        <span>Revisão 2 de 2</span>
+        <div class="direita">
+          <button class="btn mini" type="button" data-acao="desfazer" disabled>
+            <i data-lucide="undo-2"></i><span>Desfazer</span><kbd>Ctrl Z</kbd>
+          </button>
+        </div>
+      </div>
+
+      <div class="va-miolo">
+        <aside class="va-lista-col" aria-label="Lista de Cortes">
+          <div class="va-lista-topo">
+            <span>12 Cortes sugeridos</span>
+            <span class="tc">↑ ↓ navegar</span>
+          </div>
+          <div class="va-lista" role="listbox" aria-label="Cortes" data-mount="va-lista"></div>
+        </aside>
+
+        <main class="va-detalhe-col" aria-label="Detalhe do Corte" data-mount="va-detalhe"></main>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== VARIANTE B: UM CORTE POR VEZ ==================== -->
+  <section data-variant="B" hidden>
+    <div class="janela">
+      <header class="topo">
+        <div class="marca"><i data-lucide="scissors"></i><span>Clipes</span></div>
+        <span class="projeto">Canal de Cortes</span>
+        <nav class="etapas" aria-label="Etapas">
+          <a class="etapa" href="#fontes">Fontes</a>
+          <span class="sep-ponto" aria-hidden="true">·</span>
+          <a class="etapa" href="#cortes" aria-current="page">Cortes</a>
+          <span class="sep-ponto" aria-hidden="true">·</span>
+          <a class="etapa" href="#exportacao">Exportação</a>
+        </nav>
+        <div class="direita">
+          <span class="fila-btn">Fila 1</span>
+          <button class="busca-trigger" type="button" data-acao="paleta" aria-label="Abrir comandos">
+            <i data-lucide="search"></i>
+            <span>Comandos</span>
+            <kbd>Ctrl K</kbd>
+          </button>
+        </div>
+      </header>
+
+      <main class="vb-miolo">
+        <div class="vb-topo-info">
+          <span class="num" data-bind="contador">3 de 12 · 2 aprovados</span>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <span>Revisão 2 de 2</span>
+            <button class="btn mini" type="button" data-acao="desfazer" disabled>
+              <i data-lucide="undo-2"></i><span>Desfazer</span><kbd>Ctrl Z</kbd>
+            </button>
+          </div>
+        </div>
+
+        <div class="vb-palco-area" data-mount="vb-palco"></div>
+
+        <div class="vb-fita-wrap">
+          <div class="vb-fita" role="tablist" aria-label="Todos os 12 Cortes" data-mount="vb-fita"></div>
+        </div>
+      </main>
+    </div>
+  </section>
+
+  <!-- ==================== VARIANTE C: TABELA QUE ABRE ==================== -->
+  <section data-variant="C" hidden>
+    <div class="janela">
+      <header class="topo">
+        <div class="marca"><i data-lucide="scissors"></i><span>Clipes</span></div>
+        <span class="projeto">Canal de Cortes</span>
+        <nav class="etapas" aria-label="Etapas">
+          <a class="etapa" href="#fontes">Fontes</a>
+          <span class="sep-ponto" aria-hidden="true">·</span>
+          <a class="etapa" href="#cortes" aria-current="page">Cortes</a>
+          <span class="sep-ponto" aria-hidden="true">·</span>
+          <a class="etapa" href="#exportacao">Exportação</a>
+        </nav>
+        <div class="direita">
+          <span class="fila-btn">Fila 1</span>
+          <button class="busca-trigger" type="button" data-acao="paleta" aria-label="Abrir comandos">
+            <i data-lucide="search"></i>
+            <span>Comandos</span>
+            <kbd>Ctrl K</kbd>
+          </button>
+        </div>
+      </header>
+
+      <div class="sublinha">
+        <span class="num" data-bind="contador">3 de 12 · 2 aprovados</span>
+        <span aria-hidden="true">·</span>
+        <span>Revisão 2 de 2</span>
+        <div class="direita">
+          <button class="btn mini" type="button" data-acao="desfazer" disabled>
+            <i data-lucide="undo-2"></i><span>Desfazer</span><kbd>Ctrl Z</kbd>
+          </button>
+        </div>
+      </div>
+
+      <main class="vc-miolo">
+        <div class="vc-cab" aria-hidden="false">
+          <button class="vc-ord" type="button" data-acao="ordenar" data-col="nota">
+            <span>Nota</span><i data-lucide="arrow-down"></i>
+          </button>
+          <button class="vc-ord" type="button" data-acao="ordenar" data-col="inicio">
+            <span>Início</span>
+          </button>
+          <span>Duração</span>
+          <span>Título</span>
+          <span>Estado</span>
+          <span></span>
+        </div>
+        <div class="vc-tabela" data-mount="vc-tabela"></div>
+      </main>
+    </div>
+  </section>
+
+  <!-- ==================== PALETA CTRL+K ==================== -->
+  <div class="paleta-fundo" id="paleta-fundo" hidden role="dialog" aria-modal="true" aria-label="Paleta de comandos">
+    <div class="popover paleta">
+      <div class="paleta-campo">
+        <i data-lucide="search"></i>
+        <input id="paleta-input" type="text" placeholder="Digite um comando da revisão…" autocomplete="off">
+        <kbd>Esc</kbd>
+      </div>
+      <div class="paleta-lista" id="paleta-lista"></div>
+    </div>
+  </div>
+
+  <!-- ==================== AVISO DISCRETO ==================== -->
+  <div class="aviso-discreto" id="aviso" hidden role="status" aria-live="polite">
+    <i data-lucide="external-link"></i>
+    <span id="aviso-texto">Abrir no editor (protótipo)</span>
+  </div>
+
+  <script>
+    window.VARIANTES = [
+      { key: 'A', nome: 'Lista e detalhe' },
+      { key: 'B', nome: 'Um Corte por vez' },
+      { key: 'C', nome: 'Tabela que abre' }
+    ];
+  </script>
+  <script src="switcher.js"></script>
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      // 12 Cortes plausíveis de um podcast de 3 horas (Corte direto · 5 eixos)
+      const CORTES = [
+        {
+          id: 'c1',
+          titulo: 'A regra de ouro antes de aceitar qualquer sociedade',
+          inicioS: 2538, // 00:42:18
+          fimS: 2592,    // 00:43:12 (54s)
+          motivo: 'Gancho direto em conselho prático com fechamento fechado.',
+          estado: 'aprovado',
+          frasesInicio: [
+            '“Antes de falar de porcentagem, olha quem paga o prejuízo.”',
+            '“Se você não definir saída no contrato, você já entrou preso.”',
+            '“Contrato de sociedade só serve para o dia em que dá errado.”',
+            '“Muita gente fecha acordo de boca na empolgação do começo.”'
+          ],
+          frasesFim: [
+            '“…porque no primeiro mês ruim todo mundo lembra do combinado.”',
+            '“…e foi aí que a gente colocou cláusula de saída em 48 horas.”',
+            '“…sem isso, a empresa vira refém de uma reunião que nunca acaba.”',
+            '“…quem entende isso cedo economiza anos de dor de cabeça.”'
+          ],
+          legenda: ['Se você', 'não definir', '<b>saída</b>', 'no contrato,', 'você já', 'entrou preso'],
+          eixos: [
+            { nome: 'Gancho', peso: '30%', nota: 9.2, why: 'Abre com afirmação forte nos primeiros 2 segundos.' },
+            { nome: 'Autossuficiência', peso: '20%', nota: 8.8, why: 'Exemplo completo sem precisar do resto do episódio.' },
+            { nome: 'Energia', peso: '20%', nota: 8.6, why: 'Tom firme e direto com pausa clara na virada.' },
+            { nome: 'Valor', peso: '15%', nota: 9.0, why: 'Critério acionável para quem abre negócio.' },
+            { nome: 'Fechamento', peso: '15%', nota: 8.7, why: 'Fecha na frase-síntese sem corte abrupto.' }
+          ]
+        },
+        {
+          id: 'c2',
+          titulo: 'O erro de preço que quase quebrou a operação no Natal',
+          inicioS: 4932, // 01:22:12
+          fimS: 4977,    // 01:22:57 (45s)
+          motivo: 'História real com número concreto logo na entrada.',
+          estado: 'aprovado',
+          frasesInicio: [
+            '“A gente vendeu três mil pedidos com margem negativa.”',
+            '“Em dezembro, dobramos o faturamento e zeramos o caixa.”',
+            '“Quando o frete subiu 18%, ninguém atualizou a planilha.”',
+            '“Parecia nosso melhor mês até o boleto do fornecedor chegar.”'
+          ],
+          frasesFim: [
+            '“…e a lição custou mais caro que um ano inteiro de lucro.”',
+            '“…hoje eu confiro margem por pedido antes de subir anúncio.”',
+            '“…faturamento alto sem margem só acelera o buraco.”',
+            '“…foi o susto que salvou o ano seguinte inteiro.”'
+          ],
+          legenda: ['Dobramos o', 'faturamento e', '<b>zeramos</b>', 'o caixa', 'naquele mês'],
+          eixos: [
+            { nome: 'Gancho', peso: '30%', nota: 8.9, why: 'Contraste imediato entre vender muito e ficar sem caixa.' },
+            { nome: 'Autossuficiência', peso: '20%', nota: 8.6, why: 'Explica causa e consequência dentro de 45 segundos.' },
+            { nome: 'Energia', peso: '20%', nota: 8.4, why: 'Ritmo acelerado na narração do problema.' },
+            { nome: 'Valor', peso: '15%', nota: 8.5, why: 'Alerta prático sobre custo de frete e margem.' },
+            { nome: 'Fechamento', peso: '15%', nota: 8.3, why: 'Encerra com a mudança de rotina.' }
+          ]
+        },
+        {
+          id: 'c3',
+          titulo: 'Ele contou como perdeu tudo em 2019',
+          inicioS: 751,  // 00:12:31
+          fimS: 799,     // 00:13:19 (48s)
+          motivo: "Gancho forte: abre com 'perdi tudo em 2019'",
+          estado: 'pendente',
+          frasesInicio: [
+            '“Muita gente acha que eu comecei já com estrutura pronta.”',
+            '“Em março de 2019 eu perdi tudo que tinha juntado em seis anos.”',
+            '“Sobraram duas caixas no escritório e um aluguel atrasado.”',
+            '“O telefone parou de tocar na mesma semana em que o contrato caiu.”'
+          ],
+          frasesFim: [
+            '“…e ninguém daquela mesa atendia mais minhas mensagens.”',
+            '“…ali eu entendi que depender de um único cliente é pedir para cair.”',
+            '“…seis meses depois, reconstruí do zero com três regras novas.”',
+            '“…foi o dia mais silencioso da minha carreira inteira.”'
+          ],
+          legenda: ['Em março', 'de 2019', 'eu <b>perdi</b>', 'tudo que', 'tinha juntado'],
+          eixos: [
+            { nome: 'Gancho', peso: '30%', nota: 9.0, why: 'Abre direto com a perda de 2019 e prende atenção.' },
+            { nome: 'Autossuficiência', peso: '20%', nota: 8.5, why: 'Contexto suficiente sem depender da pergunta anterior.' },
+            { nome: 'Energia', peso: '20%', nota: 8.0, why: 'Entonação contida e sincera no momento da virada.' },
+            { nome: 'Valor', peso: '15%', nota: 8.0, why: 'Traz o aprendizado sobre concentração de receita.' },
+            { nome: 'Fechamento', peso: '15%', nota: 8.0, why: 'Termina com frase fechada e pausa limpa.' }
+          ]
+        },
+        {
+          id: 'c4',
+          titulo: 'Por que reunião diária de uma hora mata a entrega',
+          inicioS: 6320, // 01:45:20
+          fimS: 6361,    // 01:46:01 (41s)
+          motivo: 'Opinião direta sobre rotina de equipe que gera concordância.',
+          estado: 'pendente',
+          frasesInicio: [
+            '“Se o time precisa de uma hora todo dia para se alinhar, falta clareza.”',
+            '“Reunião diária longa virou teatro de quem quer parecer ocupado.”',
+            '“A gente cortou quatro reuniões por semana e a entrega dobrou.”',
+            '“Ninguém produz código ou vídeo em blocos de vinte minutos.”'
+          ],
+          frasesFim: [
+            '“…em quinze minutos por escrito tudo fica resolvido.”',
+            '“…deixa a manhã livre para quem realmente executa.”',
+            '“…reunião boa é a que termina antes do café esfriar.”',
+            '“…testa uma semana sem call de manhã para ver o resultado.”'
+          ],
+          legenda: ['Cortamos', 'quatro reuniões', 'e a <b>entrega</b>', 'simplesmente', 'dobrou'],
+          eixos: [
+            { nome: 'Gancho', peso: '30%', nota: 8.4, why: 'Tese clara contra excesso de reuniões.' },
+            { nome: 'Autossuficiência', peso: '20%', nota: 8.2, why: 'Começo, meio e conclusão fechados.' },
+            { nome: 'Energia', peso: '20%', nota: 8.0, why: 'Boa cadência de fala sem rodeios.' },
+            { nome: 'Valor', peso: '15%', nota: 8.1, why: 'Sugestão objetiva aplicável em qualquer equipe.' },
+            { nome: 'Fechamento', peso: '15%', nota: 7.7, why: 'Convite direto para testar na prática.' }
+          ]
+        },
+        {
+          id: 'c5',
+          titulo: 'Comentário rápido sobre a mudança de algoritmo',
+          inicioS: 8685, // 02:24:45
+          fimS: 8717,    // 02:25:17 (32s)
+          motivo: 'Fato datado; depende da notícia citada minutos antes.',
+          estado: 'rejeitado',
+          frasesInicio: [
+            '“Como eu estava falando antes do intervalo sobre a atualização.”',
+            '“Essa mudança da última sexta mexeu só no alcance de links.”',
+            '“Quem já postava vídeo nativo quase não sentiu diferença.”',
+            '“O pessoal exagerou na reação nos primeiros dois dias.”'
+          ],
+          frasesFim: [
+            '“…mas semana que vem eles já ajustam isso de novo.”',
+            '“…então nem vale reescrever o calendário por causa disso.”',
+            '“…voltando ao ponto do convidado anterior…”',
+            '“…é só observar os próximos dez dias com calma.”'
+          ],
+          legenda: ['Essa mudança', 'mexeu só', 'no <b>alcance</b>', 'de links', 'externos'],
+          eixos: [
+            { nome: 'Gancho', peso: '30%', nota: 7.5, why: 'Entrada morna, referencia trecho anterior.' },
+            { nome: 'Autossuficiência', peso: '20%', nota: 7.2, why: 'Falta citar qual plataforma mudou.' },
+            { nome: 'Energia', peso: '20%', nota: 8.0, why: 'Conversa leve em estúdio.' },
+            { nome: 'Valor', peso: '15%', nota: 8.4, why: 'Acalma pânico comum entre criadores.' },
+            { nome: 'Fechamento', peso: '15%', nota: 8.6, why: 'Boa frase de encerramento.' }
+          ]
+        },
+        {
+          id: 'c6',
+          titulo: 'Como ele respondeu quando o cliente pediu desconto de 40%',
+          inicioS: 3490, // 00:58:10
+          fimS: 3539,    // 00:58:59 (49s)
+          motivo: 'Diálogo encenado de negociação com virada clara.',
+          estado: 'pendente',
+          frasesInicio: [
+            '“Toda proposta grande tem o momento do desconto absurdo.”',
+            '“O diretor pediu 40% de desconto olhando no meu olho.”',
+            '“Eu fechei o notebook e perguntei o que ele queria tirar do escopo.”',
+            '“A sala ficou em silêncio por uns dez segundos.”'
+          ],
+          frasesFim: [
+            '“…porque preço sem tirar entrega vira favor, não negócio.”',
+            '“…no dia seguinte ele assinou no valor cheio.”',
+            '“…quem baixa o preço sem cortar escopo perde respeito na hora.”',
+            '“…essa pergunta resolve metade das negociações difíceis.”'
+          ],
+          legenda: ['Fechei o', 'notebook e', 'perguntei o', 'que sai do', '<b>escopo</b>'],
+          eixos: [
+            { nome: 'Gancho', peso: '30%', nota: 8.1, why: 'Situação reconhecível para quem vende serviço.' },
+            { nome: 'Autossuficiência', peso: '20%', nota: 7.8, why: 'História inteira contada em ordem clara.' },
+            { nome: 'Energia', peso: '20%', nota: 7.6, why: 'Pausa dramática funciona bem.' },
+            { nome: 'Valor', peso: '15%', nota: 7.4, why: 'Técnica simples de troca por escopo.' },
+            { nome: 'Fechamento', peso: '15%', nota: 7.2, why: 'Conclui com o desfecho do contrato.' }
+          ]
+        },
+        {
+          id: 'c7',
+          titulo: 'A pergunta de entrevista que revela quem realmente fez o projeto',
+          inicioS: 5644, // 01:34:04
+          fimS: 5688,    // 01:34:48 (44s)
+          motivo: 'Dica prática de contratação com exemplo de resposta.',
+          estado: 'pendente',
+          frasesInicio: [
+            '“Currículo bonito qualquer modelo escreve hoje em dia.”',
+            '“Eu sempre pergunto qual foi a decisão mais errada que a pessoa tomou.”',
+            '“Quem realmente construiu lembra exatamente do que deu errado.”',
+            '“Quem só assistiu responde com frase genérica de livro.”'
+          ],
+          frasesFim: [
+            '“…e em cinco minutos você separa discurso de prática.”',
+            '“…não falha uma vez em entrevista técnica.”',
+            '“…o detalhe do erro entrega quem estava com a mão na massa.”',
+            '“…anota essa pergunta para a próxima seleção.”'
+          ],
+          legenda: ['Quem realmente', 'construiu', 'lembra do', 'que deu', '<b>errado</b>'],
+          eixos: [
+            { nome: 'Gancho', peso: '30%', nota: 7.8, why: 'Começa desafiando entrevistas tradicionais.' },
+            { nome: 'Autossuficiência', peso: '20%', nota: 7.5, why: 'Fácil de entender sem contexto extra.' },
+            { nome: 'Energia', peso: '20%', nota: 7.2, why: 'Tom calmo e explicativo.' },
+            { nome: 'Valor', peso: '15%', nota: 7.9, why: 'Pergunta pronta para aplicar.' },
+            { nome: 'Fechamento', peso: '15%', nota: 7.0, why: 'Fecha bem na síntese.' }
+          ]
+        },
+        {
+          id: 'c8',
+          titulo: 'O microfone barato que resolveu o eco do estúdio',
+          inicioS: 1715, // 00:28:35
+          fimS: 1752,    // 00:29:12 (37s)
+          motivo: 'Comparação direta de áudio sem enrolação técnica.',
+          estado: 'pendente',
+          frasesInicio: [
+            '“Gastamos seis mil em espuma antes de testar o básico.”',
+            '“Trocar de condensador para dinâmico resolveu 80% do eco.”',
+            '“Em sala sem tratamento, microfone caro só capta mais rua.”',
+            '“A gente descobriu isso gravando num quarto vazio.”'
+          ],
+          frasesFim: [
+            '“…às vezes o problema não é a sala, é o tipo de cápsula.”',
+            '“…e sobrou orçamento para iluminar melhor o quadro.”',
+            '“…testa perto da boca antes de comprar painel acústico.”',
+            '“…ninguém nos avisou disso no primeiro ano.”'
+          ],
+          legenda: ['Microfone caro', 'em sala vazia', 'só capta', 'mais <b>eco</b>', 'da rua'],
+          eixos: [
+            { nome: 'Gancho', peso: '30%', nota: 7.4, why: 'Contraste bom de custo vs. resultado.' },
+            { nome: 'Autossuficiência', peso: '20%', nota: 7.4, why: 'Trecho bem delimitado.' },
+            { nome: 'Energia', peso: '20%', nota: 7.0, why: 'Ritmo constante.' },
+            { nome: 'Valor', peso: '15%', nota: 7.3, why: 'Recomendação útil para iniciantes.' },
+            { nome: 'Fechamento', peso: '15%', nota: 6.9, why: 'Encerramento suave.' }
+          ]
+        },
+        {
+          id: 'c9',
+          titulo: 'Bastidores da viagem que atrasou quatro horas no aeroporto',
+          inicioS: 9410, // 02:36:50
+          fimS: 9444,    // 02:37:24 (34s)
+          motivo: 'Anedota solta sem conexão clara com o tema do canal.',
+          estado: 'rejeitado',
+          frasesInicio: [
+            '“E naquela quinta choveu tanto que fechou o aeroporto.”',
+            '“A gente ficou quatro horas tentando editar no saguão.”',
+            '“Acabou a bateria do computador no meio da exportação.”',
+            '“Quase perdemos o horário de publicar o episódio.”'
+          ],
+          frasesFim: [
+            '“…mas no fim o arquivo subiu faltando dois minutos.”',
+            '“…hoje eu levo carregador extra até para padaria.”',
+            '“…enfim, foi só um perrengue de viagem.”',
+            '“…mas voltando ao assunto principal…”'
+          ],
+          legenda: ['Acabou a', 'bateria no', 'meio da', '<b>exportação</b>', 'no saguão'],
+          eixos: [
+            { nome: 'Gancho', peso: '30%', nota: 6.8, why: 'Começa como conversa informal sem tensão.' },
+            { nome: 'Autossuficiência', peso: '20%', nota: 7.1, why: 'Compreensível, mas pouco relevante.' },
+            { nome: 'Energia', peso: '20%', nota: 7.0, why: 'Risos leves dos dois apresentadores.' },
+            { nome: 'Valor', peso: '15%', nota: 6.5, why: 'Pouco aprendizado prático.' },
+            { nome: 'Fechamento', peso: '15%', nota: 7.0, why: 'Transição fraca no fim.' }
+          ]
+        },
+        {
+          id: 'c10',
+          titulo: 'Por que publicar menos vídeos melhorou a retenção do canal',
+          inicioS: 7140, // 01:59:00
+          fimS: 7186,    // 01:59:46 (46s)
+          motivo: 'Dado de retenção simples e contra-intuitivo.',
+          estado: 'pendente',
+          frasesInicio: [
+            '“Quando a gente postava todo dia, a qualidade caiu na terceira semana.”',
+            '“Caímos de sete para três vídeos por semana e a média dobrou.”',
+            '“O público percebe quando você está só cumprindo tabela.”',
+            '“Sobrou tempo para revisar roteiro e cortar gorduras.”'
+          ],
+          frasesFim: [
+            '“…consistência não é volume, é padrão previsível.”',
+            '“…e a equipe parou de trabalhar no limite toda sexta.”',
+            '“…melhor três bons que sete esquecíveis.”',
+            '“…foi a melhor decisão editorial do ano.”'
+          ],
+          legenda: ['Caímos para', 'três por semana', 'e a <b>média</b>', 'de retenção', 'dobrou'],
+          eixos: [
+            { nome: 'Gancho', peso: '30%', nota: 6.8, why: 'Boa promessa logo no início.' },
+            { nome: 'Autossuficiência', peso: '20%', nota: 6.7, why: 'Fecha o raciocínio em menos de 1 minuto.' },
+            { nome: 'Energia', peso: '20%', nota: 6.3, why: 'Fala mais pausada e reflexiva.' },
+            { nome: 'Valor', peso: '15%', nota: 6.6, why: 'Ajuda quem sofre com frequência diária.' },
+            { nome: 'Fechamento', peso: '15%', nota: 6.5, why: 'Boa frase final.' }
+          ]
+        },
+        {
+          id: 'c11',
+          titulo: 'A diferença entre audiência fiel e pico de curiosidade',
+          inicioS: 4120, // 01:08:40
+          fimS: 4162,    // 01:09:22 (42s)
+          motivo: 'Explicação clara, porém com ritmo mais lento.',
+          estado: 'pendente',
+          frasesInicio: [
+            '“Vídeo polêmico traz gente que nunca mais volta no canal.”',
+            '“Pico de visualização sem retorno não paga a conta do mês seguinte.”',
+            '“Você olha os comentários e metade nem sabe do que o canal fala.”',
+            '“É diferente de quem acompanha toda terça esperando o episódio.”'
+          ],
+          frasesFim: [
+            '“…audiência fiel se constrói em meses, não num susto de algoritmo.”',
+            '“…prefiro dez mil pessoas que confiam do que um milhão passando.”',
+            '“…essa métrica quase ninguém olha no painel.”',
+            '“…e muda totalmente o tipo de pauta que você escolhe.”'
+          ],
+          legenda: ['Pico de', 'curiosidade', 'não cria', '<b>audiência</b>', 'fiel'],
+          eixos: [
+            { nome: 'Gancho', peso: '30%', nota: 6.4, why: 'Introdução um pouco longa.' },
+            { nome: 'Autossuficiência', peso: '20%', nota: 6.5, why: 'Ideia completa e compreensível.' },
+            { nome: 'Energia', peso: '20%', nota: 5.9, why: 'Tom plano durante o trecho.' },
+            { nome: 'Valor', peso: '15%', nota: 6.4, why: 'Boa distinção estratégica.' },
+            { nome: 'Fechamento', peso: '15%', nota: 6.2, why: 'Fecha sem impacto forte.' }
+          ]
+        },
+        {
+          id: 'c12',
+          titulo: 'Leitura de pergunta do chat sobre setup de duas câmeras',
+          inicioS: 9985, // 02:46:25
+          fimS: 10020,   // 02:47:00 (35s)
+          motivo: 'Resposta útil, mas depende do nome do equipamento na pergunta.',
+          estado: 'pendente',
+          frasesInicio: [
+            '“O Marcos perguntou aqui no chat como sincronizar duas câmeras.”',
+            '“A gente usa clap no começo e alinha pelo pico de áudio.”',
+            '“Não precisa de cabo caro se você gravar um áudio guia.”',
+            '“Na mesa de corte já entra tudo com o mesmo frame rate.”'
+          ],
+          frasesFim: [
+            '“…só garante que as duas estejam em 30 quadros cravados.”',
+            '“…se misturar 24 com 30, depois de vinte minutos sai de sincronia.”',
+            '“…valeu pela pergunta, Marcos.”',
+            '“…simples assim, sem complicação.”'
+          ],
+          legenda: ['Garante que', 'as duas', 'estejam em', '<b>30 quadros</b>', 'cravados'],
+          eixos: [
+            { nome: 'Gancho', peso: '30%', nota: 5.8, why: 'Começa lendo nome de espectador.' },
+            { nome: 'Autossuficiência', peso: '20%', nota: 6.0, why: 'Requer saber que falam de gravação.' },
+            { nome: 'Energia', peso: '20%', nota: 5.7, why: 'Final de live, voz mais cansada.' },
+            { nome: 'Valor', peso: '15%', nota: 6.2, why: 'Dica correta de frame rate.' },
+            { nome: 'Fechamento', peso: '15%', nota: 5.8, why: 'Despedida casual do chat.' }
+          ]
+        }
+      ];
+
+      // Calcula Nota ponderada (30/20/20/15/15) e prepara ajustes de borda em memória
+      const PESOS = [0.30, 0.20, 0.20, 0.15, 0.15];
+      CORTES.forEach((c, idx) => {
+        c.ordemFonte = idx;
+        c.nota = c.eixos.reduce((acc, e, i) => acc + e.nota * PESOS[i], 0);
+        c.inicioDelta = 0; // -1..+2
+        c.fimDelta = 0;    // -2..+1
+        c.baseInicioS = c.inicioS;
+        c.baseFimS = c.fimS;
+      });
+
+      const PASSOS_FRASE = 4; // cada Frase desloca 4 s em memória
+      const estadoApp = {
+        variante: 'A',
+        selecionadoId: 'c3', // "Ele contou como perdeu tudo em 2019" (3 de 12 · 2 aprovados)
+        eixosAbertos: { A: false, B: false, C: true },
+        ordemCol: 'nota',    // 'nota' | 'inicio'
+        ordemDir: -1,        // -1 desc | 1 asc
+        undoStack: [],
+        tocando: false,
+        progressoS: 14.2,
+        timerPlayback: null,
+        paletaAberta: false,
+        paletaIndice: 0,
+        paletaFiltro: '',
+        avisoTimer: null
+      };
+
+      // ---------- Utilitários ----------
+      function fmtNota(n) {
+        return n.toFixed(1).replace('.', ',');
+      }
+      function fmtHMS(seg) {
+        const s = Math.max(0, Math.round(seg));
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const r = s % 60;
+        return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(r).padStart(2, '0');
+      }
+      function fmtMS(seg) {
+        const s = Math.max(0, Math.floor(seg));
+        const m = Math.floor(s / 60);
+        const r = s % 60;
+        return String(m).padStart(2, '0') + ':' + String(r).padStart(2, '0');
+      }
+      function getCortesOrdenados() {
+        const copia = CORTES.slice();
+        if (estadoApp.variante === 'C') {
+          copia.sort((a, b) => {
+            const va = estadoApp.ordemCol === 'nota' ? a.nota : a.inicioS;
+            const vb = estadoApp.ordemCol === 'nota' ? b.nota : b.inicioS;
+            return (va - vb) * estadoApp.ordemDir;
+          });
+        } else {
+          // A e B sempre ordenados por Nota decrescente
+          copia.sort((a, b) => b.nota - a.nota);
+        }
+        return copia;
+      }
+      function getSelecionado() {
+        return CORTES.find((c) => c.id === estadoApp.selecionadoId) || CORTES[0];
+      }
+      function duracaoCorte(c) {
+        return Math.max(12, c.fimS - c.inicioS);
+      }
+      function fraseAtual(c, borda) {
+        if (borda === 'inicio') {
+          const i = Math.min(c.frasesInicio.length - 1, Math.max(0, c.inicioDelta + 1));
+          return c.frasesInicio[i];
+        }
+        const i = Math.min(c.frasesFim.length - 1, Math.max(0, c.fimDelta + 1));
+        return c.frasesFim[i];
+      }
+      function legendaAtual(c) {
+        const dur = duracaoCorte(c);
+        const frac = Math.min(0.99, Math.max(0, estadoApp.progressoS / dur));
+        const tokens = c.legenda.map((w) => w.replace(/<\/?b>/g, ''));
+        const ativo = Math.floor(frac * tokens.length);
+        return tokens.map((w, i) => (i === ativo ? `<b>${w}</b>` : w)).join(' ');
+      }
+      function rotuloEstado(estado) {
+        if (estado === 'aprovado') return '<span class="estado"><i data-lucide="check"></i><span>Aprovado</span></span>';
+        if (estado === 'rejeitado') return '<span class="estado"><i data-lucide="x"></i><span>Rejeitado</span></span>';
+        return '<span class="estado"><i data-lucide="circle-dashed"></i><span>Pendente</span></span>';
+      }
+      function iconeEstadoCompacto(estado) {
+        if (estado === 'aprovado') return '<i data-lucide="check" aria-label="Aprovado"></i>';
+        if (estado === 'rejeitado') return '<i data-lucide="x" aria-label="Rejeitado"></i>';
+        return '';
+      }
+
+      // ---------- Ações ----------
+      function selecionarCorte(id, manterPlay) {
+        estadoApp.selecionadoId = id;
+        if (!manterPlay) {
+          estadoApp.progressoS = 0;
+        } else {
+          const dur = duracaoCorte(getSelecionado());
+          if (estadoApp.progressoS >= dur) estadoApp.progressoS = 0;
+        }
+        renderizar();
+      }
+
+      function moverSelecao(delta) {
+        const lista = getCortesOrdenados();
+        const idx = lista.findIndex((c) => c.id === estadoApp.selecionadoId);
+        const prox = Math.min(lista.length - 1, Math.max(0, idx + delta));
+        if (prox !== idx) {
+          selecionarCorte(lista[prox].id, false);
+          garantirVisivel();
+        }
+      }
+
+      function proximoPendenteApos(atualId) {
+        const lista = getCortesOrdenados();
+        const idx = lista.findIndex((c) => c.id === atualId);
+        for (let off = 1; off <= lista.length; off++) {
+          const cand = lista[(idx + off) % lista.length];
+          if (cand.estado === 'pendente' && cand.id !== atualId) return cand.id;
+        }
+        return lista[(idx + 1) % lista.length].id;
+      }
+
+      function decidir(novoEstado) {
+        const c = getSelecionado();
+        const anterior = c.estado;
+        estadoApp.undoStack.push({ id: c.id, anterior });
+        c.estado = novoEstado;
+        const proxId = proximoPendenteApos(c.id);
+        selecionarCorte(proxId, false);
+        garantirVisivel();
+      }
+
+      function pularCorte() {
+        const c = getSelecionado();
+        const proxId = proximoPendenteApos(c.id);
+        selecionarCorte(proxId, false);
+      }
+
+      function desfazer() {
+        const item = estadoApp.undoStack.pop();
+        if (!item) return;
+        const c = CORTES.find((x) => x.id === item.id);
+        if (c) {
+          c.estado = item.anterior;
+          selecionarCorte(c.id, false);
+          garantirVisivel();
+        }
+      }
+
+      function ajustarFrase(borda, delta) {
+        const c = getSelecionado();
+        if (borda === 'inicio') {
+          const novo = c.inicioDelta + delta;
+          const novoInicio = c.baseInicioS + novo * PASSOS_FRASE;
+          if (novo < -1 || novo > 2 || c.fimS - novoInicio < 15 || c.fimS - novoInicio > 90) return;
+          c.inicioDelta = novo;
+          c.inicioS = novoInicio;
+        } else {
+          const novo = c.fimDelta + delta;
+          const novoFim = c.baseFimS + novo * PASSOS_FRASE;
+          if (novo < -1 || novo > 2 || novoFim - c.inicioS < 15 || novoFim - c.inicioS > 90) return;
+          c.fimDelta = novo;
+          c.fimS = novoFim;
+        }
+        const dur = duracaoCorte(c);
+        if (estadoApp.progressoS > dur) estadoApp.progressoS = dur - 1;
+        renderizar();
+      }
+
+      function alternarEixos(varianteKey) {
+        estadoApp.eixosAbertos[varianteKey] = !estadoApp.eixosAbertos[varianteKey];
+        renderizar();
+      }
+
+      function alternarPlay() {
+        estadoApp.tocando = !estadoApp.tocando;
+        if (estadoApp.tocando) {
+          if (!estadoApp.timerPlayback) {
+            estadoApp.timerPlayback = setInterval(() => {
+              const dur = duracaoCorte(getSelecionado());
+              estadoApp.progressoS += 0.25;
+              if (estadoApp.progressoS >= dur) estadoApp.progressoS = 0;
+              atualizarPlaybackDOM();
+            }, 250);
+          }
+        } else if (estadoApp.timerPlayback) {
+          clearInterval(estadoApp.timerPlayback);
+          estadoApp.timerPlayback = null;
+        }
+        renderizar();
+      }
+
+      function atualizarPlaybackDOM() {
+        const c = getSelecionado();
+        const dur = duracaoCorte(c);
+        const pct = Math.min(100, Math.max(0, (estadoApp.progressoS / dur) * 100));
+        const sec = document.querySelector(`[data-variant="${estadoApp.variante}"]`);
+        if (!sec) return;
+        const fill = sec.querySelector('.progresso-preenchido');
+        const head = sec.querySelector('.progresso-playhead');
+        const tempo = sec.querySelector('[data-bind="tempo-play"]');
+        const leg = sec.querySelector('.legenda');
+        if (fill) fill.style.width = pct + '%';
+        if (head) head.style.left = pct + '%';
+        if (tempo) tempo.textContent = `${fmtMS(estadoApp.progressoS)} / ${fmtMS(dur)}`;
+        if (leg) leg.innerHTML = legendaAtual(c);
+      }
+
+      function mostrarAviso(texto) {
+        const el = document.getElementById('aviso');
+        document.getElementById('aviso-texto').textContent = texto;
+        el.hidden = false;
+        clearTimeout(estadoApp.avisoTimer);
+        estadoApp.avisoTimer = setTimeout(() => { el.hidden = true; }, 2600);
+      }
+
+      function garantirVisivel() {
+        requestAnimationFrame(() => {
+          const sec = document.querySelector(`[data-variant="${estadoApp.variante}"]`);
+          const ativo = sec && sec.querySelector('.va-item.sel, .vc-grupo.aberto');
+          if (ativo && ativo.scrollIntoView) {
+            ativo.scrollIntoView({ block: 'nearest' });
+          }
+        });
+      }
+
+      // ---------- Renderização compartilhada de fragmentos ----------
+      function htmlPreview(c, compacto) {
+        const dur = duracaoCorte(c);
+        const pct = Math.min(100, Math.max(0, (estadoApp.progressoS / dur) * 100));
+        const iconePlay = estadoApp.tocando ? 'pause' : 'play';
+        const rotuloPlay = estadoApp.tocando ? 'Pausar' : 'Reproduzir';
+        return `
+          <div class="palco-wrap">
+            <div class="quadro916">
+              <img src="midia/quadro-2.jpg" alt="Prévia 9:16 do Corte">
+              <div class="legenda">${legendaAtual(c)}</div>
+            </div>
+            <div class="progresso-trilha" data-acao="seek" role="slider" aria-label="Posição da prévia" aria-valuemin="0" aria-valuemax="${dur}" aria-valuenow="${Math.round(estadoApp.progressoS)}">
+              <div class="progresso-fundo">
+                <div class="progresso-preenchido" style="width:${pct}%"></div>
+                <div class="progresso-playhead" style="left:${pct}%"></div>
+              </div>
+            </div>
+            <div class="transporte">
+              <button class="btn mini" type="button" data-acao="play" aria-label="${rotuloPlay} prévia">
+                <i data-lucide="${iconePlay}"></i>
+                ${compacto ? '' : `<span>${rotuloPlay}</span><kbd>Espaço</kbd>`}
+              </button>
+              <span class="tc num" data-bind="tempo-play">${fmtMS(estadoApp.progressoS)} / ${fmtMS(dur)}</span>
+            </div>
+          </div>
+        `;
+      }
+
+      function htmlEixosLista(c) {
+        return c.eixos.map((e) => `
+          <div class="eixo-item">
+            <span class="eixo-nome"><span>${e.nome}</span><span class="eixo-peso num">${e.peso}</span></span>
+            <span class="eixo-num num">${fmtNota(e.nota)}</span>
+            <span class="eixo-why">${e.why}</span>
+          </div>
+        `).join('');
+      }
+
+      function htmlBordas(c) {
+        const dur = duracaoCorte(c);
+        const disInicMenos = c.inicioDelta <= -1 || dur + PASSOS_FRASE > 90;
+        const disInicMais = c.inicioDelta >= 2 || dur - PASSOS_FRASE < 15;
+        const disFimMenos = c.fimDelta <= -1 || dur - PASSOS_FRASE < 15;
+        const disFimMais = c.fimDelta >= 2 || dur + PASSOS_FRASE > 90;
+        return `
+          <div class="bordas-bloco">
+            <div class="borda-linha">
+              <span class="borda-rotulo">Início</span>
+              <span class="borda-tc tc num">${fmtHMS(c.inicioS)}</span>
+              <span class="borda-btns">
+                <button class="btn mini" type="button" data-acao="borda" data-borda="inicio" data-delta="-1" ${disInicMenos ? 'disabled' : ''}>−1 Frase</button>
+                <button class="btn mini" type="button" data-acao="borda" data-borda="inicio" data-delta="1" ${disInicMais ? 'disabled' : ''}>+1 Frase</button>
+              </span>
+              <span class="frase-previa">${fraseAtual(c, 'inicio')}</span>
+            </div>
+            <div class="borda-linha">
+              <span class="borda-rotulo">Fim</span>
+              <span class="borda-tc tc num">${fmtHMS(c.fimS)}</span>
+              <span class="borda-btns">
+                <button class="btn mini" type="button" data-acao="borda" data-borda="fim" data-delta="-1" ${disFimMenos ? 'disabled' : ''}>−1 Frase</button>
+                <button class="btn mini" type="button" data-acao="borda" data-borda="fim" data-delta="1" ${disFimMais ? 'disabled' : ''}>+1 Frase</button>
+              </span>
+              <span class="frase-previa">${fraseAtual(c, 'fim')}</span>
+            </div>
+          </div>
+        `;
+      }
+
+      function htmlAcoes(c, opcoes) {
+        const { comPular, comEditor } = opcoes;
+        return `
+          <div class="acoes-linha">
+            <button class="btn prim" type="button" data-acao="aprovar" aria-pressed="${c.estado === 'aprovado'}">
+              <i data-lucide="check"></i><span>Aprovar</span><kbd>A</kbd>
+            </button>
+            <button class="btn sec" type="button" data-acao="rejeitar" aria-pressed="${c.estado === 'rejeitado'}">
+              <i data-lucide="x"></i><span>Rejeitar</span><kbd>R</kbd>
+            </button>
+            ${comPular ? `
+              <button class="btn" type="button" data-acao="pular">
+                <i data-lucide="skip-forward"></i><span>Pular</span><kbd>↓</kbd>
+              </button>
+            ` : ''}
+            ${comEditor ? `
+              <button class="btn" type="button" data-acao="editor">
+                <span>Abrir no editor</span><kbd>Enter</kbd>
+              </button>
+            ` : ''}
+          </div>
+        `;
+      }
+
+      // ---------- Render Variante A ----------
+      function renderVarianteA(lista, c) {
+        const listEl = document.querySelector('[data-mount="va-lista"]');
+        const detEl = document.querySelector('[data-mount="va-detalhe"]');
+        listEl.innerHTML = lista.map((item) => {
+          const sel = item.id === c.id;
+          const decidido = item.estado !== 'pendente';
+          return `
+            <button class="va-item ${sel ? 'marcado sel' : ''} ${decidido ? 'decidido' : ''}"
+              type="button" role="option" aria-selected="${sel}" data-select="${item.id}">
+              <span class="va-item-titulo">${item.titulo}</span>
+              <span class="va-item-meta">
+                <span class="tc num">${fmtHMS(item.inicioS)}</span>
+                <span class="num">${duracaoCorte(item)} s</span>
+              </span>
+              <span class="va-item-dir">
+                <span class="va-item-nota num">${fmtNota(item.nota)}</span>
+                <span class="va-item-estado">${iconeEstadoCompacto(item.estado)}</span>
+              </span>
+            </button>
+          `;
+        }).join('');
+
+        const eixosAberto = estadoApp.eixosAbertos.A;
+        detEl.innerHTML = `
+          <div class="va-detalhe-grid">
+            ${htmlPreview(c, false)}
+            <div class="va-info">
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                <div class="va-meta-discreta">
+                  ${rotuloEstado(c.estado)}
+                  <span>·</span>
+                  <span class="num">${duracaoCorte(c)} s</span>
+                  <span>·</span>
+                  <span>Revisão 2 de 2</span>
+                </div>
+                <h1 class="titulo-corte">${c.titulo}</h1>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                <div class="nota-linha">
+                  <span class="nota-valor num">Nota ${fmtNota(c.nota)}</span>
+                  <span class="nota-motivo">${c.motivo}</span>
+                </div>
+                <button class="eixos-toggle" type="button" data-acao="eixos" data-var="A" aria-expanded="${eixosAberto}">
+                  <i data-lucide="${eixosAberto ? 'chevron-down' : 'chevron-right'}"></i>
+                  <span>Ver os 5 eixos</span>
+                </button>
+                ${eixosAberto ? `<div class="eixos-lista">${htmlEixosLista(c)}</div>` : ''}
+              </div>
+
+              ${htmlBordas(c)}
+              ${htmlAcoes(c, { comPular: false, comEditor: true })}
+            </div>
+          </div>
+        `;
+      }
+
+      // ---------- Render Variante B ----------
+      function renderVarianteB(lista, c) {
+        const palcoEl = document.querySelector('[data-mount="vb-palco"]');
+        const fitaEl = document.querySelector('[data-mount="vb-fita"]');
+        const eixosAberto = estadoApp.eixosAbertos.B;
+
+        palcoEl.innerHTML = `
+          ${htmlPreview(c, false)}
+          <div class="vb-detalhe">
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div class="va-meta-discreta">
+                ${rotuloEstado(c.estado)}
+                <span>·</span>
+                <span class="num">${duracaoCorte(c)} s</span>
+              </div>
+              <h1 class="titulo-corte" style="font-size:18px;">${c.titulo}</h1>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div class="nota-linha">
+                <span class="nota-valor num">Nota ${fmtNota(c.nota)}</span>
+                <span class="nota-motivo">${c.motivo}</span>
+              </div>
+              <button class="eixos-toggle" type="button" data-acao="eixos" data-var="B" aria-expanded="${eixosAberto}">
+                <i data-lucide="${eixosAberto ? 'chevron-down' : 'chevron-right'}"></i>
+                <span>Ver os 5 eixos</span>
+              </button>
+              ${eixosAberto ? `<div class="eixos-lista">${htmlEixosLista(c)}</div>` : ''}
+            </div>
+
+            <div class="vb-tempos-bloco">
+              ${htmlBordas(c)}
+            </div>
+
+            ${htmlAcoes(c, { comPular: true, comEditor: true })}
+          </div>
+        `;
+
+        fitaEl.innerHTML = lista.map((item, idx) => {
+          const sel = item.id === c.id;
+          const feito = item.estado !== 'pendente';
+          return `
+            <button class="vb-tile ${sel ? 'sel' : ''} ${feito ? 'feito' : ''}"
+              type="button" role="tab" aria-selected="${sel}"
+              aria-label="Corte ${idx + 1}: ${item.titulo}" data-select="${item.id}">
+              <span class="num">${idx + 1}</span>
+              ${iconeEstadoCompacto(item.estado)}
+            </button>
+          `;
+        }).join('');
+      }
+
+      // ---------- Render Variante C ----------
+      function renderVarianteC(lista, c) {
+        const sec = document.querySelector('[data-variant="C"]');
+        // Atualiza seta de ordenação no cabeçalho
+        sec.querySelectorAll('[data-acao="ordenar"]').forEach((btn) => {
+          const col = btn.dataset.col;
+          const ativo = col === estadoApp.ordemCol;
+          const rot = col === 'nota' ? 'Nota' : 'Início';
+          const seta = ativo ? `<i data-lucide="${estadoApp.ordemDir === -1 ? 'arrow-down' : 'arrow-up'}"></i>` : '';
+          btn.innerHTML = `<span style="color:${ativo ? 'var(--t1)' : 'inherit'}">${rot}</span>${seta}`;
+        });
+
+        const tabEl = document.querySelector('[data-mount="vc-tabela"]');
+        const eixosAberto = estadoApp.eixosAbertos.C;
+        tabEl.innerHTML = lista.map((item) => {
+          const aberto = item.id === c.id;
+          const decidido = item.estado !== 'pendente';
+          return `
+            <div class="vc-grupo ${aberto ? 'aberto marcado' : ''} ${decidido ? 'decidido' : ''}">
+              <button class="vc-linha" type="button" aria-expanded="${aberto}" data-select="${item.id}">
+                <span class="num" style="font-weight:${aberto ? '600' : '500'};color:${aberto ? 'var(--t1)' : 'var(--t2)'}">${fmtNota(item.nota)}</span>
+                <span class="tc num">${fmtHMS(item.inicioS)}</span>
+                <span class="t3 num">${duracaoCorte(item)} s</span>
+                <span class="vc-titulo-cel">${item.titulo}</span>
+                <span>${rotuloEstado(item.estado)}</span>
+                <span class="t3" style="justify-self:end;"><i data-lucide="${aberto ? 'chevron-down' : 'chevron-right'}"></i></span>
+              </button>
+              ${aberto ? `
+                <div class="vc-gaveta">
+                  ${htmlPreview(item, true)}
+                  <div class="vc-gaveta-dir">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                      <span class="nota-motivo">${item.motivo}</span>
+                      <button class="eixos-toggle" type="button" data-acao="eixos" data-var="C" aria-expanded="${eixosAberto}">
+                        <i data-lucide="${eixosAberto ? 'chevron-down' : 'chevron-right'}"></i>
+                        <span>Ver os 5 eixos</span>
+                      </button>
+                    </div>
+                    ${eixosAberto ? `<div class="vc-eixos-grid">${htmlEixosLista(item)}</div>` : ''}
+                    ${htmlBordas(item)}
+                    <div class="vc-gaveta-rodape">
+                      ${htmlAcoes(item, { comPular: false, comEditor: true })}
+                    </div>
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+          `;
+        }).join('');
+      }
+
+      // ---------- Render Global ----------
+      function renderizar() {
+        const lista = getCortesOrdenados();
+        const c = getSelecionado();
+        const pos = Math.max(1, lista.findIndex((x) => x.id === c.id) + 1);
+        const aprovados = CORTES.filter((x) => x.estado === 'aprovado').length;
+        const contadorTexto = `${pos} de ${CORTES.length} · ${aprovados} aprovados`;
+
+        document.querySelectorAll('[data-bind="contador"]').forEach((el) => {
+          el.textContent = contadorTexto;
+        });
+        document.querySelectorAll('[data-acao="desfazer"]').forEach((btn) => {
+          btn.disabled = estadoApp.undoStack.length === 0;
+        });
+
+        if (estadoApp.variante === 'A') renderVarianteA(lista, c);
+        if (estadoApp.variante === 'B') renderVarianteB(lista, c);
+        if (estadoApp.variante === 'C') renderVarianteC(lista, c);
+
+        if (window.lucide) window.lucide.createIcons();
+      }
+
+      // ---------- Paleta Ctrl+K (6 comandos da revisão) ----------
+      const COMANDOS = [
+        { id: 'aprovar', nome: 'Aprovar Corte atual', atalho: 'A', icone: 'check', fn: () => decidir('aprovado') },
+        { id: 'rejeitar', nome: 'Rejeitar Corte atual', atalho: 'R', icone: 'x', fn: () => decidir('rejeitado') },
+        { id: 'proximo', nome: 'Ir para o próximo Corte pendente', atalho: '↓', icone: 'skip-forward', fn: pularCorte },
+        { id: 'desfazer', nome: 'Desfazer última decisão', atalho: 'Ctrl Z', icone: 'undo-2', fn: desfazer },
+        { id: 'play', nome: 'Reproduzir ou pausar prévia', atalho: 'Espaço', icone: 'play', fn: alternarPlay },
+        { id: 'editor', nome: 'Abrir Corte no editor', atalho: 'Enter', icone: 'external-link', fn: () => mostrarAviso('Abrir no editor (protótipo)') }
+      ];
+
+      function comandosFiltrados() {
+        const q = estadoApp.paletaFiltro.trim().toLowerCase();
+        if (!q) return COMANDOS;
+        return COMANDOS.filter((cmd) => cmd.nome.toLowerCase().includes(q));
+      }
+
+      function renderPaleta() {
+        const itens = comandosFiltrados();
+        if (estadoApp.paletaIndice >= itens.length) estadoApp.paletaIndice = 0;
+        const listaEl = document.getElementById('paleta-lista');
+        if (!itens.length) {
+          listaEl.innerHTML = '<div class="paleta-vazio">Nenhum comando encontrado</div>';
+          return;
+        }
+        listaEl.innerHTML = itens.map((cmd, idx) => `
+          <button class="paleta-item ${idx === estadoApp.paletaIndice ? 'ativo' : ''}" type="button" data-cmd="${cmd.id}">
+            <span class="paleta-item-esq">
+              <i data-lucide="${cmd.icone}"></i>
+              <span>${cmd.nome}</span>
+            </span>
+            <kbd>${cmd.atalho}</kbd>
+          </button>
+        `).join('');
+        if (window.lucide) window.lucide.createIcons();
+      }
+
+      function abrirPaleta() {
+        estadoApp.paletaAberta = true;
+        estadoApp.paletaFiltro = '';
+        estadoApp.paletaIndice = 0;
+        const fundo = document.getElementById('paleta-fundo');
+        const input = document.getElementById('paleta-input');
+        input.value = '';
+        fundo.hidden = false;
+        renderPaleta();
+        input.focus();
+      }
+
+      function fecharPaleta() {
+        estadoApp.paletaAberta = false;
+        document.getElementById('paleta-fundo').hidden = true;
+      }
+
+      function executarComandoPaleta(cmd) {
+        if (!cmd) return;
+        fecharPaleta();
+        cmd.fn();
+      }
+
+      // ---------- Delegação de cliques ----------
+      document.addEventListener('click', (e) => {
+        const cmdBtn = e.target.closest('[data-cmd]');
+        if (cmdBtn) {
+          const cmd = COMANDOS.find((x) => x.id === cmdBtn.dataset.cmd);
+          executarComandoPaleta(cmd);
+          return;
+        }
+        if (e.target.id === 'paleta-fundo') {
+          fecharPaleta();
+          return;
+        }
+
+        const selBtn = e.target.closest('[data-select]');
+        if (selBtn) {
+          selecionarCorte(selBtn.dataset.select, false);
+          return;
+        }
+
+        const acaoEl = e.target.closest('[data-acao]');
+        if (!acaoEl) return;
+        const acao = acaoEl.dataset.acao;
+        if (acao === 'paleta') abrirPaleta();
+        else if (acao === 'desfazer') desfazer();
+        else if (acao === 'aprovar') decidir('aprovado');
+        else if (acao === 'rejeitar') decidir('rejeitado');
+        else if (acao === 'pular') pularCorte();
+        else if (acao === 'editor') mostrarAviso('Abrir no editor (protótipo)');
+        else if (acao === 'play') alternarPlay();
+        else if (acao === 'eixos') alternarEixos(acaoEl.dataset.var);
+        else if (acao === 'borda') ajustarFrase(acaoEl.dataset.borda, Number(acaoEl.dataset.delta));
+        else if (acao === 'ordenar') {
+          const col = acaoEl.dataset.col;
+          if (estadoApp.ordemCol === col) estadoApp.ordemDir *= -1;
+          else { estadoApp.ordemCol = col; estadoApp.ordemDir = col === 'nota' ? -1 : 1; }
+          renderizar();
+        } else if (acao === 'seek') {
+          const rect = acaoEl.getBoundingClientRect();
+          const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+          estadoApp.progressoS = frac * duracaoCorte(getSelecionado());
+          atualizarPlaybackDOM();
+        }
+      });
+
+      // ---------- Eventos da paleta ----------
+      const paletaInput = document.getElementById('paleta-input');
+      paletaInput.addEventListener('input', (e) => {
+        estadoApp.paletaFiltro = e.target.value;
+        estadoApp.paletaIndice = 0;
+        renderPaleta();
+      });
+      paletaInput.addEventListener('keydown', (e) => {
+        const itens = comandosFiltrados();
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          fecharPaleta();
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (itens.length) {
+            estadoApp.paletaIndice = (estadoApp.paletaIndice + 1) % itens.length;
+            renderPaleta();
+          }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (itens.length) {
+            estadoApp.paletaIndice = (estadoApp.paletaIndice - 1 + itens.length) % itens.length;
+            renderPaleta();
+          }
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          executarComandoPaleta(itens[estadoApp.paletaIndice]);
+        }
+      });
+
+      // ---------- Atalhos globais ----------
+      addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+          e.preventDefault();
+          if (estadoApp.paletaAberta) fecharPaleta();
+          else abrirPaleta();
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+          const t = e.target;
+          if (t.closest && t.closest('input, textarea, [contenteditable]')) return;
+          e.preventDefault();
+          desfazer();
+          return;
+        }
+
+        if (estadoApp.paletaAberta) {
+          if (e.key === 'Escape') { e.preventDefault(); fecharPaleta(); }
+          return;
+        }
+
+        const t = e.target;
+        if (t.closest && t.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]')) return;
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+        const k = e.key.toLowerCase();
+        if (k === 'a') {
+          e.preventDefault();
+          decidir('aprovado');
+        } else if (k === 'r') {
+          e.preventDefault();
+          decidir('rejeitado');
+        } else if (e.key === 'ArrowDown' || k === 'j') {
+          e.preventDefault();
+          moverSelecao(1);
+        } else if (e.key === 'ArrowUp' || k === 'k') {
+          e.preventDefault();
+          moverSelecao(-1);
+        } else if (e.key === ' ') {
+          if (t.closest && t.closest('button, a')) return;
+          e.preventDefault();
+          alternarPlay();
+        } else if (e.key === 'Enter') {
+          if (t.closest && t.closest('button, a')) return;
+          e.preventDefault();
+          mostrarAviso('Abrir no editor (protótipo)');
+        }
+      });
+
+      // ---------- Troca de variante via switcher.js ----------
+      document.addEventListener('variante', (e) => {
+        estadoApp.variante = e.detail;
+        renderizar();
+      });
+
+      // Render inicial baseado na URL atual
+      const params = new URLSearchParams(location.search);
+      const inicial = params.get('variant');
+      if (inicial && ['A', 'B', 'C'].includes(inicial)) estadoApp.variante = inicial;
+      renderizar();
+    })();
+  </script>
+</body>
+</html>
