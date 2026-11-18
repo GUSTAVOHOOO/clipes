@@ -23,7 +23,7 @@ import {
 } from 'react'
 import { flushSync } from 'react-dom'
 import { useAtalhos, usePaleta, type Atalho } from '~/comandos/atalhos'
-import { chamar, paraErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useFila, useSalvamentoEditor, type Fila } from '~/core/progresso'
 import { resolver, type Rota } from '~/rotas/rotas'
@@ -289,7 +289,7 @@ export function Shell({
       setDialogoErroSalvarAberto(false)
       salvamento.limparErro()
     } catch (erro) {
-      setErroFlushLocal(erro instanceof ErroCore ? erro : new ErroCore('project_write', String(erro ?? '')))
+      setErroFlushLocal(paraErroCore(erro))
     } finally {
       setSalvandoAgora(false)
     }

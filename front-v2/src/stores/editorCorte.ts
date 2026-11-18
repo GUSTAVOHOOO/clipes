@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import {
   useFila,
   useSalvamentoEditor,
@@ -373,19 +373,6 @@ export interface StoreEditorCorte {
   registrarEventoProgresso: (evento: EventoProgresso) => void
 }
 
-function normalizarErro(err: unknown): ErroCore {
-  if (err instanceof ErroCore) return err
-  if (err && typeof err === 'object' && 'code' in err) {
-    const rec = err as { code?: unknown; message?: unknown; usage?: unknown }
-    return new ErroCore(
-      typeof rec.code === 'string' && rec.code ? rec.code : 'desconhecido',
-      typeof rec.message === 'string' ? rec.message : '',
-      rec.usage,
-    )
-  }
-  return new ErroCore('desconhecido', err instanceof Error ? err.message : String(err ?? ''))
-}
-
 function estadoInicial(
   projetoPath: string | null = null,
   corteId: string | null = null,
@@ -675,7 +662,7 @@ export function criarStoreEditorCorte(): StoreEditorCorte {
       }
     } catch (err) {
       if (token !== sessaoToken) return
-      const erro = normalizarErro(err)
+      const erro = paraErroCore(err)
       if (erro.code !== 'proxy_not_ready') {
         atualizarEstado({
           timeline: { ...estado.timeline, state: 'failed', error: erro.code },
@@ -769,7 +756,7 @@ export function criarStoreEditorCorte(): StoreEditorCorte {
           error: rProxy.value.error ?? null,
         }
       } else if (rProxy.status === 'rejected') {
-        const erroProxy = normalizarErro(rProxy.reason)
+        const erroProxy = paraErroCore(rProxy.reason)
         if (erroProxy.code === 'source_offline' || erroProxy.code === 'source_changed') {
           patch.modoSomenteLeituraMidia = true
           patch.proxy = { state: 'offline', key: null, job: null, progress: 0, error: null }
@@ -793,7 +780,7 @@ export function criarStoreEditorCorte(): StoreEditorCorte {
       return doc
     } catch (err) {
       if (token !== sessaoToken) return null
-      atualizarEstado({ carregando: false, erro: normalizarErro(err) })
+      atualizarEstado({ carregando: false, erro: paraErroCore(err) })
       return null
     }
   }
@@ -844,7 +831,7 @@ export function criarStoreEditorCorte(): StoreEditorCorte {
       return atualizado
     } catch (err) {
       if (token !== sessaoToken) throw err
-      const erro = normalizarErro(err)
+      const erro = paraErroCore(err)
       atualizarEstado({
         oficial: antes,
         previaLocal: null,
@@ -1175,7 +1162,7 @@ export function criarStoreEditorCorte(): StoreEditorCorte {
       }
     } catch (err) {
       if (token === sessaoToken) {
-        atualizarEstado({ frases: frasesAntes, erroAcao: normalizarErro(err) })
+        atualizarEstado({ frases: frasesAntes, erroAcao: paraErroCore(err) })
       }
       throw err
     }
@@ -1210,7 +1197,7 @@ export function criarStoreEditorCorte(): StoreEditorCorte {
       atualizarEstado({ dirty: false, salvando: false, erroSalvamento: null })
       return { ok: true }
     } catch (err) {
-      const erro = normalizarErro(err)
+      const erro = paraErroCore(err)
       if (token === sessaoToken) {
         atualizarEstado({ salvando: false, erroSalvamento: erro })
       }
