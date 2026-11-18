@@ -181,4 +181,11 @@ describe('mapeador de erros (erros.ts)', () => {
     expect(alerta).toHaveTextContent('Ver detalhe técnico')
     expect(alerta).toHaveTextContent('desconhecido: boom')
   })
+
+  it('mapeia window_uncertain em PT-BR com vocabulário do domínio e recuperação para a Fila', () => {
+    const resultado = mensagemDeErro(new ErroCore('window_uncertain', 'janela incerta'))
+    expect(resultado.titulo).toMatch(/Janela/)
+    expect(resultado.titulo).toMatch(/Seleção/)
+    expect(resultado.recuperacao).toEqual({ rotulo: 'Abrir Fila de Jobs', acao: 'abrir-fila' })
+  })
 })
