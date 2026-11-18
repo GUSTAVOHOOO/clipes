@@ -23,6 +23,11 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Sintoma:** a revisão automática do worker bloqueia `Stop-Process`, apagar arquivos temporários ou abrir o Chrome.
 - **Ação:** o worker pede ao coordenador via `ask` com PIDs e caminhos exatos; o coordenador confere o comando de cada processo antes de encerrar e apaga os arquivos.
 
+### `agy --print` em modo headless volta vazio com exit 0
+- **Sintoma:** `agy --mode plan --print "<brief>" --output-format json` termina com `status: SUCCESS`, `response: ""` e `denied_actions: [{action: command, display_name: Bash}]`. O stderr diz que uma ferramenta pediu a permissão `command` e o modo headless a negou.
+- **Causa:** para ler arquivos, o Antigravity tenta usar o shell, e o modo headless não consegue pedir a permissão, então nega em silêncio.
+- **Ação:** no primeiro prompt, escreva "não use shell; use só a ferramenta nativa de leitura de arquivo". Quando a resposta vier vazia, confira `denied_actions` antes de concluir que deu falha de cota ou de ambiente. Para retomar a mesma sessão, use `agy --conversation <uuid>`. Não use `--dangerously-skip-permissions` em tarefa de leitura.
+
 ### Decisão que não está no ticket nem nos ADRs
 - **Ação:** o worker pergunta via `ask`; o coordenador leva ao dev e não decide sozinho. A resposta vira registro no PR (ADR curto ou seção de doc).
 - **Já decidido:** o seam do núcleo usa um crate Rust sem Tauri, registro de comandos por módulo com `inventory`, despacho único (nome + JSON) para UI e harness, `ProgressEvent` tipado e `core::process::spawn` sem shell (PR #86). O identificador do app é `io.github.gustavohooo.clipes`.
