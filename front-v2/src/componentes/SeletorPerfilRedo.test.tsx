@@ -159,7 +159,7 @@ describe('<SeletorPerfilRedo>', () => {
     // Exclui perfilAtual ('Principal Local') e mantém os demais
     expect(within(dialogo).queryByText(/Principal Local/)).toBeNull()
     expect(dialogo).toHaveTextContent(/Remoto Forte/)
-    expect(dialogo).toHaveTextContent(/#304/)
+    expect(dialogo).not.toHaveTextContent(/#\d+/)
 
     const btnCancelar = within(dialogo).getByRole('button', { name: 'Cancelar' })
     await waitFor(() => {
@@ -274,5 +274,148 @@ describe('<SeletorPerfilRedo>', () => {
     const alertaIncerta = await within(dialogo).findByRole('alert')
     expect(alertaIncerta).toHaveTextContent(/chamada.*incert/i)
     expect(aoFechar).not.toHaveBeenCalled()
+  })
+
+  it('UI-34: usa tokens do design-system-v2 sem variáveis CSS v1 no rodapé e quando não há outro perfil', async () => {
+    configurarMocksPadrao()
+    const { unmount } = render(
+      envolver(
+        <SeletorPerfilRedo
+          aberto
+          run={1}
+          windows={[0]}
+          perfilAtual="legacy"
+          aoFechar={vi.fn()}
+          aoConcluir={vi.fn()}
+        />,
+      ),
+    )
+
+    const dialogo = await screen.findByRole('alertdialog')
+    const notaRevisao = await within(dialogo).findByText(/Gera uma nova revisão nesta execução/i)
+    const linhaNota = notaRevisao.closest('div')
+    expect(linhaNota).toHaveClass('text-pequeno', 'text-t3')
+
+    const classesNormal = Array.from(dialogo.querySelectorAll('*'))
+      .map((el) => el.getAttribute('class') ?? '')
+      .join(' ')
+    expect(classesNormal).not.toMatch(/var\(--(borda|raio-|texto-|texto\))/)
+    unmount()
+
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'provider.profiles.list') {
+        return {
+          profiles: [
+            {
+              id: 'legacy',
+              label: 'Principal Local',
+              kind: 'ollama',
+              endpoint: 'http://127.0.0.1:11434/v1',
+              model: 'llama3:8b',
+              local: true,
+              cli: false,
+            },
+          ],
+        }
+      }
+      if (cmd === 'assistant.tasks') {
+        return { projectLocalOnly: false, tasks: [] }
+      }
+      return null
+    })
+
+    render(
+      envolver(
+        <SeletorPerfilRedo
+          aberto
+          run={1}
+          windows={[0]}
+          perfilAtual="legacy"
+          aoFechar={vi.fn()}
+          aoConcluir={vi.fn()}
+        />,
+      ),
+    )
+
+    const dialogoVazio = await screen.findByRole('alertdialog')
+    const msgSemOutro = await within(dialogoVazio).findByText(/Nenhum outro Perfil de Provedor disponível/i)
+    expect(msgSemOutro).toHaveClass('text-pequeno', 'text-t3')
+
+    const classesVazio = Array.from(dialogoVazio.querySelectorAll('*'))
+      .map((el) => el.getAttribute('class') ?? '')
+      .join(' ')
+    expect(classesVazio).not.toMatch(/var\(--(borda|raio-|texto-|texto\))/)
+  })
+
+  it('UI-35: não expõe número de ticket (#304), comandos internos nem "legacy" na UI', async () => {
+    const user = userEvent.setup()
+
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'provider.profiles.list') {
+        return {
+          profiles: [
+            {
+              id: 'legacy',
+              label: 'legacy',
+              kind: 'openai',
+              endpoint: 'https://api.openai.com/v1',
+              model: 'gpt-4o-mini',
+              local: false,
+              cli: false,
+            },
+            {
+              id: 'remoto-forte',
+              label: 'Remoto Forte',
+              kind: 'openai',
+              endpoint: 'https://api.openai.com/v1',
+              model: 'gpt-4o',
+              local: false,
+              cli: false,
+            },
+          ],
+        }
+      }
+      if (cmd === 'assistant.tasks') {
+        return { projectLocalOnly: false, tasks: [] }
+      }
+      if (cmd === 'selection.estimate') {
+        return {
+          run: 1,
+          windows: [0],
+          profile: { id: 'legacy', label: 'legacy', kind: 'openai', model: 'gpt-4o-mini' },
+          paid: true,
+          leavesMachine: true,
+          estimate: { kind: 'usd', minMicroUsd: 500, maxMicroUsd: 1500, inputTokens: 6000, windows: 1 },
+        }
+      }
+      return null
+    })
+
+    render(
+      envolver(
+        <SeletorPerfilRedo
+          aberto
+          run={1}
+          windows={[0]}
+          perfilAtual="remoto-forte"
+          aoFechar={vi.fn()}
+          aoConcluir={vi.fn()}
+        />,
+      ),
+    )
+
+    const dialogo = await screen.findByRole('alertdialog')
+    const resumo = await within(dialogo).findByRole('region', {
+      name: /Resumo de custo e privacidade/i,
+    })
+
+    const notaRevisao = within(dialogo).getByText(/Gera uma nova revisão nesta execução/i)
+    await user.hover(notaRevisao)
+
+    expect(document.body.textContent ?? '').not.toMatch(/#\d+/)
+    expect(document.body.textContent ?? '').not.toContain('selection.redo')
+    expect(dialogo).not.toHaveTextContent(/\blegacy\b/i)
+    expect(within(dialogo).getByRole('combobox')).toHaveTextContent('Perfil configurado')
+    expect(within(resumo).getByText('Perfil configurado')).toBeInTheDocument()
   })
 })
