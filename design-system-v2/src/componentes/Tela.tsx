@@ -17,11 +17,17 @@ export interface TelaProps {
   meio?: ReactNode
   /** extras à direita do topo, antes da Fila */
   direita?: ReactNode
+  /** extras à direita do topo, depois da Paleta */
+  aposPaleta?: ReactNode
   /** false sem Projeto aberto */
   mostrarEtapas?: boolean
   /** true no assistente: só a marca */
   modoMinimo?: boolean
   projeto?: { nome: string; outros?: string[] } | null
+  aoSelecionarProjeto?: (outro: string) => void
+  aoTrocarProjeto?: () => void
+  aoConfigurarProjeto?: () => void
+  aoFecharProjeto?: () => void
   etapa?: Etapa
   /** contadores discretos por etapa (Fontes transcritas, Cortes aprovados) */
   contadores?: Partial<Record<Etapa, string>>
@@ -30,27 +36,49 @@ export interface TelaProps {
   aoAbrirFila?: () => void
   aoAbrirPaleta?: () => void
   somenteLocal?: boolean
+  aoAbrirSomenteLocal?: () => void
   /** barra de status: esquerda e direita */
   status?: { esquerda?: ReactNode; direita?: ReactNode }
   children: ReactNode
   className?: string
 }
 
-export function Tela({ titulo, meio, direita, mostrarEtapas = true, modoMinimo, projeto, etapa, contadores, aoIrEtapa, fila, aoAbrirFila, aoAbrirPaleta, somenteLocal, status, children, className }: TelaProps) {
+export function Tela({ titulo, meio, direita, aposPaleta, mostrarEtapas = true, modoMinimo, projeto, aoSelecionarProjeto, aoTrocarProjeto, aoConfigurarProjeto, aoFecharProjeto, etapa, contadores, aoIrEtapa, fila, aoAbrirFila, aoAbrirPaleta, somenteLocal, aoAbrirSomenteLocal, status, children, className }: TelaProps) {
   return (
-    <div className={cn('flex h-full w-full min-w-0 flex-col overflow-hidden bg-chao', className)} aria-label={titulo}>
+    <div data-tela="" className={cn('flex h-full w-full min-w-0 flex-col overflow-hidden bg-chao', className)} aria-label={titulo}>
       <BarraSuperior>
         <Marca compacta={!!projeto && !modoMinimo} />
-        {!modoMinimo && projeto && <SeletorProjeto nome={projeto.nome} outros={projeto.outros} />}
+        {!modoMinimo && projeto && (
+          <SeletorProjeto
+            nome={projeto.nome}
+            outros={projeto.outros}
+            aoSelecionar={aoSelecionarProjeto}
+            aoTrocar={aoTrocarProjeto}
+            aoConfigurar={aoConfigurarProjeto}
+            aoFechar={aoFecharProjeto}
+          />
+        )}
         {!modoMinimo && mostrarEtapas && projeto && <Etapas atual={etapa} contadores={contadores} aoIr={aoIrEtapa} />}
         {!modoMinimo && (
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-2">
             {somenteLocal && (
-              <Status icone={<ShieldCheck className="size-[13px] stroke-[1.75]" aria-hidden />}>Somente local</Status>
+              aoAbrirSomenteLocal ? (
+                <button
+                  type="button"
+                  onClick={aoAbrirSomenteLocal}
+                  aria-label="Somente local: abrir configurações de privacidade"
+                  className="flex h-7 cursor-pointer items-center rounded-controle border-0 bg-transparent px-2 transition-colors duration-(--dur-rapida) hover:bg-area hover:text-t1"
+                >
+                  <Status icone={<ShieldCheck className="size-[13px] stroke-[1.75]" aria-hidden />}>Somente local</Status>
+                </button>
+              ) : (
+                <Status icone={<ShieldCheck className="size-[13px] stroke-[1.75]" aria-hidden />}>Somente local</Status>
+              )
             )}
             {direita}
             {fila !== undefined && <GatilhoFila fila={fila} aoAbrir={aoAbrirFila} />}
             <GatilhoPaleta aoAbrir={aoAbrirPaleta} />
+            {aposPaleta}
           </div>
         )}
       </BarraSuperior>
@@ -63,7 +91,7 @@ export function Tela({ titulo, meio, direita, mostrarEtapas = true, modoMinimo, 
 
 export function BarraSuperior({ children }: { children: ReactNode }) {
   return (
-    <header className="flex h-(--altura-topo) shrink-0 items-center gap-5 border-b border-linha px-4">
+    <header data-regiao="topo" tabIndex={-1} className="foco-interno flex h-(--altura-topo) shrink-0 items-center gap-5 border-b border-linha px-4">
       {children}
     </header>
   )
@@ -78,7 +106,16 @@ function Marca({ compacta }: { compacta?: boolean }) {
   )
 }
 
-export function SeletorProjeto({ nome, outros = [] }: { nome: string; outros?: string[] }) {
+export interface SeletorProjetoProps {
+  nome: string
+  outros?: string[]
+  aoSelecionar?: (outro: string) => void
+  aoTrocar?: () => void
+  aoConfigurar?: () => void
+  aoFechar?: () => void
+}
+
+export function SeletorProjeto({ nome, outros = [], aoSelecionar, aoTrocar, aoConfigurar, aoFechar }: SeletorProjetoProps) {
   return (
     <Menu
       gatilho={
@@ -90,14 +127,14 @@ export function SeletorProjeto({ nome, outros = [] }: { nome: string; outros?: s
     >
       <MenuItem icone={<Check />}>{nome}</MenuItem>
       {outros.map((o) => (
-        <MenuItem key={o} icone={<span />}>
+        <MenuItem key={o} icone={<span />} aoSelecionar={aoSelecionar ? () => aoSelecionar(o) : undefined}>
           {o}
         </MenuItem>
       ))}
       <MenuSeparador />
-      <MenuItem icone={<FolderOpen />}>Trocar Projeto…</MenuItem>
-      <MenuItem icone={<Settings />}>Configurações do Projeto</MenuItem>
-      <MenuItem icone={<LogOut />}>Fechar Projeto</MenuItem>
+      <MenuItem icone={<FolderOpen />} aoSelecionar={aoTrocar}>Trocar Projeto…</MenuItem>
+      <MenuItem icone={<Settings />} aoSelecionar={aoConfigurar}>Configurações do Projeto</MenuItem>
+      <MenuItem icone={<LogOut />} aoSelecionar={aoFechar}>Fechar Projeto</MenuItem>
     </Menu>
   )
 }
@@ -156,7 +193,7 @@ export function GatilhoPaleta({ aoAbrir }: { aoAbrir?: () => void }) {
 /** Rodapé fino: salvamento e job à esquerda; dicas de atalho à direita. Anuncia mudanças com polidez. */
 export function BarraStatus({ esquerda, direita }: { esquerda?: ReactNode; direita?: ReactNode }) {
   return (
-    <footer className="flex h-(--altura-rodape) shrink-0 items-center justify-between gap-4 px-4 text-pequeno text-t3">
+    <footer data-regiao="rodape" tabIndex={-1} className="foco-interno flex h-(--altura-rodape) shrink-0 items-center justify-between gap-4 px-4 text-pequeno text-t3">
       <div role="status" aria-live="polite" className="flex min-w-0 items-center gap-4">
         {esquerda}
       </div>
