@@ -6,6 +6,7 @@ import type { Rota, SecaoConfig } from '~/rotas/rotas'
 import { useRota } from '~/rotas/useRota'
 import { ComEstado, useEstadoForcado } from '~/shell/EstadoForcado'
 import { Shell, useProjetoAtual, type ProjetoAtual } from '~/shell/Shell'
+import { Assistente } from '~/telas/assistente/Assistente'
 import { Inicio } from '~/telas/inicio/Inicio'
 
 const TITULOS_CONFIG: Record<SecaoConfig, string> = {
@@ -181,6 +182,14 @@ function AppRoteado({
     return (
       <Shell rota={rota} projeto={projeto} somenteLocal={somenteLocal}>
         <Inicio />
+      </Shell>
+    )
+  }
+
+  if (rota.tela === 'assistente') {
+    return (
+      <Shell rota={rota} projeto={projeto} somenteLocal={somenteLocal}>
+        <Assistente passo={rota.passo} />
       </Shell>
     )
   }
