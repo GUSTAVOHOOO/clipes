@@ -5,6 +5,7 @@ import { useAtalhos, usePaleta, type Atalho } from '~/comandos/atalhos'
 import { chamar } from '~/core/cliente'
 import { useFila, type Fila } from '~/core/progresso'
 import { resolver, type Rota } from '~/rotas/rotas'
+import { FechamentoJanela } from '~/shell/FechamentoJanela'
 
 export type ProjetoAtual = {
   id?: string | null
@@ -345,6 +346,7 @@ export function Shell({
       }
     >
       <main className="flex min-h-0 flex-1 flex-col overflow-auto p-4">{children}</main>
+      <FechamentoJanela jobs={jobs} />
     </Tela>
   )
 }

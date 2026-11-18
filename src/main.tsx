@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { isTauri } from '@tauri-apps/api/core';
+import { listen, emit, type UnlistenFn } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { PanelLeft, PanelRight } from 'lucide-react';
 import { ComandosProvider, useComandos } from '@/lib/comandos';
 import { LanguageContext, useText, type Language } from '@/lib/i18n';
@@ -56,12 +58,66 @@ function App() {
   const setLanguage = (v: Language) => { updateLanguage(v); try { localStorage.setItem('clipes.language',v); } catch { /* session only */ } };
   return <LanguageContext.Provider value={language}><ComandosProvider><Shell language={language} setLanguage={setLanguage}/></ComandosProvider></LanguageContext.Provider>;
 }
-iniciarTema();
-const rootEl = document.getElementById('root')!;
-if (isTauri()) {
-  void initMediaTransport().then(() => {
+export type OpcoesFechamentoV1 = {
+  isTauri?: () => boolean;
+  listen?: typeof listen;
+  emit?: typeof emit;
+  getCurrentWindow?: typeof getCurrentWindow;
+};
+
+type EntradaListenerFechamento = {
+  contagem: number;
+  desligar: Promise<UnlistenFn>;
+};
+
+let fechamentoAtivo: EntradaListenerFechamento | null = null;
+
+/** Registra um único listener para `app-close-requested` no front V1 e destrói a janela no Tauri. */
+export function registrarFechamentoV1(opcoes: OpcoesFechamentoV1 = {}): () => void {
+  const noTauri = opcoes.isTauri ?? isTauri;
+  if (!noTauri()) return () => {};
+
+  if (!fechamentoAtivo) {
+    const assinar = opcoes.listen ?? listen;
+    const emitir = opcoes.emit ?? emit;
+    const janelaAtual = opcoes.getCurrentWindow ?? getCurrentWindow;
+    const desligar = assinar('app-close-requested', () => {
+      void emitir('app-close-ack').catch(() => {});
+      void janelaAtual()
+        .destroy()
+        .catch(() => {});
+    });
+    fechamentoAtivo = { contagem: 0, desligar };
+  }
+
+  const entrada = fechamentoAtivo;
+  entrada.contagem += 1;
+
+  let cancelado = false;
+  return () => {
+    if (cancelado) return;
+    cancelado = true;
+    entrada.contagem -= 1;
+    if (entrada.contagem <= 0) {
+      if (fechamentoAtivo === entrada) {
+        fechamentoAtivo = null;
+      }
+      void entrada.desligar
+        .then((unlisten) => unlisten())
+        .catch(() => {});
+    }
+  };
+}
+
+const rootEl = typeof document !== 'undefined' ? document.getElementById('root') : null;
+if (rootEl) {
+  iniciarTema();
+  if (isTauri()) {
+    void registrarFechamentoV1();
+    void initMediaTransport().then(() => {
+      createRoot(rootEl).render(<App />);
+    });
+  } else {
     createRoot(rootEl).render(<App />);
-  });
-} else {
-  createRoot(rootEl).render(<App />);
+  }
 }
