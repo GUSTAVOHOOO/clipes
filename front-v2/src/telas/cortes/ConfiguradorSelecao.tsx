@@ -177,18 +177,6 @@ const ROTULO_EIXO: Record<string, string> = {
 const TETO_TECNICO_PADRAO_S = 300
 const LIMITE_MUSICA_SHORTS_S = 60
 
-function normalizarErro(err: unknown): ErroCore {
-  if (err instanceof ErroCore) return err
-  if (err && typeof err === 'object' && 'code' in err) {
-    const e = err as { code?: unknown; message?: unknown }
-    return new ErroCore(
-      typeof e.code === 'string' && e.code ? e.code : 'desconhecido',
-      typeof e.message === 'string' ? e.message : '',
-    )
-  }
-  return new ErroCore('desconhecido', err instanceof Error ? err.message : String(err ?? ''))
-}
-
 function ordenarPesos(pesos: PesoNota[], videoKind: TipoVideoSelecao): PesoNota[] {
   if (videoKind !== 'transformed') return pesos
   return [...pesos].sort((a, b) => {
@@ -405,7 +393,7 @@ export function ConfiguradorSelecao({
       })
       .catch((err) => {
         if (cancelado) return
-        setErroEstimativa(normalizarErro(err))
+        setErroEstimativa(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? '')))
         setCarregandoInicial(false)
       })
 
@@ -495,7 +483,7 @@ export function ConfiguradorSelecao({
         .catch((err) => {
           if (cancelado) return
           setEstimativa(null)
-          setErroEstimativa(normalizarErro(err))
+          setErroEstimativa(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? '')))
         })
     }
 
@@ -539,6 +527,24 @@ export function ConfiguradorSelecao({
     return false
   }, [erroEstimativa?.code, erroDisparo?.code, tarefas, tarefaSelecao?.profile, estimativa])
 
+  const estadoContextoEfetivo = useMemo(() => {
+    if (!selectionState) return null
+    if (selectionState.applicable) return selectionState
+    if (destino?.localidade === 'cli') return selectionState
+    if (
+      estimativa?.plan?.state === 'full' ||
+      estimativa?.plan?.state === 'reduced' ||
+      estimativa?.plan?.state === 'blocked'
+    ) {
+      return {
+        applicable: true,
+        state: estimativa.plan.state as 'full' | 'reduced' | 'blocked',
+        reference: { firstWindowMinutes: estimativa.plan.state === 'reduced' ? 12 : 15 },
+      }
+    }
+    return selectionState
+  }, [selectionState, destino?.localidade, estimativa?.plan?.state])
+
   const canalMinS = canalPerfil ? Math.round(canalPerfil.minUs / 1_000_000) : 20
   const canalMaxS = canalPerfil ? Math.round(canalPerfil.maxUs / 1_000_000) : 60
   const diferenteDoCanal =
@@ -579,7 +585,7 @@ export function ConfiguradorSelecao({
       setPrecisaAvisoDireto(false)
       setCanalPerfil((prev) => (prev ? { ...prev, directMonetizationAck: true } : prev))
     } catch (err) {
-      setErroDisparo(normalizarErro(err))
+      setErroDisparo(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? '')))
     } finally {
       setConfirmandoAvisoDireto(false)
     }
@@ -593,7 +599,7 @@ export function ConfiguradorSelecao({
       await recarregarSinais()
       setVersaoSinais((v) => v + 1)
     } catch (err) {
-      setErroSinais(normalizarErro(err))
+      setErroSinais(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? '')))
     } finally {
       setOcupadoEnergia(false)
     }
@@ -607,7 +613,7 @@ export function ConfiguradorSelecao({
       await recarregarSinais()
       setVersaoSinais((v) => v + 1)
     } catch (err) {
-      setErroSinais(normalizarErro(err))
+      setErroSinais(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? '')))
     } finally {
       setOcupadoChat(false)
     }
@@ -620,7 +626,7 @@ export function ConfiguradorSelecao({
       await chamar('jobs.cancel', { id: jobId })
       await recarregarSinais()
     } catch (err) {
-      setErroSinais(normalizarErro(err))
+      setErroSinais(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? '')))
     }
   }
 
@@ -639,7 +645,7 @@ export function ConfiguradorSelecao({
       setConfirmacaoAberta(false)
       aoIniciarSelecao?.(res)
     } catch (err) {
-      const e = normalizarErro(err)
+      const e = err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? ''))
       if (e.code === 'confirmation_required' && !confirmed) {
         setConfirmacaoAberta(true)
       } else {
@@ -1022,14 +1028,14 @@ export function ConfiguradorSelecao({
       <section aria-label="4. Contexto, Custo e Disparo" className="flex flex-col gap-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-forte text-t1">4. Contexto, Custo e Disparo</h2>
-          {!semPerfilConfigurado && selectionState && (
-            selectionState.applicable === false ? (
+          {!semPerfilConfigurado && estadoContextoEfetivo && (
+            estadoContextoEfetivo.applicable === false ? (
               <Status tom="info">Contexto gerenciado pelo CLI</Status>
-            ) : selectionState.state === 'full' ? (
+            ) : estadoContextoEfetivo.state === 'full' ? (
               <Status tom="sucesso">Janela de contexto: Completa (15 min)</Status>
-            ) : selectionState.state === 'reduced' ? (
+            ) : estadoContextoEfetivo.state === 'reduced' ? (
               <Status tom="aviso">
-                Janela de contexto: Reduzida ({selectionState.reference?.firstWindowMinutes ?? 12} min)
+                Janela de contexto: Reduzida ({estadoContextoEfetivo.reference?.firstWindowMinutes ?? 12} min)
               </Status>
             ) : (
               <div className="flex items-center gap-2">

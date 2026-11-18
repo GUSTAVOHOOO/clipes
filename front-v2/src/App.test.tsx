@@ -64,12 +64,12 @@ describe('App', () => {
     })
   })
 
-  it('renderiza placeholder de Cortes com único h1 quando há Projeto aberto', async () => {
+  it('renderiza placeholder de Exportação com único h1 quando há Projeto aberto', async () => {
     vi.stubEnv('VITE_CORE_MOCK', '1')
-    window.history.replaceState(null, '', '/?source-test=1#/projeto/test-project/cortes')
+    window.history.replaceState(null, '', '/?source-test=1#/projeto/test-project/exportacao')
     render(<App />)
 
-    const h1 = await screen.findByRole('heading', { level: 1, name: 'Cortes' })
+    const h1 = await screen.findByRole('heading', { level: 1, name: 'Exportação' })
     expect(h1).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
   })

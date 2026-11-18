@@ -82,7 +82,9 @@ test.describe('Fontes — UI-15 (alvo Checkbox >= 24px), UI-16 (h1) e UI-18b (Ex
     })
     await expect(page.getByRole('heading', { level: 1, name: 'changed.mp4' })).toBeVisible()
     await page.getByRole('button', { name: 'Iniciar transcrição' }).click()
-    await expect(page.getByText(/40%/)).toBeVisible()
+    await expect(
+      page.getByRole('region', { name: 'Blocos de 10 min' }).getByText(/40%/),
+    ).toBeVisible()
 
     await page.evaluate(() => {
       window.location.hash = '#/projeto/meu-canal-de-cortes/fontes'
