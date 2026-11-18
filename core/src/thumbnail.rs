@@ -9,8 +9,7 @@
 //! empacotamento (`ai_task::routing_id`).
 use crate::{
     ai_task::{self, AiTask, Budget, TaskInput, Violation},
-    jobs::{self, Safety},
-    projects, provider,
+    jobs, projects,
     sentences::{self, Sentence},
     CommandRegistration, CommandResult, CoreError, EventSink,
 };
@@ -197,64 +196,25 @@ fn build_input(frases: &[Sentence]) -> TaskInput {
     }
 }
 
-fn route_safety() -> Result<(String, Safety), CoreError> {
-    Ok(match provider::routed(Some(TASK_ID), None)? {
-        provider::Routed::Cli(name) => (name, Safety::Paid),
-        provider::Routed::Api { profile, local } => {
-            (profile.id, if local { Safety::Local } else { Safety::Paid })
-        }
-    })
-}
-
-fn estimate_of(input: &TaskInput, safety: Safety) -> Value {
-    let paid = matches!(safety, Safety::Paid);
-    let unknown = json!({"kind": "unknown", "minMicroUsd": null, "maxMicroUsd": null});
-    let Ok((target, profile)) = jobs::route_of_profile(TASK_ID, paid, None) else {
-        return unknown;
-    };
-    let Ok((wire, _)) = ai_task::check_definition(task()) else {
-        return unknown;
-    };
-    let request = provider::StructuredRequest {
-        estimate_hint: input.estimate_hint.clone(),
-        instruction: ai_task::normalized_prompt(PROMPT),
-        transcript: input.transcript.clone(),
-        schema: wire,
-        native_schema: false,
-        max_output_tokens: Some(task().budget.max_output_tokens),
-    };
-    provider::cost::estimate_for(&target, &profile, &request).unwrap_or(unknown)
-}
-
 /// `thumbnail.estimate {candidate}`: se o Provedor é pago e o custo estimado.
 fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let ctx = context(candidate_arg(&v)?)?;
-    let (profile, safety) = route_safety()?;
+    let route = jobs::resolve_route(TASK_ID, None)?;
     let mut input = build_input(&ctx.cut.sentences);
     crate::angles::add_to_input(&mut input, &ctx.cut, false)?;
     Ok(json!({
-        "paid": matches!(safety, Safety::Paid),
-        "profile": profile,
-        "estimate": estimate_of(&input, safety),
+        "paid": route.paid(),
+        "profile": route.profile.id,
+        "estimate": jobs::estimate_units(TASK_ID, &[input], route.safety, None),
     }))
 }
 
 /// `thumbnail.suggest {candidate, confirmed?}`: enfileira a Tarefa de IA. Provedor pago exige
-/// `confirmed`; o veto "somente local" é aplicado pelo executor da fila.
+/// `confirmed`; o veto "somente local" é aplicado pelo pré-vôo de `jobs::ai`.
 fn cmd_suggest(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let ctx = context(candidate_arg(&v)?)?;
-    let (profile, safety) = route_safety()?;
     let mut input = build_input(&ctx.cut.sentences);
     crate::angles::add_to_input(&mut input, &ctx.cut, false)?;
-    if matches!(safety, Safety::Paid) && v["confirmed"] != true {
-        return Err(CoreError {
-            code: "confirmation_required".into(),
-            message:
-                "Esta sugestão de capa usa um Provedor pago: confirme o custo estimado antes de gerar."
-                    .into(),
-            usage: Some(json!({"estimate": estimate_of(&input, safety)})),
-        });
-    }
     let (run, (start, end)) = (ctx.cut.run, ctx.cut.identity);
     let busy = projects::with_reader(|c| {
         c.query_row(
@@ -269,13 +229,22 @@ fn cmd_suggest(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             "Já há uma sugestão de capa em andamento para este Corte.",
         ));
     }
-    let definition = task();
     let batch = format!("thumbnail-{run}-{start}-{end}");
-    let job = jobs::enqueue_ai_in_batch(TASK_ID, &input, safety, Some(&batch))?;
+    let (route, job_ids) = jobs::enqueue_checked(jobs::EnqueueAiRequest {
+        task_id: TASK_ID,
+        profile_id: None,
+        batch: Some(&batch),
+        inputs: &[input],
+        confirmed: v["confirmed"] == true,
+        confirmation_message:
+            "Esta sugestão de capa usa um Provedor pago: confirme o custo estimado antes de gerar.",
+    })?;
+    let job = job_ids[0];
+    let definition = task();
     projects::with_writer(|c| {
         c.execute(
             "INSERT INTO thumbnail_suggestions(job_id,run_id,cand_start_id,cand_end_id,task_version,prompt_sha256,profile) VALUES (?1,?2,?3,?4,?5,?6,?7)",
-            (job, run, start, end, definition.version, definition.prompt_sha256, &profile),
+            (job, run, start, end, definition.version, definition.prompt_sha256, &route.profile.id),
         )?;
         Ok(())
     })?;
@@ -319,35 +288,6 @@ fn materialize(ctx: &Context) -> Result<(), CoreError> {
     })
 }
 
-/// Código de erro do job: só o formato fixo esperado, nunca texto do modelo.
-fn job_code(result: &Option<Value>) -> Option<String> {
-    result.as_ref()?["code"]
-        .as_str()
-        .filter(|c| {
-            !c.is_empty()
-                && c.len() <= 48
-                && c.chars()
-                    .all(|ch| ch.is_ascii_lowercase() || ch == '_' || ch.is_ascii_digit())
-        })
-        .map(str::to_owned)
-}
-
-fn violation_codes(result: &Option<Value>) -> Vec<String> {
-    result
-        .as_ref()
-        .and_then(|r| r["violations"].as_array())
-        .map(|a| {
-            a.iter()
-                .filter_map(|x| x["code"].as_str())
-                .filter(|c| {
-                    c.len() <= 48 && c.chars().all(|ch| ch.is_ascii_lowercase() || ch == '_')
-                })
-                .map(str::to_owned)
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 fn document(ctx: &Context) -> Result<Value, CoreError> {
     materialize(ctx)?;
     let (run, (start, end)) = (ctx.cut.run, ctx.cut.identity);
@@ -377,11 +317,12 @@ fn document(ctx: &Context) -> Result<Value, CoreError> {
             })?
             .collect::<rusqlite::Result<_>>()?;
         let last_job = rows.last().map(|(s, result)| {
+            let codes = jobs::outcome_codes(result.as_ref());
             json!({
                 "id": s["jobId"],
                 "state": s["state"],
-                "code": job_code(result),
-                "violations": violation_codes(result),
+                "code": codes.code,
+                "violations": codes.violations,
             })
         });
         let suggestions: Vec<Value> = rows

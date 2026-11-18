@@ -732,11 +732,11 @@ fn cmd_create(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         return Err(error("invalid_batch", "Faixa de Corte inválida."));
     }
     let kind = crate::selection::parse_kind(&v)?;
-    let (profile, safety) = crate::selection::route_safety()?;
+    let route = jobs::resolve_route(crate::selection::TASK_ID, None)?;
     if engine == "groq" && projects::project_local_only()? {
         return Err(crate::provider::local_only_violation());
     }
-    let paid = matches!(safety, jobs::Safety::Paid) || engine == "groq";
+    let paid = route.paid() || engine == "groq";
     if paid && v["confirmed"] != true {
         let mut audio_estimate = Some(0i64);
         if engine == "groq" {
@@ -757,10 +757,10 @@ fn cmd_create(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             code: "confirmation_required".into(),
             message: "Este lote usa um serviço pago: confirme antes de começar.".into(),
             usage: Some(json!({
-                "selectionPaid": matches!(safety, jobs::Safety::Paid),
+                "selectionPaid": route.paid(),
                 "transcriptionPaid": engine == "groq",
                 "audioEstimateMicroUsd": audio_estimate,
-                "profile": profile,
+                "profile": route.profile.id,
                 "maxCostMicroUsd": cap,
                 "sources": unique.len(),
             })),

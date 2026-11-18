@@ -6,12 +6,14 @@
 //! aqui troca perfil sozinho nem muda o padrão do app ou da Tarefa, e a rota passa pelo veto
 //! "somente local" (por tarefa e por Projeto) antes de qualquer rede. Um job `uncertain` nunca
 //! é refeito por aqui: antes o usuário resolve a incerteza (ADR-0005).
-use super::{ai, enqueue_ai_with_profile, Safety};
+use super::{ai, enqueue_checked, estimate_units, resolve_route, EnqueueAiRequest};
 use crate::{
-    ai_task::{self, TaskInput},
-    projects, provider, CommandRegistration, CommandResult, CoreError, EventSink,
+    ai_task::TaskInput,
+    projects, CommandRegistration, CommandResult, CoreError, EventSink,
 };
 use serde_json::{json, Value};
+
+const CONFIRMATION_MESSAGE: &str = "Refazer com este perfil envia o texto a um Provedor pago: confirme o perfil e o custo estimado antes de começar.";
 
 fn error(code: &str, message: &str) -> CoreError {
     CoreError {
@@ -63,104 +65,6 @@ pub fn source(id: i64) -> Result<Source, CoreError> {
     })
 }
 
-/// Para onde a unidade iria com o perfil pedido, já depois do veto "somente local".
-pub struct Route {
-    /// `{id, label, kind, model}`: nada de endpoint nem de chave.
-    pub profile: Value,
-    pub safety: Safety,
-}
-
-impl Route {
-    pub fn paid(&self) -> bool {
-        matches!(self.safety, Safety::Paid)
-    }
-}
-
-/// Resolve `profile` para a Tarefa `task`. Perfil remoto com "somente local" ligado (da tarefa
-/// ou do Projeto) devolve `local_only_violation` aqui, sem nenhuma chamada de rede.
-pub fn route(task: &str, profile: &str) -> Result<Route, CoreError> {
-    Ok(match provider::routed(Some(task), Some(profile))? {
-        provider::Routed::Cli(name) => Route {
-            profile: json!({"id": name, "label": name, "kind": name, "model": null}),
-            safety: Safety::Paid,
-        },
-        provider::Routed::Api { profile, local } => Route {
-            profile: json!({"id": profile.id, "label": profile.label, "kind": profile.kind, "model": profile.model}),
-            safety: if local { Safety::Local } else { Safety::Paid },
-        },
-    })
-}
-
-/// Soma a estimativa do #40 das unidades para o perfil pedido (ou a rota da Tarefa, sem
-/// perfil). Custo desconhecido nunca vira zero.
-pub fn estimate_inputs(
-    task: &str,
-    inputs: &[TaskInput],
-    safety: Safety,
-    profile: Option<&str>,
-) -> Value {
-    let paid = matches!(safety, Safety::Paid);
-    let mut kind = String::from("unknown");
-    let (mut input_tokens, mut min, mut max) = (0_u64, Some(0_u64), Some(0_u64));
-    if let (Some(definition), Ok((target, profile))) = (
-        ai_task::find(task),
-        ai::route_of_profile(task, paid, profile),
-    ) {
-        for (i, input) in inputs.iter().enumerate() {
-            let estimate = ai::request_for(definition, input)
-                .and_then(|request| provider::cost::estimate_for(&target, &profile, &request).ok());
-            let Some(estimate) = estimate else {
-                kind = "unknown".into();
-                min = None;
-                max = None;
-                break;
-            };
-            let this = estimate["kind"].as_str().unwrap_or("unknown").to_owned();
-            if i == 0 {
-                kind = this;
-            } else if kind != this {
-                kind = "unknown".into();
-            }
-            input_tokens += estimate["inputTokens"].as_u64().unwrap_or(0);
-            min = min
-                .zip(estimate["minMicroUsd"].as_u64())
-                .map(|(a, b)| a + b);
-            max = max
-                .zip(estimate["maxMicroUsd"].as_u64())
-                .map(|(a, b)| a + b);
-        }
-    }
-    json!({
-        "kind": kind,
-        "units": inputs.len(),
-        "windows": inputs.len(),
-        "inputTokens": input_tokens,
-        "minMicroUsd": min,
-        "maxMicroUsd": max,
-    })
-}
-
-/// O que a confirmação mostra antes de refazer: o perfil, o custo estimado e se o texto sai da
-/// máquina (todo perfil que não é loopback, e todo CLI).
-pub fn preview(route: &Route, estimate: Value) -> Value {
-    json!({
-        "profile": route.profile,
-        "paid": route.paid(),
-        "leavesMachine": route.paid(),
-        "estimate": estimate,
-    })
-}
-
-/// A confirmação pedida a um perfil pago: o mesmo erro tipado de `selection.start`, com o
-/// perfil e a estimativa em `usage`.
-pub fn confirmation_required(preview: Value) -> CoreError {
-    CoreError {
-        code: "confirmation_required".into(),
-        message: "Refazer com este perfil envia o texto a um Provedor pago: confirme o perfil e o custo estimado antes de começar.".into(),
-        usage: Some(json!({"estimate": preview["estimate"], "profile": preview["profile"], "leavesMachine": preview["leavesMachine"]})),
-    }
-}
-
 fn profile_arg(v: &Value) -> Result<String, CoreError> {
     match v["profileId"].as_str() {
         Some(id) if !id.is_empty() && id.len() <= 64 => Ok(id.to_owned()),
@@ -178,9 +82,9 @@ fn job_arg(v: &Value) -> Result<i64, CoreError> {
 fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let profile = profile_arg(&v)?;
     let source = source(job_arg(&v)?)?;
-    let route = route(&source.task, &profile)?;
-    let estimate = estimate_inputs(&source.task, &[source.input], route.safety, Some(&profile));
-    Ok(preview(&route, estimate))
+    let route = resolve_route(&source.task, Some(&profile))?;
+    let estimate = estimate_units(&source.task, &[source.input], route.safety, Some(&profile));
+    Ok(route.preview(estimate))
 }
 
 /// `jobs.redo {id, profileId, confirmed?}`: enfileira a unidade de novo, no mesmo lote, com o
@@ -188,24 +92,15 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 fn cmd_redo(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let profile = profile_arg(&v)?;
     let source = source(job_arg(&v)?)?;
-    let route = route(&source.task, &profile)?;
-    if route.paid() && v["confirmed"] != true {
-        let estimate = estimate_inputs(
-            &source.task,
-            std::slice::from_ref(&source.input),
-            route.safety,
-            Some(&profile),
-        );
-        return Err(confirmation_required(preview(&route, estimate)));
-    }
-    let job = enqueue_ai_with_profile(
-        &source.task,
-        &source.input,
-        route.safety,
-        source.batch.as_deref(),
-        Some(&profile),
-    )?;
-    Ok(json!({"job": job, "profile": route.profile}))
+    let (route, jobs) = enqueue_checked(EnqueueAiRequest {
+        task_id: &source.task,
+        profile_id: Some(&profile),
+        batch: source.batch.as_deref(),
+        inputs: &[source.input],
+        confirmed: v["confirmed"] == true,
+        confirmation_message: CONFIRMATION_MESSAGE,
+    })?;
+    Ok(json!({"job": jobs[0], "profile": route.profile}))
 }
 
 inventory::submit! { CommandRegistration { name: "jobs.redo.estimate", execute: cmd_estimate } }

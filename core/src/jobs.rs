@@ -2,15 +2,17 @@ use crate::{projects, CommandRegistration, CommandResult, EventSink};
 use serde_json::{json, Value};
 mod ai;
 mod budget;
-pub(crate) use ai::route_of_profile;
+pub(crate) use ai::confirmation_error;
 pub(crate) mod preview;
 pub mod redo;
 pub use ai::{
-    enqueue_ai, enqueue_ai_in_batch, enqueue_ai_with_profile, set_ai_provider, set_ai_route,
+    enqueue_ai, enqueue_ai_in_batch, enqueue_ai_with_profile, enqueue_checked, estimate_units,
+    outcome_codes, resolve_route, set_ai_provider, set_ai_route, AiRoute, EnqueueAiRequest,
+    JobOutcomeCodes, ProfileSummary,
 };
 pub(crate) use budget::{audio_precheck, pause as pause_scope};
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Safety {
     Local,
     Paid,

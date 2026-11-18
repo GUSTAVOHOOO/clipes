@@ -8,8 +8,7 @@
 //! `docs/contribuindo/empacotamento.md`.
 use crate::{
     ai_task::{self, AiTask, Budget, TaskInput, Violation},
-    jobs::{self, Safety},
-    projects, provider,
+    jobs, projects,
     sentences::{self, Sentence},
     CommandRegistration, CommandResult, CoreError, EventSink,
 };
@@ -535,35 +534,6 @@ fn build_input(
     }
 }
 
-fn route_safety() -> Result<(String, Safety), CoreError> {
-    Ok(match provider::routed(Some(TASK_ID), None)? {
-        provider::Routed::Cli(name) => (name, Safety::Paid),
-        provider::Routed::Api { profile, local } => {
-            (profile.id, if local { Safety::Local } else { Safety::Paid })
-        }
-    })
-}
-
-fn estimate_of(input: &TaskInput, safety: Safety) -> Value {
-    let paid = matches!(safety, Safety::Paid);
-    let unknown = json!({"kind": "unknown", "minMicroUsd": null, "maxMicroUsd": null});
-    let Ok((target, profile)) = jobs::route_of_profile(TASK_ID, paid, None) else {
-        return unknown;
-    };
-    let Ok((wire, _)) = ai_task::check_definition(task()) else {
-        return unknown;
-    };
-    let request = provider::StructuredRequest {
-        estimate_hint: input.estimate_hint.clone(),
-        instruction: ai_task::normalized_prompt(PROMPT),
-        transcript: input.transcript.clone(),
-        schema: wire,
-        native_schema: false,
-        max_output_tokens: Some(task().budget.max_output_tokens),
-    };
-    provider::cost::estimate_for(&target, &profile, &request).unwrap_or(unknown)
-}
-
 fn candidate_arg(v: &Value) -> Result<i64, CoreError> {
     v["candidate"]
         .as_i64()
@@ -573,7 +543,7 @@ fn candidate_arg(v: &Value) -> Result<i64, CoreError> {
 /// `packaging.estimate {candidate, language?}`: idioma, se é preciso escolher, e custo estimado.
 fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let ctx = context(candidate_arg(&v)?)?;
-    let (profile, safety) = route_safety()?;
+    let route = jobs::resolve_route(TASK_ID, None)?;
     let lang = pick_language(&ctx, &v)?;
     let credit = credit_for_candidate(&ctx, lang);
     let chapters_res = chapters::resolve(ctx.candidate, lang)?;
@@ -585,10 +555,10 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     );
     crate::angles::add_to_input(&mut input, &ctx.cut, false)?;
     Ok(json!({
-        "paid": matches!(safety, Safety::Paid),
-        "profile": profile,
+        "paid": route.paid(),
+        "profile": route.profile.id,
         "language": lang.code(),
-        "estimate": estimate_of(&input, safety),
+        "estimate": jobs::estimate_units(TASK_ID, &[input], route.safety, None),
     }))
 }
 
@@ -597,7 +567,6 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 fn cmd_generate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let ctx = context(candidate_arg(&v)?)?;
     let lang = pick_language(&ctx, &v)?;
-    let (profile, safety) = route_safety()?;
     let credit = credit_for_candidate(&ctx, lang);
     let chapters_res = chapters::resolve(ctx.candidate, lang)?;
     let mut input = build_input(
@@ -607,15 +576,6 @@ fn cmd_generate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         chapters_res.block.as_deref(),
     );
     crate::angles::add_to_input(&mut input, &ctx.cut, false)?;
-    if matches!(safety, Safety::Paid) && v["confirmed"] != true {
-        return Err(CoreError {
-            code: "confirmation_required".into(),
-            message:
-                "Este empacotamento usa um Provedor pago: confirme o custo estimado antes de gerar."
-                    .into(),
-            usage: Some(json!({"estimate": estimate_of(&input, safety)})),
-        });
-    }
     let (run, (start, end)) = (ctx.cut.run, ctx.cut.identity);
     let busy = projects::with_reader(|c| {
         c.query_row(
@@ -630,13 +590,22 @@ fn cmd_generate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             "Já há uma geração em andamento para este Corte.",
         ));
     }
-    let definition = task();
     let batch = format!("packaging-{run}-{start}-{end}");
-    let job = jobs::enqueue_ai_in_batch(TASK_ID, &input, safety, Some(&batch))?;
+    let (route, job_ids) = jobs::enqueue_checked(jobs::EnqueueAiRequest {
+        task_id: TASK_ID,
+        profile_id: None,
+        batch: Some(&batch),
+        inputs: &[input],
+        confirmed: v["confirmed"] == true,
+        confirmation_message:
+            "Este empacotamento usa um Provedor pago: confirme o custo estimado antes de gerar.",
+    })?;
+    let job = job_ids[0];
+    let definition = task();
     projects::with_writer(|c| {
         c.execute(
             "INSERT INTO packaging_generations(job_id,run_id,cand_start_id,cand_end_id,language,task_version,prompt_sha256,profile) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
-            (job, run, start, end, lang.code(), definition.version, definition.prompt_sha256, &profile),
+            (job, run, start, end, lang.code(), definition.version, definition.prompt_sha256, &route.profile.id),
         )?;
         Ok(())
     })?;
@@ -783,35 +752,6 @@ fn read_generations(run: i64, identity: (i64, i64)) -> Result<Vec<Generation>, C
     })
 }
 
-/// Código de erro do job: só o formato fixo esperado, nunca texto do modelo.
-pub(crate) fn job_code(result: &Option<Value>) -> Option<String> {
-    result.as_ref()?["code"]
-        .as_str()
-        .filter(|c| {
-            !c.is_empty()
-                && c.len() <= 48
-                && c.chars()
-                    .all(|ch| ch.is_ascii_lowercase() || ch == '_' || ch.is_ascii_digit())
-        })
-        .map(str::to_owned)
-}
-
-pub(crate) fn violation_codes(result: &Option<Value>) -> Vec<String> {
-    result
-        .as_ref()
-        .and_then(|r| r["violations"].as_array())
-        .map(|a| {
-            a.iter()
-                .filter_map(|x| x["code"].as_str())
-                .filter(|c| {
-                    c.len() <= 48 && c.chars().all(|ch| ch.is_ascii_lowercase() || ch == '_')
-                })
-                .map(str::to_owned)
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 fn limits_json() -> Value {
     json!({
         "titleChars": MAX_TITLE_CHARS,
@@ -884,11 +824,12 @@ fn document(ctx: &Context) -> Result<Value, CoreError> {
         })
         .collect();
     let job = latest_job.map(|g| {
+        let codes = jobs::outcome_codes(g.job_result.as_ref());
         json!({
             "id": g.job_id,
             "state": g.job_state,
-            "code": job_code(&g.job_result),
-            "violations": violation_codes(&g.job_result),
+            "code": codes.code,
+            "violations": codes.violations,
         })
     });
     Ok(json!({
