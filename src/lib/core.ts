@@ -205,7 +205,8 @@ type MockCleanupInfo = {
   warning: string | null;
 };
 const narrationGenerated = new Map<number, { blockId: number; voiceId: string; modelId: string; engineId: string; trimmed?: boolean; cleanupEnabled?: boolean; cleanupReady?: boolean; durationUs: number; alignment: MockBlockAlignment }[]>();
-const sourceTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('source-test');
+const hasSourceTest = () => typeof location !== 'undefined' && new URLSearchParams(location.search).has('source-test');
+const sourceTest = hasSourceTest();
 const componentsMissing = typeof location !== 'undefined' && new URLSearchParams(location.search).has('components-missing');
 const assistantTestInit = hasSearchFlag('assistant-test');
 const ffmpegMock = { installed: !componentsMissing && !assistantTestInit, incomplete: false, path: null as string | null };
@@ -243,7 +244,29 @@ let jobItems = [
 ];
 let transcribeMock: { transcript: object | null; job: object | null } = groqRetryTest ? {transcript:{id:1,engine:'groq',state:'running',resume_us:4e6,duration_us:10e6,words:1},job:{id:99,state:'cancelled',progress:40}} : { transcript: null, job: null };
 if (groqRetryTest || componentsMissing || hardwareCpuMode || hardwareProbeFallbackMode) sourceItems.push({id:4,path:'/test/downloaded.mp4',status:'available',available:true,verified:true,language:'pt',permission:{status:'none'}});
-let providerMock = { kind: 'openai', endpoint: '', model: '', nativeSchema: false, context: null as number | null, keyLastFour: null as string | null, remote: false, confirmed: false, confirmedEndpoints: [] as string[] };
+let providerMock = hasSearchFlag('assistant-test')
+  ? {
+      kind: 'openai',
+      endpoint: '',
+      model: '',
+      nativeSchema: false,
+      context: null as number | null,
+      keyLastFour: null as string | null,
+      remote: false,
+      confirmed: false,
+      confirmedEndpoints: [] as string[],
+    }
+  : {
+      kind: 'openai',
+      endpoint: 'https://api.openai.com/v1',
+      model: 'gpt-4o-mini',
+      nativeSchema: false,
+      context: 128000 as number | null,
+      keyLastFour: '9a4f' as string | null,
+      remote: true,
+      confirmed: true,
+      confirmedEndpoints: ['https://api.openai.com/v1'] as string[],
+    };
 type ProfileMock = { id: string; label: string; kind: string; endpoint: string; model: string; nativeSchema: boolean; ownKey: boolean; context: number | null; maxOutput?: number | null; timeoutSecs?: number | null; tokensPerRequest?: number | null; tokensPerMinute?: number | null; tokensPerDay?: number | null; keyLastFour: string | null };
 let profileMocks: ProfileMock[] = [];
 const isLocalHost = (endpoint: string) => {
@@ -671,6 +694,11 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         audio: { applicable: totalCuts > 0, cutsWithAudio: 0, cutsWithUnverifiedAudio: 0, totalUnverified: 0 },
       } as T;
     }
+    if (name === 'jobs.budget.get' || name === 'jobs.budget.set' || name === 'jobs.budget.continue') {
+      if (!getActiveProjectMock()) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
+      const handled = batchMockDispatch(name, args);
+      if (handled !== undefined) return handled as T;
+    }
     if (sourceTest && new URLSearchParams(location.search).has('batch-test')) { const handled = batchMockDispatch(name, args); if (handled !== undefined) return handled as T; }
     if (name.startsWith('thumbnail.')) { const handled = thumbnailMockDispatch(name, args); if (handled !== undefined) return handled as T; }
     if (name.startsWith('script.') || name.startsWith('angles.')) { const handled = scriptMockDispatch(name, args); if (handled !== undefined) return handled as T; }
@@ -1096,8 +1124,17 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       return { profileId: id, kind: p.kind, value: p.context ?? (p.kind === 'ollama' ? 4096 : 8192), source, detail: null, explanation: why[source], capped: false, warning: null, measured: false, userContext: p.context, loaded: null, maxContext: null, maxOutput: null, refreshed: !!(args as { refresh?: boolean }).refresh } as T;
     }
     if (name === 'provider.selection_state') {
-      const id = (args as { profileId?: string }).profileId ?? 'legacy';
+      const a = args as { profileId?: string; task?: string };
+      let id = a.profileId;
+      if (!id && a.task) {
+        const rota = assistantMock.tasks[a.task] || assistantMock.default;
+        if (!rota) return { applicable: false } as T;
+        if (['codex', 'claude', 'opencode'].includes(rota)) return { applicable: false } as T;
+        id = rota === 'endpoint' ? 'legacy' : rota.startsWith('profile:') ? rota.slice(8) : rota;
+      }
+      id = id ?? 'legacy';
       if (['codex', 'claude', 'opencode'].includes(id)) return { applicable: false } as T;
+      if (id === 'legacy' && !providerMock.endpoint) return { applicable: false } as T;
       const p = id === 'legacy' ? { id, context: providerMock.context, kind: providerMock.kind, endpoint: providerMock.endpoint, model: providerMock.model } : profileMocks.find(x => x.id === id);
       if (!p) throw { code: 'invalid_settings', message: 'Profile not found' };
       // Limites só do simulador (o núcleo real usa o planejador): abaixo de 11 mil bloqueia, abaixo de 16 mil reduz.
@@ -1107,14 +1144,39 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       return { applicable: true, profileId: id, kind: p.kind, model: p.model, contextTokens: tokens, origin: p.context ? 'user' : 'fallback', state,
         reference: { sourceMinutes: 60, maxWindowMinutes: 15, minWindowMinutes: 9, firstWindowMinutes: state === 'blocked' ? null : state === 'reduced' ? 12 : 15, windows: state === 'blocked' ? null : 5 }, guides } as T;
     }
-    if (name === 'provider.profiles.remove') { profileMocks = profileMocks.filter(p => p.id !== (args as { profileId: string }).profileId); return {} as T; }
-    if (name === 'provider.status') return { ...providerMock } as T;
+    if (name === 'provider.profiles.remove') {
+      const id = (args as { profileId?: string }).profileId;
+      if (!id || id === 'legacy' || !profileMocks.some(p => p.id === id)) {
+        throw { code: 'invalid_settings', message: 'Não é possível remover este perfil.' };
+      }
+      profileMocks = profileMocks.filter(p => p.id !== id);
+      return {} as T;
+    }
+    if (name === 'provider.status') return { ...providerMock, timeouts: { remote: 60, local: 300 } } as T;
     if (name === 'provider.cli.status') return { ...providerCliMock } as T;
     if (name === 'provider.cli.configure') {
       const a = args as { kind?: string; model?: string; timeoutSeconds?: number | null };
-      providerCliMock.selected = a.kind ?? '';
-      if ('model' in a && typeof a.model === 'string') providerCliMock.opencodeModel = a.model;
-      if ('timeoutSeconds' in a) providerCliMock.timeoutSeconds = a.timeoutSeconds ?? 300;
+      const kind = a.kind ?? '';
+      if (!['', 'codex', 'claude', 'opencode'].includes(kind)) {
+        throw { code: 'invalid_settings', message: 'CLI inválido.' };
+      }
+      if (kind === 'opencode' && 'model' in a) {
+        const m = String(a.model ?? '').trim();
+        if (!m || m.length > 200 || !m.includes('/')) {
+          throw { code: 'invalid_settings', message: 'Modelo OpenCode inválido (use provedor/modelo).' };
+        }
+        providerCliMock.opencodeModel = m;
+      }
+      if ('timeoutSeconds' in a) {
+        if (a.timeoutSeconds === null) {
+          providerCliMock.timeoutSeconds = 300;
+        } else if (typeof a.timeoutSeconds === 'number' && Number.isInteger(a.timeoutSeconds) && a.timeoutSeconds >= 1 && a.timeoutSeconds <= 3600) {
+          providerCliMock.timeoutSeconds = a.timeoutSeconds;
+        } else {
+          throw { code: 'invalid_settings', message: 'Timeout inválido (1..3600 s).' };
+        }
+      }
+      providerCliMock.selected = kind;
       return {} as T;
     }
     if (name === 'provider.cli.confirm') {
@@ -1126,14 +1188,20 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     }
     if (name === 'provider.configure' && (args as { profileId?: string }).profileId) {
       const a = args as { profileId: string; label: string; kind: string; endpoint: string; model: string; nativeSchema: boolean; ownKey?: boolean; context?: number | null; maxOutput?: number | null; timeoutSecs?: number | null; tokensPerRequest?: number | null; tokensPerMinute?: number | null; tokensPerDay?: number | null };
-      let parsedHost: string;
-      try {
-        parsedHost = new URL(a.endpoint).hostname;
-      } catch {
+      if (a.profileId === 'legacy' && a.ownKey) throw { code: 'invalid_settings', message: 'O perfil legado não aceita chave própria.' };
+      if (!a.model?.trim()) throw { code: 'invalid_settings', message: 'Informe o modelo.' };
+      let parsedUrl: URL;
+      try { parsedUrl = new URL(a.endpoint); } catch { throw { code: 'invalid_endpoint', message: 'Endereço do Provedor inválido.' }; }
+      if (!parsedUrl.hostname || !['http:', 'https:'].includes(parsedUrl.protocol) || parsedUrl.username || parsedUrl.password || parsedUrl.search || parsedUrl.hash) {
         throw { code: 'invalid_endpoint', message: 'Endereço do Provedor inválido.' };
       }
-      if (!parsedHost) throw { code: 'invalid_endpoint', message: 'Endereço do Provedor inválido.' };
-      if (a.profileId === 'legacy' && a.ownKey) throw { code: 'invalid_settings', message: 'Perfil legacy não suporta ownKey.' };
+      if (a.timeoutSecs !== undefined && a.timeoutSecs !== null && (typeof a.timeoutSecs !== 'number' || a.timeoutSecs < 1 || a.timeoutSecs > 3600)) {
+        throw { code: 'invalid_settings', message: 'Timeout inválido (1..3600 s).' };
+      }
+      if (a.profileId === 'legacy') {
+        providerMock = { ...providerMock, kind: a.kind, endpoint: a.endpoint, model: a.model, nativeSchema: a.nativeSchema, context: a.context ?? null, remote: !isLocalHost(a.endpoint), confirmed: providerMock.confirmedEndpoints.includes(a.endpoint) };
+        return { profileId: 'legacy' } as T;
+      }
       const old = profileMocks.find(p => p.id === a.profileId);
       const next = { id: a.profileId, label: a.label, kind: a.kind, endpoint: a.endpoint, model: a.model, nativeSchema: a.nativeSchema, context: a.context ?? null, maxOutput: 'maxOutput' in a ? a.maxOutput : old?.maxOutput ?? null, timeoutSecs: 'timeoutSecs' in a ? a.timeoutSecs : old?.timeoutSecs ?? null, tokensPerRequest: 'tokensPerRequest' in a ? a.tokensPerRequest : old?.tokensPerRequest ?? null, tokensPerMinute: 'tokensPerMinute' in a ? a.tokensPerMinute : old?.tokensPerMinute ?? null, tokensPerDay: 'tokensPerDay' in a ? a.tokensPerDay : old?.tokensPerDay ?? null, ownKey: a.ownKey ?? old?.ownKey ?? false, keyLastFour: old?.keyLastFour ?? null };
       profileMocks = old ? profileMocks.map(p => p.id === a.profileId ? next : p) : [...profileMocks, next];
@@ -1154,26 +1222,101 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     }
     if ((name === 'provider.key.set' || name === 'provider.key.remove') && (args as { profileId?: string }).profileId && (args as { profileId?: string }).profileId !== 'legacy') {
       const { profileId, key } = args as { profileId: string; key?: string };
-      profileMocks = profileMocks.map(p => p.id === profileId ? { ...p, keyLastFour: name === 'provider.key.set' ? key!.slice(-4) : null } : p);
+      const lastFour = name === 'provider.key.set' ? key!.slice(-4) : null;
+      const alvo = profileMocks.find(p => p.id === profileId);
+      profileMocks = profileMocks.map(p => p.id === profileId ? { ...p, keyLastFour: lastFour } : p);
+      if (alvo && !alvo.ownKey && alvo.endpoint === providerMock.endpoint) {
+        providerMock.keyLastFour = lastFour;
+      }
       return {} as T;
     }
     if (name === 'provider.key.set') { providerMock.keyLastFour = (args as { key: string }).key.slice(-4); return {} as T; }
     if (name === 'provider.key.remove') { providerMock.keyLastFour = null; return {} as T; }
     if (name === 'provider.confirm') { const endpoint = (args as { endpoint: string }).endpoint; if (endpoint === providerMock.endpoint) providerMock.confirmed = true; providerMock.confirmedEndpoints.push(endpoint); return {} as T; }
     if (name === 'provider.prices.get' || name === 'provider.prices.set' || name === 'provider.prices.clear') {
-      const a = args as { provider: string; model: string; inputPerMillion?: number; outputPerMillion?: number };
-      if (name === 'provider.prices.set') priceOverrides = [...priceOverrides.filter(p => !(p.provider === a.provider && p.model === a.model)), { provider: a.provider, model: a.model, inputPerMillion: a.inputPerMillion!, outputPerMillion: a.outputPerMillion! }];
-      if (name === 'provider.prices.clear') priceOverrides = priceOverrides.filter(p => !(p.provider === a.provider && p.model === a.model));
-      return { updatedAt: '2026-11-14', prices: [{ provider: 'openai', model: 'gpt-5', inputPerMillion: 1.25, outputPerMillion: 10 }], overrides: priceOverrides } as T;
+      const a = args as { provider?: string; model?: string; inputPerMillion?: number; outputPerMillion?: number; tiers?: { aboveInputTokens: number; inputPerMillion: number; outputPerMillion: number }[] };
+      if (name === 'provider.prices.set') {
+        const prov = String(a.provider ?? '').trim();
+        const mod = String(a.model ?? '').trim();
+        if (!prov || !mod || typeof a.inputPerMillion !== 'number' || a.inputPerMillion < 0 || typeof a.outputPerMillion !== 'number' || a.outputPerMillion < 0) {
+          throw { code: 'invalid_price', message: 'Preço inválido.' };
+        }
+        if (a.tiers && a.tiers.some((t, i) => t.aboveInputTokens <= 0 || t.inputPerMillion < 0 || t.outputPerMillion < 0 || (i > 0 && t.aboveInputTokens <= a.tiers![i - 1].aboveInputTokens))) {
+          throw { code: 'invalid_price', message: 'Faixas de preço inválidas.' };
+        }
+        priceOverrides = [...priceOverrides.filter(p => !(p.provider === prov && p.model === mod)), { provider: prov, model: mod, inputPerMillion: a.inputPerMillion, outputPerMillion: a.outputPerMillion }];
+      }
+      if (name === 'provider.prices.clear') {
+        if (!a.provider || !a.model) throw { code: 'invalid_price', message: 'Preço inválido.' };
+        priceOverrides = priceOverrides.filter(p => !(p.provider === a.provider && p.model === a.model));
+      }
+      const prices = [
+        { provider: 'openai', model: 'gpt-5', inputPerMillion: 1.25, outputPerMillion: 10 },
+        { provider: 'openai', model: 'gpt-4o-mini', inputPerMillion: 0.15, outputPerMillion: 0.6 },
+        { provider: 'anthropic', model: 'claude-sonnet-4-5', inputPerMillion: 3, outputPerMillion: 15 },
+        { provider: 'gemini', model: 'gemini-2.5-flash-lite', inputPerMillion: 0.1, outputPerMillion: 0.4 },
+        { provider: 'groq', model: 'openai/gpt-oss-120b', inputPerMillion: 0.15, outputPerMillion: 0.6 },
+      ];
+      return { updatedAt: '2026-11-14', prices, overrides: priceOverrides } as T;
     }
     if (name === 'provider.cost.estimate') {
-      const { transcript, maxOutputTokens } = args as { transcript: string; maxOutputTokens?: number };
+      const a = args as { transcript?: string; maxOutputTokens?: number; profileId?: string; task?: string };
+      const transcript = a.transcript ?? '';
+      const maxOutputTokens = a.maxOutputTokens;
       const inputTokens = Math.ceil((transcript.length + 2) / 4);
       const high = Math.ceil(inputTokens * 5 / 3);
       const tier = high > 100000 ? { aboveInputTokens: 100000, upToInputTokens: null, crossesThreshold: inputTokens <= 100000 } : null;
-      return { kind: 'usd', inputTokens, inputTokensRange: { min: inputTokens, max: high }, tier, maxOutputTokens: maxOutputTokens ?? null, minMicroUsd: Math.round(inputTokens * 1.25), maxMicroUsd: maxOutputTokens ? Math.round(high * 1.25 + maxOutputTokens * 10) : null } as T;
+      if (a.profileId || a.task) {
+        let rota = a.profileId ?? '';
+        if (!rota && a.task) rota = assistantMock.tasks[a.task] || assistantMock.default;
+        const target = taskTarget(rota.startsWith('profile:') || ['codex', 'claude', 'opencode', 'endpoint'].includes(rota) ? rota : rota === 'legacy' ? 'endpoint' : `profile:${rota}`);
+        if (target) {
+          if ((a.task && assistantMock.localOnly[a.task]) || (getActiveProjectMock() && projectVetoMock)) {
+            if (!target.local) throw { code: 'local_only_violation', message: 'Bloqueado pelo modo Somente local.' };
+          }
+          if (target.local) {
+            return { kind: 'zero', callsOnly: false, inputTokens, inputTokensRange: { min: inputTokens, max: high }, tier: null, maxOutputTokens: maxOutputTokens ?? null, minMicroUsd: 0, maxMicroUsd: 0, priceSource: null, tableUpdatedAt: '2026-11-14', profileId: target.id } as T;
+          }
+          if (target.cli) {
+            const free = target.kind === 'opencode' && target.cost.kind === 'zero';
+            return { kind: free ? 'zero' : target.kind === 'opencode' ? 'unknown' : 'plan_quota', callsOnly: !free, inputTokens, inputTokensRange: { min: inputTokens, max: high }, tier: null, maxOutputTokens: maxOutputTokens ?? null, minMicroUsd: free ? 0 : null, maxMicroUsd: free ? 0 : null, priceSource: null, tableUpdatedAt: '2026-11-14', profileId: target.id } as T;
+          }
+          const builtIn = [
+            { provider: 'openai', model: 'gpt-5', inputPerMillion: 1.25, outputPerMillion: 10 },
+            { provider: 'openai', model: 'gpt-4o-mini', inputPerMillion: 0.15, outputPerMillion: 0.6 },
+            { provider: 'anthropic', model: 'claude-sonnet-4-5', inputPerMillion: 3, outputPerMillion: 15 },
+            { provider: 'gemini', model: 'gemini-2.5-flash-lite', inputPerMillion: 0.1, outputPerMillion: 0.4 },
+            { provider: 'groq', model: 'openai/gpt-oss-120b', inputPerMillion: 0.15, outputPerMillion: 0.6 },
+          ];
+          const ov = priceOverrides.find(p => p.provider === target.kind && p.model === target.model);
+          const tab = builtIn.find(p => p.provider === target.kind && p.model === target.model);
+          const price = ov ?? tab;
+          if (!price) {
+            return { kind: 'unknown', callsOnly: false, inputTokens, inputTokensRange: { min: inputTokens, max: high }, tier: null, maxOutputTokens: maxOutputTokens ?? null, minMicroUsd: null, maxMicroUsd: null, priceSource: null, tableUpdatedAt: '2026-11-14', profileId: target.id } as T;
+          }
+          return { kind: 'usd', callsOnly: false, inputTokens, inputTokensRange: { min: inputTokens, max: high }, tier, maxOutputTokens: maxOutputTokens ?? null, minMicroUsd: Math.round(inputTokens * price.inputPerMillion), maxMicroUsd: maxOutputTokens ? Math.round(high * price.inputPerMillion + maxOutputTokens * price.outputPerMillion) : Math.round(high * price.inputPerMillion), priceSource: ov ? 'override' : 'table', tableUpdatedAt: '2026-11-14', profileId: target.id } as T;
+        }
+      }
+      return { kind: 'usd', inputTokens, inputTokensRange: { min: inputTokens, max: high }, tier, maxOutputTokens: maxOutputTokens ?? null, minMicroUsd: Math.round(inputTokens * 1.25), maxMicroUsd: maxOutputTokens ? Math.round(high * 1.25 + maxOutputTokens * 10) : null, priceSource: 'table', tableUpdatedAt: '2026-11-14' } as T;
     }
-    if (name === 'provider.cost.list') return (sourceTest ? [{ id: 1, task: 'score', batch: null, provider: 'openai', model: 'gpt-5', costKind: 'usd', microUsd: 2500 }, { id: 2, task: 'script', batch: null, provider: 'cli:codex', model: '', costKind: 'plan_quota', microUsd: null }] : []) as T;
+    if (name === 'provider.cost.list') {
+      if (!getActiveProjectMock()) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
+      return [
+        { id: 1, jobId: 48, task: 'selection', taskVersion: 4, attempt: 1, outcome: 'ok', code: 'ok', batch: null, profile: 'legacy', provider: 'openai', model: 'gpt-4o-mini', inputTokens: 14200, outputTokens: 1180, calls: 1, costKind: 'usd', microUsd: 30000, estimateMicroUsd: 30000, durationMs: 2400, priceSource: 'table', tableUpdatedAt: '2026-11-15', createdAt: 1794942840000000 },
+        { id: 2, jobId: 47, task: 'packaging', taskVersion: 2, attempt: 1, outcome: 'invalid_json', code: 'invalid_json', batch: null, profile: 'legacy', provider: 'openai', model: 'gpt-4o-mini', inputTokens: 6400, outputTokens: 920, calls: 1, costKind: 'usd', microUsd: 40000, estimateMicroUsd: 30000, durationMs: 3100, priceSource: 'table', tableUpdatedAt: '2026-11-15', createdAt: 1794942480000000 },
+        { id: 3, jobId: 46, task: 'script', taskVersion: 1, attempt: 1, outcome: 'ok', code: 'ok', batch: null, profile: 'codex', provider: 'cli:codex', model: '', inputTokens: null, outputTokens: null, calls: 1, costKind: 'plan_quota', microUsd: null, estimateMicroUsd: null, durationMs: 4800, priceSource: null, tableUpdatedAt: '2026-11-15', createdAt: 1794941700000000 },
+      ] as T;
+    }
+    if (name === 'provider.audit.list') {
+      if (!getActiveProjectMock()) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
+      const jobFilter = (args as { job?: number }).job;
+      const rows = [
+        { id: 1, providerKind: 'openai', host: 'api.openai.com', model: 'gpt-4o-mini', promptSha256: '4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a', inputSha256: '8f3a111122223333444455556666777788889999aaaabbbbccccddddeeee91c2', sentBytes: 54120, responseSha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', task: 'selection', taskVersion: 4, outcome: 'ok', costId: 1, transcriptionCallId: null, job: 48 },
+        { id: 2, providerKind: 'openai', host: 'api.openai.com', model: 'gpt-4o-mini', promptSha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08', inputSha256: '7a09111122223333444455556666777788889999aaaabbbbccccddddeeeee211', sentBytes: 19110, responseSha256: null, task: 'packaging', taskVersion: 2, outcome: 'invalid_json', costId: 2, transcriptionCallId: null, job: 47 },
+        { id: 3, providerKind: 'ollama', host: '127.0.0.1:11434', model: 'qwen2.5:14b', promptSha256: '2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae', inputSha256: '3c1d111122223333444455556666777788889999aaaabbbbccccddddeeee44b0', sentBytes: 18904, responseSha256: 'ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d', task: 'translation', taskVersion: 1, outcome: 'ok', costId: null, transcriptionCallId: null, job: 45 },
+      ];
+      return (typeof jobFilter === 'number' ? rows.filter(r => r.job === jobFilter) : rows) as T;
+    }
     if (name === 'provider.test' && providerCliMock.selected === 'opencode' && new URLSearchParams(location.search).has('opencode-free-limit')) throw { code: 'cli_free_limit', message: 'OpenCode free quota exhausted; retry after 79181 seconds; no automatic retry' };
     if (name === 'provider.test' && (args as { probeContext?: boolean }).probeContext) return { truncated: true, measured: 2048 } as T;
     if (name === 'provider.test') {
