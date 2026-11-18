@@ -1,11 +1,32 @@
-import { DicaAtalho, Status, Tela, useToast, type Etapa } from '@ds'
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
+import {
+  BotaoIcone,
+  DicaAtalho,
+  Menu,
+  MenuItem,
+  MenuSeparador,
+  Status,
+  Tela,
+  useToast,
+  type Etapa,
+} from '@ds'
+import { Info, Keyboard, MessageSquareWarning, MoreHorizontal, Settings } from 'lucide-react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react'
 import { flushSync } from 'react-dom'
 import { useAtalhos, usePaleta, type Atalho } from '~/comandos/atalhos'
-import { chamar } from '~/core/cliente'
+import { chamar, ErroCore } from '~/core/cliente'
+import { mensagemDeErro } from '~/core/erros'
 import { useFila, type Fila } from '~/core/progresso'
 import { resolver, type Rota } from '~/rotas/rotas'
 import { FechamentoJanela } from '~/shell/FechamentoJanela'
+import { FolhaAtalhos } from '~/shell/FolhaAtalhos'
 
 export type ProjetoAtual = {
   id?: string | null
@@ -17,6 +38,27 @@ export type ProjetoAtual = {
 type RespostaSomenteLocal = {
   open?: boolean
   enabled: boolean
+}
+
+type ProjetoRecente = {
+  available: boolean
+  name: string
+  path: string
+}
+
+const SELETOR_FOCAVEL =
+  'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+
+function focarRegiao(alvo: HTMLElement): void {
+  const candidatos = alvo.querySelectorAll<HTMLElement>(SELETOR_FOCAVEL)
+  for (const el of candidatos) {
+    if (el.closest('[hidden], [aria-hidden="true"]')) continue
+    const estilo = window.getComputedStyle(el)
+    if (estilo.display === 'none' || estilo.visibility === 'hidden') continue
+    el.focus()
+    return
+  }
+  alvo.focus()
 }
 
 export type EstadoProjetoAtual = {
@@ -210,8 +252,46 @@ export function Shell({
     ? `${primeiroAtivo.mensagem || primeiroAtivo.etapa} · ${Math.round(primeiroAtivo.percentual)}%`
     : undefined
 
-  const { abrir: abrirPaleta } = usePaleta()
+  const { aberta: paletaAberta, abrir: abrirPaleta } = usePaleta()
   const toast = useToast()
+  const mainRef = useRef<HTMLElement>(null)
+  const [ajudaAtalhosAberta, setAjudaAtalhosAberta] = useState(false)
+  const [recentesDisponiveis, setRecentesDisponiveis] = useState<ProjetoRecente[]>([])
+
+  const modoMinimo = rotaAtiva.tela === 'assistente'
+  const etapa = etapaDaRota(rotaAtiva)
+
+  const chaveProjeto = projeto ? `${projeto.id ?? ''}|${projeto.name}|${projeto.path ?? ''}` : null
+
+  useEffect(() => {
+    if (!chaveProjeto || modoMinimo || !projeto) {
+      setRecentesDisponiveis([])
+      return
+    }
+    let cancelado = false
+    chamar<ProjetoRecente[]>('projects.recent', {})
+      .then((lista) => {
+        if (cancelado || !Array.isArray(lista)) return
+        const filtrados = lista.filter(
+          (item) =>
+            item.available &&
+            item.path !== projeto.path &&
+            item.name !== projeto.name,
+        )
+        setRecentesDisponiveis(filtrados)
+      })
+      .catch(() => {
+        if (!cancelado) setRecentesDisponiveis([])
+      })
+    return () => {
+      cancelado = true
+    }
+  }, [chaveProjeto, modoMinimo, projeto])
+
+  const outrosProjetos = useMemo(
+    () => [...new Set(recentesDisponiveis.map((item) => item.name))],
+    [recentesDisponiveis],
+  )
 
   const abrirFilaPadrao = useCallback(() => {
     if (aoAbrirFila) {
@@ -227,8 +307,126 @@ export function Shell({
     })
   }, [aoAbrirFila, jobsAtivos.length, toast])
 
+  const notificarErroProjeto = useCallback(
+    (erro: unknown) => {
+      const coreErr =
+        erro instanceof ErroCore ? erro : new ErroCore('desconhecido', String(erro ?? ''))
+      const traducao = mensagemDeErro(coreErr)
+      toast.add({
+        type: 'erro',
+        title: traducao.titulo,
+        actionProps:
+          traducao.recuperacao?.acao === 'abrir-fila'
+            ? { children: traducao.recuperacao.rotulo, onClick: abrirFilaPadrao }
+            : undefined,
+      })
+    },
+    [abrirFilaPadrao, toast],
+  )
+
+  const aoTrocarProjeto = useCallback(() => {
+    window.location.hash = '#/inicio'
+  }, [])
+
+  const aoConfigurarProjeto = useCallback(() => {
+    window.location.hash = '#/config/projeto'
+  }, [])
+
+  const aoFecharProjeto = useCallback(async () => {
+    try {
+      await chamar('projects.close', {})
+      notificarMudancaProjeto(null)
+      window.location.hash = '#/inicio'
+    } catch (erro) {
+      notificarErroProjeto(erro)
+    }
+  }, [notificarErroProjeto])
+
+  const aoSelecionarProjeto = useCallback(
+    async (nomeOutro: string) => {
+      const alvo = recentesDisponiveis.find((item) => item.name === nomeOutro)
+      if (!alvo) {
+        window.location.hash = '#/inicio'
+        return
+      }
+      try {
+        const aberto = await chamar<ProjetoAtual>('projects.open', { path: alvo.path })
+        notificarMudancaProjeto(aberto)
+        const id = aberto.id ?? aberto.name
+        window.location.hash = `#/projeto/${encodeURIComponent(id)}/fontes`
+      } catch (erro) {
+        notificarErroProjeto(erro)
+      }
+    },
+    [notificarErroProjeto, recentesDisponiveis],
+  )
+
+  const aoAbrirSomenteLocal = useCallback(() => {
+    window.location.hash = projeto ? '#/config/projeto' : '#/config/provedores'
+  }, [projeto])
+
+  const ciclarRegiao = useCallback((direcao: 1 | -1) => {
+    const raiz = mainRef.current?.closest('[data-tela]') ?? document
+    const topo = raiz.querySelector<HTMLElement>('[data-regiao="topo"]')
+    const conteudo = mainRef.current ?? raiz.querySelector<HTMLElement>('[data-regiao="conteudo"]')
+    const rodape = raiz.querySelector<HTMLElement>('[data-regiao="rodape"]')
+    const regioes = [topo, conteudo, rodape].filter((el): el is HTMLElement => el !== null)
+    if (regioes.length === 0) return
+
+    const ativo = document.activeElement
+    const idxAtual = regioes.findIndex(
+      (r) => r === ativo || (ativo instanceof Node && r.contains(ativo)),
+    )
+    const proximoIdx =
+      idxAtual < 0
+        ? direcao > 0
+          ? 0
+          : regioes.length - 1
+        : (idxAtual + direcao + regioes.length) % regioes.length
+    focarRegiao(regioes[proximoIdx])
+  }, [])
+
+  useEffect(() => {
+    const aoTeclar = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || paletaAberta) return
+      const temDialogoModal = Array.from(
+        document.querySelectorAll('[role="dialog"], [role="alertdialog"]'),
+      ).some((el) => !el.closest('[aria-label="Notifications"]'))
+      if (temDialogoModal) return
+
+      if (e.key === 'F6' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        ciclarRegiao(e.shiftKey ? -1 : 1)
+        return
+      }
+
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key === '/') {
+        e.preventDefault()
+        setAjudaAtalhosAberta((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', aoTeclar, { capture: true })
+    return () => window.removeEventListener('keydown', aoTeclar, { capture: true })
+  }, [ciclarRegiao, paletaAberta])
+
   const atalhosShell = useMemo<Atalho[]>(() => {
     const lista: Atalho[] = [
+      {
+        id: 'shell.regioes',
+        titulo: 'Ciclar entre regiões macro da janela',
+        grupo: 'Navegação',
+        tecla: 'F6',
+        teclaUnica: false,
+        executar: () => ciclarRegiao(1),
+      },
+      {
+        id: 'fila.alternar',
+        titulo: 'Abrir/fechar Fila de Jobs',
+        grupo: 'Navegação',
+        tecla: 'Mod+J',
+        executar: abrirFilaPadrao,
+      },
       {
         id: 'navegar.inicio',
         titulo: 'Ir para Início e Projetos',
@@ -261,6 +459,14 @@ export function Shell({
         executar: () => {
           window.location.hash = '#/sobre'
         },
+      },
+      {
+        id: 'atalhos.ajuda',
+        titulo: 'Folha de ajuda rápida de atalhos',
+        grupo: 'App',
+        tecla: '?',
+        teclaUnica: true,
+        executar: () => setAjudaAtalhosAberta((v) => !v),
       },
     ]
 
@@ -295,12 +501,9 @@ export function Shell({
     }
 
     return lista
-  }, [projetoAberto])
+  }, [abrirFilaPadrao, ciclarRegiao, projetoAberto])
 
   useAtalhos(atalhosShell)
-
-  const modoMinimo = rotaAtiva.tela === 'assistente'
-  const etapa = etapaDaRota(rotaAtiva)
 
   const aoIrEtapa = useCallback(
     (proximaEtapa: Etapa) => {
@@ -310,20 +513,75 @@ export function Shell({
     [projetoAberto],
   )
 
+  const ehMac =
+    typeof navigator !== 'undefined' && /mac/i.test(navigator.platform || navigator.userAgent)
+  const atalhoConfig = ehMac ? '⌘,' : 'Ctrl+,'
+
   return (
     <Tela
       titulo={titulo ?? tituloDaRota(rotaAtiva)}
       meio={meio}
       direita={direita}
+      aposPaleta={
+        <>
+          <BotaoIcone
+            rotulo="Configurações"
+            atalho={atalhoConfig}
+            onClick={() => {
+              window.location.hash = '#/config/provedores'
+            }}
+          >
+            <Settings />
+          </BotaoIcone>
+          <Menu
+            alinhar="end"
+            gatilho={
+              <BotaoIcone semDica rotulo="Mais ações" title="Mais ações">
+                <MoreHorizontal />
+              </BotaoIcone>
+            }
+          >
+            <MenuItem
+              icone={<MessageSquareWarning />}
+              aoSelecionar={() => {
+                window.location.hash = '#/relatos'
+              }}
+            >
+              Relatos e diagnóstico
+            </MenuItem>
+            <MenuItem
+              icone={<Info />}
+              aoSelecionar={() => {
+                window.location.hash = '#/sobre'
+              }}
+            >
+              Sobre e atualizações
+            </MenuItem>
+            <MenuSeparador />
+            <MenuItem
+              icone={<Keyboard />}
+              atalho="?"
+              aoSelecionar={() => setAjudaAtalhosAberta(true)}
+            >
+              Ajuda de atalhos
+            </MenuItem>
+          </Menu>
+        </>
+      }
       modoMinimo={modoMinimo}
       mostrarEtapas={Boolean(projeto)}
-      projeto={projeto ? { nome: projeto.name } : null}
+      projeto={projeto ? { nome: projeto.name, outros: outrosProjetos } : null}
+      aoSelecionarProjeto={aoSelecionarProjeto}
+      aoTrocarProjeto={aoTrocarProjeto}
+      aoConfigurarProjeto={aoConfigurarProjeto}
+      aoFecharProjeto={aoFecharProjeto}
       etapa={etapa}
       aoIrEtapa={aoIrEtapa}
       fila={{ ativos: jobsAtivos.length, resumo: resumoFila }}
       aoAbrirFila={abrirFilaPadrao}
       aoAbrirPaleta={abrirPaleta}
       somenteLocal={somenteLocal}
+      aoAbrirSomenteLocal={aoAbrirSomenteLocal}
       status={
         modoMinimo
           ? undefined
@@ -338,6 +596,8 @@ export function Shell({
               ),
               direita: (
                 <>
+                  <DicaAtalho tecla="F6">Região</DicaAtalho>
+                  <DicaAtalho tecla="?">Atalhos</DicaAtalho>
                   <DicaAtalho tecla="Ctrl K">Comandos</DicaAtalho>
                   <DicaAtalho tecla="Ctrl ,">Configurações</DicaAtalho>
                 </>
@@ -345,8 +605,16 @@ export function Shell({
             }
       }
     >
-      <main className="flex min-h-0 flex-1 flex-col overflow-auto p-4">{children}</main>
+      <main
+        ref={mainRef}
+        data-regiao="conteudo"
+        tabIndex={-1}
+        className="foco-interno flex min-h-0 flex-1 flex-col overflow-auto p-4"
+      >
+        {children}
+      </main>
       <FechamentoJanela jobs={jobs} />
+      <FolhaAtalhos aberto={ajudaAtalhosAberta} aoMudarAberto={setAjudaAtalhosAberta} />
     </Tela>
   )
 }

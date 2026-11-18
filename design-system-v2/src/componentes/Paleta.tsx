@@ -3,7 +3,7 @@
 import { Dialog as D } from '@base-ui/react/dialog'
 import { Command } from 'cmdk'
 import { Search } from 'lucide-react'
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { Kbd } from '@/primitivas/Botao'
 import { camadaBase } from '@/primitivas/Flutuantes'
 import { cn } from '@/lib/cn'
@@ -43,11 +43,19 @@ export function useAtalhoPaleta(alternar: () => void) {
 
 export function Paleta({ aberto, aoMudarAberto, comandos, placeholder = 'Digitar comando…' }: PaletaProps) {
   const grupos = [...new Set(comandos.map((c) => c.grupo ?? ''))]
+  const focoRetornoRef = useRef<HTMLElement | null>(null)
+  const estavaAbertaRef = useRef(false)
+
+  if (aberto && !estavaAbertaRef.current && typeof document !== 'undefined') {
+    focoRetornoRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  }
+  estavaAbertaRef.current = aberto
+
   return (
     <D.Root open={aberto} onOpenChange={(v) => aoMudarAberto(v)}>
       <D.Portal>
         <D.Backdrop className="fixed inset-0 bg-veu transition-opacity duration-(--dur-base) data-ending-style:opacity-0 data-starting-style:opacity-0" style={{ zIndex: 'var(--z-dialogo)' }} />
-        <D.Popup aria-label="Paleta de comandos" className={cn(camadaBase, 'fixed top-[14vh] left-1/2 w-[min(520px,calc(100vw-32px))] -translate-x-1/2 p-2')} style={{ zIndex: 'var(--z-dialogo)' }}>
+        <D.Popup finalFocus={focoRetornoRef} aria-label="Paleta de comandos" className={cn(camadaBase, 'fixed top-[14vh] left-1/2 w-[min(520px,calc(100vw-32px))] -translate-x-1/2 p-2')} style={{ zIndex: 'var(--z-dialogo)' }}>
           <D.Title className="sr-only">Paleta de comandos</D.Title>
           <Command label="Comandos" loop>
             <div className="mb-1.5 flex items-center gap-2 border-b border-linha px-2 pt-1 pb-2">
@@ -77,6 +85,9 @@ export function Paleta({ aberto, aoMudarAberto, comandos, placeholder = 'Digitar
                 </Command.Group>
               ))}
             </Command.List>
+            <div className="mt-1.5 flex items-center justify-between border-t border-linha px-2 pt-2 pb-0.5 text-micro text-t3">
+              <span>Enter para executar · Esc para fechar</span>
+            </div>
           </Command>
         </D.Popup>
       </D.Portal>
