@@ -64,7 +64,7 @@ try {
   await page.getByRole('button', {name:'Atualizar yt-dlp'}).click();
   const ytDlpUpdateDialog = page.getByRole('alertdialog', {name:'Atualizar yt-dlp?'});
   await ytDlpUpdateDialog.waitFor();
-  assert.match(await ytDlpUpdateDialog.innerText(), /Versão instalada: test/);
+  assert.match(await ytDlpUpdateDialog.innerText(), /Versão instalada: 2026\.11\.01/);
   await ytDlpUpdateDialog.getByRole('button', {name:'Cancelar'}).click();
   await page.getByRole('button', {name:'Atualizar yt-dlp'}).click();
   await ytDlpUpdateDialog.getByRole('button', {name:'Atualizar',exact:true}).click();
