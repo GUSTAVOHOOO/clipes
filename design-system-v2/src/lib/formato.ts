@@ -22,9 +22,22 @@ export function duracao(us: number): string {
   return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min${s % 60 ? ` ${s % 60} s` : ''}`
 }
 
-/** micro-dólares → "US$ 0,04" */
+/** micro-dólares → "US$ 0,04", "< US$ 0,01" (positivo < 1 centavo) ou "US$ 0,00" (zero) */
 export function usd(micro: number): string {
-  return `US$ ${(micro / 1_000_000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: micro < 10_000 ? 3 : 2 })}`
+  if (micro === 0) return 'US$ 0,00'
+  if (micro > 0 && micro < 10_000) return '< US$ 0,01'
+  return `US$ ${(micro / 1_000_000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+/** faixa de custo em micro-dólares (min..max) para estimativas */
+export function faixaUsd(minMicro: number, maxMicro: number): string {
+  const min = Math.min(minMicro, maxMicro)
+  const max = Math.max(minMicro, maxMicro)
+  if (min === 0 && max === 0) return 'US$ 0,00'
+  if (min >= 0 && max < 10_000) return '< US$ 0,01'
+  if (min === max) return usd(min)
+  if (min > 0 && min < 10_000) return `< US$ 0,01 – ${usd(max)}`
+  return `~${usd(min)} – ${usd(max)}`
 }
 
 /** 8.4 → "8,4" */

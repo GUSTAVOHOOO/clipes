@@ -12,14 +12,16 @@ test.describe('Tela Detalhe da Fonte e Transcrição (#/projeto/:id/fontes/:font
     await page.getByRole('button', { name: /Abrir Projeto Meu Canal de Cortes/i }).click()
     await expect(page).toHaveURL(/#\/projeto\/meu-canal-de-cortes\/fontes$/)
 
-    // 1) Guarda de rota: :fonteId inexistente redireciona com alerta humano
+    // 1) Guarda de rota: :fonteId inexistente redireciona com toast de aviso (UI-27a)
     await page.evaluate(() => {
       window.location.hash = '#/projeto/meu-canal-de-cortes/fontes/999'
     })
     await expect(page).toHaveURL(/#\/projeto\/meu-canal-de-cortes\/fontes$/)
-    await expect(
-      page.getByText(/A Fonte selecionada não foi encontrada neste Projeto\./i),
-    ).toBeVisible()
+    const toastNaoEncontrado = page.getByText(/A Fonte selecionada não foi encontrada neste Projeto\./i)
+    await expect(toastNaoEncontrado).toBeVisible()
+    const toastRoot = toastNaoEncontrado.locator('xpath=ancestor::div[contains(@class,"rounded-controle")][1]')
+    await expect(toastRoot.locator('.lucide-triangle-alert')).toHaveCount(1)
+    await expect(toastRoot.locator('.lucide-check')).toHaveCount(0)
 
     // 2) Abre Fonte 4 (available, transcrição completa) em 1366x768
     await page.evaluate(() => {
@@ -37,7 +39,7 @@ test.describe('Tela Detalhe da Fonte e Transcrição (#/projeto/:id/fontes/:font
     expect(rolagem1366).toEqual({ altura: true, largura: true })
     await page.screenshot({ path: 'test-results/fonte-transcricao-1366.png' })
 
-    // 3) ?estado=vazio exibe aviso VAD #279 e CTA do Motor
+    // 3) ?estado=vazio exibe aviso VAD, respeita Luz Única (UI-26), oculta Blocos (UI-27b), alvos >= 24px (UI-24) e < US$ 0,01 (UI-28)
     await page.evaluate(() => {
       window.location.hash = '#/projeto/meu-canal-de-cortes/fontes/4?estado=vazio'
     })
@@ -45,6 +47,25 @@ test.describe('Tela Detalhe da Fonte e Transcrição (#/projeto/:id/fontes/:font
     await expect(
       page.getByText(/ligado na CPU \(acelera em ~18%\) e desligado na GPU \(evita gastar ~1 GB extra de VRAM/i),
     ).toBeVisible()
+    await expect(page.locator('button.bg-sinal')).toHaveCount(1)
+    await expect(page.getByText('Blocos de 10 min')).toHaveCount(0)
+
+    const radioLocal = page.getByRole('radio', { name: /Local — US\$ 0,00/i })
+    const radioGroq = page.getByRole('radio', { name: /Groq remoto/i })
+    await expect(radioGroq).toContainText('< US$ 0,01')
+    const summaryDetalhes = page.locator('summary', { hasText: 'Detalhes técnicos' })
+    for (const el of [radioLocal, radioGroq, summaryDetalhes]) {
+      const box = await el.boundingBox()
+      expect(box).not.toBeNull()
+      expect(box!.height).toBeGreaterThanOrEqual(24)
+    }
+    await summaryDetalhes.click()
+    const linkComponentes = page.getByRole('link', { name: /Configurar componentes e hardware/i })
+    await expect(linkComponentes).toBeVisible()
+    const boxComponentes = await linkComponentes.boundingBox()
+    expect(boxComponentes).not.toBeNull()
+    expect(boxComponentes!.height).toBeGreaterThanOrEqual(24)
+    await summaryDetalhes.click()
 
     // Volta para estado pronto em 1440x900
     await page.setViewportSize({ width: 1440, height: 900 })
@@ -176,7 +197,11 @@ test.describe('Tela Detalhe da Fonte e Transcrição (#/projeto/:id/fontes/:font
 
     // Troca de Motor para Groq em transcrição parcial exige ConfirmDialog (engine_change_confirmation)
     await page.getByRole('radio', { name: /Groq remoto/i }).click()
-    await page.getByRole('link', { name: 'Configurar chave do Groq' }).click()
+    const linkChaveGroq = page.getByRole('link', { name: 'Configurar chave do Groq' })
+    const boxChaveGroq = await linkChaveGroq.boundingBox()
+    expect(boxChaveGroq).not.toBeNull()
+    expect(boxChaveGroq!.height).toBeGreaterThanOrEqual(24)
+    await linkChaveGroq.click()
     await expect(page).toHaveURL(/#\/config\/provedores$/)
     await page.getByLabel('Nova chave da API Groq').fill('gsk_teste_123456')
     await page.getByRole('button', { name: 'Salvar chave' }).click()

@@ -9,6 +9,7 @@ import {
   Status,
   cn,
   duracao,
+  faixaUsd,
   tcLongo,
   usd,
   useToast,
@@ -23,12 +24,12 @@ import {
   type KeyboardEvent,
   type RefObject,
 } from 'react'
-import { chamar, paraErroCore, type ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useFila } from '~/core/progresso'
 import type { FonteProjeto, TranscriptStatusFonte } from '~/stores/fontesProjeto'
 
-type MotorEscolha = 'local' | 'groq'
+export type MotorEscolha = 'local' | 'groq'
 
 type HardwareStatus = {
   gpu: { name: string; driver: string; total_mib: number; free_mib: number } | null
@@ -181,6 +182,7 @@ export type PainelMotorSinaisProps = {
   aoAtualizarStatus: () => Promise<void>
   aoPedirRelocalizacao?: () => void
   aoFocarMotorRef?: RefObject<HTMLButtonElement | null>
+  aoRegistrarIniciarRef?: RefObject<((opcoes?: { engine?: MotorEscolha }) => Promise<void>) | null>
 }
 
 /** Painel esquerdo do Detalhe da Fonte: Motor Local/Groq, amostra 30 s, VAD #279, blocos e sinais. */
@@ -192,6 +194,7 @@ export function PainelMotorSinais({
   aoAtualizarStatus,
   aoPedirRelocalizacao,
   aoFocarMotorRef,
+  aoRegistrarIniciarRef,
 }: PainelMotorSinaisProps) {
   const toast = useToast()
   const jobsFila = useFila()
@@ -369,7 +372,11 @@ export function PainelMotorSinais({
     return Math.round(estimativa.estimate_s * restante * 1_000_000)
   }, [estimativa?.estimate_s, progressoDeterministico, transcricaoRodando])
 
-  const blocoAtual = Math.min(totalBlocos, Math.max(1, blocos.length + (transcricaoRodando ? 1 : 0)))
+  const blocosVisiveis = useMemo(
+    () => (transcript === null && !transcricaoRodando ? [] : blocos),
+    [blocos, transcript, transcricaoRodando],
+  )
+  const blocoAtual = Math.min(totalBlocos, Math.max(1, blocosVisiveis.length + (transcricaoRodando ? 1 : 0)))
 
   const alterarAgrupamento = async (args: { auto: true } | { enabled: boolean }) => {
     setErroLocal(null)
@@ -430,8 +437,19 @@ export function PainelMotorSinais({
     retryConfirmed?: boolean
   }) => {
     const engineAlvo = opcoes?.engine ?? motor
-    if (!fonteDisponivel || iniciando) return
-    if (engineAlvo === 'groq' && bloqueadoSomenteLocal) return
+    if (iniciando) return
+    if (!fonteDisponivel) {
+      if (opcoes?.engine) {
+        setErroLocal(new ErroCore('source_missing', 'O arquivo da Fonte não está disponível no disco.'))
+      }
+      return
+    }
+    if (engineAlvo === 'groq' && bloqueadoSomenteLocal) {
+      if (opcoes?.engine) {
+        setErroLocal(new ErroCore('local_only_violation', 'Somente local está ativo para este Projeto.'))
+      }
+      return
+    }
 
     setErroLocal(null)
     setIniciando(true)
@@ -470,6 +488,17 @@ export function PainelMotorSinais({
       setIniciando(false)
     }
   }
+
+  const iniciarTranscricaoRef = useRef(iniciarTranscricao)
+  iniciarTranscricaoRef.current = iniciarTranscricao
+
+  useEffect(() => {
+    if (!aoRegistrarIniciarRef) return
+    aoRegistrarIniciarRef.current = (opcoes) => iniciarTranscricaoRef.current(opcoes)
+    return () => {
+      aoRegistrarIniciarRef.current = null
+    }
+  }, [aoRegistrarIniciarRef])
 
   const confirmarDialogoMotor = async () => {
     if (!confirmacao) return
@@ -660,7 +689,7 @@ export function PainelMotorSinais({
               aria-checked={motor === 'local'}
               tabIndex={motor === 'local' ? 0 : -1}
               onClick={() => setMotor('local')}
-              className="foco flex cursor-pointer items-center justify-between gap-2 rounded-mini border-0 bg-transparent p-0 text-left text-base font-medio text-t1"
+              className="foco flex min-h-6 cursor-pointer items-center justify-between gap-2 rounded-mini border-0 bg-transparent p-0 text-left text-base font-medio text-t1"
             >
               <span>Local — US$ 0,00</span>
               <span className="text-pequeno font-normal text-t3">não sai da máquina</span>
@@ -718,7 +747,7 @@ export function PainelMotorSinais({
 
               {/* Detalhes técnicos recolhidos por revelação progressiva */}
               <details className="text-pequeno text-t3">
-                <summary className="foco cursor-pointer rounded-mini py-0.5 text-t2 hover:text-t1">
+                <summary className="foco min-h-6 cursor-pointer rounded-mini py-1 text-t2 hover:text-t1">
                   Detalhes técnicos
                 </summary>
                 <div className="mt-1.5 flex flex-col gap-1 rounded-controle bg-elevado p-2 font-mono text-pequeno text-t2">
@@ -734,7 +763,7 @@ export function PainelMotorSinais({
                   )}
                   <a
                     href="#/config/componentes"
-                    className="foco mt-1 font-sans text-pequeno text-t1 underline"
+                    className="foco mt-1 inline-flex min-h-6 items-center self-start font-sans text-pequeno text-t1 underline"
                   >
                     Configurar componentes e hardware
                   </a>
@@ -827,12 +856,12 @@ export function PainelMotorSinais({
                 aria-checked={motor === 'groq'}
                 tabIndex={motor === 'groq' ? 0 : -1}
                 onClick={() => setMotor('groq')}
-                className="foco flex cursor-pointer items-center gap-2 rounded-mini border-0 bg-transparent p-0 text-left text-base font-medio text-t1"
+                className="foco flex min-h-6 cursor-pointer items-center gap-2 rounded-mini border-0 bg-transparent p-0 text-left text-base font-medio text-t1"
               >
                 <span>Groq remoto</span>
                 {groqEst && !bloqueadoSomenteLocal && (
                   <span className="num text-pequeno font-normal text-t3">
-                    ~{usd(groqEst.minMicroUsd)} – {usd(groqEst.maxMicroUsd)}
+                    {faixaUsd(groqEst.minMicroUsd, groqEst.maxMicroUsd)}
                   </span>
                 )}
               </button>
@@ -872,7 +901,10 @@ export function PainelMotorSinais({
                 {!groqInfo?.configured && (
                   <div className="flex flex-wrap items-center justify-between gap-2 rounded-controle bg-elevado px-2.5 py-2 text-pequeno text-t2">
                     <span>Chave da API do Groq não configurada no cofre.</span>
-                    <a href="#/config/provedores" className="foco text-t1 underline">
+                    <a
+                      href="#/config/provedores"
+                      className="foco inline-flex min-h-6 items-center text-t1 underline"
+                    >
                       Configurar chave do Groq
                     </a>
                   </div>
@@ -912,12 +944,12 @@ export function PainelMotorSinais({
       </section>
 
       {/* Cartão 2: Progresso e Blocos de 10 min */}
-      {(transcricaoRodando || blocos.length > 0 || parcialPausada || transcricaoConcluida) && (
+      {(transcricaoRodando || blocosVisiveis.length > 0 || parcialPausada || transcricaoConcluida) && (
         <section aria-label="Blocos de 10 min" className="flex flex-col gap-2.5 rounded-area bg-area p-3">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-forte text-t1">Blocos de 10 min</h2>
             <span className="num text-pequeno text-t2">
-              {blocos.length} / {totalBlocos} blocos salvos
+              {blocosVisiveis.length} / {totalBlocos} blocos salvos
             </span>
           </div>
 
@@ -937,9 +969,9 @@ export function PainelMotorSinais({
             }
           />
 
-          {blocos.length > 0 && (
+          {blocosVisiveis.length > 0 && (
             <ul className="m-0 flex max-h-36 list-none flex-col gap-1 overflow-y-auto p-0">
-              {blocos.map((b, idx) => {
+              {blocosVisiveis.map((b, idx) => {
                 const dispositivo = b.device === 'cpu' ? 'CPU' : 'GPU'
                 const faixa = `${tcLongo(b.start_us)}–${tcLongo(b.end_us)}`
                 return (
