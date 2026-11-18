@@ -204,8 +204,8 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 
 ### `e2e (windows-latest)` falha no `POST /session` com WebView2 150+ em runner elevado (#282)
 - **Sintoma:** no GitHub Actions (`windows-latest`, `runneradmin` elevado, WebView2 `156.0.4314.58`), `tauri-driver` + `msedgedriver` expira no `POST /session` (ou falha com `DevToolsActivePort file doesn't exist`), enquanto localmente em usuário padrão e no `ubuntu-latest` a suíte passa.
-- **Causa:** a partir do WebView2 v150+, processos elevados ignoram `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` e demais variáveis `WEBVIEW2_*`.
-- **Ação:** o job `e2e` do `ci.yml` roda só em `ubuntu-latest`, e no Windows a E2E roda localmente sem elevação; as saídas possíveis para o runner Windows estão registradas na issue [#282](https://github.com/GUSTAVOHOOO/clipes/issues/282).
+- **Causa:** a partir do WebView2 v150+, processos elevados ignoram `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` e demais variáveis `WEBVIEW2_*`, impedindo que o `msedgedriver` passe `--remote-debugging-port=0` ao WebView2.
+- **Ação:** no CI (`.github/workflows/ci.yml`), um step só do Windows antes do E2E grava a política de máquina em `HKLM:\SOFTWARE\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments` com valor `REG_SZ` de nome `clipes.exe` e dado `--remote-debugging-port=0`, que processos elevados honram; localmente no Windows, rode `bun run test:e2e` em usuário padrão sem elevação.
 
 ## Disco
 
