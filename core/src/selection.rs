@@ -1230,8 +1230,13 @@ fn run_chat(row: &RunRow, frases: &[Sentence]) -> Result<Option<ChatMarks>, Core
 // ---------------------------------------------------------------- retomar e refazer
 
 /// Janelas que um refazer atinge: as pedidas (ou todas as não concluídas) que não estão na
-/// fila nem rodando. Janela concluída nunca é repetida.
-fn redo_inputs(run: i64, v: &Value) -> Result<Vec<(i64, TaskInput)>, CoreError> {
+/// fila nem rodando. Janela concluída nunca é repetida. Quando `include_uncertain` é falso,
+/// qualquer Janela selecionada com job `uncertain` recusa com `window_uncertain`.
+fn window_inputs_for(
+    run: i64,
+    v: &Value,
+    include_uncertain: bool,
+) -> Result<Vec<(i64, TaskInput)>, CoreError> {
     let row = read_run(run)?;
     let windows = read_windows(run)?;
     let wanted: Option<Vec<i64>> = v["windows"]
@@ -1250,6 +1255,19 @@ fn redo_inputs(run: i64, v: &Value) -> Result<Vec<(i64, TaskInput)>, CoreError> 
     for w in &windows {
         let selected = wanted.as_ref().is_none_or(|ids| ids.contains(&w.idx));
         if !selected {
+            continue;
+        }
+        if w.state() == "uncertain" {
+            if !include_uncertain {
+                return Err(error(
+                    "window_uncertain",
+                    "A chamada desta Janela tem resultado incerto: resolva a incerteza antes de retomar ou refazer.",
+                ));
+            }
+            out.push((
+                w.idx,
+                window_input(slice_by_ids(&frases, w.first_id, w.last_id), &range, &marks),
+            ));
             continue;
         }
         match w.effective().outcome {
@@ -1283,23 +1301,69 @@ fn redo_inputs(run: i64, v: &Value) -> Result<Vec<(i64, TaskInput)>, CoreError> 
     Ok(out)
 }
 
-/// `selection.redo {run, windows?, confirmed?}` (e `selection.resume`, sem `windows`): refaz
-/// só as Janelas que falharam ou foram canceladas, no mesmo lote, contando no orçamento.
-///
-/// Com `profileId` (#126, "refazer com o forte"): refaz as `windows` pedidas, mesmo concluídas,
-/// com esse Perfil de Provedor só desta vez. Veja [`redo_with_profile`].
-fn cmd_redo(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let run = v["run"]
-        .as_i64()
-        .ok_or_else(|| error("run_not_found", "Execução de seleção não encontrada."))?;
-    if let Some(profile) = explicit_profile(&v)? {
-        return redo_with_profile(run, &profile, &v);
+fn redo_inputs(run: i64, v: &Value) -> Result<Vec<(i64, TaskInput)>, CoreError> {
+    window_inputs_for(run, v, false)
+}
+
+/// Pré-checagem do fluxo de lote (`batches.item.resume`) para uma execução de seleção (#290):
+/// se houver Janelas `uncertain`, exige confirmação com estimativa cobrindo todas as Janelas que
+/// serão repetidas (incertas + falhas/canceladas) e devolve os `job_id` incertos a resolver via
+/// `jobs.retry` antes de chamar `selection.resume`.
+pub(crate) fn batch_resume_prepare(run: i64, confirmed: bool) -> Result<Vec<i64>, CoreError> {
+    let row = read_run(run)?;
+    let windows = read_windows(run)?;
+    let uncertain_jobs: Vec<i64> = windows
+        .iter()
+        .filter(|w| w.state() == "uncertain")
+        .filter_map(|w| w.job_id)
+        .collect();
+    if uncertain_jobs.is_empty() {
+        return Ok(Vec::new());
     }
+    let (_, safety) = route_safety()?;
+    let has_paid_uncertain = projects::with_reader(|c| {
+        let mut q = c.prepare(
+            "SELECT 1 FROM selection_windows w JOIN jobs j ON j.id=w.job_id WHERE w.run_id=?1 AND j.state='uncertain' AND j.safety='paid' LIMIT 1",
+        )?;
+        q.exists([run])
+    })?;
+    let inputs = window_inputs_for(run, &json!({"run": run}), true)?;
+    if (matches!(safety, Safety::Paid) || has_paid_uncertain) && !confirmed {
+        let list: Vec<TaskInput> = inputs.iter().map(|i| i.1.clone()).collect();
+        return Err(confirmation_required(estimate_inputs(
+            row.kind,
+            &list,
+            Safety::Paid,
+        )));
+    }
+    Ok(uncertain_jobs)
+}
+
+/// Marca a execução como `running` quando todas as Janelas pendentes voltaram à fila via
+/// `jobs.retry` e não restaram Janelas `failed`/`cancelled` para `selection.resume`.
+pub(crate) fn mark_running(run: i64) -> Result<(), CoreError> {
+    projects::with_writer(|c| {
+        c.execute(
+            "UPDATE selection_runs SET state='running' WHERE id=?1",
+            [run],
+        )?;
+        Ok(())
+    })?;
+    Ok(())
+}
+
+fn parse_run_id(v: &Value) -> Result<i64, CoreError> {
+    v["run"]
+        .as_i64()
+        .ok_or_else(|| error("run_not_found", "Execução de seleção não encontrada."))
+}
+
+fn resume_run(run: i64, v: &Value) -> CommandResult {
+    let kind = read_run(run)?.kind;
     let (profile, safety) = route_safety()?;
-    let inputs = redo_inputs(run, &v)?;
+    let inputs = redo_inputs(run, v)?;
     if matches!(safety, Safety::Paid) && v["confirmed"] != true {
         let list: Vec<TaskInput> = inputs.iter().map(|i| i.1.clone()).collect();
-        let kind = read_run(run)?.kind;
         return Err(confirmation_required(estimate_inputs(kind, &list, safety)));
     }
     enqueue_windows(
@@ -1312,6 +1376,34 @@ fn cmd_redo(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         },
     )?;
     Ok(json!({"run": run, "windows": inputs.iter().map(|i| i.0).collect::<Vec<_>>()}))
+}
+
+/// `selection.resume {run, confirmed?}`: retoma uma execução parcial reenfileirando apenas as
+/// Janelas elegíveis (falhas ou canceladas), no mesmo lote, contando no orçamento. Recusa com
+/// `window_uncertain` se houver ao menos uma Janela com job `uncertain`, sem reenfileirar nada.
+fn cmd_resume(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let run = parse_run_id(&v)?;
+    read_run(run)?;
+    if read_windows(run)?.iter().any(|w| w.state() == "uncertain") {
+        return Err(error(
+            "window_uncertain",
+            "Esta execução tem Janela com chamada incerta: resolva a incerteza antes de retomar.",
+        ));
+    }
+    resume_run(run, &json!({"run": run, "confirmed": v["confirmed"]}))
+}
+
+/// `selection.redo {run, windows?, confirmed?}`: refaz só as Janelas que falharam ou foram
+/// canceladas, no mesmo lote, contando no orçamento.
+///
+/// Com `profileId` (#126, "refazer com o forte"): refaz as `windows` pedidas, mesmo concluídas,
+/// com esse Perfil de Provedor só desta vez. Veja [`redo_with_profile`].
+fn cmd_redo(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let run = parse_run_id(&v)?;
+    if let Some(profile) = explicit_profile(&v)? {
+        return redo_with_profile(run, &profile, &v);
+    }
+    resume_run(run, &v)
 }
 
 /// O `profileId` pedido, se houver: um id curto, escolhido pelo usuário. Nunca vem do padrão.
@@ -1557,7 +1649,7 @@ inventory::submit! { CommandRegistration { name: "selection.get", execute: cmd_g
 inventory::submit! { CommandRegistration { name: "selection.list", execute: cmd_list } }
 inventory::submit! { CommandRegistration { name: "selection.cancel", execute: cmd_cancel } }
 inventory::submit! { CommandRegistration { name: "selection.redo", execute: cmd_redo } }
-inventory::submit! { CommandRegistration { name: "selection.resume", execute: cmd_redo } }
+inventory::submit! { CommandRegistration { name: "selection.resume", execute: cmd_resume } }
 
 #[cfg(test)]
 mod tests;

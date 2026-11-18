@@ -918,11 +918,25 @@ fn cmd_item_resume(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     }
     let confirmed = v["confirmed"] == true;
     if let Some(run) = item.run {
+        let uncertain_jobs = crate::selection::batch_resume_prepare(run, confirmed)?;
+        for job in &uncertain_jobs {
+            crate::dispatch(
+                "jobs.retry",
+                json!({"id": job, "confirmed": true}),
+                &mut |_| {},
+            )?;
+        }
         let mut args = json!({"run": run});
         if confirmed {
             args["confirmed"] = json!(true);
         }
-        crate::dispatch("selection.resume", args, &mut |_| {})?;
+        match crate::dispatch("selection.resume", args, &mut |_| {}) {
+            Ok(_) => {}
+            Err(e) if e.code == "nothing_to_redo" && !uncertain_jobs.is_empty() => {
+                crate::selection::mark_running(run)?;
+            }
+            Err(e) => return Err(e),
+        }
         set_item(
             batch.id,
             item.position,
