@@ -64,9 +64,36 @@
     --sombra-toast: 0 8px 24px rgb(20 20 30 / 0.16);
   }
 
+  [data-contrast='high'] {
+    --linha: #5c5c66;
+    --linha-forte: #b4b4be;
+    --t1: #ffffff;
+    --t2: #dcdcde;
+    --t3: #b4b4be;
+    --sinal-texto: #ff8555;
+    --erro: #ff9494;
+  }
+
+  [data-tema='claro'][data-contrast='high'] {
+    --linha: #686872;
+    --linha-forte: #36363e;
+    --t1: #09090b;
+    --t2: #202026;
+    --t3: #36363e;
+    --sinal-texto: #8f2a04;
+    --foco: #9e2f06;
+    --erro: #961616;
+  }
+
   :root {
-    /* tipografia */
+    /* tipografia e escala */
     --fonte: 'Inter Variable', 'Inter', system-ui, sans-serif;
+    --tam-micro: 11px;
+    --tam-pequeno: 12px;
+    --tam-base: 13px;
+    --tam-campo: 14px;
+    --tam-titulo: 16px;
+    --tam-destaque: 20px;
 
     /* movimento: curto e com saída exponencial; some com prefers-reduced-motion */
     --dur-rapida: 120ms;
@@ -88,6 +115,19 @@
     --altura-controle: 28px;
     --altura-controle-p: 24px;
     --altura-barra: 36px;
+  }
+
+  [data-escala='115'] {
+    --tam-micro: 13px;
+    --tam-pequeno: 14px;
+    --tam-base: 15px;
+    --tam-campo: 16px;
+    --tam-titulo: 18px;
+    --tam-destaque: 23px;
+  }
+
+  [data-escala='115'] body {
+    font-size: var(--tam-base);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -125,19 +165,19 @@
 
   --font-sans: var(--fonte);
 
-  /* escala de texto em px: a UI é densa e a base é 13 px */
+  /* escala de texto em px: a UI é densa e a base é 13 px (15 px com [data-escala="115"]) */
   --text-*: initial;
-  --text-micro: 11px;
+  --text-micro: var(--tam-micro);
   --text-micro--line-height: 1.3;
-  --text-pequeno: 12px;
+  --text-pequeno: var(--tam-pequeno);
   --text-pequeno--line-height: 1.45;
-  --text-base: 13px;
+  --text-base: var(--tam-base);
   --text-base--line-height: 1.45;
-  --text-campo: 14px;
+  --text-campo: var(--tam-campo);
   --text-campo--line-height: 1.4;
-  --text-titulo: 16px;
+  --text-titulo: var(--tam-titulo);
   --text-titulo--line-height: 1.3;
-  --text-destaque: 20px;
+  --text-destaque: var(--tam-destaque);
   --text-destaque--line-height: 1.25;
 
   --font-weight-normal: 400;

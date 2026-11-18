@@ -1,11 +1,15 @@
 import { useSyncExternalStore } from 'react'
 
+export type ModoTeclasUnicas = 'ativas' | 'alt' | 'desligadas'
+
 export type Preferencias = {
   tema: 'escuro' | 'claro' | 'sistema'
   escala: 100 | 115
   altoContraste: boolean
   idioma: 'pt' | 'en'
   teclasUnicas: boolean
+  modoTeclasUnicas: ModoTeclasUnicas
+  paineisSoPorClique: boolean
   atalhos: Record<string, string>
 }
 
@@ -17,6 +21,8 @@ export const PADRAO: Preferencias = {
   altoContraste: false,
   idioma: 'pt',
   teclasUnicas: true,
+  modoTeclasUnicas: 'ativas',
+  paineisSoPorClique: true,
   atalhos: {},
 }
 
@@ -39,17 +45,35 @@ function sanitizarAtalhos(valor: unknown): Record<string, string> {
   return out
 }
 
+function ehModoTeclasUnicas(valor: unknown): valor is ModoTeclasUnicas {
+  return valor === 'ativas' || valor === 'alt' || valor === 'desligadas'
+}
+
 function sanitizar(bruto: unknown): Preferencias {
   if (!bruto || typeof bruto !== 'object' || Array.isArray(bruto)) {
     return { ...PADRAO, atalhos: {} }
   }
   const obj = bruto as Record<string, unknown>
+  const modoTeclasUnicas: ModoTeclasUnicas = ehModoTeclasUnicas(obj.modoTeclasUnicas)
+    ? obj.modoTeclasUnicas
+    : obj.teclasUnicas === false
+      ? 'desligadas'
+      : PADRAO.modoTeclasUnicas
+
+  const teclasUnicas =
+    typeof obj.teclasUnicas === 'boolean' && !ehModoTeclasUnicas(obj.modoTeclasUnicas)
+      ? obj.teclasUnicas
+      : modoTeclasUnicas !== 'desligadas'
+
   return {
     tema: obj.tema === 'escuro' || obj.tema === 'claro' || obj.tema === 'sistema' ? obj.tema : PADRAO.tema,
     escala: obj.escala === 100 || obj.escala === 115 ? obj.escala : PADRAO.escala,
     altoContraste: typeof obj.altoContraste === 'boolean' ? obj.altoContraste : PADRAO.altoContraste,
     idioma: obj.idioma === 'pt' || obj.idioma === 'en' ? obj.idioma : PADRAO.idioma,
-    teclasUnicas: typeof obj.teclasUnicas === 'boolean' ? obj.teclasUnicas : PADRAO.teclasUnicas,
+    teclasUnicas,
+    modoTeclasUnicas,
+    paineisSoPorClique:
+      typeof obj.paineisSoPorClique === 'boolean' ? obj.paineisSoPorClique : PADRAO.paineisSoPorClique,
     atalhos: sanitizarAtalhos(obj.atalhos),
   }
 }
@@ -90,11 +114,23 @@ export function criarPreferencias(armazenamento?: Armazenamento) {
   }
 
   function mudar(parcial: Partial<Preferencias>): void {
-    const proximo = sanitizar({
-      ...ler(),
+    const corrente = ler()
+    const mesclado: Partial<Preferencias> = {
+      ...corrente,
       ...parcial,
-      atalhos: parcial.atalhos !== undefined ? parcial.atalhos : ler().atalhos,
-    })
+      atalhos: parcial.atalhos !== undefined ? parcial.atalhos : corrente.atalhos,
+    }
+    if (parcial.modoTeclasUnicas !== undefined && parcial.teclasUnicas === undefined) {
+      mesclado.teclasUnicas = parcial.modoTeclasUnicas !== 'desligadas'
+    } else if (parcial.teclasUnicas !== undefined && parcial.modoTeclasUnicas === undefined) {
+      mesclado.modoTeclasUnicas = parcial.teclasUnicas
+        ? corrente.modoTeclasUnicas === 'alt'
+          ? 'alt'
+          : 'ativas'
+        : 'desligadas'
+    }
+
+    const proximo = sanitizar(mesclado)
     atual = proximo
     inicializado = true
     const serializado = JSON.stringify(proximo)

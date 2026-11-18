@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { aplicarPreferencias, resolverTemaEfetivo } from '~/preferencias/aplicarPreferencias'
 import { criarPreferencias, PADRAO, usePreferencias } from '~/preferencias/preferencias'
 
 function memoriaStorage(inicial: Record<string, string> = {}) {
@@ -27,11 +28,21 @@ describe('criarPreferencias', () => {
 
     store.mudar({ tema: 'claro', teclasUnicas: false })
 
-    expect(store.ler()).toEqual({ ...PADRAO, tema: 'claro', teclasUnicas: false })
+    expect(store.ler()).toEqual({
+      ...PADRAO,
+      tema: 'claro',
+      teclasUnicas: false,
+      modoTeclasUnicas: 'desligadas',
+    })
     expect(storage.dados.get('clipes.preferencias.v1')).toBeTruthy()
 
     const outraInstancia = criarPreferencias(storage)
-    expect(outraInstancia.ler()).toEqual({ ...PADRAO, tema: 'claro', teclasUnicas: false })
+    expect(outraInstancia.ler()).toEqual({
+      ...PADRAO,
+      tema: 'claro',
+      teclasUnicas: false,
+      modoTeclasUnicas: 'desligadas',
+    })
   })
 
   it('cai no PADRAO quando o JSON salvo é inválido', () => {
@@ -103,6 +114,75 @@ describe('usePreferencias', () => {
       result.current[1]({ tema: 'sistema', teclasUnicas: false })
     })
 
-    expect(result.current[0]).toEqual({ ...PADRAO, tema: 'sistema', teclasUnicas: false })
+    expect(result.current[0]).toEqual({
+      ...PADRAO,
+      tema: 'sistema',
+      teclasUnicas: false,
+      modoTeclasUnicas: 'desligadas',
+    })
+  })
+
+  it('sincroniza modoTeclasUnicas com teclasUnicas legado e suporta paineisSoPorClique', () => {
+    const storage = memoriaStorage({
+      'clipes.preferencias.v1': JSON.stringify({ teclasUnicas: false }),
+    })
+    const store = criarPreferencias(storage)
+    expect(store.ler().modoTeclasUnicas).toBe('desligadas')
+    expect(store.ler().teclasUnicas).toBe(false)
+
+    store.mudar({ modoTeclasUnicas: 'alt', paineisSoPorClique: false })
+    expect(store.ler().modoTeclasUnicas).toBe('alt')
+    expect(store.ler().teclasUnicas).toBe(true)
+    expect(store.ler().paineisSoPorClique).toBe(false)
+
+    store.mudar({ modoTeclasUnicas: 'desligadas' })
+    expect(store.ler().teclasUnicas).toBe(false)
+  })
+})
+
+describe('aplicarPreferencias', () => {
+  afterEach(() => {
+    document.documentElement.removeAttribute('data-tema')
+    document.documentElement.removeAttribute('data-contrast')
+    document.documentElement.removeAttribute('data-escala')
+    document.documentElement.lang = ''
+    vi.restoreAllMocks()
+  })
+
+  it('aplica data-tema, data-contrast="high", data-escala="115" e resolve tema sistema', () => {
+    aplicarPreferencias({
+      ...PADRAO,
+      tema: 'claro',
+      altoContraste: true,
+      escala: 115,
+      idioma: 'en',
+    })
+
+    expect(document.documentElement.getAttribute('data-tema')).toBe('claro')
+    expect(document.documentElement.getAttribute('data-contrast')).toBe('high')
+    expect(document.documentElement.getAttribute('data-escala')).toBe('115')
+    expect(document.documentElement.lang).toBe('en')
+
+    aplicarPreferencias({ ...PADRAO, tema: 'escuro', altoContraste: false, escala: 100 })
+    expect(document.documentElement.getAttribute('data-tema')).toBe('escuro')
+    expect(document.documentElement.hasAttribute('data-contrast')).toBe(false)
+    expect(document.documentElement.hasAttribute('data-escala')).toBe(false)
+    expect(document.documentElement.lang).toBe('pt-BR')
+
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockReturnValue({
+        matches: true,
+        media: '(prefers-color-scheme: light)',
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      }),
+    )
+    expect(resolverTemaEfetivo('sistema')).toBe('claro')
+    vi.unstubAllGlobals()
   })
 })

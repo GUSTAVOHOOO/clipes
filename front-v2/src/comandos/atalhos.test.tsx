@@ -1,7 +1,17 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { criarRegistro, ProvedorAtalhos, useAtalhos, type Atalho } from '~/comandos/atalhos'
+import {
+  criarRegistro,
+  detectarConflitoAtalho,
+  formatarEventoTeclado,
+  MAPA_ATALHOS_OFICIAL,
+  ProvedorAtalhos,
+  resolverTeclaExibida,
+  substituirAtalho,
+  useAtalhos,
+  type Atalho,
+} from '~/comandos/atalhos'
 
 beforeAll(() => {
   if (typeof globalThis.ResizeObserver === 'undefined') {
@@ -242,5 +252,67 @@ describe('ProvedorAtalhos e useAtalhos', () => {
     await user.click(screen.getByText('Aprovar Corte'))
     expect(aoAprovar).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('dialog', { name: 'Paleta de comandos' })).not.toBeInTheDocument()
+  })
+
+  it('modoTeclasUnicas "alt" exige Alt+tecla, atualiza <Kbd> na Paleta para Alt+A e "desligadas" mantém Ctrl+K', () => {
+    const aoAprovar = vi.fn()
+    localStorage.setItem(
+      'clipes.preferencias.v1',
+      JSON.stringify({ modoTeclasUnicas: 'alt', teclasUnicas: true }),
+    )
+
+    render(
+      <ProvedorAtalhos>
+        <ComAtalhos
+          atalhos={[{ id: 'aprovar', titulo: 'Aprovar Corte', grupo: 'Revisão', tecla: 'A', executar: aoAprovar }]}
+        />
+      </ProvedorAtalhos>,
+    )
+
+    fireEvent.keyDown(window, { key: 'a' })
+    expect(aoAprovar).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(window, { key: 'a', altKey: true })
+    expect(aoAprovar).toHaveBeenCalledTimes(1)
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    expect(screen.getByRole('dialog', { name: 'Paleta de comandos' })).toBeInTheDocument()
+    expect(screen.getByText('Alt+A')).toBeInTheDocument()
+  })
+
+  it('tratar respeita modoTeclasUnicas alt/desligadas e remapeamento com conflito por escopo', () => {
+    const reg = criarRegistro()
+    const aprovar = vi.fn()
+    const paleta = vi.fn()
+    reg.registrar([
+      { id: 'revisao.aprovar', titulo: 'Aprovar', grupo: 'Revisão', tecla: 'A', executar: aprovar },
+      { id: 'paleta.abrir', titulo: 'Paleta', grupo: 'Global', tecla: 'Mod+K', executar: paleta },
+    ])
+
+    expect(reg.tratar(eventoTecla('a'), { modoTeclasUnicas: 'alt' })).toBe(false)
+    expect(reg.tratar(eventoTecla('a', { altKey: true }), { modoTeclasUnicas: 'alt' })).toBe(true)
+    expect(aprovar).toHaveBeenCalledTimes(1)
+
+    expect(reg.tratar(eventoTecla('a', { altKey: true }), { modoTeclasUnicas: 'desligadas' })).toBe(false)
+    expect(reg.tratar(eventoTecla('k', { ctrlKey: true }), { modoTeclasUnicas: 'desligadas' })).toBe(true)
+    expect(paleta).toHaveBeenCalledTimes(1)
+
+    expect(resolverTeclaExibida('A', 'alt')).toBe('Alt+A')
+    expect(resolverTeclaExibida('A', 'desligadas')).toBeUndefined()
+    expect(resolverTeclaExibida('Mod+K', 'desligadas')).toBe('Mod+K')
+
+    expect(formatarEventoTeclado(eventoTecla('Shift'))).toBeNull()
+    expect(formatarEventoTeclado(eventoTecla('r', { altKey: true }))).toBe('Alt+R')
+
+    const conflito = detectarConflitoAtalho('revisao.aprovar', 'R', MAPA_ATALHOS_OFICIAL, {})
+    expect(conflito?.id).toBe('revisao.rejeitar')
+
+    // Mesmo atalho em escopos separados (I em Revisão vs Editor) não gera conflito
+    const semConflito = detectarConflitoAtalho('revisao.bordaInicio', 'I', MAPA_ATALHOS_OFICIAL, {})
+    expect(semConflito).toBeNull()
+
+    const remapeados = substituirAtalho({}, 'revisao.aprovar', 'R', 'revisao.rejeitar')
+    expect(remapeados['revisao.aprovar']).toBe('R')
+    expect(remapeados['revisao.rejeitar']).toBe('')
   })
 })
