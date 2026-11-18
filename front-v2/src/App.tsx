@@ -1,5 +1,5 @@
 import { Esqueleto, EstadoTela, ProvedorDicas, ProvedorToast, useToast } from '@ds'
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { ProvedorAtalhos } from '~/comandos/atalhos'
 import { iniciarProgresso } from '~/core/progresso'
 import type { Rota, SecaoConfig } from '~/rotas/rotas'
@@ -7,6 +7,7 @@ import { useRota } from '~/rotas/useRota'
 import { ComEstado, useEstadoForcado } from '~/shell/EstadoForcado'
 import { Shell, useProjetoAtual, type ProjetoAtual } from '~/shell/Shell'
 import { Assistente } from '~/telas/assistente/Assistente'
+import { ConfigCustos } from '~/telas/config/ConfigCustos'
 import { ConfigProvedores } from '~/telas/config/ConfigProvedores'
 import { ConfiguracoesLayout } from '~/telas/config/ConfiguracoesLayout'
 import { Inicio } from '~/telas/inicio/Inicio'
@@ -169,8 +170,13 @@ function AppRoteado({
   somenteLocal: boolean
 }) {
   const toast = useToast()
+  const ultimoAvisoRef = useRef<{ texto: string; em: number } | null>(null)
   const aoRedirecionar = useCallback(
     (aviso: string) => {
+      const agora = Date.now()
+      const ant = ultimoAvisoRef.current
+      if (ant && ant.texto === aviso && agora - ant.em < 250) return
+      ultimoAvisoRef.current = { texto: aviso, em: agora }
       toast.add({ title: aviso })
     },
     [toast],
@@ -202,6 +208,8 @@ function AppRoteado({
     rota.tela === 'config' ? (
       rota.secao === 'provedores' ? (
         <ConfigProvedores projetoAberto={projetoAberto} />
+      ) : rota.secao === 'custos' ? (
+        <ConfigCustos projetoAberto={projetoAberto} />
       ) : (
         <ConfiguracoesLayout
           secao={rota.secao}
