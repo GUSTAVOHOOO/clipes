@@ -173,8 +173,10 @@ function traduzirErroJit(erro: ErroCore): { titulo: string; explicacao?: string 
         titulo: 'Falha ao baixar ou verificar o arquivo. Você pode retomar de onde parou.',
       }
     case 'unknown_component':
+      // Pendência de manifesto macOS (#301)
       return {
-        titulo: 'Este componente ainda não tem instalador automático para este sistema operacional (#301).',
+        titulo:
+          'Este componente ainda não tem instalador automático para este sistema operacional.',
       }
     case 'cancelled':
       return {
@@ -184,6 +186,10 @@ function traduzirErroJit(erro: ErroCore): { titulo: string; explicacao?: string 
       return mensagemDeErro(erro)
   }
 }
+
+// Pendência de manifesto macOS (#301)
+const DICA_INDISPONIVEL_PLATAFORMA =
+  'Download automático indisponível nesta plataforma; disponível em breve.'
 
 const TITULO_ACAO: Record<RecursoJustInTime, string> = {
   url_import: 'baixar vídeos por URL',
@@ -339,9 +345,10 @@ export function InstaladorJustInTime({
             nome: 'Ambiente Python isolado (Worker)',
             instalado: workerInstalado,
             licenca: mUv?.license ?? 'Apache-2.0',
+            // Tamanho varia por CUDA/CPU (#307)
             nota: workerInstalado
               ? undefined
-              : 'Tamanho variável conforme ambiente CUDA/CPU (#307)',
+              : 'Tamanho variável conforme ambiente CUDA/CPU',
             indisponivelManifesto: !workerInstalado && !mUv,
           },
           {
@@ -598,6 +605,16 @@ export function InstaladorJustInTime({
     </Botao>
   )
 
+  const acaoBaixar = bloqueadoPorPlataforma ? (
+    <Dica texto={DICA_INDISPONIVEL_PLATAFORMA}>
+      <span tabIndex={0} className="inline-flex">
+        {botaoBaixar}
+      </span>
+    </Dica>
+  ) : (
+    botaoBaixar
+  )
+
   const conteudo = (
     <div className="flex flex-col gap-3">
       <p className="text-base text-t2">
@@ -655,8 +672,9 @@ export function InstaladorJustInTime({
                 <span className="text-pequeno text-t3">{item.nota}</span>
               )}
               {!item.instalado && item.indisponivelManifesto && (
+                // Pendência de manifesto macOS (#301)
                 <span className="text-pequeno text-t2">
-                  Download automático indisponível nesta plataforma (#301).
+                  Download automático indisponível nesta plataforma.
                 </span>
               )}
             </li>
@@ -723,15 +741,7 @@ export function InstaladorJustInTime({
               Agora não
             </Botao>
           )}
-          {bloqueadoPorPlataforma ? (
-            <Dica texto="Download automático indisponível nesta plataforma; aguarda manifesto macOS (#301).">
-              <span tabIndex={0} className="inline-flex">
-                {botaoBaixar}
-              </span>
-            </Dica>
-          ) : (
-            botaoBaixar
-          )}
+          {acaoBaixar}
         </div>
       )}
     </div>
@@ -753,15 +763,7 @@ export function InstaladorJustInTime({
                 Cancelar
               </Botao>
             )}
-            {bloqueadoPorPlataforma ? (
-              <Dica texto="Download automático indisponível nesta plataforma; aguarda manifesto macOS (#301).">
-                <span tabIndex={0} className="inline-flex">
-                  {botaoBaixar}
-                </span>
-              </Dica>
-            ) : (
-              botaoBaixar
-            )}
+            {acaoBaixar}
           </>
         }
       >

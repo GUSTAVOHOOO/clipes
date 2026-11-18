@@ -428,7 +428,7 @@ describe('<InstaladorJustInTime>', () => {
     expect(chamarMock).toHaveBeenCalledWith('components.cancel', { id: 'deno' })
   })
 
-  it('error traduz component_integrity (com Reinstalar yt-dlp), hash_mismatch, terms_acceptance_required e unknown_component (#301)', async () => {
+  it('error traduz component_integrity (com Reinstalar yt-dlp), hash_mismatch, terms_acceptance_required e unknown_component sem expor refs de ticket', async () => {
     const user = userEvent.setup()
 
     // 1) component_integrity ao checar status do yt-dlp + hash_mismatch ao reinstalar
@@ -477,10 +477,14 @@ describe('<InstaladorJustInTime>', () => {
     })
     const r2 = render(envolver(<InstaladorJustInTime recurso="url_import" aoConcluir={vi.fn()} />))
     await user.click(await screen.findByRole('button', { name: /Baixar e continuar/i }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(/#301/)
+    const alertaUnknown = await screen.findByRole('alert')
+    expect(alertaUnknown).toHaveTextContent(
+      /Este componente ainda não tem instalador automático para este sistema operacional\./i,
+    )
+    expect(alertaUnknown.textContent ?? '').not.toMatch(/#\d+/)
     r2.unmount()
 
-    // 3) Desabilitação com Dica citando #301 quando ausente do manifesto
+    // 3) Desabilitação com Dica sem ref de ticket quando ausente do manifesto
     chamarMock.mockImplementation(async (cmd: string) => {
       if (cmd === 'components.ytdlp.status') return { installed: false }
       if (cmd === 'components.deno.status') return { installed: false }
@@ -497,11 +501,207 @@ describe('<InstaladorJustInTime>', () => {
     const r3 = render(envolver(<InstaladorJustInTime recurso="url_import" aoConcluir={vi.fn()} />))
     const btnMac = await screen.findByRole('button', { name: /Baixar e continuar/i })
     expect(btnMac).toBeDisabled()
-    expect(screen.getByText(/#301/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Download automático indisponível nesta plataforma\./i),
+    ).toBeInTheDocument()
     const gatilhoDica = btnMac.parentElement as HTMLElement
     await user.hover(gatilhoDica)
-    expect(await screen.findByText(/aguarda manifesto macOS \(#301\)/i)).toBeInTheDocument()
+    const dica = await screen.findByText(
+      /Download automático indisponível nesta plataforma; disponível em breve\./i,
+    )
+    expect(dica).toBeInTheDocument()
+    expect(document.body.textContent ?? '').not.toMatch(/#\d+/)
     r3.unmount()
+  })
+
+  it('UI-12 / UI-18a: varredura de texto renderizado não encontra #\\d+ em nenhum estado ou modo', async () => {
+    const user = userEvent.setup()
+
+    const exigirSemTicket = (contexto: string) => {
+      const texto = document.body.textContent ?? ''
+      expect(texto, `Texto visível em "${contexto}" continha referência de ticket`).not.toMatch(
+        /#\d+/,
+      )
+    }
+
+    // 1) loading
+    let resolverLoading!: (v: unknown) => void
+    chamarMock.mockImplementation((cmd: string) => {
+      if (cmd === 'components.ytdlp.status') {
+        return new Promise((res) => {
+          resolverLoading = res
+        })
+      }
+      if (cmd === 'components.deno.status') return Promise.resolve({ installed: false })
+      if (cmd === 'components.manifest') return Promise.resolve(MANIFESTO_PADRAO)
+      if (cmd === 'sources.url.settings.get') {
+        return Promise.resolve({ terms_accepted: false, download_dir: '/downloads' })
+      }
+      if (cmd === 'components.settings.get') {
+        return Promise.resolve({ data_dir: '/dados', cache_dir: '/cache', cache_limit_bytes: 1e10 })
+      }
+      return Promise.resolve(null)
+    })
+    const rLoad = render(envolver(<InstaladorJustInTime recurso="url_import" aoConcluir={vi.fn()} />))
+    expect(screen.getByRole('status', { name: /Verificando requisitos/i })).toBeInTheDocument()
+    exigirSemTicket('loading')
+    resolverLoading({ installed: false })
+    await screen.findByRole('button', { name: /Baixar e continuar/i })
+    exigirSemTicket('url_import pendente com termos')
+    rLoad.unmount()
+
+    // 2) yunet com worker ausente (nota CUDA/CPU sem #307)
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'components.worker.status') return { installed: false }
+      if (cmd === 'components.models.manifest') {
+        return [
+          {
+            id: 'yunet',
+            label: 'YuNet',
+            license: 'MIT',
+            source_url: 'https://github.com/opencv/opencv_zoo',
+            size: 232_589,
+            installed: false,
+            worker_installed: false,
+          },
+        ]
+      }
+      if (cmd === 'components.manifest') return MANIFESTO_PADRAO
+      if (cmd === 'components.settings.get') {
+        return { data_dir: '/dados', cache_dir: '/cache', cache_limit_bytes: 1e10 }
+      }
+      return null
+    })
+    const rYunet = render(envolver(<InstaladorJustInTime recurso="yunet" aoConcluir={vi.fn()} />))
+    expect(
+      await screen.findByText(/Tamanho variável conforme ambiente CUDA\/CPU/i),
+    ).toBeInTheDocument()
+    exigirSemTicket('yunet com worker ausente')
+    rYunet.unmount()
+
+    // 3) tts com termo expandido + job em execução
+    chamarMock.mockImplementation((cmd: string) => {
+      if (cmd === 'components.pocket_tts.status') return Promise.resolve({ installed: false })
+      if (cmd === 'tts.catalog') return Promise.resolve(CATALOGO_TTS_BASE)
+      if (cmd === 'components.manifest') return Promise.resolve(MANIFESTO_PADRAO)
+      if (cmd === 'components.settings.get') {
+        return Promise.resolve({ data_dir: '/dados', cache_dir: '/cache', cache_limit_bytes: 1e10 })
+      }
+      if (cmd === 'components.download') return new Promise(() => {})
+      return Promise.resolve(null)
+    })
+    const rTts = render(
+      envolver(<InstaladorJustInTime recurso="tts" idioma="pt" aoConcluir={vi.fn()} />),
+    )
+    await screen.findByRole('button', { name: /Baixar e continuar/i })
+    await user.click(screen.getByText(/Ver texto original completo/i))
+    exigirSemTicket('tts com termo expandido')
+    await user.click(screen.getByRole('checkbox'))
+    await user.click(screen.getByRole('button', { name: /Baixar e continuar/i }))
+    expect(await screen.findByRole('button', { name: 'Cancelar' })).toBeInTheDocument()
+    exigirSemTicket('tts job_running')
+    rTts.unmount()
+
+    // 4) modo="modal" com item ausente do manifesto + Dica em hover + erro unknown_component
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'components.ytdlp.status') return { installed: false }
+      if (cmd === 'components.deno.status') return { installed: false }
+      if (cmd === 'components.manifest') return MANIFESTO_PADRAO.filter((c) => c.id !== 'yt-dlp')
+      if (cmd === 'sources.url.settings.get') {
+        return { terms_accepted: true, download_dir: '/downloads' }
+      }
+      if (cmd === 'components.settings.get') {
+        return { data_dir: '/dados', cache_dir: '/cache', cache_limit_bytes: 1e10 }
+      }
+      return null
+    })
+    const rModal = render(
+      envolver(
+        <InstaladorJustInTime
+          recurso="url_import"
+          modo="modal"
+          aberto
+          aoFechar={vi.fn()}
+          aoConcluir={vi.fn()}
+        />,
+      ),
+    )
+    const dialogo = await screen.findByRole('dialog', { name: /Recurso necessário para esta ação/i })
+    const btnModal = within(dialogo).getByRole('button', { name: /Baixar e continuar/i })
+    expect(btnModal).toBeDisabled()
+    await user.hover(btnModal.parentElement as HTMLElement)
+    expect(
+      await screen.findByText(/Download automático indisponível nesta plataforma; disponível em breve\./i),
+    ).toBeInTheDocument()
+    exigirSemTicket('modo modal indisponível com Dica')
+    rModal.unmount()
+
+    // 5) erro unknown_component após tentativa de download
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'components.ytdlp.status') return { installed: false }
+      if (cmd === 'components.deno.status') return { installed: false }
+      if (cmd === 'components.manifest') return MANIFESTO_PADRAO
+      if (cmd === 'sources.url.settings.get') {
+        return { terms_accepted: true, download_dir: '/downloads' }
+      }
+      if (cmd === 'components.settings.get') {
+        return { data_dir: '/dados', cache_dir: '/cache', cache_limit_bytes: 1e10 }
+      }
+      if (cmd === 'components.download') throw new ErroCore('unknown_component', 'missing macos')
+      return null
+    })
+    const rErr = render(envolver(<InstaladorJustInTime recurso="url_import" aoConcluir={vi.fn()} />))
+    await user.click(await screen.findByRole('button', { name: /Baixar e continuar/i }))
+    await screen.findByRole('alert')
+    exigirSemTicket('erro unknown_component')
+    rErr.unmount()
+  })
+
+  it('UI-17: possui exatamente um botão primário nos modos inline e modal', async () => {
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'components.ytdlp.status') return { installed: false }
+      if (cmd === 'components.deno.status') return { installed: false }
+      if (cmd === 'components.manifest') return MANIFESTO_PADRAO
+      if (cmd === 'sources.url.settings.get') {
+        return { terms_accepted: true, download_dir: '/downloads' }
+      }
+      if (cmd === 'components.settings.get') {
+        return { data_dir: '/dados', cache_dir: '/cache', cache_limit_bytes: 1e10 }
+      }
+      return null
+    })
+
+    const rInline = render(
+      envolver(
+        <InstaladorJustInTime recurso="url_import" modo="inline" aoFechar={vi.fn()} aoConcluir={vi.fn()} />,
+      ),
+    )
+    await screen.findByRole('button', { name: /Baixar e continuar/i })
+    const primariosInline = screen
+      .getAllByRole('button')
+      .filter((b) => b.className.split(/\s+/).includes('bg-sinal'))
+    expect(primariosInline).toHaveLength(1)
+    expect(primariosInline[0]).toHaveTextContent(/Baixar e continuar/i)
+    rInline.unmount()
+
+    const rModal = render(
+      envolver(
+        <InstaladorJustInTime
+          recurso="url_import"
+          modo="modal"
+          aberto
+          aoFechar={vi.fn()}
+          aoConcluir={vi.fn()}
+        />,
+      ),
+    )
+    const dialogo = await screen.findByRole('dialog', { name: /Recurso necessário para esta ação/i })
+    const primariosModal = within(dialogo)
+      .getAllByRole('button')
+      .filter((b) => b.className.split(/\s+/).includes('bg-sinal'))
+    expect(primariosModal).toHaveLength(1)
+    expect(primariosModal[0]).toHaveTextContent(/Baixar e continuar/i)
+    rModal.unmount()
   })
 
   it('modo="modal" abre em <Dialogo> acessível e fecha com Esc quando ocioso', async () => {

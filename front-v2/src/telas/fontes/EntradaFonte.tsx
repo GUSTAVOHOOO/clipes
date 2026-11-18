@@ -470,6 +470,7 @@ export function EntradaFonte({
     )
   }, [jobFonteAtivo, jobs])
 
+  const jitInlineAberto = modo === 'url' && mostrarJit
   const traducaoErro = erro ? mensagemDeErro(erro) : null
   const copiaTravada = !originUrl && copiarParaProjeto && copiaEmAndamento
   const podeImportar =
@@ -481,7 +482,7 @@ export function EntradaFonte({
 
   const botaoImportar = (
     <Botao
-      variante="primario"
+      variante={jitInlineAberto ? 'secundario' : 'primario'}
       icone={<Upload />}
       carregando={importando}
       disabled={!podeImportar}
@@ -602,7 +603,7 @@ export function EntradaFonte({
                   className="min-w-0 flex-1"
                 />
                 <Botao
-                  variante={inspecao ? 'secundario' : 'primario'}
+                  variante={inspecao || jitInlineAberto ? 'secundario' : 'primario'}
                   icone={<Download />}
                   disabled={Boolean(jobUrlAtivo) || importando || ytdlpAusente}
                   onClick={() => void iniciarBaixarUrl()}

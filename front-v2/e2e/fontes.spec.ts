@@ -70,8 +70,12 @@ test.describe('Tela Lista e Entrada de Fontes (#/projeto/:id/fontes)', () => {
     // Modo URL: Termos do YouTube -> js_runtime_missing + InstaladorJustInTime -> age_restricted
     await page.getByRole('radio', { name: /URL \(VOD\)/i }).click()
     const campoUrl = page.getByRole('textbox', { name: /URL do vídeo/i })
+    const btnBaixarUrl = page.getByRole('button', { name: 'Baixar por URL' })
+    await expect(page.locator('button.bg-sinal')).toHaveCount(1)
+    await expect(btnBaixarUrl).toHaveClass(/bg-sinal/)
+
     await campoUrl.fill('https://youtube.com/watch/js-test')
-    await page.getByRole('button', { name: 'Baixar por URL' }).click()
+    await btnBaixarUrl.click()
 
     const dlgTermos = page.getByRole('alertdialog')
     await expect(dlgTermos).toBeVisible()
@@ -79,10 +83,26 @@ test.describe('Tela Lista e Entrada de Fontes (#/projeto/:id/fontes)', () => {
     await expect(dlgTermos).toBeHidden()
 
     await expect(page.getByRole('alert')).toContainText(/deno/i)
-    await expect(page.getByRole('region', { name: /Instalação necessária/i })).toBeVisible()
+    const regiaoJit = page.getByRole('region', { name: /Instalação necessária/i })
+    await expect(regiaoJit).toBeVisible()
+
+    // UI-17 e UI-12/UI-18a em 1366x768: único primário laranja e zero refs #\d+ no JIT
+    await expect(page.locator('button.bg-sinal')).toHaveCount(1)
+    await expect(regiaoJit.getByRole('button', { name: /Baixar e continuar/i })).toHaveClass(
+      /bg-sinal/,
+    )
+    await expect(btnBaixarUrl).not.toHaveClass(/bg-sinal/)
+    expect(await regiaoJit.innerText()).not.toMatch(/#\d+/)
+    await page.screenshot({ path: 'test-results/fontes-jit-1366.png' })
+
+    // Ao fechar o JIT inline com "Agora não", "Baixar por URL" volta a ser o único primário
+    await regiaoJit.getByRole('button', { name: 'Agora não' }).click()
+    await expect(regiaoJit).toBeHidden()
+    await expect(page.locator('button.bg-sinal')).toHaveCount(1)
+    await expect(btnBaixarUrl).toHaveClass(/bg-sinal/)
 
     await campoUrl.fill('https://youtube.com/watch/age-test')
-    await page.getByRole('button', { name: 'Baixar por URL' }).click()
+    await btnBaixarUrl.click()
     const alertaIdade = page.getByRole('alert')
     await expect(alertaIdade).toContainText(/restrição de idade/i)
     await alertaIdade.getByRole('button', { name: 'Importar arquivo local' }).click()
@@ -143,6 +163,52 @@ test.describe('Tela Lista e Entrada de Fontes (#/projeto/:id/fontes)', () => {
 
     await gaveta.getByRole('button', { name: /changed\.mp4/i }).click()
     await expect(page).toHaveURL(/#\/projeto\/meu-canal-de-cortes\/fontes\/1\?frase=142&row=142$/)
+
+    expect(erros).toEqual([])
+  })
+
+  test('UI-17 e UI-12/UI-18a no fluxo URL/VOD + JIT em 1440x900', async ({ page }) => {
+    const erros: string[] = []
+    page.on('pageerror', (erro) => erros.push(erro.message))
+
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/#/inicio')
+    await page.getByRole('button', { name: /Abrir Projeto Meu Canal de Cortes/i }).click()
+    await expect(page).toHaveURL(/#\/projeto\/meu-canal-de-cortes\/fontes$/)
+
+    await page.getByRole('radio', { name: /URL \(VOD\)/i }).click()
+    const campoUrl = page.getByRole('textbox', { name: /URL do vídeo/i })
+    const btnBaixarUrl = page.getByRole('button', { name: 'Baixar por URL' })
+
+    await campoUrl.fill('https://youtube.com/watch/js-test')
+    await btnBaixarUrl.click()
+
+    const dlgTermos = page.getByRole('alertdialog')
+    await expect(dlgTermos).toBeVisible()
+    await dlgTermos.getByRole('button', { name: /Aceitar e baixar/i }).click()
+    await expect(dlgTermos).toBeHidden()
+
+    const regiaoJit = page.getByRole('region', { name: /Instalação necessária/i })
+    await expect(regiaoJit).toBeVisible()
+
+    await expect(page.locator('button.bg-sinal')).toHaveCount(1)
+    await expect(regiaoJit.getByRole('button', { name: /Baixar e continuar/i })).toHaveClass(
+      /bg-sinal/,
+    )
+    await expect(btnBaixarUrl).not.toHaveClass(/bg-sinal/)
+    expect(await regiaoJit.innerText()).not.toMatch(/#\d+/)
+
+    const rolagem1440 = await page.evaluate(() => ({
+      altura: document.documentElement.scrollHeight <= window.innerHeight,
+      largura: document.documentElement.scrollWidth <= window.innerWidth,
+    }))
+    expect(rolagem1440).toEqual({ altura: true, largura: true })
+    await page.screenshot({ path: 'test-results/fontes-jit-1440.png' })
+
+    await regiaoJit.getByRole('button', { name: 'Agora não' }).click()
+    await expect(regiaoJit).toBeHidden()
+    await expect(page.locator('button.bg-sinal')).toHaveCount(1)
+    await expect(btnBaixarUrl).toHaveClass(/bg-sinal/)
 
     expect(erros).toEqual([])
   })
