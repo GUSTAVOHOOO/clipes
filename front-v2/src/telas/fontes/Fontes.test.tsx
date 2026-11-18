@@ -285,7 +285,7 @@ describe('Tela Fontes (#/projeto/:id/fontes)', () => {
     })
   })
 
-  it('Fonte changed/!verified aciona Verificar identidade tratando confirmation_required e Excluir Fonte cita #295', async () => {
+  it('Fonte changed/!verified aciona Verificar identidade tratando confirmation_required e Excluir Fonte está habilitado sem citar ticket', async () => {
     const user = userEvent.setup()
     let chamadasHash = 0
     mockBase({
@@ -316,11 +316,10 @@ describe('Tela Fontes (#/projeto/:id/fontes)', () => {
     const cardChanged = (await screen.findByText('Live_15_11_cortada.mp4')).closest('li') as HTMLElement
     expect(within(cardChanged).getByText('Alterada')).toBeInTheDocument()
 
-    // Botão Excluir Fonte desabilitado com Dica citando #295
+    // Botão Excluir Fonte habilitado e sem referência a ticket (#295)
     const btnExcluir = within(cardChanged).getByRole('button', { name: /Excluir Fonte/i })
-    expect(btnExcluir).toBeDisabled()
-    await user.hover(btnExcluir.parentElement as HTMLElement)
-    expect(await screen.findByText(/#295/)).toBeInTheDocument()
+    expect(btnExcluir).toBeEnabled()
+    expect(cardChanged).not.toHaveTextContent(/#295/)
 
     // Verificar identidade com confirmation_required
     await user.click(within(cardChanged).getByRole('button', { name: /Verificar identidade/i }))
@@ -468,15 +467,122 @@ describe('Tela Fontes (#/projeto/:id/fontes)', () => {
     expect(listbox).toBeInTheDocument()
   })
 
-  it('exibe exatamente um <h1> visível "Fontes e Transcrição" (UI-10 / WCAG)', async () => {
+  it('exibe exatamente um <h1> visível "Fontes e Transcrição" em Fontes e na sub-aba Lotes (UI-16 / WCAG)', async () => {
     mockBase({ fontes: FONTES_MISTAS })
 
-    render(
+    const rFontes = render(
       envolver(<Fontes projetoId="demo" projetoPath="/projetos/Demo.clipes" sub="fontes" store={store} />),
     )
 
     const h1 = await screen.findByRole('heading', { level: 1, name: 'Fontes e Transcrição' })
     expect(h1).toBeVisible()
     expect(document.querySelectorAll('h1')).toHaveLength(1)
+    rFontes.unmount()
+
+    // Sub-aba Lotes com EstadoTela (sem lotes): continua com 1 <h1> e EstadoTela em <h2>
+    store = criarStoreFontesProjeto()
+    mockBase({ fontes: FONTES_MISTAS })
+    const rLotesVazio = render(
+      envolver(<Fontes projetoId="demo" projetoPath="/projetos/Demo.clipes" sub="lotes" store={store} />),
+    )
+    expect(await screen.findByRole('heading', { level: 1, name: 'Fontes e Transcrição' })).toBeVisible()
+    expect(await screen.findByRole('heading', { level: 2, name: 'Nenhum lote executado neste Projeto ainda.' })).toBeVisible()
+    expect(document.querySelectorAll('h1')).toHaveLength(1)
+    rLotesVazio.unmount()
+
+    // Sub-aba Lotes sem Fontes (EstadoTela): 1 <h1> e EstadoTela em <h2>
+    store = criarStoreFontesProjeto()
+    mockBase({ fontes: [] })
+    render(
+      envolver(<Fontes projetoId="demo" projetoPath="/projetos/Demo.clipes" sub="lotes" store={store} />),
+    )
+    expect(await screen.findByRole('heading', { level: 1, name: 'Fontes e Transcrição' })).toBeVisible()
+    expect(await screen.findByRole('heading', { level: 2, name: 'Nenhuma Fonte para processar em lote' })).toBeVisible()
+    expect(document.querySelectorAll('h1')).toHaveLength(1)
+  })
+
+  it('UI-18b: Excluir Fonte abre ConfirmDialog focado em Cancelar, chama sources.delete, atualiza store e trata source_busy', async () => {
+    const user = userEvent.setup()
+    let fontesAtuais = [...FONTES_MISTAS]
+    let falharBusy = false
+
+    mockBase({
+      overrides: {
+        'sources.list': () => [...fontesAtuais],
+        'sources.delete': (args) => {
+          const a = args as { id: number }
+          if (falharBusy) {
+            throw new ErroCore('source_busy', 'tarefa ativa na fonte')
+          }
+          fontesAtuais = fontesAtuais.filter((f) => f.id !== a.id)
+          return {
+            deleted: true,
+            id: a.id,
+            transcripts: 1,
+            cuts: 2,
+            selection_runs: 1,
+            clip_edits: 1,
+            batch_items: 0,
+            jobs: 1,
+            jobs_kept_for_costs: 1,
+          }
+        },
+      },
+    })
+
+    render(
+      envolver(<Fontes projetoId="demo" projetoPath="/projetos/Demo.clipes" sub="fontes" store={store} />),
+    )
+
+    const card = (await screen.findByText('Live_12_11_final.mp4')).closest('li') as HTMLElement
+
+    // Seleciona a Fonte para lote antes de testar exclusão (store deve limpar ID excluído depois)
+    await user.click(within(card).getByRole('checkbox', { name: /Selecionar Live_12_11_final\.mp4 para lote/i }))
+    expect(store.estado().selecionadasParaLote).toEqual([1])
+
+    // 1) Abre diálogo -> foco inicial em Cancelar + texto de Cortes/edições e histórico de custos
+    await user.click(within(card).getByRole('button', { name: /Excluir Fonte/i }))
+    const dlg = await screen.findByRole('alertdialog')
+    expect(dlg).toHaveTextContent(/Cortes/i)
+    expect(dlg).toHaveTextContent(/edições/i)
+    expect(dlg).toHaveTextContent(/histórico de custos é mantido/i)
+    expect(dlg).not.toHaveTextContent(/#\d+/)
+
+    const btnCancelar = within(dlg).getByRole('button', { name: 'Cancelar' })
+    await waitFor(() => expect(btnCancelar).toHaveFocus())
+
+    // Cancelar não chama sources.delete
+    await user.click(btnCancelar)
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(chamarMock).not.toHaveBeenCalledWith('sources.delete', expect.anything())
+
+    // 2) Erro source_busy mostra mensagem do mapeador central em role="alert"
+    falharBusy = true
+    await user.click(within(card).getByRole('button', { name: /Excluir Fonte/i }))
+    const dlgBusy = await screen.findByRole('alertdialog')
+    await user.click(within(dlgBusy).getByRole('button', { name: 'Excluir Fonte' }))
+
+    const alerta = await screen.findByRole('alert')
+    expect(alerta).toHaveTextContent(
+      /Há uma tarefa ativa ou incerta vinculada a esta Fonte; aguarde ou resolva na Fila de Jobs antes de excluir\./i,
+    )
+    expect(screen.getByText('Live_12_11_final.mp4')).toBeInTheDocument()
+
+    // 3) Confirmação com sucesso chama sources.delete e atualiza lista e seleção pelo store
+    falharBusy = false
+    await user.click(within(card).getByRole('button', { name: /Excluir Fonte/i }))
+    const dlgOk = await screen.findByRole('alertdialog')
+    await user.click(within(dlgOk).getByRole('button', { name: 'Excluir Fonte' }))
+
+    await waitFor(() => {
+      expect(chamarMock).toHaveBeenCalledWith('sources.delete', {
+        project: '/projetos/Demo.clipes',
+        id: 1,
+      })
+      expect(screen.queryByText('Live_12_11_final.mp4')).not.toBeInTheDocument()
+    })
+    expect(store.estado().fontes.map((f) => f.id)).toEqual([2, 3])
+    expect(store.estado().selecionadasParaLote).toEqual([])
+    expect(screen.getByRole('tab', { name: 'Fontes (2)' })).toBeInTheDocument()
   })
 })

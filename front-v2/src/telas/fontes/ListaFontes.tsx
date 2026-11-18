@@ -6,7 +6,6 @@ import {
   Checkbox,
   ConfirmDialog,
   Dialogo,
-  Dica,
   EstadoTela,
   FaixaJob,
   ListaVirtual,
@@ -166,6 +165,9 @@ export function ListaFontes({
   const [alvoIdioma, setAlvoIdioma] = useState<FonteProjeto | null>(null)
   const [idiomaEditado, setIdiomaEditado] = useState('pt')
   const [salvandoIdioma, setSalvandoIdioma] = useState(false)
+
+  const [alvoExcluir, setAlvoExcluir] = useState<FonteProjeto | null>(null)
+  const [excluindoFonte, setExcluindoFonte] = useState(false)
 
   useEffect(() => {
     chamar<IdiomaOpcao[]>('channel_profile.languages', {})
@@ -379,6 +381,37 @@ export function ListaFontes({
     }
   }
 
+  const confirmarExclusao = async () => {
+    if (!alvoExcluir) return
+    const fonteAlvo = alvoExcluir
+    setExcluindoFonte(true)
+    setErroAcao(null)
+    try {
+      const res = await chamar<{
+        deleted?: boolean
+        jobs_kept_for_costs?: number
+      }>('sources.delete', {
+        project: projetoPath,
+        id: fonteAlvo.id,
+      })
+      setAlvoExcluir(null)
+      await aoAtualizarTodas()
+      const nome = basenameCaminho(fonteAlvo.path)
+      const sufixoCustos =
+        res && typeof res.jobs_kept_for_costs === 'number' && res.jobs_kept_for_costs > 0
+          ? ' Histórico de custos mantido.'
+          : ''
+      toast.add({
+        title: `Fonte ${nome} excluída.${sufixoCustos}`,
+      })
+    } catch (err) {
+      setAlvoExcluir(null)
+      setErroAcao(normalizarErro(err))
+    } finally {
+      setExcluindoFonte(false)
+    }
+  }
+
   const jobAtivoLista = useMemo(() => {
     const porNome = jobs.find(
       (j) =>
@@ -560,13 +593,15 @@ export function ListaFontes({
             </Botao>
           )}
 
-          <Dica texto="Exclusão de Fonte aguarda comando sources.delete no núcleo (#295).">
-            <span tabIndex={0} className="ml-auto inline-flex">
-              <Botao variante="perigo" tamanho="p" icone={<Trash2 />} disabled>
-                Excluir Fonte
-              </Botao>
-            </span>
-          </Dica>
+          <Botao
+            variante="perigo"
+            tamanho="p"
+            icone={<Trash2 />}
+            className="ml-auto"
+            onClick={() => setAlvoExcluir(fonte)}
+          >
+            Excluir Fonte
+          </Botao>
         </div>
       </article>
     )
@@ -583,6 +618,27 @@ export function ListaFontes({
         <BannerErroCore
           erro={{ code: erroAcao.code, message: erroAcao.detalhe || erroAcao.message }}
           traduzir={() => ({ titulo: traducaoErroAcao.titulo })}
+          acaoRecuperacao={
+            traducaoErroAcao.recuperacao?.acao === 'abrir-fila'
+              ? {
+                  rotulo: traducaoErroAcao.recuperacao.rotulo,
+                  aoAcionar: () => {
+                    toast.add({
+                      title: 'Fila de Jobs',
+                      description:
+                        'Use o botão Fila no topo ou Ctrl+J para acompanhar tarefas ativas.',
+                    })
+                  },
+                }
+              : traducaoErroAcao.recuperacao?.rota
+                ? {
+                    rotulo: traducaoErroAcao.recuperacao.rotulo,
+                    aoAcionar: () => {
+                      window.location.hash = traducaoErroAcao.recuperacao!.rota!
+                    },
+                  }
+                : undefined
+          }
           aoDispensar={() => setErroAcao(null)}
           permitirRelato
         />
@@ -835,6 +891,30 @@ export function ListaFontes({
           desabilitado={salvandoIdioma}
         />
       </Dialogo>
+
+      {/* ConfirmDialog: Excluir Fonte */}
+      <ConfirmDialog
+        aberto={Boolean(alvoExcluir)}
+        aoMudarAberto={(v) => {
+          if (!v && !excluindoFonte) setAlvoExcluir(null)
+        }}
+        titulo={
+          alvoExcluir
+            ? `Excluir Fonte — ${basenameCaminho(alvoExcluir.path)}?`
+            : 'Excluir Fonte?'
+        }
+        descricao={
+          alvoExcluir
+            ? `A Transcrição, os Cortes e as edições vinculados a ${basenameCaminho(alvoExcluir.path)} saem deste Projeto. O histórico de custos é mantido e o arquivo original no disco não é apagado.`
+            : ''
+        }
+        variante="perigo"
+        rotuloConfirmar="Excluir Fonte"
+        rotuloCancelar="Cancelar"
+        focoInicial="cancelar"
+        ocupado={excluindoFonte}
+        aoConfirmar={confirmarExclusao}
+      />
     </section>
   )
 }
