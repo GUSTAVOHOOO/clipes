@@ -255,13 +255,13 @@ test.describe('A11y AA — UI-07 a UI-10 (1366x768)', () => {
     ).toBeVisible()
     expect(await page.locator('h1').count()).toBe(1)
 
-    // PlaceholderTela: #/relatos, #/sobre e #/projeto/:id/cortes
+    // PlaceholderTela: #/relatos, #/sobre e #/projeto/:id/exportacao
     await page.goto('/#/relatos')
     await expect(page.getByRole('heading', { level: 1, name: 'Relatos e diagnóstico' })).toBeVisible()
     expect(await page.locator('h1').count()).toBe(1)
 
-    await page.goto('/?source-test=1#/projeto/test-project/cortes')
-    await expect(page.getByRole('heading', { level: 1, name: 'Cortes' })).toBeVisible()
+    await page.goto('/?source-test=1#/projeto/test-project/exportacao')
+    await expect(page.getByRole('heading', { level: 1, name: 'Exportação' })).toBeVisible()
     expect(await page.locator('h1').count()).toBe(1)
 
     // ConfigExportacao: h1 + h2 Status atual + h2 Escolha de encoder

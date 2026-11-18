@@ -3,7 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { isTauri } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { emitirProgressoMock } from '@core'
-import { criarFila, iniciarProgresso, useFila, type EventoProgresso } from '~/core/progresso'
+import {
+  criarFila,
+  definirProjetoDaFila,
+  iniciarProgresso,
+  useFila,
+  type EventoProgresso,
+} from '~/core/progresso'
 
 vi.mock('@tauri-apps/api/core', () => ({
   isTauri: vi.fn(() => false),
@@ -259,6 +265,38 @@ describe('Fila de jobs sobre core-progress (progresso.ts)', () => {
     parar()
     emitirProgressoMock(evento({ job: '77', percentage: 90, message: 'Após cancelar' }))
     expect(fila.jobs()[0]).toMatchObject({ id: '77', percentual: 65 })
+    vi.unstubAllEnvs()
+  })
+
+  it('componente montado antes de iniciarProgresso recebe eventos da fila padrão (inclusive por Projeto via definirProjetoDaFila)', async () => {
+    vi.stubEnv('VITE_CORE_MOCK', '1')
+    mockIsTauri.mockReturnValue(false)
+
+    // Simula outra fila usada antes em módulo/teste — não pode desviar useFila() da fila padrão única
+    const filaIsolada = criarFila(() => 'outro')
+    const pararIsolada = await iniciarProgresso(filaIsolada)
+    pararIsolada()
+
+    // Hook/componente monta e chama useFila() ANTES de iniciarProgresso()
+    const { result } = renderHook(() => useFila())
+    expect(result.current).toEqual([])
+
+    definirProjetoDaFila('canal-a')
+    const pararPadrao = await iniciarProgresso()
+
+    act(() => {
+      emitirProgressoMock(evento({ job: '88', project: 'canal-a', percentage: 45 }))
+      emitirProgressoMock(evento({ job: 'ffmpeg', project: null, stage: 'download', percentage: 70 }))
+      emitirProgressoMock(evento({ job: '99', project: 'canal-b', percentage: 30 }))
+    })
+
+    expect(result.current.map((j) => ({ id: j.id, percentual: j.percentual }))).toEqual([
+      { id: '88', percentual: 45 },
+      { id: 'ffmpeg', percentual: 70 },
+    ])
+
+    definirProjetoDaFila(null)
+    pararPadrao()
     vi.unstubAllEnvs()
   })
 })

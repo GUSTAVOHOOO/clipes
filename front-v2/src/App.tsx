@@ -1,7 +1,7 @@
 import { Esqueleto, EstadoTela, ProvedorDicas, ProvedorToast, useToast } from '@ds'
 import { useCallback, useEffect, useRef } from 'react'
 import { ProvedorAtalhos } from '~/comandos/atalhos'
-import { iniciarProgresso } from '~/core/progresso'
+import { definirProjetoDaFila, iniciarProgresso } from '~/core/progresso'
 import { aplicarPreferencias } from '~/preferencias/aplicarPreferencias'
 import { usePreferencias } from '~/preferencias/preferencias'
 import type { Rota, SecaoConfig } from '~/rotas/rotas'
@@ -16,6 +16,7 @@ import { ConfigExportacao } from '~/telas/config/ConfigExportacao'
 import { ConfigProjeto } from '~/telas/config/ConfigProjeto'
 import { ConfigProvedores } from '~/telas/config/ConfigProvedores'
 import { ConfiguracoesLayout } from '~/telas/config/ConfiguracoesLayout'
+import { Selecao } from '~/telas/cortes/Selecao'
 import { DetalheFonte } from '~/telas/fontes/DetalheFonte'
 import { Fontes } from '~/telas/fontes/Fontes'
 import { Inicio } from '~/telas/inicio/Inicio'
@@ -253,6 +254,20 @@ function AppRoteado({
     )
   }
 
+  if (rota.tela === 'cortes') {
+    return (
+      <Shell rota={rota} projeto={projeto} somenteLocal={somenteLocal}>
+        <Selecao
+          projetoId={rota.projeto}
+          projetoPath={projeto?.path ?? null}
+          fonteParam={rota.fonte}
+          runParam={rota.run}
+          revParam={rota.rev}
+        />
+      </Shell>
+    )
+  }
+
   const placeholder = <PlaceholderTela rota={rota} />
   const placeholderConfig = <PlaceholderTela rota={rota} nivelTitulo="h2" />
 
@@ -305,6 +320,14 @@ function AppRoteado({
 function AppInterno() {
   const { projeto, somenteLocal, carregando } = useProjetoAtual()
   const [preferencias] = usePreferencias()
+  const projetoId = projeto ? (projeto.id ?? projeto.name) : null
+
+  useEffect(() => {
+    definirProjetoDaFila(projetoId)
+    return () => {
+      definirProjetoDaFila(null)
+    }
+  }, [projetoId])
 
   useEffect(() => {
     aplicarPreferencias(preferencias)

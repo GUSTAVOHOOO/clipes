@@ -132,7 +132,15 @@ export function criarFila(
   return { aplicar, jobs, assinar }
 }
 
-let filaAtiva: Fila = criarFila(() => null)
+let projetoDaFila: string | null = null
+
+/** Define o ID do Projeto ativo lido pela fila padrão ao filtrar eventos `core-progress`. */
+export function definirProjetoDaFila(id: string | null): void {
+  projetoDaFila = id
+}
+
+const filaPadrao: Fila = criarFila(() => projetoDaFila)
+let filaDestinoTauri: Fila = filaPadrao
 
 type ListenerCompartilhado = {
   contagem: number
@@ -142,21 +150,21 @@ type ListenerCompartilhado = {
 let listenerAtivo: ListenerCompartilhado | null = null
 
 /** Assina uma única vez o evento `core-progress` no Tauri; fora do Tauri, é no-op. */
-export async function iniciarProgresso(fila: Fila = filaAtiva): Promise<() => void> {
-  filaAtiva = fila
-
+export async function iniciarProgresso(fila: Fila = filaPadrao): Promise<() => void> {
   if (!isTauri()) {
     if (import.meta.env.VITE_CORE_MOCK === '1') {
       return assinarProgressoMock((evento) => {
-        filaAtiva.aplicar(evento)
+        fila.aplicar(evento)
       })
     }
     return () => {}
   }
 
+  filaDestinoTauri = fila
+
   if (!listenerAtivo) {
     const promessa = listen<EventoProgresso>('core-progress', (evento) => {
-      filaAtiva.aplicar(evento.payload)
+      filaDestinoTauri.aplicar(evento.payload)
     })
     listenerAtivo = { contagem: 0, promessa }
   }
@@ -190,6 +198,6 @@ export async function iniciarProgresso(fila: Fila = filaAtiva): Promise<() => vo
 }
 
 /** Hook reativo para ler a lista de jobs da Fila via `useSyncExternalStore`. */
-export function useFila(fila: Fila = filaAtiva): Job[] {
+export function useFila(fila: Fila = filaPadrao): Job[] {
   return useSyncExternalStore(fila.assinar, fila.jobs, fila.jobs)
 }
