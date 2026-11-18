@@ -4,12 +4,15 @@ import { coreDispatch } from '@core'
 export class ErroCore extends Error {
   readonly code: string
   readonly detalhe: string
+  /** Dados que o núcleo anexa ao erro (ex.: custo estimado em `confirmation_required`). */
+  readonly usage?: unknown
 
-  constructor(code: string, detalhe = '') {
+  constructor(code: string, detalhe = '', usage?: unknown) {
     super(detalhe || code)
     this.name = 'ErroCore'
     this.code = code
     this.detalhe = detalhe
+    if (usage !== undefined) this.usage = usage
   }
 }
 
@@ -21,22 +24,22 @@ function normalizarErro(erro: unknown): ErroCore {
   }
 
   if (erro instanceof Error) {
-    const comCodigo = erro as Error & { code?: unknown }
+    const comCodigo = erro as Error & { code?: unknown; usage?: unknown }
     const code =
       typeof comCodigo.code === 'string' && comCodigo.code.trim().length > 0
         ? comCodigo.code.trim()
         : 'desconhecido'
-    return new ErroCore(code, erro.message)
+    return new ErroCore(code, erro.message, comCodigo.usage)
   }
 
   if (erro !== null && typeof erro === 'object') {
-    const registro = erro as { code?: unknown; message?: unknown }
+    const registro = erro as { code?: unknown; message?: unknown; usage?: unknown }
     const code =
       typeof registro.code === 'string' && registro.code.trim().length > 0
         ? registro.code.trim()
         : 'desconhecido'
     const detalhe = typeof registro.message === 'string' ? registro.message : ''
-    return new ErroCore(code, detalhe)
+    return new ErroCore(code, detalhe, registro.usage)
   }
 
   if (erro === undefined || erro === null) {

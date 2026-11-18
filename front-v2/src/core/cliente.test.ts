@@ -77,3 +77,39 @@ describe('cliente do núcleo (chamar / ErroCore)', () => {
     expect((capturado as ErroCore).detalhe).toBe(esperadoDetalhe)
   })
 })
+
+describe('ErroCore.usage (confirmações com custo)', () => {
+  beforeEach(() => {
+    mockDispatch.mockReset()
+  })
+
+  it('preserva usage de objeto { code, message, usage } rejeitado pelo núcleo', async () => {
+    const usage = { selectionPaid: true, audioEstimateMicroUsd: 250_000 }
+    mockDispatch.mockRejectedValueOnce({ code: 'confirmation_required', message: 'm', usage })
+
+    const erro = await chamar('batches.create', {}).catch((e: unknown) => e)
+
+    expect(erro).toBeInstanceOf(ErroCore)
+    expect((erro as ErroCore).code).toBe('confirmation_required')
+    expect((erro as ErroCore).usage).toEqual(usage)
+  })
+
+  it('preserva usage de Error com propriedade usage', async () => {
+    const usage = { estimate: { minMicroUsd: 1, maxMicroUsd: 2 } }
+    mockDispatch.mockRejectedValueOnce(
+      Object.assign(new Error('m'), { code: 'transcription_retry_confirmation', usage }),
+    )
+
+    const erro = await chamar('transcription.start', {}).catch((e: unknown) => e)
+
+    expect((erro as ErroCore).usage).toEqual(usage)
+  })
+
+  it('deixa usage indefinido quando o núcleo não manda', async () => {
+    mockDispatch.mockRejectedValueOnce({ code: 'project_busy', message: 'x' })
+
+    const erro = await chamar('projects.open', {}).catch((e: unknown) => e)
+
+    expect((erro as ErroCore).usage).toBeUndefined()
+  })
+})
