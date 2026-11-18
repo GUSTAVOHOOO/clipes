@@ -33,6 +33,11 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Causa:** falha intermitente na renovação da credencial do Google usada pelo Antigravity. Uma chamada logo depois (`agy --mode plan --print "Responda só com a palavra OK." --output-format json`) responde normalmente.
 - **Ação:** confira o worktree (`git status`, `git log origin/master..HEAD`) e retome o worker com `orca orchestration send --to dispatch:<id>`, dizendo onde ele parou. Só trate como impedimento de login se a chamada de teste também falhar.
 
+### Worker Antigravity para com `JSON hook "jsonhook__orca-status_PreToolUse_0_0" failed: exit status 1`
+- **Sintoma:** toda chamada de ferramenta do worker (ler, editar, `run_command`, `orca orchestration`) falha antes de executar com `JSON hook "jsonhook__orca-status_PreToolUse_0_0" failed: command failed: exit status 1, stderr:` vazio, e o Orca avisa `Worker stopped without reporting`.
+- **Causa:** o hook de status do Orca (`~/.gemini/config/hooks.json` → `~/.orca/agent-hooks/antigravity-pre-tool-use.cmd`, que sobe o `Orca.exe` como Node) tem timeout de 10 s. Com muitos workers rodando testes ao mesmo tempo, a máquina fica lenta e o hook passa do limite (medido: 8,8 s num pico e 0,2 s com a carga normal, em 18/11/2026). Os scripts terminam sempre com 0; o `exit status 1` é o processo cortado pelo timeout.
+- **Ação:** confira o tempo do hook com `echo {} | ORCA_ANTIGRAVITY_EVENT=PreToolUse ORCA_AGENT_HOOK_PORT=1 ORCA_AGENT_HOOK_TOKEN=x ORCA_PANE_KEY=y cmd //c "%USERPROFILE%\.orca\agent-hooks\antigravity-pre-tool-use.cmd"` (Git Bash). Se estiver bem abaixo de 10 s, retome o worker com `orca orchestration send --to dispatch:<id>` dizendo onde parou. Se continuar lento, reduza os workers simultâneos (sobretudo compilação Rust e Playwright) antes de retomar. Não edite os hooks do Orca.
+
 ### Porta 1430 ocupada por outro worktree (Playwright do front-v2)
 - **Sintoma:** `bunx playwright test` em `front-v2/` testa as telas de outro worktree ou falha porque a porta 1430 já está em uso.
 - **Causa:** `front-v2/vite.config.ts` usa `port: 1430` com `strictPort`, e `front-v2/playwright.config.ts` reaproveita o servidor existente fora do CI. Dois worktrees não rodam o Playwright local ao mesmo tempo.
