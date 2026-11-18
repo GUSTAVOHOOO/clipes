@@ -1,4 +1,4 @@
-import { Abas, BannerErroCore, Busca, Esqueleto, EstadoTela, type Aba } from '@ds'
+import { Abas, BannerErroCore, Busca, Esqueleto, EstadoTela, cn, type Aba } from '@ds'
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { formatarTecla, useAtalhos, type Atalho } from '~/comandos/atalhos'
 import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
@@ -55,15 +55,28 @@ export function Fontes({
   const [erroFts, setErroFts] = useState<ErroCore | null>(null)
   const [resultadosFts, setResultadosFts] = useState<ResultadoBuscaFts[]>([])
   const seqBuscaRef = useRef(0)
+  const debounceBuscaRef = useRef<number | null>(null)
 
   const encProjeto = encodeURIComponent(projetoId)
+
+  const cancelarDebounceBusca = useCallback(() => {
+    if (debounceBuscaRef.current !== null) {
+      window.clearTimeout(debounceBuscaRef.current)
+      debounceBuscaRef.current = null
+    }
+  }, [])
+
+  const limparResultadosBusca = useCallback(() => {
+    setGavetaAberta(false)
+    setTermoPesquisado('')
+    setResultadosFts([])
+    setErroFts(null)
+  }, [])
 
   const executarBuscaFts = useCallback(async (queryBruta: string) => {
     const q = queryBruta.trim()
     if (!q) {
-      setGavetaAberta(false)
-      setResultadosFts([])
-      setErroFts(null)
+      limparResultadosBusca()
       return
     }
     const seq = ++seqBuscaRef.current
@@ -87,21 +100,30 @@ export function Fontes({
         setBuscandoFts(false)
       }
     }
-  }, [])
+  }, [limparResultadosBusca])
+
+  const fecharBuscaFts = useCallback(() => {
+    cancelarDebounceBusca()
+    seqBuscaRef.current += 1
+    setBuscandoFts(false)
+    limparResultadosBusca()
+    setTermoBusca('')
+    buscaGlobalRef.current?.focus()
+  }, [cancelarDebounceBusca, limparResultadosBusca])
 
   useEffect(() => {
+    cancelarDebounceBusca()
     const q = termoBusca.trim()
     if (!q) {
-      setGavetaAberta(false)
-      setResultadosFts([])
-      setErroFts(null)
+      limparResultadosBusca()
       return
     }
-    const timer = window.setTimeout(() => {
+    debounceBuscaRef.current = window.setTimeout(() => {
+      debounceBuscaRef.current = null
       void executarBuscaFts(q)
     }, 220)
-    return () => window.clearTimeout(timer)
-  }, [executarBuscaFts, termoBusca])
+    return cancelarDebounceBusca
+  }, [cancelarDebounceBusca, executarBuscaFts, limparResultadosBusca, termoBusca])
 
   const focarEntradaLocal = useCallback(() => {
     setModoEntrada('local')
@@ -166,6 +188,7 @@ export function Fontes({
 
   const aoSubmeterBusca = (e: FormEvent) => {
     e.preventDefault()
+    cancelarDebounceBusca()
     void executarBuscaFts(termoBusca)
   }
 
@@ -247,7 +270,12 @@ export function Fontes({
             </div>
           )}
 
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div
+            className={cn(
+              'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden',
+              gavetaAberta && 'hidden 2xl:flex',
+            )}
+          >
             {estadoDireita === 'carregando' && (
               <div className="rounded-area bg-area p-3">
                 <Esqueleto
@@ -318,19 +346,20 @@ export function Fontes({
             )}
           </div>
 
-          <GavetaBuscaFts
-            aberto={gavetaAberta}
-            termo={termoPesquisado}
-            carregando={buscandoFts}
-            erro={erroFts}
-            resultados={resultadosFts}
-            projetoId={projetoId}
-            aoFechar={() => {
-              setGavetaAberta(false)
-              buscaGlobalRef.current?.focus()
-            }}
-            aoTentarNovamente={() => void executarBuscaFts(termoPesquisado)}
-          />
+          {gavetaAberta && (
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden 2xl:flex-none [&>aside]:min-h-0 [&>aside]:w-full [&>aside]:flex-1 2xl:[&>aside]:w-[380px]">
+              <GavetaBuscaFts
+                aberto={gavetaAberta}
+                termo={termoPesquisado}
+                carregando={buscandoFts}
+                erro={erroFts}
+                resultados={resultadosFts}
+                projetoId={projetoId}
+                aoFechar={fecharBuscaFts}
+                aoTentarNovamente={() => void executarBuscaFts(termoPesquisado)}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>

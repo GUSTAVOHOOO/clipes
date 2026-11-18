@@ -107,6 +107,43 @@ describe('UI-15: Checkbox sem rótulo visível com alvo >= 24x24 px', () => {
     expect(label!.className).toContain('min-h-6')
     expect(label!.className).toContain('justify-center')
   })
+
+  it('UI-28: botão Ir para Cortes não duplica seta no texto além do ícone', () => {
+    render(
+      envolver(
+        <ListaFontes
+          projetoId="demo"
+          projetoPath="/projetos/Demo.clipes"
+          fontes={FONTES_EXEMPLO}
+          transcriptStatusBySource={{
+            1: {
+              language: 'pt',
+              transcript: {
+                id: 1,
+                state: 'complete',
+                resume_us: 3600_000_000,
+                duration_us: 3600_000_000,
+                model: 'whisper-turbo',
+                engine: 'local',
+                words: 1200,
+              },
+              job: null,
+            },
+          }}
+          selecionadasParaLote={[]}
+          invalidacoes={{ transcricao: 0, energia: 0, chat: 0, preview: 0, lotes: 0 }}
+          aoMudarSelecionadas={() => {}}
+          aoIrParaLote={() => {}}
+          aoAtualizarFonte={async () => {}}
+          aoAtualizarTodas={async () => {}}
+        />,
+      ),
+    )
+
+    const btn = screen.getByRole('button', { name: 'Ir para Cortes' })
+    expect(btn.textContent?.trim()).toBe('Ir para Cortes')
+    expect(btn.textContent).not.toContain('→')
+  })
 })
 
 describe('Mock TS sources.delete (src/lib/core.ts)', () => {
