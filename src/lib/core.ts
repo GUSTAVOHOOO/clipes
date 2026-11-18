@@ -244,17 +244,29 @@ let jobItems = [
 ];
 let transcribeMock: { transcript: object | null; job: object | null } = groqRetryTest ? {transcript:{id:1,engine:'groq',state:'running',resume_us:4e6,duration_us:10e6,words:1},job:{id:99,state:'cancelled',progress:40}} : { transcript: null, job: null };
 if (groqRetryTest || componentsMissing || hardwareCpuMode || hardwareProbeFallbackMode) sourceItems.push({id:4,path:'/test/downloaded.mp4',status:'available',available:true,verified:true,language:'pt',permission:{status:'none'}});
-let providerMock = {
-  kind: 'openai',
-  endpoint: 'https://api.openai.com/v1',
-  model: 'gpt-4o-mini',
-  nativeSchema: false,
-  context: 128000 as number | null,
-  keyLastFour: '9a4f' as string | null,
-  remote: true,
-  confirmed: true,
-  confirmedEndpoints: ['https://api.openai.com/v1'] as string[],
-};
+let providerMock = hasSearchFlag('assistant-test')
+  ? {
+      kind: 'openai',
+      endpoint: '',
+      model: '',
+      nativeSchema: false,
+      context: null as number | null,
+      keyLastFour: null as string | null,
+      remote: false,
+      confirmed: false,
+      confirmedEndpoints: [] as string[],
+    }
+  : {
+      kind: 'openai',
+      endpoint: 'https://api.openai.com/v1',
+      model: 'gpt-4o-mini',
+      nativeSchema: false,
+      context: 128000 as number | null,
+      keyLastFour: '9a4f' as string | null,
+      remote: true,
+      confirmed: true,
+      confirmedEndpoints: ['https://api.openai.com/v1'] as string[],
+    };
 type ProfileMock = { id: string; label: string; kind: string; endpoint: string; model: string; nativeSchema: boolean; ownKey: boolean; context: number | null; maxOutput?: number | null; timeoutSecs?: number | null; tokensPerRequest?: number | null; tokensPerMinute?: number | null; tokensPerDay?: number | null; keyLastFour: string | null };
 let profileMocks: ProfileMock[] = [];
 const isLocalHost = (endpoint: string) => {
@@ -683,7 +695,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       } as T;
     }
     if (name === 'jobs.budget.get' || name === 'jobs.budget.set' || name === 'jobs.budget.continue') {
-      if (!hasSourceTest()) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
+      if (!getActiveProjectMock()) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
       const handled = batchMockDispatch(name, args);
       if (handled !== undefined) return handled as T;
     }
@@ -1259,7 +1271,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         if (!rota && a.task) rota = assistantMock.tasks[a.task] || assistantMock.default;
         const target = taskTarget(rota.startsWith('profile:') || ['codex', 'claude', 'opencode', 'endpoint'].includes(rota) ? rota : rota === 'legacy' ? 'endpoint' : `profile:${rota}`);
         if (target) {
-          if ((a.task && assistantMock.localOnly[a.task]) || (hasSourceTest() && projectVetoMock)) {
+          if ((a.task && assistantMock.localOnly[a.task]) || (getActiveProjectMock() && projectVetoMock)) {
             if (!target.local) throw { code: 'local_only_violation', message: 'Bloqueado pelo modo Somente local.' };
           }
           if (target.local) {
@@ -1288,7 +1300,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       return { kind: 'usd', inputTokens, inputTokensRange: { min: inputTokens, max: high }, tier, maxOutputTokens: maxOutputTokens ?? null, minMicroUsd: Math.round(inputTokens * 1.25), maxMicroUsd: maxOutputTokens ? Math.round(high * 1.25 + maxOutputTokens * 10) : null, priceSource: 'table', tableUpdatedAt: '2026-11-14' } as T;
     }
     if (name === 'provider.cost.list') {
-      if (!hasSourceTest()) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
+      if (!getActiveProjectMock()) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
       return [
         { id: 1, jobId: 48, task: 'selection', taskVersion: 4, attempt: 1, outcome: 'ok', code: 'ok', batch: null, profile: 'legacy', provider: 'openai', model: 'gpt-4o-mini', inputTokens: 14200, outputTokens: 1180, calls: 1, costKind: 'usd', microUsd: 30000, estimateMicroUsd: 30000, durationMs: 2400, priceSource: 'table', tableUpdatedAt: '2026-11-15', createdAt: 1794942840000000 },
         { id: 2, jobId: 47, task: 'packaging', taskVersion: 2, attempt: 1, outcome: 'invalid_json', code: 'invalid_json', batch: null, profile: 'legacy', provider: 'openai', model: 'gpt-4o-mini', inputTokens: 6400, outputTokens: 920, calls: 1, costKind: 'usd', microUsd: 40000, estimateMicroUsd: 30000, durationMs: 3100, priceSource: 'table', tableUpdatedAt: '2026-11-15', createdAt: 1794942480000000 },
@@ -1296,7 +1308,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       ] as T;
     }
     if (name === 'provider.audit.list') {
-      if (!hasSourceTest()) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
+      if (!getActiveProjectMock()) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
       const jobFilter = (args as { job?: number }).job;
       const rows = [
         { id: 1, providerKind: 'openai', host: 'api.openai.com', model: 'gpt-4o-mini', promptSha256: '4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a', inputSha256: '8f3a111122223333444455556666777788889999aaaabbbbccccddddeeee91c2', sentBytes: 54120, responseSha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', task: 'selection', taskVersion: 4, outcome: 'ok', costId: 1, transcriptionCallId: null, job: 48 },
