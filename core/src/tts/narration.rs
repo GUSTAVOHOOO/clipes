@@ -181,9 +181,7 @@ pub(crate) fn read_latest_script_in(
     c: &Connection,
     cut: &crate::selection::ApprovedCut,
 ) -> rusqlite::Result<Result<Option<LatestScript>, CoreError>> {
-    let is_transformed = crate::selection::effective_video_kind(c, cut.candidate)?
-        == Some(crate::selection::cut::VideoKind::Transformed);
-    if !is_transformed {
+    if cut.video_kind != crate::selection::cut::VideoKind::Transformed {
         return Ok(Err(error(
             "script_requires_transformed",
             "A Narração por Roteiro só existe para Cortes do Vídeo transformado.",
@@ -410,12 +408,6 @@ fn preferred_voice_for(lang: &str, requested: Option<&str>) -> Result<String, Co
     Ok(catalog::default_voice_for_language(norm).id.to_owned())
 }
 
-fn candidate_arg(v: &Value) -> Result<i64, CoreError> {
-    v["candidate"]
-        .as_i64()
-        .ok_or_else(|| error("candidate_not_found", "Candidato não encontrado."))
-}
-
 struct JobRow {
     id: i64,
     state: String,
@@ -483,7 +475,7 @@ struct AudioRow {
 }
 
 fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let candidate_id = candidate_arg(&v)?;
+    let candidate_id = crate::selection::candidate_id_arg(&v, "candidate")?;
     let project = project_root_dir()?;
     let gate_err = script::narration_allowed(candidate_id).err();
     let allowed = gate_err.is_none();
@@ -645,7 +637,7 @@ fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 }
 
 fn enqueue_narration(v: &Value, block_id: Option<i64>) -> CommandResult {
-    let candidate_id = candidate_arg(v)?;
+    let candidate_id = crate::selection::candidate_id_arg(v, "candidate")?;
     script::narration_allowed(candidate_id)?;
     let _ = pocket_tts_executable()?;
 

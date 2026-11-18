@@ -219,14 +219,7 @@ fn resolve_clip_id(request: &ExportRequest) -> Result<Option<i64>, CoreError> {
     let Some(candidate_id) = request.candidate_id else {
         return Ok(None);
     };
-    projects::with_reader(|c| {
-        c.query_row(
-            "SELECT id FROM clip_edits WHERE identity=?1",
-            [format!("candidate:{candidate_id}")],
-            |r| r.get(0),
-        )
-        .optional()
-    })
+    crate::editor::edits::clip_id_for_candidate(candidate_id)
 }
 
 pub(crate) fn target(
@@ -276,14 +269,9 @@ pub(crate) fn target_with(
     let transcript = transcript.ok_or_else(bounds)?;
     if let Some(candidate) = request.candidate_id {
         let run=projects::with_reader(|c| c.query_row("SELECT c.run_id FROM selection_candidates c JOIN selection_runs r ON r.id=c.run_id WHERE c.id=?1 AND r.transcript_id=?2",(candidate,transcript),|r|r.get::<_,i64>(0)).optional())?.ok_or_else(candidate_error)?;
-        let review = crate::dispatch("selection.review", json!({"run":run}), &mut |_| {})?;
-        let valid = review["items"].as_array().is_some_and(|items| {
-            items.iter().any(|item| {
-                item["candidate"] == candidate
-                    && item["status"] == "approved"
-                    && (edited.is_some()
-                        || (item["startId"] == request.start_id && item["endId"] == request.end_id))
-            })
+        let borders = crate::selection::approved_borders_for_run(run)?;
+        let valid = borders.get(&candidate).is_some_and(|&(start_id, end_id)| {
+            edited.is_some() || (start_id == request.start_id && end_id == request.end_id)
         });
         if !valid {
             return Err(candidate_error());

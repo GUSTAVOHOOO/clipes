@@ -3,7 +3,7 @@
 use crate::{
     ai_task::{AiTask, Budget, TaskInput, Violation},
     jobs, packaging, projects,
-    selection::ApprovedCut,
+    selection::{approved_transformed_cut, candidate_id_arg, cut::VideoKind, ApprovedCut},
     sentences, CommandRegistration, CommandResult, CoreError, EventSink,
 };
 use rusqlite::OptionalExtension;
@@ -168,28 +168,15 @@ ALTER TABLE script_block_versions ADD COLUMN angle_revision INTEGER NOT NULL DEF
 ALTER TABLE script_approvals ADD COLUMN angle_revision INTEGER NOT NULL DEFAULT 0;
 " } }
 
-fn candidate_arg(v: &Value) -> Result<i64, CoreError> {
-    v["candidate"]
-        .as_i64()
-        .ok_or_else(|| error("candidate_not_found", "Candidato não encontrado."))
-}
-
-pub(crate) fn transformed(cut: &ApprovedCut) -> Result<bool, CoreError> {
-    Ok(
-        projects::with_reader(|c| crate::selection::effective_video_kind(c, cut.candidate))?
-            == Some(crate::selection::cut::VideoKind::Transformed),
-    )
+pub(crate) fn transformed(cut: &ApprovedCut) -> bool {
+    cut.video_kind == VideoKind::Transformed
 }
 
 fn context(v: &Value) -> Result<ApprovedCut, CoreError> {
-    let cut = crate::selection::approved_cut(candidate_arg(v)?)?;
-    if !transformed(&cut)? {
-        return Err(error(
-            "script_requires_transformed",
-            "O Roteiro só existe para Cortes do Vídeo transformado.",
-        ));
-    }
-    Ok(cut)
+    approved_transformed_cut(
+        candidate_id_arg(v, "candidate")?,
+        "O Roteiro só existe para Cortes do Vídeo transformado.",
+    )
 }
 
 pub(crate) fn selected(cut: &ApprovedCut) -> Result<(i64, Value), CoreError> {
@@ -216,7 +203,7 @@ pub(crate) fn add_to_input(
     cut: &ApprovedCut,
     require: bool,
 ) -> Result<(), CoreError> {
-    if !transformed(cut)? {
+    if !transformed(cut) {
         return Ok(());
     }
     let (_, angle) = if require {

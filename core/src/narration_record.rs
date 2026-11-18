@@ -731,12 +731,6 @@ fn persist_recorded_block(
     Ok((narration_id, rel_path, info))
 }
 
-fn candidate_arg(v: &Value) -> Result<i64, CoreError> {
-    v["candidate"]
-        .as_i64()
-        .ok_or_else(|| error("candidate_not_found", "Candidato não encontrado."))
-}
-
 fn block_arg(v: &Value) -> Result<i64, CoreError> {
     v["block"]
         .as_i64()
@@ -749,7 +743,7 @@ fn block_arg(v: &Value) -> Result<i64, CoreError> {
 /// quando o worker está instalado (ou salva sem aparo com aviso) e dispara o alinhamento.
 fn cmd_record_block(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     let _guard = projects::start_job()?;
-    let candidate_id = candidate_arg(&v)?;
+    let candidate_id = crate::selection::candidate_id_arg(&v, "candidate")?;
     let block_id = block_arg(&v)?;
     let project = project_root_dir()?;
     let (norm_lang, version_id) = load_target_block(candidate_id, block_id)?;
@@ -881,7 +875,7 @@ fn cmd_record_block(v: Value, events: &mut EventSink<'_>) -> CommandResult {
 /// apara uma gravação salva anteriormente sem aparo quando o worker passa a estar instalado.
 fn cmd_trim_block(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     let _guard = projects::start_job()?;
-    let candidate_id = candidate_arg(&v)?;
+    let candidate_id = crate::selection::candidate_id_arg(&v, "candidate")?;
     let block_id = block_arg(&v)?;
     let project = project_root_dir()?;
     let (norm_lang, version_id) = load_target_block(candidate_id, block_id)?;
@@ -988,7 +982,7 @@ fn cmd_trim_block(v: Value, events: &mut EventSink<'_>) -> CommandResult {
 /// `narration.discard_draft { candidate, block }`:
 /// remove o arquivo temporário de uma gravação recusada (`no_speech_detected`).
 fn cmd_discard_draft(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let candidate_id = candidate_arg(&v)?;
+    let candidate_id = crate::selection::candidate_id_arg(&v, "candidate")?;
     let block_id = block_arg(&v)?;
     let (cache_dir, _, _) = crate::components::cache_settings()?;
     let work_dir = cache_dir.join("narration-record");

@@ -234,43 +234,41 @@ pub(crate) fn collect_cuts(scope_source: Option<i64>) -> Result<Vec<PlannedCut>,
             let rows = q.query_map([transcript], |r| r.get(0))?;
             rows.collect::<rusqlite::Result<Vec<_>>>()
         })?;
+        let mut sentence_times: Option<HashMap<i64, (i64, i64)>> = None;
         for run_id in runs {
-            let review = crate::dispatch("selection.review", json!({"run": run_id}), &mut |_| {})?;
-            let titles: HashMap<i64, String> = projects::with_reader(|c| {
-                let mut q =
-                    c.prepare("SELECT id,title FROM selection_candidates WHERE run_id=?1")?;
+            let borders = crate::selection::approved_borders_for_run(run_id)?;
+            if borders.is_empty() {
+                continue;
+            }
+            let times = match &sentence_times {
+                Some(map) => map,
+                None => {
+                    let loaded: HashMap<i64, (i64, i64)> = crate::sentences::load_for(transcript)?
+                        .into_iter()
+                        .map(|s| (s.id, (s.start_us, s.end_us)))
+                        .collect();
+                    sentence_times.insert(loaded)
+                }
+            };
+            let candidates: Vec<(i64, String)> = projects::with_reader(|c| {
+                let mut q = c.prepare(
+                    "SELECT id,title FROM selection_candidates WHERE run_id=?1 AND revision=(SELECT revision FROM selection_runs WHERE id=?1) ORDER BY rank ASC",
+                )?;
                 let rows = q.query_map([run_id], |r| {
                     Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
                 })?;
-                rows.collect::<rusqlite::Result<HashMap<_, _>>>()
+                rows.collect::<rusqlite::Result<Vec<_>>>()
             })?;
-            let Some(items) = review["items"].as_array() else {
-                continue;
-            };
-            for item in items {
-                if item["status"] != "approved" {
-                    continue;
-                }
-                let Some(candidate_id) = item["candidate"].as_i64() else {
+            for (candidate_id, title) in candidates {
+                let Some(&(rev_start_id, rev_end_id)) = borders.get(&candidate_id) else {
                     continue;
                 };
-                let (Some(rev_start_id), Some(rev_end_id), Some(rev_start_us), Some(rev_end_us)) = (
-                    item["startId"].as_i64(),
-                    item["endId"].as_i64(),
-                    item["startUs"].as_i64(),
-                    item["endUs"].as_i64(),
-                ) else {
+                let (Some(&(rev_start_us, _)), Some(&(_, rev_end_us))) =
+                    (times.get(&rev_start_id), times.get(&rev_end_id))
+                else {
                     continue;
                 };
-                let title = titles.get(&candidate_id).cloned().unwrap_or_default();
-                let edited_id: Option<i64> = projects::with_reader(|c| {
-                    c.query_row(
-                        "SELECT id FROM clip_edits WHERE identity=?1",
-                        [format!("candidate:{candidate_id}")],
-                        |r| r.get(0),
-                    )
-                    .optional()
-                })?;
+                let edited_id = crate::editor::edits::clip_id_for_candidate(candidate_id)?;
                 if let Some(cid) = edited_id {
                     match crate::editor::edits::document(cid) {
                         Ok(doc) => cuts.push(PlannedCut {

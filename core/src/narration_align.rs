@@ -1057,9 +1057,7 @@ pub fn run(job_id: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreErr
 }
 
 fn enqueue_align(v: &Value, block_id: Option<i64>) -> CommandResult {
-    let candidate_id = v["candidate"]
-        .as_i64()
-        .ok_or_else(|| error("candidate_not_found", "Candidato não encontrado."))?;
+    let candidate_id = crate::selection::candidate_id_arg(v, "candidate")?;
     let project = project_root_dir()?;
     script::narration_allowed(candidate_id)?;
     let settings = crate::components::load_settings()?;
@@ -1127,9 +1125,7 @@ fn cmd_align_block(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 }
 
 fn cmd_review(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let candidate_id = v["candidate"]
-        .as_i64()
-        .ok_or_else(|| error("candidate_not_found", "Candidato não encontrado."))?;
+    let candidate_id = crate::selection::candidate_id_arg(&v, "candidate")?;
     let block_id = v["block"]
         .as_i64()
         .or_else(|| v["blockId"].as_i64())
@@ -1213,17 +1209,6 @@ fn cmd_review(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     }))
 }
 
-fn candidate_for_clip(c: &Connection, clip_id: i64) -> rusqlite::Result<Option<i64>> {
-    let identity: Option<String> = c
-        .query_row(
-            "SELECT identity FROM clip_edits WHERE id=?1",
-            [clip_id],
-            |r| r.get(0),
-        )
-        .optional()?;
-    Ok(identity.and_then(|id| id.strip_prefix("candidate:")?.parse::<i64>().ok()))
-}
-
 /// Persiste o modo de legenda escolhido para o candidato (`auto`, `narration`, `original` ou `translated`).
 pub(crate) fn set_saved_track_for_candidate(
     candidate_id: i64,
@@ -1240,7 +1225,7 @@ pub(crate) fn set_saved_track_for_candidate(
 }
 
 pub(crate) fn sync_track_from_translation(clip_id: i64, track: &str) -> Result<(), CoreError> {
-    let candidate = projects::with_reader(|c| candidate_for_clip(c, clip_id))?;
+    let candidate = crate::editor::edits::candidate_id_for_clip(clip_id)?;
     if let Some(cid) = candidate {
         set_saved_track_for_candidate(cid, track)?;
     }
@@ -1253,7 +1238,7 @@ fn cmd_track_set(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let candidate_id = match v["candidate_id"].as_i64().filter(|&id| id > 0) {
         Some(cid) => Some(cid),
         None => match clip_id {
-            Some(cid) => projects::with_reader(|c| candidate_for_clip(c, cid))?,
+            Some(cid) => crate::editor::edits::candidate_id_for_clip(cid)?,
             None => None,
         },
     };
@@ -1318,16 +1303,10 @@ fn cmd_track_set(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 
     if let Some(cand) = candidate_id {
         if track == "narration" {
-            let _cut = crate::selection::approved_cut(cand)?;
-            let is_transformed =
-                projects::with_reader(|c| crate::selection::effective_video_kind(c, cand))?
-                    == Some(crate::selection::cut::VideoKind::Transformed);
-            if !is_transformed {
-                return Err(error(
-                    "script_requires_transformed",
-                    "Legendas da Narração só existem para o Vídeo transformado.",
-                ));
-            }
+            let _cut = crate::selection::approved_transformed_cut(
+                cand,
+                "Legendas da Narração só existem para o Vídeo transformado.",
+            )?;
         }
         set_saved_track_for_candidate(cand, track)?;
     } else if track == "narration" {
