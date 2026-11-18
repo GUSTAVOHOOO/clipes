@@ -518,7 +518,9 @@ describe('ConfigComponentes (#/config/componentes)', () => {
     expect(dialogo).toHaveTextContent(/YuNet/i)
     expect(dialogo).toHaveTextContent(/MIT/i)
     expect(dialogo).toHaveTextContent(/KB|MB|B/i)
-    expect(within(dialogo).getByRole('button', { name: 'Cancelar' })).toHaveFocus()
+    await waitFor(() => {
+      expect(within(dialogo).getByRole('button', { name: 'Cancelar' })).toHaveFocus()
+    })
     expect(chamarMock).not.toHaveBeenCalledWith('components.models.download', expect.anything())
 
     await user.click(within(dialogo).getByRole('button', { name: /Baixar agora/i }))
