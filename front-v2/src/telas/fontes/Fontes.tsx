@@ -12,6 +12,7 @@ import {
 import { EntradaFonte, type ModoEntradaFonte } from '~/telas/fontes/EntradaFonte'
 import { GavetaBuscaFts, type ResultadoBuscaFts } from '~/telas/fontes/GavetaBuscaFts'
 import { ListaFontes } from '~/telas/fontes/ListaFontes'
+import { LotesFontes } from '~/telas/fontes/LotesFontes'
 
 export type FontesProps = {
   projetoId: string
@@ -230,23 +231,11 @@ export function Fontes({
       </div>
 
       {sub === 'lotes' ? (
-        <div className="flex min-h-0 flex-1 items-center justify-center rounded-area bg-area">
-          <EstadoTela
-            tipo="vazio"
-            titulo="Lotes de Fontes"
-            descricao={
-              selecionadasParaLote.length > 0
-                ? `${selecionadasParaLote.length} Fonte(s) selecionada(s) pronta(s) para processamento em lote.`
-                : 'Crie e acompanhe Lotes de Fontes para transcrever e selecionar Cortes em sequência.'
-            }
-            acaoPrimaria={{
-              rotulo: 'Voltar para Fontes',
-              aoAcionar: () => {
-                window.location.hash = `#/projeto/${encProjeto}/fontes`
-              },
-            }}
-          />
-        </div>
+        <LotesFontes
+          projetoId={projetoId}
+          projetoPath={projetoPath}
+          store={store}
+        />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden lg:flex-row">
           {projetoPath && (
