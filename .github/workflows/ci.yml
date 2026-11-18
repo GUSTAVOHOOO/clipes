@@ -40,6 +40,29 @@ jobs:
         run: bunx playwright install chromium
       - run: bun run test:contrast
       - run: bun run test:ui
+      - name: Install front-v2 dependencies
+        working-directory: front-v2
+        run: bun install --frozen-lockfile
+      - name: Install front-v2 browser (Linux)
+        if: runner.os == 'Linux'
+        working-directory: front-v2
+        run: bunx playwright install --with-deps chromium
+      - name: Install front-v2 browser (Windows)
+        if: runner.os == 'Windows'
+        working-directory: front-v2
+        run: bunx playwright install chromium
+      - name: Typecheck front-v2
+        working-directory: front-v2
+        run: bun run typecheck
+      - name: Build front-v2
+        working-directory: front-v2
+        run: bun run build
+      - name: Test front-v2
+        working-directory: front-v2
+        run: bun run test
+      - name: E2E front-v2
+        working-directory: front-v2
+        run: bunx playwright test
   e2e:
     strategy:
       matrix:
