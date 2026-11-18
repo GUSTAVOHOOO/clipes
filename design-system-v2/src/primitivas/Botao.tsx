@@ -9,17 +9,17 @@ export type TamanhoBotao = 'p' | 'm' | 'g'
 
 const base =
   'inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-controle border-0 whitespace-nowrap select-none ' +
-  'transition-[background-color,color,filter] duration-(--dur-base) ease-saida ' +
+  'transition-[background-color,color,filter,box-shadow] duration-(--dur-base) ease-saida ' +
   'disabled:pointer-events-none disabled:opacity-40 aria-disabled:pointer-events-none aria-disabled:opacity-40 ' +
   '[&_svg]:size-[15px] [&_svg]:shrink-0 [&_svg]:stroke-[1.75]'
 
 const variantes: Record<VarianteBotao, string> = {
   primario: 'bg-sinal font-forte text-no-sinal hover:brightness-108 active:brightness-95',
-  secundario: 'bg-elevado text-t1 hover:bg-hover',
+  secundario: 'bg-elevado text-t1 shadow-[inset_0_0_0_1px_var(--contorno-controle)] hover:bg-hover',
   fantasma: 'bg-transparent text-t2 hover:bg-hover hover:text-t1 aria-expanded:bg-hover aria-expanded:text-t1 aria-pressed:text-t1',
-  perigo: 'bg-elevado text-erro hover:bg-hover',
+  perigo: 'bg-elevado text-erro shadow-[inset_0_0_0_1px_var(--contorno-controle)] hover:bg-hover',
   // suave: um degrau só (área), para ações repetidas em linhas e sobre o chão
-  suave: 'bg-area text-t2 hover:bg-hover hover:text-t1',
+  suave: 'bg-area text-t2 shadow-[inset_0_0_0_1px_var(--contorno-controle)] hover:bg-hover hover:text-t1',
 }
 
 const tamanhos: Record<TamanhoBotao, string> = {

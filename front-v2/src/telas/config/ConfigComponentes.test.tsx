@@ -626,4 +626,23 @@ describe('ConfigComponentes (#/config/componentes)', () => {
       })
     })
   })
+
+  it('UI-08: todos os elementos <summary> em ConfigComponentes possuem min-h-6 (>= 24 px)', async () => {
+    const user = userEvent.setup()
+    mockComponentesPadrao()
+    render(envolver(<ConfigComponentes projetoAberto={null} />))
+
+    const sumHardware = (await screen.findByText('Detalhes técnicos')).closest('summary')
+    expect(sumHardware?.className).toContain('min-h-6')
+
+    await user.click(screen.getByRole('tab', { name: /Componentes e Modelos/i }))
+    const sumFfmpeg = (await screen.findByText('Usar FFmpeg já instalado no sistema')).closest('summary')
+    expect(sumFfmpeg?.className).toContain('min-h-6')
+    const sumWorker = screen.getByText('Detalhes técnicos').closest('summary')
+    expect(sumWorker?.className).toContain('min-h-6')
+
+    await user.click(screen.getByRole('tab', { name: /Vozes TTS/i }))
+    const sumTts = (await screen.findByText('Texto original em inglês')).closest('summary')
+    expect(sumTts?.className).toContain('min-h-6')
+  })
 })

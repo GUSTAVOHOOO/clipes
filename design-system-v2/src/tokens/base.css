@@ -72,6 +72,9 @@
   kbd {
     font-family: var(--fonte);
   }
+  summary {
+    min-height: 24px;
+  }
 }
 
 /* Utilitários do sistema */
@@ -87,5 +90,5 @@
 }
 /* a marca de seleção: 2 px de sinal na borda esquerda, só onde está o trabalho */
 @utility marcado {
-  box-shadow: inset 2px 0 0 var(--sinal);
+  box-shadow: inset 2px 0 0 var(--sinal), inset 0 0 0 1px var(--contorno-controle);
 }

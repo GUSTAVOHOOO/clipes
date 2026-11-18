@@ -560,4 +560,42 @@ describe('Tela Assistente de Primeiro Uso (#/assistente)', () => {
       expect(window.location.hash).toBe('#/config/provedores')
     })
   })
+
+  it('UI-08 e UI-10: Passo 1 tem h1 único e alvos >= 24 px (Mudar pasta de instalação e summaries)', async () => {
+    mockPasso1({ workerInstalled: true })
+    render(envolver(<Assistente passo={1} />))
+
+    const h1 = await screen.findByRole('heading', {
+      level: 1,
+      name: /Passo 1: Essencial para transcrever e cortar/i,
+    })
+    expect(h1).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+
+    const btnPasta = screen.getByRole('button', { name: 'Mudar pasta de instalação' })
+    expect(btnPasta.className).toContain('min-h-6')
+
+    const sumFfmpeg = screen.getByText('Já tenho FFmpeg instalado no computador').closest('summary')
+    const sumTech = screen.getByText('Detalhes técnicos').closest('summary')
+    expect(sumFfmpeg?.className).toContain('min-h-6')
+    expect(sumTech?.className).toContain('min-h-6')
+  })
+
+  it('UI-08 e UI-10: Passo 2 tem h1 único e role="radio" com min-h-6', async () => {
+    mockPasso2()
+    render(envolver(<Assistente passo={2} />))
+
+    const h1 = await screen.findByRole('heading', {
+      level: 1,
+      name: /Passo 2: Quem escolhe os Cortes e sugere títulos/i,
+    })
+    expect(h1).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+
+    const radios = screen.getAllByRole('radio')
+    expect(radios.length).toBeGreaterThanOrEqual(4)
+    for (const r of radios) {
+      expect(r.className).toContain('min-h-6')
+    }
+  })
 })

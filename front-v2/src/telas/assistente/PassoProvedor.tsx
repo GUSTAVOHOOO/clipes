@@ -343,9 +343,9 @@ export function PassoProvedor({ aoVoltar, aoConcluir, aoPular, pulando }: PassoP
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex flex-col gap-3 rounded-area bg-area p-4">
-        <h2 className="text-titulo font-forte text-t1">
+        <h1 className="text-titulo font-forte text-t1">
           Passo 2: Quem escolhe os Cortes e sugere títulos
-        </h2>
+        </h1>
 
         {erroExibido && (
           <BannerErroCore
@@ -407,7 +407,7 @@ export function PassoProvedor({ aoVoltar, aoConcluir, aoPular, pulando }: PassoP
                       setSelecionada(opcao.id)
                       setTesteOk(null)
                     }}
-                    className="foco flex cursor-pointer items-center gap-2 rounded-controle border-0 bg-transparent px-1 py-0.5 text-left text-base font-medio text-t1"
+                    className="foco flex min-h-6 cursor-pointer items-center gap-2 rounded-controle border-0 bg-transparent px-1 py-0.5 text-left text-base font-medio text-t1"
                   >
                     <span
                       aria-hidden

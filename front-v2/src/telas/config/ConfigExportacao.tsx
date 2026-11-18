@@ -278,7 +278,7 @@ export function ConfigExportacao({ projetoAberto }: { projetoAberto: string | nu
             className="flex flex-col gap-2.5 rounded-area bg-area p-3"
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <strong className="text-base font-medio text-t1">Status atual</strong>
+              <h2 className="text-base font-medio text-t1">Status atual</h2>
               <Status tom={status.stale ? 'aviso' : 'sucesso'} forte>
                 {rotuloEncoder(status.effective)} · {status.manual ? 'Manual' : 'Automático'}
               </Status>
@@ -314,7 +314,7 @@ export function ConfigExportacao({ projetoAberto }: { projetoAberto: string | nu
             aria-label="Escolha de encoder"
             className="flex flex-col gap-2 rounded-area bg-area p-3"
           >
-            <strong className="text-base font-medio text-t1">Escolha de encoder</strong>
+            <h2 className="text-base font-medio text-t1">Escolha de encoder</h2>
             <div
               role="radiogroup"
               aria-label="Escolha de encoder H.264"

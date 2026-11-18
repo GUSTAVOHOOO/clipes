@@ -6,12 +6,15 @@ import { readFileSync } from 'node:fs'
 
 const css = readFileSync(new URL('../src/tokens/tokens.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 
-function bloco(seletor: string): Record<string, string> {
+function bloco(seletor: string, base: Record<string, string> = {}): Record<string, string> {
   const ini = css.indexOf(seletor)
   if (ini < 0) throw new Error(`Seletor não encontrado em tokens.css: ${seletor}`)
   const corpo = css.slice(css.indexOf('{', ini) + 1, css.indexOf('}', ini))
-  const vars: Record<string, string> = {}
+  const vars: Record<string, string> = { ...base }
   for (const m of corpo.matchAll(/--([a-z0-9-]+):\s*(#[0-9a-f]{6})/gi)) vars[m[1]] = m[2]
+  for (const m of corpo.matchAll(/--([a-z0-9-]+):\s*var\(--([a-z0-9-]+)\)/gi)) {
+    if (vars[m[2]]) vars[m[1]] = vars[m[2]]
+  }
   return vars
 }
 
@@ -48,12 +51,14 @@ const paresAltoContraste: [string, string[], number][] = [
   ['sinal', ['chao', 'area', 'elevado'], 3],
   ['foco', ['chao', 'area', 'elevado', 'hover'], 3],
   ['linha-forte', ['chao', 'area', 'elevado'], 7],
+  ['contorno-controle', fundos, 3],
+  ['contorno-campo', fundos, 3],
 ]
 
 const escuro = bloco(":root,\n  [data-tema='escuro']")
 const claro = bloco("[data-tema='claro']")
-const escuroAlto = { ...escuro, ...bloco("[data-contrast='high']") }
-const claroAlto = { ...claro, ...bloco("[data-tema='claro'][data-contrast='high']") }
+const escuroAlto = bloco("[data-contrast='high']", escuro)
+const claroAlto = bloco("[data-tema='claro'][data-contrast='high']", claro)
 
 let falhas = 0
 for (const [nome, t, pares] of [
@@ -65,10 +70,15 @@ for (const [nome, t, pares] of [
   console.log(`\nTema ${nome}`)
   for (const [frente, bases, minimo] of pares) {
     for (const base of bases) {
+      if (!t[frente]) {
+        falhas++
+        console.log(`FALHA ${frente.padEnd(18)} ausente em tokens.css`)
+        continue
+      }
       const r = razao(t[frente], t[base])
       const ok = r >= minimo
       if (!ok) falhas++
-      console.log(`${ok ? 'ok  ' : 'FALHA'} ${frente.padEnd(12)} sobre ${base.padEnd(8)} ${r.toFixed(2)}:1 (mín. ${minimo})`)
+      console.log(`${ok ? 'ok  ' : 'FALHA'} ${frente.padEnd(18)} sobre ${base.padEnd(8)} ${r.toFixed(2)}:1 (mín. ${minimo})`)
     }
   }
 }

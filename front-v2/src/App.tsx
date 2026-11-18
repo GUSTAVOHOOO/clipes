@@ -32,12 +32,19 @@ function irPara(hash: string) {
   window.location.hash = hash
 }
 
-function PlaceholderTela({ rota }: { rota: Rota }) {
+function PlaceholderTela({
+  rota,
+  nivelTitulo = 'h1',
+}: {
+  rota: Rota
+  nivelTitulo?: 'h1' | 'h2'
+}) {
   switch (rota.tela) {
     case 'inicio':
       return (
         <EstadoTela
           tipo="vazio"
+          nivelTitulo={nivelTitulo}
           titulo="Início e Projetos"
           descricao="Crie ou abra um Projeto portátil para começar a trabalhar com Fontes, Transcrição e Cortes."
           acaoPrimaria={{
@@ -50,6 +57,7 @@ function PlaceholderTela({ rota }: { rota: Rota }) {
       return (
         <EstadoTela
           tipo="vazio"
+          nivelTitulo={nivelTitulo}
           titulo={`Assistente de primeiro uso · Passo ${rota.passo}`}
           descricao="Configure o FFmpeg, o Motor de transcrição local e o Perfil de Provedor padrão."
           acaoPrimaria={{
@@ -62,6 +70,7 @@ function PlaceholderTela({ rota }: { rota: Rota }) {
       return (
         <EstadoTela
           tipo="vazio"
+          nivelTitulo={nivelTitulo}
           titulo={rota.sub === 'lotes' ? 'Lotes de Fontes' : 'Fontes e Transcrição'}
           descricao="Importe Fontes locais ou por link, acompanhe Lotes de Fontes e gerencie Permissões e Transcrições."
           acaoPrimaria={{
@@ -74,6 +83,7 @@ function PlaceholderTela({ rota }: { rota: Rota }) {
       return (
         <EstadoTela
           tipo="vazio"
+          nivelTitulo={nivelTitulo}
           titulo="Detalhe da Fonte"
           descricao={`Acompanhe o processamento, leia, corrija e pesquise na Transcrição da Fonte ${rota.fonte}.`}
           acaoPrimaria={{
@@ -86,6 +96,7 @@ function PlaceholderTela({ rota }: { rota: Rota }) {
       return (
         <EstadoTela
           tipo="vazio"
+          nivelTitulo={nivelTitulo}
           titulo="Cortes"
           descricao="Configure a seleção de Cortes a partir da Transcrição e abra a revisão dos candidatos."
           acaoPrimaria={{
@@ -98,6 +109,7 @@ function PlaceholderTela({ rota }: { rota: Rota }) {
       return (
         <EstadoTela
           tipo="vazio"
+          nivelTitulo={nivelTitulo}
           titulo="Revisão de Cortes"
           descricao={`Avalie a Nota dos candidatos da execução ${rota.run}, ajuste bordas por Frase e aprove Cortes.`}
           acaoPrimaria={{
@@ -110,6 +122,7 @@ function PlaceholderTela({ rota }: { rota: Rota }) {
       return (
         <EstadoTela
           tipo="vazio"
+          nivelTitulo={nivelTitulo}
           titulo={`Corte ${rota.corte} · ${rota.aba}`}
           descricao="Ajuste bordas, enquadramento, legendas, Transformação e Empacotamento do Corte."
           acaoPrimaria={{
@@ -122,6 +135,7 @@ function PlaceholderTela({ rota }: { rota: Rota }) {
       return (
         <EstadoTela
           tipo="vazio"
+          nivelTitulo={nivelTitulo}
           titulo={rota.sub === 'lotes' ? 'Lotes de exportação' : 'Exportação'}
           descricao="Confira a prontidão dos Cortes aprovados e acompanhe a renderização em MP4."
           acaoPrimaria={{
@@ -134,6 +148,7 @@ function PlaceholderTela({ rota }: { rota: Rota }) {
       return (
         <EstadoTela
           tipo="vazio"
+          nivelTitulo={nivelTitulo}
           titulo={`Configurações · ${TITULOS_CONFIG[rota.secao]}`}
           descricao="Preferências do aplicativo, Perfis de Provedor, custos, armazenamento e configurações do Projeto."
           acaoPrimaria={{
@@ -146,6 +161,7 @@ function PlaceholderTela({ rota }: { rota: Rota }) {
       return (
         <EstadoTela
           tipo="vazio"
+          nivelTitulo={nivelTitulo}
           titulo="Relatos e diagnóstico"
           descricao="Gere um diagnóstico local sanitizado do ambiente para relatar problemas sem telemetria."
           acaoPrimaria={{
@@ -158,6 +174,7 @@ function PlaceholderTela({ rota }: { rota: Rota }) {
       return (
         <EstadoTela
           tipo="vazio"
+          nivelTitulo={nivelTitulo}
           titulo="Sobre e atualizações"
           descricao="Versão instalada do aplicativo, verificação de atualizações assinadas e licenças."
           acaoPrimaria={{
@@ -222,6 +239,7 @@ function AppRoteado({
   }
 
   const placeholder = <PlaceholderTela rota={rota} />
+  const placeholderConfig = <PlaceholderTela rota={rota} nivelTitulo="h2" />
 
   const conteudo =
     rota.tela === 'config' ? (
@@ -246,9 +264,9 @@ function AppRoteado({
           <ComEstado
             estado={forcado ?? 'pronto'}
             carregando={<Esqueleto variante="painel" />}
-            vazio={placeholder}
+            vazio={placeholderConfig}
           >
-            {placeholder}
+            {placeholderConfig}
           </ComEstado>
         </ConfiguracoesLayout>
       )

@@ -728,7 +728,7 @@ export function ConfigComponentes({ projetoAberto }: { projetoAberto: string | n
 
                 {hardware && (
                   <details className="text-pequeno text-t3">
-                    <summary className="foco w-fit cursor-pointer rounded-controle hover:text-t2">
+                    <summary className="foco min-h-6 w-fit cursor-pointer rounded-controle py-[3px] hover:text-t2">
                       Detalhes técnicos
                     </summary>
                     <p className="mt-1.5 font-mono text-micro text-t2">
@@ -972,7 +972,7 @@ export function ConfigComponentes({ projetoAberto }: { projetoAberto: string | n
                 )}
 
                 <details className="text-pequeno text-t3">
-                  <summary className="foco w-fit cursor-pointer rounded-controle hover:text-t2">
+                  <summary className="foco min-h-6 w-fit cursor-pointer rounded-controle py-[3px] hover:text-t2">
                     Usar FFmpeg já instalado no sistema
                   </summary>
                   <div className="mt-2 flex flex-wrap items-end gap-2">
@@ -1186,7 +1186,7 @@ export function ConfigComponentes({ projetoAberto }: { projetoAberto: string | n
 
                 {workerStatus.handshake && (
                   <details className="text-pequeno text-t3">
-                    <summary className="foco w-fit cursor-pointer rounded-controle hover:text-t2">
+                    <summary className="foco min-h-6 w-fit cursor-pointer rounded-controle py-[3px] hover:text-t2">
                       Detalhes técnicos
                     </summary>
                     <p className="mt-1 font-mono text-micro text-t2">
@@ -1462,7 +1462,7 @@ export function ConfigComponentes({ projetoAberto }: { projetoAberto: string | n
                         <p className="text-pequeno text-t2">{engineTts.prohibitedUse.summaryPt}</p>
                         {engineTts.prohibitedUse.textEn && (
                           <details className="text-pequeno text-t3">
-                            <summary className="foco w-fit cursor-pointer rounded-controle hover:text-t2">
+                            <summary className="foco min-h-6 w-fit cursor-pointer rounded-controle py-[3px] hover:text-t2">
                               Texto original em inglês
                             </summary>
                             <p className="mt-1 text-micro text-t2">

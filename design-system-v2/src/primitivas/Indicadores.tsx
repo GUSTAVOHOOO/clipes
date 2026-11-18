@@ -29,7 +29,7 @@ export function Abas<V extends string>({ valor, aoMudar, abas, rotulo, tamanho =
       <Tb.List aria-label={rotulo} className={cn('flex gap-0.5', className)}>
         {abas.map((a) => (
           <Tb.Tab key={a.valor} value={a.valor} disabled={a.desabilitada} title={a.dica}
-            className={cn('cursor-pointer rounded-controle border-0 bg-transparent text-t3 transition-colors duration-(--dur-rapida) ease-saida hover:text-t2 data-active:bg-elevado data-active:text-t1 data-disabled:cursor-default data-disabled:opacity-50 data-disabled:hover:text-t3',
+            className={cn('cursor-pointer rounded-controle border-0 bg-transparent text-t3 transition-colors duration-(--dur-rapida) ease-saida hover:text-t2 data-active:bg-elevado data-active:text-t1 data-active:shadow-[inset_0_0_0_1px_var(--contorno-controle)] data-disabled:cursor-default data-disabled:opacity-50 data-disabled:hover:text-t3',
               tamanho === 'p' ? 'h-6 px-2 text-pequeno' : 'h-7 px-2.5 text-base')}
           >
             {a.rotulo}
