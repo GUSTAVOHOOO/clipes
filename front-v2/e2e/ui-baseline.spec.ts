@@ -265,23 +265,34 @@ test.describe('Linha de base UI — Ondas 0+1 (Impeccable)', () => {
     await salvarCaptura('01-shell-inicio-1366.png')
     relatorio.push(await auditarPagina(page, 'inicio-padrao', '1366x768', 'padrao'))
 
-    // Verifica F6 e Ctrl+J no Shell
+    // Verifica F6 e Ctrl+J no Shell (UI-04)
     const antesF6 = await page.evaluate(() => document.activeElement?.tagName ?? null)
+    const regiaoAntesF6 = await page.evaluate(
+      () => document.activeElement?.closest('[data-regiao]')?.getAttribute('data-regiao') ?? null,
+    )
     await page.keyboard.press('F6')
     const depoisF6 = await page.evaluate(() => document.activeElement?.tagName ?? null)
+    const regiaoDepoisF6 = await page.evaluate(
+      () => document.activeElement?.closest('[data-regiao]')?.getAttribute('data-regiao') ?? null,
+    )
+    expect(regiaoDepoisF6).not.toBeNull()
+    expect(regiaoDepoisF6).not.toBe(regiaoAntesF6)
     await page.keyboard.press('Control+j')
+    await expect(page.getByText('Fila de jobs', { exact: true })).toBeVisible()
     const urlAposCtrlJ = page.url()
 
-    // Paleta Ctrl+K + Esc restaura foco
+    // Paleta Ctrl+K + rodapé (UI-14) + Esc restaura foco
     const gatilhoPaleta = page.getByRole('button', { name: /Abrir comandos/i })
     await gatilhoPaleta.focus()
     await page.keyboard.press('Control+k')
     const dialogoPaleta = page.getByRole('dialog', { name: 'Paleta de comandos' })
     await expect(dialogoPaleta).toBeVisible()
     await expect(dialogoPaleta).toHaveCSS('opacity', '1')
+    await expect(dialogoPaleta.getByText('Enter para executar · Esc para fechar')).toBeVisible()
     await salvarCaptura('02-shell-paleta-1366.png')
     await page.keyboard.press('Escape')
     await expect(dialogoPaleta).toBeHidden()
+    await expect(gatilhoPaleta).toBeFocused()
 
     // Estados ?estado=carregando, vazio, erro em #/inicio
     await page.goto('/#/inicio?estado=carregando')
@@ -309,21 +320,26 @@ test.describe('Linha de base UI — Ondas 0+1 (Impeccable)', () => {
     await dlgNovo.getByRole('textbox', { name: 'Pasta onde salvar' }).fill('/tmp/clipes')
     await dlgNovo.getByRole('button', { name: 'Criar Projeto' }).click()
     await expect(page).toHaveURL(/#\/projeto\/canal-baseline\/fontes$/)
+    relatorio.push(await auditarPagina(page, 'shell-com-projeto', '1366x768', 'padrao'))
 
-    // Abre menu SeletorProjeto e registra efeito de clicar em "Fechar Projeto"
+    // Abre menu SeletorProjeto e verifica UI-01: "Fechar Projeto" fecha o Projeto e volta para #/inicio
     await page.getByRole('button', { name: /Canal Baseline/i }).click()
     const menuProjeto = page.getByRole('menu')
     await expect(menuProjeto).toBeVisible()
     await expect(menuProjeto).toHaveCSS('opacity', '1')
     await salvarCaptura('03-shell-projeto-aberto-1366.png')
     await menuProjeto.getByRole('menuitem', { name: 'Fechar Projeto' }).click()
+    await expect(page).toHaveURL(/#\/inicio$/)
+    await expect(page.getByRole('navigation', { name: 'Etapas do Projeto' })).toBeHidden()
+    await expect(page.getByRole('button', { name: 'Fechar Projeto' })).toBeHidden()
     const urlAposFecharMenu = page.url()
-    await page.keyboard.press('Escape')
-    relatorio.push(await auditarPagina(page, 'shell-com-projeto', '1366x768', 'padrao'))
 
-    // Voltar a #/inicio, fechar Projeto e abrir Projeto V1
+    // Voltar a #/inicio, fechar Projeto (se ainda estiver aberto) e abrir Projeto V1
     await page.goto('/#/inicio')
-    await page.getByRole('button', { name: 'Fechar Projeto' }).click()
+    const botaoFecharInicio = page.getByRole('button', { name: 'Fechar Projeto' })
+    if (await botaoFecharInicio.isVisible()) {
+      await botaoFecharInicio.click()
+    }
     await page.getByRole('button', { name: /Abrir pasta \.clipes/i }).click()
     const dlgAbrir = page.getByRole('dialog', { name: 'Abrir pasta .clipes' })
     await dlgAbrir.getByRole('textbox', { name: 'Pasta .clipes' }).fill('C:\\V1\\CanalLegado.clipes')
@@ -346,6 +362,25 @@ test.describe('Linha de base UI — Ondas 0+1 (Impeccable)', () => {
     relatorio.push(await auditarPagina(page, 'assistente-passo2-api', '1366x768', 'padrao'))
 
     await page.getByRole('button', { name: /Pular por enquanto/i }).click()
+    await expect(page).toHaveURL(/#\/inicio$/)
+
+    // Captura 21 (fim do Fluxo b): #/projeto/:id/fontes com URL (VOD) e InstaladorJustInTime inline aberto
+    await page.getByRole('button', { name: /Abrir Projeto Meu Canal de Cortes/i }).click()
+    await expect(page).toHaveURL(/#\/projeto\/meu-canal-de-cortes\/fontes$/)
+    await page.getByRole('radio', { name: /URL \(VOD\)/i }).click()
+    await page.getByRole('textbox', { name: /URL do vídeo/i }).fill('https://youtube.com/watch/js-test')
+    await page.getByRole('button', { name: 'Baixar por URL' }).click()
+    const dlgTermosJit = page.getByRole('alertdialog')
+    await expect(dlgTermosJit).toBeVisible()
+    await dlgTermosJit.getByRole('button', { name: /Aceitar e baixar/i }).click()
+    await expect(dlgTermosJit).toBeHidden()
+    await expect(page.getByRole('region', { name: /Instalação necessária/i })).toBeVisible()
+    await salvarCaptura('21-fontes-jit-1366.png')
+    relatorio.push(await auditarPagina(page, 'fontes-jit', '1366x768', 'padrao'))
+
+    // Fecha o Projeto para manter #/config/custos sem Projeto no Fluxo (c)
+    await page.getByRole('button', { name: /Meu Canal de Cortes/i }).click()
+    await page.getByRole('menuitem', { name: 'Fechar Projeto' }).click()
     await expect(page).toHaveURL(/#\/inicio$/)
 
     // 3. Fluxo (c): Provedores e Custos
@@ -451,7 +486,14 @@ test.describe('Linha de base UI — Ondas 0+1 (Impeccable)', () => {
       body: JSON.stringify(
         {
           erros,
-          shellChecks: { antesF6, depoisF6, urlAposCtrlJ, urlAposFecharMenu },
+          shellChecks: {
+            antesF6,
+            depoisF6,
+            regiaoAntesF6,
+            regiaoDepoisF6,
+            urlAposCtrlJ,
+            urlAposFecharMenu,
+          },
           relatorio,
         },
         null,
