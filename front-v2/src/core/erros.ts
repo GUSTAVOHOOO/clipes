@@ -329,6 +329,10 @@ export const TABELA_ERROS: Record<string, MensagemErro> = {
     titulo: 'Algumas Janelas da seleção falharam; refaça-as para completar a execução.',
     recuperacao: { rotulo: 'Refazer com outro Perfil', acao: 'refazer-outro-perfil' },
   },
+  selection_windows_failed: {
+    titulo: 'Algumas Janelas da seleção falharam; refaça-as para completar a execução.',
+    recuperacao: { rotulo: 'Refazer com outro Perfil', acao: 'refazer-outro-perfil' },
+  },
   invalid_clip: {
     titulo: 'Este Corte não está aberto ou não foi encontrado no Editor.',
   },
@@ -407,6 +411,172 @@ export const TABELA_ERROS: Record<string, MensagemErro> = {
   project_write: {
     titulo: 'Não foi possível gravar as edições no disco. Verifique o espaço disponível.',
     recuperacao: { rotulo: 'Abrir Armazenamento', rota: '#/config/componentes' },
+  },
+  // Pacote E (Transformar, Narração, TTS, Capa e Empacotamento)
+  angle_invalid: {
+    titulo: 'Confira o nome (até 60 caracteres), a promessa (1 frase, até 200 caracteres) e as Frases selecionadas.',
+  },
+  angle_change_confirmation: {
+    titulo: 'Confirme a troca do ângulo: os blocos do Roteiro ficarão desatualizados.',
+    recuperacao: { rotulo: 'Confirmar troca', acao: 'confirmar' },
+  },
+  edit_invalid: {
+    titulo: 'A edição excedeu os limites permitidos ou contém formato inválido.',
+  },
+  invalid_edit: {
+    titulo: 'A edição excedeu os limites permitidos ou contém formato inválido.',
+  },
+  nothing_to_edit: {
+    titulo: 'Gere o conteúdo deste Corte antes de editar.',
+  },
+  nothing_to_approve: {
+    titulo: 'O bloco ainda não tem texto para aprovar.',
+  },
+  generation_in_progress: {
+    titulo: 'Já existe uma geração ou sugestão em andamento para este Corte.',
+    recuperacao: { rotulo: 'Abrir Fila de Jobs', acao: 'abrir-fila' },
+  },
+  suggestion_in_progress: {
+    titulo: 'Já existe uma sugestão de capa em andamento para este Corte.',
+    recuperacao: { rotulo: 'Abrir Fila de Jobs', acao: 'abrir-fila' },
+  },
+  generating: {
+    titulo: 'A geração do Roteiro ainda está em andamento.',
+    recuperacao: { rotulo: 'Abrir Fila de Jobs', acao: 'abrir-fila' },
+  },
+  no_script: {
+    titulo: 'Gere e aprove o Roteiro antes de narrar.',
+  },
+  pending_blocks: {
+    titulo: 'Ainda há blocos pendentes de aprovação no Roteiro.',
+  },
+  import_in_progress: {
+    titulo: 'Já existe uma importação de áudio em andamento para este Corte.',
+    recuperacao: { rotulo: 'Abrir Fila de Jobs', acao: 'abrir-fila' },
+  },
+  import_unsupported_format: {
+    titulo: 'Arquivo inválido: envie .wav, .mp3, .m4a ou .ogg com áudio válido entre 0,3 s e 10 min e até 200 MiB.',
+  },
+  import_file_too_large: {
+    titulo: 'Arquivo inválido: envie .wav, .mp3, .m4a ou .ogg com áudio válido entre 0,3 s e 10 min e até 200 MiB.',
+  },
+  import_duration_too_short: {
+    titulo: 'Arquivo inválido: envie .wav, .mp3, .m4a ou .ogg com áudio válido entre 0,3 s e 10 min e até 200 MiB.',
+  },
+  import_duration_too_long: {
+    titulo: 'Arquivo inválido: envie .wav, .mp3, .m4a ou .ogg com áudio válido entre 0,3 s e 10 min e até 200 MiB.',
+  },
+  import_no_audio_stream: {
+    titulo: 'Arquivo inválido: envie .wav, .mp3, .m4a ou .ogg com áudio válido entre 0,3 s e 10 min e até 200 MiB.',
+  },
+  import_unsupported_codec: {
+    titulo: 'Arquivo inválido: envie .wav, .mp3, .m4a ou .ogg com áudio válido entre 0,3 s e 10 min e até 200 MiB.',
+  },
+  import_empty_file: {
+    titulo: 'Arquivo inválido: envie .wav, .mp3, .m4a ou .ogg com áudio válido entre 0,3 s e 10 min e até 200 MiB.',
+  },
+  import_invalid_audio: {
+    titulo: 'Arquivo inválido: envie .wav, .mp3, .m4a ou .ogg com áudio válido entre 0,3 s e 10 min e até 200 MiB.',
+  },
+  import_file_missing: {
+    titulo: 'O arquivo de áudio selecionado não foi encontrado no disco.',
+  },
+  import_failed: {
+    titulo: 'Não foi possível importar o arquivo de áudio para este bloco.',
+  },
+  invalid_recording_audio: {
+    titulo: 'O áudio gravado está vazio ou em formato inválido.',
+  },
+  recording_too_large: {
+    titulo: 'A gravação ultrapassou o tamanho máximo permitido.',
+  },
+  narration_record_failed: {
+    titulo: 'Não foi possível salvar ou processar a gravação da Narração.',
+  },
+  narration_failed: {
+    titulo: 'Não foi possível gerar ou ler o áudio da Narração.',
+  },
+  narration_missing: {
+    titulo: 'Este bloco ainda não possui áudio de Narração.',
+  },
+  narration_not_recorded: {
+    titulo: 'Apenas gravações de microfone podem ser aparadas com VAD.',
+  },
+  narration_align_failed: {
+    titulo: 'Não foi possível alinhar a Narração com o texto do Roteiro.',
+  },
+  narration_cleanup_failed: {
+    titulo: 'Não foi possível preparar a limpeza de voz sem o FFmpeg funcionando.',
+    recuperacao: { rotulo: 'Verificar FFmpeg', rota: '#/config/componentes' },
+  },
+  cleanup_not_applicable: {
+    titulo: 'A limpeza de voz só se aplica a Narração gravada ou importada.',
+  },
+  invalid_cleanup_state: {
+    titulo: 'A limpeza de voz só se aplica a Narração gravada ou importada.',
+  },
+  alignment_missing: {
+    titulo: 'Alinhe o áudio deste bloco antes de revisar o texto.',
+  },
+  invalid_review_choice: {
+    titulo: 'Escolha entre usar o texto do Roteiro ou o texto falado.',
+  },
+  tts_model_missing: {
+    titulo: 'Falta baixar o modelo de voz TTS deste idioma.',
+    recuperacao: { rotulo: 'Instalar modelo TTS', rota: '#/config/componentes', acao: 'instalar-componente' },
+  },
+  tts_model_unknown: {
+    titulo: 'Modelo de voz TTS desconhecido no catálogo.',
+  },
+  tts_model_language_mismatch: {
+    titulo: 'O modelo TTS selecionado não corresponde ao idioma do Roteiro.',
+  },
+  tts_voice_unknown: {
+    titulo: 'Voz de Narração desconhecida no catálogo.',
+  },
+  tts_voice_language_mismatch: {
+    titulo: 'A voz selecionada não é compatível com o idioma do Roteiro.',
+  },
+  tts_voice_unsupported: {
+    titulo: 'A voz selecionada não é compatível com o modelo TTS ativo.',
+  },
+  terms_acceptance_required: {
+    titulo: 'Confirme o termo de uso responsável antes de baixar o modelo de voz.',
+    recuperacao: { rotulo: 'Aceitar termos', acao: 'aceitar-termos' },
+  },
+  ffmpeg_missing: {
+    titulo: 'Instale o Componente FFmpeg para processar áudio, capa ou vídeo.',
+    recuperacao: { rotulo: 'Verificar FFmpeg', rota: '#/config/componentes', acao: 'instalar-componente' },
+  },
+  instant_out_of_cut: {
+    titulo: 'Escolha um momento dentro dos limites do Corte antes de salvar ou exportar a capa.',
+  },
+  no_instant: {
+    titulo: 'Escolha um momento dentro dos limites do Corte antes de exportar a capa.',
+  },
+  thumbnail_exists: {
+    titulo: 'Já existe um arquivo com esse nome na pasta escolhida. Escolha outro nome para não sobrescrever.',
+  },
+  thumbnail_destination: {
+    titulo: 'Escolha uma pasta existente e um nome de arquivo PNG válido.',
+  },
+  thumbnail_failed: {
+    titulo: 'Não foi possível extrair o quadro da capa.',
+  },
+  chapter_delimiters_missing: {
+    titulo: 'Os marcadores de capítulos foram removidos da descrição. Nada foi alterado para preservar seu texto.',
+  },
+  chapters_require_transformed: {
+    titulo: 'Capítulos automáticos existem apenas para Vídeo transformado.',
+  },
+  chapters_unavailable: {
+    titulo: 'Capítulos automáticos exigem Vídeo transformado com Roteiro aprovado, Narração pronta e ao menos 3 blocos de 10 s.',
+  },
+  narration_required: {
+    titulo: 'Gere ou grave a Narração dos blocos antes de atualizar os capítulos.',
+  },
+  too_few_chapters: {
+    titulo: 'O YouTube exige pelo menos 3 capítulos com duração mínima de 10 s cada.',
   },
 }
 
