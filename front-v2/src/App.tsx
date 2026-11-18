@@ -16,6 +16,7 @@ import { ConfigExportacao } from '~/telas/config/ConfigExportacao'
 import { ConfigProjeto } from '~/telas/config/ConfigProjeto'
 import { ConfigProvedores } from '~/telas/config/ConfigProvedores'
 import { ConfiguracoesLayout } from '~/telas/config/ConfiguracoesLayout'
+import { Revisao } from '~/telas/cortes/Revisao'
 import { Selecao } from '~/telas/cortes/Selecao'
 import { DetalheFonte } from '~/telas/fontes/DetalheFonte'
 import { Fontes } from '~/telas/fontes/Fontes'
@@ -263,6 +264,20 @@ function AppRoteado({
           fonteParam={rota.fonte}
           runParam={rota.run}
           revParam={rota.rev}
+        />
+      </Shell>
+    )
+  }
+
+  if (rota.tela === 'revisao') {
+    return (
+      <Shell rota={rota} projeto={projeto} somenteLocal={somenteLocal}>
+        <Revisao
+          projetoId={rota.projeto}
+          projetoPath={projeto?.path ?? null}
+          runParam={rota.run}
+          revParam={rota.rev}
+          corteParam={rota.corte}
         />
       </Shell>
     )
