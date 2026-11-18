@@ -479,4 +479,85 @@ describe('Tela Assistente de Primeiro Uso (#/assistente)', () => {
       expect(window.location.hash).toBe('#/inicio')
     })
   })
+
+  it('UI-03: Passo 2 inicia consentimento de cada CLI desmarcado e exige marcação antes de concluir', async () => {
+    const user = userEvent.setup()
+    mockPasso2({
+      detect: {
+        ollama: { found: false, endpoint: null, models: [] },
+        lmStudio: { found: false, endpoint: null, models: [] },
+        llamaCpp: { found: false, endpoint: null, models: [] },
+        codex: { found: true },
+        claude: { found: true },
+        opencode: { found: true },
+      },
+    })
+
+    render(envolver(<Assistente passo={2} />))
+
+    const radioCodex = await screen.findByRole('radio', { name: /Codex CLI/i })
+    expect(radioCodex).toHaveAttribute('aria-checked', 'true')
+    expect(
+      screen.getByRole('checkbox', { name: /Concordo em enviar apenas texto de transcrições pela Codex CLI/i }),
+    ).not.toBeChecked()
+    expect(screen.getByRole('button', { name: /Concluir configuração/i })).toBeDisabled()
+
+    await user.click(screen.getByRole('radio', { name: /Claude Code CLI/i }))
+    expect(
+      screen.getByRole('checkbox', { name: /Concordo em enviar apenas texto de transcrições pela Claude Code CLI/i }),
+    ).not.toBeChecked()
+    expect(screen.getByRole('button', { name: /Concluir configuração/i })).toBeDisabled()
+
+    await user.click(screen.getByRole('radio', { name: /OpenCode CLI/i }))
+    const checkOpencode = screen.getByRole('checkbox', {
+      name: /Concordo em enviar apenas texto de transcrições pela OpenCode CLI/i,
+    })
+    expect(checkOpencode).not.toBeChecked()
+    expect(screen.getByRole('button', { name: /Concluir configuração/i })).toBeDisabled()
+
+    expect(chamarMock).not.toHaveBeenCalledWith('provider.cli.configure', expect.anything())
+    expect(chamarMock).not.toHaveBeenCalledWith('provider.cli.confirm', expect.anything())
+    expect(chamarMock).not.toHaveBeenCalledWith('provider.test', expect.anything())
+    expect(chamarMock).not.toHaveBeenCalledWith('assistant.default.set', expect.anything())
+
+    await user.click(checkOpencode)
+    const btnConcluir = screen.getByRole('button', { name: /Concluir configuração/i })
+    expect(btnConcluir).toBeEnabled()
+
+    await user.click(btnConcluir)
+    await waitFor(() => {
+      expect(chamarMock).toHaveBeenCalledWith('provider.cli.configure', expect.objectContaining({ kind: 'opencode' }))
+      expect(chamarMock).toHaveBeenCalledWith('provider.cli.confirm', { kind: 'opencode' })
+      expect(chamarMock).toHaveBeenCalledWith('assistant.default.set', { choice: 'opencode' })
+    })
+  })
+
+  it('UI-05: preserva retorno=config entre passos 1 e 2 e volta para #/config/provedores ao concluir ou pular', async () => {
+    const user = userEvent.setup()
+    window.location.hash = '#/assistente?passo=1&retorno=config'
+    mockPasso1({ ffmpegInstalled: true })
+
+    const { rerender } = render(envolver(<Assistente passo={1} />))
+    await user.click(await screen.findByRole('button', { name: /Próximo: Provedor de IA/i }))
+    expect(window.location.hash).toBe('#/assistente?passo=2&retorno=config')
+
+    mockPasso2()
+    rerender(envolver(<Assistente passo={2} />))
+    await screen.findByRole('radio', { name: /Ollama/i })
+
+    await user.click(screen.getByRole('button', { name: /Voltar/i }))
+    expect(window.location.hash).toBe('#/assistente?passo=1&retorno=config')
+
+    window.location.hash = '#/assistente?passo=2&retorno=config'
+    await user.click(screen.getByRole('button', { name: /Concluir configuração/i }))
+    await waitFor(() => {
+      expect(window.location.hash).toBe('#/config/provedores')
+    })
+
+    window.location.hash = '#/assistente?passo=2&retorno=config'
+    await user.click(screen.getByRole('button', { name: /Pular por enquanto/i }))
+    await waitFor(() => {
+      expect(window.location.hash).toBe('#/config/provedores')
+    })
+  })
 })

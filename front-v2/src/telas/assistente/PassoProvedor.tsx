@@ -110,11 +110,7 @@ export function PassoProvedor({ aoVoltar, aoConcluir, aoPular, pulando }: PassoP
   const [selecionada, setSelecionada] = useState<OpcaoProvedor['id']>('api')
 
   const [modeloPorServidor, setModeloPorServidor] = useState<Record<string, string>>({})
-  const [cliConsentido, setCliConsentido] = useState<Record<string, boolean>>({
-    codex: true,
-    claude: true,
-    opencode: true,
-  })
+  const [cliConsentido, setCliConsentido] = useState<Record<string, boolean>>({})
   const [modeloOpencode, setModeloOpencode] = useState('opencode/big-pickle')
 
   const [presetApi, setPresetApi] = useState<PresetApi>('openai')
@@ -241,6 +237,12 @@ export function PassoProvedor({ aoVoltar, aoConcluir, aoPular, pulando }: PassoP
     }
 
     if (atual.tipo === 'cli') {
+      if (!cliConsentido[atual.id]) {
+        throw new ErroCore(
+          'confirmation_required',
+          'Confirme o consentimento de envio pela CLI antes de continuar.',
+        )
+      }
       await chamar('provider.cli.configure', {
         kind: atual.id,
         ...(atual.id === 'opencode' ? { model: modeloOpencode.trim() } : {}),
@@ -250,6 +252,12 @@ export function PassoProvedor({ aoVoltar, aoConcluir, aoPular, pulando }: PassoP
     }
 
     // tipo === 'api'
+    if (!consentimentoApi) {
+      throw new ErroCore(
+        'confirmation_required',
+        'Confirme o consentimento de envio remoto antes de continuar.',
+      )
+    }
     const profileId = `api-${presetApi}`
     const kind = PRESETS_API[presetApi].kind
     await chamar('provider.configure', {
@@ -485,8 +493,8 @@ export function PassoProvedor({ aoVoltar, aoConcluir, aoPular, pulando }: PassoP
                       }
                       className="text-pequeno"
                     >
-                      Concordo em enviar apenas texto de transcrições pela CLI (consome cota do
-                      plano)
+                      Concordo em enviar apenas texto de transcrições pela {opcao.rotulo} (consome
+                      cota do seu plano)
                     </Checkbox>
                   </div>
                 )}

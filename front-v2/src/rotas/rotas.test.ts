@@ -15,9 +15,15 @@ describe('resolver rotas', () => {
     expect(resolver('#/inicio', semProjeto)).toEqual({ rota: { tela: 'inicio' } })
   })
 
-  it('resolve #/assistente com passo padrão 1 ou explícito 2', () => {
+  it('resolve #/assistente com passo padrão 1 ou explícito 2 e retorno opcional', () => {
     expect(resolver('#/assistente', semProjeto)).toEqual({ rota: { tela: 'assistente', passo: 1 } })
     expect(resolver('#/assistente?passo=2', semProjeto)).toEqual({ rota: { tela: 'assistente', passo: 2 } })
+    expect(resolver('#/assistente?passo=1&retorno=config', semProjeto)).toEqual({
+      rota: { tela: 'assistente', passo: 1, retorno: 'config' },
+    })
+    expect(resolver('#/assistente?passo=2&retorno=config', semProjeto)).toEqual({
+      rota: { tela: 'assistente', passo: 2, retorno: 'config' },
+    })
   })
 
   it('bloqueia rotas de Projeto quando não há Projeto aberto ou é outro Projeto', () => {
@@ -113,6 +119,8 @@ describe('resolver rotas', () => {
       '#/inicio',
       '#/assistente',
       '#/assistente?passo=2',
+      '#/assistente?passo=1&retorno=config',
+      '#/assistente?passo=2&retorno=config',
       '#/projeto',
       '#/projeto/canal',
       '#/projeto/canal/desconhecido',
