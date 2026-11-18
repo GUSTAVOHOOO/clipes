@@ -11,6 +11,7 @@ import { Shell, useProjetoAtual, type ProjetoAtual } from '~/shell/Shell'
 import { Assistente } from '~/telas/assistente/Assistente'
 import { ConfigAparencia } from '~/telas/config/ConfigAparencia'
 import { ConfigCustos } from '~/telas/config/ConfigCustos'
+import { ConfigProjeto } from '~/telas/config/ConfigProjeto'
 import { ConfigProvedores } from '~/telas/config/ConfigProvedores'
 import { ConfiguracoesLayout } from '~/telas/config/ConfiguracoesLayout'
 import { Inicio } from '~/telas/inicio/Inicio'
@@ -215,6 +216,8 @@ function AppRoteado({
         <ConfigCustos projetoAberto={projetoAberto} />
       ) : rota.secao === 'aparencia' ? (
         <ConfigAparencia projetoAberto={projetoAberto} />
+      ) : rota.secao === 'projeto' ? (
+        <ConfigProjeto projetoAberto={projetoAberto} projeto={projeto} />
       ) : (
         <ConfiguracoesLayout
           secao={rota.secao}

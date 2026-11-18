@@ -280,6 +280,18 @@ let priceOverrides: { provider: string; model: string; inputPerMillion: number; 
 let assistantTouched = false;
 let assistantMock = { completed: !assistantTestInit, skipped: false, needsSetup: assistantTestInit, default: '', tasks: { selection: '', packaging: '', script: '', translation: '' } as Record<string, string>, localOnly: { selection: false, packaging: false, script: false, translation: false } as Record<string, boolean> };
 let projectVetoMock = false;
+type BackupMockItem = { id: string; created_at: number; before_restore: boolean };
+let backupSeqMock = 1;
+const backupSettingsMock = {
+  interval_seconds: 1800,
+  copies: 10,
+  default_interval_seconds: 1800,
+  default_copies: 10,
+};
+let backupsMock: BackupMockItem[] = [
+  { id: 'backup-20261117-193000.sqlite', created_at: 1794943800, before_restore: false },
+  { id: 'before-restore-20261117-184500.sqlite', created_at: 1794941100, before_restore: true },
+];
 let channelProfileMock = {
   videoKind: 'direct',
   language: 'pt',
@@ -729,8 +741,63 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       jobItems = jobItems.map(item => item.id === id ? {...item, state: name === 'jobs.retry' ? 'queued' : 'cancelled'} : item);
       return null as T;
     }
-    if (sourceTest && name === 'backups.list') return [] as T;
-    if (sourceTest && name === 'backups.settings.get') return { interval_seconds: 1800, copies: 10 } as T;
+    if (name === 'backups.list') {
+      if (!getActiveProjectMock()) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
+      if (readEstadoParam() === 'vazio') return [] as T;
+      return backupsMock.map((b) => ({ ...b })) as T;
+    }
+    if (name === 'backups.settings.get') {
+      const active = getActiveProjectMock();
+      if (!active) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
+      const warning = active.warning
+        ? { code: 'backup_failed', message: active.warning }
+        : hasSearchFlag('backup-warning') || readEstadoParam() === 'parcial'
+          ? { code: 'backup_failed', message: 'O último backup automático falhou por espaço ou permissão.' }
+          : null;
+      return { ...backupSettingsMock, warning } as T;
+    }
+    if (name === 'backups.settings.set') {
+      if (!getActiveProjectMock()) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
+      const a = args as { interval_seconds?: unknown; copies?: unknown };
+      const interval = typeof a.interval_seconds === 'number' ? a.interval_seconds : NaN;
+      const copies = typeof a.copies === 'number' ? a.copies : NaN;
+      if (!Number.isInteger(interval) || interval <= 0 || !Number.isInteger(copies) || copies <= 0) {
+        throw { code: 'backup_settings', message: 'Informe intervalo e número de cópias inteiros maiores que zero.' };
+      }
+      backupSettingsMock.interval_seconds = interval;
+      backupSettingsMock.copies = copies;
+      return null as T;
+    }
+    if (name === 'backups.create') {
+      if (!getActiveProjectMock()) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
+      const now = Math.floor(Date.now() / 1000);
+      const seq = String(backupSeqMock++).padStart(4, '0');
+      const novo: BackupMockItem = {
+        id: `backup-20261118-${now}-${seq}.sqlite`,
+        created_at: now,
+        before_restore: false,
+      };
+      backupsMock = [novo, ...backupsMock].slice(0, Math.max(1, backupSettingsMock.copies));
+      return null as T;
+    }
+    if (name === 'backups.restore') {
+      const active = getActiveProjectMock();
+      if (!active) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
+      if (hasSearchFlag('project-busy') || (activeMockJobs.get(active.id)?.size ?? 0) > 0) {
+        throw { code: 'project_busy', message: 'Há uma tarefa ativa bloqueando esta operação no Projeto.' };
+      }
+      const id = (args as { id?: unknown }).id;
+      if (typeof id !== 'string' || !backupsMock.some((b) => b.id === id)) {
+        throw { code: 'backup_invalid', message: 'Este arquivo de backup está corrompido ou é incompatível.' };
+      }
+      const now = Math.floor(Date.now() / 1000);
+      const seq = String(backupSeqMock++).padStart(4, '0');
+      backupsMock = [
+        { id: `before-restore-20261118-${now}-${seq}.sqlite`, created_at: now, before_restore: true },
+        ...backupsMock,
+      ];
+      return null as T;
+    }
     if (name === 'sources.url.settings.get') return urlSettingsMock as T;
     if (name === 'sources.url.settings.set') { urlSettingsMock = {...urlSettingsMock, ...(args as typeof urlSettingsMock)}; return urlSettingsMock as T; }
     if (sourceTest && name === 'sources.list') return sourceItems as T;
