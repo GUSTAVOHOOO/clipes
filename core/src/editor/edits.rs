@@ -814,17 +814,88 @@ fn snapshots(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     load(&mut s, id)?;
     projects::with_reader(|c| {
         let mut q = c.prepare(
-            "SELECT document FROM clip_snapshots WHERE clip_id=?1 ORDER BY id DESC LIMIT 20",
+            "SELECT id, document FROM clip_snapshots WHERE clip_id=?1 ORDER BY id DESC LIMIT 20",
         )?;
-        let docs = q
-            .query_map([id], |r| r.get::<_, String>(0))?
+        let rows = q
+            .query_map([id], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(docs)
+        Ok(rows)
     })?
     .into_iter()
-    .map(|s| decode(&s).and_then(|d| serde_json::to_value(d).map_err(|_| invalid())))
-    .collect::<Result<Vec<_>, _>>()
+    .map(|(snapshot_id, s)| {
+        let doc = decode(&s)?;
+        let mut value = serde_json::to_value(doc).map_err(|_| invalid())?;
+        if let Some(obj) = value.as_object_mut() {
+            obj.insert("snapshot_id".into(), json!(snapshot_id));
+        }
+        Ok(value)
+    })
+    .collect::<Result<Vec<_>, CoreError>>()
     .map(Value::from)
+}
+fn snapshot_missing() -> CoreError {
+    error(
+        "snapshot_missing",
+        "Snapshot não encontrado para este Corte.",
+    )
+}
+fn restore_clip_id(v: &Value) -> Result<i64, CoreError> {
+    let id_field = v.get("id").filter(|val| !val.is_null());
+    let clip_id_field = v.get("clip_id").filter(|val| !val.is_null());
+    match (id_field, clip_id_field) {
+        (Some(a), Some(b)) => {
+            let a = a.as_i64().ok_or_else(invalid)?;
+            let b = b.as_i64().ok_or_else(invalid)?;
+            if a != b {
+                return Err(invalid());
+            }
+            Ok(a)
+        }
+        (Some(a), None) => a.as_i64().ok_or_else(invalid),
+        (None, Some(b)) => b.as_i64().ok_or_else(invalid),
+        (None, None) => Err(invalid()),
+    }
+}
+fn snapshots_restore(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let clip_id = restore_clip_id(&v)?;
+    let snapshot_id = v
+        .get("snapshot_id")
+        .and_then(Value::as_i64)
+        .ok_or_else(snapshot_missing)?;
+    let mut s = lock()?;
+    let entry = load(&mut s, clip_id)?;
+    let encoded: Option<String> = projects::with_reader(|c| {
+        c.query_row(
+            "SELECT document FROM clip_snapshots WHERE id=?1 AND clip_id=?2",
+            (snapshot_id, clip_id),
+            |r| r.get(0),
+        )
+        .optional()
+    })?;
+    let encoded = encoded.ok_or_else(snapshot_missing)?;
+    let snap_doc = decode(&encoded)?;
+    if snap_doc.original.source_id != entry.doc.original.source_id
+        || snap_doc.original.candidate_id != entry.doc.original.candidate_id
+    {
+        return Err(invalid());
+    }
+    validate(&snap_doc, &snap_doc.range)?;
+    validate_silences(&snap_doc.range, snap_doc.silences.as_ref())?;
+    if entry.doc.revision == u64::MAX {
+        return Err(invalid());
+    }
+    push_history(entry);
+    entry.doc.range = snap_doc.range;
+    entry.doc.silences = snap_doc.silences;
+    entry.doc.crop = snap_doc.crop;
+    entry.doc.narration_starts = snap_doc.narration_starts;
+    entry.doc.soundtrack = snap_doc.soundtrack;
+    entry.doc.sfx = snap_doc.sfx;
+    if entry.doc.revision <= snap_doc.revision {
+        entry.doc.revision = snap_doc.revision.saturating_add(1);
+    }
+    start_autosave();
+    Ok(answer(clip_id, &entry.doc))
 }
 fn clip_words(source_id: i64, start_us: i64, end_us: i64) -> Result<Vec<(i64, i64)>, CoreError> {
     let transcript = sentences::source_transcript(&json!({"source_id": source_id}))?;
@@ -1713,6 +1784,7 @@ inventory::submit! {CommandRegistration {name:"editor.undo",execute:undo}}
 inventory::submit! {CommandRegistration {name:"editor.redo",execute:redo}}
 inventory::submit! {CommandRegistration {name:"editor.flush",execute:flush}}
 inventory::submit! {CommandRegistration {name:"editor.snapshots",execute:snapshots}}
+inventory::submit! {CommandRegistration {name:"editor.snapshots.restore",execute:snapshots_restore}}
 inventory::submit! {CommandRegistration {name:"editor.silences.detect",execute:silences_detect}}
 inventory::submit! {CommandRegistration {name:"editor.silences.toggle",execute:silences_toggle}}
 inventory::submit! {CommandRegistration {name:"editor.silences.revert_all",execute:silences_revert_all}}
