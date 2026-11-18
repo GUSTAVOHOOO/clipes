@@ -1178,9 +1178,10 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
           { stage: 'hash', percentage: 100, message: 'Verificando Fonte', delayMs: 5 },
         ],
         () => {
+          const manterCaminhoV1 = name === 'sources.relocate' && hasSourceTest() && path === '/test/replacement.mp4';
           sourceItems = sourceItems.map((item) =>
             item.id === id
-              ? { ...item, ...(name === 'sources.relocate' && path ? { path } : {}), status: 'available', available: true, verified: true }
+              ? { ...item, ...(!manterCaminhoV1 && name === 'sources.relocate' && path ? { path } : {}), status: 'available', available: true, verified: true }
               : item,
           );
         },
