@@ -1,4 +1,3 @@
-import fs from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 
 declare const process: { env: Record<string, string | undefined> }
@@ -350,7 +349,6 @@ test.describe('Avaliação UI independente — Onda 3 (Seleção e Bancada de Re
     page,
   }, testInfo) => {
     test.setTimeout(150_000)
-    fs.mkdirSync(CAPTURAS_DIR, { recursive: true })
 
     // Controlador leve apenas para segurar timers curtos de mock (15-35ms) ao capturar estados "running"
     await page.addInitScript(() => {
@@ -834,8 +832,6 @@ test.describe('Avaliação UI independente — Onda 3 (Seleção e Bancada de Re
       null,
       2,
     )
-    fs.mkdirSync('test-results', { recursive: true })
-    fs.writeFileSync('test-results/ui-onda3-audit.json', jsonRelatorio, 'utf-8')
     await testInfo.attach('ui-onda3-audit.json', {
       body: jsonRelatorio,
       contentType: 'application/json',
