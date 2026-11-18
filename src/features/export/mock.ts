@@ -15,8 +15,62 @@ let batchSerial = 6400;
 const jobs = new Map<number, Mock>();
 const batches = new Map<number, BatchMock>();
 // Encoder do #62: o mock imita o cache do núcleo (lista que passou no teste e troca manual).
-const encoder = { detected: false, passed: ['h264_nvenc', 'libx264'], manual: null as string | null };
-const encoderView = () => ({ ffmpeg: true, detected: encoder.detected, stale: false, passed: encoder.detected ? encoder.passed : [], selected: 'h264_nvenc', manual: encoder.manual, effective: encoder.detected ? encoder.manual ?? 'h264_nvenc' : 'libx264' });
+const encoder = {
+  detected: false,
+  staleCleared: false,
+  passed: ['h264_nvenc', 'libx264'],
+  manual: null as string | null,
+  gpu: 'NVIDIA GeForce RTX 3050 Laptop GPU',
+  detectedAt: null as number | null,
+};
+function readExportEstado(): string | null {
+  if (typeof location === 'undefined') return null;
+  const hash = location.hash ?? '';
+  const qIdx = hash.indexOf('?');
+  if (qIdx >= 0) {
+    const v = new URLSearchParams(hash.slice(qIdx + 1)).get('estado');
+    if (v) return v;
+  }
+  return new URLSearchParams(location.search).get('estado');
+}
+function hasExportFlag(flag: string): boolean {
+  if (typeof location === 'undefined') return false;
+  if (new URLSearchParams(location.search).has(flag)) return true;
+  const hash = location.hash ?? '';
+  const qIdx = hash.indexOf('?');
+  return qIdx >= 0 && new URLSearchParams(hash.slice(qIdx + 1)).has(flag);
+}
+const encoderView = () => {
+  const estado = readExportEstado();
+  const noFfmpeg = estado === 'erro' || hasExportFlag('components-missing') || hasExportFlag('encoder-no-ffmpeg');
+  if (noFfmpeg) {
+    return {
+      ffmpeg: false,
+      detected: false,
+      stale: false,
+      passed: [],
+      selected: 'libx264',
+      manual: null,
+      effective: 'libx264',
+      gpu: '',
+      detected_at: null,
+    };
+  }
+  const stale = !encoder.staleCleared && (estado === 'parcial' || hasExportFlag('encoder-stale'));
+  const detected = stale ? false : encoder.detected;
+  const temCache = detected || stale;
+  return {
+    ffmpeg: true,
+    detected,
+    stale,
+    passed: temCache ? encoder.passed : [],
+    selected: temCache ? 'h264_nvenc' : 'libx264',
+    manual: encoder.manual,
+    effective: temCache ? encoder.manual ?? 'h264_nvenc' : 'libx264',
+    gpu: temCache ? encoder.gpu : '',
+    detected_at: stale ? 1794942840 : encoder.detectedAt,
+  };
+};
 function batchView(b: BatchMock) {
   if (b.state === 'running') {
     const elapsed = Date.now() - b.started;
@@ -78,8 +132,24 @@ export function exportMock(
 ): unknown {
   const a = args as { job?: number; id?: number; output?: string; start_id?: number; end_id?: number; source_id?: number; output_dir?: string; confirmed?: boolean };
   if (name === 'export.encoder.status') return encoderView();
-  if (name === 'export.encoder.detect') { encoder.detected = true; return encoderView(); }
-  if (name === 'export.encoder.set') { encoder.manual = (args as { encoder: string | null }).encoder; return encoderView(); }
+  if (name === 'export.encoder.detect') {
+    if (!encoderView().ffmpeg) {
+      throw { code: 'component_missing', message: 'FFmpeg ou FFprobe ausente.' };
+    }
+    encoder.detected = true;
+    encoder.staleCleared = true;
+    encoder.detectedAt = Math.floor(Date.now() / 1000);
+    return encoderView();
+  }
+  if (name === 'export.encoder.set') {
+    const view = encoderView();
+    const choice = (args as { encoder?: string | null }).encoder;
+    if ((!view.detected && !view.stale) || (choice !== null && (typeof choice !== 'string' || !view.passed.includes(choice)))) {
+      throw { code: 'encoder_invalid', message: 'Escolha um encoder da lista que passou no teste.' };
+    }
+    encoder.manual = choice;
+    return encoderView();
+  }
   if (name === 'export.settings') return { last_directory: '/test/exports' };
   if (name === 'export.batch.start') {
     const params = new URLSearchParams(location.search);

@@ -10,7 +10,9 @@ import { ComEstado, useEstadoForcado } from '~/shell/EstadoForcado'
 import { Shell, useProjetoAtual, type ProjetoAtual } from '~/shell/Shell'
 import { Assistente } from '~/telas/assistente/Assistente'
 import { ConfigAparencia } from '~/telas/config/ConfigAparencia'
+import { ConfigComponentes } from '~/telas/config/ConfigComponentes'
 import { ConfigCustos } from '~/telas/config/ConfigCustos'
+import { ConfigExportacao } from '~/telas/config/ConfigExportacao'
 import { ConfigProjeto } from '~/telas/config/ConfigProjeto'
 import { ConfigProvedores } from '~/telas/config/ConfigProvedores'
 import { ConfiguracoesLayout } from '~/telas/config/ConfiguracoesLayout'
@@ -214,6 +216,10 @@ function AppRoteado({
         <ConfigProvedores projetoAberto={projetoAberto} />
       ) : rota.secao === 'custos' ? (
         <ConfigCustos projetoAberto={projetoAberto} />
+      ) : rota.secao === 'componentes' ? (
+        <ConfigComponentes projetoAberto={projetoAberto} />
+      ) : rota.secao === 'exportacao' ? (
+        <ConfigExportacao projetoAberto={projetoAberto} />
       ) : rota.secao === 'aparencia' ? (
         <ConfigAparencia projetoAberto={projetoAberto} />
       ) : rota.secao === 'projeto' ? (
