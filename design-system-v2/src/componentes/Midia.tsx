@@ -1,7 +1,7 @@
 // Mídia: <PlayerProxy> (quadro 9:16 com legenda), <Transporte>, <TimelineEditor> compacta
 // e <BarraAcoes> (5 ações que abrem popovers ao lado do vídeo; Ctrl+] reabre o último).
 import { Popover as P } from '@base-ui/react/popover'
-import { FileQuestion, Pause, Play, Plus, SkipBack, SkipForward, Volume2, VolumeX, X } from 'lucide-react'
+import { FileQuestion, Film, Pause, Play, Plus, SkipBack, SkipForward, Volume2, VolumeX, X } from 'lucide-react'
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import { cn } from '@/lib/cn'
 import { tc } from '@/lib/formato'
@@ -36,10 +36,28 @@ export interface PlayerProxyProps {
 /** O vídeo é o conteúdo: quadro preto, cantos de 6 px, legenda com a cor do vídeo (não do app). */
 export function PlayerProxy({ fonteDisponivel, poster, modo, enquadramento = 'preencher', legenda, refQuadro, aoPedirRelocalizacao, className }: PlayerProxyProps) {
   const proporcao = modo === 'fonte_16_9' ? 'aspect-video' : 'aspect-[9/16]'
+  const [imagemFalhou, setImagemFalhou] = useState(false)
+
+  useEffect(() => {
+    setImagemFalhou(false)
+  }, [poster])
+
   return (
     <div ref={refQuadro} className={cn('relative overflow-hidden rounded-area bg-preto', proporcao, className)}>
       {fonteDisponivel && poster ? (
-        <img src={poster} alt="Quadro do Corte" className={cn('block h-full w-full', enquadramento === 'ajustar' ? 'object-contain' : 'object-cover')} />
+        imagemFalhou ? (
+          <div role="img" aria-label="Quadro do Corte" className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center">
+            <Film className="size-6 stroke-[1.5] text-t3" aria-hidden />
+            <span className="text-pequeno text-t3">Prévia indisponível</span>
+          </div>
+        ) : (
+          <img
+            src={poster}
+            alt="Quadro do Corte"
+            onError={() => setImagemFalhou(true)}
+            className={cn('block h-full w-full', enquadramento === 'ajustar' ? 'object-contain' : 'object-cover')}
+          />
+        )
       ) : (
         <div className="flex h-full flex-col items-center justify-center gap-3 p-4 text-center">
           <FileQuestion className="size-5 stroke-[1.5] text-t3" aria-hidden />
@@ -87,6 +105,10 @@ type TransporteProps = {
   duracaoUs: number
   reproduzindo: boolean
   mudo?: boolean
+  compacto?: boolean
+  atalhoReproduzir?: string | null
+  atalhoEntrada?: string | null
+  atalhoSaida?: string | null
   aoAlternar: () => void
   aoInicio?: () => void
   aoFim?: () => void
@@ -96,29 +118,66 @@ type TransporteProps = {
   className?: string
 }
 
-export function Transporte({ tempoUs, duracaoUs, reproduzindo, mudo, aoAlternar, aoInicio, aoFim, aoMarcarEntrada, aoMarcarSaida, aoAlternarMudo, className }: TransporteProps) {
+export function Transporte({
+  tempoUs,
+  duracaoUs,
+  reproduzindo,
+  mudo,
+  compacto = false,
+  atalhoReproduzir,
+  atalhoEntrada,
+  atalhoSaida,
+  aoAlternar,
+  aoInicio,
+  aoFim,
+  aoMarcarEntrada,
+  aoMarcarSaida,
+  aoAlternarMudo,
+  className,
+}: TransporteProps) {
+  const tam = compacto ? 'p' : 'm'
+  const kbdReproduzir = atalhoReproduzir === undefined ? 'Espaço' : atalhoReproduzir || undefined
+  const kbdEntrada = atalhoEntrada === undefined ? 'I' : atalhoEntrada || undefined
+  const kbdSaida = atalhoSaida === undefined ? 'O' : atalhoSaida || undefined
+
   return (
-    <div role="toolbar" aria-label="Controles de reprodução" onKeyDown={rovingSetas} className={cn('flex h-(--altura-barra) items-center gap-1 rounded-area bg-area px-2', className)}>
-      <BotaoIcone rotulo="Ir para Entrada" onClick={aoInicio}>
+    <div
+      role="toolbar"
+      aria-label="Controles de reprodução"
+      onKeyDown={rovingSetas}
+      className={cn(
+        'flex h-(--altura-barra) items-center rounded-area bg-area',
+        compacto ? 'gap-0.5 px-1.5' : 'gap-1 px-2',
+        className,
+      )}
+    >
+      <BotaoIcone tamanho={tam} rotulo="Ir para Entrada" onClick={aoInicio}>
         <SkipBack />
       </BotaoIcone>
-      <BotaoIcone rotulo={reproduzindo ? 'Pausar' : 'Reproduzir'} atalho="Espaço" onClick={aoAlternar} tabIndex={-1}>
+      <BotaoIcone tamanho={tam} rotulo={reproduzindo ? 'Pausar' : 'Reproduzir'} atalho={kbdReproduzir} onClick={aoAlternar} tabIndex={-1}>
         {reproduzindo ? <Pause /> : <Play />}
       </BotaoIcone>
-      <BotaoIcone rotulo="Ir para Saída" onClick={aoFim} tabIndex={-1}>
+      <BotaoIcone tamanho={tam} rotulo="Ir para Saída" onClick={aoFim} tabIndex={-1}>
         <SkipForward />
       </BotaoIcone>
-      <span className="num px-2 text-pequeno text-t2" aria-label={`Posição ${tc(tempoUs)} de ${tc(duracaoUs)}`}>
+      <span
+        className={cn('num shrink-0 whitespace-nowrap text-pequeno text-t2', compacto ? 'px-1' : 'px-2')}
+        aria-label={`Posição ${tc(tempoUs)} de ${tc(duracaoUs)}`}
+      >
         {tc(tempoUs)} <span className="text-t3">/ {tc(duracaoUs)}</span>
       </span>
-      <span aria-hidden className="mx-0.5 h-3.5 w-px bg-linha" />
-      <BotaoIcone rotulo="Definir Entrada" atalho="I" onClick={aoMarcarEntrada} tabIndex={-1}>
-        <span className="num text-base">I</span>
-      </BotaoIcone>
-      <BotaoIcone rotulo="Definir Saída" atalho="O" onClick={aoMarcarSaida} tabIndex={-1}>
-        <span className="num text-base">O</span>
-      </BotaoIcone>
-      <BotaoIcone rotulo={mudo ? 'Ligar áudio' : 'Silenciar'} onClick={aoAlternarMudo} tabIndex={-1} aria-pressed={!!mudo}>
+      <span aria-hidden className="mx-0.5 h-3.5 w-px shrink-0 bg-linha" />
+      {aoMarcarEntrada && (
+        <BotaoIcone tamanho={tam} rotulo="Definir Entrada" atalho={kbdEntrada} onClick={aoMarcarEntrada} tabIndex={-1}>
+          <span className="num text-base">I</span>
+        </BotaoIcone>
+      )}
+      {aoMarcarSaida && (
+        <BotaoIcone tamanho={tam} rotulo="Definir Saída" atalho={kbdSaida} onClick={aoMarcarSaida} tabIndex={-1}>
+          <span className="num text-base">O</span>
+        </BotaoIcone>
+      )}
+      <BotaoIcone tamanho={tam} rotulo={mudo ? 'Ligar áudio' : 'Silenciar'} onClick={aoAlternarMudo} tabIndex={-1} aria-pressed={!!mudo}>
         {mudo ? <VolumeX /> : <Volume2 />}
       </BotaoIcone>
     </div>

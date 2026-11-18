@@ -21,9 +21,11 @@ import {
 } from '@ds'
 import { AlertTriangle, Check, FileQuestion, MessageSquare, Sparkles, X } from 'lucide-react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { formatarTecla, resolverTeclaExibida } from '~/comandos/atalhos'
 import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useFila } from '~/core/progresso'
+import { usePreferencias } from '~/preferencias/preferencias'
 import type { FonteProjeto } from '~/stores/fontesProjeto'
 import type { ResumoRunSelecao } from '~/stores/selecaoProjeto'
 import type { CandidatoLista, ChatPicoCandidato } from '~/telas/cortes/ListaCandidatos'
@@ -213,6 +215,12 @@ function formatarPicoChat(pico: ChatPicoCandidato): string {
   return `chat ${razao}× acima do normal${reacao ? ` · ${reacao}` : ''} · ${tcLongo(pico.atUs)}`
 }
 
+function formatarPerfilCandidato(profile: string): string {
+  const limpo = profile.trim()
+  if (!limpo || limpo === 'legacy') return 'Perfil configurado'
+  return limpo
+}
+
 /** Coluna direita da Bancada de Revisão (C.2): PlayerProxy 9:16, Nota explicável, ±1 Frase e Guardrails. */
 export function DetalheCandidato({
   projetoId,
@@ -233,8 +241,20 @@ export function DetalheCandidato({
   className,
 }: DetalheCandidatoProps) {
   const jobsFila = useFila()
+  const [preferencias] = usePreferencias()
   const idMotivoAbrir = useId()
   const idDicaDireto = useId()
+
+  const teclaExibida = useCallback(
+    (idAtalho: string, padrao: string, teclaUnica = true) => {
+      const base = Object.hasOwn(preferencias.atalhos, idAtalho)
+        ? preferencias.atalhos[idAtalho]
+        : padrao
+      const efetiva = resolverTeclaExibida(base, preferencias.modoTeclasUnicas, teclaUnica)
+      return efetiva ? formatarTecla(efetiva) : undefined
+    },
+    [preferencias.atalhos, preferencias.modoTeclasUnicas],
+  )
 
   const [proxyState, setProxyState] = useState<EstadoProxyLocal>(ESTADO_PROXY_INICIAL)
   const [proxyTentativa, setProxyTentativa] = useState(0)
@@ -273,7 +293,10 @@ export function DetalheCandidato({
   const [ackEmCurso, setAckEmCurso] = useState(false)
 
   const ultimoCandidatoSolicitadoRef = useRef<number | null>(null)
-  const statusConsultadoParaKeyRef = useRef<string | null>(null)
+  const jobsFilaRef = useRef(jobsFila)
+  jobsFilaRef.current = jobsFila
+  const filaInicioProxyRef = useRef<typeof jobsFila | null>(null)
+  const ultimaFilaStatusRef = useRef<typeof jobsFila | null>(null)
 
   const fonteDisponivel = Boolean(fonte && fonte.status === 'available')
   const duracaoCorteUs = candidato ? Math.max(0, candidato.endUs - candidato.startUs) : 0
@@ -322,7 +345,8 @@ export function DetalheCandidato({
 
     let cancelado = false
     ultimoCandidatoSolicitadoRef.current = candidato.id
-    statusConsultadoParaKeyRef.current = null
+    filaInicioProxyRef.current = jobsFilaRef.current
+    ultimaFilaStatusRef.current = null
     setProxyState({ ...ESTADO_PROXY_INICIAL, status: 'queued' })
 
     void chamar<ProxyResposta>('proxy.request', {
@@ -363,6 +387,8 @@ export function DetalheCandidato({
           })
           return
         }
+        filaInicioProxyRef.current = jobsFilaRef.current
+        ultimaFilaStatusRef.current = null
         setProxyState({
           status: res.state === 'queued' ? 'queued' : 'running',
           key: res.key,
@@ -398,6 +424,7 @@ export function DetalheCandidato({
   useEffect(() => {
     if (!jobProxyAtivo) return
     if (proxyState.status !== 'queued' && proxyState.status !== 'running') return
+    if (jobsFila === filaInicioProxyRef.current) return
 
     if (jobProxyAtivo.estado === 'falhou') {
       setProxyState((prev) => ({
@@ -412,29 +439,50 @@ export function DetalheCandidato({
     }
 
     if (jobProxyAtivo.estado === 'concluido' && proxyState.key) {
-      if (statusConsultadoParaKeyRef.current === proxyState.key) return
-      statusConsultadoParaKeyRef.current = proxyState.key
-      void chamar<ProxyResposta>('proxy.status', { key: proxyState.key })
+      if (ultimaFilaStatusRef.current === jobsFila) return
+      ultimaFilaStatusRef.current = jobsFila
+      const chaveConsultada = proxyState.key
+      void chamar<ProxyResposta>('proxy.status', { key: chaveConsultada })
         .then((res) => {
-          setProxyState((prev) => ({
-            ...prev,
-            status: res.state === 'failed' ? 'error' : 'ready',
-            progress: res.state === 'failed' ? prev.progress : 100,
-            erro:
-              res.state === 'failed'
-                ? new ErroCore(res.error ?? 'desconhecido', 'Falha ao concluir preview.')
-                : null,
-          }))
+          setProxyState((prev) => {
+            if (prev.key !== chaveConsultada) return prev
+            if (prev.status !== 'queued' && prev.status !== 'running') return prev
+            if (res.state === 'ready') {
+              return {
+                ...prev,
+                status: 'ready',
+                progress: 100,
+                erro: null,
+              }
+            }
+            if (res.state === 'failed') {
+              return {
+                ...prev,
+                status: 'error',
+                erro: new ErroCore(res.error ?? 'desconhecido', 'Falha ao concluir preview.'),
+              }
+            }
+            return {
+              ...prev,
+              status: res.state === 'queued' ? 'queued' : 'running',
+              progress: res.progress ?? prev.progress,
+              erro: null,
+            }
+          })
         })
         .catch((err) => {
-          setProxyState((prev) => ({
-            ...prev,
-            status: 'error',
-            erro: paraErroCore(err),
-          }))
+          setProxyState((prev) => {
+            if (prev.key !== chaveConsultada) return prev
+            if (prev.status !== 'queued' && prev.status !== 'running') return prev
+            return {
+              ...prev,
+              status: 'error',
+              erro: paraErroCore(err),
+            }
+          })
         })
     }
-  }, [jobProxyAtivo, proxyState.key, proxyState.status])
+  }, [jobsFila, jobProxyAtivo, proxyState.key, proxyState.status])
 
   // Carrega guardrails (e angles.get se transformed) apenas quando aprovado
   useEffect(() => {
@@ -644,22 +692,34 @@ export function DetalheCandidato({
     endEarlier: true,
     endLater: true,
   }
-  const progressoProxy = jobProxyAtivo ? jobProxyAtivo.percentual : proxyState.progress
+  const progressoProxy =
+    jobProxyAtivo && jobProxyAtivo.estado === 'rodando'
+      ? jobProxyAtivo.percentual
+      : proxyState.progress
   const codigoErroProxy = proxyState.erro?.code ?? ''
   const erroOffline = codigoErroProxy === 'source_offline' || codigoErroProxy === 'source_changed'
   const erroComponente =
     codigoErroProxy === 'component_missing' || codigoErroProxy === 'ffprobe_missing'
   const erroFaixaGuardrails = erroGuardrails ?? erroAngulos
 
+  const atalhoAprovar = teclaExibida('revisao.aprovar', 'A', true)
+  const atalhoRejeitar = teclaExibida('revisao.rejeitar', 'R', true)
+  const atalhoInicio = teclaExibida('revisao.bordaInicio', 'I', true)
+  const atalhoInicioAvancar = teclaExibida('revisao.bordaInicioAvancar', 'Shift+I', true)
+  const atalhoFim = teclaExibida('revisao.bordaFim', 'O', true)
+  const atalhoFimAvancar = teclaExibida('revisao.bordaFimAvancar', 'Shift+O', true)
+  const atalhoEspaco = teclaExibida('transporte.reproduzir', 'Espaço', true)
+  const atalhoAbrirEditor = teclaExibida('revisao.abrirEditor', 'Enter', false)
+
   return (
     <section
       aria-label="Detalhe do Corte"
-      className={cn('flex min-h-0 min-w-0 flex-col gap-5 overflow-y-auto pt-2 pr-1 pb-4', className)}
+      className={cn('flex min-h-0 min-w-0 flex-col gap-4 overflow-y-auto pt-2 pr-1 pb-4', className)}
     >
       {/* Grade superior: Preview 9:16 + Transporte à esquerda | Metadados, Nota, Eixos e Chat à direita */}
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[clamp(204px,28vh,250px)_1fr]">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[clamp(228px,30vh,260px)_1fr]">
         <div
-          className="flex w-[clamp(204px,28vh,250px)] shrink-0 flex-col gap-2"
+          className="flex w-[clamp(228px,30vh,260px)] shrink-0 flex-col gap-2"
           onKeyDown={(e) => {
             if (desabilitarAtalhosLocais) return
             if ((e.target as HTMLElement).closest('input, textarea, [role="dialog"]')) return
@@ -773,15 +833,15 @@ export function DetalheCandidato({
           )}
 
           <Transporte
+            compacto
             tempoUs={tempoAtualUs}
             duracaoUs={duracaoCorteUs}
             reproduzindo={reproduzindo}
             mudo={mudo}
+            atalhoReproduzir={atalhoEspaco ?? null}
             aoAlternar={() => setReproduzindo((v) => !v)}
             aoInicio={() => setTempoAtualUs(0)}
             aoFim={() => setTempoAtualUs(duracaoCorteUs)}
-            aoMarcarEntrada={() => void aoAjustar(candidato.id, 'start', -1)}
-            aoMarcarSaida={() => void aoAjustar(candidato.id, 'end', -1)}
             aoAlternarMudo={() => setMudo((v) => !v)}
             className="w-full justify-between"
           />
@@ -796,23 +856,23 @@ export function DetalheCandidato({
             <SeloTipoVideo tipo={run.videoKind} />
             <span aria-hidden>·</span>
             <span>
-              Gerado por {candidato.profile} · revisão {candidato.revision}
+              Gerado por {formatarPerfilCandidato(candidato.profile)} · revisão {candidato.revision}
               {candidato.windows.length > 0 && (
                 <> · Janelas {candidato.windows.map((w) => w + 1).join(', ')}</>
               )}
             </span>
             {run.videoKind === 'direct' && (
               <Dica texto="A conversão individual para Vídeo transformado ainda não está disponível nesta versão.">
-                <span tabIndex={0} className="inline-flex" aria-describedby={idDicaDireto}>
-                  <Botao
-                    tamanho="p"
-                    variante="fantasma"
-                    icone={<Sparkles />}
-                    disabled
-                  >
-                    Converter em Vídeo transformado
-                  </Botao>
-                </span>
+                <Botao
+                  tamanho="p"
+                  variante="fantasma"
+                  icone={<Sparkles />}
+                  aria-disabled="true"
+                  aria-describedby={idDicaDireto}
+                  className="pointer-events-auto!"
+                >
+                  Converter em Vídeo transformado
+                </Botao>
               </Dica>
             )}
           </div>
@@ -864,7 +924,7 @@ export function DetalheCandidato({
             <Botao
               tamanho="p"
               variante="suave"
-              aria-label="Recuar início 1 Frase (I)"
+              aria-label={atalhoInicio ? `Recuar início 1 Frase (${atalhoInicio})` : 'Recuar início 1 Frase'}
               disabled={!moves.startEarlier || ocupadoAjuste}
               onClick={() => void aoAjustar(candidato.id, 'start', -1)}
             >
@@ -873,13 +933,17 @@ export function DetalheCandidato({
             <Botao
               tamanho="p"
               variante="suave"
-              aria-label="Avançar início 1 Frase (Shift+I)"
+              aria-label={
+                atalhoInicioAvancar
+                  ? `Avançar início 1 Frase (${atalhoInicioAvancar})`
+                  : 'Avançar início 1 Frase'
+              }
               disabled={!moves.startLater || ocupadoAjuste}
               onClick={() => void aoAjustar(candidato.id, 'start', 1)}
             >
               +1 Frase
             </Botao>
-            <Kbd>I</Kbd>
+            {atalhoInicio && <Kbd>{atalhoInicio}</Kbd>}
           </span>
           <span className="min-w-0 truncate text-pequeno text-t3" title={candidato.startText}>
             {candidato.startText}
@@ -897,7 +961,7 @@ export function DetalheCandidato({
             <Botao
               tamanho="p"
               variante="suave"
-              aria-label="Recuar fim 1 Frase (O)"
+              aria-label={atalhoFim ? `Recuar fim 1 Frase (${atalhoFim})` : 'Recuar fim 1 Frase'}
               disabled={!moves.endEarlier || ocupadoAjuste}
               onClick={() => void aoAjustar(candidato.id, 'end', -1)}
             >
@@ -906,13 +970,15 @@ export function DetalheCandidato({
             <Botao
               tamanho="p"
               variante="suave"
-              aria-label="Avançar fim 1 Frase (Shift+O)"
+              aria-label={
+                atalhoFimAvancar ? `Avançar fim 1 Frase (${atalhoFimAvancar})` : 'Avançar fim 1 Frase'
+              }
               disabled={!moves.endLater || ocupadoAjuste}
               onClick={() => void aoAjustar(candidato.id, 'end', 1)}
             >
               +1 Frase
             </Botao>
-            <Kbd>O</Kbd>
+            {atalhoFim && <Kbd>{atalhoFim}</Kbd>}
           </span>
           <span className="min-w-0 truncate text-pequeno text-t3" title={candidato.endText}>
             {candidato.endText}
@@ -937,7 +1003,7 @@ export function DetalheCandidato({
         <Botao
           variante={aprovado ? 'secundario' : 'primario'}
           icone={<Check />}
-          atalho="A"
+          atalho={atalhoAprovar}
           aria-pressed={aprovado}
           onClick={() => void aoDecidir(candidato.id, 'approved')}
         >
@@ -946,7 +1012,7 @@ export function DetalheCandidato({
         <Botao
           variante="secundario"
           icone={<X />}
-          atalho="R"
+          atalho={atalhoRejeitar}
           aria-pressed={rejeitado}
           onClick={() => void aoDecidir(candidato.id, 'rejected')}
         >
@@ -954,7 +1020,7 @@ export function DetalheCandidato({
         </Botao>
         <Botao
           variante={aprovado ? 'primario' : 'fantasma'}
-          atalho="Enter"
+          atalho={atalhoAbrirEditor}
           disabled={!aprovado}
           aria-describedby={!aprovado ? idMotivoAbrir : undefined}
           onClick={() => aoAbrirEditor(candidato.id)}

@@ -551,7 +551,7 @@ describe('Bancada de Revisão de Cortes (#/projeto/:id/cortes/revisao/:runId)', 
 
     // Botão Refazer bloqueado quando há janela uncertain e sem expor ticket (UI-12)
     const btnRefazer = screen.getByRole('button', { name: /Refazer com outro Perfil/i })
-    expect(btnRefazer).toBeDisabled()
+    expect(btnRefazer).toHaveAttribute('aria-disabled', 'true')
     const textoSemRunId = (document.body.textContent ?? '').replace(/Execução\s+#\d+/g, '')
     expect(textoSemRunId).not.toMatch(/#\d+/)
 
@@ -699,7 +699,7 @@ describe('Bancada de Revisão de Cortes (#/projeto/:id/cortes/revisao/:runId)', 
     })
     expect(await screen.findByRole('heading', { level: 2, name: 'Sem título' })).toBeInTheDocument()
     expect(screen.getByText(/0 aprovados · 1 rejeitados · 2 pendentes/i)).toBeInTheDocument()
-    expect(btnDesfazer).toBeDisabled()
+    expect(btnDesfazer).toHaveAttribute('aria-disabled', 'true')
   })
 
   it('alterna Revisão da execução (?rev=:n) chamando selection.get + selection.review e abre <SeletorPerfilRedo>', async () => {
@@ -936,5 +936,110 @@ describe('Bancada de Revisão de Cortes (#/projeto/:id/cortes/revisao/:runId)', 
     })
     fireEvent.keyDown(window, { key: 'Enter' })
     expect(window.location.hash).toBe('#/projeto/demo/corte/201/editar?run=1')
+  })
+
+  it('UI-31a: não exibe banner de redo quando há job ai:selection rodando de outro run ou janela cancelada', async () => {
+    mockRevisaoBase()
+
+    render(
+      envolver(
+        <Revisao
+          projetoId="demo"
+          projetoPath="/projetos/Demo.clipes"
+          runParam="1"
+          storeFontes={storeFontes}
+          fila={filaTeste}
+        />,
+      ),
+    )
+
+    expect(await screen.findByRole('heading', { level: 1, name: /Execução #1/i })).toBeInTheDocument()
+
+    // Job de seleção de OUTRO run (Run #2, window jobId 99 e selection-2) rodando na Fila global
+    act(() => {
+      filaTeste.aplicar({
+        job: '99',
+        project: 'demo',
+        stage: 'ai:selection:call',
+        percentage: 10,
+        message: 'Consultando Provedor',
+        error: null,
+      })
+      filaTeste.aplicar({
+        job: 'selection-2',
+        project: 'demo',
+        stage: 'selection:window',
+        percentage: 50,
+        message: 'Janela da seleção 2',
+        error: null,
+      })
+    })
+
+    expect(
+      screen.queryByText(/Gerando nova revisão da execução em segundo plano/i),
+    ).not.toBeInTheDocument()
+  })
+
+  it('UI-32b: substitui <span tabIndex={0}> por aria-disabled="true" direto nos botões Desfazer e Refazer bloqueados', async () => {
+    const user = userEvent.setup()
+    mockRevisaoBase({
+      'selection.get': () => ({
+        run: criarRunBase({ state: 'partial' }),
+        windows: criarJanelasPadrao(true),
+        candidates: criarCandidatosPadrao(2),
+      }),
+      'selection.review': () => ({
+        run: 1,
+        items: criarItensRevisaoPadrao(2),
+        canUndo: false,
+      }),
+    })
+
+    const { container } = render(
+      envolver(
+        <Revisao
+          projetoId="demo"
+          projetoPath="/projetos/Demo.clipes"
+          runParam="1"
+          storeFontes={storeFontes}
+          fila={filaTeste}
+        />,
+      ),
+    )
+
+    expect(await screen.findByRole('heading', { level: 1, name: /Execução #1/i })).toBeInTheDocument()
+    expect(container.querySelector('span[tabindex="0"]')).toBeNull()
+
+    const btnDesfazer = screen.getByRole('button', { name: /Desfazer/i })
+    const btnRefazer = screen.getByRole('button', { name: /Refazer com outro Perfil/i })
+    expect(btnDesfazer).toHaveAttribute('aria-disabled', 'true')
+    expect(btnDesfazer).not.toBeDisabled()
+    expect(btnRefazer).toHaveAttribute('aria-disabled', 'true')
+    expect(btnRefazer).not.toBeDisabled()
+
+    await user.click(btnDesfazer)
+    await user.click(btnRefazer)
+    expect(chamarMock).not.toHaveBeenCalledWith('selection.undo', expect.anything())
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('UI-33c: mantém o sub-cabeçalho compacto sem rótulo "Revisão:" redundante e com flex-nowrap a partir de 1280px', async () => {
+    mockRevisaoBase()
+
+    render(
+      envolver(
+        <Revisao
+          projetoId="demo"
+          projetoPath="/projetos/Demo.clipes"
+          runParam="1"
+          storeFontes={storeFontes}
+          fila={filaTeste}
+        />,
+      ),
+    )
+
+    const nav = await screen.findByRole('navigation', { name: /Controles da revisão/i })
+    expect(nav.className).toContain('min-[1280px]:flex-nowrap')
+    expect(within(nav).queryByText('Revisão:')).not.toBeInTheDocument()
   })
 })
