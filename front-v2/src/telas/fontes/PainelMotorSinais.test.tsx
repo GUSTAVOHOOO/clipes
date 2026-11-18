@@ -307,11 +307,11 @@ describe('<PainelMotorSinais>', () => {
         tentativas += 1
         const a = args as { replace_confirmed?: boolean }
         if (!a.replace_confirmed) {
-          const err = new ErroCore('engine_change_confirmation', 'Confirme troca de motor') as ErroCore & {
-            usage?: unknown
-          }
-          err.usage = { blocks: 2, paid_audio_us: 600_000_000, paid_usd: 0.01 }
-          throw err
+          throw new ErroCore('engine_change_confirmation', 'Confirme troca de motor', {
+            blocks: 2,
+            paid_audio_us: 600_000_000,
+            paid_usd: 0.01,
+          })
         }
         return { transcript_id: 4, state: 'running', job_id: 99, warnings: [] }
       },

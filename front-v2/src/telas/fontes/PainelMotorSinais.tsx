@@ -105,8 +105,6 @@ type ChatStatus = {
   job: { id: number; state: string; progress: number } | null
 }
 
-type ErroComUsage = ErroCore & { usage?: unknown }
-
 type ConfirmacaoMotor =
   | {
       tipo: 'replace'
@@ -127,16 +125,14 @@ type ConfirmacaoMotor =
 
 const BLOCO_PADRAO_US = 600_000_000
 
-function normalizarErro(err: unknown): ErroComUsage {
-  if (err instanceof ErroCore) return err as ErroComUsage
+function normalizarErro(err: unknown): ErroCore {
+  if (err instanceof ErroCore) return err
   if (err && typeof err === 'object' && 'code' in err) {
-    const e = err as { code?: unknown; message?: unknown; usage?: unknown }
-    const out = new ErroCore(
+    const e = err as { code?: unknown; message?: unknown }
+    return new ErroCore(
       typeof e.code === 'string' && e.code ? e.code : 'desconhecido',
       typeof e.message === 'string' ? e.message : '',
-    ) as ErroComUsage
-    if ('usage' in e) out.usage = e.usage
-    return out
+    )
   }
   return new ErroCore('desconhecido', err instanceof Error ? err.message : String(err ?? ''))
 }
@@ -228,7 +224,7 @@ export function PainelMotorSinais({
   const [iniciando, setIniciando] = useState(false)
   const [cancelandoJob, setCancelandoJob] = useState(false)
   const [avisoGpuFallback, setAvisoGpuFallback] = useState(false)
-  const [erroLocal, setErroLocal] = useState<ErroComUsage | null>(null)
+  const [erroLocal, setErroLocal] = useState<ErroCore | null>(null)
   const [confirmacao, setConfirmacao] = useState<ConfirmacaoMotor | null>(null)
   const [confirmandoDialogo, setConfirmandoDialogo] = useState(false)
 
