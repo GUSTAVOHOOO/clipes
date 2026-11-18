@@ -617,4 +617,40 @@ describe('Tela Assistente de Primeiro Uso (#/assistente)', () => {
     expect(dica).toBeInTheDocument()
     expect(screen.queryByText(/#[0-9]{3}/)).not.toBeInTheDocument()
   })
+
+  it('UI-20: botão Mostrar/Ocultar chave usa BotaoIcone de 28 px (h-7 w-7) com Dica e alterna visibilidade', async () => {
+    const user = userEvent.setup()
+    mockPasso2({
+      detect: {
+        ollama: { found: false, endpoint: null, models: [] },
+        lmStudio: { found: false, endpoint: null, models: [] },
+        llamaCpp: { found: false, endpoint: null, models: [] },
+        codex: { found: false },
+        claude: { found: false },
+        opencode: { found: false },
+      },
+    })
+
+    render(envolver(<Assistente passo={2} />))
+
+    const campoChave = await screen.findByLabelText('Chave de API')
+    expect(campoChave).toHaveAttribute('type', 'password')
+
+    const btnMostrar = screen.getByRole('button', { name: 'Mostrar chave' })
+    expect(btnMostrar.className).toContain('h-7')
+    expect(btnMostrar.className).toContain('w-7')
+    expect(btnMostrar.className).not.toContain('h-6')
+
+    await user.hover(btnMostrar)
+    expect(await screen.findByText('Mostrar chave')).toBeInTheDocument()
+
+    await user.click(btnMostrar)
+    expect(campoChave).toHaveAttribute('type', 'text')
+    const btnOcultar = screen.getByRole('button', { name: 'Ocultar chave' })
+    expect(btnOcultar).toBeInTheDocument()
+
+    await user.click(btnOcultar)
+    expect(campoChave).toHaveAttribute('type', 'password')
+    expect(screen.getByRole('button', { name: 'Mostrar chave' })).toBeInTheDocument()
+  })
 })
