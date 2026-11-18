@@ -28,6 +28,16 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Causa:** para ler arquivos, o Antigravity tenta usar o shell, e o modo headless não consegue pedir a permissão, então nega em silêncio.
 - **Ação:** no primeiro prompt, escreva "não use shell; use só a ferramenta nativa de leitura de arquivo". Quando a resposta vier vazia, confira `denied_actions` antes de concluir que deu falha de cota ou de ambiente. Para retomar a mesma sessão, use `agy --conversation <uuid>`. Não use `--dangerously-skip-permissions` em tarefa de leitura.
 
+### Worker Antigravity para no meio do turno com `UNAUTHENTICATED (code 401)`
+- **Sintoma:** o terminal do worker mostra `UNAUTHENTICATED (code 401): Request is missing required authentication credential` e o Orca avisa `Worker stopped without reporting`. O trabalho local (commits e arquivos alterados) fica no worktree.
+- **Causa:** falha intermitente na renovação da credencial do Google usada pelo Antigravity. Uma chamada logo depois (`agy --mode plan --print "Responda só com a palavra OK." --output-format json`) responde normalmente.
+- **Ação:** confira o worktree (`git status`, `git log origin/master..HEAD`) e retome o worker com `orca orchestration send --to dispatch:<id>`, dizendo onde ele parou. Só trate como impedimento de login se a chamada de teste também falhar.
+
+### Porta 1430 ocupada por outro worktree (Playwright do front-v2)
+- **Sintoma:** `bunx playwright test` em `front-v2/` testa as telas de outro worktree ou falha porque a porta 1430 já está em uso.
+- **Causa:** `front-v2/vite.config.ts` usa `port: 1430` com `strictPort`, e `front-v2/playwright.config.ts` reaproveita o servidor existente fora do CI. Dois worktrees não rodam o Playwright local ao mesmo tempo.
+- **Ação:** nunca encerre o Vite de outro worktree. Faça o push e use os jobs `e2e` do CI como critério; rode o Playwright local quando `Get-NetTCPConnection -LocalPort 1430` voltar vazio.
+
 ### Decisão que não está no ticket nem nos ADRs
 - **Ação:** o worker pergunta via `ask`; o coordenador leva ao dev e não decide sozinho. A resposta vira registro no PR (ADR curto ou seção de doc).
 - **Já decidido:** o seam do núcleo usa um crate Rust sem Tauri, registro de comandos por módulo com `inventory`, despacho único (nome + JSON) para UI e harness, `ProgressEvent` tipado e `core::process::spawn` sem shell (PR #86). O identificador do app é `io.github.gustavohooo.clipes`.
@@ -50,6 +60,11 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Sintoma:** Playwright encontra dois botões com o mesmo nome após fechar um diálogo Foco.
 - **Causa:** a animação de saída ainda mantém o botão do diálogo na árvore enquanto o teste tenta abrir o próximo diálogo.
 - **Ação:** aguarde o diálogo anterior ficar oculto e restrinja o seletor de abertura à seção que contém o botão.
+
+### `toHaveFocus` falha de vez em quando no Vitest do front-v2 (#395)
+- **Sintoma:** `expect(element).toHaveFocus()` recebe o botão que abriu o diálogo em vez do botão inicial do `ConfirmDialog`. Passa com o arquivo isolado e falha na suíte completa ou no CI.
+- **Causa:** o gerenciador de foco do base-ui aplica o foco inicial de forma assíncrona (microtarefa e `requestAnimationFrame`).
+- **Ação:** depois de abrir diálogo ou popover, ou de navegar, use `await waitFor(() => expect(el).toHaveFocus())`, com a mesma asserção e sem aumentar o timeout. Foco síncrono (logo depois de `user.tab()`) não precisa.
 
 ### Testes com biblioteca e fontes de momentos diferentes após merge
 - **Sintoma:** um `cargo test --workspace` iniciado antes do merge falha com `Invalid provider type` num teste de Ollama adicionado pelo merge, embora o código atual aceite esse tipo.
