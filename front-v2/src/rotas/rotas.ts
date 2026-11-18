@@ -10,7 +10,7 @@ export type Rota =
   | { tela: 'inicio' }
   | { tela: 'assistente'; passo: 1 | 2 }
   | { tela: 'fontes'; projeto: string; sub: 'fontes' | 'lotes' }
-  | { tela: 'fonte'; projeto: string; fonte: string }
+  | { tela: 'fonte'; projeto: string; fonte: string; frase?: number; row?: number }
   | { tela: 'cortes'; projeto: string; fonte?: string; run?: string; rev?: number }
   | { tela: 'revisao'; projeto: string; run: string; rev?: number; corte?: string }
   | { tela: 'corte'; projeto: string; corte: string; aba: 'editar' | 'transformar' | 'empacotar'; run?: string }
@@ -81,7 +81,15 @@ function resolverProjeto(partes: string[], query: URLSearchParams, ctx: Contexto
       return { rota: { tela: 'fontes', projeto, sub } }
     }
     if (partes.length === 4) {
-      return { rota: { tela: 'fonte', projeto, fonte: decodificar(partes[3]) } }
+      return {
+        rota: semIndefinidos({
+          tela: 'fonte',
+          projeto,
+          fonte: decodificar(partes[3]),
+          frase: numeroOpcional(query.get('frase')),
+          row: numeroOpcional(query.get('row')),
+        }),
+      }
     }
     return { redirecionar: `#/projeto/${projetoEnc}/fontes` }
   }

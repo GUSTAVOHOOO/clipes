@@ -36,6 +36,15 @@ describe('resolver rotas', () => {
     expect(resolver('#/projeto/canal/fontes/f-1', comCanal)).toEqual({
       rota: { tela: 'fonte', projeto: 'canal', fonte: 'f-1' },
     })
+    expect(resolver('#/projeto/canal/fontes/1?frase=142&row=142', comCanal)).toEqual({
+      rota: { tela: 'fonte', projeto: 'canal', fonte: '1', frase: 142, row: 142 },
+    })
+    expect(resolver('#/projeto/canal/fontes/1?frase=0&row=0', comCanal)).toEqual({
+      rota: { tela: 'fonte', projeto: 'canal', fonte: '1', frase: 0, row: 0 },
+    })
+    expect(resolver('#/projeto/canal/fontes/1?frase=abc&row=nope', comCanal)).toEqual({
+      rota: { tela: 'fonte', projeto: 'canal', fonte: '1' },
+    })
   })
 
   it('resolve cortes e revisão de cortes com parâmetros de query', () => {

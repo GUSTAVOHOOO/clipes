@@ -1,9 +1,43 @@
 // Lote de Fontes simulado (#56) e orçamentos por escopo (`task` | `batch`, ADR-0009).
 const flag = (name: string) => typeof location !== 'undefined' && new URLSearchParams(location.search).has(name);
 
-type Item = { position: number; sourceId: number; name: string; state: string; error: string | null; progress: number | null; transcriptionJob: number | null; selectionRun: number | null };
-type Mock = { id: number; videoKind: string; paused: boolean; cancelled: boolean; cap: number | null; pause: string | null; spent: number; items: Item[] };
-let batch: Mock | null = null;
+export type BatchProgressEmitter = (evento: {
+  job: string;
+  project?: string | null;
+  stage: string;
+  percentage: number;
+  message: string;
+  error: { code: string; message: string } | null;
+}) => void;
+
+type Item = {
+  position: number;
+  sourceId: number;
+  name: string;
+  state: string;
+  error: string | null;
+  resetAtMs: number | null;
+  progress: number | null;
+  transcriptionJob: number | null;
+  selectionRun: number | null;
+};
+
+type Mock = {
+  id: number;
+  engine: string;
+  videoKind: string;
+  minUs: number | null;
+  maxUs: number | null;
+  paused: boolean;
+  cancelled: boolean;
+  cap: number | null;
+  pause: string | null;
+  spent: number;
+  items: Item[];
+};
+
+let nextBatchId = 1;
+const batchesList: Mock[] = [];
 
 export type BudgetMockEntry = {
   scope: 'task' | 'batch';
@@ -81,7 +115,12 @@ const budgets = new Map<string, BudgetMockEntry>([
   ],
 ]);
 
-const names: Record<number, string> = { 1: 'changed.mp4', 2: 'offline.mp4', 3: 'mismatch.mp4' };
+const names: Record<number, string> = {
+  1: 'changed.mp4',
+  2: 'offline.mp4',
+  3: 'mismatch.mp4',
+  4: 'Live_12_11_final.mp4',
+};
 
 function budgetFromBatch(b: Mock): BudgetMockEntry {
   return {
@@ -109,18 +148,38 @@ function budgetFromBatch(b: Mock): BudgetMockEntry {
 }
 
 function view(b: Mock) {
-  const count = (...states: string[]) => b.items.filter(i => states.includes(i.state)).length;
-  const status = b.cancelled ? 'cancelled'
-    : count('completed', 'cancelled') === b.items.length ? 'completed'
-    : b.paused ? 'paused'
-    : b.pause ? 'budget_paused'
-    : count('transcribing', 'selecting', 'pending') === 0 ? 'attention' : 'running';
+  const count = (...states: string[]) => b.items.filter((i) => states.includes(i.state)).length;
+  const status = b.cancelled
+    ? 'cancelled'
+    : count('completed', 'cancelled') === b.items.length
+      ? 'completed'
+      : b.paused
+        ? 'paused'
+        : b.pause
+          ? 'budget_paused'
+          : count('transcribing', 'selecting', 'pending') === 0
+            ? 'attention'
+            : 'running';
   return {
-    id: b.id, key: `sources-${b.id}`, state: b.cancelled ? 'cancelled' : b.paused ? 'paused' : 'running', status, engine: 'local', videoKind: b.videoKind, minUs: null, maxUs: null,
+    id: b.id,
+    key: `sources-${b.id}`,
+    state: b.cancelled ? 'cancelled' : b.paused ? 'paused' : status === 'completed' ? 'completed' : 'running',
+    status,
+    engine: b.engine,
+    videoKind: b.videoKind,
+    minUs: b.minUs,
+    maxUs: b.maxUs,
     pause: b.paused ? 'user' : b.pause,
-    budget: budgetFromBatch(b),
-    counts: { total: b.items.length, completed: count('completed'), paused: count('paused'), active: count('transcribing', 'selecting'), pending: count('pending'), cancelled: count('cancelled') },
-    items: b.items.map(i => ({ ...i, engine: 'local' })),
+    budget: budgets.get(`batch:sources-${b.id}`) ?? budgetFromBatch(b),
+    counts: {
+      total: b.items.length,
+      completed: count('completed'),
+      paused: count('paused'),
+      active: count('transcribing', 'selecting'),
+      pending: count('pending'),
+      cancelled: count('cancelled'),
+    },
+    items: b.items.map((i) => ({ ...i, engine: b.engine })),
   };
 }
 
@@ -140,7 +199,8 @@ function saveBudget(args: Record<string, unknown>, resume: boolean) {
     throw { code: 'invalid_budget', message: 'Orçamento inválido.' };
   }
   const mapKey = `${scope}:${key}`;
-  const prev = budgets.get(mapKey) ?? (scope === 'batch' && batch && key === `sources-${batch.id}` ? budgetFromBatch(batch) : null);
+  const matchingBatch = scope === 'batch' ? batchesList.find((b) => `sources-${b.id}` === key) : undefined;
+  const prev = budgets.get(mapKey) ?? (matchingBatch ? budgetFromBatch(matchingBatch) : null);
 
   const maxCalls = parseLimit(args.maxCalls, prev?.maxCalls ?? null);
   const maxTokens = parseLimit(args.maxTokens, prev?.maxTokens ?? null);
@@ -162,54 +222,264 @@ function saveBudget(args: Record<string, unknown>, resume: boolean) {
     maxCostMicroUsd,
     unknownConfirmed: confirmed,
     since: reset ? Date.now() * 1000 : (prev?.since ?? Date.now() * 1000),
-    usage: reset || !prev ? { calls: 0, inputTokens: 0, outputTokens: 0, microUsd: 0, audioMicroUsd: 0, unknownCostCalls: 0, planQuotaCalls: 0, durationMs: 0, costLabel: null } : { ...prev.usage },
+    usage:
+      reset || !prev
+        ? { calls: 0, inputTokens: 0, outputTokens: 0, microUsd: 0, audioMicroUsd: 0, unknownCostCalls: 0, planQuotaCalls: 0, durationMs: 0, costLabel: null }
+        : { ...prev.usage },
     paused: resume ? null : (prev?.paused ?? null),
   };
 
   budgets.set(mapKey, next);
 
-  if (scope === 'batch' && batch && key === `sources-${batch.id}`) {
-    batch.cap = maxCostMicroUsd;
-    if (resume) batch.pause = null;
+  if (matchingBatch) {
+    matchingBatch.cap = maxCostMicroUsd;
+    if (resume) matchingBatch.pause = null;
   }
 
   return { budgets: [next] };
 }
 
+function findBatch(id?: number): Mock | undefined {
+  if (typeof id === 'number') return batchesList.find((b) => b.id === id);
+  return batchesList[batchesList.length - 1];
+}
+
 /** `undefined` quando o comando não é do lote ou orçamento. */
-export function batchMockDispatch(name: string, args: object): unknown {
-  const a = args as { sourceIds?: number[]; engine?: string; videoKind?: string; confirmed?: boolean; maxCostMicroUsd?: number | null; sourceId?: number; scope?: string };
+export function batchMockDispatch(
+  name: string,
+  args: object,
+  emitProgress?: BatchProgressEmitter,
+  projectId: string | null = 'test-project',
+): unknown {
+  const a = args as {
+    id?: number;
+    sourceIds?: number[];
+    engine?: string;
+    videoKind?: string;
+    minUs?: number | null;
+    maxUs?: number | null;
+    confirmed?: boolean;
+    maxCostMicroUsd?: number | null;
+    sourceId?: number;
+    scope?: string;
+  };
   if (name === 'jobs.budget.get') {
     const lista = [...budgets.values()];
-    if (batch) {
-      const bKey = `batch:sources-${batch.id}`;
-      if (!budgets.has(bKey)) lista.push(budgetFromBatch(batch));
+    for (const b of batchesList) {
+      const bKey = `batch:sources-${b.id}`;
+      if (!budgets.has(bKey)) lista.push(budgetFromBatch(b));
     }
     return { budgets: lista };
   }
   if (name === 'jobs.budget.set') return saveBudget(args as Record<string, unknown>, false);
   if (name === 'jobs.budget.continue') return saveBudget(args as Record<string, unknown>, true);
+
+  const emit = (
+    b: Mock,
+    stage: string,
+    message: string,
+    error: { code: string; message: string } | null = null,
+  ) => {
+    emitProgress?.({
+      job: `batch-${b.id}`,
+      project: projectId,
+      stage,
+      percentage: 0,
+      message,
+      error,
+    });
+  };
+
   if (name === 'batches.create') {
-    if (flag('batch-paid') && !a.confirmed) throw { code: 'confirmation_required', message: 'confirmação obrigatória', usage: { selectionPaid: true, transcriptionPaid: a.engine === 'groq', audioEstimateMicroUsd: a.engine === 'groq' ? 12000 : null, profile: 'legacy', maxCostMicroUsd: a.maxCostMicroUsd ?? null, sources: a.sourceIds?.length ?? 0 } };
-    const ids = a.sourceIds ?? [];
-    batch = {
-      id: 1, videoKind: a.videoKind ?? 'direct', paused: false, cancelled: false, cap: a.maxCostMicroUsd ?? null, pause: flag('batch-unknown') ? 'cost_unknown' : null, spent: 1200,
-      items: ids.map((sourceId, position) => ({ position, sourceId, name: names[sourceId] ?? `live-${sourceId}.mp4`, state: position === 0 ? 'completed' : position === 1 ? 'paused' : 'selecting', error: position === 1 ? 'provider_http' : null, progress: position === 2 ? 40 : null, transcriptionJob: null, selectionRun: position + 1 })),
+    const uniqueIds = [...new Set(a.sourceIds ?? [])];
+    if (uniqueIds.length === 0 || uniqueIds.length > 500) {
+      throw { code: 'invalid_batch', message: 'Selecione entre 1 e 500 Fontes.' };
+    }
+    if (a.engine && a.engine !== 'local' && a.engine !== 'groq') {
+      throw { code: 'invalid_engine', message: 'Motor de transcrição inválido.' };
+    }
+    if (a.videoKind && a.videoKind !== 'direct' && a.videoKind !== 'transformed') {
+      throw { code: 'invalid_video_kind', message: 'Tipo de vídeo inválido.' };
+    }
+    if (
+      (a.minUs !== undefined && a.minUs !== null && a.minUs <= 0) ||
+      (a.maxUs !== undefined && a.maxUs !== null && a.minUs !== undefined && a.minUs !== null && a.maxUs <= a.minUs)
+    ) {
+      throw { code: 'invalid_batch', message: 'Faixa de duração inválida.' };
+    }
+    if (a.maxCostMicroUsd !== undefined && a.maxCostMicroUsd !== null && (!Number.isFinite(a.maxCostMicroUsd) || a.maxCostMicroUsd < 0)) {
+      throw { code: 'invalid_budget', message: 'Orçamento inválido.' };
+    }
+    const engine = a.engine ?? 'local';
+    if ((flag('batch-paid') || engine === 'groq') && !a.confirmed) {
+      throw {
+        code: 'confirmation_required',
+        message: 'confirmação obrigatória',
+        usage: {
+          selectionPaid: flag('batch-paid'),
+          transcriptionPaid: engine === 'groq',
+          audioEstimateMicroUsd: engine === 'groq' ? 12000 : null,
+          profile: 'legacy',
+          maxCostMicroUsd: a.maxCostMicroUsd ?? null,
+          sources: uniqueIds.length,
+        },
+      };
+    }
+
+    const id = nextBatchId++;
+    const items: Item[] = uniqueIds.map((sourceId, position) => {
+      if (position === 0) {
+        return {
+          position,
+          sourceId,
+          name: names[sourceId] ?? `live-${sourceId}.mp4`,
+          state: 'completed',
+          error: null,
+          resetAtMs: null,
+          progress: 100,
+          transcriptionJob: null,
+          selectionRun: position + 1,
+        };
+      }
+      if (position === 1) {
+        return {
+          position,
+          sourceId,
+          name: names[sourceId] ?? `live-${sourceId}.mp4`,
+          state: 'paused',
+          error: flag('batch-uncertain') ? 'timeout_uncertain' : 'provider_http',
+          resetAtMs: null,
+          progress: null,
+          transcriptionJob: null,
+          selectionRun: position + 1,
+        };
+      }
+      if (position === 2) {
+        return {
+          position,
+          sourceId,
+          name: names[sourceId] ?? `live-${sourceId}.mp4`,
+          state: 'selecting',
+          error: null,
+          resetAtMs: null,
+          progress: 40,
+          transcriptionJob: null,
+          selectionRun: position + 1,
+        };
+      }
+      if (position === 3) {
+        return {
+          position,
+          sourceId,
+          name: names[sourceId] ?? `live-${sourceId}.mp4`,
+          state: 'paused',
+          error: 'timeout_uncertain',
+          resetAtMs: null,
+          progress: null,
+          transcriptionJob: 200 + position,
+          selectionRun: position + 1,
+        };
+      }
+      return {
+        position,
+        sourceId,
+        name: names[sourceId] ?? `live-${sourceId}.mp4`,
+        state: 'pending',
+        error: null,
+        resetAtMs: null,
+        progress: 0,
+        transcriptionJob: null,
+        selectionRun: null,
+      };
+    });
+
+    const created: Mock = {
+      id,
+      engine,
+      videoKind: a.videoKind ?? 'direct',
+      minUs: a.minUs ?? null,
+      maxUs: a.maxUs ?? null,
+      paused: false,
+      cancelled: false,
+      cap: a.maxCostMicroUsd ?? null,
+      pause: flag('batch-unknown') ? 'cost_unknown' : null,
+      spent: 1200,
+      items,
     };
-    budgets.set(`batch:sources-${batch.id}`, budgetFromBatch(batch));
-    return view(batch);
+    batchesList.push(created);
+    budgets.set(`batch:sources-${created.id}`, budgetFromBatch(created));
+
+    emit(created, 'batch:created', 'Lote de Fontes criado');
+    emit(created, 'batch:item', 'Item do lote atualizado');
+    const pausedItem = items.find((i) => i.state === 'paused');
+    if (pausedItem && pausedItem.error) {
+      emit(created, 'batch:item-paused', 'Item pausado no lote', {
+        code: pausedItem.error,
+        message: pausedItem.error,
+      });
+    }
+    if (items.every((i) => i.state === 'completed' || i.state === 'cancelled')) {
+      emit(created, 'batch:completed', 'Lote concluído');
+    }
+
+    return view(created);
   }
-  if (name === 'batches.list') return batch ? [view(batch)] : [];
-  if (name === 'batches.get') return view(batch!);
-  if (name === 'batches.pause' && batch) { batch.paused = true; return view(batch); }
-  if (name === 'batches.resume' && batch) { batch.paused = false; return view(batch); }
-  if (name === 'batches.cancel' && batch) { batch.cancelled = true; batch.items = batch.items.map(i => i.state === 'completed' ? i : { ...i, state: 'cancelled' }); return view(batch); }
-  if (name === 'batches.item.resume' && batch) {
-    const item = batch.items.find(i => i.sourceId === a.sourceId);
-    if (item?.error === 'timeout_uncertain') throw { code: 'uncertain_job', message: 'incerto' };
-    if (flag('batch-paid') && !a.confirmed) throw { code: 'confirmation_required', message: 'confirmação obrigatória', usage: { estimate: { kind: 'usd', minMicroUsd: 1200, maxMicroUsd: 5400 } } };
-    if (item) { item.state = 'selecting'; item.error = null; item.progress = 10; }
-    return view(batch);
+  if (name === 'batches.list') return [...batchesList].reverse().map(view);
+  if (name === 'batches.get') {
+    const b = findBatch(a.id);
+    if (!b) throw { code: 'batch_not_found', message: 'Lote não encontrado.' };
+    return view(b);
+  }
+  if (name === 'batches.pause') {
+    const b = findBatch(a.id);
+    if (!b) throw { code: 'batch_not_found', message: 'Lote não encontrado.' };
+    if (b.cancelled) throw { code: 'invalid_batch_state', message: 'Lote já cancelado.' };
+    b.paused = true;
+    const budget = budgets.get(`batch:sources-${b.id}`) ?? budgetFromBatch(b);
+    budget.paused = 'user';
+    budgets.set(`batch:sources-${b.id}`, budget);
+    emit(b, 'batch:paused', 'Lote pausado');
+    return view(b);
+  }
+  if (name === 'batches.resume') {
+    const b = findBatch(a.id);
+    if (!b) throw { code: 'batch_not_found', message: 'Lote não encontrado.' };
+    if (b.cancelled) throw { code: 'invalid_batch_state', message: 'Lote já cancelado.' };
+    b.paused = false;
+    const budget = budgets.get(`batch:sources-${b.id}`) ?? budgetFromBatch(b);
+    budget.paused = b.pause;
+    budgets.set(`batch:sources-${b.id}`, budget);
+    emit(b, 'batch:resumed', 'Lote retomado');
+    return view(b);
+  }
+  if (name === 'batches.cancel') {
+    const b = findBatch(a.id);
+    if (!b) throw { code: 'batch_not_found', message: 'Lote não encontrado.' };
+    b.cancelled = true;
+    b.items = b.items.map((i) => (i.state === 'completed' ? i : { ...i, state: 'cancelled' }));
+    emit(b, 'batch:cancelled', 'Lote cancelado');
+    return view(b);
+  }
+  if (name === 'batches.item.resume') {
+    const b = findBatch(a.id);
+    if (!b) throw { code: 'batch_not_found', message: 'Lote não encontrado.' };
+    if (b.cancelled) throw { code: 'invalid_batch_state', message: 'Lote já cancelado.' };
+    const item = b.items.find((i) => i.sourceId === a.sourceId);
+    if (!item) throw { code: 'source_missing', message: 'Fonte não encontrada no lote.' };
+    if (item.state !== 'paused') throw { code: 'invalid_item_state', message: 'Item não está pausado.' };
+    if (item.error === 'timeout_uncertain') throw { code: 'uncertain_job', message: 'incerto' };
+    if ((flag('batch-paid') || b.engine === 'groq') && !a.confirmed) {
+      throw {
+        code: 'confirmation_required',
+        message: 'confirmação obrigatória',
+        usage: { estimate: { kind: 'usd', minMicroUsd: 1200, maxMicroUsd: 5400 } },
+      };
+    }
+    item.state = 'selecting';
+    item.error = null;
+    item.progress = 10;
+    emit(b, 'batch:item', 'Item retomado');
+    return view(b);
   }
   return undefined;
 }
