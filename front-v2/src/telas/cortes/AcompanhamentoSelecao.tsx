@@ -151,6 +151,18 @@ function traduzirSubestagio(etapa?: string): string | null {
   return null
 }
 
+function rotuloPerfilSelecao(
+  profileId: string | null | undefined,
+  perfis: readonly PerfilProvedorLista[],
+): string | null {
+  const limpo = profileId?.trim()
+  if (!limpo) return null
+  const encontrado = perfis.find((p) => p.id === limpo || p.label === limpo)
+  if (encontrado?.label) return encontrado.label
+  if (limpo.toLowerCase() === 'legacy') return 'Perfil configurado'
+  return limpo
+}
+
 function converterEstimativaParaDs(estimate: RespostaEstimativaResume['estimate']) {
   if (estimate.kind === 'usd') {
     return {
@@ -622,13 +634,17 @@ export function AcompanhamentoSelecao({
             {Math.max(0, totalJanelas - janelasConcluidas)} pendente(s).
           </p>
           {temIncerta ? (
-            /* Bloqueado enquanto existir janela incerta sem resolução na Fila (#290) */
+            /* Bloqueado enquanto existir janela incerta sem resolução na Fila */
             <Dica texto="Há janela incerta nesta execução; resolva na Fila antes de retomar.">
-              <span tabIndex={0} className="inline-flex">
-                <Botao tamanho="p" variante="secundario" disabled>
-                  Retomar janelas pendentes
-                </Botao>
-              </span>
+              <Botao
+                tamanho="p"
+                variante="secundario"
+                aria-disabled="true"
+                onClick={(e) => e.preventDefault()}
+                className="pointer-events-auto! cursor-not-allowed hover:bg-elevado"
+              >
+                Retomar janelas pendentes
+              </Botao>
             </Dica>
           ) : (
             janelasRetomaveis.length > 0 && (
@@ -657,7 +673,10 @@ export function AcompanhamentoSelecao({
           </div>
           <span className="num text-pequeno text-t3">
             Faixa: {duracao(runAtivo.minUs)} – {duracao(runAtivo.maxUs)}
-            {runAtivo.profile ? ` · Perfil base: ${runAtivo.profile}` : ''}
+            {(() => {
+              const perfilBase = rotuloPerfilSelecao(runAtivo.profile, perfis)
+              return perfilBase ? ` · Perfil base: ${perfilBase}` : ''
+            })()}
           </span>
         </div>
 
@@ -785,14 +804,14 @@ export function AcompanhamentoSelecao({
                 </div>
 
                 {erroJanela && (
-                  <p className="text-pequeno text-erro">
+                  <p className={w.state === 'cancelled' ? 'text-pequeno text-t3' : 'text-pequeno text-erro'}>
                     {erroJanela.titulo}
                     {horarioReset ? ` (retoma às ${horarioReset})` : ''}
                   </p>
                 )}
 
                 <div className="flex flex-wrap items-center justify-between gap-2 text-pequeno text-t3">
-                  <span>Perfil: {w.profile || runAtivo.profile || '—'}</span>
+                  <span>Perfil: {rotuloPerfilSelecao(w.profile || runAtivo.profile, perfis) ?? '—'}</span>
 
                   <div className="flex flex-wrap items-center gap-1.5">
                     {(w.state === 'failed' || w.state === 'cancelled') && (

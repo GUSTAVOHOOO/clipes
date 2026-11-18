@@ -457,7 +457,7 @@ test.describe('Avaliação UI independente — Onda 3 (Seleção e Bancada de Re
     await dlgConfirm.getByRole('button', { name: 'Cancelar' }).click()
     await expect(dlgConfirm).toBeHidden()
 
-    // 1440x900 + troca para Fonte offline.mp4 no Select (mostra aviso offline + 0 execuções)
+    // 1440x900 + troca para Fonte offline.mp4 no Select (mostra aviso offline + execução existente sem piscar semPerfilConfigurado)
     await page.setViewportSize({ width: 1440, height: 900 })
     const cols1440 = await page
       .locator('section[aria-label="Janelas de seleção"] ul[role="list"]')
@@ -467,7 +467,10 @@ test.describe('Avaliação UI independente — Onda 3 (Seleção e Bancada de Re
     await page.getByRole('combobox', { name: /Fonte transcrita/i }).click()
     await page.getByRole('option', { name: /offline\.mp4/i }).click()
     await expect(page.getByText('Fonte offline no disco')).toBeVisible()
-    await expect(page.getByText('Nenhuma seleção executada nesta Fonte')).toBeVisible()
+    await expect(page.getByRole('heading', { level: 2, name: /Execução #3/i })).toBeVisible()
+    await expect(
+      page.getByText(/Configure um Perfil de Provedor para selecionar Cortes/i),
+    ).toHaveCount(0)
     await salvarCaptura('04-selecao-fonte-offline-1440.png')
     relatorio.push(await auditarPagina(page, 'i-selecao-fonte-offline', '1440x900', 'padrao'))
 
@@ -517,7 +520,7 @@ test.describe('Avaliação UI independente — Onda 3 (Seleção e Bancada de Re
     await expect(bannerIncerta).toContainText(/Chamada paga incerta/i)
     const btnRetomar = page.getByRole('button', { name: 'Retomar janelas pendentes' })
     await expect(btnRetomar).toBeDisabled()
-    await btnRetomar.locator('..').hover()
+    await btnRetomar.hover()
     await expect(
       page.getByText(/Há janela incerta nesta execução; resolva na Fila antes de retomar\./i),
     ).toBeVisible()

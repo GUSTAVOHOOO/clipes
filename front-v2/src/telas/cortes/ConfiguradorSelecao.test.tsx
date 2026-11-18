@@ -591,4 +591,100 @@ describe('<ConfiguradorSelecao>', () => {
     expect(screen.getByRole('button', { name: /Configurar Provedores/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Selecionar Cortes' })).toBeDisabled()
   })
+
+  it('UI-30: não engole context_too_small no modo legado (assistant.tasks sem profile) nem pisca EstadoTela enquanto selection.estimate carrega', async () => {
+    const user = userEvent.setup()
+    let resolverEstimativa!: (v: unknown) => void
+    let rejeitarEstimativa!: (e: unknown) => void
+    let chamada = 0
+
+    mockBase({
+      'provider.selection_state': () => ({ applicable: false }),
+      'assistant.tasks': () => ({
+        projectLocalOnly: false,
+        tasks: [
+          {
+            task: 'selection',
+            choice: '',
+            source: 'none',
+            profile: null,
+            localOnly: false,
+            blocked: false,
+            missing: null,
+          },
+        ],
+      }),
+      'selection.estimate': () => {
+        chamada += 1
+        if (chamada === 1) {
+          return new Promise((resolve, reject) => {
+            resolverEstimativa = resolve
+            rejeitarEstimativa = reject
+          })
+        }
+        throw new ErroCore('context_too_small', 'Janela de contexto insuficiente.')
+      },
+    })
+
+    const { rerender } = render(
+      envolver(<ConfiguradorSelecao fonte={FONTE_DEMO} execucaoEmAndamento={false} />),
+    )
+
+    // Enquanto selection.estimate da 1ª carga estiver pendente, não deve piscar "Configure um Perfil de Provedor"
+    await waitFor(() => {
+      expect(chamarMock).toHaveBeenCalledWith('selection.estimate', expect.anything())
+    })
+    expect(
+      screen.queryByText(/Configure um Perfil de Provedor para selecionar Cortes/i),
+    ).not.toBeInTheDocument()
+
+    await act(async () => {
+      rejeitarEstimativa(new ErroCore('context_too_small', 'Janela de contexto insuficiente.'))
+    })
+
+    // Erro context_too_small deve aparecer no BannerErroCore com botão "Reduzir duração máxima"
+    const alerta = await screen.findByRole('alert')
+    expect(alerta).toHaveTextContent(/Janela de contexto/i)
+    expect(within(alerta).getByRole('button', { name: /Reduzir duração máxima/i })).toBeInTheDocument()
+    expect(
+      screen.queryByText(/Configure um Perfil de Provedor para selecionar Cortes/i),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Selecionar Cortes' })).toBeDisabled()
+
+    // Ao trocar para outra Fonte com estimativa ainda pendente, também não pisca EstadoTela sem permissão
+    chamada = 0
+    const outraFonte: FonteProjeto = {
+      ...FONTE_DEMO,
+      id: 2,
+      path: '/videos/offline.mp4',
+      status: 'offline',
+      available: false,
+    }
+    rerender(envolver(<ConfiguradorSelecao fonte={outraFonte} execucaoEmAndamento={false} />))
+
+    await waitFor(() => {
+      expect(chamarMock).toHaveBeenCalledWith(
+        'selection.estimate',
+        expect.objectContaining({ source_id: 2 }),
+      )
+    })
+    expect(
+      screen.queryByText(/Configure um Perfil de Provedor para selecionar Cortes/i),
+    ).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolverEstimativa({
+        paid: true,
+        profile: 'legacy',
+        minUs: 20_000_000,
+        maxUs: 60_000_000,
+        videoKind: 'direct',
+        plan: { state: 'full', windows: [{ index: 0 }], contextTokens: 32768 },
+        weights: PESOS_DIRETO,
+        estimate: { kind: 'usd', windows: 1, inputTokens: 10_000, minMicroUsd: 1_000, maxMicroUsd: 5_000 },
+      })
+    })
+    expect(await screen.findByRole('button', { name: 'Selecionar Cortes' })).toBeEnabled()
+    void user
+  })
 })

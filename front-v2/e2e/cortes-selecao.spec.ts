@@ -35,6 +35,22 @@ test.describe('Tela Configurador e Acompanhamento de Seleção (#/projeto/:id/co
       largura: document.documentElement.scrollWidth <= window.innerWidth,
     }))
     expect(rolagem1366).toEqual({ altura: true, largura: true })
+
+    // UI-36: F6 / Shift+F6 ciclam Topo -> Configurador -> Acompanhamento -> Rodapé
+    await page.keyboard.press('F6')
+    await expect(page.locator('[data-regiao="topo"] :focus')).toHaveCount(1)
+    await page.keyboard.press('F6')
+    await expect(page.locator('aside[aria-label="Configurador de Seleção"] :focus')).toHaveCount(1)
+    await page.keyboard.press('F6')
+    await expect(page.locator('section[aria-label="Acompanhamento de Seleção"] :focus')).toHaveCount(1)
+    await page.keyboard.press('F6')
+    await expect(page.locator('[data-regiao="rodape"]')).toBeFocused()
+    await page.keyboard.press('Shift+F6')
+    await expect(page.locator('section[aria-label="Acompanhamento de Seleção"] :focus')).toHaveCount(1)
+
+    // UI-35: não expõe identificador "legacy" no Acompanhamento
+    await expect(page.locator('section[aria-label="Acompanhamento de Seleção"]')).not.toContainText(/\blegacy\b/i)
+
     await page.screenshot({ path: 'test-results/cortes-selecao-1366.png' })
 
     // 2. ?estado=vazio -> "Nenhuma Fonte transcrita ainda" e CTA navega para #/projeto/demo/fontes
@@ -64,7 +80,8 @@ test.describe('Tela Configurador e Acompanhamento de Seleção (#/projeto/:id/co
     await expect(bannerIncerta).not.toContainText(/#\d+/)
     const btnRetomar = page.getByRole('button', { name: 'Retomar janelas pendentes' })
     await expect(btnRetomar).toBeDisabled()
-    await btnRetomar.locator('..').hover()
+    await expect(btnRetomar).toHaveAttribute('aria-disabled', 'true')
+    await btnRetomar.hover()
     const tooltipIncerta = page.getByText(/Há janela incerta nesta execução; resolva na Fila antes de retomar\./i)
     await expect(tooltipIncerta).toBeVisible()
     await expect(tooltipIncerta).not.toContainText(/#\d+/)
@@ -122,6 +139,15 @@ test.describe('Tela Configurador e Acompanhamento de Seleção (#/projeto/:id/co
     }))
     expect(rolagem1440).toEqual({ altura: true, largura: true })
     await page.screenshot({ path: 'test-results/cortes-selecao-1440.png' })
+
+    // 7. UI-30: ?selection-blocked=1 no modo legado exibe context_too_small (não engole com EstadoTela de perfil)
+    await page.goto('/?selection-blocked=1#/inicio')
+    await page.getByRole('button', { name: /Abrir Projeto Demo/i }).click()
+    await page.evaluate(() => {
+      window.location.hash = '#/projeto/demo/cortes'
+    })
+    await expect(page.getByRole('button', { name: 'Reduzir duração máxima' })).toBeVisible()
+    await expect(page.getByText(/Configure um Perfil de Provedor para selecionar Cortes/i)).toHaveCount(0)
 
     expect(erros).toEqual([])
   })

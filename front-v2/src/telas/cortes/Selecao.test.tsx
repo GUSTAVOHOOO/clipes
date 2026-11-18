@@ -545,17 +545,21 @@ describe('Tela Configurador e Acompanhamento de Seleção (#/projeto/:id/cortes)
     expect(alerta).toHaveTextContent(/Chamada paga incerta/i)
 
     const btnRetomar = screen.getByRole('button', { name: /Retomar janelas pendentes/i })
-    expect(btnRetomar).toBeDisabled()
+    expect(btnRetomar).toHaveAttribute('aria-disabled', 'true')
+    expect(btnRetomar).not.toBeDisabled()
+    expect(btnRetomar.closest('span[tabindex="0"]')).toBeNull()
 
-    // Dica acessível ao focar o gatilho envolvente do botão desabilitado, sem referência de ticket (#\d+)
-    const gatilhoDica = btnRetomar.closest('[tabindex="0"]') as HTMLElement
-    expect(gatilhoDica).not.toBeNull()
-    await user.hover(gatilhoDica)
+    // Dica acessível diretamente no botão aria-disabled (sem span tabIndex=0), sem referência de ticket (#\d+)
+    await user.hover(btnRetomar)
     const dicaTexto = await screen.findByText(
       /Há janela incerta nesta execução; resolva na Fila antes de retomar\./i,
     )
     expect(dicaTexto).toBeInTheDocument()
     expect(dicaTexto.textContent ?? '').not.toMatch(/#\d+/)
+
+    await user.click(btnRetomar)
+    expect(chamarMock).not.toHaveBeenCalledWith('selection.estimate', { run: 1 })
+    expect(chamarMock).not.toHaveBeenCalledWith('selection.resume', expect.anything())
 
     // Varredura UI-12 no texto renderizado e na Dica (excluindo o identificador "Execução #<id>")
     expect(alerta.textContent ?? '').not.toMatch(/#\d+/)
@@ -793,5 +797,146 @@ describe('Tela Configurador e Acompanhamento de Seleção (#/projeto/:id/cortes)
     await waitFor(() => {
       expect(chamarMock).toHaveBeenCalledWith('selection.cancel', { run: 1 })
     })
+  })
+
+  it('UI-35: traduz profile "legacy" para rótulo amigável e janela cancelada sem texto genérico nem #304', async () => {
+    const janelasLegacyECancelada = criarJanelasPadrao().map((w) =>
+      w.index === 0
+        ? { ...w, profile: 'legacy' }
+        : w.index === 1
+          ? { ...w, state: 'cancelled', code: 'cancelled', profile: 'legacy' }
+          : { ...w, profile: 'legacy' },
+    )
+
+    mockSelecaoBase({
+      'provider.profiles.list': () => ({
+        profiles: [
+          {
+            id: 'legacy',
+            label: 'Principal',
+            kind: 'openai',
+            endpoint: 'https://api.openai.com/v1',
+            model: 'gpt-4o-mini',
+            local: false,
+            cli: false,
+          },
+        ],
+      }),
+      'selection.list': () => [criarRunBase({ state: 'partial', profile: 'legacy' })],
+      'selection.get': () => ({
+        run: criarRunBase({ state: 'partial', profile: 'legacy' }),
+        windows: janelasLegacyECancelada,
+        candidates: criarCandidatosPadrao(2),
+      }),
+    })
+
+    const { unmount } = render(
+      envolver(
+        <Selecao
+          projetoId="demo"
+          projetoPath="/projetos/Demo.clipes"
+          storeFontes={storeFontes}
+          fila={filaTeste}
+        />,
+      ),
+    )
+
+    expect(await screen.findByText(/Perfil base: Principal/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/Perfil: Principal/i).length).toBeGreaterThanOrEqual(1)
+    expect(document.body.textContent ?? '').not.toMatch(/\blegacy\b/i)
+    expect(document.body.textContent ?? '').not.toContain('#304')
+    expect(screen.queryByText('Algo deu errado nesta operação.')).not.toBeInTheDocument()
+    const janela2 = screen.getByRole('listitem', { name: /Janela 2/i })
+    expect(within(janela2).getByText('Esta operação foi cancelada antes de concluir.')).toBeInTheDocument()
+    expect(janela2.querySelector('.text-erro')).toBeNull()
+    unmount()
+
+    // Fallback quando 'legacy' não está na lista de perfis
+    const storeFallback = criarStoreFontesProjeto()
+    mockSelecaoBase({
+      'provider.profiles.list': () => ({ profiles: [] }),
+      'selection.list': () => [criarRunBase({ state: 'partial', profile: 'legacy' })],
+      'selection.get': () => ({
+        run: criarRunBase({ state: 'partial', profile: 'legacy' }),
+        windows: janelasLegacyECancelada,
+        candidates: criarCandidatosPadrao(2),
+      }),
+    })
+    render(
+      envolver(
+        <Selecao
+          projetoId="demo"
+          projetoPath="/projetos/Demo.clipes"
+          storeFontes={storeFallback}
+          fila={filaTeste}
+        />,
+      ),
+    )
+    expect(await screen.findByText(/Perfil base: Perfil configurado/i)).toBeInTheDocument()
+    expect(document.body.textContent ?? '').not.toMatch(/\blegacy\b/i)
+  })
+
+  it('UI-36: F6 e Shift+F6 ciclam entre Topo, Configurador, Acompanhamento e Rodapé', async () => {
+    mockSelecaoBase()
+    render(
+      envolver(
+        <div>
+          <header data-regiao="topo">
+            <button type="button">Botão Topo</button>
+          </header>
+          <main data-regiao="conteudo">
+            <Selecao
+              projetoId="demo"
+              projetoPath="/projetos/Demo.clipes"
+              storeFontes={storeFontes}
+              fila={filaTeste}
+            />
+          </main>
+          <footer data-regiao="rodape">
+            <button type="button">Botão Rodapé</button>
+          </footer>
+        </div>,
+      ),
+    )
+
+    const configurador = await screen.findByRole('complementary', { name: 'Configurador de Seleção' })
+    const acompanhamento = screen.getByRole('region', { name: 'Acompanhamento de Seleção' })
+    const topo = document.querySelector('[data-regiao="topo"]')!
+    const rodape = document.querySelector('[data-regiao="rodape"]')!
+
+    // Aguarda Configurador sair do esqueleto inicial
+    await screen.findByRole('radio', { name: /Corte direto/i })
+
+    // F6: Topo -> Configurador -> Acompanhamento -> Rodapé -> Topo
+    const fireF6 = (shiftKey = false) => {
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F6', shiftKey, cancelable: true }))
+      })
+    }
+
+    fireF6()
+    expect(topo.contains(document.activeElement)).toBe(true)
+
+    fireF6()
+    expect(configurador.contains(document.activeElement)).toBe(true)
+
+    fireF6()
+    expect(acompanhamento.contains(document.activeElement)).toBe(true)
+
+    fireF6()
+    expect(rodape.contains(document.activeElement)).toBe(true)
+
+    fireF6()
+    expect(topo.contains(document.activeElement)).toBe(true)
+
+    // Shift+F6: Topo -> Rodapé -> Acompanhamento -> Configurador
+    fireF6(true)
+    expect(rodape.contains(document.activeElement)).toBe(true)
+
+    fireF6(true)
+    expect(acompanhamento.contains(document.activeElement)).toBe(true)
+
+    fireF6(true)
+    expect(configurador.contains(document.activeElement)).toBe(true)
   })
 })

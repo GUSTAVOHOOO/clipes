@@ -35,6 +35,21 @@ export type SelecaoProps = {
   fila?: Fila
 }
 
+const SELETOR_FOCAVEL =
+  'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+
+function focarRegiao(alvo: HTMLElement): void {
+  const candidatos = alvo.querySelectorAll<HTMLElement>(SELETOR_FOCAVEL)
+  for (const el of candidatos) {
+    if (el.closest('[hidden], [aria-hidden="true"]')) continue
+    const estilo = window.getComputedStyle(el)
+    if (estilo.display === 'none' || estilo.visibility === 'hidden') continue
+    el.focus()
+    return
+  }
+  alvo.focus()
+}
+
 function nomeArquivo(path: string): string {
   return path.split(/[\\/]/).pop() || path
 }
@@ -107,6 +122,73 @@ export function Selecao({
   const [runSelecionadoId, setRunSelecionadoId] = useState<number | null>(null)
   const refCampoMaxUs = useRef<HTMLInputElement | null>(null)
   const refBotaoDisparar = useRef<HTMLButtonElement | null>(null)
+  const configuradorRef = useRef<HTMLElement | null>(null)
+  const acompanhamentoRef = useRef<HTMLElement | null>(null)
+  const regiaoFocoRef = useRef<{ prev: number; curr: number }>({ prev: -1, curr: -1 })
+
+  // Registra F6 / Shift+F6 com 4 regiões (Topo -> Configurador -> Acompanhamento -> Rodapé)
+  useEffect(() => {
+    const obterRegioes = (): HTMLElement[] => {
+      if (!configuradorRef.current && !acompanhamentoRef.current) return []
+      const topo = document.querySelector<HTMLElement>('[data-regiao="topo"]')
+      const rodape = document.querySelector<HTMLElement>('[data-regiao="rodape"]')
+      return [
+        topo,
+        configuradorRef.current,
+        acompanhamentoRef.current,
+        rodape,
+      ].filter((el): el is HTMLElement => el !== null)
+    }
+
+    const indiceDoElemento = (el: EventTarget | null, regioes: HTMLElement[]): number => {
+      if (!(el instanceof Node)) return -1
+      return regioes.findIndex((r) => r === el || r.contains(el))
+    }
+
+    const aoFocusIn = (e: FocusEvent) => {
+      const regioes = obterRegioes()
+      const idx = indiceDoElemento(e.target, regioes)
+      regiaoFocoRef.current = { prev: regiaoFocoRef.current.curr, curr: idx }
+    }
+
+    const aoTeclar = (e: KeyboardEvent) => {
+      if (e.key !== 'F6' || e.ctrlKey || e.metaKey || e.altKey) return
+      const temDialogoModal = Array.from(
+        document.querySelectorAll('[role="dialog"], [role="alertdialog"]'),
+      ).some((el) => !el.closest('[aria-label="Notifications"]'))
+      if (temDialogoModal) return
+
+      const regioes = obterRegioes()
+      if (regioes.length === 0) return
+
+      // Se o Shell já tratou este F6 em capture antes de nós, recupera a região anterior ao Shell
+      const idxAtual = e.defaultPrevented
+        ? regiaoFocoRef.current.prev
+        : indiceDoElemento(document.activeElement, regioes)
+
+      e.preventDefault()
+      e.stopPropagation()
+      e.stopImmediatePropagation()
+
+      const dir = e.shiftKey ? -1 : 1
+      const proximoIdx =
+        idxAtual < 0
+          ? dir > 0
+            ? 0
+            : regioes.length - 1
+          : (idxAtual + dir + regioes.length) % regioes.length
+
+      focarRegiao(regioes[proximoIdx])
+      regiaoFocoRef.current = { prev: proximoIdx, curr: proximoIdx }
+    }
+
+    document.addEventListener('focusin', aoFocusIn, true)
+    window.addEventListener('keydown', aoTeclar, { capture: true })
+    return () => {
+      document.removeEventListener('focusin', aoFocusIn, true)
+      window.removeEventListener('keydown', aoTeclar, { capture: true })
+    }
+  }, [])
 
   const fontesTranscritas = useMemo(() => {
     const prontas = fontes.filter(
@@ -405,8 +487,10 @@ export function Selecao({
       {/* Duas colunas com rolagem independente */}
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[42%_1fr] min-[1440px]:grid-cols-[38%_1fr]">
         <aside
+          ref={configuradorRef}
+          tabIndex={-1}
           aria-label="Configurador de Seleção"
-          className="flex min-h-0 flex-col overflow-hidden"
+          className="flex min-h-0 flex-col overflow-hidden outline-none"
         >
           <AreaRolagem rotulo="Configurador de Seleção" className="h-full min-h-0">
             <div className="pr-2 pb-2">
@@ -432,8 +516,10 @@ export function Selecao({
         </aside>
 
         <section
+          ref={acompanhamentoRef}
+          tabIndex={-1}
           aria-label="Acompanhamento de Seleção"
-          className="flex min-h-0 flex-col overflow-hidden"
+          className="flex min-h-0 flex-col overflow-hidden outline-none"
         >
           <AreaRolagem rotulo="Acompanhamento de Seleção" className="h-full min-h-0">
             <div className="pr-2 pb-2">
