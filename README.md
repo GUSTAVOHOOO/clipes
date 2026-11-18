@@ -286,7 +286,7 @@ As decisões de modelo e de pipeline vêm de benchmarks reproduzíveis, não de 
 
 - [x] **v1.0**: núcleo completo, Corte direto e Vídeo transformado, instaladores para Windows e Linux
 - [ ] **v2**: interface refeita do zero, minimalista e mais rápida de operar, sobre o mesmo núcleo ([#288](https://github.com/GUSTAVOHOOO/clipes/issues/288)). Pesquisa de UX, arquitetura de informação, wireframes e direção visual já estão em [`docs/produto/front-v2/`](docs/produto/front-v2/)
-- [ ] Seleção de Cortes guiada por sinais, com a IA só refinando os candidatos
+- [ ] Seleção de Cortes guiada por sinais, com a IA só refinando os candidatos ([#319](https://github.com/GUSTAVOHOOO/clipes/issues/319))
 - [ ] macOS ([#301](https://github.com/GUSTAVOHOOO/clipes/issues/301)) e assinatura de código no Windows ([#24](https://github.com/GUSTAVOHOOO/clipes/issues/24))
 - [ ] Mais adiante: servidor MCP para agentes ([#192](https://github.com/GUSTAVOHOOO/clipes/issues/192)), clonagem de voz ([#214](https://github.com/GUSTAVOHOOO/clipes/issues/214)) e o resto de [melhorias futuras](docs/futuro.md)
 
