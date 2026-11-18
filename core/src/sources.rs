@@ -645,11 +645,434 @@ fn set_permission(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     get(&v, id)
 }
 
+fn delete_source(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let _job = projects::start_job()?;
+    if let Some(requested) = v.get("project").filter(|p| !p.is_null()) {
+        let requested = requested
+            .as_str()
+            .ok_or_else(|| err("invalid_project", "Projeto obrigatório"))?;
+        let current = crate::dispatch("projects.current", json!({}), &mut |_| {})?;
+        if current["path"].as_str() != Some(requested) {
+            return Err(err("invalid_project", "O Projeto não está aberto"));
+        }
+    }
+    let id = v["id"]
+        .as_i64()
+        .ok_or_else(|| err("source_missing", "Fonte não encontrada"))?;
+    crate::dispatch("editor.flush", json!({}), &mut |_| {})?;
+
+    let outcome: Result<Value, CoreError> = projects::with_writer(|conn| {
+        let tx = conn.transaction()?;
+        let exists: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sources WHERE id=?1)",
+            [id],
+            |r| r.get(0),
+        )?;
+        if !exists {
+            return Ok(Err(err("source_missing", "Fonte não encontrada")));
+        }
+
+        tx.execute_batch(
+            "DROP TABLE IF EXISTS _del_src_transcripts;
+             DROP TABLE IF EXISTS _del_src_runs;
+             DROP TABLE IF EXISTS _del_src_candidates;
+             DROP TABLE IF EXISTS _del_src_clips;
+             DROP TABLE IF EXISTS _del_src_jobs;
+             CREATE TEMP TABLE _del_src_transcripts (id INTEGER PRIMARY KEY);
+             CREATE TEMP TABLE _del_src_runs (id INTEGER PRIMARY KEY);
+             CREATE TEMP TABLE _del_src_candidates (id INTEGER PRIMARY KEY);
+             CREATE TEMP TABLE _del_src_clips (id INTEGER PRIMARY KEY);
+             CREATE TEMP TABLE _del_src_jobs (id INTEGER PRIMARY KEY);",
+        )?;
+
+        tx.execute(
+            "INSERT INTO _del_src_transcripts(id) SELECT id FROM transcripts WHERE source_id=?1",
+            [id],
+        )?;
+        tx.execute(
+            "INSERT INTO _del_src_runs(id)
+             SELECT id FROM selection_runs
+             WHERE transcript_id IN (SELECT id FROM _del_src_transcripts)",
+            [],
+        )?;
+        tx.execute(
+            "INSERT INTO _del_src_candidates(id)
+             SELECT id FROM selection_candidates
+             WHERE run_id IN (SELECT id FROM _del_src_runs)",
+            [],
+        )?;
+        tx.execute(
+            "INSERT INTO _del_src_clips(id)
+             SELECT id FROM clip_edits
+             WHERE json_extract(document, '$.original.source_id') = ?1
+                OR identity LIKE ('source:' || ?1 || ':%')
+                OR identity IN (SELECT 'candidate:' || id FROM _del_src_candidates)",
+            [id],
+        )?;
+        tx.execute(
+            "INSERT OR IGNORE INTO _del_src_jobs(id)
+             SELECT id FROM jobs WHERE source_id=?1
+             UNION
+             SELECT job_id FROM proxy_jobs WHERE source_id=?1
+             UNION
+             SELECT job_id FROM timeline_jobs WHERE source_id=?1
+             UNION
+             SELECT job_id FROM reframe_suggestions WHERE source_id=?1
+             UNION
+             SELECT job_id FROM export_batch_items WHERE (source_id=?1 OR batch_id IN (SELECT id FROM export_batches WHERE source_id=?1)) AND job_id IS NOT NULL
+             UNION
+             SELECT job_id FROM exports WHERE json_extract(request, '$.source_id')=?1
+             UNION
+             SELECT job_id FROM transcription_calls WHERE transcript_id IN (SELECT id FROM _del_src_transcripts)
+             UNION
+             SELECT job_id FROM selection_windows WHERE run_id IN (SELECT id FROM _del_src_runs) AND job_id IS NOT NULL
+             UNION
+             SELECT prev_job_id FROM selection_windows WHERE run_id IN (SELECT id FROM _del_src_runs) AND prev_job_id IS NOT NULL
+             UNION
+             SELECT job_id FROM angle_generations WHERE run_id IN (SELECT id FROM _del_src_runs)
+             UNION
+             SELECT job_id FROM packaging_generations WHERE run_id IN (SELECT id FROM _del_src_runs)
+             UNION
+             SELECT job_id FROM script_generations WHERE run_id IN (SELECT id FROM _del_src_runs)
+             UNION
+             SELECT v.job_id FROM script_block_versions v
+               JOIN script_blocks b ON b.id=v.block_id
+               JOIN script_generations g ON g.id=b.generation_id
+               WHERE g.run_id IN (SELECT id FROM _del_src_runs) AND v.job_id IS NOT NULL
+             UNION
+             SELECT job_id FROM thumbnail_suggestions WHERE run_id IN (SELECT id FROM _del_src_runs)
+             UNION
+             SELECT job_id FROM narration_jobs WHERE candidate_id IN (SELECT id FROM _del_src_candidates)
+             UNION
+             SELECT job_id FROM narration_align_jobs WHERE candidate_id IN (SELECT id FROM _del_src_candidates)
+             UNION
+             SELECT job_id FROM narration_import_jobs WHERE candidate_id IN (SELECT id FROM _del_src_candidates)
+             UNION
+             SELECT trj.job_id FROM translation_run_jobs trj
+               JOIN translation_runs tr ON tr.id=trj.run_id
+               WHERE tr.clip_id IN (SELECT id FROM _del_src_clips)
+             UNION
+             SELECT transcription_job FROM source_batch_items WHERE source_id=?1 AND transcription_job IS NOT NULL",
+            [id],
+        )?;
+
+        let busy: bool = tx.query_row(
+            "SELECT EXISTS(
+               SELECT 1 FROM jobs
+               WHERE id IN (SELECT id FROM _del_src_jobs)
+                 AND state IN ('queued','running','uncertain')
+             )",
+            [],
+            |r| r.get(0),
+        )?;
+        if busy {
+            return Ok(Err(err(
+                "source_busy",
+                "Há uma tarefa ativa ou incerta vinculada a esta Fonte.",
+            )));
+        }
+
+        let standalone_clips: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM clip_edits
+             WHERE id IN (SELECT id FROM _del_src_clips)
+               AND identity NOT IN (SELECT 'candidate:' || id FROM _del_src_candidates)",
+            [],
+            |r| r.get(0),
+        )?;
+
+        // Folhas de roteiro/narração antes de script_blocks/script_generations.
+        tx.execute(
+            "DELETE FROM narration_aligned_words WHERE narration_id IN (
+               SELECT nb.id FROM narration_blocks nb
+               JOIN script_blocks sb ON sb.id=nb.block_id
+               JOIN script_generations sg ON sg.id=sb.generation_id
+               WHERE sg.run_id IN (SELECT id FROM _del_src_runs)
+             )",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM narration_alignments WHERE narration_id IN (
+               SELECT nb.id FROM narration_blocks nb
+               JOIN script_blocks sb ON sb.id=nb.block_id
+               JOIN script_generations sg ON sg.id=sb.generation_id
+               WHERE sg.run_id IN (SELECT id FROM _del_src_runs)
+             )",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM narration_cleanups WHERE narration_id IN (
+               SELECT nb.id FROM narration_blocks nb
+               JOIN script_blocks sb ON sb.id=nb.block_id
+               JOIN script_generations sg ON sg.id=sb.generation_id
+               WHERE sg.run_id IN (SELECT id FROM _del_src_runs)
+             )",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM narration_recordings WHERE narration_id IN (
+               SELECT nb.id FROM narration_blocks nb
+               JOIN script_blocks sb ON sb.id=nb.block_id
+               JOIN script_generations sg ON sg.id=sb.generation_id
+               WHERE sg.run_id IN (SELECT id FROM _del_src_runs)
+             )",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM narration_blocks WHERE block_id IN (
+               SELECT sb.id FROM script_blocks sb
+               JOIN script_generations sg ON sg.id=sb.generation_id
+               WHERE sg.run_id IN (SELECT id FROM _del_src_runs)
+             )",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM script_approvals WHERE block_id IN (
+               SELECT sb.id FROM script_blocks sb
+               JOIN script_generations sg ON sg.id=sb.generation_id
+               WHERE sg.run_id IN (SELECT id FROM _del_src_runs)
+             )",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM script_block_versions WHERE block_id IN (
+               SELECT sb.id FROM script_blocks sb
+               JOIN script_generations sg ON sg.id=sb.generation_id
+               WHERE sg.run_id IN (SELECT id FROM _del_src_runs)
+             )",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM script_blocks WHERE generation_id IN (
+               SELECT id FROM script_generations WHERE run_id IN (SELECT id FROM _del_src_runs)
+             )",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM script_generations WHERE run_id IN (SELECT id FROM _del_src_runs)",
+            [],
+        )?;
+
+        // Ângulos, empacotamento e capa ligados a selection_runs.
+        tx.execute(
+            "DELETE FROM script_angles WHERE run_id IN (SELECT id FROM _del_src_runs)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM angle_generations WHERE run_id IN (SELECT id FROM _del_src_runs)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM packaging_edits WHERE generation_id IN (
+               SELECT id FROM packaging_generations WHERE run_id IN (SELECT id FROM _del_src_runs)
+             )",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM packaging_generations WHERE run_id IN (SELECT id FROM _del_src_runs)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM thumbnail_choices WHERE run_id IN (SELECT id FROM _del_src_runs)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM thumbnail_suggestions WHERE run_id IN (SELECT id FROM _del_src_runs)",
+            [],
+        )?;
+
+        // Edições de Corte, tradução e estilos de legenda.
+        tx.execute(
+            "DELETE FROM translation_run_jobs
+             WHERE run_id IN (SELECT id FROM translation_runs WHERE clip_id IN (SELECT id FROM _del_src_clips))
+                OR job_id IN (SELECT id FROM _del_src_jobs)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM clip_translated_sentences WHERE clip_id IN (SELECT id FROM _del_src_clips)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM translation_runs WHERE clip_id IN (SELECT id FROM _del_src_clips)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM clip_caption_tracks WHERE clip_id IN (SELECT id FROM _del_src_clips)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM caption_styles WHERE clip_id IN (SELECT id FROM _del_src_clips)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM clip_snapshots WHERE clip_id IN (SELECT id FROM _del_src_clips)",
+            [],
+        )?;
+        let clip_edits_deleted = tx.execute(
+            "DELETE FROM clip_edits WHERE id IN (SELECT id FROM _del_src_clips)",
+            [],
+        )? as i64;
+
+        // Jobs auxiliares de narração ligados aos candidatos e seleção.
+        tx.execute(
+            "DELETE FROM narration_jobs
+             WHERE candidate_id IN (SELECT id FROM _del_src_candidates)
+                OR job_id IN (SELECT id FROM _del_src_jobs)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM narration_align_jobs
+             WHERE candidate_id IN (SELECT id FROM _del_src_candidates)
+                OR job_id IN (SELECT id FROM _del_src_jobs)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM narration_import_jobs
+             WHERE candidate_id IN (SELECT id FROM _del_src_candidates)
+                OR job_id IN (SELECT id FROM _del_src_jobs)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM narration_caption_tracks WHERE candidate_id IN (SELECT id FROM _del_src_candidates)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM selection_decisions WHERE run_id IN (SELECT id FROM _del_src_runs)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM selection_windows WHERE run_id IN (SELECT id FROM _del_src_runs)",
+            [],
+        )?;
+        let candidates_deleted = tx.execute(
+            "DELETE FROM selection_candidates WHERE run_id IN (SELECT id FROM _del_src_runs)",
+            [],
+        )? as i64;
+        let runs_deleted = tx.execute(
+            "DELETE FROM selection_runs WHERE id IN (SELECT id FROM _del_src_runs)",
+            [],
+        )? as i64;
+
+        // Transcrição, frases (gatilho limpa sentence_search), correções, energia e auditoria de chamadas.
+        tx.execute(
+            "DELETE FROM caption_word_overrides WHERE transcript_id IN (SELECT id FROM _del_src_transcripts)",
+            [],
+        )?;
+        tx.execute("DELETE FROM caption_remap_pending WHERE source_id=?1", [id])?;
+        tx.execute("DELETE FROM caption_remap_notices WHERE source_id=?1", [id])?;
+        tx.execute(
+            "DELETE FROM transcript_corrections WHERE transcript_id IN (SELECT id FROM _del_src_transcripts)",
+            [],
+        )?;
+        // Apagar `sentences` explicitamente garante que o gatilho `sentences_search_delete` limpe `sentence_search`.
+        tx.execute(
+            "DELETE FROM sentences WHERE transcript_id IN (SELECT id FROM _del_src_transcripts)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM transcript_words WHERE transcript_id IN (SELECT id FROM _del_src_transcripts)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM transcription_block_config WHERE transcript_id IN (SELECT id FROM _del_src_transcripts)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM transcription_blocks WHERE transcript_id IN (SELECT id FROM _del_src_transcripts)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM energy_measurements WHERE transcript_id IN (SELECT id FROM _del_src_transcripts)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM sentence_energy WHERE transcript_id IN (SELECT id FROM _del_src_transcripts)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM call_audit WHERE transcription_call_id IN (
+               SELECT id FROM transcription_calls
+               WHERE transcript_id IN (SELECT id FROM _del_src_transcripts)
+                  OR job_id IN (SELECT id FROM _del_src_jobs)
+             )",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM transcription_calls
+             WHERE transcript_id IN (SELECT id FROM _del_src_transcripts)
+                OR job_id IN (SELECT id FROM _del_src_jobs)",
+            [],
+        )?;
+        let transcripts_deleted = tx.execute(
+            "DELETE FROM transcripts WHERE id IN (SELECT id FROM _del_src_transcripts)",
+            [],
+        )? as i64;
+
+        // Exportações, reframing, lotes, chat, jobs e a própria Fonte.
+        tx.execute(
+            "DELETE FROM exports WHERE job_id IN (SELECT id FROM _del_src_jobs)",
+            [],
+        )?;
+        let export_batch_items_deleted = tx.execute(
+            "DELETE FROM export_batch_items
+             WHERE source_id=?1
+                OR batch_id IN (SELECT id FROM export_batches WHERE source_id=?1)
+                OR job_id IN (SELECT id FROM _del_src_jobs)",
+            [id],
+        )? as i64;
+        tx.execute("DELETE FROM export_batches WHERE source_id=?1", [id])?;
+        tx.execute(
+            "DELETE FROM reframe_suggestions
+             WHERE source_id=?1 OR job_id IN (SELECT id FROM _del_src_jobs)",
+            [id],
+        )?;
+        tx.execute(
+            "DELETE FROM proxy_jobs WHERE source_id=?1 OR job_id IN (SELECT id FROM _del_src_jobs)",
+            [id],
+        )?;
+        tx.execute(
+            "DELETE FROM timeline_jobs WHERE source_id=?1 OR job_id IN (SELECT id FROM _del_src_jobs)",
+            [id],
+        )?;
+        let source_batch_items_deleted =
+            tx.execute("DELETE FROM source_batch_items WHERE source_id=?1", [id])? as i64;
+        tx.execute("DELETE FROM chat_series WHERE source_id=?1", [id])?;
+        tx.execute("DELETE FROM chat_replays WHERE source_id=?1", [id])?;
+        let jobs_deleted = tx.execute(
+            "DELETE FROM jobs WHERE id IN (SELECT id FROM _del_src_jobs)",
+            [],
+        )? as i64;
+        tx.execute("DELETE FROM sources WHERE id=?1", [id])?;
+
+        tx.execute_batch(
+            "DROP TABLE _del_src_jobs;
+             DROP TABLE _del_src_clips;
+             DROP TABLE _del_src_candidates;
+             DROP TABLE _del_src_runs;
+             DROP TABLE _del_src_transcripts;",
+        )?;
+        tx.commit()?;
+
+        let cuts_deleted = candidates_deleted + standalone_clips;
+        Ok(Ok(json!({
+            "deleted": true,
+            "id": id,
+            "transcripts": transcripts_deleted,
+            "cuts": cuts_deleted,
+            "selection_runs": runs_deleted,
+            "clip_edits": clip_edits_deleted,
+            "batch_items": source_batch_items_deleted + export_batch_items_deleted,
+            "jobs": jobs_deleted,
+        })))
+    })?;
+    outcome
+}
+
 inventory::submit! {CommandRegistration{name:"sources.import",execute:import}}
 inventory::submit! {CommandRegistration{name:"sources.inspect",execute:inspect}}
 inventory::submit! {CommandRegistration{name:"sources.list",execute:list}}
 inventory::submit! {CommandRegistration{name:"sources.hash",execute:hash_source}}
 inventory::submit! {CommandRegistration{name:"sources.relocate",execute:relocate}}
 inventory::submit! {CommandRegistration{name:"sources.cancel",execute:cancel}}
+inventory::submit! {CommandRegistration{name:"sources.delete",execute:delete_source}}
 inventory::submit! {CommandRegistration{name:"sources.language.set",execute:set_language}}
 inventory::submit! {CommandRegistration{name:"sources.permission.set",execute:set_permission}}
