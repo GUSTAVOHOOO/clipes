@@ -148,6 +148,10 @@ export const TABELA_ERROS: Record<string, MensagemErro> = {
   source_offline: entradaFonteAlterada,
   source_changed: entradaFonteAlterada,
   source_mismatch: entradaFonteAlterada,
+  source_busy: {
+    titulo: 'Há uma tarefa ativa ou incerta vinculada a esta Fonte; aguarde ou resolva na Fila de Jobs antes de excluir.',
+    recuperacao: { rotulo: 'Abrir Fila de Jobs', acao: 'abrir-fila' },
+  },
   terms_required: {
     titulo: 'Confirme o aviso de direitos autorais e Termos antes de baixar por URL.',
     recuperacao: { rotulo: 'Aceitar termos', acao: 'aceitar-termos' },
