@@ -1,6 +1,7 @@
 import {
   BannerErroCore,
   Botao,
+  BotaoIcone,
   Checkbox,
   cn,
   Entrada,
@@ -532,14 +533,13 @@ export function PassoProvedor({ aoVoltar, aoConcluir, aoPular, pulando }: PassoP
                           placeholder="Cole sua chave (cofre do SO)"
                           className="min-w-0 flex-1"
                         />
-                        <Botao
-                          tamanho="p"
+                        <BotaoIcone
                           variante="suave"
-                          aria-label={mostrarChave ? 'Ocultar chave' : 'Mostrar chave'}
+                          rotulo={mostrarChave ? 'Ocultar chave' : 'Mostrar chave'}
                           onClick={() => setMostrarChave((v) => !v)}
                         >
                           {mostrarChave ? <EyeOff /> : <Eye />}
-                        </Botao>
+                        </BotaoIcone>
                       </div>
                     </div>
 

@@ -555,4 +555,47 @@ describe('<EntradaFonte>', () => {
     expect(botoesPrimarios()).toHaveLength(1)
     expect(botoesPrimarios()[0]).toBe(btnBaixarJit)
   })
+
+  it('UI-19: omite CTA "Instalar deno" no BannerErroCore enquanto o JIT inline está aberto e restaura ao fechar', async () => {
+    const user = userEvent.setup()
+    configurarMocksPadrao({
+      'components.deno.status': () => ({ installed: false }),
+      'sources.url.download': () => {
+        throw new ErroCore('js_runtime_missing', 'deno required')
+      },
+    })
+
+    render(
+      envolver(
+        <EntradaFonte
+          projetoPath="/projetos/Canal.clipes"
+          copiaEmAndamento={false}
+          aoImportar={vi.fn()}
+          aoMudarCopiaAtiva={vi.fn()}
+        />,
+      ),
+    )
+
+    await user.click(screen.getByRole('radio', { name: /URL \(VOD\)/i }))
+    await user.type(
+      await screen.findByRole('textbox', { name: /URL do vídeo/i }),
+      'https://youtube.com/watch?v=js-test',
+    )
+    await user.click(screen.getByRole('button', { name: 'Baixar por URL' }))
+
+    const alerta = await screen.findByRole('alert')
+    expect(alerta).toHaveTextContent(/deno/i)
+    expect(await screen.findByRole('region', { name: /Instalação necessária/i })).toBeInTheDocument()
+    expect(within(alerta).queryByRole('button', { name: /Instalar deno/i })).not.toBeInTheDocument()
+
+    // Ao fechar o JIT sem dispensar o alerta, o CTA "Instalar deno" volta e reabre o JIT ao clicar
+    await user.click(screen.getByRole('button', { name: 'Agora não' }))
+    expect(screen.queryByRole('region', { name: /Instalação necessária/i })).not.toBeInTheDocument()
+
+    const btnInstalarDeno = within(alerta).getByRole('button', { name: 'Instalar deno' })
+    await user.click(btnInstalarDeno)
+
+    expect(await screen.findByRole('region', { name: /Instalação necessária/i })).toBeInTheDocument()
+    expect(within(alerta).queryByRole('button', { name: /Instalar deno/i })).not.toBeInTheDocument()
+  })
 })

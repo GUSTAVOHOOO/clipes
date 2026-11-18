@@ -519,7 +519,8 @@ export function EntradaFonte({
           erro={{ code: erro.code, message: erro.detalhe || erro.message }}
           traduzir={() => ({ titulo: traducaoErro.titulo })}
           acaoRecuperacao={
-            traducaoErro.recuperacao
+            traducaoErro.recuperacao &&
+            !(jitInlineAberto && traducaoErro.recuperacao.acao === 'instalar-componente')
               ? {
                   rotulo: traducaoErro.recuperacao.rotulo,
                   aoAcionar: () => {
