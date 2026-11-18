@@ -173,7 +173,7 @@ export function PlayerReferenciaFonte({
             {duracaoUs > 0 ? <span className="text-t3"> / {tcLongo(duracaoUs)}</span> : null}
           </span>
 
-          <Dica texto="Prévia de miniaturas/waveform via jobs.preview aguarda chaves opacas clipes-media (#296).">
+          <Dica texto="Tira de miniaturas ainda indisponível para esta Fonte.">
             <span tabIndex={0} className="ml-auto inline-flex">
               <Botao variante="fantasma" tamanho="p" icone={<Film />} disabled>
                 Tira de miniaturas

@@ -101,6 +101,21 @@ test.describe('Tela Detalhe da Fonte e Transcrição (#/projeto/:id/fontes/:font
     await expect(palavraCorrigida).toBeFocused()
     await expect(palavraCorrigida).toHaveAttribute('aria-description', 'Palavra corrigida')
 
+    // UI-29: Refazer exibe atalho e setas ←/→ cruzam a fronteira da janela DOM virtualizada
+    await expect(
+      page.getByRole('button', { name: /^Refazer(?!\s+transcrição)/i }).locator('kbd'),
+    ).toBeVisible()
+    const ultimoBotaoMontado = leitor.locator('button[data-word]').last()
+    const ultimaPosMontada = Number(await ultimoBotaoMontado.getAttribute('data-word'))
+    await ultimoBotaoMontado.focus()
+    await page.keyboard.press('ArrowRight')
+    const focadoDepoisDir = leitor.locator('button[data-word]:focus')
+    await expect(focadoDepoisDir).toBeVisible()
+    const posDepoisDir = Number(await focadoDepoisDir.getAttribute('data-word'))
+    expect(posDepoisDir).toBeGreaterThan(ultimaPosMontada)
+    await page.keyboard.press('ArrowLeft')
+    await expect(leitor.locator(`button[data-word="${ultimaPosMontada}"]`)).toBeFocused()
+
     await page.keyboard.press('Control+f')
     const buscaLeitor = page.getByRole('searchbox', { name: 'Buscar na Transcrição' })
     await expect(buscaLeitor).toBeFocused()
@@ -136,6 +151,8 @@ test.describe('Tela Detalhe da Fonte e Transcrição (#/projeto/:id/fontes/:font
     await expect(leitorOffline.getByRole('button', { name: 'OfflineEdit' })).toHaveCount(0)
     await page.keyboard.press('Control+z')
     await expect(page.getByRole('button', { name: 'Ir para Fonte afetada' })).toBeVisible()
+    await expect(page.getByText('Live_12_11_final.mp4')).toBeVisible()
+    await expect(page.getByText(/Fonte #4/)).toHaveCount(0)
 
     // 6) Volta para Fonte 4: amostra 30 s sem vazar int8_float16, Groq e Somente local
     await page.evaluate(() => {

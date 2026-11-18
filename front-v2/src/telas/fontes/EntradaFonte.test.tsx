@@ -424,7 +424,7 @@ describe('<EntradaFonte>', () => {
     rejeitarDownload(new ErroCore('cancelled', 'cancelado'))
     r1.unmount()
 
-    // Trava #307: copiaEmAndamento: true + copy: true desabilita Importar Fonte com Dica citando #307
+    // Trava de cópia simultânea: copiaEmAndamento: true + copy: true desabilita Importar Fonte com Dica sem ref de ticket
     configurarMocksPadrao()
     window.__CLIPES_E2E__ = {
       dialogQueue: ['/videos/outra_live.mkv'],
@@ -449,7 +449,10 @@ describe('<EntradaFonte>', () => {
     const btnImportar = screen.getByRole('button', { name: 'Importar Fonte' })
     expect(btnImportar).toBeDisabled()
     await user.hover(btnImportar.parentElement as HTMLElement)
-    expect(await screen.findByText(/#307/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/Aguarde a cópia em andamento concluir antes de copiar outra Fonte\./i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/#\d{2,4}\b/)).not.toBeInTheDocument()
   })
 
   it('UI-17: rebaixa "Baixar por URL" para secundário enquanto <InstaladorJustInTime> inline está aberto e devolve ao fechar', async () => {

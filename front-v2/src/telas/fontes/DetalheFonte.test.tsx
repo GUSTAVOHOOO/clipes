@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProvedorDicas, ProvedorToast } from '@ds'
-import { ProvedorAtalhos } from '~/comandos/atalhos'
+import { formatarTecla, ProvedorAtalhos } from '~/comandos/atalhos'
 import { ErroCore } from '~/core/cliente'
 import { criarFila, type Fila } from '~/core/progresso'
 import type { FonteProjeto } from '~/stores/fontesProjeto'
@@ -96,8 +96,29 @@ beforeAll(() => {
     },
   })
 
+  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+    configurable: true,
+    get() {
+      return this.hasAttribute('data-index') ? 76 : 600
+    },
+  })
+
+  Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+    configurable: true,
+    get() {
+      const filho = this.firstElementChild as HTMLElement | null
+      const h = filho?.style?.height ? parseFloat(filho.style.height) : 0
+      return Number.isFinite(h) && h > 0 ? Math.max(h, 600) : 600
+    },
+  })
+
   if (!HTMLElement.prototype.scrollIntoView) {
     HTMLElement.prototype.scrollIntoView = () => {}
+  }
+  HTMLElement.prototype.scrollTo = function (opts?: ScrollToOptions | number, y?: number) {
+    const top = typeof opts === 'number' ? (y ?? 0) : (opts?.top ?? 0)
+    this.scrollTop = top
+    this.dispatchEvent(new Event('scroll'))
   }
   if (!Element.prototype.getAnimations) {
     Element.prototype.getAnimations = () => []
@@ -518,13 +539,25 @@ describe('Tela DetalheFonte (#/projeto/:id/fontes/:fonteId)', () => {
       expect(screen.getByRole('button', { name: 'Fala' })).toHaveFocus()
     })
 
-    // Tooltip #302 e Ctrl+Z retornando outra Fonte exibe toast com link "Ir para Fonte afetada"
+    // UI-28: Tooltip de Desfazer/Refazer sem #302 e Ctrl+Z retornando outra Fonte exibe o nome da Fonte no toast
     const btnDesfazer = screen.getByRole('button', { name: /Desfazer/i })
     await user.hover(btnDesfazer)
-    expect(await screen.findByText(/#302/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/Desfaz a última correção de palavra no Projeto inteiro\./i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/#\d{2,4}\b/)).not.toBeInTheDocument()
+
+    const btnRefazer = screen.getByRole('button', { name: /^Refazer(?!\s+transcrição)/i })
+    await user.hover(btnRefazer)
+    expect(
+      await screen.findByText(/Refaz a última correção desfeita no Projeto inteiro\./i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/#\d{2,4}\b/)).not.toBeInTheDocument()
 
     await user.click(btnDesfazer)
     expect(await screen.findByRole('button', { name: /Ir para Fonte afetada/i })).toBeInTheDocument()
+    expect(await screen.findByText('VOD_09_11_v1.mp4')).toBeInTheDocument()
+    expect(screen.queryByText(/Fonte #2/)).not.toBeInTheDocument()
 
     // Busca Ctrl+F com empty state ("Nenhum trecho encontrado") e Limpar busca
     await user.keyboard('{Control>}f{/Control}')
@@ -747,6 +780,94 @@ describe('Tela DetalheFonte (#/projeto/:id/fontes/:fonteId)', () => {
         'transcription.start',
         expect.objectContaining({ replace_confirmed: true, engine: 'groq' }),
       )
+    })
+  })
+
+  it('UI-29: Refazer exibe atalho Ctrl+Shift+Z e setas ←/→ cruzam a fronteira da janela DOM virtualizada', async () => {
+    const user = userEvent.setup()
+    const itens40 = Array.from({ length: 40 }, (_, i) => {
+      const id = i + 1
+      const pos0 = id * 10
+      const pos1 = id * 10 + 1
+      return {
+        type: 'sentence' as const,
+        id,
+        start_us: i * 5_000_000,
+        end_us: (i + 1) * 5_000_000,
+        language: 'pt',
+        text: `Linha${id}A Linha${id}B`,
+        first_position: pos0,
+        last_position: pos1,
+        words: [
+          { position: pos0, text: `Linha${id}A`, corrected: false, start_us: i * 5_000_000 },
+          { position: pos1, text: `Linha${id}B`, corrected: false, start_us: i * 5_000_000 + 500_000 },
+        ],
+      }
+    })
+
+    mockBase({
+      transcriptState: 'complete',
+      overrides: {
+        'transcription.timeline': (args) => {
+          const { offset = 0, limit = 200 } = (args as { offset?: number; limit?: number }) ?? {}
+          return {
+            total: itens40.length,
+            offset,
+            items: itens40.slice(offset, offset + limit),
+          }
+        },
+      },
+    })
+
+    render(
+      envolver(
+        <DetalheFonte projetoId="demo" projetoPath="/projetos/Demo.clipes" fonteId="4" />,
+      ),
+    )
+
+    // 1) Botão Refazer exibe badge de atalho (Mod+Shift+Z)
+    const btnRefazer = await screen.findByRole('button', { name: /^Refazer(?!\s+transcrição)/i })
+    const kbdRefazer = btnRefazer.querySelector('kbd')
+    expect(kbdRefazer).not.toBeNull()
+    expect(kbdRefazer?.textContent).toBe(formatarTecla('Mod+Shift+Z'))
+
+    // 2) ArrowRight na última palavra montada da janela DOM virtualizada rola e foca a primeira palavra da próxima Frase
+    const regiao = await screen.findByRole('region', { name: 'Transcrição da Fonte' })
+    await waitFor(() => {
+      expect(regiao.querySelectorAll('button[data-word]').length).toBeGreaterThan(0)
+    })
+    const botoesMontadosInicio = Array.from(regiao.querySelectorAll<HTMLButtonElement>('button[data-word]'))
+    const ultimoBotao = botoesMontadosInicio[botoesMontadosInicio.length - 1]
+    const ultimaLinhaMontada = Number(ultimoBotao.closest('[data-index]')?.getAttribute('data-index'))
+    const proxFraseId = ultimaLinhaMontada + 2
+    expect(screen.queryByRole('article', { name: `Frase ${proxFraseId}` })).not.toBeInTheDocument()
+
+    ultimoBotao.focus()
+    expect(ultimoBotao).toHaveFocus()
+    await user.keyboard('{ArrowRight}')
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: `Linha${proxFraseId}A` })).toHaveFocus()
+    })
+
+    // 3) ArrowLeft na primeira palavra montada quando rolado para baixo rola para trás e foca a última palavra da Frase anterior
+    regiao.scrollTo({ top: 2000 })
+    await waitFor(() => {
+      expect(screen.queryByRole('article', { name: 'Frase 1' })).not.toBeInTheDocument()
+    })
+
+    const botoesMontadosBaixo = Array.from(regiao.querySelectorAll<HTMLButtonElement>('button[data-word]'))
+    const primeiroBotao = botoesMontadosBaixo[0]
+    const primeiraLinhaMontada = Number(primeiroBotao.closest('[data-index]')?.getAttribute('data-index'))
+    const prevFraseId = primeiraLinhaMontada
+    expect(screen.queryByRole('article', { name: `Frase ${prevFraseId}` })).not.toBeInTheDocument()
+
+    primeiroBotao.focus()
+    expect(primeiroBotao).toHaveFocus()
+    await user.keyboard('{ArrowLeft}')
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: `Linha${prevFraseId}B` })).toHaveFocus()
     })
   })
 })

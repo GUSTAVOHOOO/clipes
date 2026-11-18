@@ -80,4 +80,20 @@ describe('<PlayerReferenciaFonte>', () => {
     await user.click(screen.getByRole('button', { name: /Relocalizar \/ Verificar/i }))
     expect(aoPedirRelocalizacao).toHaveBeenCalledTimes(1)
   })
+
+  it('UI-28: Dica de "Tira de miniaturas" não expõe referência de ticket nem comandos internos', async () => {
+    const user = userEvent.setup()
+    render(
+      <ProvedorDicas>
+        <PlayerReferenciaFonte fonteId={4} disponivel duracaoUs={3_600_000_000} />
+      </ProvedorDicas>,
+    )
+
+    const btnMiniaturas = screen.getByRole('button', { name: /Tira de miniaturas/i })
+    await user.hover(btnMiniaturas.parentElement as HTMLElement)
+
+    const dica = await screen.findByText(/Tira de miniaturas ainda indisponível para esta Fonte\./i)
+    expect(dica).toBeInTheDocument()
+    expect(screen.queryByText(/#\d{2,4}\b|jobs\.preview|clipes-media/)).not.toBeInTheDocument()
+  })
 })
