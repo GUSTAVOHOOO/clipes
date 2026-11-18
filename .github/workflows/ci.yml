@@ -40,9 +40,10 @@ jobs:
             if [[ "$files" == "__ALL__" ]]; then echo true; return; fi
             if grep -Eq "$1" <<<"$files"; then echo true; else echo false; fi
           }
-          # O próprio CI mudou: valida tudo.
-          ci='^\.github/workflows/ci\.yml$'
-          echo "rust=$(match "$ci|^(core|src-tauri|benchmarks/transcricao)/|^(Cargo\.toml|Cargo\.lock|deny\.toml)$")" >> "$GITHUB_OUTPUT"
+          # O próprio CI ou o fim de linha (.gitattributes) mudou: valida tudo.
+          ci='^\.github/workflows/ci\.yml$|^\.gitattributes$'
+          # catalog/: o núcleo embute catalog/models.json (include_str!) e o valida em teste.
+          echo "rust=$(match "$ci|^(core|src-tauri|benchmarks/transcricao|catalog)/|^(Cargo\.toml|Cargo\.lock|deny\.toml)$")" >> "$GITHUB_OUTPUT"
           echo "front_v1=$(match "$ci|^(src|design-system|scripts)/|^(package\.json|bun\.lock|index\.html|vite\.config\.ts|tsconfig\.json)$")" >> "$GITHUB_OUTPUT"
           echo "front_v2=$(match "$ci|^(front-v2|design-system-v2)/|^src/lib/")" >> "$GITHUB_OUTPUT"
           echo "tauri=$(match "$ci|^(core|src-tauri|src|scripts|catalog)/|^(Cargo\.toml|Cargo\.lock|package\.json|bun\.lock|vite\.config\.ts)$")" >> "$GITHUB_OUTPUT"
