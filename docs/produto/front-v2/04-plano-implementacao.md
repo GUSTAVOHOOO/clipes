@@ -44,7 +44,7 @@ Cada onda é um conjunto de tickets (sub-issues de #288), entregue em PRs pequen
 | **3 · Cortes** | Configurador de Seleção com custo, Bancada de revisão (lista e detalhe, Nota, ±1 Frase, aprovar/rejeitar por teclado) · **[Plano detalhado](./07-plano-onda-3.md)** | `telas/C-cortes-selecao-revisao.md`, C1–C2, `prototipo/revisao.html?variant=A` | 2 |
 | **4 · Editor** | `<ContextoCorte>` e exportação individual; palco 9:16 + transporte + barra de 5 ações com popovers; Transcrição/Índice do Corte; timeline compacta; ciclo de vida (`editor.open`, autosave, `editor.flush`, diálogo de 3 ações) | `telas/D-corte-editar.md`, D1–D5, `prototipo/editor.html?variant=D` | 3 |
 | **5 · Transformar e Empacotar** | Ângulos, Roteiro, Narração (TTS, gravação, importação, teleprompter); Empacotamento com validadores | `telas/E-corte-transformar-empacotar.md`, E1–E2 | 4 |
-| **6 · Exportação, Fila, Relatos, Sobre** | Mesa de prontidão e lote, painel da Fila de Jobs, Relatos (ADR-0006), Sobre e atualizações | `telas/F-exportacao-fila-relatos.md`, F1–F4 | 4 |
+| **6 · Exportação, Fila, Relatos, Sobre** | Mesa de prontidão e lote, painel da Fila de Jobs, Relatos (ADR-0006), Sobre e atualizações · **[Plano detalhado](./10-plano-onda-6.md)** | `telas/F-exportacao-fila-relatos.md`, F1–F4 | 4 |
 | **7 · Troca** | `tauri.conf.json` aponta para `front-v2/`; E2E Tauri (`scripts/e2e-tauri.mjs`) migrado para as telas v2; fechamento da janela com `app-close-requested` (#291); remoção do front v1 (`src/`, `design-system/`) **só com ok do dev** | `01-arquitetura.md` §5 | 1–6 e #289–#291 |
 
 Regras de toda onda:
