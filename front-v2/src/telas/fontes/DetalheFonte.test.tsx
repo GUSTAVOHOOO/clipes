@@ -870,4 +870,17 @@ describe('Tela DetalheFonte (#/projeto/:id/fontes/:fonteId)', () => {
       expect(screen.getByRole('button', { name: `Linha${prevFraseId}B` })).toHaveFocus()
     })
   })
+
+  it('UI-42: botão Selecionar Cortes usa ícone ArrowRight sem seta literal → no rótulo', async () => {
+    mockBase({ transcriptState: 'complete' })
+    render(
+      envolver(
+        <DetalheFonte projetoId="demo" projetoPath="/projetos/Demo.clipes" fonteId="4" />,
+      ),
+    )
+
+    const btnSelecionar = await screen.findByRole('button', { name: 'Selecionar Cortes' })
+    expect(btnSelecionar.textContent?.trim()).toBe('Selecionar Cortes')
+    expect(btnSelecionar.querySelector('svg')).not.toBeNull()
+  })
 })

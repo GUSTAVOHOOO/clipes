@@ -589,6 +589,146 @@ export function PainelMotorSinais({
     ? `${(hardware.gpu.free_mib / 1024).toFixed(1)} GB livres de ${(hardware.gpu.total_mib / 1024).toFixed(1)} GB`
     : 'Sem GPU dedicada'
 
+  const conteudoVad = (
+    <>
+      {agrupamento && (
+        <div
+          role="radiogroup"
+          aria-label="Modo de agrupamento VAD"
+          onKeyDown={moverFocoRadio}
+          className="flex flex-col gap-1.5"
+        >
+          <button
+            type="button"
+            role="radio"
+            aria-checked={agrupamento.mode === 'auto'}
+            tabIndex={agrupamento.mode === 'auto' ? 0 : -1}
+            onClick={() => void alterarAgrupamento({ auto: true })}
+            className={cn(
+              'foco flex min-h-6 cursor-pointer items-center justify-between rounded-controle border-0 px-2.5 py-1 text-left text-pequeno',
+              agrupamento.mode === 'auto'
+                ? 'bg-elevado font-medio text-t1'
+                : 'bg-chao text-t2 hover:bg-hover hover:text-t1',
+            )}
+          >
+            <span>Automático (recomendado)</span>
+            <span className="num text-t3">
+              {agrupamento.enabled ? `Ligado — até ${agrupamento.size} trechos` : 'Desligado'}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            role="radio"
+            aria-checked={agrupamento.mode === 'manual'}
+            tabIndex={agrupamento.mode === 'manual' ? 0 : -1}
+            onClick={() => void alterarAgrupamento({ enabled: agrupamento.enabled })}
+            className={cn(
+              'foco flex min-h-6 cursor-pointer items-center justify-between rounded-controle border-0 px-2.5 py-1 text-left text-pequeno',
+              agrupamento.mode === 'manual'
+                ? 'bg-elevado font-medio text-t1'
+                : 'bg-chao text-t2 hover:bg-hover hover:text-t1',
+            )}
+          >
+            <span>Manual</span>
+            <span className="num text-t3">
+              {agrupamento.enabled ? `Ligado — até ${agrupamento.size} trechos` : 'Desligado'}
+            </span>
+          </button>
+
+          <Checkbox
+            marcado={agrupamento.enabled}
+            aoMudar={(checked) => void alterarAgrupamento({ enabled: checked })}
+            className="text-pequeno"
+          >
+            Agrupar trechos consecutivos antes de transcrever
+          </Checkbox>
+        </div>
+      )}
+
+      <p className="rounded-controle bg-elevado px-2.5 py-1.5 text-pequeno text-t2">
+        No modo automático, o agrupamento fica ligado na CPU (acelera em ~18%) e desligado na GPU
+        (evita gastar ~1 GB extra de VRAM sem ganho medido).
+      </p>
+    </>
+  )
+
+  const cartaoBlocos =
+    transcricaoRodando || blocosVisiveis.length > 0 || parcialPausada || transcricaoConcluida ? (
+      <section aria-label="Blocos de 10 min" className="flex flex-col gap-2.5 rounded-area bg-area p-3">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-base font-forte text-t1">Blocos de 10 min</h2>
+          <span className="num text-pequeno text-t2">
+            {blocosVisiveis.length} / {totalBlocos} blocos salvos
+          </span>
+        </div>
+
+        <Progresso
+          valor={progressoDeterministico}
+          rotulo={
+            transcricaoRodando
+              ? traduzirEstagio(jobFilaTranscricao?.etapa, blocoAtual, totalBlocos)
+              : transcricaoConcluida
+                ? 'Transcrição concluída'
+                : `Progresso salvo até ${tcLongo(transcript?.resume_us ?? 0)}`
+          }
+          detalhe={
+            etaRestanteUs != null
+              ? `${Math.round(progressoDeterministico)}% · ETA ~${duracao(etaRestanteUs)}`
+              : `${Math.round(progressoDeterministico)}%`
+          }
+        />
+
+        {blocosVisiveis.length > 0 && (
+          <ul className="m-0 flex max-h-36 list-none flex-col gap-1 overflow-y-auto p-0">
+            {blocosVisiveis.map((b, idx) => {
+              const dispositivo = b.device === 'cpu' ? 'CPU' : 'GPU'
+              const faixa = `${tcLongo(b.start_us)}–${tcLongo(b.end_us)}`
+              return (
+                <li
+                  key={`${b.start_us}-${idx}`}
+                  className="flex items-center justify-between gap-2 rounded-controle bg-chao px-2 py-1 text-pequeno"
+                >
+                  <span className="num text-t1">{faixa}</span>
+                  <Dica
+                    texto={
+                      b.compute_type
+                        ? `${dispositivo} (${b.compute_type})`
+                        : `Processado em ${dispositivo}`
+                    }
+                  >
+                    <span className="rounded-mini bg-elevado px-1.5 py-0.5 text-micro text-t2">
+                      {dispositivo}
+                    </span>
+                  </Dica>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+
+        {transcricaoRodando && jobTranscricao && (
+          <div className="flex flex-col gap-1.5">
+            {transcript?.engine === 'groq' && (
+              <p className="text-pequeno text-t3">
+                Se houver chamada paga do Groq em voo ao cancelar, ela aparecerá como incerta na
+                Fila de Jobs para revisão.
+              </p>
+            )}
+            <Botao
+              variante="secundario"
+              tamanho="p"
+              icone={<Pause />}
+              carregando={cancelandoJob}
+              onClick={() => void cancelarJob(jobTranscricao.id)}
+            >
+              Pausar / Cancelar mantendo blocos salvos
+            </Botao>
+          </div>
+        )}
+      </section>
+    ) : null
+
   return (
     <div className="flex flex-col gap-3">
       {erroLocal && traducaoErro && (
@@ -653,6 +793,8 @@ export function PainelMotorSinais({
           </Status>
         </div>
       )}
+
+      {transcricaoRodando && cartaoBlocos}
 
       {/* Cartão 1: Motor de Transcrição */}
       <section aria-label="Motor de transcrição" className="flex flex-col gap-3 rounded-area bg-area p-3">
@@ -770,75 +912,29 @@ export function PainelMotorSinais({
                 </div>
               </details>
 
-              {/* Agrupamento VAD #279 */}
-              <div className="flex flex-col gap-2 rounded-controle bg-area p-2.5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <strong className="text-pequeno font-medio text-t1">
-                    Agrupamento de trechos (VAD)
-                  </strong>
-                  <Status tom="info">Vale para o app inteiro</Status>
-                </div>
-
-                {agrupamento && (
-                  <div
-                    role="radiogroup"
-                    aria-label="Modo de agrupamento VAD"
-                    onKeyDown={moverFocoRadio}
-                    className="flex flex-col gap-1.5"
-                  >
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={agrupamento.mode === 'auto'}
-                      tabIndex={agrupamento.mode === 'auto' ? 0 : -1}
-                      onClick={() => void alterarAgrupamento({ auto: true })}
-                      className={cn(
-                        'foco flex min-h-6 cursor-pointer items-center justify-between rounded-controle border-0 px-2.5 py-1 text-left text-pequeno',
-                        agrupamento.mode === 'auto'
-                          ? 'bg-elevado font-medio text-t1'
-                          : 'bg-chao text-t2 hover:bg-hover hover:text-t1',
-                      )}
-                    >
-                      <span>Automático (recomendado)</span>
-                      <span className="num text-t3">
-                        {agrupamento.enabled ? `Ligado — até ${agrupamento.size} trechos` : 'Desligado'}
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={agrupamento.mode === 'manual'}
-                      tabIndex={agrupamento.mode === 'manual' ? 0 : -1}
-                      onClick={() => void alterarAgrupamento({ enabled: agrupamento.enabled })}
-                      className={cn(
-                        'foco flex min-h-6 cursor-pointer items-center justify-between rounded-controle border-0 px-2.5 py-1 text-left text-pequeno',
-                        agrupamento.mode === 'manual'
-                          ? 'bg-elevado font-medio text-t1'
-                          : 'bg-chao text-t2 hover:bg-hover hover:text-t1',
-                      )}
-                    >
-                      <span>Manual</span>
-                      <span className="num text-t3">
-                        {agrupamento.enabled ? `Ligado — até ${agrupamento.size} trechos` : 'Desligado'}
-                      </span>
-                    </button>
-
-                    <Checkbox
-                      marcado={agrupamento.enabled}
-                      aoMudar={(checked) => void alterarAgrupamento({ enabled: checked })}
-                      className="text-pequeno"
-                    >
-                      Agrupar trechos consecutivos antes de transcrever
-                    </Checkbox>
+              {/* Agrupamento VAD */}
+              {transcricaoRodando ? (
+                <details className="rounded-controle bg-area p-2.5 text-pequeno text-t3">
+                  <summary className="foco min-h-6 cursor-pointer rounded-mini py-1 font-medio text-t2 hover:text-t1">
+                    Agrupamento de trechos (VAD) ·{' '}
+                    {agrupamento?.enabled ? 'Ligado' : 'Desligado'}
+                  </summary>
+                  <div className="mt-2 flex flex-col gap-2">
+                    <Status tom="info">Vale para o app inteiro</Status>
+                    {conteudoVad}
                   </div>
-                )}
-
-                <p className="rounded-controle bg-elevado px-2.5 py-1.5 text-pequeno text-t2">
-                  No modo automático, o agrupamento fica ligado na CPU (acelera em ~18%) e desligado
-                  na GPU (evita gastar ~1 GB extra de VRAM sem ganho medido).
-                </p>
-              </div>
+                </details>
+              ) : (
+                <div className="flex flex-col gap-2 rounded-controle bg-area p-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <strong className="text-pequeno font-medio text-t1">
+                      Agrupamento de trechos (VAD)
+                    </strong>
+                    <Status tom="info">Vale para o app inteiro</Status>
+                  </div>
+                  {conteudoVad}
+                </div>
+              )}
             </div>
           </div>
 
@@ -944,80 +1040,7 @@ export function PainelMotorSinais({
       </section>
 
       {/* Cartão 2: Progresso e Blocos de 10 min */}
-      {(transcricaoRodando || blocosVisiveis.length > 0 || parcialPausada || transcricaoConcluida) && (
-        <section aria-label="Blocos de 10 min" className="flex flex-col gap-2.5 rounded-area bg-area p-3">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-base font-forte text-t1">Blocos de 10 min</h2>
-            <span className="num text-pequeno text-t2">
-              {blocosVisiveis.length} / {totalBlocos} blocos salvos
-            </span>
-          </div>
-
-          <Progresso
-            valor={progressoDeterministico}
-            rotulo={
-              transcricaoRodando
-                ? traduzirEstagio(jobFilaTranscricao?.etapa, blocoAtual, totalBlocos)
-                : transcricaoConcluida
-                  ? 'Transcrição concluída'
-                  : `Progresso salvo até ${tcLongo(transcript?.resume_us ?? 0)}`
-            }
-            detalhe={
-              etaRestanteUs != null
-                ? `${Math.round(progressoDeterministico)}% · ETA ~${duracao(etaRestanteUs)}`
-                : `${Math.round(progressoDeterministico)}%`
-            }
-          />
-
-          {blocosVisiveis.length > 0 && (
-            <ul className="m-0 flex max-h-36 list-none flex-col gap-1 overflow-y-auto p-0">
-              {blocosVisiveis.map((b, idx) => {
-                const dispositivo = b.device === 'cpu' ? 'CPU' : 'GPU'
-                const faixa = `${tcLongo(b.start_us)}–${tcLongo(b.end_us)}`
-                return (
-                  <li
-                    key={`${b.start_us}-${idx}`}
-                    className="flex items-center justify-between gap-2 rounded-controle bg-chao px-2 py-1 text-pequeno"
-                  >
-                    <span className="num text-t1">{faixa}</span>
-                    <Dica
-                      texto={
-                        b.compute_type
-                          ? `${dispositivo} (${b.compute_type})`
-                          : `Processado em ${dispositivo}`
-                      }
-                    >
-                      <span className="rounded-mini bg-elevado px-1.5 py-0.5 text-micro text-t2">
-                        {dispositivo}
-                      </span>
-                    </Dica>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-
-          {transcricaoRodando && jobTranscricao && (
-            <div className="flex flex-col gap-1.5">
-              {transcript?.engine === 'groq' && (
-                <p className="text-pequeno text-t3">
-                  Se houver chamada paga do Groq em voo ao cancelar, ela aparecerá como incerta na
-                  Fila de Jobs para revisão.
-                </p>
-              )}
-              <Botao
-                variante="secundario"
-                tamanho="p"
-                icone={<Pause />}
-                carregando={cancelandoJob}
-                onClick={() => void cancelarJob(jobTranscricao.id)}
-              >
-                Pausar / Cancelar mantendo blocos salvos
-              </Botao>
-            </div>
-          )}
-        </section>
-      )}
+      {!transcricaoRodando && cartaoBlocos}
 
       {/* Cartão 3: Sinais para Seleção de Cortes */}
       <section aria-label="Sinais para Seleção de Cortes" className="flex flex-col gap-2.5 rounded-area bg-area p-3">

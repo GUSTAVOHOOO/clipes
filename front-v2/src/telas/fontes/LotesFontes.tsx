@@ -171,10 +171,19 @@ export function LotesFontes({
               tipo="vazio"
               titulo="Nenhum lote executado neste Projeto ainda."
               descricao="Selecione Fontes ao lado para processar Transcrição e Seleção de Cortes em sequência."
-              acaoPrimaria={{
-                rotulo: 'Focar seleção de Fontes',
-                aoAcionar: focarSelecaoFontes,
-              }}
+              {...(projetoPath
+                ? {
+                    acaoSecundaria: {
+                      rotulo: 'Focar seleção de Fontes',
+                      aoAcionar: focarSelecaoFontes,
+                    },
+                  }
+                : {
+                    acaoPrimaria: {
+                      rotulo: 'Focar seleção de Fontes',
+                      aoAcionar: focarSelecaoFontes,
+                    },
+                  })}
             />
           </div>
         ) : (

@@ -695,4 +695,52 @@ describe('Tela Fontes (#/projeto/:id/fontes)', () => {
     expect(store.estado().selecionadasParaLote).toEqual([])
     expect(screen.getByRole('tab', { name: 'Fontes (2)' })).toBeInTheDocument()
   })
+
+  it('UI-40b: mantém apenas um botão bg-sinal em estado vazio ao alternar EntradaFonte para URL (VOD) ou inspecionar local', async () => {
+    const user = userEvent.setup()
+    mockBase({
+      fontes: [],
+      overrides: {
+        'sources.inspect': () => ({
+          format: { duration: '120.0' },
+          streams: [
+            { index: 0, codec_type: 'video', width: 1920, height: 1080, avg_frame_rate: '60/1' },
+            { index: 1, codec_type: 'audio', codec_name: 'aac', tags: { title: 'Mic' } },
+          ],
+        }),
+      },
+    })
+
+    const { container } = render(
+      envolver(<Fontes projetoId="demo" projetoPath="/projetos/Demo.clipes" sub="fontes" store={store} />),
+    )
+
+    const btnImportarPrimeira = await screen.findByRole('button', { name: 'Importar primeira Fonte' })
+    expect(Array.from(container.querySelectorAll('button.bg-sinal'))).toHaveLength(1)
+    expect(btnImportarPrimeira).toHaveClass('bg-sinal')
+
+    // Alterna EntradaFonte para URL (VOD): Baixar por URL assume o papel primário
+    await user.click(screen.getByRole('radio', { name: /URL \(VOD\)/i }))
+    const botoesSinalUrl = Array.from(container.querySelectorAll('button.bg-sinal'))
+    expect(botoesSinalUrl).toHaveLength(1)
+    expect(botoesSinalUrl[0]).toHaveTextContent('Baixar por URL')
+    expect(screen.getByRole('button', { name: 'Importar primeira Fonte' })).not.toHaveClass('bg-sinal')
+
+    // Volta para Arquivo local e inspeciona arquivo: Importar Fonte assume o papel primário
+    await user.click(screen.getByRole('radio', { name: /Arquivo local/i }))
+    expect(screen.getByRole('button', { name: 'Importar primeira Fonte' })).toHaveClass('bg-sinal')
+    expect(Array.from(container.querySelectorAll('button.bg-sinal'))).toHaveLength(1)
+
+    await user.type(screen.getByRole('textbox', { name: /Arquivo de vídeo/i }), '/videos/nova.mp4')
+    await user.click(screen.getByRole('button', { name: 'Inspecionar arquivo' }))
+    const btnImportarFonte = await screen.findByRole('button', { name: 'Importar Fonte' })
+    expect(btnImportarFonte).toHaveClass('bg-sinal')
+    expect(screen.getByRole('button', { name: 'Importar primeira Fonte' })).not.toHaveClass('bg-sinal')
+    expect(Array.from(container.querySelectorAll('button.bg-sinal'))).toHaveLength(1)
+
+    // Ao limpar seleção, Importar primeira Fonte volta a ser o único bg-sinal
+    await user.click(screen.getByRole('button', { name: 'Limpar seleção' }))
+    expect(screen.getByRole('button', { name: 'Importar primeira Fonte' })).toHaveClass('bg-sinal')
+    expect(Array.from(container.querySelectorAll('button.bg-sinal'))).toHaveLength(1)
+  })
 })

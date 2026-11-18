@@ -45,6 +45,7 @@ export function Fontes({
   } = useFontesProjeto(projetoPath, { store })
 
   const [modoEntrada, setModoEntrada] = useState<ModoEntradaFonte>('local')
+  const [entradaCtaPrimarioAtivo, setEntradaCtaPrimarioAtivo] = useState(false)
   const inputLocalRef = useRef<HTMLInputElement>(null)
   const buscaGlobalRef = useRef<HTMLInputElement>(null)
 
@@ -266,6 +267,7 @@ export function Fontes({
                 refPrimeiroControle={inputLocalRef}
                 modo={modoEntrada}
                 aoMudarModo={setModoEntrada}
+                aoMudarCtaPrimarioAtivo={setEntradaCtaPrimarioAtivo}
               />
             </div>
           )}
@@ -317,10 +319,19 @@ export function Fontes({
                   tipo="vazio"
                   titulo="Nenhuma Fonte importada ainda"
                   descricao="Importe um arquivo de vídeo do seu computador ou baixe uma live gravada (VOD) por URL para começar a transcrever."
-                  acaoPrimaria={{
-                    rotulo: 'Importar primeira Fonte',
-                    aoAcionar: focarEntradaLocal,
-                  }}
+                  {...(Boolean(projetoPath) && (modoEntrada === 'url' || entradaCtaPrimarioAtivo)
+                    ? {
+                        acaoSecundaria: {
+                          rotulo: 'Importar primeira Fonte',
+                          aoAcionar: focarEntradaLocal,
+                        },
+                      }
+                    : {
+                        acaoPrimaria: {
+                          rotulo: 'Importar primeira Fonte',
+                          aoAcionar: focarEntradaLocal,
+                        },
+                      })}
                 />
               </div>
             )}
