@@ -3,19 +3,65 @@ on:
   pull_request:
   push:
     branches: [master]
+
+# Um run novo no mesmo PR cancela o anterior; na master nunca cancela.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Política: PR roda só o que o diff toca, no SO mais barato (Ubuntu; o E2E Tauri
+# fica no Windows, que é o alvo distribuído). Push na master roda tudo em
+# Windows + Ubuntu. O job `ci-ok` agrega o resultado: skipped conta como ok.
 jobs:
-  check:
-    timeout-minutes: 90
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      rust: ${{ steps.f.outputs.rust }}
+      front_v1: ${{ steps.f.outputs.front_v1 }}
+      front_v2: ${{ steps.f.outputs.front_v2 }}
+      tauri: ${{ steps.f.outputs.tauri }}
+      worker: ${{ steps.f.outputs.worker }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: f
+        shell: bash
+        run: |
+          # Fora de PR (push na master) tudo roda.
+          if [[ "$GITHUB_EVENT_NAME" != "pull_request" ]]; then
+            files="__ALL__"
+          else
+            files="$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")"
+          fi
+          echo "$files"
+          match() { # match <regex>
+            if [[ "$files" == "__ALL__" ]]; then echo true; return; fi
+            if grep -Eq "$1" <<<"$files"; then echo true; else echo false; fi
+          }
+          # O próprio CI mudou: valida tudo.
+          ci='^\.github/workflows/ci\.yml$'
+          echo "rust=$(match "$ci|^(core|src-tauri|benchmarks/transcricao)/|^(Cargo\.toml|Cargo\.lock|deny\.toml)$")" >> "$GITHUB_OUTPUT"
+          echo "front_v1=$(match "$ci|^(src|design-system|scripts)/|^(package\.json|bun\.lock|index\.html|vite\.config\.ts|tsconfig\.json)$")" >> "$GITHUB_OUTPUT"
+          echo "front_v2=$(match "$ci|^(front-v2|design-system-v2)/|^src/lib/")" >> "$GITHUB_OUTPUT"
+          echo "tauri=$(match "$ci|^(core|src-tauri|src|scripts|catalog)/|^(Cargo\.toml|Cargo\.lock|package\.json|bun\.lock|vite\.config\.ts)$")" >> "$GITHUB_OUTPUT"
+          echo "worker=$(match "$ci|^worker/")" >> "$GITHUB_OUTPUT"
+
+  # Núcleo Rust + métricas do benchmark.
+  rust:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    timeout-minutes: 60
     strategy:
+      fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["windows-latest","ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: '1.3.12'
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf ffmpeg
@@ -26,11 +72,27 @@ jobs:
       - name: Verify libass for export parity
         shell: bash
         run: ffmpeg -hide_banner -h filter=ass
-      - run: bun install --frozen-lockfile
       - name: Testar métricas do benchmark
         shell: bash
         run: PYTHONPATH=benchmarks/transcricao python -m unittest discover -s benchmarks/transcricao/tests
       - run: cargo test --workspace
+
+  # Front v1 (app Tauri atual).
+  front-v1:
+    needs: changes
+    if: needs.changes.outputs.front_v1 == 'true'
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["windows-latest","ubuntu-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.12'
+      - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run build
       - name: Install browser dependencies (Linux)
@@ -41,34 +103,47 @@ jobs:
         run: bunx playwright install chromium
       - run: bun run test:contrast
       - run: bun run test:ui
-      - name: Install front-v2 dependencies
+
+  # Front v2 (sobre o mock TypeScript do núcleo).
+  front-v2:
+    needs: changes
+    if: needs.changes.outputs.front_v2 == 'true'
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["windows-latest","ubuntu-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
         working-directory: front-v2
-        run: bun install --frozen-lockfile
-      - name: Install front-v2 browser (Linux)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.12'
+      - run: bun install --frozen-lockfile
+      - name: Install browser (Linux)
         if: runner.os == 'Linux'
-        working-directory: front-v2
         run: bunx playwright install --with-deps chromium
-      - name: Install front-v2 browser (Windows)
+      - name: Install browser (Windows)
         if: runner.os == 'Windows'
-        working-directory: front-v2
         run: bunx playwright install chromium
-      - name: Typecheck front-v2
-        working-directory: front-v2
-        run: bun run typecheck
-      - name: Build front-v2
-        working-directory: front-v2
-        run: bun run build
-      - name: Test front-v2
-        working-directory: front-v2
-        run: bun run test
-      - name: E2E front-v2
-        working-directory: front-v2
-        run: bunx playwright test
+      - run: bun run typecheck
+      - run: bun run build
+      - run: bun run test
+      - run: bunx playwright test
+
+  # E2E do app Tauri real. Em PR: só se o diff toca o app e só no Windows
+  # (alvo distribuído). Na master: Windows + Ubuntu.
   e2e:
+    needs: changes
+    if: needs.changes.outputs.tauri == 'true'
     timeout-minutes: 60
     strategy:
+      fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["windows-latest"]' || '["windows-latest","ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -76,6 +151,7 @@ jobs:
         with:
           bun-version: '1.3.12'
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
@@ -109,11 +185,15 @@ jobs:
       - name: Run Tauri E2E (Windows)
         if: runner.os == 'Windows'
         run: bun run test:e2e
+
   worker:
+    needs: changes
+    if: needs.changes.outputs.worker == 'true'
     timeout-minutes: 10
     strategy:
+      fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["windows-latest","ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -124,6 +204,8 @@ jobs:
         run: uv run --frozen --extra cpu --project worker pytest worker/tests
       - name: Verificar licenças do ambiente Python fixado
         run: uv run --frozen --extra cpu --project worker python worker/check_licenses.py
+
+  # Barato (~30 s): roda sempre.
   licenses:
     timeout-minutes: 10
     runs-on: ubuntu-latest
@@ -146,3 +228,18 @@ jobs:
           node --test scripts/license-policy.test.mjs
           bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start . --excludePackages 'clipes@1.0.0' --json | node scripts/check-licenses.mjs
           bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start design-system --excludePackages '@clipes/design-system@0.1.0' --json | node scripts/check-licenses.mjs
+
+  # Check único para olhar (ou exigir na proteção de branch): verde se nada
+  # falhou nem foi cancelado; jobs pulados pelo filtro de caminho contam como ok.
+  ci-ok:
+    if: always()
+    needs: [changes, rust, front-v1, front-v2, e2e, worker, licenses]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Agregar resultado
+        shell: bash
+        run: |
+          echo '${{ toJSON(needs) }}'
+          if [[ '${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}' == 'true' ]]; then
+            exit 1
+          fi
