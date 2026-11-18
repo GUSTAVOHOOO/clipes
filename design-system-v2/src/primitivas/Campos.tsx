@@ -8,8 +8,8 @@ import { Kbd } from './Botao'
 import { camadaBase, itemBase } from './Flutuantes'
 
 export const caixaCampo =
-  'w-full rounded-controle border-0 bg-elevado text-t1 outline-none transition-[background-color,box-shadow] duration-(--dur-base) ease-saida ' +
-  'hover:bg-hover focus-visible:bg-elevado focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-foco ' +
+  'w-full rounded-controle border-0 bg-elevado text-t1 shadow-[inset_0_0_0_1px_var(--contorno-campo)] outline-none transition-[background-color,box-shadow] duration-(--dur-base) ease-saida ' +
+  'in-[.bg-elevado]:bg-chao hover:bg-hover in-[.bg-elevado]:hover:bg-hover focus-visible:bg-elevado in-[.bg-elevado]:focus-visible:bg-chao focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-foco ' +
   'disabled:pointer-events-none disabled:opacity-40 aria-invalid:shadow-[inset_0_0_0_1px_var(--erro)]'
 
 type CampoProps = {
@@ -106,7 +106,7 @@ export function Select<V extends string>({ valor, aoMudar, opcoes, rotulo, place
   const atual = opcoes.find((o) => o.valor === valor)
   return (
     <S.Root value={valor} onValueChange={(v) => v != null && aoMudar(v as V)} items={opcoes.map((o) => ({ value: o.valor, label: o.rotulo }))} disabled={desabilitado} modal={false}>
-      <S.Trigger id={id} aria-label={rotulo} {...aria} className={cn(caixaCampo, 'flex h-7 min-w-36 cursor-pointer items-center gap-2 pr-1.5 pl-2.5 text-left text-pequeno data-popup-open:bg-hover', className)}>
+      <S.Trigger id={id} aria-label={rotulo} {...aria} className={cn(caixaCampo, 'flex h-7 min-w-36 cursor-pointer items-center gap-2 pr-1.5 pl-2.5 text-left text-pequeno data-popup-open:bg-hover in-[.bg-elevado]:data-popup-open:bg-hover', className)}>
         <S.Value className={cn('flex-1 truncate', !atual && 'text-t3')}>{atual?.rotulo ?? placeholder}</S.Value>
         <S.Icon className="text-t3">
           <ChevronsUpDown className="size-[14px] stroke-[1.75]" />

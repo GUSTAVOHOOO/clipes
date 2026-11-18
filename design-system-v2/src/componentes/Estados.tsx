@@ -84,13 +84,16 @@ export interface EstadoTelaProps {
   acaoSecundaria?: { rotulo: string; aoAcionar: () => void }
   /** faixa no topo de listas/sub-abas em vez do bloco centrado */
   compacto?: boolean
+  /** nível semântico do título no bloco centrado (h1 quando a tela inteira é um placeholder) */
+  nivelTitulo?: 'h1' | 'h2'
 }
 
 const iconeEstado = { vazio: CircleDashed, parcial: CircleDashed, sem_permissao: Lock }
 
 /** Explica o porquê em PT-BR e leva à próxima ação real com um único primário. */
-export function EstadoTela({ tipo, titulo, descricao, acaoPrimaria, acaoSecundaria, compacto }: EstadoTelaProps) {
+export function EstadoTela({ tipo, titulo, descricao, acaoPrimaria, acaoSecundaria, compacto, nivelTitulo = 'h2' }: EstadoTelaProps) {
   const Icone = iconeEstado[tipo]
+  const Titulo = nivelTitulo === 'h1' ? 'h1' : 'h2'
   if (compacto)
     return (
       <div role="status" className="flex items-center gap-3 rounded-area bg-area px-3 py-2">
@@ -114,7 +117,7 @@ export function EstadoTela({ tipo, titulo, descricao, acaoPrimaria, acaoSecundar
     <div className="flex h-full w-full items-center justify-center p-8">
       <div className="flex max-w-[44ch] flex-col items-start gap-3">
         <Icone className="size-5 stroke-[1.5] text-t3" aria-hidden />
-        <h2 className="text-titulo font-forte tracking-[-0.01em] text-balance text-t1">{titulo}</h2>
+        <Titulo className="text-titulo font-forte tracking-[-0.01em] text-balance text-t1">{titulo}</Titulo>
         <p className="text-t2">{descricao}</p>
         {(acaoPrimaria || acaoSecundaria) && (
           <div className="mt-2 flex gap-2">
@@ -158,7 +161,7 @@ export function BannerErroCore({ erro, acaoRecuperacao, acaoSecundaria, permitir
         <p className="text-t1">{t.titulo}</p>
         {t.explicacao && <p className="text-pequeno text-t2">{t.explicacao}</p>}
         <details className="group mt-0.5 text-pequeno text-t3">
-          <summary className="w-fit cursor-pointer list-none rounded-controle hover:text-t2 [&::-webkit-details-marker]:hidden">
+          <summary className="inline-flex min-h-6 w-fit cursor-pointer list-none items-center rounded-controle hover:text-t2 [&::-webkit-details-marker]:hidden">
             <span className="group-open:hidden">Ver detalhe técnico</span>
             <span className="hidden group-open:inline">Ocultar detalhe técnico</span>
           </summary>
@@ -166,7 +169,7 @@ export function BannerErroCore({ erro, acaoRecuperacao, acaoSecundaria, permitir
             {erro.code}: {erro.message}
           </code>
           {permitirRelato && (
-            <a href="#/relatos?tipo=bug" className="mt-1.5 inline-block text-t2 underline hover:text-t1">
+            <a href="#/relatos?tipo=bug" className="mt-1.5 inline-flex min-h-6 items-center text-t2 underline hover:text-t1">
               Mandar relato com este erro
             </a>
           )}

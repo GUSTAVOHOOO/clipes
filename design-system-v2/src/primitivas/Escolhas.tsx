@@ -86,7 +86,7 @@ type OpcaoSeg<V extends string> = { valor: V; rotulo: ReactNode; desabilitada?: 
 /** Escolha exclusiva curta (Preencher · Ajustar · Duplo). Usa radiogroup com setas. */
 export function Segmentado<V extends string>({ valor, aoMudar, opcoes, rotulo, className }: { valor: V; aoMudar: (v: V) => void; opcoes: OpcaoSeg<V>[]; rotulo: string; className?: string }) {
   return (
-    <div role="radiogroup" aria-label={rotulo} className={cn('flex gap-0.5 rounded-controle bg-chao p-0.5', className)}
+    <div role="radiogroup" aria-label={rotulo} className={cn('flex gap-0.5 rounded-controle bg-chao p-0.5 shadow-[inset_0_0_0_1px_var(--contorno-controle)]', className)}
       onKeyDown={(e) => {
         if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
         const ativas = opcoes.filter((o) => !o.desabilitada)
@@ -101,7 +101,7 @@ export function Segmentado<V extends string>({ valor, aoMudar, opcoes, rotulo, c
         return (
           <button key={o.valor} type="button" role="radio" aria-checked={sel} tabIndex={sel ? 0 : -1} disabled={o.desabilitada} onClick={() => aoMudar(o.valor)}
             className={cn('h-6.5 flex-1 cursor-pointer rounded-mini border-0 px-2 text-pequeno transition-colors duration-(--dur-rapida) ease-saida disabled:opacity-40',
-              sel ? 'bg-elevado font-medio text-t1' : 'bg-transparent text-t3 hover:text-t2')}
+              sel ? 'bg-elevado font-medio text-t1 shadow-[inset_0_0_0_1px_var(--contorno-controle)]' : 'bg-transparent text-t3 hover:text-t2')}
           >
             {o.rotulo}
           </button>
@@ -122,7 +122,7 @@ export function GradeOpcoes<V extends string>({ valor, aoMudar, opcoes, rotulo, 
         return (
           <button key={o.valor} type="button" role="radio" aria-checked={sel} onClick={() => aoMudar(o.valor)}
             className={cn('flex cursor-pointer flex-col items-center gap-1.5 rounded-controle border-0 px-1.5 py-2 text-pequeno transition-colors duration-(--dur-base) ease-saida [&_svg]:size-4 [&_svg]:stroke-[1.75]',
-              sel ? 'marcado bg-hover font-medio text-t1' : 'bg-chao text-t2 hover:bg-hover hover:text-t1')}
+              sel ? 'marcado bg-hover font-medio text-t1' : 'bg-chao text-t2 shadow-[inset_0_0_0_1px_var(--contorno-controle)] hover:bg-hover hover:text-t1')}
           >
             {o.icone}
             {o.rotulo}
