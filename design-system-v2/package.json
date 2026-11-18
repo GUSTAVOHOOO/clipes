@@ -1,0 +1,33 @@
+{
+  "name": "@clipes/design-system-v2",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "Design system do front v2 do Clipes: tokens, primitivas e componentes do catálogo, com galeria local.",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -p . && vite build",
+    "typecheck": "tsc -p .",
+    "preview": "vite preview --host 127.0.0.1",
+    "contraste": "bun scripts/contraste.ts"
+  },
+  "dependencies": {
+    "@base-ui/react": "1.9.0",
+    "@fontsource-variable/inter": "5.3.0",
+    "@tanstack/react-virtual": "3.14.26",
+    "cmdk": "1.1.1",
+    "lucide-react": "1.72.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "tailwindcss": "4.3.5",
+    "typescript": "7.0.2",
+    "vite": "8.3.8"
+  }
+}

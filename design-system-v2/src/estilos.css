@@ -1,0 +1,5 @@
+/* Ponto de entrada do design system v2: Tailwind 4, tokens e base.
+   No app: @import '@clipes/design-system-v2/estilos.css'; e um @source para os componentes. */
+@import 'tailwindcss';
+@import './tokens/tokens.css';
+@import './tokens/base.css';
