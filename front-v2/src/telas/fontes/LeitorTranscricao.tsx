@@ -150,6 +150,8 @@ export function LeitorTranscricao({
   const inputEdicaoRef = useRef<HTMLInputElement | null>(null)
   const devolverFocoPosRef = useRef<number | null>(null)
   const paginasEmVooRef = useRef<Set<number>>(new Set())
+  const aoErroRef = useRef(aoErro)
+  aoErroRef.current = aoErro
 
   const carregarPagina = useCallback(
     async (offset: number, _limit = TAMANHO_PAGINA) => {
@@ -171,12 +173,12 @@ export function LeitorTranscricao({
           return prox
         })
       } catch (err) {
-        aoErro?.(normalizarErro(err))
+        aoErroRef.current?.(normalizarErro(err))
       } finally {
         paginasEmVooRef.current.delete(inicioPagina)
       }
     },
-    [aoErro, fonteId],
+    [fonteId],
   )
 
   useEffect(() => {
@@ -219,7 +221,7 @@ export function LeitorTranscricao({
         }
       })
       .catch((err) => {
-        if (!cancelado) aoErro?.(normalizarErro(err))
+        if (!cancelado) aoErroRef.current?.(normalizarErro(err))
       })
       .finally(() => {
         if (!cancelado) setCarregandoInicial(false)
@@ -228,7 +230,7 @@ export function LeitorTranscricao({
     return () => {
       cancelado = true
     }
-  }, [aoErro, carregarPagina, fonteId, scrollPara?.frase, scrollPara?.row])
+  }, [carregarPagina, fonteId, scrollPara?.frase, scrollPara?.row])
 
   // Restaura foco na palavra após confirmar ou cancelar edição inline
   useEffect(() => {
