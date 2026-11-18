@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A9 · Config: Aparência e Teclado — Wireframes Clipes v2</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .config-nav { width: 220px; flex-shrink: 0; }
+  .config-nav-item {
+    padding: 9px 12px; border-bottom: 1px solid var(--sutil);
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    color: var(--texto-2);
+  }
+  .config-nav-item.ativo { background: var(--sutil); color: var(--texto); font-weight: 600; }
+  .config-nav-item.desab { color: var(--texto-3); }
+  .config-conteudo {
+    flex: 1; min-width: 0; min-height: 0; overflow: auto;
+    padding: 14px 20px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .bloco-cfg { border: 1px solid var(--borda); border-radius: var(--r); background: var(--tela); padding: 10px 12px; display: flex; flex-direction: column; gap: 7px; }
+  .seg { display: inline-flex; border: 1px solid var(--borda); border-radius: var(--r); overflow: hidden; }
+  .seg-item { padding: 5px 10px; background: var(--tela); color: var(--texto-2); border-right: 1px solid var(--borda); }
+  .seg-item:last-child { border-right: 0; }
+  .seg-item.ativo { background: var(--forte); color: #fff; font-weight: 600; }
+  .radio-sim { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--texto); font-size: 9px; flex: none; }
+  .escala-115 { font-size: 15px; }
+  .escala-115 .btn { min-height: 32px; }
+  .alto-contraste .bloco-cfg,
+  .alto-contraste .campo,
+  .alto-contraste .btn,
+  .alto-contraste .selo { border-color: var(--texto); }
+  .erro-core { border: 1px solid var(--texto); border-radius: var(--r); background: var(--painel); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .captura-tecla { border: 1px dashed var(--texto); background: var(--painel); padding: 3px 8px; border-radius: var(--r); font-size: 12px; }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>A9 · Config: Aparência e Teclado</h1>
+    <p>Rota: <span class="mono">#/config/aparencia</span>. Fonte:
+      <span class="mono">telas/A-shell-inicio-config.md</span> (Tela 9),
+      <span class="mono">01-arquitetura.md</span> §3, §8–9 e
+      <span class="mono">02-consolidacao.md</span> §3.</p>
+    <nav>
+      <a href="#normal">1. Normal 1366</a>
+      <a href="#escala-wcag">2. Escala 115% + Alto Contraste + WCAG 2.1.4 (Alt)</a>
+      <a href="#remap-conflito">3. Remapeamento e conflito de atalho</a>
+      <a href="#dialogo">4. Restaurar padrões (&lt;ConfirmDialog&gt;)</a>
+    </nav>
+  </header>
+
+  <!-- 1. Normal 1366x768 -->
+  <section class="wf-variante" id="normal">
+    <h2>1. Normal · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Meu canal ▾</button>
+          <nav class="etapas" aria-label="Etapas do Projeto">
+            <span class="etapa">1. Fontes <small>3</small></span>
+            <span class="etapa">2. Cortes <small>12</small></span>
+            <span class="etapa">3. Exportação <small>4</small></span>
+          </nav>
+          <div class="linha empurra">
+            <button class="btn">Fila · 0</button>
+            <button class="btn">Buscar <kbd>Ctrl+K</kbd></button>
+            <button class="btn icone sel" aria-label="Configurações">⚙</button>
+            <button class="btn">Mais ▾</button>
+          </div>
+        </header>
+
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações <kbd class="empurra">Ctrl+,</kbd></div>
+            <nav class="lista" aria-label="Seções de Configurações">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item">Componentes e Armazenamento</div>
+              <div class="config-nav-item">Exportação e Encoder</div>
+              <div class="config-nav-item ativo" aria-current="page">Aparência e Teclado</div>
+              <div class="config-nav-item">Projeto atual</div>
+            </nav>
+          </aside>
+
+          <div class="config-conteudo">
+            <h2 style="margin: 0; font-size: 18px">Aparência e Teclado</h2>
+
+            <!-- 1. Visual e Idioma -->
+            <div class="bloco-cfg leitura">
+              <strong>1. Visual e Idioma</strong>
+              <div class="linha">
+                <span class="rotulo" style="width: 150px">Tema:</span>
+                <div class="seg" role="radiogroup" aria-label="Tema">
+                  <span class="seg-item ativo">Escuro</span>
+                  <span class="seg-item">Claro</span>
+                  <span class="seg-item">Seguir sistema</span><span class="n">1</span>
+                </div>
+              </div>
+              <div class="linha">
+                <span class="rotulo" style="width: 150px">Alto Contraste:</span>
+                <label class="linha"><input type="checkbox"> <span>Modo Alto Contraste (bordas e texto ≥ 7:1)</span></label>
+              </div>
+              <div class="linha">
+                <span class="rotulo" style="width: 150px">Escala da interface:</span>
+                <div class="seg" role="radiogroup" aria-label="Escala da interface">
+                  <span class="seg-item ativo">100% (Padrão 13 px)</span>
+                  <span class="seg-item">115% (Maior 15 px)</span>
+                </div>
+              </div>
+              <div class="linha">
+                <span class="rotulo" style="width: 150px">Idioma:</span>
+                <div class="campo" style="width: 210px; color: var(--texto)">Português (Brasil) ▾</div>
+              </div>
+              <div class="linha" style="align-items: flex-start">
+                <span class="rotulo" style="width: 150px">Painéis e movimento:</span>
+                <div class="coluna cresce" style="gap: 4px">
+                  <label class="linha"><input type="checkbox" checked> <span>Abrir gavetas e painéis apenas por clique ou atalho</span></label>
+                  <span class="rotulo">Animações respeitam automaticamente a preferência <span class="mono">prefers-reduced-motion</span> do sistema.</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. WCAG 2.1.4 -->
+            <div class="bloco-cfg leitura">
+              <div class="linha">
+                <strong>2. Acessibilidade de Teclado (WCAG 2.1.4)</strong><span class="n">2</span>
+              </div>
+              <span class="rotulo">Atalhos de tecla única (<kbd>Espaço</kbd>, <kbd>J</kbd>, <kbd>K</kbd>, <kbd>L</kbd>, <kbd>I</kbd>, <kbd>O</kbd>, <kbd>A</kbd>, <kbd>R</kbd>, <kbd>?</kbd>):</span>
+              <div class="coluna" role="radiogroup" aria-label="Modo de teclas únicas">
+                <label class="linha"><span class="radio-sim">●</span> <strong>Ativos fora de campos de texto (padrão NLE)</strong></label>
+                <label class="linha"><span class="radio-sim"></span> <span>Exigir modificador <kbd>Alt</kbd> + tecla (evita disparos acidentais)</span></label>
+                <label class="linha"><span class="radio-sim"></span> <span>Desligar todos os atalhos de tecla única (mantém <kbd>Ctrl/Cmd</kbd> e <kbd>F6</kbd>)</span></label>
+              </div>
+            </div>
+
+            <!-- 3. Mapa de Atalhos -->
+            <div class="bloco-cfg">
+              <div class="linha">
+                <strong>3. Mapa de Atalhos (pesquisável e remapeável)</strong>
+                <div class="campo empurra" style="width: 240px">Buscar ação, escopo ou tecla…</div>
+                <button class="btn">Restaurar padrões</button>
+              </div>
+              <table class="tabela" role="grid" aria-label="Mapa de atalhos de teclado">
+                <thead>
+                  <tr><th>Escopo</th><th>Ação</th><th>Atalho atual</th><th>Remapear</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Global</td>
+                    <td>Paleta de comandos</td>
+                    <td><kbd>Ctrl+K</kbd></td>
+                    <td><button class="btn">Remapear</button></td>
+                  </tr>
+                  <tr>
+                    <td>Global</td>
+                    <td>Alternar entre regiões da janela</td>
+                    <td><kbd>F6</kbd> / <kbd>Shift+F6</kbd></td>
+                    <td><button class="btn">Remapear</button></td>
+                  </tr>
+                  <tr>
+                    <td>Transporte</td>
+                    <td>Reproduzir / Pausar</td>
+                    <td><kbd>Espaço</kbd><span class="n">3</span></td>
+                    <td><button class="btn">Remapear</button></td>
+                  </tr>
+                  <tr>
+                    <td>Revisão de Cortes</td>
+                    <td>Aprovar candidato</td>
+                    <td><kbd>A</kbd></td>
+                    <td><button class="btn">Remapear</button></td>
+                  </tr>
+                  <tr>
+                    <td>Editor do Corte</td>
+                    <td>Mover borda Entrada para a agulha</td>
+                    <td><kbd>I</kbd></td>
+                    <td><button class="btn">Remapear</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </main>
+
+        <footer class="barra-status"><span>Salvo</span><span>·</span><span>Preferências salvas localmente</span><span class="empurra"><kbd>F6</kbd> alternar região · <kbd>?</kbd> atalhos</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Escala 115% + Alto Contraste + WCAG 2.1.4 (Alt) -->
+  <section class="wf-variante" id="escala-wcag">
+    <h2>2. Escala 115% + Alto Contraste + WCAG 2.1.4 "Exigir Alt" · 1366 × 768</h2>
+    <div class="wf-quadro w1366 escala-115 alto-contraste">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Meu canal ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes <small>3</small></span><span class="etapa">2. Cortes <small>12</small></span><span class="etapa">3. Exportação <small>4</small></span></nav>
+          <div class="linha empurra"><button class="btn">Fila · 0</button><button class="btn">Buscar <kbd>Ctrl+K</kbd></button><button class="btn icone sel">⚙</button></div>
+        </header>
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações</div>
+            <nav class="lista">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item">Componentes e Armazenamento</div>
+              <div class="config-nav-item">Exportação e Encoder</div>
+              <div class="config-nav-item ativo">Aparência e Teclado</div>
+              <div class="config-nav-item">Projeto atual</div>
+            </nav>
+          </aside>
+          <div class="config-conteudo">
+            <h2 style="margin: 0; font-size: 20px">Aparência e Teclado</h2>
+            <div class="bloco-cfg leitura">
+              <strong>1. Visual e Idioma</strong>
+              <div class="linha">
+                <span class="rotulo" style="width: 155px">Alto Contraste:</span>
+                <label class="linha"><input type="checkbox" checked> <strong>Ativo</strong> (<span class="mono">[data-contrast="high"]</span>)</label><span class="n">4</span>
+              </div>
+              <div class="linha">
+                <span class="rotulo" style="width: 155px">Escala da interface:</span>
+                <div class="seg"><span class="seg-item">100%</span><span class="seg-item ativo">115% (15 px)</span></div>
+              </div>
+            </div>
+
+            <div class="bloco-cfg leitura">
+              <strong>2. Acessibilidade de Teclado (WCAG 2.1.4)</strong>
+              <div class="coluna">
+                <label class="linha"><span class="radio-sim"></span> <span>Ativos fora de campos de texto</span></label>
+                <label class="linha"><span class="radio-sim">●</span> <strong>Exigir modificador Alt + tecla</strong></label>
+                <label class="linha"><span class="radio-sim"></span> <span>Desligar todos os atalhos de tecla única</span></label>
+              </div>
+            </div>
+
+            <div class="bloco-cfg">
+              <strong>3. Mapa de Atalhos (atualizado com Alt)</strong>
+              <table class="tabela" role="grid">
+                <thead><tr><th>Escopo</th><th>Ação</th><th>Atalho ativo</th><th>Remapear</th></tr></thead>
+                <tbody>
+                  <tr><td>Transporte</td><td>Reproduzir / Pausar</td><td><kbd>Alt+Espaço</kbd></td><td><button class="btn">Remapear</button></td></tr>
+                  <tr><td>Revisão</td><td>Aprovar candidato</td><td><kbd>Alt+A</kbd></td><td><button class="btn">Remapear</button></td></tr>
+                  <tr><td>Editor</td><td>Borda Entrada na agulha</td><td><kbd>Alt+I</kbd></td><td><button class="btn">Remapear</button></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </main>
+        <footer class="barra-status"><span>Salvo</span><span>·</span><span>Sem rolagem horizontal em 1366×768</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Remapeamento e conflito -->
+  <section class="wf-variante" id="remap-conflito">
+    <h2>3. Remapeamento em captura, conflito de atalho e busca vazia · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup"><button class="btn fantasma">Meu canal ▾</button><div class="linha empurra"><button class="btn icone sel">⚙</button></div></header>
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações</div>
+            <nav class="lista">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item">Componentes e Armazenamento</div>
+              <div class="config-nav-item">Exportação e Encoder</div>
+              <div class="config-nav-item ativo">Aparência e Teclado</div>
+              <div class="config-nav-item">Projeto atual</div>
+            </nav>
+          </aside>
+          <div class="config-conteudo">
+            <h2 style="margin: 0; font-size: 18px">Aparência e Teclado</h2>
+            <div class="bloco-cfg">
+              <div class="linha">
+                <strong>3. Mapa de Atalhos</strong>
+                <div class="campo empurra" style="width: 240px; color: var(--texto)">Aprovar</div>
+                <button class="btn">Restaurar padrões</button>
+              </div>
+              <table class="tabela" role="grid">
+                <thead><tr><th>Escopo</th><th>Ação</th><th>Atalho</th><th>Remapear</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td>Revisão de Cortes</td>
+                    <td>Aprovar candidato</td>
+                    <td><span class="captura-tecla" aria-live="polite">Pressione a nova combinação… Esc para cancelar</span><span class="n">5</span></td>
+                    <td><button class="btn">Cancelar</button></td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="erro-core" role="alert">
+                <strong>⚠ Conflito de atalho no escopo Revisão de Cortes</strong><span class="n">6</span>
+                <span>A tecla <kbd>R</kbd> já está atribuída a <strong>"Rejeitar candidato"</strong>.</span>
+                <div class="linha">
+                  <button class="btn prim">Substituir atalho</button>
+                  <button class="btn">Escolher outra tecla</button>
+                </div>
+              </div>
+              <div class="caixa tracejada linha">
+                <span class="rotulo">Quando a busca não encontra resultados: <em>"Nenhum atalho corresponde a 'xyz'."</em></span>
+                <button class="btn empurra">Limpar busca</button>
+              </div>
+            </div>
+          </div>
+        </main>
+        <footer class="barra-status"><span>Salvo</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Diálogo Restaurar padrões -->
+  <section class="wf-variante" id="dialogo">
+    <h2>4. Confirmação para restaurar todos os atalhos (&lt;ConfirmDialog&gt;) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup"><button class="btn fantasma">Meu canal ▾</button></header>
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações</div>
+            <nav class="lista">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item">Componentes e Armazenamento</div>
+              <div class="config-nav-item">Exportação e Encoder</div>
+              <div class="config-nav-item ativo">Aparência e Teclado</div>
+              <div class="config-nav-item">Projeto atual</div>
+            </nav>
+          </aside>
+          <div class="config-conteudo"><div class="caixa tracejada cresce"></div></div>
+        </main>
+        <footer class="barra-status"><span>Salvo</span></footer>
+      </div>
+      <div class="dialogo-fundo" role="presentation">
+        <div class="dialogo" role="alertdialog" aria-modal="true" aria-labelledby="tit-rst">
+          <h3 id="tit-rst" style="margin: 0">Restaurar todos os atalhos?</h3>
+          <span>Todos os atalhos remapeados e o modo de teclas únicas voltarão para o padrão original do Clipes.</span>
+          <div class="linha" style="justify-content: flex-end">
+            <button class="btn sel">Cancelar</button><span class="n">7</span>
+            <button class="btn perigo">Restaurar padrões</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li><strong>Tema, escala, contraste e idioma:</strong> aplicados imediatamente no <span class="mono">&lt;html&gt;</span> (<span class="mono">data-theme</span>, <span class="mono">data-contrast="high"</span>, escala e <span class="mono">LanguageContext</span>) e persistidos localmente no Store de Sessão (<span class="mono">localStorage</span> — Consolidação §3).</li>
+      <li><strong>Interruptor WCAG 2.2 SC 2.1.4:</strong> altera globalmente o manipulador em <span class="mono">useComandos</span>; quando desligado ou com <kbd>Alt</kbd> exigido, atualiza todos os <span class="mono">&lt;kbd&gt;</span> exibidos na interface e na Paleta.</li>
+      <li><strong>Fonte única de verdade (<span class="mono">useComandos</span>):</strong> os <span class="mono">&lt;kbd&gt;</span> listados na tabela são lidos diretamente do registro ativo, garantindo paridade entre tabela, dicas da Barra de Status e Paleta <kbd>Ctrl+K</kbd>.</li>
+      <li><strong>Escala 115% e Alto Contraste:</strong> aumentam a fonte base de 13 px para 15 px e reforçam bordas/contrastes (≥ 7:1) sem gerar rolagem horizontal em 1366×768.</li>
+      <li><strong>Captura acessível:</strong> ao clicar em <em>"Remapear"</em>, anuncia em <span class="mono">aria-live="polite"</span>: <em>"Gravando atalho para &lt;ação&gt;. Pressione a nova tecla ou Esc para cancelar."</em></li>
+      <li><strong>Detecção de conflito:</strong> valida colisões dentro do mesmo escopo ou com atalhos globais (<kbd>Ctrl+K</kbd>, <kbd>F6</kbd>) antes de gravar, impedindo sobrescrita silenciosa.</li>
+      <li><strong>Restauração segura:</strong> restaurar um único atalho é imediato; <em>"Restaurar todos os padrões"</em> abre <span class="mono">&lt;ConfirmDialog&gt;</span> com foco inicial em <em>"Cancelar"</em>.</li>
+    </ol>
+  </section>
+
+</main>
+<script src="kit.js"></script>
+</body>
+</html>

@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B2 · Lotes de Fontes — Wireframes front v2</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .subnav {
+    display: flex; align-items: center; gap: 12px; padding: 0 12px;
+    background: var(--tela); border-bottom: 1px solid var(--borda); flex: none;
+  }
+  .radio-linha { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .radio-ponto { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--texto-2); display: inline-grid; place-items: center; flex: none; }
+  .radio-ponto.ativo::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--forte); }
+  .chk { width: 14px; height: 14px; border: 1px solid var(--texto-2); border-radius: 2px; display: inline-grid; place-items: center; font-size: 10px; flex: none; background: var(--tela); }
+  .chk.ativo { background: var(--forte); border-color: var(--forte); color: #fff; }
+  .chk.desab { background: var(--sutil); border-color: var(--borda); color: var(--texto-3); }
+  .campo-texto { color: var(--texto); justify-content: space-between; }
+  .resumo-custo { border: 1px solid var(--texto-2); border-radius: var(--r); padding: 8px 10px; background: var(--painel); display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>B2 · Lotes de Fontes</h1>
+    <p>Rota: <span class="mono">#/projeto/:id/fontes?sub=lotes</span>. Especificação: <span class="mono">telas/B-fontes-e-transcricao.md</span> (Tela 2) e <span class="mono">02-consolidacao.md</span>.
+      Permite criar Lotes de Fontes (1–500 Fontes) para Transcrição e Seleção de Cortes em sequência com teto de custo opcional, pausar/retomar/cancelar e tratar pausas por orçamento ou erro por item.</p>
+    <nav>
+      <a href="#normal">Normal · 1366</a>
+      <a href="#largo">Grid 1440 e pausas · 1440</a>
+      <a href="#vazio">Vazio · 1366</a>
+      <a href="#confirmacao">Confirmação de custo · 1366</a>
+      <a href="#erro">Erro acionável · 1366</a>
+    </nav>
+  </header>
+
+  <!-- ==================== VARIANTE 1: NORMAL 1366 ==================== -->
+  <section class="wf-variante" id="normal">
+    <h2>Normal · 1366 × 768 (Construtor de Lote + Lote em execução e Lote em atenção parcial)</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal de Lives ▾</button>
+          <nav class="etapas">
+            <span class="etapa atual">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa">2. Cortes<small>6 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra">
+            <button class="btn">Fila · 1 ativo</button>
+            <button class="btn">Comandos <kbd>Ctrl K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+            <button class="btn icone" aria-label="Mais opções">⋯</button>
+          </div>
+        </div>
+
+        <div class="conteudo coluna" style="gap: 0">
+          <div class="subnav">
+            <div class="abas" role="tablist">
+              <span class="aba" role="tab">Fontes (4)</span>
+              <span class="aba atual" role="tab">Lotes de Fontes (2)</span>
+            </div>
+            <span class="rotulo empurra">Execução sequencial: Transcrição → Seleção de Cortes</span>
+          </div>
+
+          <div class="linha cresce" style="align-items: stretch; gap: 0; min-height: 0; overflow: hidden;">
+            <!-- ZONA ESQUERDA: Construtor de Lote -->
+            <aside class="painel" style="width: 510px">
+              <div class="painel-cab">
+                <span>Novo Lote de Fontes</span>
+                <span class="selo empurra">1–500 Fontes</span>
+              </div>
+              <div class="painel-corpo">
+                <!-- 1. Fontes incluídas -->
+                <fieldset class="caixa coluna" style="gap: 4px; margin: 0">
+                  <legend style="font-size: 12px; font-weight: 600; padding: 0 4px">1. Fontes incluídas (2 de 4)</legend>
+                  <div class="linha">
+                    <span class="chk ativo">✓</span>
+                    <span>Live_12_11_final.mp4</span>
+                    <span class="mono rotulo empurra">03:42:10 · Não transcrita</span>
+                  </div>
+                  <div class="linha">
+                    <span class="chk ativo">✓</span>
+                    <span>Live_15_11_cortada.mp4</span>
+                    <span class="mono rotulo empurra">02:05:12 · Parcial 40%</span>
+                  </div>
+                  <div class="linha mudo">
+                    <span class="chk desab">–</span>
+                    <span>VOD_09_11_youtube.mp4</span>
+                    <span class="selo empurra">! Offline — relocalize</span><span class="n">1</span>
+                  </div>
+                  <div class="linha">
+                    <span class="chk"></span>
+                    <span>Podcast_ep42.mp4</span>
+                    <span class="mono rotulo empurra">01:18:45 · Pronta</span>
+                  </div>
+                </fieldset>
+
+                <!-- 2. Motor de transcrição -->
+                <div class="caixa coluna" style="gap: 4px">
+                  <strong style="font-size: 12px">2. Motor de transcrição</strong>
+                  <div class="linha" style="gap: 16px">
+                    <span class="radio-linha"><span class="radio-ponto ativo"></span> Local (US$ 0,00)</span>
+                    <span class="radio-linha"><span class="radio-ponto"></span> Groq (remoto · ~US$ 0,68)</span>
+                  </div>
+                </div>
+
+                <!-- 3. Parâmetros de Seleção -->
+                <div class="caixa coluna" style="gap: 6px">
+                  <strong style="font-size: 12px">3. Seleção de Cortes</strong>
+                  <div class="linha" style="gap: 14px">
+                    <span class="rotulo">Tipo:</span>
+                    <span class="radio-linha"><span class="radio-ponto ativo"></span> Corte direto</span>
+                    <span class="radio-linha"><span class="radio-ponto"></span> Vídeo transformado</span>
+                  </div>
+                  <div class="linha">
+                    <span class="rotulo">Duração do Corte:</span>
+                    <div class="campo campo-texto mono" style="width: 58px; height: 24px"><span>20</span><span class="rotulo">s</span></div>
+                    <span class="rotulo">até</span>
+                    <div class="campo campo-texto mono" style="width: 58px; height: 24px"><span>60</span><span class="rotulo">s</span></div>
+                    <span class="rotulo">(limite técnico: 180 s)</span>
+                  </div>
+                </div>
+
+                <!-- 4. Teto de custo opcional -->
+                <div class="caixa coluna" style="gap: 4px">
+                  <div class="linha">
+                    <strong style="font-size: 12px">4. Teto de custo opcional (USD)</strong>
+                    <div class="campo campo-texto mono empurra" style="width: 96px; height: 24px"><span>US$</span><span>2.00</span></div>
+                  </div>
+                  <span class="rotulo">Quando o teto for atingido, o lote pausa automaticamente antes da próxima chamada paga.</span>
+                </div>
+
+                <!-- ResumoCustoPrivacidade -->
+                <div class="resumo-custo">
+                  <div class="linha">
+                    <strong>Resumo de Custo e Privacidade</strong><span class="n">2</span>
+                    <span class="selo cheio empurra">Remoto (HTTPS)</span>
+                  </div>
+                  <div>Rota: Seleção de Cortes → <strong>OpenAI Rápido</strong> (<span class="mono">gpt-4o-mini</span>)</div>
+                  <div>Envio: só texto da Transcrição para <span class="mono">api.openai.com</span></div>
+                  <div class="mono">Estimativa: <strong>~US$ 0,30 – US$ 0,55</strong> · Teto do lote: US$ 2,00</div>
+                </div>
+
+                <div class="linha">
+                  <button class="btn prim">Iniciar lote com 2 Fontes</button><span class="n">3</span>
+                </div>
+              </div>
+            </aside>
+
+            <!-- ZONA DIREITA: Lista de Lotes do Projeto -->
+            <section class="painel dir cresce" style="border-left: 0; background: var(--tela)">
+              <div class="painel-cab" style="background: var(--painel)">
+                <span>Lotes do Projeto (2)</span>
+                <span class="rotulo empurra">Atualizado via <span class="mono">core-progress</span></span>
+              </div>
+
+              <div class="painel-corpo">
+                <!-- Lote #4: Em execução -->
+                <div class="cartao">
+                  <div class="linha">
+                    <strong>Lote #4</strong>
+                    <span class="selo cheio">▶ Em execução (1/2)</span>
+                    <div class="linha empurra">
+                      <button class="btn" style="height: 24px">Pausar lote</button><span class="n">4</span>
+                      <button class="btn perigo" style="height: 24px">Cancelar lote</button>
+                    </div>
+                  </div>
+                  <div class="rotulo mono">Motor: Local · Corte direto (20–60s) · Teto: US$ 2,00 · Gasto até agora: ~US$ 0,14</div>
+                  <table class="tabela" role="grid">
+                    <thead>
+                      <tr><th>#</th><th>Fonte</th><th>Etapa / Estado</th><th>Progresso</th><th>Ação</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="mono">1</td>
+                        <td><strong>Live_12_11_final.mp4</strong></td>
+                        <td>Transcrevendo</td>
+                        <td style="width: 150px">
+                          <div class="linha">
+                            <div class="barra-prog cresce" role="progressbar" aria-valuenow="62"><i style="--p: 62%"></i></div>
+                            <span class="mono">62%</span>
+                          </div>
+                        </td>
+                        <td><button class="btn" style="height: 24px">Abrir</button></td>
+                      </tr>
+                      <tr>
+                        <td class="mono">2</td>
+                        <td>Live_15_11_cortada.mp4</td>
+                        <td class="mudo">Na fila</td>
+                        <td class="mono mudo">0%</td>
+                        <td><button class="btn" style="height: 24px">Abrir</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- Lote #3: Requer atenção (partial) -->
+                <div class="cartao">
+                  <div class="linha">
+                    <strong>Lote #3</strong>
+                    <span class="selo cheio">⚠ Requer atenção (1 concluído, 1 pausado)</span><span class="n">5</span>
+                    <button class="btn perigo empurra" style="height: 24px">Cancelar lote</button>
+                  </div>
+                  <div class="banner" style="padding: 6px 10px">
+                    <span>1 Fonte já concluiu e pode ser revisada em Cortes; 1 Fonte pausou sozinha por erro do Provedor.</span>
+                  </div>
+                  <table class="tabela" role="grid">
+                    <thead>
+                      <tr><th>#</th><th>Fonte</th><th>Etapa / Estado</th><th>Progresso</th><th>Ação</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="mono">1</td>
+                        <td><strong>Live_05_11.mp4</strong></td>
+                        <td>✓ Concluído</td>
+                        <td class="mono">100%</td>
+                        <td><button class="btn prim" style="height: 24px">Revisar Cortes →</button></td>
+                      </tr>
+                      <tr>
+                        <td class="mono">2</td>
+                        <td><strong>Podcast_ep40.mp4</strong></td>
+                        <td>⚠ Pausado: limite temporário do Provedor</td>
+                        <td class="mono">80%</td>
+                        <td>
+                          <div class="linha">
+                            <button class="btn prim" style="height: 24px">Retomar item</button><span class="n">6</span>
+                            <button class="btn" style="height: 24px">Abrir</button>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div class="barra-status">
+          <span>Salvo</span><span>Lote #4: Live_12_11_final.mp4 (62%)</span>
+          <span class="empurra"><kbd>F6</kbd> trocar região · <kbd>Ctrl J</kbd> Fila de Jobs · <kbd>?</kbd> atalhos</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== VARIANTE 2: 1440 PAUSADO POR ORÇAMENTO + SOMENTE LOCAL ==================== -->
+  <section class="wf-variante" id="largo">
+    <h2>Largo · 1440 × 900 (<span class="mono">Somente local</span> ativo + Lote pausado por orçamento + item <span class="mono">uncertain</span> + grid expandido)</h2>
+    <div class="wf-quadro w1440">
+      <div class="shell">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal de Lives ▾</button>
+          <nav class="etapas">
+            <span class="etapa atual">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa">2. Cortes<small>6 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra">
+            <span class="selo cheio">🔒 Somente local</span><span class="n">7</span>
+            <span class="selo">Orçamento: pausado</span>
+            <button class="btn">Fila · 1 incerto</button>
+            <button class="btn">Comandos <kbd>Ctrl K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+          </div>
+        </div>
+
+        <div class="conteudo coluna" style="gap: 0">
+          <div class="subnav">
+            <div class="abas">
+              <span class="aba">Fontes (4)</span>
+              <span class="aba atual">Lotes de Fontes (3)</span>
+            </div>
+          </div>
+
+          <div class="linha cresce" style="align-items: stretch; gap: 0; min-height: 0; overflow: hidden;">
+            <!-- Construtor com Somente local bloqueando Groq -->
+            <aside class="painel" style="width: 480px">
+              <div class="painel-cab"><span>Novo Lote de Fontes</span></div>
+              <div class="painel-corpo">
+                <fieldset class="caixa coluna" style="gap: 4px; margin: 0">
+                  <legend style="font-size: 12px; font-weight: 600; padding: 0 4px">1. Fontes incluídas (1 de 4)</legend>
+                  <div class="linha"><span class="chk ativo">✓</span><span>Podcast_ep42.mp4</span><span class="mono rotulo empurra">01:18:45</span></div>
+                </fieldset>
+
+                <div class="caixa coluna" style="gap: 6px">
+                  <strong style="font-size: 12px">2. Motor de transcrição</strong>
+                  <span class="radio-linha"><span class="radio-ponto ativo"></span> Local (US$ 0,00 · nunca sai da máquina)</span>
+                  <div class="linha mudo">
+                    <span class="radio-linha"><span class="radio-ponto"></span> Groq (remoto)</span>
+                    <span class="selo empurra">Bloqueado por Somente local</span>
+                  </div>
+                </div>
+
+                <div class="resumo-custo">
+                  <div class="linha">
+                    <strong>Resumo de Custo e Privacidade</strong>
+                    <span class="selo cheio empurra">Local (loopback)</span>
+                  </div>
+                  <div>Rota: Seleção de Cortes → <strong>Ollama Local</strong> (<span class="mono">qwen2.5:14b</span>)</div>
+                  <div>Envio: texto não sai da sua máquina</div>
+                  <div class="mono">Estimativa: <strong>US$ 0,00</strong></div>
+                </div>
+
+                <button class="btn prim">Iniciar lote com 1 Fonte</button>
+              </div>
+            </aside>
+
+            <!-- Lista de lotes em 1440 -->
+            <section class="painel dir cresce" style="border-left: 0; background: var(--tela)">
+              <div class="painel-cab" style="background: var(--painel)"><span>Lotes do Projeto (3)</span></div>
+              <div class="painel-corpo">
+                <!-- Lote #5: Pausado por orçamento -->
+                <div class="cartao" style="border-width: 2px; border-color: var(--texto)">
+                  <div class="linha">
+                    <strong>Lote #5</strong>
+                    <span class="selo cheio">⏸ Pausado por orçamento (1/3 concluído)</span><span class="n">8</span>
+                    <button class="btn perigo empurra" style="height: 24px">Cancelar lote</button>
+                  </div>
+                  <div class="banner">
+                    <span>O gasto acumulado (<strong class="mono">US$ 2,01</strong>) atingiu o teto configurado (<strong class="mono">US$ 2,00</strong>) antes da próxima chamada paga.</span>
+                    <button class="btn prim empurra">Ajustar orçamento e continuar</button>
+                  </div>
+                  <table class="tabela" role="grid">
+                    <thead>
+                      <tr><th>#</th><th>Fonte</th><th>Etapa / Estado</th><th>Progresso</th><th>Duração / Nota</th><th>Ação</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="mono">1</td>
+                        <td>Live_01_11.mp4</td>
+                        <td>✓ Concluído</td>
+                        <td class="mono">100%</td>
+                        <td class="mono rotulo">14 candidatos</td>
+                        <td><button class="btn prim" style="height: 24px">Revisar Cortes →</button></td>
+                      </tr>
+                      <tr>
+                        <td class="mono">2</td>
+                        <td><strong>Live_03_11.mp4</strong></td>
+                        <td>⏸ Aguardando teto de orçamento</td>
+                        <td class="mono">45%</td>
+                        <td class="rotulo">Transcrição pronta; seleção pendente</td>
+                        <td><button class="btn" style="height: 24px">Abrir</button></td>
+                      </tr>
+                      <tr>
+                        <td class="mono">3</td>
+                        <td>Live_04_11.mp4</td>
+                        <td class="mudo">Na fila</td>
+                        <td class="mono mudo">0%</td>
+                        <td class="rotulo mudo">–</td>
+                        <td><button class="btn" style="height: 24px">Abrir</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- Lote #4: Pausado pelo usuário + item uncertain_job -->
+                <div class="cartao">
+                  <div class="linha">
+                    <strong>Lote #4</strong>
+                    <span class="selo cheio">⏸ Pausado pelo usuário</span>
+                    <div class="linha empurra">
+                      <button class="btn prim" style="height: 24px">Retomar lote</button>
+                      <button class="btn perigo" style="height: 24px">Cancelar lote</button>
+                    </div>
+                  </div>
+                  <table class="tabela" role="grid">
+                    <thead>
+                      <tr><th>#</th><th>Fonte</th><th>Etapa / Estado</th><th>Progresso</th><th>Ação</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="mono">1</td>
+                        <td><strong>Live_12_11_final.mp4</strong></td>
+                        <td>⚠ Pausado: chamada paga com resultado incerto (<span class="mono">uncertain</span>)</td>
+                        <td class="mono">80%</td>
+                        <td><button class="btn prim" style="height: 24px">Resolver na Fila (<kbd>Ctrl J</kbd>)</button><span class="n">9</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div class="barra-status">
+          <span>Salvo</span><span>Lote #5 pausado por orçamento</span>
+          <span class="empurra"><kbd>F6</kbd> trocar região · <kbd>Ctrl J</kbd> Fila de Jobs · <kbd>?</kbd> atalhos</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== VARIANTE 3: VAZIO 1366 ==================== -->
+  <section class="wf-variante" id="vazio">
+    <h2>Vazio · 1366 × 768 (<span class="mono">?estado=vazio</span> — há Fontes, mas nenhum lote executado ainda)</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal de Lives ▾</button>
+          <nav class="etapas">
+            <span class="etapa atual">1. Fontes e Transcrição<small>3</small></span>
+            <span class="etapa">2. Cortes<small>0</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra"><button class="btn">Fila</button><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </div>
+
+        <div class="conteudo coluna" style="gap: 0">
+          <div class="subnav">
+            <div class="abas"><span class="aba">Fontes (3)</span><span class="aba atual">Lotes de Fontes (0)</span></div>
+          </div>
+          <div class="linha cresce" style="align-items: stretch; gap: 0; min-height: 0; overflow: hidden;">
+            <aside class="painel" style="width: 500px">
+              <div class="painel-cab"><span>Novo Lote de Fontes</span></div>
+              <div class="painel-corpo">
+                <fieldset class="caixa coluna" style="gap: 4px; margin: 0">
+                  <legend style="font-size: 12px; font-weight: 600; padding: 0 4px">1. Fontes incluídas (0 de 3)</legend>
+                  <div class="linha"><span class="chk"></span><span>Live_12_11_final.mp4</span></div>
+                  <div class="linha"><span class="chk"></span><span>Live_15_11_cortada.mp4</span></div>
+                  <div class="linha"><span class="chk"></span><span>Podcast_ep42.mp4</span></div>
+                </fieldset>
+                <button class="btn prim" disabled>Iniciar lote com 0 Fontes</button>
+              </div>
+            </aside>
+            <section class="cresce coluna" style="justify-content: center; align-items: center; background: var(--tela); padding: 32px">
+              <div class="caixa coluna leitura" style="padding: 24px; align-items: center; text-align: center; gap: 10px">
+                <strong style="font-size: 15px">Nenhum lote executado neste Projeto ainda</strong>
+                <p style="margin: 0; color: var(--texto-2)">
+                  Selecione Fontes ao lado para processar Transcrição e Seleção de Cortes em sequência.
+                </p>
+                <button class="btn prim">Focar seleção de Fontes</button><span class="n">10</span>
+              </div>
+            </section>
+          </div>
+        </div>
+        <div class="barra-status"><span>Salvo</span><span>Sem jobs ativos</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== VARIANTE 4: CONFIRMAÇÃO DE CUSTO 1366 ==================== -->
+  <section class="wf-variante" id="confirmacao">
+    <h2>Diálogo de confirmação pré-disparo · 1366 × 768 (<span class="mono">confirmation_required</span> com <span class="mono">&lt;ResumoCustoPrivacidade&gt;</span>)</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal de Lives ▾</button>
+          <nav class="etapas"><span class="etapa atual">1. Fontes e Transcrição<small>4</small></span><span class="etapa">2. Cortes</span><span class="etapa">3. Exportação</span></nav>
+          <div class="linha empurra"><button class="btn">Fila</button><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </div>
+        <div class="conteudo" style="background: var(--painel)">
+          <div class="secao rotulo">Fundo inerte (<span class="mono">inert</span>) aguardando confirmação explícita de custo e envio remoto…</div>
+        </div>
+        <div class="barra-status"><span>Salvo</span><span class="empurra"><kbd>Esc</kbd> cancelar</span></div>
+      </div>
+
+      <div class="dialogo-fundo">
+        <div class="dialogo" role="alertdialog" aria-modal="true" style="width: 520px">
+          <strong style="font-size: 15px">Confirmar início do Lote #5 (2 Fontes)?</strong><span class="n">11</span>
+          <p style="margin: 0; font-size: 12px; color: var(--texto-2)">
+            Este lote executará chamadas pagas/remotas para fora da sua máquina. Revise o resumo abaixo antes de confirmar.
+          </p>
+          <div class="resumo-custo">
+            <div class="linha"><strong>Transcrição</strong><span class="selo cheio empurra">Remoto (HTTPS)</span></div>
+            <div>Motor: <strong>Groq</strong> (<span class="mono">whisper-large-v3-turbo</span> · <span class="mono">api.groq.com</span>)</div>
+            <div>Envio: apenas áudio com fala (FLAC) · Estimativa: <span class="mono"><strong>~US$ 0,68</strong></span></div>
+          </div>
+          <div class="resumo-custo">
+            <div class="linha"><strong>Seleção de Cortes</strong><span class="selo cheio empurra">Remoto (HTTPS)</span></div>
+            <div>Perfil: <strong>OpenAI Rápido</strong> (<span class="mono">gpt-4o-mini</span> · <span class="mono">api.openai.com</span>)</div>
+            <div>Envio: somente texto da Transcrição · Estimativa: <span class="mono"><strong>~US$ 0,30 – US$ 0,55</strong></span></div>
+          </div>
+          <div class="caixa mono" style="font-size: 12px">
+            Total estimado: <strong>~US$ 0,98 – US$ 1,23</strong> · Teto de parada do lote: <strong>US$ 2,00</strong>
+          </div>
+          <div class="linha" style="justify-content: flex-end">
+            <button class="btn" style="outline: 2px solid var(--texto); outline-offset: 2px">Cancelar</button>
+            <button class="btn prim">Confirmar e iniciar lote</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== VARIANTE 5: ERRO ACIONÁVEL 1366 ==================== -->
+  <section class="wf-variante" id="erro">
+    <h2>Erro acionável · 1366 × 768 (<span class="mono">BannerErroCore</span> para <span class="mono">local_only_violation</span> e <span class="mono">profile_unavailable</span>)</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal de Lives ▾</button>
+          <nav class="etapas"><span class="etapa atual">1. Fontes e Transcrição<small>4</small></span><span class="etapa">2. Cortes</span><span class="etapa">3. Exportação</span></nav>
+          <div class="linha empurra"><span class="selo cheio">🔒 Somente local</span><button class="btn">Fila</button><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </div>
+        <div class="conteudo coluna" style="gap: 0">
+          <div class="subnav"><div class="abas"><span class="aba">Fontes (4)</span><span class="aba atual">Lotes de Fontes (2)</span></div></div>
+          <div class="linha cresce" style="align-items: stretch; gap: 0; min-height: 0; overflow: hidden;">
+            <aside class="painel" style="width: 520px">
+              <div class="painel-cab"><span>Novo Lote de Fontes</span></div>
+              <div class="painel-corpo">
+                <div class="cartao" role="alert" style="border-width: 2px; border-color: var(--texto)">
+                  <strong>! Bloqueado pelo modo Somente local</strong><span class="n">12</span>
+                  <div class="rotulo">A Tarefa de seleção de Cortes ou o Motor Groq envia dados para fora da máquina, o que está proibido neste Projeto.</div>
+                  <div class="linha">
+                    <button class="btn prim">Escolher Perfil local</button>
+                    <button class="btn">Revisar Somente local</button>
+                  </div>
+                  <details>
+                    <summary class="rotulo" style="cursor: pointer">Ver detalhe técnico</summary>
+                    <div class="mono rotulo" style="margin-top: 4px">code: local_only_violation · comando: batches.create</div>
+                  </details>
+                </div>
+
+                <div class="cartao" role="alert">
+                  <strong>! Nenhum Perfil de Provedor válido está configurado para selecionar Cortes.</strong>
+                  <div class="linha"><button class="btn">Configurar Provedores</button></div>
+                </div>
+              </div>
+            </aside>
+            <section class="painel dir cresce" style="border-left: 0; background: var(--tela)">
+              <div class="painel-cab" style="background: var(--painel)"><span>Lotes do Projeto (2)</span></div>
+              <div class="painel-corpo">
+                <div class="cartao rotulo">Lotes anteriores continuam visíveis e consultáveis mesmo quando o novo lote falha na validação.</div>
+              </div>
+            </section>
+          </div>
+        </div>
+        <div class="barra-status"><span>Salvo</span><span>Falha ao validar lote</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li>Fontes <span class="mono">offline</span> ficam desmarcadas e desabilitadas no construtor com aviso claro; se todas as Fontes estiverem offline, o botão de iniciar fica desabilitado com orientação para relocalizar antes.</li>
+      <li><span class="mono">&lt;ResumoCustoPrivacidade&gt;</span> mostra sempre a rota de Tarefa de IA resolvida, destino (<span class="mono">Local (loopback)</span>, <span class="mono">Remoto (HTTPS)</span> ou <span class="mono">CLI</span>), estimativa em <span class="mono">tabular-nums</span> e teto configurado.</li>
+      <li>Ao clicar em <em>Iniciar lote</em> (<span class="mono">batches.create</span>), se houver chamada remota/paga o núcleo retorna <span class="mono">confirmation_required</span> com <span class="mono">usage</span>, abrindo o diálogo da variante <a href="#confirmacao">Confirmação de custo</a> antes de reenviar <span class="mono">confirmed: true</span>.</li>
+      <li><em>Pausar lote</em> (<span class="mono">batches.pause</span>) finaliza eventual chamada paga em andamento sem interromper no meio e muda o botão para <em>Retomar lote</em> (<span class="mono">batches.resume</span>). <em>Cancelar lote</em> (<span class="mono">batches.cancel</span>) sempre pede <span class="mono">&lt;ConfirmDialog&gt;</span> preservando resultados já salvos.</li>
+      <li>Quando um item falha por erro do Provedor, apenas ele pausa; as demais Fontes do lote continuam em sequência. O lote entra em estado <span class="mono">attention</span> quando não há mais itens ativos/pendentes.</li>
+      <li><em>Retomar item</em> (<span class="mono">batches.item.resume</span>) pode receber <span class="mono">confirmation_required</span> ou <span class="mono">transcription_retry_confirmation</span> e abrir <span class="mono">&lt;ConfirmDialog&gt;</span> antes de reenviar <span class="mono">confirmed: true</span>.</li>
+      <li>Selo permanente <strong>Somente local</strong> no topo indica veto ativo no Projeto (<span class="mono">projects.local_only</span>) ou em Tarefa de IA; nunca troca o Provedor sozinho (ADR-0010).</li>
+      <li>Em lote <span class="mono">budget_paused</span>, <em>Ajustar orçamento e continuar</em> abre diálogo para digitar novo teto em USD (ou remover teto) e chamar <span class="mono">jobs.budget.continue { scope: "batch", key: "sources-" + id }</span>.</li>
+      <li>Quando um item pausa com código <span class="mono">uncertain_job</span>, ele não pode ser retomado às cegas pelo lote: o botão leva direto à Fila de Jobs (<kbd>Ctrl J</kbd>) para decisão humana explícita.</li>
+      <li><strong>Decisão de wireframe:</strong> quando o Projeto ainda não tem nenhuma Fonte importada, a sub-aba exibe estado vazio único orientando <em>"Importe ao menos uma Fonte antes de criar um Lote de Fontes"</em> + CTA <em>Voltar para Fontes</em>; em <span class="mono">?estado=carregando</span>, exibe <span class="mono">&lt;Esqueleto&gt;</span> na lista de checkboxes à esquerda e 2 cartões <span class="mono">&lt;Esqueleto&gt;</span> à direita.</li>
+      <li>No <span class="mono">&lt;ConfirmDialog&gt;</span> de ação paga, o foco inicial fica no botão <strong>Cancelar</strong> (evita disparo acidental por <kbd>Enter</kbd>) e o fundo recebe <span class="mono">inert</span>.</li>
+      <li><span class="mono">&lt;BannerErroCore&gt;</span> traduz <span class="mono">local_only_violation</span>, <span class="mono">profile_unavailable</span>, <span class="mono">uncertain_job</span>, <span class="mono">invalid_batch</span> e <span class="mono">invalid_budget</span> com ações diretas para <span class="mono">#/config/provedores</span> ou <span class="mono">#/config/projeto</span>.</li>
+    </ol>
+  </section>
+</main>
+<script src="kit.js"></script>
+</body>
+</html>

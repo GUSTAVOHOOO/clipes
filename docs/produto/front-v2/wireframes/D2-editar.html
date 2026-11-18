@@ -1,0 +1,773 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>D2 · Editar (Palco, Timeline, Painéis e Estados) — Wireframes front v2</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .shell.com-contexto.shell-editor-1366 { grid-template-rows: 44px auto 1fr 30px; }
+  .ctx-compacto { flex-direction: column; align-items: stretch; gap: 4px; padding: 5px 12px; height: auto; }
+  .ctx-subabas { display: flex; gap: 4px; align-items: center; }
+  .ctx-subaba {
+    padding: 3px 9px; border: 1px solid var(--borda); border-radius: var(--r);
+    background: var(--tela); color: var(--texto-2); font-size: 12px;
+  }
+  .ctx-subaba.atual { background: var(--sutil); color: var(--texto); font-weight: 600; border-color: var(--texto); }
+  .titulo-corte { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+  /* Zonas do editor */
+  .editor-corpo { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; }
+  .editor-topo { display: flex; flex: 1; min-height: 0; }
+  .trilho-recolhido {
+    width: 44px; flex: none; background: var(--painel);
+    display: flex; flex-direction: column; align-items: center; padding: 8px 4px; gap: 8px;
+    border-right: 1px solid var(--borda);
+  }
+  .trilho-recolhido.dir { border-right: 0; border-left: 1px solid var(--borda); }
+  .rotulo-vertical { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 11px; color: var(--texto-2); font-weight: 600; }
+
+  .palco-area {
+    flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;
+    background: var(--fundo);
+  }
+  .palco-cab {
+    display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+    background: var(--painel); border-bottom: 1px solid var(--borda);
+  }
+  .palco-centro {
+    flex: 1; min-height: 0; display: grid; place-items: center; padding: 8px; position: relative;
+  }
+  .quadro-916 {
+    height: 100%; max-height: 290px; aspect-ratio: 9 / 16; position: relative;
+    display: flex; flex-direction: column; justify-content: flex-end; align-items: center; padding: 10px;
+  }
+  .w1440 .quadro-916 { max-height: 360px; }
+  .legenda-palco {
+    width: 100%; background: var(--tela); border: 1px solid var(--texto); border-radius: 3px;
+    padding: 4px 6px; font-size: 11px; text-align: center; line-height: 1.3;
+  }
+  .legenda-palco .ativa { background: var(--forte); color: #fff; padding: 0 3px; border-radius: 2px; }
+  .transporte {
+    display: flex; align-items: center; gap: 6px; padding: 5px 10px;
+    background: var(--painel); border-top: 1px solid var(--borda); flex-wrap: nowrap;
+  }
+  .transporte .btn { height: 24px; padding: 0 7px; font-size: 12px; }
+
+  /* Timeline */
+  .tl-wrap { border-top: 1px solid var(--borda); background: var(--painel); display: flex; flex-direction: column; flex: none; }
+  .tl-cab {
+    display: flex; align-items: center; gap: 6px; padding: 4px 10px;
+    border-bottom: 1px solid var(--sutil); font-size: 12px;
+  }
+  .tl-cab .btn { height: 22px; padding: 0 6px; font-size: 11px; }
+  .tl-minimapa {
+    height: 18px; background: var(--tela); border-bottom: 1px solid var(--sutil);
+    position: relative; display: flex; align-items: center; padding: 0 8px; font-size: 10px; color: var(--texto-3);
+  }
+  .tl-mini-janela {
+    position: absolute; left: 26%; width: 42%; top: 2px; bottom: 2px;
+    border: 1px solid var(--texto); background: var(--sutil);
+  }
+  .tl-mini-corte {
+    position: absolute; left: 32%; width: 28%; top: 4px; bottom: 4px; background: var(--forte); opacity: .5;
+  }
+  .tl-regua {
+    display: grid; grid-template-columns: 124px 1fr; height: 20px; border-bottom: 1px solid var(--borda);
+    background: var(--tela); font-size: 11px; color: var(--texto-2);
+  }
+  .tl-regua > :first-child { padding: 2px 8px; border-right: 1px solid var(--sutil); }
+  .tl-regua > :last-child { position: relative; display: flex; justify-content: space-between; padding: 2px 12px; }
+  .tl-faixa { display: grid; grid-template-columns: 124px 1fr; border-bottom: 1px solid var(--sutil); height: 32px; }
+  .tl-faixa > :first-child {
+    padding: 0 8px; font-size: 11px; color: var(--texto-2); border-right: 1px solid var(--sutil);
+    display: flex; align-items: center; justify-content: space-between; gap: 4px;
+  }
+  .tl-faixa > :last-child { position: relative; background: var(--tela); overflow: hidden; }
+  .alca {
+    position: absolute; top: 1px; bottom: 1px; width: 10px; background: var(--forte); color: #fff;
+    font-size: 10px; display: grid; place-items: center; font-weight: 700; z-index: 2;
+  }
+  .alca.foco { outline: 2px solid var(--texto); outline-offset: 1px; }
+  .silencio-hachura {
+    position: absolute; top: 3px; bottom: 3px;
+    background: repeating-linear-gradient(45deg, var(--sutil), var(--sutil) 4px, var(--tela) 4px, var(--tela) 8px);
+    border: 1px dashed var(--texto-2); font-size: 10px; display: flex; align-items: center; justify-content: center;
+    color: var(--texto);
+  }
+  .onda-ph {
+    position: absolute; inset: 6px 8px;
+    background: repeating-linear-gradient(90deg, var(--borda) 0 2px, transparent 2px 5px);
+    opacity: .65;
+  }
+  .kf-pino {
+    position: absolute; top: 6px; width: 14px; height: 18px; display: grid; place-items: center;
+    font-size: 11px; border: 1px solid var(--texto-2); background: var(--tela); border-radius: 2px;
+  }
+  .kf-pino.sel { outline: 2px solid var(--texto); font-weight: 700; background: var(--sutil); }
+  .bloco-tl {
+    position: absolute; top: 4px; bottom: 4px; background: var(--sutil); border: 1px solid var(--borda);
+    border-radius: 3px; font-size: 10px; padding: 0 4px; display: flex; align-items: center; overflow: hidden; white-space: nowrap;
+  }
+  .bloco-tl.aviso { border-style: dashed; border-color: var(--texto); background: var(--painel); }
+  .duck-curva {
+    position: absolute; left: 18%; width: 64%; top: 8px; bottom: 6px;
+    border: 1px solid var(--texto-2); background: var(--painel);
+    clip-path: polygon(0 20%, 15% 20%, 20% 70%, 55% 70%, 60% 20%, 100% 20%, 100% 100%, 0 100%);
+  }
+  .sfx-pino {
+    position: absolute; top: 5px; padding: 1px 5px; font-size: 10px;
+    border: 1px solid var(--texto-2); border-radius: 10px; background: var(--tela);
+  }
+  .sfx-pino.sel { outline: 2px solid var(--texto); font-weight: 600; }
+  .seg-btn { padding: 3px 8px; border: 1px solid var(--borda); background: var(--tela); font-size: 12px; color: var(--texto-2); }
+  .seg-btn.ativo { background: var(--sutil); color: var(--texto); font-weight: 600; border-color: var(--texto); }
+  .esq-item { padding: 6px 8px; border-bottom: 1px solid var(--sutil); font-size: 12px; }
+  .insp-abas { display: flex; flex-wrap: wrap; gap: 2px; padding: 4px 6px; border-bottom: 1px solid var(--borda); background: var(--tela); }
+  .insp-aba { padding: 4px 6px; font-size: 11px; border-radius: 3px; color: var(--texto-2); }
+  .insp-aba.atual { background: var(--sutil); color: var(--texto); font-weight: 600; }
+  .badge-borda {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    background: var(--forte); color: #fff; font-size: 11px; padding: 3px 8px; border-radius: var(--r); white-space: nowrap; z-index: 3;
+  }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>D2 · Sub-aba Editar (4 Zonas Sincronizadas e Timeline)</h1>
+    <p>Rota: <span class="mono">#/projeto/:id/corte/:corteId/editar</span>.
+      Especificação: <span class="mono">telas/D-corte-editar.md</span> (Tela 2) e <span class="mono">01-arquitetura.md</span> (§4 e §8).</p>
+    <nav>
+      <a href="#editar-1366-inspetor">1366 (Inspetor aberto)</a>
+      <a href="#editar-1366-transcricao">1366 (Transcrição aberta)</a>
+      <a href="#editar-1440">1440 (Dois painéis abertos)</a>
+      <a href="#offline-1366">Somente-leitura: Fonte offline (1366)</a>
+      <a href="#carregando-1366">Gerando proxy e timeline (1366)</a>
+    </nav>
+  </header>
+
+  <!-- 1. 1366 com Inspetor aberto e Transcrição recolhida -->
+  <section class="wf-variante" id="editar-1366-inspetor">
+    <h2>Normal · 1366 × 768 (regra: 1 painel lateral por vez — Inspetor aberto, Transcrição recolhida)</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto shell-editor-1366">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Dark História ▾</button>
+          <nav class="etapas">
+            <span class="etapa">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa atual">2. Cortes<small>8 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra">
+            <span class="selo">Somente local</span>
+            <button class="btn">Fila · 0 ativos</button>
+            <button class="btn">Comandos <kbd>Ctrl K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+          </div>
+        </div>
+
+        <div class="contexto-corte ctx-compacto">
+          <div class="linha">
+            <button class="btn fantasma" style="height: 24px">← Cortes</button>
+            <button class="btn" style="height: 24px">&lt; Anterior</button>
+            <span class="titulo-corte">Corte <span class="mono">2/8</span>: "Como o navegador bloqueou o vazamento"</span>
+            <button class="btn" style="height: 24px">Próximo &gt;</button>
+            <span class="selo cheio">Vídeo transformado</span>
+            <nav class="ctx-subabas empurra" aria-label="Etapas do Corte">
+              <span class="ctx-subaba atual" aria-current="page">Editar</span>
+              <span class="ctx-subaba">Transformar</span>
+              <span class="ctx-subaba">Empacotar</span>
+            </nav>
+            <button class="btn prim" style="height: 24px">Exportar Corte <kbd>Ctrl E</kbd></button>
+          </div>
+        </div>
+
+        <div class="conteudo">
+          <div class="editor-corpo">
+            <div class="editor-topo">
+              <!-- Painel esquerdo recolhido -->
+              <aside class="trilho-recolhido" aria-label="Transcrição recolhida">
+                <button class="btn icone" title="Abrir Transcrição (Ctrl+[)">»</button><span class="n">1</span>
+                <span class="rotulo-vertical">Transcrição <kbd>Ctrl+[</kbd></span>
+              </aside>
+
+              <!-- Palco central -->
+              <main class="palco-area" aria-label="Palco de prévia">
+                <div class="palco-cab">
+                  <div class="linha" style="gap: 0">
+                    <span class="seg-btn ativo">Prévia 9:16</span>
+                    <span class="seg-btn">Enquadrar na Fonte 16:9</span>
+                  </div><span class="n">2</span>
+                  <div class="linha empurra">
+                    <button class="btn" style="height: 24px; font-size: 12px">Transcrição <kbd>Ctrl+[</kbd></button>
+                    <button class="btn prim" style="height: 24px; font-size: 12px">Inspetor <kbd>Ctrl+]</kbd></button>
+                  </div>
+                </div>
+
+                <div class="palco-centro">
+                  <div class="midia r916 quadro-916">
+                    <span>Prévia 9:16 (<span class="mono">1080×1920</span>)</span>
+                    <div class="legenda-palco">
+                      e foi <span class="ativa">exatamente</span> ali que tudo mudou
+                    </div><span class="n" style="position: absolute; top: 8px; right: 8px">3</span>
+                  </div>
+                </div>
+
+                <div class="transporte" role="toolbar" aria-label="Transporte do player">
+                  <button class="btn" title="Voltar 1 quadro (←)">|◂</button>
+                  <button class="btn" title="Rebobinar">J</button>
+                  <button class="btn prim" title="Reproduzir / Pausar (Espaço / K)">▶ Pausar</button>
+                  <button class="btn" title="Avançar">L</button>
+                  <button class="btn" title="Avançar 1 quadro (→)">▸|</button>
+                  <span class="mono" style="font-size: 12px; margin-left: 4px">00:14.2 / 00:38.4</span><span class="n">4</span>
+                  <button class="btn" style="margin-left: 4px">Entrada <kbd>I</kbd></button>
+                  <button class="btn">Saída <kbd>O</kbd></button>
+                  <button class="btn empurra">🔊 Prévia</button>
+                </div>
+              </main>
+
+              <!-- Inspetor acoplado direito -->
+              <aside class="painel dir" style="width: 350px" aria-label="Inspetor do Corte">
+                <div class="painel-cab" style="padding: 6px 10px">
+                  <span>Inspetor</span>
+                  <button class="btn icone empurra" style="height: 22px; width: 22px" title="Recolher (Ctrl+])">×</button>
+                </div>
+                <div class="insp-abas" role="tablist">
+                  <span class="insp-aba atual">Enquadramento</span>
+                  <span class="insp-aba">Legendas</span>
+                  <span class="insp-aba">Silêncios</span>
+                  <span class="insp-aba">Áudio/SFX</span>
+                  <span class="insp-aba">Histórico</span>
+                </div>
+                <div class="painel-corpo" style="padding: 8px 10px; font-size: 12px">
+                  <div class="rotulo">Layout 9:16 (<span class="mono">editor.crop.set_layout</span>)</div>
+                  <div class="grade" style="grid-template-columns: repeat(3, 1fr); gap: 4px">
+                    <div class="caixa" style="text-align: center; padding: 5px">Rosto</div>
+                    <div class="caixa" style="text-align: center; padding: 5px">Fit/Centro</div>
+                    <div class="caixa" style="text-align: center; padding: 5px; outline: 2px solid var(--texto)"><strong>Jogo+Cam</strong></div>
+                  </div>
+                  <div class="linha">
+                    <span>Proporção Topo/Base:</span>
+                    <span class="mono empurra">30% / 70%</span>
+                  </div>
+                  <div class="barra-prog"><i style="--p: 30%"></i></div>
+                  <div class="caixa">
+                    <strong>Reenquadramento YuNet</strong>
+                    <div class="rotulo">Confiança: <span class="mono">0.62</span> · sugestão pronta</div>
+                    <button class="btn" style="margin-top: 4px; width: 100%; justify-content: center">Aplicar sugestão automática</button>
+                  </div>
+                  <div class="rotulo">Keyframes manuais (2) · ver detalhe completo em D3</div>
+                </div>
+              </aside>
+            </div>
+
+            <!-- Timeline com 5 faixas -->
+            <section class="tl-wrap" aria-label="Timeline do Corte">
+              <div class="tl-cab">
+                <button class="btn">-1F</button><button class="btn">+1F</button>
+                <strong>Entrada</strong>
+                <span class="mudo">|</span>
+                <span>Duração efetiva: <strong class="mono">00:38.4</strong> <span class="rotulo">(-4,1 s silêncios)</span></span>
+                <span class="selo cheio">Encaixe em Frase</span><span class="n">5</span>
+                <span class="mudo">|</span>
+                <strong>Saída</strong>
+                <button class="btn">-1F</button><button class="btn">+1F</button>
+                <div class="linha empurra" style="gap: 4px">
+                  <button class="btn">-</button>
+                  <button class="btn">Ajustar</button>
+                  <button class="btn">+</button>
+                </div>
+              </div>
+
+              <div class="tl-minimapa">
+                <span>Mini-mapa ±2 min</span>
+                <div class="tl-mini-janela"><div class="tl-mini-corte"></div></div>
+              </div>
+
+              <div class="tl-regua">
+                <span>Régua</span>
+                <div>
+                  <span class="mono">00:00</span><span class="mono">00:10</span><span class="mono">00:20</span><span class="mono">00:30</span><span class="mono">00:40</span>
+                  <div class="playhead" style="left: 39%"></div>
+                </div>
+              </div>
+
+              <!-- Faixa 1: Vídeo -->
+              <div class="tl-faixa">
+                <span>1. Vídeo <kbd>I/O</kbd></span>
+                <div>
+                  <div class="bloco-tl" style="left: 18%; width: 64%; padding-left: 14px">[t1] [t2] [t3] [t4] [t5] [t6] (miniaturas proxy)</div>
+                  <div class="alca foco" style="left: 18%" title="Alça Entrada focada">I</div>
+                  <div class="alca" style="left: 81.5%">O</div><span class="n" style="position: absolute; left: 83%; top: 6px; z-index: 3">6</span>
+                  <div class="playhead" style="left: 39%"></div>
+                </div>
+              </div>
+
+              <!-- Faixa 2: Áudio e Silêncios -->
+              <div class="tl-faixa">
+                <span>2. Áudio/Sil.</span>
+                <div>
+                  <div class="onda-ph"></div>
+                  <div class="silencio-hachura" style="left: 30%; width: 11%">Silêncio -1,8 s</div><span class="n" style="position: absolute; left: 41.8%; top: 6px; z-index: 3">7</span>
+                  <div class="silencio-hachura" style="left: 63%; width: 9%">-2,3 s</div>
+                  <div class="playhead" style="left: 39%"></div>
+                </div>
+              </div>
+
+              <!-- Faixa 3: Frases e Keyframes -->
+              <div class="tl-faixa">
+                <span>3. Frases/KF</span>
+                <div>
+                  <div class="bloco-tl" style="left: 18%; width: 20%">Frase 12</div>
+                  <div class="bloco-tl" style="left: 38.5%; width: 24%">Frase 13</div>
+                  <div class="bloco-tl" style="left: 63%; width: 19%">Frase 14</div>
+                  <div class="kf-pino sel" style="left: 29%" title="Keyframe selecionado">◆</div>
+                  <div class="kf-pino" style="left: 58%" title="Corte seco">▮</div><span class="n" style="position: absolute; left: 60%; top: 5px; z-index: 3">8</span>
+                  <div class="playhead" style="left: 39%"></div>
+                </div>
+              </div>
+
+              <!-- Faixa 4: Narração -->
+              <div class="tl-faixa">
+                <span>4. Narração</span>
+                <div>
+                  <div class="bloco-tl" style="left: 19%; width: 22%">Bloco 1: Intro</div>
+                  <div class="bloco-tl" style="left: 44%; width: 23%">Bloco 2 (+0,3s empurrado)</div>
+                  <div class="bloco-tl aviso" style="left: 68%; width: 14%">⚠ Cauda 5,8s</div><span class="n" style="position: absolute; left: 82.5%; top: 5px; z-index: 3">9</span>
+                  <div class="playhead" style="left: 39%"></div>
+                </div>
+              </div>
+
+              <!-- Faixa 5: Trilha & SFX -->
+              <div class="tl-faixa" style="border-bottom: 0">
+                <span>5. Trilha/SFX</span>
+                <div>
+                  <div class="duck-curva" title="Ducking -12 dB sob fala"></div>
+                  <div class="sfx-pino sel" style="left: 24%">♪ SFX 1 (foco)</div>
+                  <div class="sfx-pino" style="left: 52%">♪ SFX 2</div><span class="n" style="position: absolute; left: 61%; top: 5px; z-index: 3">10</span>
+                  <div class="playhead" style="left: 39%"></div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div class="barra-status">
+          <span>Salvo</span><span>Desfazer Corte: 3 ações</span>
+          <span class="empurra"><kbd>F6</kbd> trocar região · <kbd>Ctrl+[</kbd> / <kbd>Ctrl+]</kbd> painéis</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. 1366 alternado: Transcrição aberta e Inspetor recolhido -->
+  <section class="wf-variante" id="editar-1366-transcricao">
+    <h2>Alternado · 1366 × 768 (abrir Transcrição recolhe o Inspetor automaticamente)</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto shell-editor-1366">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Dark História ▾</button>
+          <nav class="etapas">
+            <span class="etapa">1. Fontes e Transcrição</span>
+            <span class="etapa atual">2. Cortes<small>8 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra"><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </div>
+        <div class="contexto-corte ctx-compacto">
+          <div class="linha">
+            <button class="btn fantasma" style="height: 24px">← Cortes</button>
+            <span class="titulo-corte">Corte <span class="mono">2/8</span>: "Como o navegador bloqueou o vazamento"</span>
+            <span class="selo cheio">Vídeo transformado</span>
+            <nav class="ctx-subabas empurra" aria-label="Etapas do Corte">
+              <span class="ctx-subaba atual">Editar</span><span class="ctx-subaba">Transformar</span><span class="ctx-subaba">Empacotar</span>
+            </nav>
+            <button class="btn prim" style="height: 24px">Exportar Corte <kbd>Ctrl E</kbd></button>
+          </div>
+        </div>
+        <div class="conteudo">
+          <div class="editor-corpo">
+            <div class="editor-topo">
+              <aside class="painel" style="width: 330px" aria-label="Transcrição e Índice do Corte">
+                <div class="painel-cab" style="padding: 6px 10px">
+                  <div class="linha" style="gap: 0">
+                    <span class="seg-btn ativo">Transcrição</span>
+                    <span class="seg-btn">Índice do Corte</span>
+                  </div>
+                  <button class="btn icone empurra" style="height: 22px; width: 22px">×</button>
+                </div>
+                <div class="painel-corpo" style="padding: 8px 10px">
+                  <div class="campo" style="height: 24px; font-size: 12px">Buscar no Corte… <kbd style="margin-left: auto">Ctrl F</kbd></div>
+                  <div class="esq-item mudo">Frase 11 (fora do Corte — atenuada)</div>
+                  <div class="esq-item"><strong>Frase 12</strong> · Quando a transmissão começou…</div>
+                  <div class="esq-item" style="background: var(--tela); border: 1px solid var(--texto)">
+                    <strong>Frase 13</strong> · e foi <span class="selo cheio">exatamente</span> ali <span class="selo">pausa 1,8s</span> que tudo mudou
+                  </div>
+                  <div class="esq-item"><strong>Frase 14</strong> · ninguém esperava aquela resposta.</div>
+                  <div class="rotulo">Detalhe completo de palavras/menu e Índice em D4.</div>
+                </div>
+              </aside>
+
+              <main class="palco-area">
+                <div class="palco-cab">
+                  <div class="linha" style="gap: 0">
+                    <span class="seg-btn ativo">Prévia 9:16</span><span class="seg-btn">Fonte 16:9</span>
+                  </div>
+                  <div class="linha empurra">
+                    <button class="btn prim" style="height: 24px; font-size: 12px">Transcrição <kbd>Ctrl+[</kbd></button>
+                    <button class="btn" style="height: 24px; font-size: 12px">Inspetor <kbd>Ctrl+]</kbd></button>
+                  </div>
+                </div>
+                <div class="palco-centro">
+                  <div class="midia r916 quadro-916">
+                    <span>Prévia 9:16</span>
+                    <div class="legenda-palco">e foi <span class="ativa">exatamente</span> ali</div>
+                  </div>
+                </div>
+                <div class="transporte" role="toolbar">
+                  <button class="btn">|◂</button><button class="btn">J</button><button class="btn prim">▶</button><button class="btn">L</button><button class="btn">▸|</button>
+                  <span class="mono" style="font-size: 12px">00:14.2 / 00:38.4</span>
+                  <button class="btn">I</button><button class="btn">O</button>
+                </div>
+              </main>
+
+              <aside class="trilho-recolhido dir" aria-label="Inspetor recolhido">
+                <button class="btn icone" title="Abrir Inspetor (Ctrl+])">«</button>
+                <span class="rotulo-vertical">Inspetor <kbd>Ctrl+]</kbd></span>
+              </aside>
+            </div>
+
+            <section class="tl-wrap" style="height: 230px">
+              <div class="tl-cab"><strong>Timeline (5 faixas sincronizadas)</strong> <span class="rotulo empurra">Duração efetiva: <span class="mono">00:38.4</span></span></div>
+              <div class="tl-minimapa"><span>Mini-mapa ±2 min</span><div class="tl-mini-janela"><div class="tl-mini-corte"></div></div></div>
+              <div class="tl-faixa"><span>1. Vídeo</span><div><div class="bloco-tl" style="left: 18%; width: 64%">miniaturas</div><div class="alca" style="left: 18%">I</div><div class="alca" style="left: 81.5%">O</div></div></div>
+              <div class="tl-faixa"><span>2. Áudio/Sil.</span><div><div class="onda-ph"></div><div class="silencio-hachura" style="left: 33%; width: 8%">-1,8s</div></div></div>
+              <div class="tl-faixa"><span>3. Frases/KF</span><div><div class="bloco-tl" style="left: 18%; width: 64%">Frases 12..14</div></div></div>
+              <div class="tl-faixa"><span>4. Narração</span><div><div class="bloco-tl" style="left: 19%; width: 48%">Blocos 1 e 2</div></div></div>
+              <div class="tl-faixa" style="border-bottom: 0"><span>5. Trilha/SFX</span><div><div class="duck-curva"></div></div></div>
+            </section>
+          </div>
+        </div>
+        <div class="barra-status">
+          <span>Salvo</span><span>Escopo Ctrl+Z: Correção da Transcrição (Projeto)</span><span class="n">11</span>
+          <span class="empurra"><kbd>F2</kbd> corrigir palavra</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. 1440x900 com ambos os painéis abertos -->
+  <section class="wf-variante" id="editar-1440">
+    <h2>Normal · 1440 × 900 (ambos os painéis acoplados abertos simultaneamente + badge de borda ao vivo)</h2>
+    <div class="wf-quadro w1440">
+      <div class="shell com-contexto">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Dark História ▾</button>
+          <nav class="etapas">
+            <span class="etapa">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa atual">2. Cortes<small>8 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra">
+            <span class="selo">Somente local</span>
+            <button class="btn">Fila · 0 ativos</button>
+            <button class="btn">Comandos <kbd>Ctrl K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+          </div>
+        </div>
+
+        <div class="contexto-corte">
+          <button class="btn fantasma">← Cortes</button>
+          <button class="btn">&lt; Anterior</button>
+          <span class="titulo-corte">Corte <span class="mono">2/8</span>: "Como o navegador bloqueou o vazamento em 2019"</span>
+          <button class="btn">Próximo aprovado &gt;</button>
+          <span class="selo cheio">Vídeo transformado</span>
+          <nav class="ctx-subabas empurra" aria-label="Etapas do Corte">
+            <span class="ctx-subaba atual" aria-current="page">Editar</span>
+            <span class="ctx-subaba">Transformar</span>
+            <span class="ctx-subaba">Empacotar</span>
+          </nav>
+          <button class="btn prim">Exportar Corte <kbd>Ctrl E</kbd></button>
+        </div>
+
+        <div class="conteudo">
+          <div class="editor-corpo">
+            <div class="editor-topo">
+              <aside class="painel" style="width: 300px" aria-label="Transcrição e Índice do Corte">
+                <div class="painel-cab">
+                  <div class="linha" style="gap: 0">
+                    <span class="seg-btn ativo">Transcrição</span><span class="seg-btn">Índice</span>
+                  </div>
+                  <button class="btn icone empurra" style="height: 22px; width: 22px">×</button>
+                </div>
+                <div class="painel-corpo" style="padding: 8px 10px">
+                  <div class="campo" style="height: 26px">Buscar no Corte… <kbd style="margin-left: auto">Ctrl F</kbd></div>
+                  <div class="esq-item mudo">Frase 11 (fora — clique para incluir)</div>
+                  <div class="esq-item"><strong>Frase 12</strong> · Quando a transmissão começou…</div>
+                  <div class="esq-item" style="border: 1px solid var(--texto); background: var(--tela)">
+                    <strong>Frase 13</strong> · e foi <span class="selo cheio">exatamente</span> ali <span class="selo">pausa 1,8s removida</span>
+                  </div>
+                  <div class="esq-item"><strong>Frase 14</strong> · ninguém esperava aquela resposta no chat.</div>
+                  <div class="esq-item mudo">Frase 15 (fora do Corte — atenuada)</div>
+                </div>
+              </aside>
+
+              <main class="palco-area">
+                <div class="palco-cab">
+                  <div class="linha" style="gap: 0">
+                    <span class="seg-btn ativo">Prévia 9:16</span><span class="seg-btn">Enquadrar na Fonte 16:9</span>
+                  </div>
+                  <span class="rotulo empurra">Ambos painéis visíveis (≥ 1440 px)</span><span class="n">12</span>
+                </div>
+                <div class="palco-centro">
+                  <div class="badge-borda mono">Entrada · 00:14.208 na Fonte · Livre por quadro (Alt)</div><span class="n" style="position: absolute; top: 10px; right: 16px">13</span>
+                  <div class="midia r916 quadro-916">
+                    <span>Quadro exato da borda</span>
+                    <div class="legenda-palco">e foi <span class="ativa">exatamente</span> ali</div>
+                  </div>
+                </div>
+                <div class="transporte" role="toolbar">
+                  <button class="btn">|◂</button><button class="btn">J</button><button class="btn prim">▶ Pausar</button><button class="btn">L</button><button class="btn">▸|</button>
+                  <span class="mono" style="font-size: 12px">00:14.2 / 00:38.4</span>
+                  <button class="btn">Entrada <kbd>I</kbd></button><button class="btn">Saída <kbd>O</kbd></button>
+                  <button class="btn empurra">🔊 100%</button>
+                </div>
+              </main>
+
+              <aside class="painel dir" style="width: 340px" aria-label="Inspetor do Corte">
+                <div class="painel-cab">
+                  <span>Inspetor</span>
+                  <button class="btn icone empurra" style="height: 22px; width: 22px">×</button>
+                </div>
+                <div class="insp-abas">
+                  <span class="insp-aba atual">Enquadramento</span>
+                  <span class="insp-aba">Legendas</span>
+                  <span class="insp-aba">Silêncios</span>
+                  <span class="insp-aba">Áudio/SFX</span>
+                  <span class="insp-aba">Histórico</span>
+                </div>
+                <div class="painel-corpo" style="padding: 10px">
+                  <div class="rotulo">Layout 9:16</div>
+                  <div class="grade" style="grid-template-columns: repeat(3, 1fr); gap: 6px">
+                    <div class="caixa" style="text-align: center">Rosto</div>
+                    <div class="caixa" style="text-align: center">Fit</div>
+                    <div class="caixa" style="text-align: center; outline: 2px solid var(--texto)"><strong>Jogo+Cam</strong></div>
+                  </div>
+                  <div class="caixa">
+                    <div class="linha"><strong>Proporção vertical</strong><span class="mono empurra">30% / 70%</span></div>
+                    <div class="barra-prog" style="margin-top: 6px"><i style="--p: 30%"></i></div>
+                    <div class="linha" style="margin-top: 8px">
+                      <span class="seg-btn ativo">Topo (Webcam)</span>
+                      <span class="seg-btn">Base (Jogo)</span>
+                    </div>
+                  </div>
+                  <div class="caixa">
+                    <strong>Keyframes do painel Topo</strong>
+                    <div class="rotulo mono" style="margin-top: 4px">00:14.200 · x:420 y:80 w:608 h:1080</div>
+                    <div class="rotulo mono">00:26.500 · x:480 y:80 · Corte seco</div>
+                  </div>
+                </div>
+              </aside>
+            </div>
+
+            <section class="tl-wrap" aria-label="Timeline do Corte">
+              <div class="tl-cab">
+                <button class="btn">-1F</button><button class="btn">+1F</button><strong>Entrada</strong>
+                <span class="mudo">|</span>
+                <span>Duração efetiva: <strong class="mono">00:38.4</strong> <span class="rotulo">(-4,1 s silêncios)</span></span>
+                <span class="selo cheio">Livre por quadro (Alt)</span>
+                <span class="mudo">|</span>
+                <strong>Saída</strong><button class="btn">-1F</button><button class="btn">+1F</button>
+                <div class="linha empurra"><button class="btn">-</button><button class="btn">Ajustar</button><button class="btn">+</button></div>
+              </div>
+              <div class="tl-minimapa"><span>Mini-mapa ±2 min</span><div class="tl-mini-janela"><div class="tl-mini-corte"></div></div></div>
+              <div class="tl-regua"><span>Régua</span><div><span class="mono">00:00</span><span class="mono">00:10</span><span class="mono">00:20</span><span class="mono">00:30</span><span class="mono">00:40</span><div class="playhead" style="left: 39%"></div></div></div>
+              <div class="tl-faixa"><span>1. Vídeo</span><div><div class="bloco-tl" style="left: 18%; width: 64%">[t1] [t2] [t3] [t4] [t5] [t6] [t7]</div><div class="alca foco" style="left: 18%">I</div><div class="alca" style="left: 81.5%">O</div></div></div>
+              <div class="tl-faixa"><span>2. Áudio/Sil.</span><div><div class="onda-ph"></div><div class="silencio-hachura" style="left: 33%; width: 8%">Silêncio -1,8s</div><div class="silencio-hachura" style="left: 63%; width: 7%">-2,3s</div></div></div>
+              <div class="tl-faixa"><span>3. Frases/KF</span><div><div class="bloco-tl" style="left: 18%; width: 20%">Frase 12</div><div class="bloco-tl" style="left: 38.5%; width: 24%">Frase 13</div><div class="bloco-tl" style="left: 63%; width: 19%">Frase 14</div><div class="kf-pino sel" style="left: 29%">◆</div><div class="kf-pino" style="left: 58%">▮</div></div></div>
+              <div class="tl-faixa"><span>4. Narração</span><div><div class="bloco-tl" style="left: 19%; width: 22%">Bloco 1: Intro</div><div class="bloco-tl" style="left: 44%; width: 23%">Bloco 2 (+0,3s empurrado)</div><div class="bloco-tl aviso" style="left: 68%; width: 14%">⚠ Cauda 5,8s</div></div></div>
+              <div class="tl-faixa" style="border-bottom: 0"><span>5. Trilha/SFX</span><div><div class="duck-curva"></div><div class="sfx-pino sel" style="left: 24%">♪ SFX 1</div><div class="sfx-pino" style="left: 52%">♪ SFX 2</div></div></div>
+            </section>
+          </div>
+        </div>
+
+        <div class="barra-status">
+          <span>Salvo</span><span>Desfazer Corte: 3 ações</span>
+          <span class="empurra"><kbd>F6</kbd> trocar região · <kbd>Ctrl+S</kbd> salvar agora</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Modo somente-leitura (Fonte offline) -->
+  <section class="wf-variante" id="offline-1366">
+    <h2>Modo somente-leitura · Fonte <span class="mono">offline</span> / <span class="mono">changed</span> (<span class="mono">?estado=offline</span>) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto shell-editor-1366">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Dark História ▾</button>
+          <nav class="etapas">
+            <span class="etapa">1. Fontes e Transcrição</span>
+            <span class="etapa atual">2. Cortes<small>8 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra"><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </div>
+        <div class="contexto-corte ctx-compacto">
+          <div class="linha">
+            <button class="btn fantasma" style="height: 24px">← Cortes</button>
+            <span class="titulo-corte">Corte <span class="mono">2/8</span>: "Como o navegador bloqueou o vazamento"</span>
+            <span class="selo cheio">Fonte offline</span>
+            <nav class="ctx-subabas empurra"><span class="ctx-subaba atual">Editar</span><span class="ctx-subaba">Transformar</span><span class="ctx-subaba">Empacotar</span></nav>
+            <button class="btn prim" style="height: 24px" disabled>Exportar Corte</button>
+          </div>
+        </div>
+
+        <div class="conteudo">
+          <div class="editor-corpo">
+            <div class="banner" role="alert" style="margin: 8px 12px 0; border-radius: var(--r)">
+              <span class="selo cheio">Fonte offline</span>
+              <span>O arquivo original da Fonte foi movido ou alterado. Você ainda pode ler a Transcrição, inspecionar o Índice e ajustar bordas por Frase; prévia de vídeo, YuNet e exportação estão bloqueados.</span><span class="n">14</span>
+              <button class="btn prim empurra">Relocalizar Fonte</button>
+            </div>
+
+            <div class="editor-topo" style="margin-top: 8px">
+              <aside class="painel" style="width: 340px">
+                <div class="painel-cab"><span>Transcrição (editável via SQLite)</span></div>
+                <div class="painel-corpo" style="padding: 8px 10px">
+                  <div class="esq-item mudo">Frase 11 (fora do Corte)</div>
+                  <div class="esq-item"><strong>Frase 12</strong> · Quando a transmissão começou… <span class="rotulo">[Definir Entrada]</span></div>
+                  <div class="esq-item"><strong>Frase 13</strong> · e foi exatamente ali que tudo mudou…</div>
+                  <div class="esq-item"><strong>Frase 14</strong> · ninguém esperava aquela resposta. <span class="rotulo">[Definir Saída]</span></div>
+                </div>
+              </aside>
+
+              <main class="palco-area">
+                <div class="palco-centro">
+                  <div class="caixa tracejada" style="padding: 24px; text-align: center; max-width: 380px; background: var(--tela)">
+                    <strong>Prévia de vídeo indisponível</strong>
+                    <p class="rotulo" style="margin: 6px 0 12px">Relocalize o arquivo <span class="mono">live-2026-10-12.mp4</span> para gerar ou reproduzir o proxy deste Corte.</p>
+                    <button class="btn prim">Relocalizar Fonte</button>
+                  </div>
+                </div>
+                <div class="transporte" role="toolbar">
+                  <button class="btn" disabled>▶ Reproduzir</button>
+                  <span class="mono mudo" style="font-size: 12px">00:00.0 / 00:38.4</span>
+                  <button class="btn empurra" disabled>Inspetor YuNet bloqueado</button>
+                </div>
+              </main>
+            </div>
+
+            <section class="tl-wrap">
+              <div class="tl-cab">
+                <button class="btn">-1F</button><button class="btn">+1F</button><strong>Entrada (por Frase)</strong>
+                <span class="mudo">|</span>
+                <span class="rotulo">Miniaturas e onda desabilitadas sem Fonte online</span>
+                <button class="btn empurra">-1F</button><button class="btn">+1F</button><strong>Saída</strong>
+              </div>
+              <div class="tl-faixa"><span>Frases</span><div><div class="bloco-tl" style="left: 18%; width: 20%">Frase 12</div><div class="bloco-tl" style="left: 38.5%; width: 24%">Frase 13</div><div class="bloco-tl" style="left: 63%; width: 19%">Frase 14</div><div class="alca" style="left: 18%">I</div><div class="alca" style="left: 81.5%">O</div></div></div>
+              <div class="tl-faixa" style="border-bottom: 0"><span>Silêncios</span><div><div class="silencio-hachura" style="left: 33%; width: 8%">-1,8s</div><div class="silencio-hachura" style="left: 63%; width: 7%">-2,3s</div></div></div>
+            </section>
+          </div>
+        </div>
+
+        <div class="barra-status"><span>Salvo (SQLite)</span><span>Fonte offline · texto e bordas liberados</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Carregando / Job rodando (proxy + timeline sem bloquear painéis) -->
+  <section class="wf-variante" id="carregando-1366">
+    <h2>Gerando proxy e timeline (<span class="mono">job_running</span> — não bloqueia Transcrição nem Inspetor) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto shell-editor-1366">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Dark História ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes e Transcrição</span><span class="etapa atual">2. Cortes</span><span class="etapa">3. Exportação</span></nav>
+          <div class="linha empurra"><button class="btn">Fila · 2 ativos</button></div>
+        </div>
+        <div class="contexto-corte ctx-compacto">
+          <div class="linha">
+            <button class="btn fantasma" style="height: 24px">← Cortes</button>
+            <span class="titulo-corte">Corte <span class="mono">2/8</span>: "Como o navegador bloqueou o vazamento"</span>
+            <span class="selo cheio">Vídeo transformado</span>
+            <button class="btn prim empurra" style="height: 24px">Exportar Corte</button>
+          </div>
+        </div>
+
+        <div class="conteudo">
+          <div class="editor-corpo">
+            <div class="editor-topo">
+              <aside class="painel" style="width: 330px">
+                <div class="painel-cab"><span>Transcrição (já interativa)</span><span class="selo cheio empurra">Pronta</span></div>
+                <div class="painel-corpo" style="padding: 8px 10px">
+                  <div class="esq-item"><strong>Frase 12</strong> · Quando a transmissão começou…</div>
+                  <div class="esq-item"><strong>Frase 13</strong> · e foi exatamente ali que tudo mudou…</div>
+                  <div class="rotulo">Você já pode corrigir palavras (<kbd>F2</kbd>) e ajustar bordas enquanto o proxy termina.</div>
+                </div>
+              </aside>
+
+              <main class="palco-area">
+                <div class="palco-centro">
+                  <div class="caixa" style="width: 300px; padding: 16px; text-align: center">
+                    <strong>Preparando prévia rápida (<span class="mono">proxy.request</span>)</strong><span class="n">15</span>
+                    <div class="barra-prog" style="margin: 10px 0 6px"><i style="--p: 42%"></i></div>
+                    <div class="linha" style="justify-content: space-between; font-size: 12px">
+                      <span class="rotulo">Codificando trecho ±2 min…</span>
+                      <span class="mono">42%</span>
+                    </div>
+                    <button class="btn" style="margin-top: 10px">Cancelar</button>
+                  </div>
+                </div>
+                <div class="transporte" role="toolbar">
+                  <button class="btn" disabled>▶ Reproduzir</button>
+                  <span class="mono mudo" style="font-size: 12px">Aguardando proxy…</span>
+                </div>
+              </main>
+            </div>
+
+            <section class="tl-wrap" style="padding: 12px 16px; gap: 8px">
+              <div class="linha">
+                <strong>Gerando miniaturas e forma de onda (<span class="mono">editor.timeline</span>)</strong>
+                <span class="mono empurra">18%</span>
+                <button class="btn" style="height: 24px">Cancelar</button>
+              </div>
+              <div class="barra-prog"><i style="--p: 18%"></i></div>
+              <div class="texto-ph" style="width: 100%; height: 22px"></div>
+              <div class="texto-ph" style="width: 100%; height: 22px"></div>
+            </section>
+          </div>
+        </div>
+
+        <div class="barra-status"><span>Salvo</span><span>Proxy 42% · Timeline 18%</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li><strong>Regra de largura 1366 px (Decisão #1):</strong> em janelas &lt; 1440 px, apenas <strong>um</strong> painel lateral acoplado fica aberto por vez. Clicar no botão ou acionar <kbd>Ctrl+[</kbd> abre a Transcrição e recolhe automaticamente o Inspetor (e vice-versa com <kbd>Ctrl+]</kbd>), sem nunca sobrepor o Palco 9:16 (WCAG 2.4.11).</li>
+      <li><strong>Alternador de visualização:</strong> <span class="mono">Prévia 9:16</span> mostra o corte vertical final; <span class="mono">Enquadrar na Fonte 16:9</span> mostra o quadro original com retângulos de crop (detalhado em <a href="D5-enquadrar-fonte.html">D5</a>).</li>
+      <li><strong>Legendas ao vivo (<span class="mono">render.ts</span>):</strong> canvas lógico <span class="mono">1080×1920</span> escalado com paridade <span class="mono">libass</span>, karaokê por palavra, <span class="mono">fade</span> e <span class="mono">overrides</span> individuais.</li>
+      <li><strong>Barra de transporte (<span class="mono">role="toolbar"</span>):</strong> usa <em>roving tabindex</em> com <kbd>←</kbd>/<kbd>→</kbd> interno. Todos os alvos têm ≥ 24×24 px (SC 2.5.8).</li>
+      <li><strong>Indicador de encaixe na Timeline:</strong> por padrão, bordas e agulha encaixam em bordas de <strong>Frase</strong>; segurar <kbd>Alt</kbd> alterna para <em>Livre por quadro</em> (<span class="mono">free: true</span>). Estender além da janela carregada recarrega <span class="mono">editor.sentences</span>.</li>
+      <li><strong>Estado de foco/seleção na Timeline:</strong> alças <span class="mono">I</span> e <span class="mono">O</span> implementam <span class="mono">role="slider"</span> com <span class="mono">aria-valuetext</span> (ex.: <em>"Entrada em 00:14.200 da Fonte"</em>), setas ±1 Frase, <kbd>Alt+←/→</kbd> ±1 quadro e <kbd>PgUp/PgDn</kbd> ±5 Frases.</li>
+      <li><strong>Silêncios não destrutivos (WCAG 1.4.1):</strong> silêncios ativos usam hachura + borda tracejada + rótulo de duração removida (nunca só cor). Durante a prévia, o <span class="mono">SpliceMap</span> pula esses trechos automaticamente.</li>
+      <li><strong>Faixa 3 (Frases e Keyframes):</strong> distingue keyframe interpolado (<span class="mono">◆</span>) de corte seco (<span class="mono">▮</span>, <span class="mono">cut: true</span>). Item selecionado recebe contorno duplo de foco.</li>
+      <li><strong>Faixa 4 (Narração — condicional):</strong> exibida apenas quando <span class="mono">videoKind === 'transformed'</span> e <span class="mono">montage !== null</span>. Blocos podem ser movidos (<span class="mono">editor.montage.set_start</span>); empurrões respeitam respiro de <span class="mono">300 ms</span> e cauda congelada &gt; 5 s exibe <span class="mono">&lt;Status tom="aviso"&gt;</span>.</li>
+      <li><strong>Faixa 5 (Trilha &amp; SFX):</strong> desenha a curva do envelope de ducking <span class="mono">-12 dB</span> sob <span class="mono">speechIntervals</span> e pinos de SFX arrastáveis (ancorados em palavra ou livres com <kbd>Alt</kbd>).</li>
+      <li><strong>Separação de pilhas <kbd>Ctrl+Z</kbd>:</strong> quando o foco está na Transcrição, <kbd>Ctrl+Z</kbd> chama <span class="mono">transcription.undo</span> (pilha do Projeto); fora dela, chama <span class="mono">editor.undo</span> (pilha do Corte, máx. 100 entradas). O escopo ativo aparece na Barra de Status.</li>
+      <li><strong>Layout 1440+ px:</strong> Transcrição (esquerda), Palco (centro) e Inspetor (direita) permanecem abertos ao mesmo tempo; ambos ainda podem ser recolhidos via <kbd>Ctrl+[</kbd> / <kbd>Ctrl+]</kbd>.</li>
+      <li><strong>Badge de borda ao vivo (<span class="mono">overlayBorda</span>):</strong> durante arrasto da alça <span class="mono">I</span>/<span class="mono">O</span> (<span class="mono">preview: true</span>), o Palco mostra o quadro exato da borda e o badge <span class="mono">tabular-nums</span> indicando <em>Encaixe em Frase</em> ou <em>Livre por quadro (Alt)</em>.</li>
+      <li><strong>Guarda de Fonte <span class="mono">offline</span> / <span class="mono">changed</span> (ADR-0005):</strong> abre em modo somente-leitura de mídia; leitura/correção de Transcrição, Índice do Corte e ajuste de bordas por Frase continuam operáveis via SQLite.</li>
+      <li><strong>Estado inicial <span class="mono">loading</span>:</strong> antes de <span class="mono">editor.open</span> responder, as 4 zonas exibem <span class="mono">&lt;Esqueleto&gt;</span> estrutural. Assim que <span class="mono">editor.open</span> responde, Transcrição e Inspetor liberam edição mesmo enquanto <span class="mono">proxy.request</span> e <span class="mono">editor.timeline</span> seguem em <span class="mono">job_running</span>.</li>
+    </ol>
+  </section>
+
+</main>
+<script src="kit.js"></script>
+</body>
+</html>

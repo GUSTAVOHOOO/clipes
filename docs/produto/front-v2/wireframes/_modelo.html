@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Modelo de wireframe</title>
+<link rel="stylesheet" href="kit.css">
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>Modelo — copie este arquivo para começar uma tela</h1>
+    <p>Rota: <span class="mono">#/projeto/:id/cortes</span>. Fonte da especificação: <span class="mono">telas/C-cortes-selecao-revisao.md</span>, Tela C.2.
+      Cada tela tem: um quadro por variante (estado normal primeiro, depois vazio/erro/carregando e diálogos importantes), e uma lista de notas numeradas no fim.</p>
+    <nav><a href="#normal">Normal 1366</a><a href="#largo">Normal 1440</a><a href="#vazio">Vazio</a></nav>
+  </header>
+
+  <section class="wf-variante" id="normal">
+    <h2>Normal · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <div class="barra-sup">
+          <button class="btn fantasma">Meu canal ▾</button><span class="n">1</span>
+          <nav class="etapas">
+            <span class="etapa">1. Fontes e Transcrição<small>3</small></span>
+            <span class="etapa atual">2. Cortes<small>12 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra">
+            <span class="selo">Somente local</span>
+            <button class="btn">Fila · 2 ativos</button><span class="n">2</span>
+            <button class="btn">Comandos <kbd>Ctrl K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+          </div>
+        </div>
+
+        <div class="conteudo">
+          <aside class="painel" style="width: 340px">
+            <div class="painel-cab">Cortes sugeridos <span class="selo empurra">rev. 2</span></div>
+            <div class="lista">
+              <div class="sel"><span class="mono">00:12:31</span> Título do Corte <span class="selo empurra">Nota 8,4</span></div>
+              <div><span class="mono">00:40:02</span> Outro Corte <span class="selo empurra">Nota 7,9</span></div>
+              <div><span class="mono">01:02:10</span> Mais um Corte <span class="selo empurra">Nota 7,1</span></div>
+            </div>
+          </aside>
+          <div class="cresce secao">
+            <div class="linha" style="align-items: stretch; gap: 16px; height: 100%">
+              <div class="midia r916" style="height: 100%">Preview 9:16</div>
+              <div class="coluna cresce">
+                <h3 style="margin: 0">Título do Corte</h3>
+                <div class="texto-ph" style="width: 80%"></div>
+                <div class="texto-ph" style="width: 60%"></div>
+                <div class="linha"><button class="btn prim">Aprovar <kbd>A</kbd></button><button class="btn">Rejeitar <kbd>R</kbd></button><span class="n">3</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="barra-status">
+          <span>Salvo</span><span>Sem jobs ativos</span>
+          <span class="empurra"><kbd>F6</kbd> trocar região · <kbd>?</kbd> atalhos</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wf-variante" id="largo">
+    <h2>Normal · 1440 × 900 (o que muda: …)</h2>
+    <div class="wf-quadro w1440"><!-- repita a estrutura com o layout da largura maior --></div>
+  </section>
+
+  <section class="wf-variante" id="vazio">
+    <h2>Vazio · 1366</h2>
+    <div class="wf-quadro w1366"><!-- estado vazio com ação --></div>
+  </section>
+
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li>Seletor de Projeto: Trocar Projeto, Fechar Projeto (<span class="mono">projects.close</span>), Configurações do Projeto.</li>
+      <li>Botão da Fila: abre o painel acoplado (<kbd>Ctrl J</kbd>); alerta quando há job <span class="mono">uncertain</span> ou falho.</li>
+      <li>Atalhos de tecla única só funcionam se o interruptor WCAG 2.1.4 estiver ligado.</li>
+    </ol>
+  </section>
+</main>
+<script src="kit.js"></script>
+</body>
+</html>

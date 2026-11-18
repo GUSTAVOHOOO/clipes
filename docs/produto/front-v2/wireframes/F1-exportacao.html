@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F1 · Mesa de Prontidão e Exportação em Lote — Wireframes Clipes v2</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .subbarra {
+    display: flex; align-items: center; gap: 10px; padding: 6px 12px;
+    background: var(--tela); border-bottom: 1px solid var(--borda); flex-wrap: wrap;
+  }
+  .grade-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .grade-cards.c3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .card-topo { display: flex; gap: 10px; align-items: flex-start; }
+  .thumb-916 { width: 58px; flex: none; font-size: 10px; text-align: center; padding: 2px; }
+  .glifos { display: flex; flex-wrap: wrap; gap: 4px; }
+  .selo.alerta { border-color: var(--texto); background: var(--sutil); color: var(--texto); font-weight: 600; }
+  .selo.ok { border-color: var(--borda); color: var(--texto); }
+  .sep-h { height: 1px; background: var(--sutil); margin: 4px 0; }
+  .check-bloco { border: 1px solid var(--borda); border-radius: var(--r); background: var(--tela); padding: 8px 10px; }
+  .check-bloco summary { cursor: pointer; font-weight: 600; }
+  .check-lista { margin: 8px 0 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--texto-2); }
+  .skel { background: var(--sutil); border-radius: var(--r); }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>F1 · Macro-etapa 3: Exportação — Mesa de Prontidão, Lotes e Diálogos</h1>
+    <p>Rotas: <span class="mono">#/projeto/:id/exportacao?sub=prontidao|lotes</span> (alias <span class="mono">/exportacao/lotes</span>).
+      Especificação: <span class="mono">telas/F-exportacao-fila-relatos.md</span> §1, <span class="mono">01-arquitetura.md</span> §3–4, <span class="mono">02-consolidacao.md</span> §4, §6, §11.</p>
+    <nav>
+      <a href="#prontidao-1366">Prontidão 1366</a>
+      <a href="#prontidao-1440">Prontidão 1440</a>
+      <a href="#lotes-1366">Histórico de lotes</a>
+      <a href="#dialogos-1366">Confirmação pré-lote e "Exportar só este"</a>
+      <a href="#carregando-1366">Carregando (Skeleton)</a>
+      <a href="#vazio-erro-1366">Vazio e Erro acionável</a>
+    </nav>
+  </header>
+
+  <!-- 1. Prontidão 1366x768 -->
+  <section class="wf-variante" id="prontidao-1366">
+    <h2>1. Mesa de prontidão e disparo em lote (?sub=prontidao) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <nav class="etapas" aria-label="Etapas do Projeto">
+            <span class="etapa">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa">2. Cortes<small>12 aprovados</small></span>
+            <span class="etapa atual">3. Exportação<small>2 lotes</small></span>
+          </nav>
+          <div class="linha empurra">
+            <span class="selo">Somente local</span>
+            <button class="btn">Fila · 1 ativo</button>
+            <button class="btn">Comandos <kbd>Ctrl+K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+            <button class="btn">Mais ▾</button>
+          </div>
+        </header>
+
+        <div class="coluna cresce" style="gap: 0; min-height: 0">
+          <nav class="subbarra" aria-label="Visões de Exportação">
+            <div class="abas" role="tablist">
+              <span class="aba atual" role="tab" aria-selected="true">Prontidão e Lote (12)</span>
+              <span class="aba" role="tab" aria-selected="false">Histórico de lotes (2 ativos)</span>
+            </div><span class="n">1</span>
+            <div class="linha empurra">
+              <span class="rotulo">Fonte:</span>
+              <div class="campo" style="color: var(--texto); width: 150px">Todas as Fontes ▾</div>
+              <span class="rotulo">Filtro:</span>
+              <div class="campo" style="color: var(--texto); width: 155px">Todos (12) ▾</div><span class="n">2</span>
+            </div>
+          </nav>
+
+          <div class="conteudo">
+            <!-- Zona A: Grade de Prontidão -->
+            <main class="cresce secao" style="overflow: auto; padding: 12px">
+              <div class="grade-cards">
+                <!-- Card 1: Pronto -->
+                <article class="cartao">
+                  <div class="card-topo">
+                    <div class="midia r916 thumb-916">Capa 9:16</div><span class="n">3</span>
+                    <div class="coluna cresce" style="gap: 4px">
+                      <div class="linha">
+                        <span class="selo cheio">Corte direto</span>
+                        <span class="mono rotulo empurra">00:42</span>
+                      </div>
+                      <strong>Por que esse bug quebrou a build inteira</strong>
+                      <span class="rotulo">Live 14/11 · Permissão registrada (Criador Tech · YT)</span>
+                    </div>
+                  </div>
+                  <div class="glifos">
+                    <span class="selo ok">✓ Capa escolhida</span>
+                    <span class="selo ok">✓ Empacotado</span>
+                    <span class="selo ok">✓ Com Permissão</span>
+                    <span class="n">4</span>
+                  </div>
+                  <div class="linha" style="margin-top: auto; padding-top: 4px">
+                    <button class="btn prim">Editar Corte</button><span class="n">5</span>
+                    <button class="btn">Empacotar</button>
+                    <button class="btn empurra">Exportar só este</button><span class="n">6</span>
+                  </div>
+                </article>
+
+                <!-- Card 2: Vídeo transformado com pendências -->
+                <article class="cartao">
+                  <div class="card-topo">
+                    <div class="midia r916 thumb-916">Sem capa</div>
+                    <div class="coluna cresce" style="gap: 4px">
+                      <div class="linha">
+                        <span class="selo">Vídeo transformado</span>
+                        <span class="mono rotulo empurra">01:12</span>
+                      </div>
+                      <strong>Título sugerido <span class="rotulo">(sem Empacotamento)</span></strong>
+                      <span class="rotulo">Live 14/11 · Sem Permissão</span>
+                    </div>
+                  </div>
+                  <div class="glifos">
+                    <span class="selo alerta">⚠ Sem capa</span>
+                    <span class="selo alerta">⚠ Sem Empacotamento</span>
+                    <span class="selo alerta">⚠ Sem Permissão</span>
+                    <span class="selo alerta">⚠ Roteiro pendente (2)</span>
+                    <span class="selo">Acima de 60 s</span>
+                  </div>
+                  <div class="linha" style="margin-top: auto; padding-top: 4px">
+                    <button class="btn prim">Transformar</button>
+                    <button class="btn">Editar</button>
+                    <button class="btn">Empacotar</button>
+                    <button class="btn empurra">Exportar só este</button>
+                  </div>
+                </article>
+
+                <!-- Card 3: Fonte alterada + áudio sem licença -->
+                <article class="cartao">
+                  <div class="card-topo">
+                    <div class="midia r916 thumb-916">Capa 9:16</div>
+                    <div class="coluna cresce" style="gap: 4px">
+                      <div class="linha">
+                        <span class="selo cheio">Corte direto</span>
+                        <span class="mono rotulo empurra">00:38</span>
+                      </div>
+                      <strong>Reação ao anúncio da placa nova</strong>
+                      <span class="rotulo">Podcast #08 · <strong style="color: var(--texto)">Fonte alterada</strong></span>
+                    </div>
+                  </div>
+                  <div class="glifos">
+                    <span class="selo alerta">✕ Fonte indisponível</span>
+                    <span class="selo alerta">⚠ Áudio sem licença</span>
+                    <span class="selo ok">✓ Capa escolhida</span>
+                  </div>
+                  <div class="linha" style="margin-top: auto; padding-top: 4px">
+                    <button class="btn prim">Relocalizar Fonte</button>
+                    <button class="btn">Editar</button>
+                    <button class="btn empurra" disabled title="Fonte indisponível">Exportar só este</button>
+                  </div>
+                </article>
+
+                <!-- Card 4: Transformado com sobra > 5s -->
+                <article class="cartao">
+                  <div class="card-topo">
+                    <div class="midia r916 thumb-916">Capa 9:16</div>
+                    <div class="coluna cresce" style="gap: 4px">
+                      <div class="linha">
+                        <span class="selo">Vídeo transformado</span>
+                        <span class="mono rotulo empurra">00:54</span>
+                      </div>
+                      <strong>O erro oculto nos logs de produção</strong>
+                      <span class="rotulo">Live 15/11 · Permissão registrada</span>
+                    </div>
+                  </div>
+                  <div class="glifos">
+                    <span class="selo ok">✓ Roteiro aprovado</span>
+                    <span class="selo ok">✓ Narração pronta</span>
+                    <span class="selo alerta">⚠ Sobra final &gt; 5 s</span>
+                  </div>
+                  <div class="linha" style="margin-top: auto; padding-top: 4px">
+                    <button class="btn prim">Editar Corte</button>
+                    <button class="btn">Empacotar</button>
+                    <button class="btn empurra">Exportar só este</button>
+                  </div>
+                </article>
+              </div>
+            </main>
+
+            <!-- Zona B: Configuração e Disparo -->
+            <aside class="painel dir" style="width: 390px" aria-label="Configuração da exportação em lote">
+              <div class="painel-cab">Exportação em lote</div>
+              <div class="painel-corpo" style="gap: 10px">
+                <div class="coluna" style="gap: 4px">
+                  <span class="rotulo">Escopo do lote</span>
+                  <div class="linha">
+                    <button class="btn prim" style="height: 24px; font-size: 12px">Todo o Projeto (12)</button>
+                    <button class="btn" style="height: 24px; font-size: 12px" disabled>Só Fonte filtrada</button>
+                  </div>
+                  <div class="banner" style="padding: 6px 8px; font-size: 12px">
+                    <span>⚠ 1 Corte está com Fonte alterada e falhará até ser relocalizado.</span>
+                  </div>
+                </div>
+
+                <div class="coluna" style="gap: 4px">
+                  <label class="rotulo">Pasta de saída (<span class="mono">export.settings</span>)</label>
+                  <div class="linha">
+                    <div class="campo cresce mono" style="color: var(--texto); overflow: hidden">C:\Users\dev\Videos\Saida</div>
+                    <button class="btn">Escolher pasta…</button><span class="n">7</span>
+                  </div>
+                  <span class="rotulo">MP4 1080×1920 (H.264), áudio -14 LUFS / -1 dBTP, sem marca d'água.</span>
+                </div>
+
+                <div class="caixa coluna" style="gap: 4px">
+                  <div class="linha">
+                    <strong>Encoder: Hardware NVIDIA (NVENC)</strong>
+                    <span class="selo empurra">Automático</span>
+                  </div>
+                  <span class="rotulo">Se o hardware falhar durante o render, o Clipes refaz o item com CPU (x264) e registra aviso no lote.</span><span class="n">8</span>
+                  <div><button class="btn fantasma" style="padding: 0; height: 22px; text-decoration: underline">Configurar encoder →</button></div>
+                </div>
+
+                <details class="check-bloco" open>
+                  <summary>Checklist informativo (não bloqueia)</summary><span class="n">9</span>
+                  <ul class="check-lista">
+                    <li><strong>Tipo:</strong> Misto (8 diretos, 4 transformados) — legenda, crop e filtros não são Transformação.</li>
+                    <li><strong>Permissão:</strong> 10 de 12 com registro (2 sem Permissão).</li>
+                    <li><strong>Roteiro e Narração:</strong> 3 de 4 aprovados · 2 com TTS (divulgação sintética).</li>
+                    <li><strong>Áudio / Duração:</strong> 1 trilha sem licença · 2 Cortes acima de 60 s.</li>
+                    <li><strong>Aviso de Corte direto:</strong> pendente (exibido ao confirmar).</li>
+                  </ul>
+                </details>
+
+                <button class="btn prim" style="height: 34px; justify-content: center; margin-top: auto">
+                  Exportar 12 aprovados em lote
+                </button><span class="n">10</span>
+              </div>
+            </aside>
+          </div>
+        </div>
+
+        <footer class="barra-status">
+          <span>Salvo</span><span>·</span><span>Lote #5: exportando 5/12 (45%)</span>
+          <span class="empurra"><kbd>F6</kbd> trocar região · <kbd>?</kbd> atalhos</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Prontidão 1440x900 -->
+  <section class="wf-variante" id="prontidao-1440">
+    <h2>2. Mesa de prontidão (?sub=prontidao) · 1440 × 900 (o que muda: 3 colunas fluidas + busca e ordenação expandidas)</h2>
+    <div class="wf-quadro w1440">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <nav class="etapas" aria-label="Etapas do Projeto">
+            <span class="etapa">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa atual">2. Cortes<small>12 aprovados</small></span>
+            <span class="etapa">3. Exportação<small>2 lotes</small></span>
+          </nav>
+          <div class="linha empurra">
+            <span class="selo">Somente local</span>
+            <button class="btn">Fila · 1 ativo</button>
+            <button class="btn">Comandos <kbd>Ctrl+K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+            <button class="btn">Relatos</button>
+            <button class="btn">Sobre</button>
+          </div>
+        </header>
+
+        <div class="coluna cresce" style="gap: 0; min-height: 0">
+          <nav class="subbarra" aria-label="Visões de Exportação">
+            <div class="abas" role="tablist">
+              <span class="aba atual" role="tab" aria-selected="true">Prontidão e Lote (12)</span>
+              <span class="aba" role="tab" aria-selected="false">Histórico de lotes (2 ativos)</span>
+            </div>
+            <div class="linha empurra">
+              <div class="campo" style="width: 210px">Buscar título do Corte…</div>
+              <div class="campo" style="color: var(--texto); width: 155px">Todas as Fontes ▾</div>
+              <div class="campo" style="color: var(--texto); width: 165px">Com pendências (5) ▾</div>
+              <div class="campo" style="color: var(--texto); width: 170px">Ordenar: Pendências ▾</div>
+            </div>
+          </nav>
+
+          <div class="conteudo">
+            <main class="cresce secao" style="overflow: auto; padding: 14px">
+              <div class="grade-cards c3">
+                <article class="cartao">
+                  <div class="card-topo">
+                    <div class="midia r916 thumb-916">Capa</div>
+                    <div class="coluna cresce" style="gap: 3px">
+                      <div class="linha"><span class="selo cheio">Corte direto</span><span class="mono rotulo empurra">00:42</span></div>
+                      <strong>Por que esse bug quebrou a build</strong>
+                      <span class="rotulo">Live 14/11 · Com Permissão</span>
+                    </div>
+                  </div>
+                  <div class="glifos"><span class="selo ok">✓ Capa</span><span class="selo ok">✓ Empacotado</span></div>
+                  <div class="linha"><button class="btn prim">Editar</button><button class="btn">Empacotar</button><button class="btn empurra">Só este</button></div>
+                </article>
+                <article class="cartao">
+                  <div class="card-topo">
+                    <div class="midia r916 thumb-916">Sem capa</div>
+                    <div class="coluna cresce" style="gap: 3px">
+                      <div class="linha"><span class="selo">Vídeo transformado</span><span class="mono rotulo empurra">01:12</span></div>
+                      <strong>Título sugerido (sem Empac.)</strong>
+                      <span class="rotulo">Live 14/11 · Sem Permissão</span>
+                    </div>
+                  </div>
+                  <div class="glifos"><span class="selo alerta">⚠ Sem capa</span><span class="selo alerta">⚠ Roteiro (2)</span></div>
+                  <div class="linha"><button class="btn prim">Transformar</button><button class="btn">Empacotar</button><button class="btn empurra">Só este</button></div>
+                </article>
+                <article class="cartao">
+                  <div class="card-topo">
+                    <div class="midia r916 thumb-916">Capa</div>
+                    <div class="coluna cresce" style="gap: 3px">
+                      <div class="linha"><span class="selo cheio">Corte direto</span><span class="mono rotulo empurra">00:38</span></div>
+                      <strong>Reação ao anúncio da placa</strong>
+                      <span class="rotulo">Podcast #08 · Fonte alterada</span>
+                    </div>
+                  </div>
+                  <div class="glifos"><span class="selo alerta">✕ Fonte alterada</span><span class="selo alerta">⚠ Áudio</span></div>
+                  <div class="linha"><button class="btn prim">Relocalizar Fonte</button><button class="btn empurra" disabled>Só este</button></div>
+                </article>
+                <article class="cartao">
+                  <div class="card-topo">
+                    <div class="midia r916 thumb-916">Capa</div>
+                    <div class="coluna cresce" style="gap: 3px">
+                      <div class="linha"><span class="selo">Vídeo transformado</span><span class="mono rotulo empurra">00:54</span></div>
+                      <strong>O erro oculto nos logs</strong>
+                      <span class="rotulo">Live 15/11 · Com Permissão</span>
+                    </div>
+                  </div>
+                  <div class="glifos"><span class="selo ok">✓ Roteiro</span><span class="selo alerta">⚠ Sobra &gt; 5 s</span></div>
+                  <div class="linha"><button class="btn prim">Editar</button><button class="btn">Empacotar</button><button class="btn empurra">Só este</button></div>
+                </article>
+                <article class="cartao">
+                  <div class="card-topo">
+                    <div class="midia r916 thumb-916">Capa</div>
+                    <div class="coluna cresce" style="gap: 3px">
+                      <div class="linha"><span class="selo cheio">Corte direto</span><span class="mono rotulo empurra">00:29</span></div>
+                      <strong>Quando o deploy rodou sexta</strong>
+                      <span class="rotulo">Live 15/11 · Com Permissão</span>
+                    </div>
+                  </div>
+                  <div class="glifos"><span class="selo ok">✓ Pronto para publicar</span></div>
+                  <div class="linha"><button class="btn prim">Editar</button><button class="btn">Empacotar</button><button class="btn empurra">Só este</button></div>
+                </article>
+                <article class="cartao">
+                  <div class="card-topo">
+                    <div class="midia r916 thumb-916">Capa</div>
+                    <div class="coluna cresce" style="gap: 3px">
+                      <div class="linha"><span class="selo cheio">Corte direto</span><span class="mono rotulo empurra">00:47</span></div>
+                      <strong>Benchmark de CPU vs GPU</strong>
+                      <span class="rotulo">Live 15/11 · Com Permissão</span>
+                    </div>
+                  </div>
+                  <div class="glifos"><span class="selo ok">✓ Pronto para publicar</span></div>
+                  <div class="linha"><button class="btn prim">Editar</button><button class="btn">Empacotar</button><button class="btn empurra">Só este</button></div>
+                </article>
+              </div>
+            </main>
+
+            <aside class="painel dir" style="width: 410px" aria-label="Configuração da exportação em lote">
+              <div class="painel-cab">Exportação em lote</div>
+              <div class="painel-corpo" style="gap: 12px">
+                <div class="coluna" style="gap: 4px">
+                  <span class="rotulo">Escopo do lote</span>
+                  <div class="linha">
+                    <button class="btn prim" style="height: 24px; font-size: 12px">Todo o Projeto (12)</button>
+                    <button class="btn" style="height: 24px; font-size: 12px" disabled>Só Fonte filtrada</button>
+                  </div>
+                </div>
+                <div class="coluna" style="gap: 4px">
+                  <label class="rotulo">Pasta de saída</label>
+                  <div class="linha">
+                    <div class="campo cresce mono" style="color: var(--texto)">C:\Users\dev\Videos\Saida</div>
+                    <button class="btn">Escolher pasta…</button>
+                  </div>
+                  <span class="rotulo">MP4 1080×1920 (H.264) · -14 LUFS / -1 dBTP · sem marca d'água.</span>
+                </div>
+                <div class="caixa coluna" style="gap: 4px">
+                  <div class="linha"><strong>Encoder: Hardware NVIDIA (NVENC)</strong><span class="selo empurra">Automático</span></div>
+                  <span class="rotulo">Fallback automático para CPU (x264) registrado por item no lote.</span>
+                </div>
+                <details class="check-bloco" open>
+                  <summary>Checklist informativo (não bloqueia)</summary>
+                  <ul class="check-lista">
+                    <li><strong>Tipo:</strong> Misto (8 diretos, 4 transformados) — legenda/crop não são Transformação.</li>
+                    <li><strong>Permissão:</strong> 10 de 12 com registro.</li>
+                    <li><strong>Roteiro / Narração:</strong> 3 de 4 aprovados · 2 com TTS.</li>
+                    <li><strong>Áudio / Duração:</strong> 1 trilha sem licença · 2 acima de 60 s.</li>
+                  </ul>
+                </details>
+                <button class="btn prim" style="height: 34px; justify-content: center; margin-top: auto">Exportar 12 aprovados em lote</button>
+              </div>
+            </aside>
+          </div>
+        </div>
+
+        <footer class="barra-status">
+          <span>Salvo</span><span>·</span><span>Sem jobs ativos</span>
+          <span class="empurra"><kbd>F6</kbd> trocar região · <kbd>?</kbd> atalhos</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Histórico de lotes -->
+  <section class="wf-variante" id="lotes-1366">
+    <h2>3. Histórico de lotes (?sub=lotes) — progresso por item, fallback x264 e falha parcial · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <nav class="etapas" aria-label="Etapas do Projeto">
+            <span class="etapa">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa">2. Cortes<small>12 aprovados</small></span>
+            <span class="etapa atual">3. Exportação<small>1 lote ativo</small></span>
+          </nav>
+          <div class="linha empurra">
+            <span class="selo">Somente local</span>
+            <button class="btn">Fila · 1 ativo</button>
+            <button class="btn">Comandos <kbd>Ctrl+K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+          </div>
+        </header>
+
+        <div class="coluna cresce" style="gap: 0; min-height: 0">
+          <nav class="subbarra" aria-label="Visões de Exportação">
+            <div class="abas" role="tablist">
+              <span class="aba" role="tab" aria-selected="false">Prontidão e Lote (12)</span>
+              <span class="aba atual" role="tab" aria-selected="true">Histórico de lotes (1 ativo)</span>
+            </div>
+          </nav>
+
+          <div class="conteudo">
+            <!-- Zona C: Lista de Lotes -->
+            <aside class="painel" style="width: 340px" aria-label="Lista de lotes exportados">
+              <div class="painel-cab">Lotes de exportação <span class="rotulo empurra">Mais recentes</span></div>
+              <div class="lista" style="overflow: auto">
+                <div class="sel coluna" style="align-items: stretch; gap: 6px">
+                  <div class="linha">
+                    <strong>Lote #5</strong>
+                    <span class="selo cheio">Em andamento</span>
+                    <span class="mono empurra">45%</span>
+                  </div>
+                  <div class="barra-prog" role="progressbar" aria-valuenow="45" aria-valuemin="0" aria-valuemax="100"><i style="--p: 45%"></i></div>
+                  <div class="linha rotulo">
+                    <span>Todo o Projeto · 5/12 concluídos</span>
+                    <span class="mono empurra">17/11 20:42</span>
+                  </div>
+                </div>
+
+                <div class="coluna" style="align-items: stretch; gap: 4px">
+                  <div class="linha">
+                    <strong>Lote #4</strong>
+                    <span class="selo alerta">Parcial (1 falha)</span><span class="n">11</span>
+                    <span class="mono empurra">88%</span>
+                  </div>
+                  <div class="linha rotulo"><span>Live 14/11 · 7/8 exportados</span><span class="mono empurra">17/11 18:10</span></div>
+                </div>
+
+                <div class="coluna" style="align-items: stretch; gap: 4px">
+                  <div class="linha">
+                    <strong>Lote #3</strong>
+                    <span class="selo">Concluído</span>
+                    <span class="mono empurra">100%</span>
+                  </div>
+                  <div class="linha rotulo"><span>Todo o Projeto · 10/10 exportados</span><span class="mono empurra">16/11 22:05</span></div>
+                </div>
+              </div>
+            </aside>
+
+            <!-- Zona D: Detalhe do Lote selecionado -->
+            <main class="cresce secao" style="overflow: auto">
+              <div class="linha">
+                <div class="coluna" style="gap: 2px">
+                  <h3 style="margin: 0">Lote #5 — Todo o Projeto (12 Cortes)</h3>
+                  <span class="rotulo mono">Pasta: C:\Users\dev\Videos\Saida</span>
+                </div>
+                <div class="linha empurra">
+                  <button class="btn">Abrir pasta</button>
+                  <button class="btn perigo">Cancelar lote</button><span class="n">12</span>
+                </div>
+              </div>
+
+              <div class="caixa coluna" style="gap: 6px; background: var(--painel)">
+                <div class="linha">
+                  <strong>Progresso total ponderado</strong>
+                  <span class="mono empurra">45% (5 concluídos · 1 exportando · 1 falhou · 5 na fila)</span>
+                </div>
+                <div class="barra-prog" role="progressbar" aria-valuenow="45" aria-valuemin="0" aria-valuemax="100"><i style="--p: 45%"></i></div>
+              </div>
+
+              <div class="banner" role="status">
+                <span>1 item já falhou neste lote.</span>
+                <button class="btn empurra" style="height: 22px; font-size: 11px">Mostrar apenas falhas (1)</button>
+              </div>
+
+              <table class="tabela" role="grid" aria-label="Itens do lote #5">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Corte / Arquivo</th>
+                    <th>Duração</th>
+                    <th>Estado</th>
+                    <th>Encoder / Fallback</th>
+                    <th>Ação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="mono">1</td>
+                    <td><strong>Por que esse bug quebrou a build</strong><div class="rotulo mono">live14-01-00m42s.mp4</div></td>
+                    <td class="mono">00:42</td>
+                    <td><span class="selo">✓ Exportado</span></td>
+                    <td class="mono">h264_nvenc</td>
+                    <td><button class="btn">Abrir arquivo</button></td>
+                  </tr>
+                  <tr>
+                    <td class="mono">2</td>
+                    <td><strong>O erro oculto nos logs</strong><div class="rotulo mono">live15-02-00m54s.mp4</div></td>
+                    <td class="mono">00:54</td>
+                    <td>
+                      <div class="linha"><span class="selo cheio">Exportando</span><span class="mono">62%</span></div>
+                      <div class="barra-prog" style="margin-top: 4px"><i style="--p: 62%"></i></div>
+                    </td>
+                    <td class="mono">h264_nvenc</td>
+                    <td><span class="rotulo">Em execução</span></td>
+                  </tr>
+                  <tr>
+                    <td class="mono">3</td>
+                    <td><strong>Quando o deploy rodou sexta</strong><div class="rotulo mono">live15-03-00m29s.mp4</div></td>
+                    <td class="mono">00:29</td>
+                    <td><span class="selo">✓ Exportado</span></td>
+                    <td>
+                      <span class="selo alerta">Caiu para x264</span><span class="n">13</span>
+                      <div class="rotulo">de h264_nvenc: erro de memória CUDA</div>
+                    </td>
+                    <td><button class="btn">Mostrar na pasta</button></td>
+                  </tr>
+                  <tr>
+                    <td class="mono">4</td>
+                    <td><strong>Reação ao anúncio da placa</strong><div class="rotulo mono">podcast08-04-00m38s.mp4</div></td>
+                    <td class="mono">00:38</td>
+                    <td>
+                      <span class="selo alerta">✕ Falhou</span>
+                      <div class="rotulo">A Fonte foi alterada no disco.</div>
+                    </td>
+                    <td class="mono mudo">—</td>
+                    <td><button class="btn prim">Relocalizar Fonte</button></td>
+                  </tr>
+                  <tr>
+                    <td class="mono">5</td>
+                    <td><strong>Benchmark de CPU vs GPU</strong><div class="rotulo mono">live15-05-00m47s.mp4</div></td>
+                    <td class="mono">00:47</td>
+                    <td><span class="selo">Na fila</span></td>
+                    <td class="mono mudo">Aguardando</td>
+                    <td><button class="btn fantasma">Abrir Corte</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </main>
+          </div>
+        </div>
+
+        <footer class="barra-status">
+          <span>Salvo</span><span>·</span><span>Lote #5: 5/12 exportados (45%)</span>
+          <span class="empurra"><kbd>F6</kbd> trocar região · <kbd>?</kbd> atalhos</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Confirmação pré-lote (Corte direto + conflitos de arquivo) -->
+  <section class="wf-variante" id="dialogos-1366">
+    <h2>4. Confirmação pré-lote (aviso único de Corte direto + conflito de sobrescrita) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes</span><span class="etapa">2. Cortes</span><span class="etapa atual">3. Exportação</span></nav>
+          <div class="linha empurra"><button class="btn">Comandos <kbd>Ctrl+K</kbd></button></div>
+        </header>
+        <main class="conteudo"><div class="cresce secao"><div class="caixa tracejada cresce"></div></div></main>
+        <footer class="barra-status"><span>Salvo</span></footer>
+      </div>
+
+      <div class="dialogo-fundo" role="presentation">
+        <div class="dialogo" style="width: 540px" role="alertdialog" aria-modal="true" aria-labelledby="dlg-lote-tit">
+          <div class="linha">
+            <h3 id="dlg-lote-tit" style="margin: 0">Confirmar exportação em lote (12 Cortes)</h3><span class="n">14</span>
+            <button class="btn icone empurra" aria-label="Fechar">✕</button>
+          </div>
+
+          <div class="caixa coluna" style="gap: 4px; background: var(--painel)">
+            <strong>1. Aviso único de monetização — Corte direto (<span class="mono">guardrails.ack_direct_notice</span>)</strong>
+            <span class="rotulo">Este lote inclui 8 Cortes diretos (sem Transformação). Cortes diretos podem ter monetização recusada por política de conteúdo reutilizado, mesmo com Permissão registrada.</span>
+          </div>
+
+          <div class="caixa coluna" style="gap: 4px">
+            <strong>2. Arquivos já existentes na pasta (<span class="mono">confirmation_required</span>)</strong>
+            <span class="rotulo">2 arquivos em <span class="mono">C:\Users\dev\Videos\Saida</span> serão sobrescritos:</span>
+            <ul style="margin: 4px 0 0; padding-left: 18px; font-size: 12px" class="mono">
+              <li>live14-01-00m42s.mp4</li>
+              <li>live14-02-01m15s.mp4</li>
+            </ul>
+          </div>
+
+          <div class="linha rotulo">
+            <span>Custo de execução:</span>
+            <strong class="mono" style="color: var(--texto)">US$ 0,00 (processamento 100% local)</strong>
+          </div>
+
+          <div class="linha" style="justify-content: flex-end">
+            <button class="btn">Cancelar</button>
+            <button class="btn prim">Entendi e sobrescrever (12)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Carregando -->
+  <section class="wf-variante" id="carregando-1366">
+    <h2>5. Estado Carregando (&lt;Skeleton&gt;) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes</span><span class="etapa">2. Cortes</span><span class="etapa atual">3. Exportação</span></nav>
+          <div class="linha empurra"><button class="btn">Fila · 0 ativos</button></div>
+        </header>
+        <div class="coluna cresce" style="gap: 0; min-height: 0">
+          <nav class="subbarra">
+            <div class="abas"><span class="aba atual">Prontidão e Lote</span><span class="aba">Histórico de lotes</span></div>
+          </nav>
+          <div class="conteudo">
+            <main class="cresce secao" aria-busy="true" aria-label="Carregando Mesa de Prontidão">
+              <div class="grade-cards">
+                <div class="cartao"><div class="card-topo"><div class="skel r916 thumb-916"></div><div class="coluna cresce"><div class="texto-ph" style="width: 45%"></div><div class="texto-ph" style="width: 85%"></div><div class="texto-ph" style="width: 65%"></div></div></div><div class="linha"><div class="texto-ph" style="width: 80px; height: 20px"></div><div class="texto-ph" style="width: 90px; height: 20px"></div></div></div>
+                <div class="cartao"><div class="card-topo"><div class="skel r916 thumb-916"></div><div class="coluna cresce"><div class="texto-ph" style="width: 40%"></div><div class="texto-ph" style="width: 80%"></div><div class="texto-ph" style="width: 60%"></div></div></div><div class="linha"><div class="texto-ph" style="width: 80px; height: 20px"></div><div class="texto-ph" style="width: 90px; height: 20px"></div></div></div>
+                <div class="cartao"><div class="card-topo"><div class="skel r916 thumb-916"></div><div class="coluna cresce"><div class="texto-ph" style="width: 50%"></div><div class="texto-ph" style="width: 75%"></div><div class="texto-ph" style="width: 55%"></div></div></div><div class="linha"><div class="texto-ph" style="width: 80px; height: 20px"></div><div class="texto-ph" style="width: 90px; height: 20px"></div></div></div>
+                <div class="cartao"><div class="card-topo"><div class="skel r916 thumb-916"></div><div class="coluna cresce"><div class="texto-ph" style="width: 42%"></div><div class="texto-ph" style="width: 82%"></div><div class="texto-ph" style="width: 62%"></div></div></div><div class="linha"><div class="texto-ph" style="width: 80px; height: 20px"></div><div class="texto-ph" style="width: 90px; height: 20px"></div></div></div>
+                <div class="cartao"><div class="card-topo"><div class="skel r916 thumb-916"></div><div class="coluna cresce"><div class="texto-ph" style="width: 48%"></div><div class="texto-ph" style="width: 78%"></div><div class="texto-ph" style="width: 58%"></div></div></div><div class="linha"><div class="texto-ph" style="width: 80px; height: 20px"></div><div class="texto-ph" style="width: 90px; height: 20px"></div></div></div>
+                <div class="cartao"><div class="card-topo"><div class="skel r916 thumb-916"></div><div class="coluna cresce"><div class="texto-ph" style="width: 44%"></div><div class="texto-ph" style="width: 84%"></div><div class="texto-ph" style="width: 60%"></div></div></div><div class="linha"><div class="texto-ph" style="width: 80px; height: 20px"></div><div class="texto-ph" style="width: 90px; height: 20px"></div></div></div>
+              </div>
+              <span class="rotulo">Nunca exibe "Nenhum Corte aprovado" durante o carregamento inicial.</span><span class="n">15</span>
+            </main>
+            <aside class="painel dir" style="width: 390px">
+              <div class="painel-cab">Exportação em lote</div>
+              <div class="painel-corpo" style="gap: 12px">
+                <div class="texto-ph" style="width: 60%"></div>
+                <div class="texto-ph" style="height: 28px"></div>
+                <div class="texto-ph" style="height: 64px"></div>
+                <div class="texto-ph" style="height: 110px"></div>
+                <div class="texto-ph" style="height: 34px; margin-top: auto"></div>
+              </div>
+            </aside>
+          </div>
+        </div>
+        <footer class="barra-status"><span>Carregando prontidão…</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Vazio e Erro acionável -->
+  <section class="wf-variante" id="vazio-erro-1366">
+    <h2>6. Estado Vazio e Erro acionável (component_missing) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes</span><span class="etapa">2. Cortes</span><span class="etapa atual">3. Exportação</span></nav>
+          <div class="linha empurra"><button class="btn">Fila · 0 ativos</button><button class="btn">Comandos <kbd>Ctrl+K</kbd></button></div>
+        </header>
+        <div class="coluna cresce" style="gap: 0; min-height: 0">
+          <nav class="subbarra">
+            <div class="abas"><span class="aba atual">Prontidão e Lote (0)</span><span class="aba">Histórico de lotes (0)</span></div>
+          </nav>
+          <div class="conteudo">
+            <main class="cresce secao" style="gap: 16px">
+              <!-- Erro acionável -->
+              <div class="banner" role="alert" style="border-color: var(--texto); align-items: flex-start; padding: 12px">
+                <div class="coluna cresce" style="gap: 4px">
+                  <strong>Falta instalar o FFmpeg para exportar vídeos.</strong><span class="n">16</span>
+                  <span class="rotulo">O renderizador de vídeo e áudio precisa do FFmpeg configurado antes de iniciar lotes ou exportações individuais.</span>
+                  <details style="font-size: 12px; color: var(--texto-2)">
+                    <summary>Ver detalhe técnico</summary>
+                    <div class="mono" style="margin-top: 4px">code: component_missing · binary: ffmpeg</div>
+                  </details>
+                </div>
+                <div class="linha">
+                  <button class="btn prim">Instalar em Componentes</button>
+                  <button class="btn">Enviar para Relatos</button>
+                </div>
+              </div>
+
+              <!-- Vazio -->
+              <div class="caixa tracejada cresce coluna" style="justify-content: center; align-items: center; text-align: center; padding: 24px">
+                <h3 style="margin: 0">Nenhum Corte aprovado para exportar</h3>
+                <p class="rotulo" style="max-width: 52ch; margin: 4px 0 8px">
+                  Aprove candidatos na etapa de Cortes para conferi-los aqui antes de renderizar em lote.
+                </p>
+                <button class="btn prim">Ir para Cortes</button>
+              </div>
+            </main>
+            <aside class="painel dir" style="width: 390px">
+              <div class="painel-cab">Exportação em lote</div>
+              <div class="painel-corpo">
+                <div class="banner"><span>⚠ FFmpeg ausente. Instale em Componentes para habilitar o disparo.</span></div>
+                <button class="btn prim empurra" disabled style="height: 34px; justify-content: center; margin-top: auto">Exportar 0 aprovados em lote</button>
+              </div>
+            </aside>
+          </div>
+        </div>
+        <footer class="barra-status"><span>Salvo</span><span>·</span><span>Sem jobs ativos</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li><strong>Abas da etapa (<span class="mono">tablist</span>):</strong> <span class="mono">Prontidão e Lote</span> (<span class="mono">?sub=prontidao</span>) e <span class="mono">Histórico de lotes</span> (<span class="mono">?sub=lotes</span>); setas <kbd>←</kbd>/<kbd>→</kbd> alternam as abas. Sem Projeto aberto, redireciona para <span class="mono">#/inicio</span>.</li>
+      <li><strong>Filtros sincronizados:</strong> escolher uma Fonte no filtro da sub-barra sugere automaticamente alternar o escopo na Zona B entre <em>Todo o Projeto</em> e <em>Só Fonte filtrada</em>, mantendo alternador explícito.</li>
+      <li><strong>Lazy-loading e mídia:</strong> monta a grade paginada sob demanda (<span class="mono">sources.list</span> → <span class="mono">selection.*</span> → <span class="mono">packaging.get</span>, <span class="mono">thumbnail.get</span>, <span class="mono">guardrails.check</span>) com cache no Store de Projeto Ativo até existir <span class="mono">export.readiness</span>. Capa 9:16 vem de <span class="mono">thumbnail.get</span> via protocolo <span class="mono">clipes-media</span>.</li>
+      <li><strong>Glifos nunca só por cor (WCAG 1.4.1):</strong> todo indicador de pendência combina ícone distinto + rótulo textual visível.</li>
+      <li><strong>Ação primária contextual no cartão:</strong> segue prioridade da primeira pendência: Fonte indisponível → <em>Relocalizar Fonte</em> (<span class="mono">#/projeto/:id/fontes/:fonteId</span>); Vídeo transformado com Roteiro/Narração pendente → <em>Transformar</em>; sem Empacotamento/Capa → <em>Empacotar</em>; pronto → <em>Editar Corte</em>.</li>
+      <li><strong>Ação secundária "Exportar só este":</strong> abre o mesmo modal pré-exportação de <span class="mono">guardrails.check</span> e destino <span class="mono">.mp4</span> de <span class="mono">&lt;ContextoCorte&gt;</span> (ver wireframe <span class="mono">D1-contexto-corte.html</span>), chamando <span class="mono">export.start</span>.</li>
+      <li><strong>Pasta de saída:</strong> campo editável/leitura + botão nativo <span class="mono">Escolher pasta…</span> (<span class="mono">@tauri-apps/plugin-dialog</span>), pré-carregado com <span class="mono">export.settings().last_directory</span>.</li>
+      <li><strong>Encoder e lacuna de fallback:</strong> exibe <span class="mono">export.encoder.status</span>; se <span class="mono">stale === true</span>, alerta reteste recomendado em <span class="mono">#/config/exportacao</span>. Em lotes, <span class="mono">encoderFallback</span> já funciona por item; em exportação individual, aguarda correção da lacuna #1 do núcleo em <span class="mono">export.status</span>.</li>
+      <li><strong>Checklist informativo (<span class="mono">&lt;ChecklistGuardaCorpos&gt;</span>):</strong> vem aberto por padrão quando há avisos relevantes (<span class="mono">needsDirectNotice</span>, Permissão ausente, Roteiro pendente, áudio sem licença, &gt; 60 s ou sobra final &gt; 5 s) e <strong>nunca bloqueia</strong> o disparo.</li>
+      <li><strong>Botão de disparo:</strong> desabilitado apenas se <span class="mono">N === 0</span>, sem pasta de saída ou sem FFmpeg. Ao iniciar com sucesso, alterna para <span class="mono">?sub=lotes</span> e acompanha progresso via <span class="mono">core-progress</span> (<span class="mono">export-batch-&lt;id&gt;</span>).</li>
+      <li><strong>Estado parcial (<span class="mono">batch.status === "partial"</span>):</strong> ao selecionar um lote concluído com falhas (ex.: Lote #4), exibe faixa <em>"Lote concluído parcialmente: 7 de 8 Cortes exportados e 1 com falha"</em> com filtro rápido de falhas.</li>
+      <li><strong>Cancelar lote (<span class="mono">export.batch.cancel</span>):</strong> visível apenas quando <span class="mono">state === "running"</span>; abre <span class="mono">&lt;ConfirmDialog&gt;</span> simples informando que Cortes já concluídos serão mantidos.</li>
+      <li><strong>Fallback de encoder por item:</strong> quando <span class="mono">encoderFallback != null</span>, exibe o selo com encoder original e motivo traduzido.</li>
+      <li><strong>Decisão de wireframe (confirmação sequencial pré-lote):</strong> quando tanto <span class="mono">needsDirectNotice</span> quanto <span class="mono">confirmation_required</span> (<span class="mono">usage.conflicts</span>) ocorrem, o app exibe primeiro a ciência única de Corte direto (<span class="mono">guardrails.ack_direct_notice</span>) e, após <span class="mono">export.batch.start</span> retornar conflitos, exibe a lista de arquivos para confirmar <span class="mono">confirmed: true</span>. O quadro 4 condensa os dois passos visuais para revisão estrutural.</li>
+      <li><strong>Carregamento (<span class="mono">loading</span>):</strong> exibe grade de 6 cartões <span class="mono">&lt;Skeleton&gt;</span> na Zona A e linhas na Zona B sem texto de lista vazia.</li>
+      <li><strong>Erros (<span class="mono">CoreError.code</span>):</strong> usa o mapeador central dentro de <span class="mono">role="alert"</span> com detalhe técnico recolhido em <span class="mono">&lt;details&gt;</span> e ação de recuperação específica (aqui exemplificado com <span class="mono">component_missing</span>).</li>
+    </ol>
+  </section>
+</main>
+<script src="kit.js"></script>
+</body>
+</html>

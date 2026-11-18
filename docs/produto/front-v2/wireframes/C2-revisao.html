@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C2 · Bancada de revisão de Cortes — Clipes v2</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .subcab {
+    display: flex; align-items: center; gap: 10px; padding: 7px 12px;
+    background: var(--painel); border-bottom: 1px solid var(--borda); flex: none; min-width: 0;
+  }
+  .col-lista { width: 36%; border-right: 1px solid var(--borda); background: var(--painel); display: flex; flex-direction: column; min-height: 0; }
+  .w1440 .col-lista { width: 32%; }
+  .filtros { padding: 8px 10px; border-bottom: 1px solid var(--borda); display: flex; flex-direction: column; gap: 6px; background: var(--tela); flex: none; }
+  .segs { display: flex; border: 1px solid var(--borda); border-radius: var(--r); overflow: hidden; }
+  .segs > span { flex: 1; text-align: center; padding: 4px 6px; font-size: 11px; border-right: 1px solid var(--borda); color: var(--texto-2); background: var(--tela); white-space: nowrap; }
+  .segs > span:last-child { border-right: 0; }
+  .segs > span.ativo { background: var(--sutil); color: var(--texto); font-weight: 600; }
+  .slider-trilha { flex: 1; height: 6px; background: var(--sutil); border-radius: 3px; position: relative; }
+  .slider-trilha > i { position: absolute; left: 20%; top: -4px; width: 14px; height: 14px; border-radius: 50%; background: var(--forte); border: 2px solid var(--tela); }
+  .cand-lista { flex: 1; overflow: auto; min-height: 0; display: flex; flex-direction: column; }
+  .cand-item { padding: 9px 11px; border-bottom: 1px solid var(--sutil); background: var(--tela); display: flex; flex-direction: column; gap: 4px; }
+  .cand-item.sel { background: var(--sutil); outline: 2px solid var(--texto); outline-offset: -2px; }
+  .col-detalhe { flex: 1; background: var(--tela); overflow: auto; min-height: 0; padding: 10px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .bloco-det { border: 1px solid var(--borda); border-radius: var(--r); padding: 9px 11px; background: var(--tela); display: flex; flex-direction: column; gap: 6px; }
+  .bloco-det.suave { background: var(--painel); }
+  .eixo-linha { display: grid; grid-template-columns: 165px 60px 1fr; gap: 8px; align-items: center; font-size: 12px; }
+  .w1440 .eixo-linha { grid-template-columns: 215px 64px 1fr; }
+  .eixo-barra { height: 6px; background: var(--sutil); border-radius: 3px; overflow: hidden; }
+  .eixo-barra > i { display: block; height: 100%; background: var(--texto-2); }
+  .frase-cit { font-style: italic; color: var(--texto-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; font-size: 12px; }
+  .custo-card { border: 1px solid var(--texto-2); border-radius: var(--r); padding: 9px 11px; background: var(--painel); display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+  .custo-linha { display: flex; justify-content: space-between; gap: 8px; }
+  .banner.forte { border-color: var(--texto); background: var(--sutil); }
+  .estado-centro { flex: 1; display: grid; place-items: center; padding: 24px; }
+  .estado-caixa { max-width: 460px; text-align: center; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+  .esqueleto { background: var(--sutil); border-radius: var(--r); height: 14px; }
+  .legenda-sobre { position: absolute; left: 8px; right: 8px; bottom: 10px; background: var(--forte); color: #fff; font-size: 11px; text-align: center; padding: 3px 5px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>C2 · Bancada de revisão de Cortes</h1>
+    <p>Rota: <span class="mono">#/projeto/:id/cortes/revisao/:runId</span> (<span class="mono">?rev=:n&amp;corte=:cid</span>). Especificação: <span class="mono">telas/C-cortes-selecao-revisao.md</span>, Tela C.2.
+      Triagem rápida por teclado (<kbd>↑</kbd>/<kbd>↓</kbd>, <kbd>A</kbd>, <kbd>R</kbd>, <kbd>I</kbd>/<kbd>O</kbd>, <kbd>Enter</kbd>, <kbd>Ctrl Z</kbd>): lista virtualizada à esquerda, preview 9:16 + Nota explicável + ajuste em Frases + decisões + guarda-corpos + refazer com outro Perfil à direita.</p>
+    <nav>
+      <a href="#normal-1366">Normal 1366 (Corte direto · 5 eixos)</a>
+      <a href="#largo-1440">Normal 1440 (Vídeo transformado · 6 eixos)</a>
+      <a href="#refazer-perfil">Refazer com outro Perfil</a>
+      <a href="#offline-parcial">Fonte offline + Parcial</a>
+      <a href="#vazio">Vazio (0 candidatos)</a>
+      <a href="#carregando">Carregando</a>
+    </nav>
+  </header>
+
+  <!-- ==================== VARIANTE 1: NORMAL 1366 ==================== -->
+  <section class="wf-variante" id="normal-1366">
+    <h2>Normal · 1366 × 768 (Transcrição fechada por padrão · Corte direto · Nota de 5 eixos · revisões múltiplas)</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Demo ▾</button>
+          <nav class="etapas" aria-label="Etapas do Projeto">
+            <span class="etapa">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa atual">2. Cortes<small>3 aprovados</small></span>
+            <span class="etapa">3. Exportação<small>3</small></span>
+          </nav>
+          <div class="linha empurra">
+            <button class="btn">Fila · 0 ativos</button>
+            <button class="btn">Comandos <kbd>Ctrl K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+          </div>
+        </header>
+
+        <div class="conteudo coluna" style="gap: 0">
+          <!-- Sub-cabeçalho de Revisão -->
+          <div class="subcab">
+            <button class="btn">← Voltar à seleção</button>
+            <strong>Execução #14</strong>
+            <span class="rotulo">Live 12/11 - Ep. 42</span>
+            <span class="selo">Corte direto</span>
+            <span class="rotulo">Revisão:</span>
+            <div class="campo" style="width: 112px; height: 26px; color: var(--texto)">v2 (atual) ▾</div><span class="n">1</span>
+            <span class="rotulo empurra" aria-live="polite"><strong>3</strong> aprovados · <strong>2</strong> rejeitados · <strong>7</strong> pendentes</span>
+            <button class="btn">Desfazer <kbd>Ctrl Z</kbd></button><span class="n">2</span>
+            <button class="btn prim">Ir para Exportação (3) →</button>
+          </div>
+
+          <div class="linha cresce" style="align-items: stretch; gap: 0; overflow: hidden">
+            <!-- Esquerda (~36%): Filtros + Lista Virtualizada -->
+            <aside class="col-lista">
+              <div class="filtros">
+                <div class="segs" role="tablist" aria-label="Filtrar por estado">
+                  <span class="ativo">Todos (12)</span>
+                  <span>Pend. (7)</span>
+                  <span>Aprov. (3)</span>
+                  <span>Rej. (2)</span>
+                </div>
+                <div class="linha" style="gap: 8px">
+                  <span class="rotulo">Nota mín.: <strong class="mono">2,0</strong></span>
+                  <div class="slider-trilha" role="slider" aria-label="Nota mínima"><i></i></div>
+                  <div class="campo" style="width: 118px; height: 24px; color: var(--texto); font-size: 12px">Maior Nota ▾</div>
+                </div>
+              </div>
+
+              <div class="cand-lista" role="listbox" tabindex="0" aria-label="Candidatos a Corte">
+                <div class="cand-item sel" role="option" aria-selected="true">
+                  <div class="linha">
+                    <strong class="mono">8,40</strong>
+                    <span class="mono rotulo">00:14:10–00:14:58 (48s)</span>
+                    <span class="selo empurra">Pendente</span><span class="n">3</span>
+                  </div>
+                  <div style="font-weight: 600">Momento da virada na partida com reação da plateia</div>
+                  <div class="linha"><span class="selo cheio">Chat 3,1×</span><span class="rotulo">Janelas 1, 2 · Rev. 2</span></div>
+                </div>
+
+                <div class="cand-item" role="option" aria-selected="false">
+                  <div class="linha">
+                    <strong class="mono">7,90</strong>
+                    <span class="mono rotulo">01:02:05–01:02:47 (42s)</span>
+                    <span class="selo cheio empurra">✓ Aprovado · ajustado</span>
+                  </div>
+                  <div>Explicação do bug ao vivo e solução rápida</div>
+                </div>
+
+                <div class="cand-item" role="option" aria-selected="false">
+                  <div class="linha">
+                    <strong class="mono">7,50</strong>
+                    <span class="mono rotulo">01:44:12–01:44:50 (38s)</span>
+                    <span class="selo empurra">Pendente</span>
+                  </div>
+                  <div>Comparação entre os dois métodos no placar</div>
+                </div>
+
+                <div class="cand-item" role="option" aria-selected="false">
+                  <div class="linha">
+                    <strong class="mono">7,10</strong>
+                    <span class="mono rotulo">02:15:30–02:16:00 (30s)</span>
+                    <span class="selo empurra">✕ Rejeitado</span>
+                  </div>
+                  <div>Comentário sobre a atualização de sexta</div>
+                </div>
+
+                <div class="cand-item" role="option" aria-selected="false">
+                  <div class="linha">
+                    <strong class="mono">6,80</strong>
+                    <span class="mono rotulo">02:48:10–02:48:52 (42s)</span>
+                    <span class="selo empurra">Pendente</span>
+                  </div>
+                  <div>Pergunta do chat sobre configuração do servidor</div>
+                </div>
+              </div>
+            </aside>
+
+            <!-- Direita (~64%): Bancada de Detalhe -->
+            <main class="col-detalhe">
+              <!-- Bloco Superior: Preview 9:16 + Nota de 5 eixos -->
+              <div class="linha" style="align-items: stretch; gap: 12px">
+                <!-- Player 9:16 -->
+                <div class="coluna" style="width: 172px; flex: none; gap: 6px">
+                  <div class="midia r916" style="width: 100%; position: relative">
+                    <span>Proxy 9:16</span>
+                    <div class="legenda-sobre">Quando o placar virou 2 a 1</div>
+                  </div>
+                  <div class="linha" role="toolbar" aria-label="Transporte do preview" style="justify-content: center; gap: 4px">
+                    <button class="btn icone" style="height: 24px; width: 24px" title="Início">|&lt;</button>
+                    <button class="btn icone" style="height: 24px; width: 24px" title="Rebobinar (J)">J</button>
+                    <button class="btn prim" style="height: 24px; padding: 0 8px" title="Reproduzir/Pausar (Espaço)">▶</button>
+                    <button class="btn icone" style="height: 24px; width: 24px" title="Avançar (L)">L</button>
+                    <button class="btn icone" style="height: 24px; width: 24px" title="Fim">&gt;|</button>
+                  </div>
+                  <div class="linha" style="justify-content: space-between; font-size: 11px">
+                    <span class="mono" style="white-space: nowrap">00:12 / 00:48</span>
+                    <button class="btn fantasma" style="height: 20px; font-size: 11px; padding: 0 4px">Início</button>
+                    <span class="n">4</span>
+                  </div>
+                </div>
+
+                <!-- Nota Explicável (5 eixos — Corte direto) -->
+                <div class="bloco-det cresce" style="gap: 5px">
+                  <div class="linha">
+                    <strong style="font-size: 15px" class="mono">Nota: 8,40 / 10</strong>
+                    <span class="selo">5 eixos · Corte direto</span>
+                    <span class="rotulo empurra">Perfil: <span class="mono">perfil-rapido</span> · Rev. 2 · Janelas 1, 2</span>
+                  </div>
+                  <div class="rotulo">Bordas ajustadas na seleção (<span class="mono">fit</span>): começo estendido em 1 Frase.</div>
+                  <div class="coluna" style="gap: 4px; margin-top: 2px"><span class="n" style="align-self: flex-end; margin-bottom: -18px">5</span>
+                    <div class="eixo-linha">
+                      <span><strong>Gancho</strong> (30%)</span>
+                      <div class="linha" style="gap: 4px"><div class="eixo-barra cresce"><i style="width: 90%"></i></div><span class="mono">9</span></div>
+                      <span class="rotulo">Abre em pergunta direta com tensão nos primeiros 3 s.</span>
+                    </div>
+                    <div class="eixo-linha">
+                      <span><strong>Autossuficiência</strong> (20%)</span>
+                      <div class="linha" style="gap: 4px"><div class="eixo-barra cresce"><i style="width: 80%"></i></div><span class="mono">8</span></div>
+                      <span class="rotulo">Contexto completo da jogada sem depender do trecho anterior.</span>
+                    </div>
+                    <div class="eixo-linha">
+                      <span><strong>Energia</strong> (20%)</span>
+                      <div class="linha" style="gap: 4px"><div class="eixo-barra cresce"><i style="width: 90%"></i></div><span class="mono">9</span></div>
+                      <span class="rotulo">Pico de voz e risos sincronizados com pico do chat.</span>
+                    </div>
+                    <div class="eixo-linha">
+                      <span><strong>Valor</strong> (15%)</span>
+                      <div class="linha" style="gap: 4px"><div class="eixo-barra cresce"><i style="width: 80%"></i></div><span class="mono">8</span></div>
+                      <span class="rotulo">Explica a tática de virada de forma objetiva.</span>
+                    </div>
+                    <div class="eixo-linha">
+                      <span><strong>Fechamento</strong> (15%)</span>
+                      <div class="linha" style="gap: 4px"><div class="eixo-barra cresce"><i style="width: 70%"></i></div><span class="mono">7</span></div>
+                      <span class="rotulo">Encerra logo após a reação final com pausa natural.</span>
+                    </div>
+                  </div>
+                  <div class="linha" style="margin-top: 2px">
+                    <span class="selo cheio">Chat 3,1× acima do normal · risadas · 00:14:22</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Bloco Médio: Ajuste de Bordas (±1 Frase) -->
+              <div class="bloco-det suave" style="gap: 5px">
+                <div class="linha">
+                  <strong style="font-size: 12px">Bordas por Frase (±1 Frase)</strong>
+                  <span class="mono rotulo empurra">Duração atual: 00:48 (faixa: 20 s – 60 s) · Bordas sempre em Frase inteira</span><span class="n">6</span>
+                </div>
+                <div class="linha">
+                  <span class="rotulo" style="width: 56px">Entrada:</span>
+                  <button class="btn" style="height: 24px">-1 Frase <kbd>I</kbd></button>
+                  <button class="btn" style="height: 24px">+1 Frase <kbd>Shift I</kbd></button>
+                  <span class="frase-cit">"Quando o placar virou 2 a 1, ninguém no estúdio acreditou naquela defesa."</span>
+                </div>
+                <div class="linha">
+                  <span class="rotulo" style="width: 56px">Saída:</span>
+                  <button class="btn" style="height: 24px">-1 Frase <kbd>O</kbd></button>
+                  <button class="btn" style="height: 24px">+1 Frase <kbd>Shift O</kbd></button>
+                  <span class="frase-cit">"...e foi exatamente assim que fechamos a rodada sem perder nenhum ponto."</span>
+                </div>
+              </div>
+
+              <!-- Bloco Inferior: Decisão + Passagem + Refazer -->
+              <div class="bloco-det" style="gap: 8px">
+                <div class="linha">
+                  <button class="btn prim" aria-pressed="false">✓ Aprovar <kbd>A</kbd></button>
+                  <button class="btn" aria-pressed="false">✕ Rejeitar <kbd>R</kbd></button><span class="n">7</span>
+                  <button class="btn" disabled title="Aprove este candidato para editar ou exportar">Abrir Corte no Editor <kbd>Enter</kbd> →</button>
+                  <span class="rotulo">Aprove para editar ou exportar</span>
+                </div>
+                <div class="linha" style="border-top: 1px solid var(--sutil); padding-top: 7px">
+                  <span class="rotulo"><strong>Refazer com outro Perfil:</strong></span>
+                  <div class="campo" style="width: 210px; height: 26px; color: var(--texto)">Modelo Forte (claude-3-7) ▾</div>
+                  <button class="btn" style="height: 26px">Refazer Janelas (1, 2)</button><span class="n">8</span>
+                  <span class="rotulo mudo empurra">Transcrição do Corte fechada nesta largura (use o Editor)</span><span class="n">9</span>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>
+
+        <footer class="barra-status">
+          <span>Salvo</span><span><kbd>↑</kbd>/<kbd>↓</kbd> candidato · <kbd>I</kbd>/<kbd>O</kbd> bordas · <kbd>A</kbd>/<kbd>R</kbd> aprova/rejeita · <kbd>Enter</kbd> abrir</span>
+          <span class="empurra"><kbd>F6</kbd> trocar região · <kbd>?</kbd> atalhos</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== VARIANTE 2: NORMAL 1440 (VÍDEO TRANSFORMADO + APROVADO) ==================== -->
+  <section class="wf-variante" id="largo-1440">
+    <h2>Normal · 1440 × 900 (o que muda: lista 32% com 2 linhas, detalhe folgado com Transição de Frases visível; aqui em Vídeo transformado · 6 eixos · Corte aprovado)</h2>
+    <div class="wf-quadro w1440">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Dark Demo ▾</button>
+          <nav class="etapas" aria-label="Etapas do Projeto">
+            <span class="etapa">1. Fontes e Transcrição<small>6</small></span>
+            <span class="etapa atual">2. Cortes<small>4 aprovados</small></span>
+            <span class="etapa">3. Exportação<small>4</small></span>
+          </nav>
+          <div class="linha empurra">
+            <button class="btn">Fila · 0 ativos</button>
+            <button class="btn">Comandos <kbd>Ctrl K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+          </div>
+        </header>
+
+        <div class="conteudo coluna" style="gap: 0">
+          <div class="subcab">
+            <button class="btn">← Voltar à seleção</button>
+            <strong>Execução #9</strong>
+            <span class="rotulo">Documentário Economia</span>
+            <span class="selo cheio">Vídeo transformado</span>
+            <span class="rotulo">Revisão:</span>
+            <div class="campo" style="width: 112px; height: 26px; color: var(--texto)">v1 (atual) ▾</div>
+            <span class="rotulo empurra"><strong>4</strong> aprovados · <strong>1</strong> rejeitado · <strong>4</strong> pendentes</span>
+            <button class="btn">Desfazer <kbd>Ctrl Z</kbd></button>
+            <button class="btn prim">Ir para Exportação (4) →</button>
+          </div>
+
+          <div class="linha cresce" style="align-items: stretch; gap: 0; overflow: hidden">
+            <!-- Lista 32% -->
+            <aside class="col-lista">
+              <div class="filtros">
+                <div class="segs"><span class="ativo">Todos (9)</span><span>Pend. (4)</span><span>Aprov. (4)</span><span>Rej. (1)</span></div>
+                <div class="linha" style="gap: 8px">
+                  <span class="rotulo">Nota mín.: <strong class="mono">0,0</strong></span>
+                  <div class="slider-trilha"><i style="left: 0"></i></div>
+                  <div class="campo" style="width: 118px; height: 24px; color: var(--texto); font-size: 12px">Maior Nota ▾</div>
+                </div>
+              </div>
+              <div class="cand-lista" role="listbox" tabindex="0">
+                <div class="cand-item sel">
+                  <div class="linha"><strong class="mono">8,90</strong><span class="mono rotulo">00:34:10–00:35:04 (54s)</span><span class="selo cheio empurra">✓ Aprovado</span></div>
+                  <div style="font-weight: 600">Por que o modelo de crédito mudou completamente após a crise bancária</div>
+                  <div class="rotulo" style="font-size: 11px">"O banco central precisou intervir antes que a liquidez desaparecesse..."</div>
+                </div>
+                <div class="cand-item">
+                  <div class="linha"><strong class="mono">8,20</strong><span class="mono rotulo">01:12:00–01:12:48 (48s)</span><span class="selo empurra">Pendente</span></div>
+                  <div>A comparação histórica entre duas bolhas imobiliárias</div>
+                  <div class="rotulo" style="font-size: 11px">"Quando olhamos os números de 1998 lado a lado..."</div>
+                </div>
+                <div class="cand-item">
+                  <div class="linha"><strong class="mono">7,85</strong><span class="mono rotulo">00:11:22–00:12:02 (40s)</span><span class="selo cheio empurra">✓ Aprovado</span></div>
+                  <div>Explicação sobre juros compostos no varejo</div>
+                </div>
+              </div>
+            </aside>
+
+            <!-- Detalhe 68% -->
+            <main class="col-detalhe" style="gap: 10px">
+              <div class="linha" style="align-items: stretch; gap: 14px">
+                <div class="coluna" style="width: 204px; flex: none; gap: 6px">
+                  <div class="midia r916" style="width: 100%; position: relative">
+                    <span>Proxy 9:16</span>
+                    <div class="legenda-sobre">O banco central precisou intervir</div>
+                  </div>
+                  <div class="linha" style="justify-content: center; gap: 4px">
+                    <button class="btn icone" style="height: 24px; width: 24px">|&lt;</button>
+                    <button class="btn icone" style="height: 24px; width: 24px">J</button>
+                    <button class="btn prim" style="height: 24px; padding: 0 8px">▶</button>
+                    <button class="btn icone" style="height: 24px; width: 24px">L</button>
+                    <button class="btn icone" style="height: 24px; width: 24px">&gt;|</button>
+                  </div>
+                  <div class="linha" style="justify-content: space-between; font-size: 11px">
+                    <span class="mono">00:08 / 00:54</span>
+                    <button class="btn fantasma" style="height: 20px; font-size: 11px">Início do Corte</button>
+                  </div>
+                </div>
+
+                <!-- Nota 6 eixos (Vídeo transformado) -->
+                <div class="bloco-det cresce" style="gap: 5px">
+                  <div class="linha">
+                    <strong style="font-size: 15px" class="mono">Nota: 8,90 / 10</strong>
+                    <span class="selo cheio">6 eixos · Vídeo transformado</span>
+                    <span class="rotulo empurra">Perfil: <span class="mono">claude</span> · Rev. 1 · Janela 3</span>
+                  </div>
+                  <div class="coluna" style="gap: 4px; margin-top: 2px">
+                    <div class="eixo-linha">
+                      <span class="linha" style="gap: 4px"><strong>Espaço p/ comentário</strong> (30%)<span class="n">10</span></span>
+                      <div class="linha" style="gap: 4px"><div class="eixo-barra cresce"><i style="width: 95%"></i></div><span class="mono">9</span></div>
+                      <span class="rotulo">Afirmação controversa sobre regulação que pede contexto e contraponto em Narração.</span>
+                    </div>
+                    <div class="eixo-linha">
+                      <span><strong>Gancho</strong> (20%)</span>
+                      <div class="linha" style="gap: 4px"><div class="eixo-barra cresce"><i style="width: 90%"></i></div><span class="mono">9</span></div>
+                      <span class="rotulo">Dado concreto logo na primeira Frase prende atenção.</span>
+                    </div>
+                    <div class="eixo-linha">
+                      <span><strong>Energia</strong> (15%)</span>
+                      <div class="linha" style="gap: 4px"><div class="eixo-barra cresce"><i style="width: 80%"></i></div><span class="mono">8</span></div>
+                      <span class="rotulo">Entonação enfática do entrevistado ao citar o colapso.</span>
+                    </div>
+                    <div class="eixo-linha">
+                      <span><strong>Valor</strong> (15%)</span>
+                      <div class="linha" style="gap: 4px"><div class="eixo-barra cresce"><i style="width: 90%"></i></div><span class="mono">9</span></div>
+                      <span class="rotulo">Explica mecanismo pouco conhecido de liquidez bancária.</span>
+                    </div>
+                    <div class="eixo-linha">
+                      <span><strong>Autossuficiência</strong> (10%)</span>
+                      <div class="linha" style="gap: 4px"><div class="eixo-barra cresce"><i style="width: 80%"></i></div><span class="mono">8</span></div>
+                      <span class="rotulo">Tese principal fecha dentro do próprio trecho.</span>
+                    </div>
+                    <div class="eixo-linha">
+                      <span><strong>Fechamento</strong> (10%)</span>
+                      <div class="linha" style="gap: 4px"><div class="eixo-barra cresce"><i style="width: 90%"></i></div><span class="mono">9</span></div>
+                      <span class="rotulo">Termina em pergunta aberta ideal para entrada da Narração final.</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Transição de Frases + ±1 Frase -->
+              <div class="bloco-det suave" style="gap: 5px">
+                <div class="linha">
+                  <strong style="font-size: 12px">Bordas por Frase (±1 Frase) e contexto vizinho</strong>
+                  <span class="mono rotulo empurra">Duração: 00:54 (faixa: 30 s – 90 s) · Frases inteiras</span>
+                </div>
+                <div class="linha mudo" style="font-size: 11px"><span style="width: 56px">Antes:</span><span class="frase-cit">"...e isso nos leva diretamente ao terceiro trimestre daquele ano."</span></div>
+                <div class="linha">
+                  <span class="rotulo" style="width: 56px">Entrada:</span>
+                  <button class="btn" style="height: 24px">-1 Frase <kbd>I</kbd></button>
+                  <button class="btn" style="height: 24px">+1 Frase <kbd>Shift I</kbd></button>
+                  <span class="frase-cit">"O banco central precisou intervir antes que a liquidez desaparecesse."</span>
+                </div>
+                <div class="linha">
+                  <span class="rotulo" style="width: 56px">Saída:</span>
+                  <button class="btn" style="height: 24px">-1 Frase <kbd>O</kbd></button>
+                  <button class="btn" style="height: 24px">+1 Frase <kbd>Shift O</kbd></button>
+                  <span class="frase-cit">"...mas será que o contribuinte sabia quem pagaria essa conta?"</span>
+                </div>
+                <div class="linha mudo" style="font-size: 11px"><span style="width: 56px">Depois:</span><span class="frase-cit">"Nos meses seguintes, o congresso abriu três comissões..."</span></div>
+              </div>
+
+              <!-- Decisão + Guardrails (quando aprovado) -->
+              <div class="bloco-det" style="gap: 8px">
+                <div class="linha">
+                  <button class="btn" aria-pressed="true" style="outline: 2px solid var(--texto); font-weight: 600">✓ Aprovado <kbd>A</kbd></button>
+                  <button class="btn" aria-pressed="false">✕ Rejeitar <kbd>R</kbd></button>
+                  <button class="btn prim empurra">Abrir Corte no Editor <kbd>Enter</kbd> →</button>
+                </div>
+                <div class="banner" style="font-size: 12px"><span class="n">11</span>
+                  <div class="coluna cresce" style="gap: 2px">
+                    <div class="linha"><strong>&lt;ChecklistGuardaCorpos&gt;</strong><span class="selo">Permissão: Concedida</span><span class="selo">Duração ≤ 60 s</span></div>
+                    <span class="rotulo">Próximo passo no Editor: escolher <strong>Ângulo</strong> → aprovar <strong>Roteiro</strong> → gerar <strong>Narração</strong> na aba <em>Transformar</em>.</span>
+                  </div>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>
+
+        <footer class="barra-status">
+          <span>Salvo</span><span>Candidato #18 aprovado · Pronto para abrir no Editor</span>
+          <span class="empurra"><kbd>F6</kbd> trocar região · <kbd>?</kbd> atalhos</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== VARIANTE 3: REFAZER COM OUTRO PERFIL ==================== -->
+  <section class="wf-variante" id="refazer-perfil">
+    <h2>Diálogo "Refazer com outro Perfil" (&lt;ConfirmDialog&gt; + &lt;ResumoCustoPrivacidade&gt;) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Demo ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes e Transcrição</span><span class="etapa atual">2. Cortes</span><span class="etapa">3. Exportação</span></nav>
+          <div class="linha empurra"><button class="btn">Fila</button><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </header>
+        <div class="conteudo" style="opacity: .4"><div class="secao"><div class="texto-ph" style="width: 320px"></div></div></div>
+        <footer class="barra-status"><span>Salvo</span></footer>
+      </div>
+
+      <div class="dialogo-fundo">
+        <div class="dialogo" role="alertdialog" aria-modal="true" style="width: 520px">
+          <h3 style="margin: 0">Refazer Janelas 1 e 2 com outro Perfil</h3>
+          <p style="margin: 0; color: var(--texto-2)">Cria a <strong>Revisão 3</strong> desta execução preservando a Revisão 2 e todas as decisões já tomadas para candidatos idênticos.</p>
+          <div class="custo-card">
+            <div class="custo-linha"><strong>&lt;ResumoCustoPrivacidade&gt; · Seleção de Cortes</strong><span class="selo cheio">Remoto (HTTPS)</span></div>
+            <div class="custo-linha"><span>Perfil escolhido: <strong>Modelo Forte</strong> (<span class="mono">claude-3-7-sonnet</span>)</span><span class="mono">api.anthropic.com</span></div>
+            <div class="custo-linha"><span>Privacidade: texto das Janelas 1 e 2 sai da máquina</span><span>2 Janelas</span></div>
+            <div class="custo-linha"><span>Estimativa:</span><strong class="mono">~14.200 tokens · ~US$ 0,06 – US$ 0,09</strong></div>
+            <div class="custo-linha"><span>Saldo do orçamento:</span><span class="mono">US$ 1,96 restante</span></div>
+          </div><span class="n">12</span>
+          <div class="linha" style="justify-content: flex-end">
+            <button class="btn" style="outline: 2px solid var(--texto)">Cancelar (foco inicial)</button>
+            <button class="btn prim">Confirmar e refazer Janelas</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== VARIANTE 4: FONTE OFFLINE + PARCIAL ==================== -->
+  <section class="wf-variante" id="offline-parcial">
+    <h2>Fonte offline no &lt;PlayerProxy&gt; + Execução parcial · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Demo ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes e Transcrição</span><span class="etapa atual">2. Cortes<small>3 aprovados</small></span><span class="etapa">3. Exportação</span></nav>
+          <div class="linha empurra"><button class="btn">Fila · 0</button><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </header>
+
+        <div class="conteudo coluna" style="gap: 0">
+          <div class="subcab">
+            <button class="btn">← Voltar à seleção</button>
+            <strong>Execução #14</strong>
+            <span class="selo cheio">Parcial (10/13 Janelas)</span>
+            <button class="btn" style="height: 24px">Retomar na tela de seleção</button><span class="n">13</span>
+            <span class="rotulo empurra">3 aprovados · 2 rejeitados · 4 pendentes</span>
+          </div>
+
+          <div class="linha cresce" style="align-items: stretch; gap: 0; overflow: hidden">
+            <aside class="col-lista">
+              <div class="filtros"><div class="segs"><span class="ativo">Todos (9)</span><span>Pend. (4)</span><span>Aprov. (3)</span><span>Rej. (2)</span></div></div>
+              <div class="cand-lista">
+                <div class="cand-item sel">
+                  <div class="linha"><strong class="mono">8,40</strong><span class="mono rotulo">00:14:10–00:14:58</span><span class="selo cheio empurra">✓ Aprovado</span></div>
+                  <div>Momento da virada na partida</div>
+                </div>
+                <div class="cand-item">
+                  <div class="linha"><strong class="mono">7,90</strong><span class="mono rotulo">01:02:05–01:02:47</span><span class="selo empurra">Pendente</span></div>
+                  <div>Explicação do bug ao vivo</div>
+                </div>
+              </div>
+            </aside>
+
+            <main class="col-detalhe">
+              <div class="linha" style="align-items: stretch; gap: 12px">
+                <div class="caixa tracejada coluna" style="width: 210px; flex: none; justify-content: center; align-items: center; text-align: center; padding: 14px; min-height: 240px">
+                  <strong>Preview indisponível</strong>
+                  <span class="rotulo">O arquivo da Fonte foi movido ou alterado no disco (<span class="mono">source_offline</span>).</span>
+                  <button class="btn prim">Ir para Fontes e relocalizar</button><span class="n">14</span>
+                </div>
+
+                <div class="bloco-det cresce">
+                  <div class="linha"><strong class="mono">Nota: 8,40 / 10</strong><span class="rotulo empurra">Eixos e textos seguem acessíveis via SQLite</span></div>
+                  <div class="eixo-linha"><span><strong>Gancho</strong> (30%)</span><div class="linha"><div class="eixo-barra cresce"><i style="width: 90%"></i></div><span class="mono">9</span></div><span class="rotulo">Abre em pergunta direta.</span></div>
+                  <div class="eixo-linha"><span><strong>Autossuficiência</strong> (20%)</span><div class="linha"><div class="eixo-barra cresce"><i style="width: 80%"></i></div><span class="mono">8</span></div><span class="rotulo">Contexto completo.</span></div>
+                </div>
+              </div>
+
+              <div class="bloco-det suave">
+                <div class="linha">
+                  <strong style="font-size: 12px">Bordas por Frase (funcionais mesmo offline)</strong>
+                  <span class="frase-cit">"Quando o placar virou 2 a 1..."</span>
+                  <button class="btn" style="height: 24px">-1 <kbd>I</kbd></button><button class="btn" style="height: 24px">+1 <kbd>Shift I</kbd></button>
+                </div>
+              </div>
+
+              <div class="bloco-det">
+                <div class="linha">
+                  <button class="btn" aria-pressed="true" style="outline: 2px solid var(--texto)">✓ Aprovado <kbd>A</kbd></button>
+                  <button class="btn">✕ Rejeitar <kbd>R</kbd></button>
+                  <button class="btn prim empurra">Abrir Corte no Editor <kbd>Enter</kbd> →</button>
+                </div>
+                <div class="banner" role="alert" style="font-size: 12px">
+                  <span><strong>Permissão não registrada</strong> nesta Fonte para crédito automático.</span>
+                  <button class="btn empurra" style="height: 24px">Registrar Permissão</button>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>
+
+        <footer class="barra-status"><span>Salvo</span><span>Fonte offline · Preview 9:16 bloqueado</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== VARIANTE 5: VAZIO ==================== -->
+  <section class="wf-variante" id="vazio">
+    <h2>Vazio (0 candidatos na execução) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Demo ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes e Transcrição</span><span class="etapa atual">2. Cortes<small>0</small></span><span class="etapa">3. Exportação</span></nav>
+          <div class="linha empurra"><button class="btn">Fila · 0</button><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </header>
+
+        <div class="conteudo coluna" style="gap: 0">
+          <div class="subcab">
+            <button class="btn">← Voltar à seleção</button>
+            <strong>Execução #15</strong>
+            <span class="selo">Corte direto</span>
+            <span class="rotulo empurra">0 candidatos</span>
+          </div>
+
+          <div class="estado-centro">
+            <div class="estado-caixa caixa tracejada" style="padding: 28px">
+              <strong>Nenhum candidato gerado nesta execução</strong>
+              <p style="margin: 0; color: var(--texto-2)">O Provedor não encontrou trechos dentro dos critérios e da faixa de duração. Tente ampliar a faixa ou refazer com outro Perfil.</p>
+              <button class="btn prim">Voltar à seleção para tentar outro Perfil</button><span class="n">15</span>
+            </div>
+          </div>
+        </div>
+
+        <footer class="barra-status"><span>Salvo</span><span>Sem candidatos</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== VARIANTE 6: CARREGANDO ==================== -->
+  <section class="wf-variante" id="carregando">
+    <h2>Carregando (&lt;Esqueleto&gt;) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Demo ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes e Transcrição</span><span class="etapa atual">2. Cortes</span><span class="etapa">3. Exportação</span></nav>
+          <div class="linha empurra"><button class="btn">Fila</button><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </header>
+        <div class="conteudo coluna" style="gap: 0">
+          <div class="subcab"><div class="esqueleto" style="width: 420px; height: 22px"></div></div>
+          <div class="linha cresce" style="align-items: stretch; gap: 0">
+            <aside class="col-lista secao" style="gap: 10px">
+              <div class="esqueleto" style="height: 54px"></div>
+              <div class="esqueleto" style="height: 68px"></div>
+              <div class="esqueleto" style="height: 68px"></div>
+              <div class="esqueleto" style="height: 68px"></div>
+              <div class="esqueleto" style="height: 68px"></div>
+            </aside>
+            <main class="col-detalhe">
+              <div class="linha" style="gap: 14px; align-items: flex-start">
+                <div class="esqueleto" style="width: 172px; height: 306px"></div>
+                <div class="esqueleto cresce" style="height: 240px"></div>
+              </div>
+              <div class="esqueleto" style="height: 92px"></div>
+              <div class="esqueleto" style="height: 76px"></div>
+            </main>
+          </div>
+        </div>
+        <footer class="barra-status"><span>Carregando candidatos…</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== NOTAS ==================== -->
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li>Seletor de Revisão da execução: visível quando <span class="mono">run.revisions.length &gt; 1</span>; alternar chama <span class="mono">selection.get { run, revision }</span> e <span class="mono">selection.review { run }</span>, preservando decisões compatíveis e atualizando <span class="mono">?rev=:n</span>.</li>
+      <li><em>Desfazer decisão</em> (<span class="mono">selection.undo { run }</span>, <kbd>Ctrl Z</kbd>): desabilitado quando <span class="mono">!canUndo</span>; funciona inclusive entre sessões reabertas revertendo o último registro de <span class="mono">selection_decisions</span>.</li>
+      <li>Lista de candidatos (<span class="mono">&lt;ListaVirtual&gt;</span>): <span class="mono">role="listbox"</span> com <span class="mono">tabIndex={0}</span> e <span class="mono">aria-activedescendant</span> (sem <span class="mono">tabIndex={-1}</span>); <kbd>↑</kbd>/<kbd>↓</kbd> trocam o candidato e disparam <span class="mono">proxy.request</span> para o trecho <span class="mono">[startUs, endUs]</span>.</li>
+      <li><span class="mono">&lt;PlayerProxy&gt;</span> 9:16: se o proxy ainda estiver em geração (<span class="mono">queued</span>/<span class="mono">running</span>), exibe progresso determinístico via <span class="mono">core-progress</span> + botão <em>Cancelar preview</em> (<span class="mono">jobs.cancel</span>), mantendo Nota, bordas e <kbd>A</kbd>/<kbd>R</kbd> 100% interativos.</li>
+      <li>Nota explicável: média ponderada de 5 eixos no <strong>Corte direto</strong> (<span class="mono">Gancho 30%</span>, <span class="mono">Autossuficiência 20%</span>, <span class="mono">Energia 20%</span>, <span class="mono">Valor 15%</span>, <span class="mono">Fechamento 15%</span>); cada eixo traz pontuação <span class="mono">0–10</span> e justificativa textual (<span class="mono">axes[key].why</span>).</li>
+      <li>Ajuste de bordas por Frase (<span class="mono">selection.adjust</span>): botões desabilitados conforme <span class="mono">moves.startEarlier/Later</span> e <span class="mono">moves.endEarlier/Later</span> dentro da faixa <span class="mono">[minUs, maxUs]</span>. Erros (<span class="mono">adjust_too_short</span> etc.) aparecem inline mantendo o candidato selecionado.</li>
+      <li>Decisão (<span class="mono">selection.decide</span>): atualização otimista com rollback em erro; aprovar habilita <em>Abrir Corte no Editor</em> (<kbd>Enter</kbd> → <span class="mono">#/projeto/:id/corte/:corteId/editar</span>) e carrega <span class="mono">guardrails.check</span>. Atalhos de tecla única (<kbd>A</kbd>, <kbd>R</kbd>, <kbd>I</kbd>, <kbd>O</kbd>, <kbd>J</kbd>/<kbd>K</kbd>/<kbd>L</kbd>) respeitam o interruptor WCAG 2.1.4 e desligam em campos de texto.</li>
+      <li><em>Refazer com outro Perfil</em>: usa sempre <span class="mono">selection.redo { run, windows, profileId }</span>; fica bloqueado com aviso se alguma Janela de origem estiver <span class="mono">uncertain</span>, <span class="mono">queued</span> ou <span class="mono">running</span>.</li>
+      <li>Decisão de wireframe: na Tela C.2 não há painel lateral de Transcrição em 1366 px (nem em 1440 px); a Transcrição completa do Corte fica fechada por padrão e é acessada ao abrir o Corte no Editor (<kbd>Ctrl [</kbd>). Em 1440+ px, a Bancada exibe os textos vizinhos (<em>Antes</em> / <em>Depois</em>) quando disponíveis.</li>
+      <li>No <strong>Vídeo transformado</strong>, o 6.º eixo <strong>Espaço para comentário (30%)</strong> assume o primeiro destaque da lista.</li>
+      <li><span class="mono">&lt;ChecklistGuardaCorpos&gt;</span> (apenas quando aprovado, nunca bloqueante): exibe Permissão, duração &gt; 60 s, aviso único do Corte direto (<em>Entendi o risco</em> → <span class="mono">guardrails.ack_direct_notice</span>) ou o próximo passo <span class="mono">Ângulo → Roteiro → Narração</span> (via <span class="mono">angles.get</span>) no Vídeo transformado.</li>
+      <li>Confirmação obrigatória em <span class="mono">&lt;ConfirmDialog&gt;</span> com <span class="mono">&lt;ResumoCustoPrivacidade&gt;</span> antes de <span class="mono">selection.redo { confirmed: true }</span>, com foco inicial em <em>Cancelar</em>.</li>
+      <li>Quando um <span class="mono">selection.redo</span> roda em segundo plano, aparece faixa discreta no sub-cabeçalho sem travar a revisão dos candidatos atuais; ao concluir, toast anuncia a nova revisão.</li>
+      <li>Fonte <span class="mono">offline</span>/<span class="mono">changed</span> ou FFmpeg ausente (<span class="mono">component_missing</span>) substitui apenas o quadro do player 9:16 por CTA acionável de recuperação, mantendo revisão e decisões operacionais.</li>
+      <li>Segundo estado vazio (quando filtro por estado ou <em>Nota mínima</em> zera a lista): substitui apenas a lista à esquerda por <em>"Nenhum candidato corresponde aos filtros atuais"</em> + botão <em>Limpar filtros</em>.</li>
+    </ol>
+  </section>
+</main>
+<script src="kit.js"></script>
+</body>
+</html>

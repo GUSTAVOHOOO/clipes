@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F4 · Sobre e Atualizações — Wireframes Clipes v2</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .centro-sobre { width: 100%; max-width: 82ch; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; min-height: 0; height: 100%; }
+  .aba { white-space: nowrap; }
+  .licenca-pre {
+    margin: 0; padding: 12px; border: 1px solid var(--borda); border-radius: var(--r);
+    background: var(--painel); font-family: ui-monospace, monospace; font-size: 12px; line-height: 1.45;
+    white-space: pre-wrap; overflow: auto; flex: 1; min-height: 140px;
+  }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>F4 · Sobre e Atualizações</h1>
+    <p>Rota: <span class="mono">#/sobre</span>.
+      Especificação: <span class="mono">telas/F-exportacao-fila-relatos.md</span> §4, <span class="mono">01-arquitetura.md</span> §3 e §9.</p>
+    <nav>
+      <a href="#sobre-1366">Versão atual e Licença (1366)</a>
+      <a href="#atualizacao-1440">Atualização disponível e Atribuições (1440)</a>
+      <a href="#estados-1366">Carregando, Instalando, Offline, Assinatura inválida e Busca vazia</a>
+    </nav>
+  </header>
+
+  <!-- 1. Sobre normal (1366x768) -->
+  <section class="wf-variante" id="sobre-1366">
+    <h2>1. Sobre e Atualizações (estado atualizado + Licença Apache-2.0) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <nav class="etapas" aria-label="Etapas do Projeto">
+            <span class="etapa">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa">2. Cortes<small>12 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra">
+            <span class="selo">Somente local</span>
+            <button class="btn">Fila · 0 ativos</button>
+            <button class="btn">Comandos <kbd>Ctrl+K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+            <button class="btn sel">Sobre</button>
+          </div>
+        </header>
+
+        <div class="conteudo">
+          <main class="cresce secao" style="overflow: hidden">
+            <div class="centro-sobre">
+              <!-- Zona 1: Identidade e Versão -->
+              <section class="linha" style="align-items: flex-start">
+                <div class="coluna" style="gap: 4px">
+                  <h3 style="margin: 0">Clipes — Gerador local e open source de Cortes</h3>
+                  <div class="linha rotulo">
+                    <span>Versão instalada: <strong class="mono" style="color: var(--texto)">0.1.0</strong></span><span class="n">1</span>
+                    <span>·</span>
+                    <span>Licença: <strong>Apache-2.0</strong></span>
+                  </div>
+                </div>
+                <div class="linha empurra">
+                  <button class="btn fantasma" style="text-decoration: underline">Repositório GitHub ↗</button>
+                  <button class="btn">Relatar problema ou ideia</button>
+                </div>
+              </section>
+
+              <!-- Zona 2: Atualizações -->
+              <section class="caixa coluna" style="gap: 8px; background: var(--painel); padding: 12px">
+                <div class="linha">
+                  <strong>Atualizações assinadas via GitHub Releases</strong>
+                  <span class="selo empurra">Nunca instala sem sua confirmação</span><span class="n">2</span>
+                </div>
+                <div class="linha" role="status">
+                  <span>Estado: Você está usando a versão mais recente (<span class="mono">0.1.0</span>).</span>
+                  <button class="btn prim empurra">Verificar atualizações</button>
+                </div>
+                <div class="linha rotulo" style="border-top: 1px solid var(--sutil); padding-top: 6px">
+                  <span>FFmpeg, yt-dlp, Worker Python e modelos de transcrição/TTS são atualizados separadamente em Configurações.</span>
+                  <button class="btn fantasma empurra" style="padding: 0; height: 22px; text-decoration: underline">Componentes e Armazenamento →</button><span class="n">3</span>
+                </div>
+              </section>
+
+              <!-- Zona 3: Licenças e Atribuições -->
+              <section class="coluna cresce" style="gap: 8px; min-height: 0">
+                <div class="linha">
+                  <div class="abas" role="tablist" aria-label="Documentos legais">
+                    <span class="aba atual" role="tab" aria-selected="true">Licença do Clipes (Apache-2.0)</span>
+                    <span class="aba" role="tab" aria-selected="false">Atribuições de terceiros</span>
+                  </div><span class="n">4</span>
+                  <span class="rotulo empurra">Bloco rolável por teclado</span><span class="n">5</span>
+                </div>
+                <pre class="licenca-pre" tabindex="0" aria-label="Texto integral da licença Apache-2.0">Apache License
+Version 2.0, January 2004
+http://www.apache.org/licenses/
+
+TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+1. Definitions. ...
+2. Grant of Copyright License. Subject to the terms and conditions of this License, each Contributor hereby grants to You a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable copyright license to reproduce, prepare Derivative Works of, publicly display, publicly perform, sublicense, and distribute the Work...
+
+(Bloco rolável por teclado com tabindex="0" — Setas / PageUp / PageDown)</pre>
+              </section>
+            </div>
+          </main>
+        </div>
+
+        <footer class="barra-status">
+          <span>Salvo</span><span>·</span><span>Sem jobs ativos</span>
+          <span class="empurra"><kbd>F6</kbd> alternar região · <kbd>?</kbd> atalhos</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Atualização disponível + Atribuições (1440x900) -->
+  <section class="wf-variante" id="atualizacao-1440">
+    <h2>2. Atualização disponível (0.2.0) + Aba Atribuições com busca · 1440 × 900 (mais altura útil para leitura)</h2>
+    <div class="wf-quadro w1440">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <nav class="etapas">
+            <span class="etapa">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa">2. Cortes<small>12 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra">
+            <span class="selo">Somente local</span>
+            <button class="btn">Fila · 0 ativos</button>
+            <button class="btn">Comandos <kbd>Ctrl+K</kbd></button>
+            <button class="btn icone">⚙</button>
+            <button class="btn">Relatos</button>
+            <button class="btn sel">Sobre</button>
+          </div>
+        </header>
+
+        <div class="conteudo">
+          <main class="cresce secao" style="overflow: hidden">
+            <div class="centro-sobre">
+              <section class="linha">
+                <div class="coluna" style="gap: 4px">
+                  <h3 style="margin: 0">Clipes — Gerador local e open source de Cortes</h3>
+                  <div class="linha rotulo">
+                    <span>Versão instalada: <strong class="mono" style="color: var(--texto)">0.1.0</strong></span>
+                    <span>·</span>
+                    <span>Licença: <strong>Apache-2.0</strong></span>
+                  </div>
+                </div>
+                <div class="linha empurra">
+                  <button class="btn fantasma" style="text-decoration: underline">Repositório GitHub ↗</button>
+                  <button class="btn">Relatar problema ou ideia</button>
+                </div>
+              </section>
+
+              <section class="caixa coluna" style="gap: 8px; background: var(--painel); padding: 12px; border-color: var(--texto)">
+                <div class="linha">
+                  <strong>Nova versão disponível: <span class="mono">0.1.0 → 0.2.0</span></strong>
+                  <span class="rotulo mono">17/11/2026</span>
+                  <span class="selo cheio empurra">Pacote assinado</span>
+                </div>
+                <div class="caixa" style="font-size: 12px">
+                  <strong>Notas da versão 0.2.0:</strong>
+                  <ul style="margin: 4px 0 0; padding-left: 18px">
+                    <li>Exportação em lote com histórico detalhado por item e fallback automático para x264.</li>
+                    <li>Agrupamento automático de legendas com verificação de hardware na Transcrição.</li>
+                  </ul>
+                </div>
+                <div class="linha">
+                  <button class="btn prim">Baixar e instalar 0.2.0</button><span class="n">6</span>
+                  <button class="btn">Lembrar depois</button>
+                </div>
+                <div class="linha rotulo" style="border-top: 1px solid var(--sutil); padding-top: 6px">
+                  <span>FFmpeg, yt-dlp, Worker Python e modelos de transcrição/TTS atualizam separadamente em Configurações.</span>
+                  <button class="btn fantasma empurra" style="padding: 0; height: 22px; text-decoration: underline">Componentes e Armazenamento →</button>
+                </div>
+              </section>
+
+              <section class="coluna cresce" style="gap: 8px; min-height: 0">
+                <div class="linha">
+                  <div class="abas" role="tablist" aria-label="Documentos legais">
+                    <span class="aba" role="tab" aria-selected="false">Licença do Clipes (Apache-2.0)</span>
+                    <span class="aba atual" role="tab" aria-selected="true">Atribuições de terceiros</span>
+                  </div>
+                  <div class="campo empurra" style="width: 260px; color: var(--texto)">FFmpeg</div><span class="n">7</span>
+                </div>
+
+                <pre class="licenca-pre" tabindex="0" aria-label="Atribuições de terceiros filtradas">=== THIRD_PARTY_NOTICES.md (filtrado por "FFmpeg") ===
+
+1. FFmpeg (libavcodec, libavformat, libavfilter, libass)
+   Licença: LGPL-2.1+ / GPL-2.0+ (conforme build selecionado em Componentes)
+   Uso: decodificação, proxy, normalização -14 LUFS e renderização MP4 1080×1920.
+   Fonte: https://ffmpeg.org/
+
+2. libass (renderização de legendas ASS/SSA via FFmpeg)
+   Licença: ISC License
+   Fonte: https://github.com/libass/libass</pre>
+              </section>
+            </div>
+          </main>
+        </div>
+
+        <footer class="barra-status">
+          <span>Salvo</span><span>·</span><span>Sem jobs ativos</span>
+          <span class="empurra"><kbd>F6</kbd> alternar região · <kbd>?</kbd> atalhos</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Estados: Carregando, Instalando, Offline, Assinatura inválida e Busca vazia -->
+  <section class="wf-variante" id="estados-1366">
+    <h2>3. Estados: Carregando (&lt;Skeleton&gt;), Instalando, Offline, Erro de assinatura e Busca vazia · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes</span><span class="etapa">2. Cortes</span><span class="etapa">3. Exportação</span></nav>
+          <div class="linha empurra"><button class="btn">Fila · 1 ativo</button><button class="btn sel">Sobre</button></div>
+        </header>
+
+        <div class="conteudo">
+          <main class="cresce secao" style="overflow: auto">
+            <div class="centro-sobre" style="height: auto">
+              <!-- Loading da versão -->
+              <div class="linha" style="flex-wrap: wrap" aria-busy="true">
+                <strong>Versão instalada:</strong>
+                <div class="texto-ph" style="width: 90px; height: 14px"></div><span class="n">8</span>
+                <span class="rotulo">(Licenças estáticas ficam legíveis sem esperar <span class="mono">app.version</span>)</span>
+              </div>
+
+              <!-- Erro de assinatura inválida -->
+              <div class="banner" role="alert" style="border-color: var(--texto); align-items: flex-start; padding: 10px 12px">
+                <div class="coluna cresce" style="gap: 4px">
+                  <strong>A verificação de assinatura digital desta atualização falhou. Instalação bloqueada por segurança.</strong><span class="n">9</span>
+                  <details style="font-size: 12px; color: var(--texto-2)">
+                    <summary>Ver detalhe técnico</summary>
+                    <div class="mono" style="margin-top: 4px">updater_error: invalid-signature</div>
+                  </details>
+                </div>
+                <button class="btn prim">Tentar novamente</button>
+              </div>
+
+              <!-- Estado offline -->
+              <div class="banner" role="status">
+                <span>Você está offline. Conecte-se à internet para verificar atualizações.</span><span class="n">10</span>
+              </div>
+
+              <!-- Estado instalando -->
+              <div class="caixa coluna" style="gap: 6px; background: var(--painel)" role="status">
+                <div class="linha">
+                  <strong>Baixando e verificando assinatura da versão 0.2.0…</strong>
+                  <span class="mono empurra">68%</span>
+                </div>
+                <div class="barra-prog"><i style="--p: 68%"></i></div>
+                <span class="rotulo">O app será reiniciado ao concluir (se houver jobs ativos na Fila, exibe confirmação antes de reiniciar).</span><span class="n">11</span>
+              </div>
+
+              <!-- Busca vazia nas atribuições -->
+              <section class="coluna" style="gap: 8px">
+                <div class="linha">
+                  <div class="abas" role="tablist">
+                    <span class="aba">Licença do Clipes (Apache-2.0)</span>
+                    <span class="aba atual">Atribuições de terceiros</span>
+                  </div>
+                  <div class="campo empurra" style="width: 260px; color: var(--texto)">biblioteca-inexistente</div>
+                </div>
+                <div class="caixa tracejada coluna" style="align-items: center; padding: 20px; text-align: center; gap: 6px">
+                  <strong>Nenhuma atribuição encontrada para "biblioteca-inexistente".</strong>
+                  <button class="btn">Limpar busca</button>
+                </div>
+              </section>
+            </div>
+          </main>
+        </div>
+
+        <footer class="barra-status"><span>Salvo</span><span>·</span><span>Exportação #11 em curso</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li><strong>Versão instalada (<span class="mono">app.version {}</span>):</strong> exibida em fonte tabular; falha de leitura exibe <em>"Não foi possível carregar a versão instalada."</em> com botão <em>Tentar novamente</em>.</li>
+      <li><strong>Atualização sob confirmação explícita (US-16):</strong> o Clipes nunca baixa nem instala atualizações automaticamente em segundo plano sem clique do usuário.</li>
+      <li><strong>Separação de componentes (US-17):</strong> deixa explícito que FFmpeg, <span class="mono">yt-dlp</span>, Worker Python e modelos atualizam separadamente em <span class="mono">#/config/componentes</span>.</li>
+      <li><strong>Abas legais (<span class="mono">tablist</span>):</strong> <span class="mono">Licença do Clipes (Apache-2.0)</span> e <span class="mono">Atribuições de terceiros</span> alternam via clique e setas <kbd>←</kbd>/<kbd>→</kbd>.</li>
+      <li><strong>Acessibilidade de leitura (WCAG 2.1.1):</strong> o bloco <span class="mono">&lt;pre tabindex="0"&gt;</span> permite rolar o texto integral de <span class="mono">LICENSE</span> e <span class="mono">THIRD_PARTY_NOTICES.md</span> inteiramente pelo teclado.</li>
+      <li><strong>Baixar e instalar (<span class="mono">downloadAndInstall()</span> → <span class="mono">relaunch()</span>):</strong> no cenário de atualização disponível, exige clique explícito; em ambiente mockado, exibe estado <em>"Atualização instalada. Reinicie para aplicar."</em></li>
+      <li><strong>Busca em atribuições:</strong> filtra localmente em <span class="mono">THIRD_PARTY_NOTICES.md</span> por nome de biblioteca ou componente.</li>
+      <li><strong>Carregamento (<span class="mono">loading</span>):</strong> apenas a linha da versão usa <span class="mono">&lt;Skeleton&gt;</span>; as licenças já vêm no bundle.</li>
+      <li><strong>Erros do atualizador:</strong> diferencia erro de rede (<span class="mono">"Sem conexão ou servidor indisponível"</span>) de falha de assinatura (<span class="mono">invalid-signature</span>), bloqueando instalação neste último caso dentro de <span class="mono">role="alert"</span>.</li>
+      <li><strong>Estado offline (US-121):</strong> quando <span class="mono">navigator.onLine === false</span>, orienta de forma neutra sem erro alarmante.</li>
+      <li><strong>Guarda de reinício com jobs ativos:</strong> se houver downloads ou exportações ativas na Fila de Jobs ao tentar reiniciar (<span class="mono">relaunch</span>), abre o mesmo <span class="mono">&lt;ConfirmDialog&gt;</span> de fechamento da janela (ver <span class="mono">A1-shell.html</span>).</li>
+    </ol>
+  </section>
+</main>
+<script src="kit.js"></script>
+</body>
+</html>

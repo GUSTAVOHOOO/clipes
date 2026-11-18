@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B1 · Lista e entrada de Fontes — Wireframes front v2</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .subnav {
+    display: flex; align-items: center; gap: 12px; padding: 0 12px;
+    background: var(--tela); border-bottom: 1px solid var(--borda); flex: none;
+  }
+  .seg { display: inline-flex; border: 1px solid var(--borda); border-radius: var(--r); overflow: hidden; background: var(--tela); }
+  .seg > span { padding: 4px 10px; font-size: 12px; color: var(--texto-2); }
+  .seg > span.ativo { background: var(--forte); color: #fff; font-weight: 600; }
+  .radio-linha { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .radio-ponto { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--texto-2); display: inline-grid; place-items: center; flex: none; }
+  .radio-ponto.ativo::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--forte); }
+  .chk { width: 14px; height: 14px; border: 1px solid var(--texto-2); border-radius: 2px; display: inline-grid; place-items: center; font-size: 10px; flex: none; background: var(--tela); }
+  .chk.ativo { background: var(--forte); border-color: var(--forte); color: #fff; }
+  .gaveta-busca { width: 410px; border-left: 1px solid var(--borda); background: var(--painel); display: flex; flex-direction: column; min-height: 0; }
+  .marca-busca { background: var(--sutil); padding: 0 2px; border-radius: 2px; font-weight: 600; }
+  .esqueleto-bloco { height: 12px; background: var(--sutil); border-radius: 3px; }
+  .campo-texto { color: var(--texto); justify-content: space-between; }
+  .grade-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>B1 · Lista e entrada de Fontes</h1>
+    <p>Rota: <span class="mono">#/projeto/:id/fontes?sub=fontes</span>. Especificação: <span class="mono">telas/B-fontes-e-transcricao.md</span> (Tela 1) e <span class="mono">02-consolidacao.md</span>.
+      Cobre importação local e por URL (instalação <em>just-in-time</em> de <span class="mono">yt-dlp</span>/<span class="mono">deno</span>), registro de Permissão, integridade no disco (<span class="mono">available</span>/<span class="mono">offline</span>/<span class="mono">changed</span>), seleção para Lote de Fontes e busca global FTS5.</p>
+    <nav>
+      <a href="#normal">Normal · 1366</a>
+      <a href="#largo">URL, JIT e Busca FTS5 · 1440</a>
+      <a href="#vazio">Vazio · 1366</a>
+      <a href="#erro">Erro acionável · 1366</a>
+      <a href="#relocalizar">Diálogo de relocalização · 1366</a>
+    </nav>
+  </header>
+
+  <!-- ==================== VARIANTE 1: NORMAL 1366 ==================== -->
+  <section class="wf-variante" id="normal">
+    <h2>Normal · 1366 × 768 (Arquivo local, pré-inspeção com Permissão e lista em vários estados)</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal de Lives ▾</button><span class="n">1</span>
+          <nav class="etapas">
+            <span class="etapa atual">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa">2. Cortes<small>6 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra">
+            <button class="btn">Fila · 1 ativo</button>
+            <button class="btn">Comandos <kbd>Ctrl K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+            <button class="btn icone" aria-label="Mais opções">⋯</button>
+          </div>
+        </div>
+
+        <div class="conteudo coluna" style="gap: 0">
+          <!-- Subnavegação + Busca Global -->
+          <div class="subnav">
+            <div class="abas" role="tablist">
+              <span class="aba atual" role="tab">Fontes (4)</span>
+              <span class="aba" role="tab">Lotes de Fontes (2)</span>
+            </div>
+            <span class="n">2</span>
+            <div class="campo empurra" style="width: 380px; justify-content: space-between">
+              <span>Buscar falas em todas as Transcrições do Projeto…</span>
+              <kbd>Ctrl F</kbd>
+            </div>
+            <span class="n">3</span>
+          </div>
+
+          <!-- Duas colunas com scroll próprio -->
+          <div class="linha cresce" style="align-items: stretch; gap: 0; min-height: 0; overflow: hidden;">
+            <!-- ZONA ESQUERDA (~40%): Entrada de Fonte -->
+            <aside class="painel" style="width: 520px">
+              <div class="painel-cab">
+                <span>Entrada de Fonte</span>
+                <div class="seg empurra" role="radiogroup" aria-label="Modo de entrada">
+                  <span class="ativo">Arquivo local</span>
+                  <span>URL (VOD)</span>
+                </div>
+                <span class="n">4</span>
+              </div>
+              <div class="painel-corpo">
+                <div class="linha">
+                  <button class="btn prim">Escolher vídeo…</button>
+                  <span class="rotulo">mp4, mkv, mov, webm, avi, m4v</span>
+                </div>
+
+                <!-- Bloco de Pré-inspeção (após sources.inspect) -->
+                <div class="cartao">
+                  <div class="linha">
+                    <strong>Pré-inspeção</strong>
+                    <span class="selo cheio empurra mono">02:15:00 · 1080p 60fps</span>
+                  </div>
+                  <div class="rotulo mono">C:\Videos\Lives\live_15_11_obs.mkv</div>
+
+                  <div class="grade-form">
+                    <div class="coluna" style="gap: 3px">
+                      <span class="rotulo">Faixa do microfone (áudio) <span class="n">5</span></span>
+                      <div class="campo campo-texto"><span>1 · Mic OBS (aac · pt)</span><span>▾</span></div>
+                    </div>
+                    <div class="coluna" style="gap: 3px">
+                      <span class="rotulo">Idioma falado</span>
+                      <div class="campo campo-texto"><span>Português (pt)</span><span>▾</span></div>
+                    </div>
+                  </div>
+
+                  <!-- Permissão -->
+                  <div class="caixa coluna" style="gap: 6px; background: var(--painel)">
+                    <div class="linha">
+                      <strong style="font-size: 12px">Permissão do criador</strong><span class="n">6</span>
+                      <span class="selo empurra">Obrigatório escolher</span>
+                    </div>
+                    <div class="linha" style="gap: 14px">
+                      <span class="radio-linha"><span class="radio-ponto"></span> Sem permissão registrada</span>
+                      <span class="radio-linha"><span class="radio-ponto ativo"></span> Tenho permissão do criador</span>
+                    </div>
+                    <div class="grade-form">
+                      <div class="coluna" style="gap: 2px">
+                        <span class="rotulo">Quem autorizou</span>
+                        <div class="campo campo-texto"><span>Streamer X</span></div>
+                      </div>
+                      <div class="coluna" style="gap: 2px">
+                        <span class="rotulo">Onde foi autorizada</span>
+                        <div class="campo campo-texto"><span>Discord / Programa de cortes</span></div>
+                      </div>
+                    </div>
+                    <div class="coluna" style="gap: 2px">
+                      <span class="rotulo">Escopo (inclua "tradução" se autorizada para traduzir legendas)</span>
+                      <div class="campo campo-texto"><span>Cortes diretos e tradução de legendas</span></div>
+                    </div>
+                  </div>
+
+                  <label class="radio-linha">
+                    <span class="chk"></span>
+                    <span>Copiar vídeo para dentro do Projeto (evita que a Fonte fique offline, mas duplica o arquivo)</span>
+                  </label>
+
+                  <div class="linha" style="margin-top: 2px">
+                    <button class="btn prim">Importar Fonte</button>
+                    <button class="btn fantasma">Limpar seleção</button>
+                    <span class="n">7</span>
+                  </div>
+                </div>
+              </div>
+            </aside>
+
+            <!-- ZONA DIREITA (~60%): Lista de Fontes do Projeto -->
+            <section class="painel dir cresce" style="border-left: 0; background: var(--tela)">
+              <div class="painel-cab" style="background: var(--painel)">
+                <span>Fontes do Projeto (4)</span>
+                <div class="linha empurra">
+                  <div class="campo campo-texto" style="width: 130px; height: 24px"><span>Todas</span><span>▾</span></div>
+                  <div class="campo" style="width: 170px; height: 24px">Buscar nome…</div>
+                </div>
+              </div>
+
+              <div class="painel-corpo">
+                <!-- Faixa partial -->
+                <div class="banner">
+                  <span>⚠ <strong>2 Fontes</strong> precisam de verificação ou relocalização no disco. A leitura e edição da Transcrição continuam disponíveis.</span>
+                  <button class="btn empurra" style="height: 24px">Ver apenas com pendência</button>
+                </div>
+
+                <!-- Barra de ações em lote -->
+                <div class="linha caixa" style="background: var(--painel)">
+                  <span class="chk ativo">✓</span>
+                  <span>Selecionar todas</span>
+                  <span class="rotulo">(2 Fontes selecionadas)</span>
+                  <button class="btn prim empurra">Processar 2 Fontes em lote →</button><span class="n">8</span>
+                </div>
+
+                <!-- Card 1: Disponível + Transcrição pronta -->
+                <div class="cartao">
+                  <div class="linha">
+                    <span class="chk ativo">✓</span>
+                    <strong>Live_12_11_final.mp4</strong>
+                    <span class="selo">Local</span>
+                    <span class="selo cheio">✓ Disponível</span>
+                    <span class="selo cheio empurra">✓ Transcrição pronta (24.810 palavras)</span>
+                  </div>
+                  <div class="linha rotulo" style="flex-wrap: wrap; gap: 10px; padding-left: 22px">
+                    <span class="mono">03:42:10 · 1080p</span>
+                    <span>Idioma: Português</span>
+                    <span>Permissão: Autorizada (cortes e tradução)</span>
+                    <span>Chat: 42 picos</span>
+                    <span>Energia: Medida (18 picos)</span>
+                  </div>
+                  <div class="linha" style="padding-left: 22px">
+                    <button class="btn prim">Ir para Cortes →</button>
+                    <button class="btn">Abrir Transcrição</button>
+                    <button class="btn">Permissão</button><span class="n">9</span>
+                  </div>
+                </div>
+
+                <!-- Card 2: Offline + Transcrição pronta -->
+                <div class="cartao" style="border-style: dashed">
+                  <div class="linha">
+                    <span class="chk"></span>
+                    <strong>VOD_09_11_youtube.mp4</strong>
+                    <span class="selo">URL</span>
+                    <span class="selo cheio">! Offline</span><span class="n">10</span>
+                    <span class="selo empurra">✓ Transcrição pronta (11.240 palavras)</span>
+                  </div>
+                  <div class="rotulo" style="padding-left: 22px">
+                    Arquivo não encontrado no disco (<span class="mono">D:\VODs\VOD_09_11_youtube.mp4</span>). Transcrição e edição continuam acessíveis; preview e exportação bloqueados.
+                  </div>
+                  <div class="linha" style="padding-left: 22px">
+                    <button class="btn prim">Relocalizar arquivo</button>
+                    <button class="btn">Abrir Transcrição</button>
+                    <button class="btn">Permissão</button>
+                  </div>
+                </div>
+
+                <!-- Card 3: Alterada + Parcial -->
+                <div class="cartao">
+                  <div class="linha">
+                    <span class="chk"></span>
+                    <strong>Live_15_11_cortada.mp4</strong>
+                    <span class="selo">Local</span>
+                    <span class="selo cheio">~ Alterada</span>
+                    <span class="selo empurra">Parcial (00:40:00)</span>
+                  </div>
+                  <div class="rotulo" style="padding-left: 22px">
+                    Arquivo mudou desde a importação. Verifique a identidade antes de usar preview ou exportar.
+                  </div>
+                  <div class="linha" style="padding-left: 22px">
+                    <button class="btn prim">Verificar identidade</button>
+                    <button class="btn">Abrir</button>
+                    <button class="btn">Permissão</button>
+                  </div>
+                </div>
+
+                <!-- Card 4: Disponível + Não transcrita + Sem permissão -->
+                <div class="cartao">
+                  <div class="linha">
+                    <span class="chk ativo">✓</span>
+                    <strong>Podcast_ep42.mp4</strong>
+                    <span class="selo">Local</span>
+                    <span class="selo cheio">✓ Disponível</span>
+                    <span class="selo empurra">Não transcrita</span>
+                  </div>
+                  <div class="linha rotulo" style="gap: 10px; padding-left: 22px">
+                    <span class="mono">01:18:45 · 1080p</span>
+                    <span>Idioma: Português</span>
+                    <span class="selo">Sem permissão</span>
+                    <span>Energia: Pendente</span>
+                  </div>
+                  <div class="linha" style="padding-left: 22px">
+                    <button class="btn">Abrir</button>
+                    <button class="btn">Permissão</button>
+                    <button class="btn">Idioma</button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div class="barra-status">
+          <span>Salvo</span><span>Sem jobs ativos</span>
+          <span class="empurra"><kbd>F6</kbd> trocar região · <kbd>Ctrl F</kbd> buscar · <kbd>?</kbd> atalhos</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== VARIANTE 2: 1440 URL + JIT + BUSCA FTS5 ==================== -->
+  <section class="wf-variante" id="largo">
+    <h2>Largo · 1440 × 900 (Entrada por URL com <em>just-in-time</em> <span class="mono">yt-dlp</span>/<span class="mono">deno</span> + Lista em linha única + Gaveta de Busca FTS5)</h2>
+    <div class="wf-quadro w1440">
+      <div class="shell">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal de Lives ▾</button>
+          <nav class="etapas">
+            <span class="etapa atual">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa">2. Cortes<small>6 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra">
+            <button class="btn">Fila · 1 ativo</button>
+            <button class="btn">Comandos <kbd>Ctrl K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+            <button class="btn icone" aria-label="Mais opções">⋯</button>
+          </div>
+        </div>
+
+        <div class="conteudo coluna" style="gap: 0">
+          <div class="subnav">
+            <div class="abas" role="tablist">
+              <span class="aba atual" role="tab">Fontes (4)</span>
+              <span class="aba" role="tab">Lotes de Fontes (2)</span>
+            </div>
+            <div class="campo campo-texto empurra" style="width: 440px">
+              <span>jogada</span>
+              <span class="rotulo">× limpar · <kbd>Ctrl F</kbd></span>
+            </div>
+          </div>
+
+          <div class="linha cresce" style="align-items: stretch; gap: 0; min-height: 0; overflow: hidden;">
+            <!-- ZONA ESQUERDA (500px max): Modo URL + JIT + Download -->
+            <aside class="painel" style="width: 480px">
+              <div class="painel-cab">
+                <span>Entrada de Fonte</span>
+                <div class="seg empurra" role="radiogroup">
+                  <span>Arquivo local</span>
+                  <span class="ativo">URL (VOD)</span>
+                </div>
+              </div>
+              <div class="painel-corpo">
+                <div class="coluna" style="gap: 4px">
+                  <span class="rotulo">URL do vídeo (YouTube VOD)</span>
+                  <div class="linha">
+                    <div class="campo campo-texto cresce"><span class="mono">https://youtube.com/watch?v=dQw4...</span></div>
+                    <button class="btn prim">Baixar por URL</button>
+                  </div>
+                  <div class="linha rotulo">
+                    <span>Pasta: <span class="mono">C:\Users\...\Downloads\Clipes</span></span>
+                    <button class="btn fantasma empurra" style="height: 22px; padding: 0 6px">Trocar pasta</button>
+                  </div>
+                </div>
+
+                <!-- Cartão Just-in-time yt-dlp / deno -->
+                <div class="cartao" style="background: var(--painel)">
+                  <div class="linha">
+                    <strong>Componentes para baixar por URL</strong><span class="n">11</span>
+                    <span class="selo cheio empurra">Sob demanda</span>
+                  </div>
+                  <div class="rotulo">
+                    <strong>yt-dlp</strong> (v2026.10 · 14 MB · Unlicense): <span class="selo cheio">✓ Instalado</span>
+                  </div>
+                  <div class="caixa coluna" style="gap: 6px">
+                    <div class="linha">
+                      <span><strong>deno</strong> (runtime JS · v2.2 · 42 MB · MIT)</span>
+                      <span class="selo empurra">Necessário para YouTube</span>
+                    </div>
+                    <div class="rotulo">Baixado da fonte oficial para a pasta de dados do Clipes.</div>
+                    <div class="linha">
+                      <button class="btn prim">Instalar deno</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Progresso de download por URL -->
+                <div class="cartao">
+                  <div class="linha">
+                    <strong>Baixando VOD por URL…</strong>
+                    <span class="mono empurra">42%</span>
+                  </div>
+                  <div class="barra-prog" role="progressbar" aria-valuenow="42"><i style="--p: 42%"></i></div>
+                  <div class="linha rotulo">
+                    <span class="mono">418 MB / 992 MB · 14,2 MB/s</span>
+                    <button class="btn empurra" style="height: 24px">Cancelar download</button>
+                  </div>
+                </div>
+
+                <!-- Pré-inspeção aguardando -->
+                <div class="caixa tracejada rotulo">
+                  Após concluir o download, a pré-inspeção abrirá aqui para selecionar faixa do microfone, idioma e Permissão antes de importar.
+                </div>
+              </div>
+            </aside>
+
+            <!-- ZONA CENTRAL/DIREITA: Lista compacta + Gaveta FTS5 -->
+            <section class="cresce coluna" style="gap: 0; min-height: 0; overflow: hidden; background: var(--tela)">
+              <div class="painel-cab" style="background: var(--painel)">
+                <span>Fontes do Projeto (4)</span>
+                <div class="linha empurra">
+                  <button class="btn" style="height: 24px">Processar selecionadas em lote</button>
+                  <div class="campo campo-texto" style="width: 120px; height: 24px"><span>Todas</span><span>▾</span></div>
+                </div>
+              </div>
+              <div class="painel-corpo">
+                <div class="cartao">
+                  <div class="linha">
+                    <span class="chk ativo">✓</span>
+                    <strong>Live_12_11_final.mp4</strong>
+                    <span class="selo">✓ Disponível</span>
+                    <button class="btn prim empurra" style="height: 24px">Ir para Cortes →</button>
+                    <button class="btn" style="height: 24px">Abrir</button>
+                  </div>
+                  <div class="mono rotulo" style="padding-left: 22px">03:42:10 · 1080p · PT · Permissão: Sim · Chat: 42 · Energia: Medida</div>
+                </div>
+                <div class="cartao" style="border-style: dashed">
+                  <div class="linha">
+                    <span class="chk"></span>
+                    <strong>VOD_09_11_youtube.mp4</strong>
+                    <span class="selo cheio">! Offline</span>
+                    <button class="btn prim empurra" style="height: 24px">Relocalizar</button>
+                    <button class="btn" style="height: 24px">Abrir</button>
+                  </div>
+                  <div class="mono rotulo" style="padding-left: 22px">01:50:00 · PT · Transcrição pronta (11.240 palavras)</div>
+                </div>
+                <div class="cartao">
+                  <div class="linha">
+                    <span class="chk"></span>
+                    <strong>Live_15_11_cortada.mp4</strong>
+                    <span class="selo cheio">~ Alterada</span>
+                    <button class="btn prim empurra" style="height: 24px">Verificar</button>
+                    <button class="btn" style="height: 24px">Abrir</button>
+                  </div>
+                  <div class="mono rotulo" style="padding-left: 22px">02:05:12 · PT · Parcial (00:40:00)</div>
+                </div>
+              </div>
+            </section>
+
+            <!-- GAVETA DIREITA: Resultados da busca global FTS5 -->
+            <aside class="gaveta-busca">
+              <div class="painel-cab">
+                <span>Busca nas Transcrições (7)</span><span class="n">12</span>
+                <button class="btn fantasma empurra" style="height: 24px">Fechar ✕</button>
+              </div>
+              <div class="painel-corpo">
+                <div class="rotulo">Resultados para <strong>"jogada"</strong> em todo o Projeto:</div>
+                <div class="cartao sel">
+                  <div class="linha">
+                    <strong>Live_12_11_final.mp4</strong>
+                    <span class="mono rotulo empurra">00:14:31 – 00:14:40</span>
+                  </div>
+                  <div style="font-size: 12px">"Presta atenção nessa <span class="marca-busca">jogada</span> aqui que mudou o placar inteiro…"</div>
+                  <div class="rotulo">Clique para abrir Frase #142</div>
+                </div>
+                <div class="cartao">
+                  <div class="linha">
+                    <strong>Live_12_11_final.mp4</strong>
+                    <span class="mono rotulo empurra">01:12:04 – 01:12:11</span>
+                  </div>
+                  <div style="font-size: 12px">"…a melhor <span class="marca-busca">jogada</span> do campeonato inteiro foi ali."</div>
+                </div>
+                <div class="cartao">
+                  <div class="linha">
+                    <strong>VOD_09_11_youtube.mp4</strong>
+                    <span class="selo">! Offline</span>
+                    <span class="mono rotulo empurra">00:38:19 – 00:38:27</span>
+                  </div>
+                  <div style="font-size: 12px">"Olha a <span class="marca-busca">jogada</span> ensaiada que eles fizeram no meio…"</div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+
+        <div class="barra-status">
+          <span>Salvo</span><span>Download URL: 42%</span>
+          <span class="empurra"><kbd>F6</kbd> trocar região · <kbd>Esc</kbd> fechar busca · <kbd>?</kbd> atalhos</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== VARIANTE 3: VAZIO 1366 ==================== -->
+  <section class="wf-variante" id="vazio">
+    <h2>Vazio · 1366 × 768 (<span class="mono">?estado=vazio</span> — projeto recém-criado sem Fontes)</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <div class="barra-sup">
+          <button class="btn fantasma">Novo Projeto ▾</button>
+          <nav class="etapas">
+            <span class="etapa atual">1. Fontes e Transcrição<small>0</small></span>
+            <span class="etapa">2. Cortes<small>0</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra">
+            <button class="btn">Fila</button>
+            <button class="btn">Comandos <kbd>Ctrl K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+          </div>
+        </div>
+
+        <div class="conteudo coluna" style="gap: 0">
+          <div class="subnav">
+            <div class="abas" role="tablist">
+              <span class="aba atual" role="tab">Fontes (0)</span>
+              <span class="aba" role="tab">Lotes de Fontes (0)</span>
+            </div>
+            <div class="campo empurra" style="width: 360px">Buscar falas em todas as Transcrições do Projeto…</div>
+          </div>
+
+          <div class="linha cresce" style="align-items: stretch; gap: 0; min-height: 0; overflow: hidden;">
+            <aside class="painel" style="width: 500px">
+              <div class="painel-cab">
+                <span>Entrada de Fonte</span>
+                <div class="seg empurra"><span class="ativo">Arquivo local</span><span>URL (VOD)</span></div>
+              </div>
+              <div class="painel-corpo">
+                <div class="caixa tracejada coluna" style="padding: 24px; align-items: center; text-align: center">
+                  <strong>Escolha um arquivo de vídeo para começar</strong>
+                  <span class="rotulo">Formatos aceitos: mp4, mkv, mov, webm, avi, m4v</span>
+                  <button class="btn prim">Escolher vídeo…</button>
+                </div>
+              </div>
+            </aside>
+
+            <section class="cresce coluna" style="justify-content: center; align-items: center; background: var(--tela); padding: 32px">
+              <div class="caixa coluna leitura" style="padding: 24px; align-items: center; text-align: center; gap: 10px">
+                <strong style="font-size: 15px">Nenhuma Fonte importada ainda</strong>
+                <p style="margin: 0; color: var(--texto-2)">
+                  Importe um arquivo de vídeo do seu computador ou baixe uma live gravada (VOD) por URL para começar a transcrever.
+                </p>
+                <button class="btn prim">Importar primeira Fonte</button><span class="n">13</span>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div class="barra-status">
+          <span>Salvo</span><span>Sem jobs ativos</span>
+          <span class="empurra"><kbd>F6</kbd> trocar região · <kbd>?</kbd> atalhos</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== VARIANTE 4: ERRO ACIONÁVEL 1366 ==================== -->
+  <section class="wf-variante" id="erro">
+    <h2>Erro acionável · 1366 × 768 (<span class="mono">BannerErroCore</span> com <span class="mono">CoreError.code</span> traduzido e detalhe técnico recolhido)</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal de Lives ▾</button>
+          <nav class="etapas">
+            <span class="etapa atual">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa">2. Cortes<small>6 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra">
+            <button class="btn">Fila</button>
+            <button class="btn">Comandos <kbd>Ctrl K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+          </div>
+        </div>
+
+        <div class="conteudo coluna" style="gap: 0">
+          <div class="subnav">
+            <div class="abas"><span class="aba atual">Fontes (4)</span><span class="aba">Lotes de Fontes (2)</span></div>
+            <div class="campo empurra" style="width: 360px">Buscar falas…</div>
+          </div>
+
+          <div class="linha cresce" style="align-items: stretch; gap: 0; min-height: 0; overflow: hidden;">
+            <aside class="painel" style="width: 520px">
+              <div class="painel-cab">
+                <span>Entrada de Fonte</span>
+                <div class="seg empurra"><span>Arquivo local</span><span class="ativo">URL (VOD)</span></div>
+              </div>
+              <div class="painel-corpo">
+                <div class="linha">
+                  <div class="campo campo-texto cresce"><span class="mono">https://youtube.com/watch?v=restrito</span></div>
+                  <button class="btn prim">Baixar por URL</button>
+                </div>
+
+                <!-- BannerErroCore -->
+                <div class="cartao" role="alert" style="border-width: 2px; border-color: var(--texto)">
+                  <div class="linha">
+                    <strong>! Falta o componente deno para resolver este vídeo do YouTube.</strong><span class="n">14</span>
+                  </div>
+                  <div class="rotulo">
+                    Sem o componente <span class="mono">deno</span>, algumas lives do YouTube não conseguem ser baixadas. Você pode instalá-lo agora (42 MB) ou importar um arquivo já salvo no computador.
+                  </div>
+                  <div class="linha">
+                    <button class="btn prim">Instalar deno</button>
+                    <button class="btn">Importar arquivo local</button>
+                    <button class="btn fantasma empurra">Dispensar</button>
+                  </div>
+                  <details>
+                    <summary class="rotulo" style="cursor: pointer">Ver detalhe técnico</summary>
+                    <div class="mono rotulo" style="margin-top: 4px">code: js_runtime_missing · comando: sources.url.download · <a href="#/relatos" style="color: var(--nota)">Abrir Relatos</a></div>
+                  </details>
+                </div>
+
+                <div class="cartao" role="alert">
+                  <strong>! Este vídeo exige login no YouTube.</strong>
+                  <div class="rotulo">O Clipes não usa seus cookies nem sua conta. Baixe o vídeo manualmente ou escolha um arquivo local.</div>
+                  <div class="linha"><button class="btn">Importar arquivo local</button></div>
+                </div>
+              </div>
+            </aside>
+
+            <section class="painel dir cresce" style="border-left: 0; background: var(--tela)">
+              <div class="painel-cab" style="background: var(--painel)"><span>Fontes do Projeto (4)</span></div>
+              <div class="painel-corpo">
+                <div class="cartao">
+                  <div class="linha"><strong>Live_12_11_final.mp4</strong><span class="selo cheio empurra">✓ Disponível</span></div>
+                  <div class="rotulo">A lista permanece navegável e interativa enquanto erros da entrada são resolvidos.</div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div class="barra-status">
+          <span>Salvo</span><span>Atenção: falha ao baixar URL</span>
+          <span class="empurra"><kbd>F6</kbd> trocar região · <kbd>?</kbd> atalhos</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== VARIANTE 5: DIÁLOGO DE RELOCALIZAÇÃO E TERMOS ==================== -->
+  <section class="wf-variante" id="relocalizar">
+    <h2>Diálogo de confirmação · 1366 × 768 (<span class="mono">&lt;ConfirmDialog&gt;</span> — relocalizar Fonte offline ou confirmar Termos do YouTube)</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal de Lives ▾</button>
+          <nav class="etapas">
+            <span class="etapa atual">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa">2. Cortes<small>6 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra"><button class="btn">Fila</button><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </div>
+        <div class="conteudo" style="background: var(--painel)">
+          <div class="secao rotulo">Fundo inerte (<span class="mono">inert</span>) enquanto o diálogo modal prende o foco…</div>
+        </div>
+        <div class="barra-status"><span>Salvo</span><span class="empurra"><kbd>Esc</kbd> cancelar diálogo</span></div>
+      </div>
+
+      <div class="dialogo-fundo">
+        <div class="dialogo" role="alertdialog" aria-modal="true" style="width: 520px">
+          <strong style="font-size: 15px">Confirmar que o arquivo é a mesma Fonte?</strong><span class="n">15</span>
+          <div class="coluna" style="gap: 6px; font-size: 12px">
+            <p style="margin: 0">A Fonte <strong>VOD_09_11_youtube.mp4</strong> estava offline e não tinha impressão digital (hash) completa salva anteriormente.</p>
+            <div class="caixa" style="background: var(--painel)">
+              <div><strong>Candidato selecionado:</strong> <span class="mono">E:\Backup_Lives\VOD_09_11_youtube.mp4</span></div>
+              <div><strong>Conferência automática:</strong> duração (<span class="mono">01:50:00</span>), tamanho (<span class="mono">4,12 GB</span>) e amostras iniciais conferem.</div>
+            </div>
+            <p style="margin: 0; color: var(--texto-2)">Ao confirmar, o novo caminho será salvo no Projeto e a prévia/exportação voltarão a funcionar.</p>
+          </div>
+          <div class="linha" style="justify-content: flex-end">
+            <button class="btn">Cancelar</button>
+            <button class="btn prim">Confirmar relocalização</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li>Seletor de Projeto abre menu com <em>Trocar Projeto</em>, <em>Fechar Projeto</em> (<span class="mono">projects.close</span>) e <em>Configurações do Projeto</em> (<span class="mono">#/config/projeto</span>).</li>
+      <li>Subnavegação em <span class="mono">role="tablist"</span> alterna entre <span class="mono">?sub=fontes</span> e <span class="mono">?sub=lotes</span> preservando histórico do navegador.</li>
+      <li><kbd>Ctrl F</kbd> foca a busca global FTS5 (<span class="mono">transcription.search</span>, limite padrão 50, até 200 ocorrências).</li>
+      <li>Alternar entre <strong>Arquivo local</strong> e <strong>URL (VOD)</strong> usa <span class="mono">role="radiogroup"</span>; a pré-inspeção aparece automaticamente após <span class="mono">sources.inspect</span> (arquivo) ou após concluir <span class="mono">sources.url.download</span> (URL).</li>
+      <li>Lista faixas de áudio de <span class="mono">metadata.streams</span> para suportar gravações multipista do OBS; o idioma inicial vem de <span class="mono">channel_profile.get</span>.</li>
+      <li><strong>Permissão</strong> exige escolha explícita antes de habilitar <em>Importar Fonte</em>. Escopo contendo <em>tradução</em> libera tradução de legendas no Editor; sem Permissão, a importação e a Transcrição continuam permitidas, mas a legenda traduzida fica bloqueada e o crédito automático na descrição fica vazio.</li>
+      <li>Ao clicar em <em>Importar Fonte</em> (<span class="mono">sources.import</span>), o núcleo calcula verificação (<span class="mono">sources.hash</span> se não copiada) e enfileira <span class="mono">preview</span> (e <span class="mono">chat</span> quando há <span class="mono">origin_url</span>). Enquanto não existe <span class="mono">sources.delete</span> no núcleo, não há botão de excluir Fonte.</li>
+      <li>Selecionar checkboxes habilita o botão com contagem explícita e abre <span class="mono">?sub=lotes</span> já preenchido com os IDs selecionados. Quando houver mais de 30 Fontes, a lista usa <span class="mono">&lt;ListaVirtual&gt;</span> (<span class="mono">role="listbox"</span>).</li>
+      <li>Botão <em>Permissão</em> abre diálogo de edição rápida (<span class="mono">sources.permission.set</span>) e invalida caches de Empacotamento e guardrails. Botão <em>Idioma</em> (<span class="mono">sources.language.set</span>) fica disponível apenas enquanto a Transcrição não iniciou.</li>
+      <li>Fontes <span class="mono">offline</span> ou <span class="mono">changed</span> usam ícone + rótulo textual (SC 1.4.1), nunca só cor; <em>Abrir Transcrição</em> permanece habilitado para leitura e correção de texto via SQLite.</li>
+      <li><strong>Instalação <em>just-in-time</em>:</strong> clicar em <em>Instalar yt-dlp</em> ou <em>Instalar deno</em> abre <span class="mono">&lt;ConfirmDialog&gt;</span> com nome, versão, tamanho, URL oficial e licença do manifesto antes de chamar <span class="mono">components.download { confirmed: true }</span>. Na primeira tentativa de baixar por URL (<span class="mono">terms_accepted: false</span>), também abre <span class="mono">&lt;ConfirmDialog&gt;</span> único de Termos do YouTube.</li>
+      <li>Na largura 1440+ px, a gaveta de busca FTS5 abre acoplada à direita sem cobrir o formulário de entrada; clicar num resultado navega para <span class="mono">#/projeto/:id/fontes/:fonteId?frase=:sentenceId&amp;row=:row</span>.</li>
+      <li><strong>Decisão de wireframe:</strong> quando <span class="mono">?estado=carregando</span> estiver ativo, a Zona Direita exibe 4 cartões <span class="mono">&lt;Esqueleto&gt;</span> estruturais (título + 2 linhas + botões) em vez de uma variante repetida inteira na página, garantindo que nunca apareça "Nenhuma Fonte importada ainda" durante o carregamento inicial.</li>
+      <li><span class="mono">&lt;BannerErroCore&gt;</span> usa <span class="mono">role="alert"</span> e traduz códigos como <span class="mono">js_runtime_missing</span>, <span class="mono">age_restricted</span>, <span class="mono">login_required</span>, <span class="mono">ffprobe_missing</span> e <span class="mono">source_mismatch</span> sem expor <span class="mono">CoreError.code</span> cru fora de <span class="mono">&lt;details&gt;</span>.</li>
+      <li>Diálogo idêntico de <span class="mono">&lt;ConfirmDialog&gt;</span> também é usado em <span class="mono">sources.hash { confirmation_required }</span> (quando arquivo alterado precisa confirmação humana), aceite único dos Termos do YouTube e confirmação de instalação de <span class="mono">yt-dlp</span>/<span class="mono">deno</span>.</li>
+    </ol>
+  </section>
+</main>
+<script src="kit.js"></script>
+</body>
+</html>

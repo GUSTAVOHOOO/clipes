@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B3 · Detalhe da Fonte e Transcrição — Wireframes front v2</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .cab-fonte {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    background: var(--tela); border-bottom: 1px solid var(--borda); flex: none; flex-wrap: nowrap; min-width: 0;
+  }
+  .radio-linha { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .radio-ponto { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--texto-2); display: inline-grid; place-items: center; flex: none; }
+  .radio-ponto.ativo::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--forte); }
+  .chk { width: 14px; height: 14px; border: 1px solid var(--texto-2); border-radius: 2px; display: inline-grid; place-items: center; font-size: 10px; flex: none; background: var(--tela); }
+  .chk.ativo { background: var(--forte); border-color: var(--forte); color: #fff; }
+  .campo-texto { color: var(--texto); justify-content: space-between; }
+  .resumo-custo { border: 1px solid var(--texto-2); border-radius: var(--r); padding: 8px 10px; background: var(--painel); display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+  .palavra {
+    display: inline-flex; align-items: center; min-width: 24px; min-height: 24px;
+    padding: 0 4px; border-radius: 3px; border: 1px solid transparent;
+  }
+  .palavra:hover { background: var(--sutil); }
+  .palavra.ativa { background: var(--forte); color: #fff; font-weight: 600; }
+  .palavra.corrigida { border-bottom: 2px dotted var(--texto); background: var(--painel); }
+  .palavra.busca { background: var(--sutil); border-color: var(--texto-2); font-weight: 600; }
+  .palavra-input {
+    display: inline-flex; align-items: center; height: 24px; padding: 0 6px;
+    border: 2px solid var(--texto); border-radius: 3px; background: var(--tela); font-weight: 600;
+  }
+  .faixa-silencio {
+    padding: 6px 10px; border: 1px dashed var(--borda); border-radius: var(--r);
+    background: repeating-linear-gradient(-45deg, var(--painel), var(--painel) 6px, var(--tela) 6px, var(--tela) 12px);
+    display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--texto-2);
+  }
+  .frase-linha-larga { display: grid; grid-template-columns: 170px minmax(0, 72ch); gap: 12px; align-items: start; }
+  .bloco-item { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 0; }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>B3 · Detalhe da Fonte e Transcrição</h1>
+    <p>Rota: <span class="mono">#/projeto/:id/fontes/:fonteId</span>. Especificação: <span class="mono">telas/B-fontes-e-transcricao.md</span> (Tela 3) e <span class="mono">02-consolidacao.md</span>.
+      Cobre escolha do Motor de transcrição (Local <span class="mono">US$ 0,00</span> com amostra 30 s e agrupamento VAD #279 vs. Groq remoto), progresso retomável por blocos de 10 min, sinais (energia/chat) e leitor virtualizado com palavras clicáveis, correção inline (<kbd>F2</kbd>/<kbd>Enter</kbd>), <span class="mono">undo</span>/<span class="mono">redo</span> e busca FTS5.</p>
+    <nav>
+      <a href="#normal">Transcrição pronta · 1366</a>
+      <a href="#transcrevendo">Transcrevendo por blocos · 1366</a>
+      <a href="#largo">Groq e leitura 72 ch · 1440</a>
+      <a href="#vazio">Antes de transcrever · 1366</a>
+      <a href="#offline">Offline e Erro · 1366</a>
+    </nav>
+  </header>
+
+  <!-- ==================== VARIANTE 1: TRANSCRIÇÃO PRONTA 1366 ==================== -->
+  <section class="wf-variante" id="normal">
+    <h2>Transcrição pronta · 1366 × 768 (Motor Local, VAD #279, Blocos 23/23, Sinais e Leitor com palavras clicáveis e correção <kbd>F2</kbd>/<kbd>Enter</kbd>)</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal de Lives ▾</button>
+          <nav class="etapas">
+            <span class="etapa atual">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa">2. Cortes<small>6 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra">
+            <button class="btn">Fila · Sem ativos</button>
+            <button class="btn">Comandos <kbd>Ctrl K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+            <button class="btn icone" aria-label="Mais opções">⋯</button>
+          </div>
+        </div>
+
+        <div class="conteudo coluna" style="gap: 0">
+          <!-- Cabeçalho da Fonte -->
+          <div class="cab-fonte">
+            <button class="btn">← Fontes</button><span class="n">1</span>
+            <strong style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Live_12_11_final.mp4</strong>
+            <span class="mono rotulo">03:42:10 · 1080p · Faixa 1 (Mic OBS)</span>
+            <span class="selo cheio">✓ Disponível</span>
+            <div class="campo campo-texto" style="width: 118px; height: 26px" title="Bloqueado após iniciar Transcrição">
+              <span>Português</span><span class="mudo">🔒</span>
+            </div>
+            <button class="btn" style="height: 26px">Permissão: Autorizada (tradução)</button>
+            <button class="btn prim empurra">Selecionar Cortes →</button><span class="n">2</span>
+          </div>
+
+          <div class="linha cresce" style="align-items: stretch; gap: 0; min-height: 0; overflow: hidden;">
+            <!-- ZONA ESQUERDA (~36%): Motor, Progresso e Sinais -->
+            <aside class="painel" style="width: 470px">
+              <div class="painel-corpo">
+                <!-- Cartão Motor de Transcrição -->
+                <div class="cartao">
+                  <div class="linha">
+                    <strong>Motor de transcrição</strong>
+                    <span class="selo cheio empurra">✓ Concluída</span>
+                  </div>
+                  <div class="coluna" style="gap: 4px; padding: 6px; background: var(--painel); border-radius: var(--r)">
+                    <span class="radio-linha"><span class="radio-ponto ativo"></span> <strong>Local — US$ 0,00</strong> (não sai da máquina)</span>
+                    <div class="rotulo" style="padding-left: 20px">Placa de vídeo NVIDIA detectada — processamento acelerado.</div>
+                    <div class="linha" style="padding-left: 20px">
+                      <button class="btn" style="height: 24px">Medir amostra 30 s</button><span class="n">3</span>
+                      <span class="mono rotulo">ETA estimado: ~12–16 min</span>
+                    </div>
+                    <details style="padding-left: 20px">
+                      <summary class="rotulo" style="cursor: pointer">Detalhes técnicos</summary>
+                      <div class="mono rotulo">modelo: large-v3 · compute: float16 · VRAM livre: 6,2 GB</div>
+                    </details>
+
+                    <!-- Agrupamento VAD #279 -->
+                    <div class="caixa coluna" style="gap: 4px; margin-left: 20px; margin-top: 2px">
+                      <div class="linha">
+                        <strong style="font-size: 12px">Agrupamento de trechos (VAD)</strong><span class="n">4</span>
+                        <span class="selo empurra">Global no app</span>
+                      </div>
+                      <div class="linha" style="gap: 12px">
+                        <span class="radio-linha"><span class="radio-ponto ativo"></span> Automático (Desligado na GPU)</span>
+                        <span class="radio-linha"><span class="radio-ponto"></span> Manual</span>
+                      </div>
+                      <div class="rotulo">
+                        No modo automático, fica ligado na CPU (acelera em ~18%) e desligado na GPU (evita gastar ~1 GB extra de VRAM sem ganho medido).
+                      </div>
+                    </div>
+                  </div>
+
+                  <span class="radio-linha"><span class="radio-ponto"></span> Groq remoto (~US$ 0,44 estimado · envia áudio FLAC)</span>
+                  <div class="linha">
+                    <button class="btn">Refazer transcrição</button>
+                  </div>
+                </div>
+
+                <!-- Blocos de 10 min -->
+                <div class="cartao">
+                  <div class="linha">
+                    <strong>Blocos de 10 min</strong>
+                    <span class="mono selo cheio empurra">23 / 23 salvos (100%)</span>
+                  </div>
+                  <div class="barra-prog" role="progressbar" aria-valuenow="100"><i style="--p: 100%"></i></div>
+                  <div class="coluna" style="gap: 2px">
+                    <div class="bloco-item"><span class="mono">✓ 00:00:00–00:10:00</span><span class="selo empurra">GPU</span></div>
+                    <div class="bloco-item"><span class="mono">✓ 00:10:00–00:20:00</span><span class="selo empurra">GPU</span></div>
+                    <div class="bloco-item rotulo">… mais 21 blocos salvos no SQLite</div>
+                  </div>
+                </div>
+
+                <!-- Sinais para Seleção de Cortes -->
+                <div class="cartao">
+                  <strong>Sinais para Seleção de Cortes</strong><span class="n">5</span>
+                  <div class="linha rotulo">
+                    <span>Energia do áudio:</span>
+                    <span class="selo cheio empurra">Medida · 18 picos · 42 altos</span>
+                  </div>
+                  <div class="linha rotulo">
+                    <span>Chat da live:</span>
+                    <span class="selo cheio empurra">Disponível · 42 picos (12.480 msgs)</span>
+                  </div>
+                </div>
+              </div>
+            </aside>
+
+            <!-- ZONA DIREITA (~64%): Leitor da Transcrição -->
+            <section class="cresce coluna" style="gap: 0; min-height: 0; overflow: hidden; background: var(--tela)">
+              <!-- Toolbar do Leitor -->
+              <div class="painel-cab" style="background: var(--painel); gap: 8px">
+                <button class="btn" style="height: 24px" title="Desfaz a última correção de palavra no Projeto inteiro (pode afetar outra Fonte)">Desfazer <kbd>Ctrl Z</kbd></button><span class="n">6</span>
+                <button class="btn" style="height: 24px" disabled>Refazer</button>
+                <div class="campo campo-texto empurra" style="width: 290px; height: 26px">
+                  <span>Nesta Fonte ▾ | <strong>jogada</strong> (3)</span>
+                  <kbd>Ctrl F</kbd>
+                </div>
+                <span class="mono rotulo">24.810 palavras</span>
+              </div>
+
+              <div class="painel-corpo">
+                <!-- Player de referência compacto -->
+                <div class="caixa linha" style="background: var(--painel); gap: 12px; align-items: center">
+                  <div class="midia r169" style="width: 156px; flex: none">Vídeo 16:9</div><span class="n">7</span>
+                  <div class="coluna cresce" style="gap: 4px">
+                    <div class="linha">
+                      <button class="btn prim" style="height: 24px">▶ Reproduzir <kbd>Espaço</kbd></button>
+                      <span class="mono">00:14:22 / 03:42:10</span>
+                      <span class="rotulo empurra">Vol: [====-]</span>
+                    </div>
+                    <div class="barra-prog"><i style="--p: 6%"></i></div>
+                    <div class="rotulo">Clique na palavra = ir ao vídeo · <kbd>F2</kbd> ou <kbd>Enter</kbd> = corrigir grafia · <kbd>←</kbd>/<kbd>→</kbd> = navegar</div>
+                  </div>
+                </div>
+
+                <!-- Lista Virtualizada da Transcrição -->
+                <div class="coluna" style="gap: 8px" role="region" aria-label="Transcrição da Fonte">
+                  <!-- Frase 1 com palavra ativa, corrigida e edição inline -->
+                  <div class="cartao">
+                    <div class="linha rotulo">
+                      <span class="mono">00:14:20 – 00:14:28</span>
+                      <span class="selo">pt</span>
+                      <span class="empurra">Frase #141</span>
+                    </div>
+                    <div style="line-height: 2.1">
+                      <span class="palavra">E</span>
+                      <span class="palavra">aí</span>
+                      <span class="palavra">pessoal,</span>
+                      <span class="palavra corrigida" title="Palavra corrigida">hoje ✎</span><span class="n">8</span>
+                      <span class="palavra ativa">vamos</span>
+                      <span class="palavra-input">testar<span class="mudo" style="margin-left: 4px">|</span></span><span class="n">9</span>
+                      <span class="palavra">essa</span>
+                      <span class="palavra">estratégia</span>
+                      <span class="palavra">nova</span>
+                      <span class="palavra">no</span>
+                      <span class="palavra">mapa.</span>
+                      <span class="rotulo" style="margin-left: 6px">(<kbd>Enter</kbd> salvar · <kbd>Esc</kbd> cancelar)</span>
+                    </div>
+                  </div>
+
+                  <!-- Item Silêncio -->
+                  <div class="faixa-silencio">
+                    <strong>Silêncio · 2,8 s</strong><span class="n">10</span>
+                    <span class="mono">00:14:28 – 00:14:31</span>
+                    <span class="empurra">Clique para pular até este trecho</span>
+                  </div>
+
+                  <!-- Frase 2 com destaque de busca -->
+                  <div class="cartao">
+                    <div class="linha rotulo">
+                      <span class="mono">00:14:31 – 00:14:40</span>
+                      <span class="selo">pt</span>
+                      <span class="empurra">Frase #142</span>
+                    </div>
+                    <div style="line-height: 2.1">
+                      <span class="palavra">Presta</span>
+                      <span class="palavra">atenção</span>
+                      <span class="palavra">nessa</span>
+                      <span class="palavra busca">jogada</span>
+                      <span class="palavra">aqui</span>
+                      <span class="palavra">que</span>
+                      <span class="palavra">mudou</span>
+                      <span class="palavra">o</span>
+                      <span class="palavra">placar</span>
+                      <span class="palavra">inteiro</span>
+                      <span class="palavra">da</span>
+                      <span class="palavra">partida.</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div class="barra-status">
+          <span>Salvo</span><span>Escopo de Desfazer: Projeto inteiro</span>
+          <span class="empurra"><kbd>F6</kbd> trocar região · <kbd>Ctrl F</kbd> buscar · <kbd>?</kbd> atalhos</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== VARIANTE 2: TRANSCREVENDO POR BLOCOS 1366 ==================== -->
+  <section class="wf-variante" id="transcrevendo">
+    <h2>Transcrevendo em andamento · 1366 × 768 (Progresso determinístico por blocos de 10 min e pausar preservando SQLite)</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal de Lives ▾</button>
+          <nav class="etapas">
+            <span class="etapa atual">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa">2. Cortes<small>6 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra">
+            <button class="btn">Fila · 1 ativo</button>
+            <button class="btn">Comandos <kbd>Ctrl K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+          </div>
+        </div>
+
+        <div class="conteudo coluna" style="gap: 0">
+          <div class="cab-fonte">
+            <button class="btn">← Fontes</button>
+            <strong>Live_15_11_cortada.mp4</strong>
+            <span class="mono rotulo">03:42:10 · 1080p · Faixa 1</span>
+            <span class="selo cheio">✓ Disponível</span>
+            <button class="btn prim empurra" disabled>Selecionar Cortes →</button>
+          </div>
+
+          <div class="linha cresce" style="align-items: stretch; gap: 0; min-height: 0; overflow: hidden;">
+            <!-- Esquerda: Progresso por blocos -->
+            <aside class="painel" style="width: 470px">
+              <div class="painel-corpo">
+                <div class="cartao" style="border-width: 2px; border-color: var(--texto)">
+                  <div class="linha">
+                    <strong>Transcrevendo bloco 15 de 23…</strong><span class="n">11</span>
+                    <span class="mono empurra"><strong>64%</strong></span>
+                  </div>
+                  <div class="barra-prog" role="progressbar" aria-valuenow="64"><i style="--p: 64%"></i></div>
+                  <div class="linha rotulo">
+                    <span>Motor: Local (GPU)</span>
+                    <span class="mono empurra">ETA restante: ~5 min</span>
+                  </div>
+                  <div class="rotulo">Blocos concluídos já estão salvos no SQLite e sobrevivem se você pausar ou fechar o app.</div>
+                  <div class="coluna" style="gap: 2px; max-height: 150px; overflow: auto; border-top: 1px solid var(--sutil); padding-top: 6px">
+                    <div class="bloco-item"><span class="mono">✓ 00:00:00–00:10:00</span><span class="selo empurra">GPU</span></div>
+                    <div class="bloco-item"><span class="mono">✓ 00:10:00–00:20:00</span><span class="selo empurra">GPU</span></div>
+                    <div class="bloco-item"><span class="mono">✓ 00:20:00–00:30:00</span><span class="selo empurra">CPU (fallback)</span></div>
+                    <div class="bloco-item rotulo">… blocos 4 a 14 salvos</div>
+                    <div class="bloco-item"><span class="mono">▶ 02:20:00–02:30:00</span><span class="selo cheio empurra">Em andamento</span></div>
+                  </div>
+                  <button class="btn">Pausar / Cancelar mantendo blocos salvos</button>
+                </div>
+
+                <div class="cartao">
+                  <strong>Sinais para Seleção de Cortes</strong>
+                  <div class="rotulo">Energia do áudio: será medida automaticamente ao concluir a Transcrição.</div>
+                  <div class="rotulo">Chat da live: disponível para busca após concluir ou manualmente.</div>
+                </div>
+              </div>
+            </aside>
+
+            <!-- Direita: Painel didático de blocos em andamento -->
+            <section class="cresce coluna" style="padding: 20px; background: var(--tela); justify-content: center; align-items: center">
+              <div class="caixa coluna leitura" style="padding: 20px; gap: 10px">
+                <strong>Transcrição em andamento — 14 de 23 blocos salvos</strong>
+                <p style="margin: 0; color: var(--texto-2)">
+                  Você pode navegar para outras Fontes ou revisar Cortes de outra live enquanto esta Transcrição continua na Fila de Jobs.
+                </p>
+                <div class="banner">
+                  <span>Progresso salvo até <strong class="mono">02:20:00</strong>. Se pausar agora, poderá retomar exatamente desse ponto sem refazer os blocos prontos.</span>
+                </div>
+                <div class="coluna" style="gap: 6px">
+                  <div class="texto-ph" style="width: 92%"></div>
+                  <div class="texto-ph" style="width: 78%"></div>
+                  <div class="texto-ph" style="width: 85%"></div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div class="barra-status">
+          <span>Salvo</span><span>Transcrição: bloco 15/23 · GPU · 64%</span>
+          <span class="empurra"><kbd>F6</kbd> trocar região · <kbd>Ctrl J</kbd> Fila de Jobs · <kbd>?</kbd> atalhos</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== VARIANTE 3: 1440 GROQ + LEITURA 72CH ==================== -->
+  <section class="wf-variante" id="largo">
+    <h2>Largo · 1440 × 900 (Motor Groq remoto com <span class="mono">&lt;ResumoCustoPrivacidade&gt;</span> + Leitor com timestamps à esquerda e leitura <span class="mono">≤ 72 ch</span>)</h2>
+    <div class="wf-quadro w1440">
+      <div class="shell">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal de Lives ▾</button>
+          <nav class="etapas">
+            <span class="etapa atual">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa">2. Cortes<small>6 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra">
+            <button class="btn">Fila · 1 ativo</button>
+            <button class="btn">Comandos <kbd>Ctrl K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+          </div>
+        </div>
+
+        <div class="conteudo coluna" style="gap: 0">
+          <div class="cab-fonte">
+            <button class="btn">← Fontes</button>
+            <strong>Podcast_ep42.mp4</strong>
+            <span class="mono rotulo">01:18:45 · 1080p · Faixa 1</span>
+            <span class="selo cheio">✓ Disponível</span>
+            <div class="campo campo-texto" style="width: 118px; height: 26px"><span>Português</span><span>▾</span></div>
+            <button class="btn" style="height: 26px">Permissão: Sem permissão</button>
+            <button class="btn prim empurra">Selecionar Cortes →</button>
+          </div>
+
+          <div class="linha cresce" style="align-items: stretch; gap: 0; min-height: 0; overflow: hidden;">
+            <!-- Esquerda: 420px com Groq + ResumoCustoPrivacidade -->
+            <aside class="painel" style="width: 420px">
+              <div class="painel-corpo">
+                <div class="cartao">
+                  <strong>Motor de transcrição</strong>
+                  <span class="radio-linha"><span class="radio-ponto"></span> Local — US$ 0,00</span>
+                  <span class="radio-linha"><span class="radio-ponto ativo"></span> <strong>Groq remoto</strong></span>
+
+                  <div class="resumo-custo"><span class="n">12</span>
+                    <div class="linha"><strong>Resumo de Custo e Privacidade</strong><span class="selo cheio empurra">Remoto (HTTPS)</span></div>
+                    <div>Tarefa: <strong>Transcrição Groq</strong> · Modelo: <span class="mono">whisper-large-v3-turbo</span></div>
+                    <div>Destino: <span class="mono">api.groq.com</span> (envia apenas o áudio com fala em FLAC)</div>
+                    <div class="mono">Estimativa: <strong>~US$ 0,14 – US$ 0,19</strong> (mínimo 10 s por chamada)</div>
+                    <div class="rotulo">Chave no cofre: ✓ Configurada (<a href="#/config/provedores" style="color: var(--nota)">Configurar</a>)</div>
+                    <label class="radio-linha" style="margin-top: 2px">
+                      <span class="chk ativo">✓</span>
+                      <span>Autorizo enviar o áudio desta Fonte para o Groq.</span>
+                    </label>
+                  </div>
+
+                  <button class="btn prim">Iniciar transcrição</button>
+                </div>
+
+                <div class="cartao">
+                  <strong>Sinais para Seleção de Cortes</strong>
+                  <div class="linha">
+                    <span class="rotulo">Energia do áudio: Ainda não medida</span>
+                    <button class="btn empurra" style="height: 24px">Medir energia agora</button>
+                  </div>
+                  <div class="rotulo">Chat da live: Disponível apenas para lives importadas por URL do YouTube.</div>
+                </div>
+              </div>
+            </aside>
+
+            <!-- Direita > 960px: timestamps à esquerda + texto ≤ 72ch -->
+            <section class="cresce coluna" style="gap: 0; min-height: 0; overflow: hidden; background: var(--tela)">
+              <div class="painel-cab" style="background: var(--painel)">
+                <button class="btn" style="height: 24px">Desfazer <kbd>Ctrl Z</kbd></button>
+                <button class="btn" style="height: 24px">Refazer</button>
+                <div class="campo empurra" style="width: 360px; height: 26px">Buscar nesta Fonte ou em todo o Projeto… <kbd>Ctrl F</kbd></div>
+              </div>
+              <div class="painel-corpo" style="gap: 12px">
+                <div class="frase-linha-larga">
+                  <div class="mono rotulo" style="padding-top: 4px">
+                    <div class="linha"><span>00:02:10 – 00:02:18</span><span class="n">13</span></div>
+                    <span class="selo">pt</span>
+                  </div>
+                  <div class="cartao" style="line-height: 2.0">
+                    <div><span class="palavra">Bem-vindos</span> <span class="palavra">ao</span> <span class="palavra">episódio</span> <span class="palavra">quarenta</span> <span class="palavra">e</span> <span class="palavra">dois,</span> <span class="palavra">hoje</span> <span class="palavra">vamos</span> <span class="palavra">conversar</span> <span class="palavra">sobre</span> <span class="palavra">produção</span> <span class="palavra">independente.</span></div>
+                  </div>
+                </div>
+                <div class="frase-linha-larga">
+                  <div class="mono rotulo" style="padding-top: 6px">00:02:18 – 00:02:21</div>
+                  <div class="faixa-silencio"><strong>Silêncio · 3,1 s</strong><span class="empurra">Clique para pular</span></div>
+                </div>
+                <div class="frase-linha-larga">
+                  <div class="mono rotulo" style="padding-top: 4px">00:02:21 – 00:02:30<br><span class="selo">en</span></div>
+                  <div class="cartao" style="line-height: 2.0">
+                    <div><span class="palavra">First</span> <span class="palavra">of</span> <span class="palavra">all,</span> <span class="palavra">let's</span> <span class="palavra">check</span> <span class="palavra">the</span> <span class="palavra">audio</span> <span class="palavra">levels</span> <span class="palavra">on</span> <span class="palavra">track</span> <span class="palavra">two.</span></div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div class="barra-status">
+          <span>Salvo</span><span>Sem jobs ativos</span>
+          <span class="empurra"><kbd>F6</kbd> trocar região · <kbd>?</kbd> atalhos</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== VARIANTE 4: VAZIO 1366 ==================== -->
+  <section class="wf-variante" id="vazio">
+    <h2>Antes de transcrever · 1366 × 768 (<span class="mono">?estado=vazio</span> — Fonte recém-importada sem Transcrição)</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal de Lives ▾</button>
+          <nav class="etapas"><span class="etapa atual">1. Fontes e Transcrição<small>4</small></span><span class="etapa">2. Cortes</span><span class="etapa">3. Exportação</span></nav>
+          <div class="linha empurra"><button class="btn">Fila</button><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </div>
+        <div class="conteudo coluna" style="gap: 0">
+          <div class="cab-fonte">
+            <button class="btn">← Fontes</button>
+            <strong>Podcast_ep42.mp4</strong>
+            <span class="mono rotulo">01:18:45 · 1080p</span>
+            <span class="selo cheio">✓ Disponível</span>
+            <button class="btn prim empurra" disabled>Selecionar Cortes →</button>
+          </div>
+          <div class="linha cresce" style="align-items: stretch; gap: 0; min-height: 0; overflow: hidden;">
+            <aside class="painel" style="width: 470px">
+              <div class="painel-corpo">
+                <div class="cartao">
+                  <strong>Motor de transcrição</strong>
+                  <span class="radio-linha"><span class="radio-ponto ativo"></span> Local — US$ 0,00</span>
+                  <div class="rotulo" style="padding-left: 20px">No modo automático, o agrupamento VAD fica ligado na CPU (acelera em ~18%) e desligado na GPU (evita ~1 GB VRAM extra).</div>
+                  <div class="linha"><button class="btn">Estimar tempo (amostra de 30 s)</button><button class="btn prim">Iniciar transcrição</button></div>
+                </div>
+              </div>
+            </aside>
+            <section class="cresce coluna" style="justify-content: center; align-items: center; background: var(--tela); padding: 32px">
+              <div class="caixa coluna leitura" style="padding: 24px; align-items: center; text-align: center; gap: 10px">
+                <strong style="font-size: 15px">Esta Fonte ainda não foi transcrita</strong>
+                <p style="margin: 0; color: var(--texto-2)">
+                  Escolha o Motor ao lado (Local grátis ou Groq remoto) e clique em <strong>Iniciar transcrição</strong>.
+                </p>
+                <button class="btn prim">Focar configuração do Motor</button><span class="n">14</span>
+              </div>
+            </section>
+          </div>
+        </div>
+        <div class="barra-status"><span>Salvo</span><span>Sem jobs ativos</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== VARIANTE 5: OFFLINE + ERRO ACIONÁVEL 1366 ==================== -->
+  <section class="wf-variante" id="offline">
+    <h2>Fonte Offline + Erro acionável · 1366 × 768 (Leitor da Transcrição continua 100% editável; player bloqueado)</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal de Lives ▾</button>
+          <nav class="etapas"><span class="etapa atual">1. Fontes e Transcrição<small>4</small></span><span class="etapa">2. Cortes</span><span class="etapa">3. Exportação</span></nav>
+          <div class="linha empurra"><span class="selo cheio">🔒 Somente local</span><button class="btn">Fila</button><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </div>
+        <div class="conteudo coluna" style="gap: 0">
+          <div class="cab-fonte">
+            <button class="btn">← Fontes</button>
+            <strong>VOD_09_11_youtube.mp4</strong>
+            <span class="mono rotulo">01:50:00 · 1080p</span>
+            <span class="selo cheio">! Offline</span>
+            <button class="btn prim">Relocalizar arquivo</button>
+            <button class="btn prim empurra">Selecionar Cortes →</button>
+          </div>
+          <div class="linha cresce" style="align-items: stretch; gap: 0; min-height: 0; overflow: hidden;">
+            <aside class="painel" style="width: 470px">
+              <div class="painel-corpo">
+                <div class="cartao" role="alert" style="border-width: 2px; border-color: var(--texto)">
+                  <strong>! O arquivo da Fonte não está disponível no disco</strong><span class="n">15</span>
+                  <div class="rotulo">Iniciar nova transcrição, amostra de 30 s e medição de energia estão bloqueados até você relocalizar o arquivo.</div>
+                  <div class="linha"><button class="btn prim">Relocalizar arquivo</button></div>
+                </div>
+
+                <div class="cartao" role="alert">
+                  <strong>! Bloqueado pelo modo Somente local</strong>
+                  <div class="rotulo">O Motor Groq envia áudio para fora da máquina.</div>
+                  <div class="linha"><button class="btn">Usar Motor Local</button><button class="btn">Revisar Somente local</button></div>
+                  <details><summary class="rotulo" style="cursor: pointer">Ver detalhe técnico</summary><div class="mono rotulo">code: local_only_violation</div></details>
+                </div>
+              </div>
+            </aside>
+
+            <section class="cresce coluna" style="gap: 0; min-height: 0; overflow: hidden; background: var(--tela)">
+              <div class="painel-cab" style="background: var(--painel)">
+                <button class="btn" style="height: 24px">Desfazer <kbd>Ctrl Z</kbd></button>
+                <button class="btn" style="height: 24px">Refazer</button>
+                <div class="campo empurra" style="width: 260px; height: 26px">Buscar… <kbd>Ctrl F</kbd></div>
+              </div>
+              <div class="painel-corpo">
+                <!-- Banner no lugar do player -->
+                <div class="banner">
+                  <span>⚠ <strong>Vídeo indisponível no disco</strong> — você ainda pode ler, buscar e corrigir toda a Transcrição. Relocalize a Fonte para reproduzir o trecho.</span>
+                  <button class="btn prim empurra" style="height: 24px">Relocalizar</button>
+                </div>
+                <div class="cartao">
+                  <div class="linha rotulo"><span class="mono">00:38:19 – 00:38:27</span><span class="selo">pt</span></div>
+                  <div style="line-height: 2.1">
+                    <span class="palavra">Olha</span> <span class="palavra">a</span> <span class="palavra">jogada</span> <span class="palavra">ensaiada</span> <span class="palavra">que</span> <span class="palavra">eles</span> <span class="palavra">fizeram</span> <span class="palavra">no</span> <span class="palavra">meio.</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+        <div class="barra-status"><span>Salvo</span><span>Fonte offline — edição de texto liberada</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li>Voltar para <span class="mono">#/projeto/:id/fontes</span>; se <span class="mono">:fonteId</span> não existir em <span class="mono">sources.list</span>, redireciona para a lista com alerta humano.</li>
+      <li>CTA <strong>Selecionar Cortes →</strong> (<span class="mono">#/projeto/:id/cortes?fonte=:fonteId</span>) só fica habilitado quando <span class="mono">transcript.state === "complete"</span>.</li>
+      <li><strong>Amostra de 30 s</strong> (<span class="mono">transcription.estimate</span>): calcula faixa <span class="mono">low_s–high_s</span> e avisa se houver <span class="mono">low_ram</span> ou <span class="mono">ram_unknown</span>; cancelável via <span class="mono">components.cancel { id: "transcription-estimate" }</span>.</li>
+      <li><strong>Agrupamento VAD (#279):</strong> chama <span class="mono">transcription.grouping</span>, que altera uma preferência global do app (sincronizada com <span class="mono">#/config/componentes</span>), com aviso obrigatório sobre CPU (~18% mais rápido) vs. GPU (~1 GB VRAM extra).</li>
+      <li><strong>Sinais:</strong> quando <span class="mono">energy.status().measured === false</span> e Transcrição está pronta, exibe botão <em>Medir energia agora</em> (<span class="mono">energy.start</span>); para lives por URL sem chat buscado, exibe <em>Buscar chat da live</em> (<span class="mono">chat.fetch</span>).</li>
+      <li><strong>Desfazer/Refazer</strong> (<span class="mono">transcription.undo</span> / <span class="mono">redo</span>) opera sobre uma pilha única do Projeto inteiro; se a correção desfeita pertencer a outra Fonte, exibe toast com link direto <em>"Ir para Fonte afetada"</em>.</li>
+      <li><span class="mono">&lt;PlayerReferenciaFonte&gt;</span> usa <span class="mono">mediaUrl("source/" + fonteId)</span> (HTTP 206 Range) para suportar lives longas (&gt; 10 min) com fallback gracioso se o codec não tocar na WebView. Clicar em qualquer palavra faz <span class="mono">seek</span> para <span class="mono">word.start_us</span>.</li>
+      <li>Palavras corrigidas (<span class="mono">corrected === true</span>) sempre combinam sublinhado pontilhado + ícone ✎ + <span class="mono">aria-description</span> (SC 1.4.1).</li>
+      <li>Toda palavra clicável tem área mínima ≥ 24×24 CSS px (SC 2.5.8). Pressionar <kbd>F2</kbd> ou <kbd>Enter</kbd> na palavra focada abre edição inline (<span class="mono">transcription.correct</span>) mantendo o foco estável na página virtualizada; <kbd>Enter</kbd> salva sem alterar tempos e <kbd>Esc</kbd> cancela.</li>
+      <li>Trechos de <span class="mono">Silêncio</span> da timeline (<span class="mono">transcription.timeline</span>) são exibidos com padrão hachurado e rótulo explícito, clicáveis para pular no player e não editáveis.</li>
+      <li>Durante transcrição em andamento, eventos <span class="mono">probe</span>, <span class="mono">gpu_probe_fallback</span>, <span class="mono">transcribing</span> e <span class="mono">complete</span> atualizam barra e blocos; trocar de Motor em transcrição parcial (<span class="mono">resume_us &gt; 0</span>) abre <span class="mono">&lt;ConfirmDialog&gt;</span> informando quantos blocos salvos serão apagados (<span class="mono">engine_change_confirmation</span>).</li>
+      <li><span class="mono">&lt;ResumoCustoPrivacidade&gt;</span> do Groq exige chave configurada no cofre e consentimento explícito (<span class="mono">transcription.groq.confirm</span>) antes de iniciar.</li>
+      <li>Na largura 1440+ px, a coluna esquerda fixa em ~420 px e o Leitor limita linhas a <span class="mono">72 ch</span> com coluna dedicada de timestamps à esquerda e badge de idioma por Frase (suporta lives bilíngues).</li>
+      <li><strong>Decisão de wireframe:</strong> quando a Transcrição foi pausada com blocos parciais (<span class="mono">resume_us &gt; 0</span>) e sem job ativo, exibe faixa informativa no topo do Leitor com botão <em>Retomar de MM:SS</em>; quando <span class="mono">?estado=carregando</span> estiver ativo, exibe <span class="mono">&lt;Esqueleto&gt;</span> no cabeçalho, 2 cartões à esquerda e 6 linhas de Frase à direita.</li>
+      <li>Se o arquivo estiver <span class="mono">offline</span> ou <span class="mono">changed</span>, apenas o player e novos processamentos ficam bloqueados; leitura, busca (<kbd>Ctrl F</kbd>) e correção de grafia (<kbd>F2</kbd>/<kbd>Enter</kbd>) funcionam integralmente via SQLite.</li>
+    </ol>
+  </section>
+</main>
+<script src="kit.js"></script>
+</body>
+</html>

@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A3 · Assistente de primeiro uso — Wireframes Clipes v2</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .assistente-wrap { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; padding: 20px 24px; gap: 14px; min-height: 0; }
+  .assistente-miolo { width: 100%; max-width: 760px; display: flex; flex-direction: column; gap: 12px; min-height: 0; flex: 1; }
+  .passos-ind { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 4px 0; }
+  .passo-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 14px; border: 1px solid var(--borda); color: var(--texto-2); background: var(--tela); }
+  .passo-pill.atual { border-color: var(--texto); color: var(--texto); font-weight: 600; background: var(--painel); }
+  .passo-pill.feito { background: var(--sutil); color: var(--texto); }
+  .passo-traco { width: 48px; height: 1px; background: var(--borda); }
+  .assistente-cartao { border: 1px solid var(--borda); border-radius: 6px; background: var(--tela); padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; overflow: auto; min-height: 0; flex: 1; }
+  .assistente-rodape { display: flex; align-items: center; gap: 8px; padding-top: 8px; border-top: 1px solid var(--sutil); }
+  .bloco-comp { border: 1px solid var(--borda); border-radius: var(--r); padding: 12px; display: flex; flex-direction: column; gap: 8px; background: var(--painel); }
+  .opcao-prov { border: 1px solid var(--borda); border-radius: var(--r); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; background: var(--tela); }
+  .opcao-prov.sel { border-color: var(--texto); background: var(--painel); }
+  .radio-sim { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--texto); font-size: 9px; flex: none; }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>A3 · Assistente de primeiro uso</h1>
+    <p>Rota: <span class="mono">#/assistente?passo=1|2</span> (<span class="mono">&lt;Tela modoMinimo&gt;</span>). Fonte:
+      <span class="mono">telas/A-shell-inicio-config.md</span> (Tela 3),
+      <span class="mono">01-arquitetura.md</span> §3 e
+      <span class="mono">02-consolidacao.md</span> §1 e §12.</p>
+    <nav>
+      <a href="#passo1">Passo 1 (download em andamento)</a>
+      <a href="#passo2">Passo 2 (Provedores)</a>
+      <a href="#concluido">Concluído</a>
+    </nav>
+  </header>
+
+  <!-- 1. Passo 1: FFmpeg + Motor de transcrição (com download em andamento) -->
+  <section class="wf-variante" id="passo1">
+    <h2>1. Passo 1: FFmpeg e Motor de transcrição (download em andamento) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <strong>Clipes · Configuração inicial</strong><span class="n">1</span>
+          <div class="linha empurra">
+            <button class="btn fantasma">Configurar depois</button>
+          </div>
+        </header>
+
+        <main class="conteudo">
+          <div class="assistente-wrap">
+            <div class="assistente-miolo">
+              <nav class="passos-ind" aria-label="Etapas da configuração inicial">
+                <span class="passo-pill atual" aria-current="step">● 1. Essencial e Hardware</span>
+                <span class="passo-traco"></span>
+                <span class="passo-pill">2. Provedores</span>
+              </nav>
+
+              <div class="assistente-cartao">
+                <h2 style="margin: 0; font-size: 17px">Passo 1: Essencial para transcrever e cortar</h2>
+
+                <!-- Bloco FFmpeg -->
+                <div class="bloco-comp">
+                  <div class="linha">
+                    <strong>1. FFmpeg e FFprobe</strong>
+                    <span class="selo cheio empurra">✓ Pronto</span><span class="n">2</span>
+                  </div>
+                  <span class="rotulo">Usado para ler vídeos, gerar previews e exportar. ~150 MB · GPL · executável separado.</span>
+                  <details>
+                    <summary class="rotulo" style="cursor: pointer">Usar FFmpeg já instalado no computador</summary>
+                    <div class="linha" style="margin-top: 6px">
+                      <div class="campo cresce mono">/usr/bin/ffmpeg</div>
+                      <button class="btn">Validar caminho</button>
+                    </div>
+                  </details>
+                </div>
+
+                <!-- Bloco Motor de Transcrição -->
+                <div class="bloco-comp">
+                  <div class="linha">
+                    <strong>2. Motor de transcrição local</strong>
+                    <span class="selo empurra">Baixando…</span>
+                  </div>
+                  <div>
+                    Placa NVIDIA detectada (<strong>NVIDIA RTX 3050 · 4 GB</strong> · 16 GB RAM). A transcrição usará aceleração por placa de vídeo.<span class="n">3</span>
+                  </div>
+                  <span class="rotulo">Recomendado: Precisão alta com aceleração NVIDIA (~1,6 GB · inclui ambiente Python isolado + modelo Whisper).</span>
+                  <div class="linha">
+                    <span class="rotulo mono">Pasta: C:\Users\Maria\AppData\Local\Clipes\data</span>
+                    <button class="btn fantasma" style="height: 22px; font-size: 12px; text-decoration: underline">Mudar pasta de instalação</button>
+                  </div>
+
+                  <!-- Progresso em andamento -->
+                  <div class="caixa coluna" style="gap: 6px; margin-top: 4px" role="progressbar" aria-valuenow="64" aria-valuemin="0" aria-valuemax="100">
+                    <div class="linha">
+                      <span>Baixando modelo Whisper recomendado…</span><span class="n">4</span>
+                      <span class="mono empurra">64% · 1,02 GB / 1,60 GB</span>
+                    </div>
+                    <div class="barra-prog" style="--p: 64%"><i></i></div>
+                    <div class="linha">
+                      <span class="rotulo">Etapa 2 de 2 (ambiente Python isolado pronto)</span>
+                      <button class="btn empurra">Cancelar</button>
+                    </div>
+                  </div>
+
+                  <div class="linha">
+                    <button class="btn" disabled>Instalar motor recomendado</button>
+                    <button class="btn" disabled>Testar meu hardware</button>
+                    <details class="empurra">
+                      <summary class="rotulo" style="cursor: pointer">Detalhes técnicos</summary>
+                    </details>
+                  </div>
+                </div>
+
+                <p class="rotulo" style="margin: 0">
+                  Ferramentas para baixar links do YouTube (<span class="mono">yt-dlp/deno</span>), reenquadramento automático de rosto (<span class="mono">YuNet</span>) e voz por Narração (<span class="mono">pocket-tts</span>) serão oferecidas só quando você usar esses recursos.
+                </p>
+              </div>
+
+              <div class="assistente-rodape">
+                <button class="btn fantasma">Pular por enquanto</button>
+                <button class="btn prim empurra">Próximo: Provedores →</button>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="barra-status">
+          <span>Baixando modelo Whisper recomendado: 64%</span>
+          <span class="empurra"><kbd>F6</kbd> alternar região · <kbd>Esc</kbd> cancelar confirmação</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Passo 2: Provedores -->
+  <section class="wf-variante" id="passo2">
+    <h2>2. Passo 2: Provedores · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <strong>Clipes · Configuração inicial</strong>
+          <div class="linha empurra"><button class="btn fantasma">Configurar depois</button></div>
+        </header>
+
+        <main class="conteudo">
+          <div class="assistente-wrap">
+            <div class="assistente-miolo">
+              <nav class="passos-ind" aria-label="Etapas da configuração inicial">
+                <span class="passo-pill feito">✓ 1. Essencial e Hardware</span>
+                <span class="passo-traco"></span>
+                <span class="passo-pill atual" aria-current="step">● 2. Provedores</span>
+              </nav>
+
+              <div class="assistente-cartao" role="radiogroup" aria-label="Escolha de Provedor">
+                <h2 style="margin: 0; font-size: 17px">Passo 2: Quem escolhe os Cortes e sugere títulos</h2>
+
+                <div class="coluna" style="gap: 8px">
+                  <span class="rotulo"><strong>Detectamos no seu computador:</strong></span>
+
+                  <div class="opcao-prov sel" role="radio" aria-checked="true">
+                    <div class="linha">
+                      <span class="radio-sim">●</span>
+                      <strong>Ollama</strong>
+                      <span class="mono rotulo">(http://127.0.0.1:11434)</span>
+                      <span class="selo empurra">🔒 Local · US$ 0,00 · não sai do computador</span><span class="n">5</span>
+                    </div>
+                    <div class="linha" style="padding-left: 22px">
+                      <span class="rotulo">Modelo encontrado:</span>
+                      <div class="campo" style="width: 200px; color: var(--texto)">qwen2.5:14b ▾</div>
+                      <button class="btn">Testar conexão</button>
+                    </div>
+                  </div>
+
+                  <div class="opcao-prov" role="radio" aria-checked="false">
+                    <div class="linha">
+                      <span class="radio-sim"></span>
+                      <strong>Codex CLI</strong>
+                      <span class="rotulo">(assinatura local encontrada)</span>
+                      <span class="selo empurra">Assinatura via CLI · consome cota do seu plano</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="coluna" style="gap: 8px">
+                  <span class="rotulo"><strong>Ou configure uma chave de API na nuvem:</strong></span>
+
+                  <div class="opcao-prov" role="radio" aria-checked="false">
+                    <div class="linha">
+                      <span class="radio-sim"></span>
+                      <strong>Chave de API (OpenAI, Anthropic, Gemini, OpenRouter…)</strong>
+                    </div>
+                    <div class="linha" style="padding-left: 22px">
+                      <div class="campo" style="width: 130px; color: var(--texto)">OpenAI ▾</div>
+                      <div class="campo" style="width: 190px; color: var(--texto)">gpt-4o-mini</div>
+                      <div class="campo cresce">Chave de API (salva no cofre do SO)</div>
+                    </div>
+                    <div class="linha" style="padding-left: 22px">
+                      <label class="linha rotulo" style="flex: 1"><input type="checkbox" disabled> <span>Concordo em enviar apenas texto de transcrições para <span class="mono">api.openai.com</span> (nunca vídeo ou áudio)</span></label><span class="n">6</span>
+                      <button class="btn empurra" disabled>Testar conexão</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="assistente-rodape">
+                <button class="btn">← Voltar</button>
+                <button class="btn fantasma">Pular por enquanto</button>
+                <button class="btn prim empurra">Concluir configuração</button>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="barra-status">
+          <span>Sonda loopback concluída: 1 servidor local e 1 CLI encontrados</span>
+          <span class="empurra"><kbd>F6</kbd> alternar região</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Concluído -->
+  <section class="wf-variante" id="concluido">
+    <h2>3. Concluído (resumo antes de ir para Início) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <strong>Clipes · Configuração inicial</strong>
+        </header>
+
+        <main class="conteudo">
+          <div class="assistente-wrap">
+            <div class="assistente-miolo">
+              <nav class="passos-ind" aria-label="Etapas da configuração inicial">
+                <span class="passo-pill feito">✓ 1. Essencial e Hardware</span>
+                <span class="passo-traco"></span>
+                <span class="passo-pill feito">✓ 2. Provedores</span>
+              </nav>
+
+              <div class="assistente-cartao" style="justify-content: center">
+                <div class="coluna" style="gap: 4px">
+                  <div class="linha"><h2 style="margin: 0; font-size: 18px">Configuração inicial concluída</h2><span class="n">7</span></div>
+                  <span class="rotulo">Os componentes essenciais e seu Provedor padrão estão prontos para uso.</span>
+                </div>
+
+                <div class="caixa coluna" style="gap: 8px; background: var(--painel)">
+                  <div class="linha"><strong>✓ FFmpeg e FFprobe</strong><span class="selo cheio empurra">Pronto (~150 MB · GPL)</span></div>
+                  <div class="linha"><strong>✓ Motor de transcrição local</strong><span class="selo cheio empurra">Pronto · NVIDIA RTX 3050</span></div>
+                  <div class="linha"><strong>✓ Provedor padrão</strong><span class="selo cheio empurra">Ollama (qwen2.5:14b) · Local · US$ 0,00</span></div>
+                </div>
+
+                <p class="rotulo" style="margin: 0">
+                  Você pode adicionar outros Perfis de Provedor, configurar Tarefas individuais ou alterar a pasta de cache a qualquer momento em <strong>Configurações</strong> (<kbd>Ctrl+,</kbd>).
+                </p>
+
+                <div class="linha" style="margin-top: 4px">
+                  <button class="btn prim">Ir para Projetos (#/inicio)</button>
+                  <button class="btn">Abrir Configurações de Provedores</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="barra-status">
+          <span>Configuração inicial salva</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li><strong>Shell mínimo (<span class="mono">&lt;Tela modoMinimo&gt;</span>):</strong> oculta seletor de Projeto, etapas e selos; mantém apenas identificação da janela e atalho discreto <em>"Configurar depois"</em> (<span class="mono">assistant.complete { skipped: true }</span>).</li>
+      <li><strong>FFmpeg:</strong> quando ausente ou incompleto, exibe botão primário <em>"Baixar FFmpeg"</em> que abre <span class="mono">&lt;ConfirmDialog&gt;</span> com tamanho, licença GPL e URL oficial antes de disparar <span class="mono">components.download { id: "ffmpeg", confirmed: true }</span>. No macOS sem entrada no manifesto, orienta usar o FFmpeg do sistema (<span class="mono">components.ffmpeg.system</span>).</li>
+      <li><strong>Tradução de hardware:</strong> a camada principal nunca expõe termos internos (<span class="mono">int8_float16</span>, <span class="mono">handshake</span>, <span class="mono">CUDA</span>), que ficam recolhidos em <span class="mono">&lt;details&gt;Detalhes técnicos&lt;/details&gt;</span>. Sem placa NVIDIA compatível (ou com GPU AMD/Intel), explica claramente que a transcrição rodará no processador (CPU) com modelo mais leve.</li>
+      <li><strong>Orquestração do download:</strong> clicar em <em>"Instalar motor recomendado"</em> abre <span class="mono">&lt;ConfirmDialog&gt;</span> com tamanho e licença e encadeia <span class="mono">components.worker.install</span> → <span class="mono">components.models.download</span> → <span class="mono">transcription.hardware.probe</span>; <em>Cancelar</em> chama <span class="mono">components.cancel</span>.</li>
+      <li><strong>Passo 2 (<span class="mono">assistant.detect</span>):</strong> sonda portas loopback em até 800 ms (exibindo <span class="mono">&lt;Esqueleto&gt;</span> durante a busca). Se não encontrar servidores locais nem CLIs, exibe estado vazio neutro e foca a opção de chave de API. Claude Code CLI exibe selo explícito <em>"Experimental"</em>.</li>
+      <li><strong>Consentimento e cofre:</strong> o botão <em>"Testar conexão"</em> (<span class="mono">provider.test</span>) só habilita após marcar o consentimento de envio de texto (<span class="mono">provider.confirm</span> / <span class="mono">provider.cli.confirm</span>). A chave vai direto para o cofre do sistema via <span class="mono">provider.key.set</span>.</li>
+      <li><strong>Decisão de wireframe (tela Concluído):</strong> a especificação (<span class="mono">telas/A-shell-inicio-config.md</span> Tela 3 §4) prevê que <em>"Concluir configuração"</em> chama <span class="mono">assistant.default.set</span> + <span class="mono">assistant.complete { skipped: false }</span> e navega para <span class="mono">#/inicio</span>. Esta variante representa o estado resumido de confirmação imediatamente antes de navegar para <span class="mono">#/inicio</span>.</li>
+    </ol>
+  </section>
+</main>
+<script src="kit.js"></script>
+</body>
+</html>

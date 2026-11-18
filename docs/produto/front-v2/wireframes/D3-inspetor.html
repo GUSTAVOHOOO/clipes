@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>D3 · Inspetor: as 5 Abas — Wireframes front v2</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .insp-abas { display: flex; flex-wrap: wrap; gap: 2px; padding: 4px 8px; border-bottom: 1px solid var(--borda); background: var(--tela); }
+  .insp-aba { padding: 4px 7px; font-size: 11px; border-radius: 3px; color: var(--texto-2); }
+  .insp-aba.atual { background: var(--sutil); color: var(--texto); font-weight: 600; }
+  .insp-col {
+    width: 390px; flex: none; background: var(--painel); border-right: 1px solid var(--borda);
+    display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+  }
+  .insp-col .painel-corpo { padding: 10px; gap: 8px; font-size: 12px; }
+  .grade-layouts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+  .layout-btn {
+    border: 1px solid var(--borda); border-radius: var(--r); background: var(--tela);
+    padding: 6px 4px; text-align: center; font-size: 11px;
+  }
+  .layout-btn.ativo { outline: 2px solid var(--texto); font-weight: 600; background: var(--sutil); }
+  .seg-btn { padding: 3px 8px; border: 1px solid var(--borda); background: var(--tela); font-size: 11px; color: var(--texto-2); }
+  .seg-btn.ativo { background: var(--sutil); color: var(--texto); font-weight: 600; border-color: var(--texto); }
+  .campo-num {
+    height: 24px; border: 1px solid var(--borda); border-radius: var(--r); background: var(--tela);
+    padding: 0 6px; display: flex; align-items: center; justify-content: space-between; font-size: 11px;
+  }
+  .cor-amostra { width: 14px; height: 14px; border: 1px solid var(--texto); border-radius: 2px; background: var(--sutil); display: inline-block; }
+  .custo-card {
+    border: 1px solid var(--texto-2); border-radius: var(--r); background: var(--tela);
+    padding: 8px; display: flex; flex-direction: column; gap: 5px; font-size: 12px;
+  }
+  .aux-area {
+    flex: 1; min-width: 0; padding: 14px; background: var(--fundo);
+    display: flex; flex-direction: column; gap: 12px; overflow: auto;
+  }
+  .btn-sm { height: 24px; padding: 0 8px; font-size: 11px; }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>D3 · Inspetor do Corte: as 5 Abas</h1>
+    <p>Rota: <span class="mono">#/projeto/:id/corte/:corteId/editar</span> (Painel direito do Editor).
+      Especificação: <span class="mono">telas/D-corte-editar.md</span> (Zona 3) e <span class="mono">02-consolidacao.md</span> ("Avaliação objetiva do Pacote D").
+      Cada variante expõe todos os controles da aba sem cortes por rolagem, mais seus estados secundários (JIT, conflito, vazio, confirmações).</p>
+    <nav>
+      <a href="#enquadramento">1. Enquadramento</a>
+      <a href="#legendas-traducao">2. Legendas e Tradução</a>
+      <a href="#silencios">3. Silêncios</a>
+      <a href="#audio-sfx">4. Áudio e SFX</a>
+      <a href="#historico">5. Histórico e Snapshots</a>
+    </nav>
+  </header>
+
+  <!-- ABA 1: ENQUADRAMENTO -->
+  <section class="wf-variante" id="enquadramento">
+    <h2>Aba 1 · Enquadramento (Normal + YuNet JIT + Confirmação de limpeza) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <span class="rotulo">Foco no painel direito: Aba 1 — Enquadramento</span>
+          <span class="selo empurra">Inspetor <kbd>Ctrl+]</kbd></span>
+        </div>
+        <div class="contexto-corte">
+          <strong>Corte 2/8: "Reação ao anúncio da placa nova"</strong>
+          <span class="selo cheio">Vídeo transformado</span>
+          <span class="rotulo empurra">Prévia ao lado detalhada em D2 e D5</span>
+        </div>
+
+        <div class="conteudo">
+          <!-- Coluna 1: Estado Normal -->
+          <aside class="insp-col" style="width: 400px">
+            <div class="painel-cab" style="padding: 6px 10px"><span>Inspetor — Estado Normal</span></div>
+            <div class="insp-abas" role="tablist">
+              <span class="insp-aba atual" role="tab" aria-selected="true">Enquadramento</span>
+              <span class="insp-aba">Legendas</span>
+              <span class="insp-aba">Silêncios</span>
+              <span class="insp-aba">Áudio/SFX</span>
+              <span class="insp-aba">Histórico</span>
+            </div>
+            <div class="painel-corpo">
+              <div class="rotulo">Layout 9:16 (<span class="mono">editor.crop.set_layout</span>)</div>
+              <div class="grade-layouts">
+                <div class="layout-btn">Rosto (9:16)</div>
+                <div class="layout-btn">Fit / Centro</div>
+                <div class="layout-btn ativo">Jogo + Webcam</div>
+                <div class="layout-btn">Duas pessoas</div>
+                <div class="layout-btn">Tela cheia ROI</div>
+              </div>
+
+              <div class="caixa">
+                <div class="linha">
+                  <strong>Tela dividida (<span class="mono">splitRatio</span>)</strong>
+                  <span class="mono empurra">30% / 70%</span>
+                </div>
+                <div class="barra-prog" style="margin: 6px 0"><i style="--p: 30%"></i></div>
+                <div class="linha">
+                  <span class="rotulo">Painel ativo:</span>
+                  <div class="linha" style="gap: 0"><span class="seg-btn ativo">Topo</span><span class="seg-btn">Base</span></div><span class="n">1</span>
+                </div>
+                <div class="rotulo" style="margin-top: 4px">Em Jogo + Webcam, o retângulo manual da webcam é o caminho principal.</div>
+              </div>
+
+              <div class="caixa">
+                <div class="linha">
+                  <strong>Reenquadramento automático (YuNet)</strong>
+                  <span class="selo empurra mono">Confiança 0,58</span>
+                </div>
+                <div class="rotulo" style="margin: 3px 0">Em Jogo+Webcam a confiança típica varia entre 0,10 e 0,65.</div>
+                <div class="linha" style="margin-top: 4px">
+                  <button class="btn btn-sm">Reanalisar</button>
+                  <button class="btn prim btn-sm empurra">Aplicar sugestão automática</button><span class="n">2</span>
+                </div>
+                <div class="rotulo" style="margin-top: 4px">⚠ Substitui apenas a sugestão; mantém suas edições manuais. Não entra no Desfazer.</div>
+              </div>
+
+              <div class="caixa">
+                <div class="linha">
+                  <strong>Keyframes manuais (<span class="mono">edits</span> · Topo)</strong>
+                  <button class="btn btn-sm empurra">+ Na agulha</button>
+                </div>
+                <div class="cartao" style="padding: 6px; margin-top: 6px; gap: 4px">
+                  <div class="linha">
+                    <span class="mono"><strong>00:14.200</strong></span>
+                    <label class="rotulo"><input type="checkbox" checked> Corte seco (cut)</label><span class="n">3</span>
+                    <button class="btn btn-sm empurra">Remover</button>
+                  </div>
+                  <div class="grade" style="grid-template-columns: repeat(4, 1fr); gap: 4px">
+                    <div class="campo-num"><span>x</span><span class="mono">420</span></div>
+                    <div class="campo-num"><span>y</span><span class="mono">80</span></div>
+                    <div class="campo-num"><span>w</span><span class="mono">608</span></div>
+                    <div class="campo-num"><span>h</span><span class="mono">1080</span></div>
+                  </div>
+                </div>
+                <button class="btn perigo btn-sm" style="margin-top: 6px; width: 100%; justify-content: center">Limpar todas as edições manuais</button><span class="n">4</span>
+              </div>
+            </div>
+          </aside>
+
+          <!-- Coluna 2: YuNet JIT + Progresso + Fit Vazio -->
+          <aside class="insp-col" style="width: 390px">
+            <div class="painel-cab" style="padding: 6px 10px"><span>Estados: YuNet JIT, Analisando e Fit</span></div>
+            <div class="painel-corpo">
+              <div class="caixa">
+                <div class="linha"><strong>&lt;InstaladorJustInTime recurso="yunet" /&gt;</strong><span class="n">5</span></div>
+                <p class="rotulo" style="margin: 4px 0">O reenquadramento automático usa o Worker Python (~180 MiB) e o modelo YuNet (~340 KiB, licença MIT) salvos na pasta de dados.</p>
+                <div class="linha">
+                  <button class="btn prim btn-sm">Instalar Worker + YuNet</button>
+                  <button class="btn btn-sm">Cancelar</button>
+                </div>
+                <div class="barra-prog" style="margin-top: 6px"><i style="--p: 65%"></i></div>
+                <div class="rotulo mono" style="margin-top: 2px">Baixando yunet.onnx · 65%</div>
+              </div>
+
+              <div class="caixa">
+                <div class="linha"><strong>Analisando enquadramento (<span class="mono">reframe.start</span>)</strong><span class="mono empurra">48%</span></div>
+                <div class="barra-prog" style="margin: 6px 0"><i style="--p: 48%"></i></div>
+                <div class="linha">
+                  <span class="rotulo">Etapa: Detectando rostos (<span class="mono">reframe_faces</span>)</span>
+                  <button class="btn btn-sm empurra">Cancelar</button>
+                </div>
+              </div>
+
+              <div class="caixa tracejada">
+                <strong>Estado vazio do layout Fit / Centro</strong>
+                <p class="rotulo" style="margin: 4px 0 0">O vídeo inteiro já cabe no quadro 9:16 com barras laterais/superiores. Escolha outro layout para preencher a tela.</p>
+              </div>
+            </div>
+          </aside>
+
+          <!-- Coluna 3: Diálogo de confirmação limpar edições -->
+          <div class="aux-area">
+            <div class="rotulo"><strong>Diálogo obrigatório ao limpar edições manuais:</strong></div>
+            <div class="dialogo" style="width: 100%; max-width: 440px; box-shadow: none" role="alertdialog">
+              <strong>Limpar todas as edições manuais de crop?</strong>
+              <p style="margin: 0">Todos os keyframes manuais de todos os painéis serão removidos. Você ainda poderá desfazer com <kbd>Ctrl+Z</kbd>.</p>
+              <div class="linha" style="justify-content: flex-end">
+                <button class="btn prim">Cancelar</button>
+                <button class="btn perigo">Limpar edições</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="barra-status"><span>Salvo</span><span>Aba 1 de 5: Enquadramento</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ABA 2: LEGENDAS E TRADUÇÃO -->
+  <section class="wf-variante" id="legendas-traducao">
+    <h2>Aba 2 · Legendas e Tradução (Estilo + Overrides + Tradução com Custo) · 1440 × 900</h2>
+    <div class="wf-quadro w1440">
+      <div class="shell com-contexto">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Dark História ▾</button>
+          <span class="rotulo">Foco no painel direito: Aba 2 — Legendas e Tradução</span>
+          <span class="selo empurra">Somente local: desligado</span>
+        </div>
+        <div class="contexto-corte">
+          <strong>Corte 2/8: "Como o navegador bloqueou o vazamento em 2019"</strong>
+          <span class="selo cheio">Vídeo transformado</span>
+        </div>
+
+        <div class="conteudo">
+          <!-- Coluna 1: Parte superior (Faixa, Presets, Estilo) -->
+          <aside class="insp-col" style="width: 410px">
+            <div class="painel-cab" style="padding: 6px 10px"><span>Legendas — Faixa, Presets e Estilo</span></div>
+            <div class="insp-abas" role="tablist">
+              <span class="insp-aba">Enquadramento</span>
+              <span class="insp-aba atual" role="tab" aria-selected="true">Legendas</span>
+              <span class="insp-aba">Silêncios</span>
+              <span class="insp-aba">Áudio/SFX</span>
+              <span class="insp-aba">Histórico</span>
+            </div>
+            <div class="painel-corpo">
+              <div class="banner" style="padding: 5px 8px">
+                <span class="selo cheio">Aviso</span>
+                <span>2 destaques por palavra descartados após retranscrição (<span class="mono">remap_status</span>).</span><span class="n">6</span>
+              </div>
+
+              <div class="coluna" style="gap: 4px">
+                <span class="rotulo">Faixa de legenda (<span class="mono">captions.track.set</span>)</span>
+                <div class="linha" style="gap: 0; flex-wrap: wrap">
+                  <span class="seg-btn ativo">Automático</span>
+                  <span class="seg-btn">Original</span>
+                  <span class="seg-btn">Traduzida</span>
+                  <span class="seg-btn">Narração</span><span class="n" style="margin-left: 4px">7</span>
+                </div>
+              </div>
+
+              <div class="caixa">
+                <div class="rotulo" style="margin-bottom: 4px">Presets (<span class="mono">captions.style.preset</span>)</div>
+                <div class="linha">
+                  <button class="btn prim btn-sm">Vertical</button>
+                  <button class="btn btn-sm">Cinema</button>
+                  <button class="btn btn-sm">Simples</button>
+                </div>
+                <div class="rotulo" style="margin-top: 4px">Trocar preset preserva seus destaques por palavra.</div>
+              </div>
+
+              <div class="caixa">
+                <div class="linha" style="margin-bottom: 4px">
+                  <strong>Personalização (<span class="mono">revision 4</span>)</strong>
+                  <button class="btn btn-sm empurra">Usar como padrão do Projeto</button><span class="n">8</span>
+                </div>
+                <div class="grade" style="grid-template-columns: 1fr 1fr; gap: 6px">
+                  <div class="campo-num"><span>Fonte</span><strong>Noto Sans ▾</strong></div>
+                  <div class="campo-num"><span>Tamanho</span><span class="mono">56 px</span></div>
+                  <div class="campo-num"><span>Cor texto</span><span class="cor-amostra"></span></div>
+                  <div class="campo-num"><span>Cor ativa</span><span class="cor-amostra"></span></div>
+                  <div class="campo-num"><span>Já falada</span><span class="cor-amostra"></span></div>
+                  <div class="campo-num"><span>Contorno</span><span class="mono">4 px</span></div>
+                  <div class="campo-num"><span>Sombra</span><span class="mono">2 px</span></div>
+                  <div class="campo-num"><span>Karaokê</span><strong>Ligado</strong></div>
+                  <div class="campo-num"><span>Posição X</span><span class="mono">540</span></div>
+                  <div class="campo-num"><span>Posição Y</span><span class="mono">1380</span></div>
+                </div>
+              </div>
+
+              <div class="banner" style="padding: 5px 8px">
+                <span class="selo">Glifos</span>
+                <span>1 emoji removido na prévia; 0 glifos ausentes (<span class="mono">export.captions</span>).</span>
+              </div>
+
+              <div class="rotulo" style="margin-top: auto">Estilo, destaques e tradução são salvos automaticamente fora do Desfazer da timeline.</div><span class="n">9</span>
+            </div>
+          </aside>
+
+          <!-- Coluna 2: Parte inferior (Override de palavra + Tradução) -->
+          <aside class="insp-col" style="width: 430px">
+            <div class="painel-cab" style="padding: 6px 10px"><span>Destaque da Palavra e Tradução (PT-BR ↔ EN)</span></div>
+            <div class="painel-corpo">
+              <div class="caixa">
+                <div class="linha">
+                  <strong>Palavra: "exatamente"</strong>
+                  <button class="btn btn-sm empurra">Limpar destaque</button>
+                </div>
+                <div class="grade" style="grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px">
+                  <div class="campo-num"><span>Cor da palavra</span><span class="cor-amostra"></span></div>
+                  <div class="campo-num"><span>Cor ativa</span><span class="cor-amostra"></span></div>
+                  <label><input type="checkbox" checked> Destaque ligado</label>
+                  <label><input type="checkbox"> Ocultar na legenda</label>
+                </div>
+              </div>
+
+              <div class="caixa">
+                <div class="linha">
+                  <strong>Tradução das legendas (<span class="mono">translation.*</span>)</strong>
+                  <span class="selo empurra">PT-BR → EN</span>
+                </div>
+
+                <div class="custo-card" style="margin-top: 6px">
+                  <div class="linha">
+                    <strong>&lt;ResumoCustoPrivacidade&gt;</strong><span class="n">10</span>
+                    <span class="selo empurra">Remoto (HTTPS)</span>
+                  </div>
+                  <div class="rotulo">Perfil: <strong>OpenAI Econômico (gpt-4o-mini)</strong> · Envia texto para <span class="mono">api.openai.com</span></div>
+                  <div class="linha">
+                    <span>Custo estimado: <strong class="mono">~US$ 0,002 – 0,004</strong></span>
+                    <span class="rotulo empurra">Saldo teto: <span class="mono">US$ 4,82</span></span>
+                  </div>
+                  <div class="linha" style="margin-top: 2px">
+                    <button class="btn btn-sm">Recalcular</button>
+                    <button class="btn prim btn-sm empurra">Traduzir Corte</button>
+                  </div>
+                </div>
+
+                <div class="banner" style="margin-top: 6px; padding: 5px 8px">
+                  <span class="selo cheio">Parcial</span>
+                  <span>1 de 2 lotes traduzido. Você pode editar o texto pronto ou refazer o pendente.</span>
+                  <button class="btn btn-sm empurra">Refazer pendente</button>
+                </div>
+
+                <div class="coluna" style="gap: 4px; margin-top: 6px">
+                  <span class="rotulo">Edição por Frase (<span class="mono">translation.edit</span> — preserva timestamps):</span>
+                  <div class="caixa" style="padding: 6px">
+                    <div class="rotulo mono">Frase 13 · 00:14.2 – 00:21.8</div>
+                    <div class="campo" style="color: var(--texto); margin-top: 3px">and that was exactly where everything changed</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          <!-- Coluna 3: Estados de conflito e sem permissão -->
+          <div class="aux-area">
+            <div class="caixa" style="background: var(--tela)">
+              <strong>Estado de conflito (<span class="mono">caption_style_conflict</span>)</strong>
+              <p class="rotulo" style="margin: 4px 0 8px">O estilo desta legenda foi atualizado em outra operação. Recarregue antes de salvar.</p>
+              <button class="btn prim btn-sm">Recarregar estilo</button>
+            </div>
+            <div class="caixa" style="background: var(--tela)">
+              <div class="linha"><strong>Estado bloqueado por Permissão (<span class="mono">!permitted</span>)</strong><span class="n">11</span></div>
+              <p class="rotulo" style="margin: 4px 0 8px">A Permissão desta Fonte não autoriza tradução. Registre o escopo de tradução na Fonte para liberar este recurso.</p>
+              <button class="btn btn-sm">Revisar Permissão da Fonte</button>
+            </div>
+            <div class="caixa" style="background: var(--tela)">
+              <strong>Bloqueio <span class="mono">Somente local</span></strong>
+              <p class="rotulo" style="margin: 4px 0 8px">Tradução bloqueada porque o Provedor envia texto para fora da máquina.</p>
+              <button class="btn btn-sm">Escolher Perfil local</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="barra-status"><span>Salvo</span><span>Aba 2 de 5: Legendas e Tradução</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ABA 3: SILÊNCIOS -->
+  <section class="wf-variante" id="silencios">
+    <h2>Aba 3 · Silêncios (Slider + Resumo + Cartões de Revisão) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Dark História ▾</button>
+          <span class="rotulo">Foco no painel direito: Aba 3 — Silêncios</span>
+        </div>
+        <div class="contexto-corte">
+          <strong>Corte 2/8: "Como o navegador bloqueou o vazamento em 2019"</strong>
+          <span class="selo cheio">Vídeo transformado</span>
+        </div>
+
+        <div class="conteudo">
+          <aside class="insp-col" style="width: 420px">
+            <div class="painel-cab" style="padding: 6px 10px"><span>Silêncios — Cartões de Revisão</span></div>
+            <div class="insp-abas" role="tablist">
+              <span class="insp-aba">Enquadramento</span>
+              <span class="insp-aba">Legendas</span>
+              <span class="insp-aba atual" role="tab" aria-selected="true">Silêncios</span>
+              <span class="insp-aba">Áudio/SFX</span>
+              <span class="insp-aba">Histórico</span>
+            </div>
+            <div class="painel-corpo">
+              <div class="caixa">
+                <div class="rotulo">Preserva <strong>120 ms</strong> após a fala anterior e <strong>75 ms</strong> antes da próxima (mínimo 200 ms).</div><span class="n">12</span>
+                <div class="linha" style="margin-top: 6px">
+                  <span>Duração mínima da pausa:</span>
+                  <strong class="mono empurra">600 ms</strong>
+                </div>
+                <div class="barra-prog" style="margin: 4px 0"><i style="--p: 20%"></i></div>
+                <div class="linha rotulo" style="justify-content: space-between"><span class="mono">300 ms</span><span class="mono">2000 ms</span></div>
+              </div>
+
+              <div class="caixa">
+                <div class="linha" style="justify-content: space-between">
+                  <span>Original: <strong class="mono">00:42.5</strong></span>
+                  <span>Efetiva: <strong class="mono">00:38.4</strong></span>
+                  <span>Removido: <strong class="mono">-4,1 s</strong></span>
+                </div>
+                <div class="linha" style="margin-top: 6px">
+                  <span class="rotulo">2 ativas / 3 detectadas</span>
+                  <button class="btn btn-sm empurra">Aplicar todos</button>
+                  <button class="btn btn-sm">Reverter todos</button>
+                </div>
+              </div>
+
+              <div class="cartao">
+                <div class="linha">
+                  <strong>#1 · <span class="mono">00:18.1 – 00:19.9</span></strong>
+                  <span class="selo cheio mono">1,8 s removida</span>
+                </div>
+                <div>"…e foi exatamente ali <span class="selo">pausa</span> que tudo mudou…"</div>
+                <div class="linha">
+                  <button class="btn btn-sm">▶ Ouvir em contexto</button><span class="n">13</span>
+                  <button class="btn btn-sm empurra">Manter pausa</button>
+                </div>
+              </div>
+
+              <div class="cartao">
+                <div class="linha">
+                  <strong>#2 · <span class="mono">00:29.4 – 00:31.7</span></strong>
+                  <span class="selo cheio mono">2,3 s removida</span>
+                </div>
+                <div>"…ninguém esperava <span class="selo">pausa</span> aquela resposta…"</div>
+                <div class="linha">
+                  <button class="btn btn-sm">▶ Ouvir em contexto</button>
+                  <button class="btn btn-sm empurra">Manter pausa</button>
+                </div>
+              </div>
+
+              <div class="cartao" style="opacity: .75">
+                <div class="linha">
+                  <strong>#3 · <span class="mono">00:35.0 – 00:35.7</span></strong>
+                  <span class="selo mono">0,7 s mantida</span>
+                </div>
+                <div class="linha">
+                  <button class="btn btn-sm">▶ Ouvir em contexto</button>
+                  <button class="btn prim btn-sm empurra">Remover pausa</button>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          <div class="aux-area">
+            <div class="caixa tracejada" style="background: var(--tela); max-width: 440px">
+              <strong>Estado vazio (sem pausas acima do limite)</strong>
+              <p class="rotulo" style="margin: 6px 0">Nenhuma pausa acima de <span class="mono">1400 ms</span> encontrada. Reduza o limite mínimo para detectar pausas menores.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="barra-status"><span>Salvo</span><span>Aba 3 de 5: Silêncios</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ABA 4: ÁUDIO E SFX -->
+  <section class="wf-variante" id="audio-sfx">
+    <h2>Aba 4 · Áudio e SFX (Trilha + SFX + Biblioteca até 500 MiB e CC-BY) · 1440 × 900</h2>
+    <div class="wf-quadro w1440">
+      <div class="shell com-contexto">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Dark História ▾</button>
+          <span class="rotulo">Foco no painel direito: Aba 4 — Áudio e SFX</span>
+        </div>
+        <div class="contexto-corte">
+          <strong>Corte 2/8: "Como o navegador bloqueou o vazamento em 2019"</strong>
+          <span class="selo cheio">Vídeo transformado</span>
+        </div>
+
+        <div class="conteudo">
+          <!-- Coluna 1: Trilha + SFX no Corte -->
+          <aside class="insp-col" style="width: 420px">
+            <div class="painel-cab" style="padding: 6px 10px"><span>Trilha Sonora e SFX no Corte</span></div>
+            <div class="insp-abas" role="tablist">
+              <span class="insp-aba">Enquadramento</span>
+              <span class="insp-aba">Legendas</span>
+              <span class="insp-aba">Silêncios</span>
+              <span class="insp-aba atual" role="tab" aria-selected="true">Áudio/SFX</span>
+              <span class="insp-aba">Histórico</span>
+            </div>
+            <div class="painel-corpo">
+              <div class="caixa">
+                <div class="linha">
+                  <strong>Trilha sonora (até 1)</strong>
+                  <span class="selo empurra">Licença: Desconhecida ⚠</span>
+                </div>
+                <div class="campo-num" style="margin-top: 6px"><span>Arquivo</span><strong>lo-fi-tensao.mp3 ▾</strong></div>
+                <div class="grade" style="grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px">
+                  <div class="campo-num"><span>Início (s)</span><span class="mono">0,0 s</span></div>
+                  <div class="campo-num"><span>Volume</span><span class="mono">30%</span></div>
+                  <div class="campo-num"><span>Fade-in</span><span class="mono">0,0 s</span></div>
+                  <div class="campo-num"><span>Fade-out</span><span class="mono">0,5 s</span></div>
+                </div>
+                <label style="margin-top: 6px; display: block"><input type="checkbox" checked> Repetir para cobrir o Corte (<span class="mono">loopToFit</span>)</label>
+                <div class="rotulo" style="margin-top: 4px">Abaixa automaticamente <span class="mono">-12 dB</span> sob a fala (<span class="mono">duckingMath</span>).</div><span class="n">14</span>
+                <button class="btn btn-sm" style="margin-top: 6px">Remover trilha (reversível com Ctrl+Z)</button><span class="n">15</span>
+              </div>
+
+              <div class="caixa">
+                <strong>Efeitos sonoros (SFX)</strong>
+                <div class="linha" style="margin-top: 4px">
+                  <button class="btn btn-sm">+ SFX na agulha</button>
+                  <button class="btn btn-sm">+ Ancorar na palavra</button>
+                </div>
+
+                <div class="cartao" style="margin-top: 6px; padding: 6px">
+                  <div class="linha">
+                    <strong>Impacto leve</strong>
+                    <span class="selo mono">Palavra "ali" · 00:14.2</span>
+                  </div>
+                  <div class="linha">
+                    <span class="rotulo">Vol: <span class="mono">80%</span> · Fade: <span class="mono">0 ms</span></span>
+                    <button class="btn btn-sm empurra">Mover para agulha</button>
+                    <button class="btn btn-sm">Remover</button>
+                  </div>
+                </div>
+
+                <div class="cartao" style="margin-top: 6px; padding: 6px">
+                  <div class="linha">
+                    <strong>Transição whoosh</strong>
+                    <span class="selo cheio empurra">Fora do Corte</span><span class="n">16</span>
+                  </div>
+                  <div class="linha">
+                    <span class="rotulo mono">00:41.0</span>
+                    <button class="btn btn-sm empurra">Mover para agulha</button>
+                    <button class="btn btn-sm">Remover</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          <!-- Coluna 2: Biblioteca de Áudio e Importação CC-BY -->
+          <aside class="insp-col" style="width: 440px">
+            <div class="painel-cab" style="padding: 6px 10px"><span>Biblioteca de Áudio do Projeto (<span class="mono">audio.list</span>)</span></div>
+            <div class="painel-corpo">
+              <div class="linha">
+                <div class="linha" style="gap: 0"><span class="seg-btn ativo">Músicas (2)</span><span class="seg-btn">SFX (4)</span></div>
+                <button class="btn prim btn-sm empurra">Importar áudio (até 500 MiB)</button>
+              </div>
+
+              <div class="caixa">
+                <strong>Importar áudio local (<span class="mono">audio.import</span>)</strong>
+                <div class="linha" style="margin-top: 4px">
+                  <div class="campo cresce" style="height: 24px">trilha-documentario.wav</div>
+                  <button class="btn btn-sm">Escolher…</button>
+                </div>
+                <div class="grade" style="grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px">
+                  <div class="campo-num"><span>Tipo</span><strong>Música ▾</strong></div>
+                  <div class="campo-num"><span>Licença</span><strong>CC-BY ▾</strong></div>
+                </div>
+                <div class="coluna" style="gap: 3px; margin-top: 6px">
+                  <div class="linha"><label class="rotulo"><strong>Atribuição (obrigatória para CC-BY)</strong></label><span class="n">17</span></div>
+                  <div class="campo" style="height: 24px; border-color: var(--texto); outline: 2px solid var(--texto)"></div>
+                  <span class="rotulo">⚠ Informe o texto de atribuição exigido pela licença CC-BY (<span class="mono">attribution_required</span>).</span>
+                </div>
+                <button class="btn prim btn-sm" style="margin-top: 6px">Salvar na biblioteca</button>
+              </div>
+
+              <div class="cartao">
+                <div class="linha">
+                  <strong>lo-fi-tensao.mp3</strong>
+                  <span class="selo empurra">Desconhecida ▾</span>
+                </div>
+                <div class="linha">
+                  <button class="btn btn-sm">Usar como trilha</button>
+                  <button class="btn perigo btn-sm empurra">Excluir da biblioteca</button>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          <!-- Coluna 3: Estados Vazio e ConfirmDialog -->
+          <div class="aux-area">
+            <div class="caixa tracejada" style="background: var(--tela)">
+              <strong>Estado vazio da biblioteca</strong>
+              <p class="rotulo" style="margin: 4px 0 8px">Nenhuma música ou efeito sonoro no Projeto ainda.</p>
+              <button class="btn prim btn-sm">Importar áudio local</button>
+            </div>
+            <div class="dialogo" style="width: 100%; box-shadow: none" role="alertdialog">
+              <strong>Excluir "lo-fi-tensao.mp3" da biblioteca?</strong>
+              <p style="margin: 0">A exclusão remove o arquivo da biblioteca do Projeto e de qualquer Corte que o utilize (<span class="mono">audio.delete</span>).</p>
+              <div class="linha" style="justify-content: flex-end">
+                <button class="btn prim">Cancelar</button>
+                <button class="btn perigo">Excluir da biblioteca</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="barra-status"><span>Salvo</span><span>Aba 4 de 5: Áudio e SFX</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ABA 5: HISTÓRICO E SNAPSHOTS -->
+  <section class="wf-variante" id="historico">
+    <h2>Aba 5 · Histórico e Snapshots (Escopo de Desfazer + 20 Snapshots somente leitura) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Dark História ▾</button>
+          <span class="rotulo">Foco no painel direito: Aba 5 — Histórico e Snapshots</span>
+        </div>
+        <div class="contexto-corte">
+          <strong>Corte 2/8: "Como o navegador bloqueou o vazamento em 2019"</strong>
+          <span class="selo cheio">Vídeo transformado</span>
+        </div>
+
+        <div class="conteudo">
+          <aside class="insp-col" style="width: 460px">
+            <div class="painel-cab" style="padding: 6px 10px"><span>Histórico do Corte e Snapshots</span></div>
+            <div class="insp-abas" role="tablist">
+              <span class="insp-aba">Enquadramento</span>
+              <span class="insp-aba">Legendas</span>
+              <span class="insp-aba">Silêncios</span>
+              <span class="insp-aba">Áudio/SFX</span>
+              <span class="insp-aba atual" role="tab" aria-selected="true">Histórico</span>
+            </div>
+            <div class="painel-corpo">
+              <div class="caixa">
+                <div class="linha">
+                  <button class="btn btn-sm" title="Desfazer edição do Corte atual">↶ Desfazer (3) <kbd>Ctrl+Z</kbd></button>
+                  <button class="btn btn-sm" title="Refazer edição do Corte atual">↷ Refazer (1) <kbd>Ctrl+Shift+Z</kbd></button><span class="n">18</span>
+                </div>
+                <div class="linha" style="margin-top: 6px">
+                  <span class="rotulo">Escopo: <strong>Corte atual</strong> (máx. 100 passos)</span>
+                  <button class="btn prim btn-sm empurra">Salvar agora <kbd>Ctrl+S</kbd></button>
+                </div>
+              </div>
+
+              <div class="caixa" style="background: var(--painel)">
+                <div class="linha"><strong>Fora do Desfazer do Corte</strong><span class="n">19</span></div>
+                <ul style="margin: 4px 0 0; padding-left: 16px; color: var(--texto-2)">
+                  <li>Sugestão automática do YuNet (preserva keyframes manuais)</li>
+                  <li>Estilo, destaques e tradução de legendas (salvos direto)</li>
+                  <li>Correções de palavras na Transcrição (pilha do Projeto)</li>
+                </ul>
+              </div>
+
+              <div class="banner" style="padding: 6px 8px">
+                <span class="selo">Somente leitura</span>
+                <span>Histórico informativo de salvamentos (<span class="mono">editor.snapshots</span>, até 20 cópias). Restauração direta será adicionada em atualização futura.</span><span class="n">20</span>
+              </div>
+
+              <table class="tabela" style="background: var(--tela); border: 1px solid var(--borda)">
+                <thead><tr><th>Rev.</th><th>Bordas (Fonte)</th><th>Silêncios</th><th>Layout</th></tr></thead>
+                <tbody>
+                  <tr><td class="mono">#12</td><td class="mono">00:14.2 – 00:56.7</td><td class="mono">2 ativas</td><td>Jogo+Cam</td></tr>
+                  <tr><td class="mono">#11</td><td class="mono">00:14.2 – 00:56.7</td><td class="mono">1 ativa</td><td>Jogo+Cam</td></tr>
+                  <tr><td class="mono">#10</td><td class="mono">00:12.8 – 00:56.7</td><td class="mono">0 ativas</td><td>Rosto</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </aside>
+
+          <div class="aux-area">
+            <div class="caixa tracejada" style="background: var(--tela); max-width: 440px">
+              <strong>Estado vazio da aba Histórico</strong>
+              <p class="rotulo" style="margin: 4px 0 0">Nenhuma edição alterada nesta sessão ainda.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="barra-status"><span>Salvo</span><span>Aba 5 de 5: Histórico e Snapshots</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li><strong>Painéis em tela dividida:</strong> disponível apenas nos layouts <span class="mono">gameplay_webcam</span> (<span class="mono">splitRatio 0.20..=0.50</span>, padrão <span class="mono">0.30</span>) e <span class="mono">two_people</span> (<span class="mono">0.30..=0.70</span>, padrão <span class="mono">0.50</span>).</li>
+      <li><strong><span class="mono">editor.crop.set_suggested</span> fora do Desfazer:</strong> aviso inline obrigatório antes de aplicar + toast <span class="mono">role="status"</span> após concluir; preserva integralmente os keyframes em <span class="mono">crop.edits</span>.</li>
+      <li><strong>Corte seco (<span class="mono">cut: true</span>):</strong> evita interpolação/câmera deslizando entre dois planos distintos na Fonte.</li>
+      <li><strong>Limpeza de edições manuais:</strong> única ação da aba protegida por <span class="mono">&lt;ConfirmDialog&gt;</span> (com foco inicial em <em>Cancelar</em>); ainda gera um passo reversível em <span class="mono">editor.undo</span>.</li>
+      <li><strong><span class="mono">&lt;InstaladorJustInTime recurso="yunet" /&gt;</span>:</strong> aparece inline quando <span class="mono">components.worker.status</span> ou <span class="mono">components.models.manifest</span> indica ausência do worker ou de <span class="mono">yunet</span>; exige <span class="mono">confirmed: true</span> e cancela via <span class="mono">components.cancel</span>.</li>
+      <li><strong>Remapeamento após retranscrição (<span class="mono">captions.remap_status</span>):</strong> faixa não-bloqueante exibida quando <span class="mono">discarded &gt; 0</span>.</li>
+      <li><strong>Faixa <span class="mono">Narração</span>:</strong> exibida apenas quando <span class="mono">videoKind === 'transformed'</span>. A opção <span class="mono">Traduzida</span> fica desabilitada até existir tradução salva.</li>
+      <li><strong>Trava de revisão (<span class="mono">caption_style_conflict</span>):</strong> <span class="mono">captions.style.set</span> envia <span class="mono">revision</span>; em conflito, mostra banner com botão <em>Recarregar estilo</em>.</li>
+      <li><strong>Sinalização de salvamento direto:</strong> estilo, destaques de palavra e tradução gravam em tabelas próprias fora de <span class="mono">clip_edits</span> e usam reversão via preset/botão <em>Limpar destaque</em>.</li>
+      <li><strong>Tradução com <span class="mono">&lt;ResumoCustoPrivacidade&gt;</span>:</strong> <span class="mono">translation.estimate</span> resolve Perfil, destino (<span class="mono">Local</span> / <span class="mono">Remoto HTTPS</span> / <span class="mono">CLI</span>), faixa em USD e saldo de orçamento antes de habilitar <span class="mono">translation.start { confirmed: true }</span>.</li>
+      <li><strong>Guarda de Permissão:</strong> se a Fonte não tiver escopo de tradução na Permissão (<span class="mono">!permitted</span>), a sub-seção exibe <span class="mono">&lt;Status tom="aviso"&gt;</span> e link para <span class="mono">#/projeto/:id/fontes/:fonteId</span>.</li>
+      <li><strong>Respiro determinístico nos silêncios:</strong> o núcleo preserva 120 ms após a fala anterior e 75 ms antes da próxima (mínimo 200 ms), evitando cortes secos nas sílabas.</li>
+      <li><strong>Ouvir em contexto:</strong> posiciona a agulha <span class="mono">1,5 s</span> antes da pausa e inicia reprodução no Palco para conferir naturalidade antes de remover/manter.</li>
+      <li><strong>Ducking e mistura (<span class="mono">duckingMath.ts</span>):</strong> trilha sonora aplica fade-in/out, <span class="mono">loopToFit</span> e atenuação automática de <span class="mono">-12 dB</span> (ataque 40 ms, liberação 300 ms) sobre <span class="mono">speechIntervals</span>.</li>
+      <li><strong>Remoção imediata reversível (Decisão #23):</strong> limpar trilha (<span class="mono">editor.audio.soundtrack.clear</span>) ou remover SFX (<span class="mono">editor.audio.sfx.remove</span>) não abre modal — executa direto com toast <em>Desfazer</em> (<kbd>Ctrl+Z</kbd>).</li>
+      <li><strong>Badge <span class="mono">Fora do Corte</span>:</strong> aparece quando o instante de um SFX fica fora das bordas atuais [<span class="mono">startUs..endUs</span>] após o usuário encurtar o Corte.</li>
+      <li><strong>Validação de atribuição CC-BY:</strong> tentar importar áudio com licença <span class="mono">cc_by</span> sem preencher <em>Atribuição</em> bloqueia o envio, foca o campo e exibe mensagem humana (<span class="mono">attribution_required</span>).</li>
+      <li><strong>Escopo do Desfazer:</strong> botões mostram <span class="mono">undoCount</span> / <span class="mono">redoCount</span> e desabilitam preventivamente quando zero (<span class="mono">nothing_to_undo</span>).</li>
+      <li><strong>Transparência de limites:</strong> deixa explícito ao usuário por que YuNet, legendas e correções de Transcrição não aparecem nesta pilha.</li>
+      <li><strong>Lacuna conhecida (Ticket #6 de núcleo):</strong> <span class="mono">editor.snapshots.restore</span> ainda não existe no Rust; até lá, a tabela permanece somente leitura/informativa.</li>
+    </ol>
+  </section>
+
+</main>
+<script src="kit.js"></script>
+</body>
+</html>

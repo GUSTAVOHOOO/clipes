@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F2 · Painel Global da Fila de Jobs — Wireframes Clipes v2</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .gaveta { width: 470px; flex-shrink: 0; background: var(--tela); }
+  .gaveta.larga { width: 580px; }
+  .selo.alerta { border-color: var(--texto); background: var(--sutil); color: var(--texto); font-weight: 600; }
+  .alerta-caixa { border: 1px solid var(--texto); border-radius: var(--r); padding: 8px 10px; background: var(--painel); display: flex; flex-direction: column; gap: 4px; }
+  .sec-tit { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--texto-2); margin-top: 4px; }
+  .sublista { margin-top: 4px; padding: 6px 8px; background: var(--painel); border: 1px solid var(--sutil); border-radius: var(--r); display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+  .resumo-custo { border: 1px solid var(--borda); border-radius: var(--r); padding: 10px; background: var(--painel); display: flex; flex-direction: column; gap: 6px; }
+  .kv { display: grid; grid-template-columns: 150px 1fr; gap: 4px 8px; font-size: 12px; }
+  .kv > :nth-child(odd) { color: var(--texto-2); }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>F2 · Painel Global da Fila de Jobs</h1>
+    <p>Superfície global acoplável (<kbd>Ctrl/Cmd+J</kbd>) montada no Shell em qualquer rota.
+      Especificação: <span class="mono">telas/F-exportacao-fila-relatos.md</span> §2, <span class="mono">01-arquitetura.md</span> §5, <span class="mono">02-consolidacao.md</span> §5–6.</p>
+    <nav>
+      <a href="#fila-1366">Fila 1366</a>
+      <a href="#fila-1440">Fila expandida 1440</a>
+      <a href="#dialogo-custo-1366">Tentar de novo / Refazer (&lt;ResumoCustoPrivacidade&gt;)</a>
+      <a href="#dialogo-orcamento-1366">Ajustar orçamento</a>
+      <a href="#dialogo-resultado-1366">Resultado do job (jobs.result)</a>
+      <a href="#sem-projeto-1366">Sem Projeto aberto e Carregando/Erro</a>
+    </nav>
+  </header>
+
+  <!-- 1. Fila 1366x768 -->
+  <section class="wf-variante" id="fila-1366">
+    <h2>1. Painel Global da Fila de Jobs aberto sobre rota ativa · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <nav class="etapas" aria-label="Etapas do Projeto">
+            <span class="etapa">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa atual">2. Cortes<small>12 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra">
+            <span class="selo">Somente local</span>
+            <button class="btn" style="height:24px;font-size:12px;border-color:var(--texto)">⏸ Orçamento pausado</button>
+            <button class="btn prim">Fila · 3 ativas · ! 1 incerto</button><span class="n">1</span>
+            <button class="btn">Comandos <kbd>Ctrl+K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+          </div>
+        </header>
+
+        <div class="conteudo">
+          <main class="cresce secao">
+            <div class="banner">
+              <strong>Rota atual permanece visível e operável à esquerda</strong> — a Fila não bloqueia edição nem navegação.
+            </div>
+            <div class="caixa tracejada cresce coluna" style="justify-content: center; align-items: center; text-align: center; padding: 20px">
+              <strong>Conteúdo da rota ativa (ex.: Bancada de Cortes ou Editor)</strong>
+              <span class="rotulo">Em qualquer tela (<span class="mono">#/inicio</span>, etapas, Corte ou <span class="mono">#/config/*</span>), <kbd>Ctrl+J</kbd> abre/fecha esta gaveta e <kbd>Esc</kbd> devolve o foco ao gatilho.</span>
+            </div>
+          </main>
+
+          <aside class="painel dir gaveta" role="complementary" aria-label="Fila de Jobs">
+            <div class="painel-cab">
+              <span>Fila de Jobs</span><kbd>Ctrl+J</kbd><span class="n">2</span>
+              <span class="rotulo" style="font-weight: normal">Projeto: Canal Cortes Tech</span>
+              <button class="btn icone empurra" aria-label="Fechar Fila (Esc)">×</button>
+            </div>
+
+            <div class="painel-corpo" style="gap: 8px">
+              <!-- Zona 1: Alertas Prioritários -->
+              <div class="alerta-caixa" role="alert">
+                <strong>⚠ 1 chamada paga com resultado incerto</strong><span class="n">3</span>
+                <span class="rotulo">Uma ou mais chamadas pagas expiraram. O Clipes nunca as repete automaticamente para evitar cobrança dupla.</span>
+              </div>
+
+              <div class="alerta-caixa" role="alert">
+                <div class="linha"><strong>⏸ Orçamento pausou: Seleção de Cortes</strong><span class="selo empurra">Teto de custo</span></div>
+                <span class="rotulo mono">Gasto: US$ 2,04 / US$ 2,00 · 12 chamadas</span>
+                <div><button class="btn prim" style="height: 24px; font-size: 12px">Ajustar orçamento e continuar</button><span class="n">4</span></div>
+              </div>
+
+              <!-- Zona 2: Filtros -->
+              <div class="abas" role="tablist">
+                <span class="aba atual" role="tab" aria-selected="true">Todos (8)</span>
+                <span class="aba" role="tab" aria-selected="false">Ativos (4)</span>
+                <span class="aba" role="tab" aria-selected="false">Atenção (3)</span>
+                <span class="aba" role="tab" aria-selected="false">Concluídos (1)</span>
+              </div>
+
+              <!-- Zona 3: Lista Unificada -->
+              <div class="sec-tit">Ação necessária (uncertain)</div>
+              <div class="cartao sel">
+                <div class="linha">
+                  <strong>Seleção de Cortes #14</strong>
+                  <span class="rotulo">Perfil: OpenAI GPT</span>
+                  <span class="selo alerta empurra">Resultado incerto</span>
+                </div>
+                <span class="rotulo">Resposta do Provedor demorou; não sabemos se houve cobrança.</span>
+                <div class="linha">
+                  <button class="btn prim">Ver estimativa e repetir</button><span class="n">5</span>
+                  <button class="btn perigo">Descartar</button>
+                </div>
+              </div>
+
+              <div class="sec-tit">Em execução / Na fila</div>
+              <div class="cartao">
+                <div class="linha">
+                  <strong>Transcrição — Live 15/11</strong>
+                  <span class="mono empurra">64%</span>
+                </div>
+                <div class="barra-prog" role="progressbar" aria-valuenow="64" aria-valuemin="0" aria-valuemax="100"><i style="--p: 64%"></i></div>
+                <div class="linha rotulo">
+                  <span>Transcrevendo · ~4 min restantes</span><span class="n">6</span>
+                  <button class="btn empurra" style="height: 22px; font-size: 11px">Cancelar</button>
+                </div>
+              </div>
+
+              <div class="cartao">
+                <div class="linha">
+                  <strong>Exportação em lote #5</strong>
+                  <span class="mono empurra">5/12 · 45%</span>
+                </div>
+                <div class="barra-prog"><i style="--p: 45%"></i></div>
+                <div class="linha rotulo">
+                  <button class="btn fantasma" style="padding: 0; height: 22px; text-decoration: underline">Abrir em Exportação</button>
+                  <button class="btn empurra" style="height: 22px; font-size: 11px">Cancelar lote</button>
+                </div>
+              </div>
+
+              <div class="cartao">
+                <div class="linha">
+                  <strong>Lote de Fontes #2</strong>
+                  <span class="selo">Local · Corte direto</span>
+                  <span class="mono empurra">2/5</span>
+                </div>
+                <div class="barra-prog"><i style="--p: 40%"></i></div>
+                <div class="sublista">
+                  <div class="linha"><span>Live 10/11</span><span class="selo empurra">Concluída</span></div>
+                  <div class="linha"><span>Live 12/11</span><span class="selo alerta">Pausada (rede)</span><button class="btn empurra" style="height: 20px; font-size: 11px">Retomar Fonte</button></div><span class="n">7</span>
+                </div>
+                <div class="linha">
+                  <button class="btn" style="height: 22px; font-size: 11px">Pausar</button>
+                  <button class="btn" style="height: 22px; font-size: 11px">Orçamento</button>
+                  <button class="btn perigo empurra" style="height: 22px; font-size: 11px">Cancelar</button>
+                </div>
+              </div>
+
+              <div class="cartao">
+                <div class="linha">
+                  <strong>Download: Modelo Whisper Turbo</strong>
+                  <span class="selo">Global</span><span class="n">8</span>
+                  <span class="mono empurra">72%</span>
+                </div>
+                <div class="barra-prog"><i style="--p: 72%"></i></div>
+                <div class="linha rotulo"><span>Operação global (fora do Projeto)</span><button class="btn empurra" style="height: 22px; font-size: 11px">Cancelar</button></div>
+              </div>
+
+              <div class="sec-tit">Falhos e concluídos recentes</div>
+              <div class="cartao">
+                <div class="linha">
+                  <strong>Seleção de Cortes #11 · Gemini</strong>
+                  <span class="selo alerta empurra">Falhou</span>
+                </div>
+                <span class="rotulo">O modelo devolveu resposta fora do formato esperado.</span>
+                <div class="linha">
+                  <button class="btn">Refazer com outro Perfil</button><span class="n">9</span>
+                  <button class="btn fantasma">Ver resultado</button>
+                </div>
+              </div>
+
+              <div class="cartao">
+                <div class="linha">
+                  <strong>Roteiro #12 · Claude</strong>
+                  <span class="mono rotulo empurra">Concluído · US$ 0,03</span>
+                </div>
+                <div class="linha">
+                  <button class="btn">Ver resultado</button>
+                  <button class="btn">Refazer com outro Perfil</button>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <footer class="barra-status">
+          <span>Salvo</span><span>·</span><span>Transcrição: 64% · ~4 min restantes</span>
+          <span class="empurra"><kbd>F6</kbd> alterna até Fila de Jobs · <kbd>Esc</kbd> fecha gaveta</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Fila 1440x900 -->
+  <section class="wf-variante" id="fila-1440">
+    <h2>2. Fila de Jobs expandida · 1440 × 900 (o que muda: gaveta mais larga com custo, tentativas e ações na mesma linha)</h2>
+    <div class="wf-quadro w1440">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <nav class="etapas">
+            <span class="etapa">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa atual">2. Cortes<small>12 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra">
+            <span class="selo">Somente local</span>
+            <button class="btn prim">Fila · 3 ativas · ! 1 incerto</button>
+            <button class="btn">Comandos <kbd>Ctrl+K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+          </div>
+        </header>
+
+        <div class="conteudo">
+          <main class="cresce secao">
+            <div class="caixa tracejada cresce coluna" style="justify-content: center; align-items: center; text-align: center; padding: 24px">
+              <strong>Área principal da rota ativa (1440 × 900)</strong>
+              <span class="rotulo">Em 1440+ px, a gaveta expande para 580 px mantendo a área principal confortável.</span>
+            </div>
+          </main>
+
+          <aside class="painel dir gaveta larga" role="complementary" aria-label="Fila de Jobs">
+            <div class="painel-cab">
+              <span>Fila de Jobs</span><kbd>Ctrl+J</kbd>
+              <span class="rotulo" style="font-weight: normal">Projeto: Canal Cortes Tech</span>
+              <button class="btn icone empurra" aria-label="Fechar Fila (Esc)">×</button>
+            </div>
+            <div class="painel-corpo" style="gap: 8px">
+              <div class="alerta-caixa" role="alert">
+                <div class="linha">
+                  <strong>⚠ 1 chamada paga incerta</strong>
+                  <span class="rotulo empurra">Nunca repetida às cegas</span>
+                </div>
+                <div class="linha">
+                  <span><strong>⏸ Orçamento pausou:</strong> Seleção de Cortes</span>
+                  <span class="mono rotulo empurra">US$ 2,04 / US$ 2,00 · 12 chamadas</span>
+                  <button class="btn prim" style="height: 24px; font-size: 12px">Ajustar e continuar</button>
+                </div>
+              </div>
+
+              <div class="abas" role="tablist">
+                <span class="aba atual">Todos (8)</span>
+                <span class="aba">Ativos e na fila (4)</span>
+                <span class="aba">Atenção (3)</span>
+                <span class="aba">Concluídos (1)</span>
+              </div>
+
+              <div class="cartao sel">
+                <div class="linha">
+                  <strong>Seleção de Cortes #14</strong>
+                  <span class="selo">OpenAI GPT</span>
+                  <span class="selo alerta empurra">Resultado incerto</span>
+                </div>
+                <div class="linha" style="flex-wrap: wrap">
+                  <span class="rotulo">Tempo limite atingido após envio · Tentativa 1</span>
+                  <div class="linha empurra">
+                    <button class="btn prim">Ver estimativa e repetir</button>
+                    <button class="btn perigo">Descartar</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="cartao">
+                <div class="linha">
+                  <strong>Transcrição — Live 15/11</strong>
+                  <span class="rotulo">Estágio: transcribing (GPU)</span>
+                  <span class="mono empurra">64% · ~4 min restantes</span>
+                  <button class="btn" style="height: 24px; font-size: 12px">Cancelar</button>
+                </div>
+                <div class="barra-prog"><i style="--p: 64%"></i></div>
+              </div>
+
+              <div class="cartao">
+                <div class="linha">
+                  <strong>Roteiro #15 · Claude Sonnet</strong>
+                  <span class="selo alerta">Pausado por orçamento</span>
+                  <span class="rotulo empurra">Na fila · aguardando liberação de teto</span>
+                </div>
+              </div>
+
+              <div class="cartao">
+                <div class="linha">
+                  <strong>Seleção de Cortes #11 · Gemini Flash</strong>
+                  <span class="selo alerta">Falhou</span>
+                  <span class="mono rotulo empurra">Tentativas: 2 · US$ 0,02</span>
+                </div>
+                <div class="linha" style="flex-wrap: wrap">
+                  <span class="rotulo">O modelo devolveu resposta fora do formato esperado.</span>
+                  <div class="linha empurra">
+                    <button class="btn">Refazer com outro Perfil</button>
+                    <button class="btn fantasma">Ver resultado</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="cartao">
+                <div class="linha">
+                  <strong>Roteiro #12 · Claude Sonnet</strong>
+                  <span class="selo">Concluído</span>
+                  <span class="mono rotulo empurra">1.840 tokens · US$ 0,03</span>
+                </div>
+                <div class="linha">
+                  <span class="rotulo">Saída validada (3 blocos)</span>
+                  <div class="linha empurra">
+                    <button class="btn">Ver resultado</button>
+                    <button class="btn">Refazer com outro Perfil</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <footer class="barra-status">
+          <span>Salvo</span><span>·</span><span>Transcrição: 64% · ~4 min restantes</span>
+          <span class="empurra"><kbd>F6</kbd> alterna regiões · <kbd>?</kbd> atalhos</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Diálogo Refazer / Tentar de novo com ResumoCustoPrivacidade -->
+  <section class="wf-variante" id="dialogo-custo-1366">
+    <h2>3. Diálogo "Refazer com outro Perfil" / "Tentar de novo" (&lt;ResumoCustoPrivacidade&gt;) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes</span><span class="etapa atual">2. Cortes</span><span class="etapa">3. Exportação</span></nav>
+          <div class="linha empurra"><span class="selo">Somente local</span><button class="btn prim">Fila · 3 ativas</button></div>
+        </header>
+        <main class="conteudo"><div class="cresce secao"><div class="caixa tracejada cresce"></div></div></main>
+        <footer class="barra-status"><span>Salvo</span></footer>
+      </div>
+
+      <div class="dialogo-fundo" role="presentation">
+        <div class="dialogo" style="width: 540px" role="alertdialog" aria-modal="true" aria-labelledby="dlg-redo-tit">
+          <div class="linha">
+            <h3 id="dlg-redo-tit" style="margin: 0">Refazer job #11 com outro Perfil de Provedor</h3><span class="n">10</span>
+            <button class="btn icone empurra" aria-label="Fechar">✕</button>
+          </div>
+
+          <div class="coluna" style="gap: 4px">
+            <label class="rotulo">Escolha o Perfil de Provedor (<span class="mono">provider.profiles.list</span>)</label>
+            <div class="campo" style="color: var(--texto)">OpenAI GPT-4o · Remoto (HTTPS) ▾</div>
+          </div>
+
+          <div class="resumo-custo">
+            <div class="linha">
+              <strong>Resumo de Custo e Privacidade</strong>
+              <span class="selo alerta empurra">Remoto (HTTPS)</span>
+            </div>
+            <div class="kv">
+              <span>Tarefa:</span><span>Seleção de Cortes (<span class="mono">ai:selection</span>)</span>
+              <span>Perfil resolvido:</span><span>OpenAI GPT-4o (<span class="mono">gpt-4o</span>)</span>
+              <span>Destino dos dados:</span><span>Envia texto da Transcrição para <span class="mono">api.openai.com</span></span>
+              <span>Estimativa de custo:</span><span class="mono"><strong>~US$ 0,04 – US$ 0,07</strong> (~18.400 tokens)</span>
+              <span>Orçamento restante:</span><span class="mono">US$ 2,96 de US$ 5,00</span>
+            </div>
+          </div>
+
+          <div class="banner" role="alert" style="border-color: var(--texto)">
+            <span>🔒 <strong>Bloqueado por Somente local:</strong> este Perfil envia texto para fora da máquina. Escolha um Perfil <em>Local (loopback)</em> ou altere o veto em Configurações.</span>
+          </div>
+
+          <div class="linha" style="justify-content: flex-end">
+            <button class="btn">Cancelar</button>
+            <button class="btn prim" disabled>Confirmar e enfileirar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Diálogo Ajustar orçamento e continuar -->
+  <section class="wf-variante" id="dialogo-orcamento-1366">
+    <h2>4. Diálogo "Ajustar orçamento e continuar" (jobs.budget.set / continue) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes</span><span class="etapa atual">2. Cortes</span><span class="etapa">3. Exportação</span></nav>
+        </header>
+        <main class="conteudo"><div class="cresce secao"><div class="caixa tracejada cresce"></div></div></main>
+        <footer class="barra-status"><span>Salvo</span></footer>
+      </div>
+
+      <div class="dialogo-fundo" role="presentation">
+        <div class="dialogo" style="width: 500px" role="dialog" aria-modal="true" aria-labelledby="dlg-orc-tit">
+          <div class="linha">
+            <h3 id="dlg-orc-tit" style="margin: 0">Ajustar orçamento e continuar fila</h3><span class="n">11</span>
+            <button class="btn icone empurra" aria-label="Fechar">✕</button>
+          </div>
+
+          <div class="caixa coluna" style="gap: 4px; background: var(--painel)">
+            <strong>Escopo pausado: Tarefa Seleção de Cortes</strong>
+            <span class="rotulo">Motivo: Teto de custo atingido (<span class="mono">budget_cost</span>)</span>
+            <span class="rotulo mono">Consumo acumulado: US$ 2,04 · 12 chamadas · 412.500 tokens</span>
+          </div>
+
+          <div class="grade" style="grid-template-columns: 1fr 1fr">
+            <div class="coluna" style="gap: 4px">
+              <label class="rotulo">Novo teto de custo (USD)</label>
+              <div class="campo mono" style="color: var(--texto)">5.00</div>
+            </div>
+            <div class="coluna" style="gap: 4px">
+              <label class="rotulo">Novo teto de chamadas</label>
+              <div class="campo mono" style="color: var(--texto)">30</div>
+            </div>
+          </div>
+
+          <label class="linha"><input type="checkbox"> <span>Zerar contador de consumo desta etapa (<span class="mono">resetUsage</span>)</span></label>
+          <label class="linha"><input type="checkbox"> <span>Confirmo continuar mesmo se Provedor não tiver preço conhecido (<span class="mono">cost_unknown</span>)</span></label>
+
+          <div class="linha" style="justify-content: flex-end">
+            <button class="btn">Cancelar</button>
+            <button class="btn prim">Salvar orçamento e retomar fila</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Diálogo Resultado do job (jobs.result) -->
+  <section class="wf-variante" id="dialogo-resultado-1366">
+    <h2>5. Diálogo "Resultado do job" (jobs.result) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes</span><span class="etapa atual">2. Cortes</span><span class="etapa">3. Exportação</span></nav>
+        </header>
+        <main class="conteudo"><div class="cresce secao"><div class="caixa tracejada cresce"></div></div></main>
+        <footer class="barra-status"><span>Salvo</span></footer>
+      </div>
+
+      <div class="dialogo-fundo" role="presentation">
+        <div class="dialogo" style="width: 540px" role="dialog" aria-modal="true" aria-labelledby="dlg-res-tit">
+          <div class="linha">
+            <h3 id="dlg-res-tit" style="margin: 0">Resultado do job #12 — Roteiro</h3><span class="n">12</span>
+            <span class="selo">Concluído</span>
+            <button class="btn icone empurra" aria-label="Fechar">✕</button>
+          </div>
+
+          <div class="caixa kv" style="background: var(--painel)">
+            <span>Desfecho:</span><span><strong>Sucesso</strong> (<span class="mono">outcome: "ok"</span>)</span>
+            <span>Perfil utilizado:</span><span>Claude Sonnet (<span class="mono">claude-3-7-sonnet</span>)</span>
+            <span>Consumo (<span class="mono">usage</span>):</span><span class="mono">1.420 entrada + 420 saída (1 chamada)</span>
+            <span>Custo real:</span><span class="mono"><strong>US$ 0,03</strong></span>
+          </div>
+
+          <div class="coluna" style="gap: 4px">
+            <span class="rotulo">Resumo estruturado (<span class="mono">data</span>)</span>
+            <div class="caixa mono" style="font-size: 12px; max-height: 140px; overflow: auto">
+              3 blocos gerados para Narração (duração estimada: 48 s).<br>
+              Bloco 1 (Gancho): "Você já viu uma atualização derrubar tudo..."<br>
+              Bloco 2 (Contexto): "Na live de sexta, o erro apareceu..."
+            </div>
+            <details style="font-size: 12px; color: var(--texto-2)">
+              <summary>Expandir JSON completo</summary>
+              <div class="mono" style="margin-top: 4px">{ "blocks": 3, "violations": [] }</div>
+            </details>
+          </div>
+
+          <div class="linha" style="justify-content: flex-end">
+            <button class="btn prim">Fechar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Sem Projeto aberto e Carregando/Erro -->
+  <section class="wf-variante" id="sem-projeto-1366">
+    <h2>6. Sem Projeto aberto (só Operações Globais) + Carregando (&lt;Skeleton&gt;) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <strong style="padding: 0 8px">Clipes</strong>
+          <div class="linha empurra">
+            <button class="btn prim">Fila · 1 global</button>
+            <button class="btn">Comandos <kbd>Ctrl+K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+          </div>
+        </header>
+
+        <div class="conteudo">
+          <main class="cresce secao">
+            <div class="caixa tracejada cresce coluna" style="justify-content: center; align-items: center; text-align: center; padding: 20px">
+              <strong>Tela #/inicio sem Projeto aberto</strong>
+              <span class="rotulo">As seções de Projeto da Fila ficam ocultas; apenas Operações Globais permanecem visíveis.</span>
+            </div>
+          </main>
+
+          <aside class="painel dir gaveta" role="complementary" aria-label="Fila de Jobs">
+            <div class="painel-cab">
+              <span>Fila de Jobs</span><kbd>Ctrl+J</kbd>
+              <button class="btn icone empurra" aria-label="Fechar Fila">×</button>
+            </div>
+            <div class="painel-corpo" style="gap: 10px">
+              <div class="caixa coluna" style="gap: 6px; background: var(--painel)">
+                <strong>Nenhum Projeto aberto</strong><span class="n">13</span>
+                <span class="rotulo">Abra um Projeto para acompanhar transcrições, seleções e exportações.</span>
+                <div><button class="btn prim" style="height: 24px; font-size: 12px">Ir para Início</button></div>
+              </div>
+
+              <div class="sec-tit">Operações globais em andamento</div>
+              <div class="cartao">
+                <div class="linha">
+                  <strong>Download: FFmpeg 7.1</strong>
+                  <span class="selo">Global</span>
+                  <span class="mono empurra">58%</span>
+                </div>
+                <div class="barra-prog"><i style="--p: 58%"></i></div>
+                <div class="linha rotulo"><span>Baixando pacote assinado…</span><button class="btn empurra" style="height: 22px; font-size: 11px">Cancelar</button></div>
+              </div>
+
+              <div class="sec-tit">Exemplo de estado carregando (&lt;Skeleton&gt;)</div>
+              <div class="cartao" aria-busy="true">
+                <div class="texto-ph" style="width: 60%"></div>
+                <div class="texto-ph" style="width: 100%; height: 6px"></div>
+                <div class="texto-ph" style="width: 40%"></div>
+              </div>
+              <div class="cartao" aria-busy="true">
+                <div class="texto-ph" style="width: 55%"></div>
+                <div class="texto-ph" style="width: 100%; height: 6px"></div>
+                <div class="texto-ph" style="width: 45%"></div>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <footer class="barra-status">
+          <span>Sem Projeto aberto</span><span>·</span><span>Download FFmpeg: 58%</span>
+          <span class="empurra"><kbd>F6</kbd> regiões · <kbd>?</kbd> atalhos</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li><strong>Gatilho no Shell:</strong> mostra contagem de ativos e alerta prioritário (<span class="mono">uncertain &gt; 0</span> ou pausa em <span class="mono">ai_pauses</span>) acessível a leitores de tela.</li>
+      <li><strong>Acoplamento não modal:</strong> <span class="mono">&lt;aside role="complementary"&gt;</span> integra o ciclo <kbd>F6</kbd>; <kbd>Esc</kbd> fecha e devolve o foco ao gatilho na Barra Superior.</li>
+      <li><strong>Banner <span class="mono">uncertain</span> (ADR-0005 / ADR-0009):</strong> sempre visível no topo enquanto existir qualquer job em <span class="mono">state === "uncertain"</span>.</li>
+      <li><strong>Pausas de orçamento (<span class="mono">jobs.budget.get</span>):</strong> traduz códigos (<span class="mono">budget_cost</span>, <span class="mono">budget_calls</span>, <span class="mono">budget_tokens</span>, <span class="mono">time_budget_exhausted</span>, <span class="mono">cost_unknown</span>) e exibe consumo desde <span class="mono">since</span>.</li>
+      <li><strong>Repetir <span class="mono">uncertain</span>:</strong> chama <span class="mono">jobs.estimate</span> antes; se <span class="mono">safety === "paid"</span>, exige <span class="mono">&lt;ConfirmDialog&gt;</span> com <span class="mono">&lt;ResumoCustoPrivacidade&gt;</span> (<span class="mono">confirmed: true</span>). Descartar exige <span class="mono">&lt;ConfirmDialog&gt;</span> simples (<span class="mono">jobs.discard</span>).</li>
+      <li><strong>ETA no cliente:</strong> calculado apenas para jobs determinísticos observados desde o início na sessão atual; omitido após recarregar a janela ou em estágios <span class="mono">ai:*</span> indeterminados (lacuna #9 da consolidação).</li>
+      <li><strong>Lotes de Fontes (<span class="mono">batches.*</span>):</strong> sublista expansível mostra Fontes pausadas com causa traduzida e botão <span class="mono">Retomar Fonte</span> (<span class="mono">batches.item.resume</span>). Se retornar <span class="mono">uncertain_job</span>, foca o job <span class="mono">uncertain</span> correspondente.</li>
+      <li><strong>Operações globais (<span class="mono">project: null</span>):</strong> alimentadas por <span class="mono">core-progress</span> (componentes, modelos TTS, URL, hash/cópia) e roteiam cancelamento para <span class="mono">components.cancel</span>, <span class="mono">tts.models.cancel</span>, <span class="mono">sources.url.cancel</span> ou <span class="mono">sources.cancel</span>.</li>
+      <li><strong>Refazer (<span class="mono">jobs.redo</span>):</strong> disponível em jobs <span class="mono">ai:*</span> <span class="mono">completed</span>, <span class="mono">failed</span> ou <span class="mono">cancelled</span>; preserva histórico sem sobrescrever o job anterior.</li>
+      <li><strong><span class="mono">&lt;ResumoCustoPrivacidade&gt;</span> e <span class="mono">Somente local</span>:</strong> diferencia <span class="mono">Local (loopback)</span>, <span class="mono">Remoto (HTTPS)</span> e <span class="mono">CLI</span>, mostra <span class="mono">US$ 0,00</span> / faixa USD / cota do plano / desconhecido em <span class="mono">tabular-nums</span>, e bloqueia confirmação com banner <span class="mono">role="alert"</span> se <span class="mono">Somente local</span> vetar o Perfil.</li>
+      <li><strong>Orçamento e <span class="mono">cost_unknown</span>:</strong> permite editar tetos, zerar contador (<span class="mono">resetUsage</span>) e confirmar execução quando o Provedor não tem preço cadastrado antes de chamar <span class="mono">jobs.budget.continue</span>.</li>
+      <li><strong>Resultado do job (<span class="mono">jobs.result</span>):</strong> exibe desfecho, uso de tokens/chamadas, custo real e resumo de <span class="mono">data</span> (ou <span class="mono">violations</span>) com JSON completo recolhido.</li>
+      <li><strong>Decisão de wireframe (estados vazio e erro):</strong> sem Projeto aberto e sem operações globais, o bloco de Projeto exibe o cartão <em>"Nenhum Projeto aberto"</em> com CTA <em>"Ir para Início"</em>; com Projeto aberto e 0 tarefas, exibe <em>"Nenhuma tarefa registrada neste Projeto ainda"</em>. O diálogo de fechamento da janela com jobs ativos (<span class="mono">app-close-requested</span>) está desenhado em <span class="mono">A1-shell.html</span>.</li>
+    </ol>
+  </section>
+</main>
+<script src="kit.js"></script>
+</body>
+</html>

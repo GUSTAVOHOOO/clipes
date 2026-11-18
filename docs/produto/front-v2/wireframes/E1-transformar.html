@@ -1,0 +1,997 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>E1 · Sub-aba Transformar (Ângulos, Roteiro, Narração) — Wireframes front v2</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  /* Ajustes locais usando apenas variáveis do kit */
+  .shell.com-contexto.shell-duas-linhas { grid-template-rows: 44px auto 1fr 30px; }
+  .ctx-empilhado { flex-direction: column; align-items: stretch; gap: 5px; padding: 6px 12px; }
+  .ctx-subabas { display: flex; gap: 4px; align-items: center; }
+  .ctx-subaba {
+    padding: 3px 9px; border: 1px solid var(--borda); border-radius: var(--r);
+    background: var(--tela); color: var(--texto-2); font-size: 12px; text-decoration: none;
+  }
+  .ctx-subaba.atual { background: var(--sutil); color: var(--texto); font-weight: 600; border-color: var(--texto); }
+  .titulo-corte { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+  /* Stepper fixo no topo da sub-aba */
+  .transf-wrap { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+  .stepper-barra {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    background: var(--painel); border-bottom: 1px solid var(--borda); flex: none;
+  }
+  .stepper-lista { display: flex; align-items: center; gap: 8px; list-style: none; margin: 0; padding: 0; flex-wrap: wrap; }
+  .passo-item {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+    border: 1px solid var(--borda); border-radius: var(--r); background: var(--tela); font-size: 12px; color: var(--texto-2);
+  }
+  .passo-item.atual { border-color: var(--texto); background: var(--sutil); color: var(--texto); font-weight: 600; }
+  .passo-item.travado { border-style: dashed; color: var(--texto-3); }
+  .passo-num {
+    display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%;
+    border: 1px solid var(--borda); font-size: 11px; font-weight: 600; background: var(--painel);
+  }
+  .passo-item.atual .passo-num { background: var(--forte); color: #fff; border-color: var(--forte); }
+
+  /* Corpo da sub-aba: painel esquerdo (Transcrição) + área do passo ativo */
+  .transf-corpo { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+  .transcricao-aside {
+    width: 340px; flex: none; background: var(--painel); border-right: 1px solid var(--borda);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  .frase-item {
+    padding: 7px 10px; border-bottom: 1px solid var(--sutil); display: flex; flex-direction: column; gap: 3px;
+    background: var(--tela); font-size: 12px;
+  }
+  .frase-item.destaque { background: var(--sutil); border-left: 3px solid var(--texto); }
+  .passo-scroll { flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 14px 20px; background: var(--tela); }
+  .passo-coluna { max-width: 68ch; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+
+  /* Cartões de Ângulo, Roteiro e Narração */
+  .bloco-card { border: 1px solid var(--borda); border-radius: var(--r); padding: 10px 12px; background: var(--tela); display: flex; flex-direction: column; gap: 8px; }
+  .bloco-card.destaque { border-color: var(--texto); background: var(--painel); }
+  .campo-texto {
+    width: 100%; border: 1px solid var(--borda); border-radius: var(--r); background: var(--tela);
+    padding: 6px 8px; font-size: 13px; color: var(--texto); line-height: 1.4;
+  }
+  .campo-area { min-height: 58px; }
+  .chips { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px;
+    border: 1px solid var(--borda); border-radius: 11px; background: var(--painel); font-size: 11px; white-space: nowrap;
+  }
+  .seg-grupo { display: inline-flex; border: 1px solid var(--borda); border-radius: var(--r); overflow: hidden; }
+  .seg-op { padding: 4px 10px; font-size: 12px; background: var(--tela); border-right: 1px solid var(--borda); color: var(--texto-2); }
+  .seg-op:last-child { border-right: 0; }
+  .seg-op.ativo { background: var(--sutil); color: var(--texto); font-weight: 600; }
+
+  /* Sub-superfícies 3A e 3B */
+  .jit-caixa { border: 1px solid var(--texto-2); border-radius: var(--r); padding: 12px; background: var(--painel); display: flex; flex-direction: column; gap: 10px; }
+  .jit-item { border: 1px solid var(--borda); border-radius: var(--r); padding: 8px 10px; background: var(--tela); display: flex; flex-direction: column; gap: 6px; }
+  .teleprompter-modal { width: 640px; }
+  .teleprompter-texto {
+    border: 1px solid var(--borda); border-radius: var(--r); background: var(--painel);
+    padding: 18px 22px; font-size: 17px; line-height: 1.55; max-width: 68ch;
+  }
+  .vu-barra { display: flex; gap: 2px; align-items: center; height: 14px; }
+  .vu-barra i { display: block; width: 6px; height: 12px; background: var(--sutil); border: 1px solid var(--borda); }
+  .vu-barra i.on { background: var(--forte); border-color: var(--forte); }
+
+  /* Revisão de desvio, Custo, Esqueleto e Alertas */
+  .revisao-desvio { border: 1px solid var(--texto); border-radius: var(--r); padding: 10px; background: var(--painel); display: flex; flex-direction: column; gap: 8px; }
+  .comparacao-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .custo-card { border: 1px solid var(--texto-2); border-radius: var(--r); padding: 10px 12px; background: var(--painel); display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+  .custo-linha { display: flex; justify-content: space-between; gap: 8px; }
+  .esqueleto { background: var(--sutil); border-radius: var(--r); height: 14px; }
+  .estado-centro { flex: 1; display: grid; place-items: center; padding: 24px; }
+  .estado-caixa { max-width: 480px; text-align: center; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>E1 · Sub-aba Transformar (Ângulos, Roteiro em blocos e Narração)</h1>
+    <p>Rota: <span class="mono">#/projeto/:id/corte/:corteId/transformar</span> (visível apenas para <strong>Vídeo transformado</strong>).
+      Especificação: <span class="mono">telas/E-corte-transformar-empacotar.md</span> (Tela 1) e <span class="mono">01-arquitetura.md</span> (§4, §6, §7, §8).
+      Em 1366 px, o painel esquerdo <strong>Transcrição do Corte</strong> inicia recolhido (<kbd>Ctrl+[</kbd>); em 1440+ px, abre acoplado à esquerda.</p>
+    <nav>
+      <a href="#passo1-angulo">1. Passo 1: Ângulo (1366)</a>
+      <a href="#passo2-roteiro-1440">2. Passo 2: Roteiro + Transcrição (1440)</a>
+      <a href="#passo3-narracao">3. Passo 3: Narração por blocos (1366)</a>
+      <a href="#subsuperficie-3a">4. 3A: TTS just-in-time (1366)</a>
+      <a href="#subsuperficie-3b">5. 3B: Teleprompter (1366)</a>
+      <a href="#custo-confirmacao">6. Guarda de custo e troca de ângulo (1366)</a>
+      <a href="#vazio-passo1">7. Vazio: Passo 1 sem sugestões (1366)</a>
+      <a href="#travado-erro-offline">8. Passo 3 travado + Erro + Fonte offline (1366)</a>
+      <a href="#carregando">9. Carregando (&lt;Esqueleto&gt;) (1366)</a>
+    </nav>
+  </header>
+
+  <!-- ==================== 1. PASSO 1: ÂNGULO (1366) ==================== -->
+  <section class="wf-variante" id="passo1-angulo">
+    <h2>1. Passo 1 · Ângulo (Transcrição recolhida por padrão) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto shell-duas-linhas">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Dark Tech ▾</button>
+          <nav class="etapas" aria-label="Etapas do Projeto">
+            <span class="etapa">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa atual">2. Cortes<small>8 aprovados</small></span>
+            <span class="etapa">3. Exportação<small>2</small></span>
+          </nav>
+          <div class="linha empurra">
+            <span class="selo">Somente local</span>
+            <button class="btn">Fila · 0 ativos</button>
+            <button class="btn">Comandos <kbd>Ctrl K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+          </div>
+        </header>
+
+        <div class="contexto-corte ctx-empilhado">
+          <div class="linha">
+            <button class="btn fantasma" style="height: 24px">← Cortes</button>
+            <button class="btn" style="height: 24px">&lt; Anterior <kbd>Alt+PgUp</kbd></button>
+            <span class="titulo-corte">Corte <span class="mono">2/8</span>: "Como o navegador bloqueou o vazamento em 2019"</span>
+            <button class="btn" style="height: 24px">Próximo aprovado &gt; <kbd>Alt+PgDn</kbd></button>
+            <span class="selo cheio empurra">Vídeo transformado</span><span class="n">1</span>
+          </div>
+          <div class="linha">
+            <nav class="ctx-subabas" aria-label="Etapas do Corte">
+              <span class="ctx-subaba">Editar</span>
+              <span class="ctx-subaba atual" aria-current="page">Transformar</span>
+              <span class="ctx-subaba">Empacotar</span>
+            </nav>
+            <button class="btn prim empurra" style="height: 24px">Exportar Corte <kbd>Ctrl E</kbd></button>
+          </div>
+        </div>
+
+        <div class="conteudo">
+          <div class="transf-wrap">
+            <div class="stepper-barra">
+              <button class="btn">Abrir Transcrição do Corte <kbd>Ctrl+[</kbd></button><span class="n">2</span>
+              <nav aria-label="Etapas da Transformação" class="empurra">
+                <ol class="stepper-lista">
+                  <li class="passo-item atual" aria-current="step"><span class="passo-num">1</span> Ângulo <span class="selo cheio">Definido: Vazamento silencioso</span></li>
+                  <li class="passo-item"><span class="passo-num">2</span> Roteiro <span class="selo">Não gerado</span></li>
+                  <li class="passo-item travado" aria-disabled="true"><span class="passo-num">3</span> 🔒 Narração <span class="selo">Travado</span></li>
+                </ol>
+              </nav><span class="n">3</span>
+            </div>
+
+            <div class="transf-corpo">
+              <div class="passo-scroll">
+                <div class="passo-coluna">
+                  <div class="linha" style="justify-content: space-between">
+                    <div>
+                      <h3 style="margin: 0; font-size: 15px">1. Escolha o ângulo da Transformação</h3>
+                      <p class="rotulo" style="margin: 3px 0 0">Escolha a promessa central do Vídeo transformado. Ela guia o Roteiro, o título e a ideia de capa.</p>
+                    </div>
+                    <button class="btn prim">Sugerir novos ângulos</button><span class="n">4</span>
+                  </div>
+
+                  <div class="linha">
+                    <span class="rotulo">Idioma do Corte:</span>
+                    <div class="campo" style="width: 110px; color: var(--texto)">PT-BR ▾</div>
+                    <span class="rotulo mudo">O idioma deste Corte ficou ambíguo na Transcrição; escolha em que idioma gerar.</span>
+                  </div>
+
+                  <!-- Ângulo escolhido -->
+                  <div class="bloco-card destaque">
+                    <div class="linha">
+                      <span class="selo cheio">Ângulo escolhido</span>
+                      <strong>Vazamento silencioso em extensões</strong>
+                      <span class="rotulo empurra">Público: desenvolvedores e usuários avançados</span>
+                    </div>
+                    <span>Promessa: Mostrar por que a atualização de 2019 fechou a brecha antes do ataque virar notícia.</span>
+                    <div class="chips">
+                      <span class="rotulo">Frases vinculadas:</span>
+                      <span class="chip mono">#104</span>
+                      <span class="chip mono">#105</span>
+                      <span class="chip mono">#108</span>
+                    </div>
+                  </div>
+
+                  <!-- Sugestões -->
+                  <div class="rotulo" style="font-weight: 600">Sugestões do Provedor (2)</div>
+                  <div class="bloco-card">
+                    <div class="linha">
+                      <strong>O erro oculto na permissão de aba</strong>
+                      <span class="rotulo empurra">Público: criadores e curiosos de segurança</span>
+                    </div>
+                    <span>Promessa: Explicar em linguagem simples como uma permissão banal expunha histórico de navegação.</span>
+                    <div class="linha">
+                      <div class="chips">
+                        <span class="chip mono">#104 [00:12]</span>
+                        <span class="chip mono">#107 [00:26]</span><span class="n">5</span>
+                      </div>
+                      <button class="btn empurra">Escolher este ângulo</button>
+                    </div>
+                  </div>
+
+                  <!-- Formulário manual expansível -->
+                  <details class="bloco-card" open>
+                    <summary style="cursor: pointer; font-weight: 600">Escrever meu próprio ângulo</summary>
+                    <div class="coluna" style="margin-top: 6px">
+                      <div class="linha" style="justify-content: space-between">
+                        <span class="rotulo">Nome do ângulo (obrigatório)</span>
+                        <span class="rotulo mono">28/60</span>
+                      </div>
+                      <div class="campo-texto">Bastidores do bloqueio em 2019</div>
+                      <div class="linha" style="justify-content: space-between">
+                        <span class="rotulo">Promessa em uma frase (obrigatório)</span>
+                        <span class="rotulo mono">64/200</span>
+                      </div>
+                      <div class="campo-texto">Explicar o impacto prático da mudança de arquitetura nos navegadores.</div>
+                      <div class="linha" style="gap: 10px">
+                        <div class="coluna cresce">
+                          <span class="rotulo">Para quem é (opcional · 0/120)</span>
+                          <div class="campo-texto mudo">Ex.: quem usa extensões no dia a dia</div>
+                        </div>
+                        <div class="coluna" style="width: 220px">
+                          <span class="rotulo">Frases de apoio (opcional · 1–12)</span>
+                          <div class="campo-texto mono">#104, #106</div>
+                        </div>
+                      </div>
+                      <div class="linha" style="justify-content: flex-end">
+                        <button class="btn">Usar meu ângulo</button><span class="n">6</span>
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <footer class="barra-status">
+          <span>Salvo</span><span>Sem jobs ativos</span>
+          <span class="empurra"><kbd>Ctrl+[</kbd> Transcrição · <kbd>F6</kbd> trocar região · <kbd>?</kbd> atalhos</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 2. PASSO 2: ROTEIRO + TRANSCRIÇÃO 1440 ==================== -->
+  <section class="wf-variante" id="passo2-roteiro-1440">
+    <h2>2. Passo 2 · Roteiro em blocos + Transcrição do Corte à ESQUERDA aberta · 1440 × 900</h2>
+    <div class="wf-quadro w1440">
+      <div class="shell com-contexto">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Dark Tech ▾</button>
+          <nav class="etapas" aria-label="Etapas do Projeto">
+            <span class="etapa">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa atual">2. Cortes<small>8 aprovados</small></span>
+            <span class="etapa">3. Exportação<small>2</small></span>
+          </nav>
+          <div class="linha empurra">
+            <button class="btn">Fila · 0 ativos</button>
+            <button class="btn">Comandos <kbd>Ctrl K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+          </div>
+        </header>
+
+        <div class="contexto-corte">
+          <button class="btn fantasma">← Cortes</button>
+          <button class="btn">&lt; Anterior <kbd>Alt+PgUp</kbd></button>
+          <span class="titulo-corte">Corte <span class="mono">2/8</span>: "Como o navegador bloqueou o vazamento em 2019"</span>
+          <button class="btn">Próximo aprovado &gt; <kbd>Alt+PgDn</kbd></button>
+          <span class="selo cheio">Vídeo transformado</span>
+          <nav class="ctx-subabas empurra" aria-label="Etapas do Corte">
+            <span class="ctx-subaba">Editar</span>
+            <span class="ctx-subaba atual" aria-current="page">Transformar</span>
+            <span class="ctx-subaba">Empacotar</span>
+          </nav>
+          <button class="btn prim">Exportar Corte <kbd>Ctrl E</kbd></button>
+        </div>
+
+        <div class="conteudo">
+          <div class="transf-wrap">
+            <div class="stepper-barra">
+              <button class="btn">Fechar Transcrição <kbd>Ctrl+[</kbd></button>
+              <nav aria-label="Etapas da Transformação" class="empurra">
+                <ol class="stepper-lista">
+                  <li class="passo-item"><span class="passo-num">1</span> Ângulo <span class="selo">Definido: Vazamento silencioso</span></li>
+                  <li class="passo-item atual" aria-current="step"><span class="passo-num">2</span> Roteiro <span class="selo cheio">2/4 aprovados</span></li>
+                  <li class="passo-item travado" aria-disabled="true"><span class="passo-num">3</span> 🔒 Narração <span class="selo">Travado · 2 blocos pendentes</span></li>
+                </ol>
+              </nav>
+            </div>
+
+            <div class="transf-corpo">
+              <!-- Painel esquerdo acoplado: Transcrição do Corte -->
+              <aside class="transcricao-aside" aria-label="Transcrição do Corte">
+                <div class="painel-cab">
+                  <span>Transcrição do Corte</span>
+                  <span class="rotulo empurra">Clique copia ID p/ refs</span><span class="n">7</span>
+                </div>
+                <div class="painel-corpo" style="padding: 0; gap: 0">
+                  <div class="frase-item destaque">
+                    <div class="linha"><span class="selo cheio mono">#104</span><span class="mono rotulo">00:12.400</span><span class="rotulo empurra">✓ em refs do Bloco 2</span></div>
+                    <span>"Quando a gente analisou os pacotes daquela extensão, ninguém percebeu que o cookie ia junto."</span>
+                  </div>
+                  <div class="frase-item">
+                    <div class="linha"><span class="selo mono">#105</span><span class="mono rotulo">00:18.120</span></div>
+                    <span>"E aí o pessoal de segurança tentou reproduzir no dia seguinte, mas já tinha patch em canary."</span>
+                  </div>
+                  <div class="frase-item destaque">
+                    <div class="linha"><span class="selo cheio mono">#106</span><span class="mono rotulo">00:24.800</span><span class="rotulo empurra">✓ em refs do Bloco 2</span></div>
+                    <span>"O detalhe que muda tudo é que a API antiga não separava contexto de origem."</span>
+                  </div>
+                  <div class="frase-item">
+                    <div class="linha"><span class="selo mono">#107</span><span class="mono rotulo">00:31.050</span></div>
+                    <span>"Quem mantinha a extensão legada precisou reescrever o manifesto inteiro em duas semanas."</span>
+                  </div>
+                  <div class="frase-item">
+                    <div class="linha"><span class="selo mono">#108</span><span class="mono rotulo">00:37.900</span></div>
+                    <span>"No fim, o usuário comum nem notou a troca, mas o vazamento caiu a zero."</span>
+                  </div>
+                </div>
+              </aside>
+
+              <!-- Área do Passo 2 -->
+              <div class="passo-scroll">
+                <div class="passo-coluna">
+                  <div class="banner" role="note">
+                    <div>
+                      <strong>Revisão humana obrigatória antes da Narração</strong><span class="n">8</span>
+                      <div class="rotulo">O Provedor sugere um rascunho em blocos, mas só você aprova o texto final. A etapa de Narração é liberada apenas quando todos os blocos estiverem aprovados — isso garante Transformação real e evita conteúdo automático repetitivo.</div>
+                    </div>
+                  </div>
+
+                  <div class="linha" style="flex-wrap: wrap; gap: 8px">
+                    <span class="rotulo">Ângulo: <strong>Vazamento silencioso</strong></span>
+                    <button class="btn">Sugerir novo Roteiro</button>
+                    <span class="selo">Faltam 2 de 4 blocos para aprovar</span>
+                    <span class="rotulo mono empurra">612/2400 caracteres</span>
+                    <button class="btn prim" disabled title="Aprove todos os blocos para liberar">Avançar para Narração →</button>
+                  </div>
+
+                  <!-- Bloco 1: Aprovado -->
+                  <article class="bloco-card">
+                    <div class="linha">
+                      <strong>Bloco 1</strong>
+                      <span class="selo cheio">✓ Aprovado</span>
+                      <span class="rotulo">Intenção: Gancho de abertura</span>
+                      <span class="rotulo mono empurra">118/600 chars</span>
+                    </div>
+                    <div class="campo-texto">Você sabia que uma única permissão banal podia expor suas abas abertas até 2019?</div>
+                    <div class="linha">
+                      <span class="rotulo">Refs:</span><span class="chip mono">#104</span>
+                      <button class="btn empurra" disabled>Aprovado</button>
+                      <button class="btn">Regenerar bloco ▾</button>
+                    </div>
+                  </article>
+
+                  <!-- Bloco 2: Pendente e Editado -->
+                  <article class="bloco-card destaque">
+                    <div class="linha" style="flex-wrap: wrap">
+                      <strong>Bloco 2</strong>
+                      <span class="selo">Pendente</span>
+                      <span class="selo">Editado</span>
+                      <span class="selo">Desatualizado — ângulo mudou</span><span class="n">9</span>
+                      <span class="rotulo empurra" style="white-space: nowrap">Intenção: Contexto técnico</span>
+                    </div>
+                    <div class="coluna" style="gap: 4px">
+                      <div class="linha" style="justify-content: space-between">
+                        <span class="rotulo">Título do bloco</span>
+                        <span class="rotulo mono">26/80</span>
+                      </div>
+                      <div class="campo-texto">A falha no contexto antigo</div>
+                    </div>
+                    <div class="coluna" style="gap: 4px">
+                      <div class="linha" style="justify-content: space-between">
+                        <span class="rotulo">Texto da Narração</span>
+                        <span class="rotulo mono">184/600</span>
+                      </div>
+                      <div class="campo-texto campo-area">O detalhe que quase ninguém percebeu é que a API antiga não separava o contexto de origem. Na prática, o cookie ia junto sem ninguém notar até a correção silenciosa chegar.</div>
+                    </div>
+                    <div class="linha">
+                      <span class="rotulo">Frases de referência (refs):</span>
+                      <span class="chip mono">#104 ×</span>
+                      <span class="chip mono">#106 ×</span>
+                      <span class="rotulo mudo">Clique na Transcrição à esquerda para vincular</span>
+                    </div>
+                    <div class="linha">
+                      <button class="btn">Salvar edição <kbd>Ctrl+S</kbd></button><span class="n">10</span>
+                      <button class="btn prim" disabled title="Salve a edição antes de aprovar">Aprovar bloco</button>
+                      <button class="btn empurra">Regenerar bloco ▾</button><span class="n">11</span>
+                    </div>
+                  </article>
+
+                  <!-- Bloco 3: Gerando -->
+                  <article class="bloco-card">
+                    <div class="linha">
+                      <strong>Bloco 3</strong>
+                      <span class="selo">Pendente</span>
+                      <span class="rotulo">Intenção: Impacto nas extensões</span>
+                      <span class="rotulo mono empurra">Chamando Provedor…</span>
+                    </div>
+                    <div class="barra-prog" style="--p: 65%"><i></i></div>
+                    <span class="rotulo">Gerando texto deste bloco…</span>
+                  </article>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <footer class="barra-status">
+          <span>Salvo</span><span>Job #41 · ai:script_block (Bloco 3)</span>
+          <span class="empurra"><kbd>Ctrl+S</kbd> salvar bloco · <kbd>Ctrl+[</kbd> Transcrição · <kbd>F6</kbd> regiões</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 3. PASSO 3: NARRAÇÃO POR BLOCOS (1366) ==================== -->
+  <section class="wf-variante" id="passo3-narracao">
+    <h2>3. Passo 3 · Narração por blocos (TTS, Gravado com limpeza Antes/Depois e Revisão de desvios) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto shell-duas-linhas">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Dark Tech ▾</button>
+          <nav class="etapas">
+            <span class="etapa">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa atual">2. Cortes<small>8 aprovados</small></span>
+            <span class="etapa">3. Exportação<small>2</small></span>
+          </nav>
+          <div class="linha empurra">
+            <button class="btn">Fila · 0 ativos</button>
+            <button class="btn">Comandos <kbd>Ctrl K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+          </div>
+        </header>
+
+        <div class="contexto-corte ctx-empilhado">
+          <div class="linha">
+            <button class="btn fantasma" style="height: 24px">← Cortes</button>
+            <button class="btn" style="height: 24px">&lt; Anterior</button>
+            <span class="titulo-corte">Corte <span class="mono">2/8</span>: "Como o navegador bloqueou o vazamento em 2019"</span>
+            <button class="btn" style="height: 24px">Próximo aprovado &gt;</button>
+            <span class="selo cheio empurra">Vídeo transformado</span>
+          </div>
+          <div class="linha">
+            <nav class="ctx-subabas" aria-label="Etapas do Corte">
+              <span class="ctx-subaba">Editar</span>
+              <span class="ctx-subaba atual" aria-current="page">Transformar</span>
+              <span class="ctx-subaba">Empacotar</span>
+            </nav>
+            <button class="btn prim empurra" style="height: 24px">Exportar Corte <kbd>Ctrl E</kbd></button>
+          </div>
+        </div>
+
+        <div class="conteudo">
+          <div class="transf-wrap">
+            <div class="stepper-barra">
+              <button class="btn">Abrir Transcrição <kbd>Ctrl+[</kbd></button>
+              <nav aria-label="Etapas da Transformação" class="empurra">
+                <ol class="stepper-lista">
+                  <li class="passo-item"><span class="passo-num">1</span> Ângulo <span class="selo">Definido</span></li>
+                  <li class="passo-item"><span class="passo-num">2</span> Roteiro <span class="selo">4/4 aprovados</span></li>
+                  <li class="passo-item atual" aria-current="step"><span class="passo-num">3</span> Narração <span class="selo cheio">3/4 blocos com voz</span></li>
+                </ol>
+              </nav>
+            </div>
+
+            <div class="transf-corpo">
+              <div class="passo-scroll">
+                <div class="passo-coluna">
+                  <!-- Resumo + controles globais de voz e ações -->
+                  <div class="bloco-card destaque">
+                    <div class="linha" style="flex-wrap: wrap">
+                      <span>Idioma: <strong>PT-BR</strong></span>
+                      <span>Duração total: <strong class="mono">00:34.2</strong></span>
+                      <span class="selo">Alinhamento: Pronto</span>
+                      <div class="linha empurra">
+                        <button class="btn">Ajustar na timeline (Editar)</button>
+                        <button class="btn prim">Avançar para Empacotar →</button>
+                      </div>
+                    </div>
+                    <div class="linha" style="flex-wrap: wrap">
+                      <label class="linha"><span class="rotulo">Voz local:</span><div class="campo" style="color: var(--texto)">Marina (PT-BR) · CC-BY-4.0 ▾</div></label>
+                      <label class="linha"><span class="rotulo">Modelo:</span><div class="campo" style="color: var(--texto)">portuguese_24l ▾</div></label><span class="n">12</span>
+                      <button class="btn empurra">Gerar voz de todos os blocos (TTS)</button>
+                      <button class="btn">Alinhar todos os blocos</button>
+                    </div>
+                  </div>
+
+                  <!-- Faixa de parcial (bloco sem áudio + needs_review) -->
+                  <div class="banner" role="status">
+                    <span>Narração parcial: 1 bloco sem áudio e 1 bloco aguardando revisão de alinhamento.</span>
+                    <button class="btn empurra">Ir para o próximo pendente</button>
+                  </div>
+
+                  <!-- Bloco 1: Gravado + Limpeza Antes/Depois + needs_review -->
+                  <article class="bloco-card">
+                    <div class="linha">
+                      <strong>Bloco 1 · Abertura</strong>
+                      <span class="selo cheio">Gravado</span>
+                      <span class="selo mono">00:11.4</span>
+                      <span class="selo">Revisão necessária</span><span class="n">13</span>
+                      <span class="rotulo empurra">Ruído medido nos silêncios</span>
+                    </div>
+                    <span class="rotulo">"Você sabia que uma única permissão banal podia expor suas abas abertas até 2019?"</span>
+                    <div class="linha" style="flex-wrap: wrap">
+                      <button class="btn">Gerar com voz (TTS)</button>
+                      <button class="btn">Gravar no microfone</button>
+                      <button class="btn">Importar áudio</button>
+                      <label class="linha empurra"><input type="checkbox" checked> Limpeza de voz (remove ruído de fundo e grave)</label>
+                    </div>
+                    <div class="linha">
+                      <button class="btn">▶ Ouvir</button>
+                      <div class="seg-grupo" role="radiogroup" aria-label="Comparar limpeza de voz">
+                        <span class="seg-op">Antes (original)</span>
+                        <span class="seg-op ativo">Depois (limpa)</span>
+                      </div><span class="n">14</span>
+                      <button class="btn empurra">Re-alinhar bloco</button>
+                    </div>
+                    <div class="revisao-desvio">
+                      <strong>O áudio falado diferiu do Roteiro (1 acréscimo, 1 troca). Escolha qual texto vai para as legendas:</strong>
+                      <div class="comparacao-cols">
+                        <div class="caixa">
+                          <div class="rotulo">Roteiro aprovado</div>
+                          <span>"...podia expor suas abas abertas até 2019?"</span>
+                        </div>
+                        <div class="caixa">
+                          <div class="rotulo">Detectado na fala</div>
+                          <span>"...podia expor <strong>todas as</strong> suas abas até 2019?"</span>
+                        </div>
+                      </div>
+                      <div class="linha" style="justify-content: flex-end">
+                        <button class="btn">Usar texto do Roteiro</button>
+                        <button class="btn prim">Usar texto falado</button>
+                      </div>
+                    </div>
+                  </article>
+
+                  <!-- Bloco 2: TTS + Bloco 3: Importado sem aparo VAD -->
+                  <article class="bloco-card">
+                    <div class="linha">
+                      <strong>Bloco 2 · A falha no contexto antigo</strong>
+                      <span class="selo cheio">TTS · marina_pt</span>
+                      <span class="selo mono">00:12.8</span>
+                      <span class="selo">✓ Alinhado</span>
+                      <button class="btn empurra">▶ Ouvir</button>
+                      <button class="btn">Regenerar TTS</button>
+                      <button class="btn">Gravar no microfone</button>
+                    </div>
+                  </article>
+
+                  <article class="bloco-card">
+                    <div class="linha">
+                      <strong>Bloco 3 · Impacto nas extensões</strong>
+                      <span class="selo">Gravado (sem VAD)</span>
+                      <span class="selo">Desatualizado (Roteiro alterado)</span>
+                      <span class="rotulo empurra">Silêncios não foram aparados na gravação</span>
+                      <button class="btn">Aparar silêncios agora</button><span class="n">15</span>
+                    </div>
+                  </article>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <footer class="barra-status">
+          <span>Salvo</span><span>Sem jobs ativos</span>
+          <span class="empurra"><kbd>F6</kbd> trocar região · <kbd>?</kbd> atalhos</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 4. SUB-SUPERFÍCIE 3A: TTS JUST-IN-TIME ==================== -->
+  <section class="wf-variante" id="subsuperficie-3a">
+    <h2>4. Passo 3 · Sub-superfície 3A: Instalador just-in-time de pocket-tts e modelo TTS · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto shell-duas-linhas">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Dark Tech ▾</button>
+          <nav class="etapas">
+            <span class="etapa">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa atual">2. Cortes<small>8 aprovados</small></span>
+            <span class="etapa">3. Exportação<small>2</small></span>
+          </nav>
+          <div class="linha empurra">
+            <button class="btn">Fila · 1 ativo</button>
+            <button class="btn">Comandos <kbd>Ctrl K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+          </div>
+        </header>
+
+        <div class="contexto-corte ctx-empilhado">
+          <div class="linha">
+            <button class="btn fantasma" style="height: 24px">← Cortes</button>
+            <span class="titulo-corte">Corte <span class="mono">2/8</span>: "Como o navegador bloqueou o vazamento em 2019"</span>
+            <span class="selo cheio empurra">Vídeo transformado</span>
+          </div>
+          <div class="linha">
+            <nav class="ctx-subabas" aria-label="Etapas do Corte">
+              <span class="ctx-subaba">Editar</span>
+              <span class="ctx-subaba atual" aria-current="page">Transformar</span>
+              <span class="ctx-subaba">Empacotar</span>
+            </nav>
+          </div>
+        </div>
+
+        <div class="conteudo">
+          <div class="transf-wrap">
+            <div class="stepper-barra">
+              <button class="btn">Abrir Transcrição <kbd>Ctrl+[</kbd></button>
+              <nav aria-label="Etapas da Transformação" class="empurra">
+                <ol class="stepper-lista">
+                  <li class="passo-item"><span class="passo-num">1</span> Ângulo <span class="selo">Definido</span></li>
+                  <li class="passo-item"><span class="passo-num">2</span> Roteiro <span class="selo">4/4 aprovados</span></li>
+                  <li class="passo-item atual" aria-current="step"><span class="passo-num">3</span> Narração <span class="selo">0/4 blocos com voz</span></li>
+                </ol>
+              </nav>
+            </div>
+
+            <div class="transf-corpo">
+              <div class="passo-scroll">
+                <div class="passo-coluna">
+                  <!-- Sub-superfície 3A inline -->
+                  <section class="jit-caixa" aria-label="Preparar voz local (TTS)">
+                    <div class="linha">
+                      <strong>PREPARAR VOZ LOCAL (TTS)</strong><span class="n">16</span>
+                      <span class="selo empurra">Instalação just-in-time</span>
+                    </div>
+                    <span>Para sintetizar a Narração no seu computador, faltam:</span>
+
+                    <div class="jit-item">
+                      <div class="linha">
+                        <strong>[1] Motor de voz pocket-tts</strong>
+                        <span class="selo mono">~42 MB</span>
+                        <span class="selo">Apache-2.0</span>
+                        <span class="rotulo mono empurra">64%</span>
+                      </div>
+                      <div class="linha">
+                        <div class="barra-prog cresce" style="--p: 64%"><i></i></div>
+                        <button class="btn">Cancelar</button>
+                      </div>
+                    </div>
+
+                    <div class="jit-item">
+                      <div class="linha">
+                        <strong>[2] Modelo de voz (PT-BR · portuguese_24l)</strong>
+                        <span class="selo mono">~310 MB</span>
+                        <span class="selo">CC-BY-4.0</span>
+                      </div>
+                      <div class="caixa">
+                        <div class="linha">
+                          <span class="rotulo"><strong>Termo de uso proibido:</strong> Não usar a voz sintética para fraude, falsidade ideológica ou assédio.</span>
+                          <button class="btn fantasma empurra">Ver texto completo</button>
+                        </div>
+                        <label class="linha" style="margin-top: 6px"><input type="checkbox" checked> Li e concordo com as restrições de uso da voz sintética</label>
+                      </div>
+                      <div class="linha" style="justify-content: flex-end">
+                        <button class="btn prim" disabled title="Aguardando término do motor pocket-tts">Baixar modelo de voz</button>
+                      </div>
+                    </div>
+                  </section>
+
+                  <div class="bloco-card">
+                    <span class="rotulo">Enquanto o TTS prepara, você pode gravar ou importar áudio diretamente em cada bloco:</span>
+                    <div class="linha">
+                      <strong>Bloco 1 · Abertura</strong>
+                      <span class="selo">Sem áudio</span>
+                      <button class="btn empurra">Gravar no microfone</button>
+                      <button class="btn">Importar áudio</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <footer class="barra-status">
+          <span>Salvo</span><span>Baixando pocket-tts (64%)…</span>
+          <span class="empurra"><kbd>F6</kbd> trocar região · <kbd>?</kbd> atalhos</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 5. SUB-SUPERFÍCIE 3B: TELEPROMPTER ==================== -->
+  <section class="wf-variante" id="subsuperficie-3b">
+    <h2>5. Passo 3 · Sub-superfície 3B: Gravador com Teleprompter (e tratamento de rascunho sem fala) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto shell-duas-linhas">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Dark Tech ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes</span><span class="etapa atual">2. Cortes</span><span class="etapa">3. Exportação</span></nav>
+          <div class="linha empurra"><button class="btn">Fila · 0 ativos</button><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </header>
+        <div class="contexto-corte ctx-empilhado">
+          <div class="linha"><span class="titulo-corte">Corte <span class="mono">2/8</span>: "Como o navegador bloqueou o vazamento em 2019"</span><span class="selo cheio empurra">Vídeo transformado</span></div>
+          <div class="linha"><nav class="ctx-subabas"><span class="ctx-subaba">Editar</span><span class="ctx-subaba atual">Transformar</span><span class="ctx-subaba">Empacotar</span></nav></div>
+        </div>
+        <div class="conteudo"><div class="cresce secao"><div class="caixa tracejada cresce"></div></div></div>
+        <footer class="barra-status"><span>Salvo</span><span>Gravando Bloco 2</span></footer>
+      </div>
+
+      <div class="dialogo-fundo" role="presentation">
+        <div class="dialogo teleprompter-modal" role="dialog" aria-modal="true" aria-labelledby="tit-tele">
+          <div class="linha">
+            <strong id="tit-tele">GRAVAR NARRAÇÃO — Bloco 2 de 4: "A falha no contexto antigo"</strong><span class="n">17</span>
+            <button class="btn empurra">Fechar <kbd>Esc</kbd></button>
+          </div>
+
+          <div class="linha" style="flex-wrap: wrap; background: var(--painel); padding: 6px 8px; border-radius: var(--r); border: 1px solid var(--borda)">
+            <span class="rotulo">Velocidade:</span>
+            <div class="caixa" style="padding: 2px 8px; width: 110px">━━●━━━━</div>
+            <span class="mono rotulo">45 px/s</span>
+            <span class="rotulo" style="margin-left: 8px">Fonte:</span>
+            <button class="btn">A-</button><button class="btn">A+</button>
+            <div class="seg-grupo empurra">
+              <span class="seg-op ativo">Rolagem</span>
+              <span class="seg-op">Passo <kbd>↑/↓</kbd></span>
+            </div><span class="n">18</span>
+          </div>
+
+          <div class="teleprompter-texto">
+            <p style="margin: 0; font-weight: 600">▸ "O detalhe que quase ninguém percebeu naquela jogada foi que a API antiga não separava o contexto de origem."</p>
+            <p class="mudo" style="margin: 10px 0 0">Na prática, o cookie ia junto sem ninguém notar até a correção silenciosa chegar.</p>
+          </div>
+
+          <div class="linha" style="background: var(--painel); padding: 8px 10px; border-radius: var(--r); border: 1px solid var(--borda)">
+            <span class="rotulo">VU Microfone:</span>
+            <div class="vu-barra" aria-label="Nível do microfone">
+              <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i>
+            </div>
+            <span class="rotulo" style="margin-left: 8px">Tempo: <strong class="mono">00:08.4</strong></span>
+            <span class="selo cheio empurra">● Gravando</span>
+          </div>
+
+          <div class="linha">
+            <button class="btn">Pausar <kbd>Espaço</kbd></button>
+            <button class="btn prim">Parar e salvar</button>
+            <button class="btn perigo empurra">Descartar e regravar</button>
+          </div>
+
+          <!-- Estado alternativo exibido quando VAD retorna no_speech_detected -->
+          <div class="banner" role="alert" style="font-size: 12px">
+            <div>
+              <strong>Se ocorrer <span class="mono">no_speech_detected</span>:</strong> O áudio anterior foi mantido e o rascunho ficou salvo temporariamente.
+              <div class="linha" style="margin-top: 6px">
+                <button class="btn">▶ Ouvir rascunho (00:04.2)</button>
+                <button class="btn">Gravar novamente</button>
+                <button class="btn perigo">Descartar rascunho</button><span class="n">19</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 6. GUARDA DE CUSTO + TROCA DE ÂNGULO ==================== -->
+  <section class="wf-variante" id="custo-confirmacao">
+    <h2>6. Guarda pré-disparo (&lt;ResumoCustoPrivacidade&gt; no &lt;ConfirmDialog&gt;) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto shell-duas-linhas">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Dark Tech ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes</span><span class="etapa atual">2. Cortes</span><span class="etapa">3. Exportação</span></nav>
+          <div class="linha empurra"><button class="btn">Fila · 0 ativos</button><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </header>
+        <div class="contexto-corte ctx-empilhado">
+          <div class="linha"><span class="titulo-corte">Corte <span class="mono">2/8</span>: "Como o navegador bloqueou o vazamento em 2019"</span><span class="selo cheio empurra">Vídeo transformado</span></div>
+          <div class="linha"><nav class="ctx-subabas"><span class="ctx-subaba">Editar</span><span class="ctx-subaba atual">Transformar</span><span class="ctx-subaba">Empacotar</span></nav></div>
+        </div>
+        <div class="conteudo"><div class="cresce secao"><div class="caixa tracejada cresce"></div></div></div>
+        <footer class="barra-status"><span>Salvo</span><span>Aguardando confirmação</span></footer>
+      </div>
+
+      <div class="dialogo-fundo" role="presentation">
+        <div class="dialogo" style="width: 520px" role="alertdialog" aria-modal="true" aria-labelledby="tit-custo">
+          <strong id="tit-custo">Confirmar envio ao Provedor — Sugerir Roteiro em blocos</strong><span class="n">20</span>
+          <div class="custo-card">
+            <div class="custo-linha"><span>Tarefa de IA:</span><strong>Roteiro em blocos (<span class="mono">script.generate</span>)</strong></div>
+            <div class="custo-linha"><span>Perfil de Provedor:</span><span>OpenAI Produção (<span class="mono">gpt-4o-mini</span>)</span></div>
+            <div class="custo-linha"><span>Privacidade e destino:</span><span class="selo">Remoto (HTTPS) · api.openai.com</span></div>
+            <div class="rotulo">Envia texto da Transcrição do Corte e o ângulo escolhido para fora da sua máquina.</div>
+            <div class="custo-linha"><span>Estimativa:</span><strong class="mono">~US$ 0,012 – US$ 0,024 (~3.400 tokens)</strong></div>
+            <div class="custo-linha"><span>Orçamento restante do Projeto:</span><span class="mono">US$ 4,82</span></div>
+          </div>
+          <div class="linha" style="justify-content: flex-end">
+            <button class="btn">Cancelar</button>
+            <button class="btn prim">Confirmar e gerar Roteiro</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 7. VAZIO: PASSO 1 SEM SUGESTÕES ==================== -->
+  <section class="wf-variante" id="vazio-passo1">
+    <h2>7. Estado Vazio · Passo 1 sem sugestões de ângulo · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto shell-duas-linhas">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Dark Tech ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes</span><span class="etapa atual">2. Cortes</span><span class="etapa">3. Exportação</span></nav>
+          <div class="linha empurra"><button class="btn">Fila · 0 ativos</button><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </header>
+        <div class="contexto-corte ctx-empilhado">
+          <div class="linha"><button class="btn fantasma" style="height: 24px">← Cortes</button><span class="titulo-corte">Corte <span class="mono">3/8</span>: "Por que o protocolo mudou"</span><span class="selo cheio empurra">Vídeo transformado</span></div>
+          <div class="linha"><nav class="ctx-subabas"><span class="ctx-subaba">Editar</span><span class="ctx-subaba atual">Transformar</span><span class="ctx-subaba">Empacotar</span></nav></div>
+        </div>
+
+        <div class="conteudo">
+          <div class="transf-wrap">
+            <div class="stepper-barra">
+              <button class="btn">Abrir Transcrição <kbd>Ctrl+[</kbd></button>
+              <nav aria-label="Etapas da Transformação" class="empurra">
+                <ol class="stepper-lista">
+                  <li class="passo-item atual" aria-current="step"><span class="passo-num">1</span> Ângulo <span class="selo">Pendente</span></li>
+                  <li class="passo-item travado" aria-disabled="true"><span class="passo-num">2</span> 🔒 Roteiro <span class="selo">Travado</span></li>
+                  <li class="passo-item travado" aria-disabled="true"><span class="passo-num">3</span> 🔒 Narração <span class="selo">Travado</span></li>
+                </ol>
+              </nav>
+            </div>
+
+            <div class="estado-centro">
+              <div class="estado-caixa">
+                <strong style="font-size: 15px">Nenhum ângulo sugerido ainda</strong>
+                <span class="rotulo">Nenhum ângulo sugerido ainda. Peça sugestões ao Provedor ou escreva o seu próprio ângulo para liberar o Roteiro.</span>
+                <div class="linha">
+                  <button class="btn prim">Sugerir ângulos</button>
+                  <button class="btn">Escrever meu próprio ângulo</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <footer class="barra-status"><span>Salvo</span><span>Sem jobs ativos</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 8. PASSO 3 TRAVADO + ERRO + FONTE OFFLINE ==================== -->
+  <section class="wf-variante" id="travado-erro-offline">
+    <h2>8. Passo 3 travado (narrationAllowed=false) + Erro acionável + Fonte offline · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto shell-duas-linhas">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Dark Tech ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes</span><span class="etapa atual">2. Cortes</span><span class="etapa">3. Exportação</span></nav>
+          <div class="linha empurra"><span class="selo">Somente local</span><button class="btn">Fila · 0 ativos</button><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </header>
+        <div class="contexto-corte ctx-empilhado">
+          <div class="linha"><button class="btn fantasma" style="height: 24px">← Cortes</button><span class="titulo-corte">Corte <span class="mono">2/8</span>: "Como o navegador bloqueou o vazamento em 2019"</span><span class="selo cheio empurra">Vídeo transformado</span></div>
+          <div class="linha"><nav class="ctx-subabas"><span class="ctx-subaba">Editar</span><span class="ctx-subaba atual">Transformar</span><span class="ctx-subaba">Empacotar</span></nav><button class="btn empurra" style="height: 24px" disabled>Exportar Corte</button></div>
+        </div>
+
+        <div class="conteudo">
+          <div class="transf-wrap">
+            <div class="stepper-barra">
+              <button class="btn">Abrir Transcrição <kbd>Ctrl+[</kbd></button>
+              <nav aria-label="Etapas da Transformação" class="empurra">
+                <ol class="stepper-lista">
+                  <li class="passo-item"><span class="passo-num">1</span> Ângulo <span class="selo">Definido</span></li>
+                  <li class="passo-item"><span class="passo-num">2</span> Roteiro <span class="selo">2/4 aprovados</span></li>
+                  <li class="passo-item atual travado" aria-current="step"><span class="passo-num">3</span> 🔒 Narração <span class="selo">Travado · 2 blocos pendentes</span></li>
+                </ol>
+              </nav>
+            </div>
+
+            <div class="passo-scroll">
+              <div class="passo-coluna">
+                <!-- Banner Fonte offline não bloqueante -->
+                <div class="banner" role="status">
+                  <div>
+                    <strong>Fonte offline no disco</strong> — Roteiro e Narração continuam editáveis pelo SQLite; preview de vídeo e exportação MP4 ficam bloqueados.
+                  </div>
+                  <button class="btn empurra">Relocalizar Fonte</button><span class="n">21</span>
+                </div>
+
+                <!-- Erro acionável -->
+                <div class="banner" role="alert" style="border-color: var(--texto); background: var(--sutil)">
+                  <div class="coluna cresce" style="gap: 4px">
+                    <strong>Bloqueado pelo modo Somente local</strong>
+                    <span>Este Provedor envia o texto para fora da máquina (<span class="mono">local_only_violation</span>).</span>
+                    <details class="rotulo">
+                      <summary style="cursor: pointer">Ver detalhe técnico</summary>
+                      <span class="mono">CoreError { code: "local_only_violation", task: "script" }</span>
+                    </details>
+                  </div>
+                  <button class="btn prim">Configurar Perfil local</button>
+                </div>
+
+                <!-- Faixa pedagógica de trava do Passo 3 -->
+                <div class="bloco-card destaque" style="padding: 16px">
+                  <strong>Narração travada: ainda há 2 bloco(s) pendente(s) no Roteiro.</strong><span class="n">22</span>
+                  <span class="rotulo">Pela regra de Transformação (ADR-0001), todos os blocos do Roteiro precisam da sua aprovação antes de gerar TTS, gravar ou importar áudio de Narração.</span>
+                  <div class="linha">
+                    <button class="btn prim">Voltar ao próximo bloco pendente</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <footer class="barra-status"><span>Salvo (SQLite)</span><span>Fonte offline</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 9. CARREGANDO (<ESQUELETO>) ==================== -->
+  <section class="wf-variante" id="carregando">
+    <h2>9. Estado Carregando (&lt;Esqueleto&gt; do Stepper e 3 blocos) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto shell-duas-linhas">
+        <header class="barra-sup">
+          <button class="btn fantasma">Canal Dark Tech ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes</span><span class="etapa atual">2. Cortes</span><span class="etapa">3. Exportação</span></nav>
+          <div class="linha empurra"><button class="btn">Fila · 0</button><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </header>
+        <div class="contexto-corte ctx-empilhado">
+          <div class="linha"><span class="titulo-corte">Carregando Corte…</span></div>
+          <div class="linha"><nav class="ctx-subabas"><span class="ctx-subaba">Editar</span><span class="ctx-subaba atual">Transformar</span><span class="ctx-subaba">Empacotar</span></nav></div>
+        </div>
+
+        <div class="conteudo">
+          <div class="transf-wrap" aria-busy="true" aria-label="Carregando Transformação">
+            <div class="stepper-barra">
+              <div class="esqueleto" style="width: 160px; height: 26px"></div>
+              <div class="linha empurra">
+                <div class="esqueleto" style="width: 130px; height: 26px"></div>
+                <div class="esqueleto" style="width: 130px; height: 26px"></div>
+                <div class="esqueleto" style="width: 130px; height: 26px"></div>
+              </div>
+            </div>
+            <div class="passo-scroll">
+              <div class="passo-coluna">
+                <div class="bloco-card"><div class="esqueleto" style="width: 40%"></div><div class="esqueleto" style="width: 90%; height: 42px"></div></div>
+                <div class="bloco-card"><div class="esqueleto" style="width: 35%"></div><div class="esqueleto" style="width: 85%; height: 42px"></div></div>
+                <div class="bloco-card"><div class="esqueleto" style="width: 45%"></div><div class="esqueleto" style="width: 88%; height: 42px"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <footer class="barra-status"><span>Carregando dados do Corte…</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== NOTAS ==================== -->
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li><strong>Guarda de rota por tipo de vídeo:</strong> a sub-aba <span class="mono">Transformar</span> só aparece para <strong>Vídeo transformado</strong>. Em <strong>Corte direto</strong> ou Corte <span class="mono">avulso-*</span>, é ocultada do <span class="mono">&lt;ContextoCorte&gt;</span> e acesso direto por URL redireciona para <span class="mono">/editar</span> com toast informativo.</li>
+      <li><strong>Painel Transcrição do Corte (<kbd>Ctrl+[</kbd>):</strong> em 1366 px inicia recolhido para preservar largura de leitura (<span class="mono">≤ 68 ch</span>); em 1440+ px abre acoplado à esquerda sem cobrir a área do passo.</li>
+      <li><strong>Stepper com trava (ADR-0001):</strong> Passo 2 exige ângulo escolhido (<span class="mono">angles.get.selected !== null</span>); Passo 3 é clicável para leitura explicativa, mas permanece travado (<span class="mono">narrationAllowed === false</span>) até todos os blocos estarem aprovados.</li>
+      <li><strong>Sugerir ângulos:</strong> chama <span class="mono">angles.estimate</span>; se <span class="mono">paid</span> ou CLI, abre <span class="mono">&lt;ResumoCustoPrivacidade&gt;</span> antes de <span class="mono">angles.generate</span>.</li>
+      <li><strong>Chips de Frase:</strong> clicar num chip de <span class="mono">sentence_ids</span> rola e destaca a Frase correspondente no painel lateral da Transcrição do Corte.</li>
+      <li><strong>Troca de ângulo com Roteiro existente:</strong> <span class="mono">angles.choose</span> retorna <span class="mono">angle_change_confirmation</span> e exige <span class="mono">&lt;ConfirmDialog&gt;</span> antes de reenviar <span class="mono">confirmed: true</span>, marcando os blocos existentes como <span class="mono">stale</span> e <span class="mono">Pendente</span>.</li>
+      <li><strong>Vincular refs via painel esquerdo:</strong> no Passo 1 ou Passo 2, clicar numa Frase no painel esquerdo insere/alterna seu ID no campo <span class="mono">refs</span> em foco.</li>
+      <li><strong>Banner permanente ADR-0001:</strong> sempre visível no topo do Passo 2 para deixar explícita a revisão humana obrigatória antes da Narração.</li>
+      <li><strong>Estados do bloco no Passo 2:</strong> exibe <span class="mono">Pendente</span> / <span class="mono">Aprovado</span>, mais badges acumulativos <span class="mono">Editado</span> e <span class="mono">Desatualizado — ângulo mudou</span> quando aplicável.</li>
+      <li><strong>Salvar edição vs. Aprovar:</strong> editar qualquer campo habilita <span class="mono">Salvar edição</span> (<span class="mono">script.edit</span>, também via <kbd>Ctrl+S</kbd>), que retorna o bloco para <span class="mono">Pendente</span>; <span class="mono">Aprovar bloco</span> (<span class="mono">script.approve</span>) fica desabilitado enquanto houver alterações não salvas.</li>
+      <li><strong>Regenerar bloco com outro Perfil:</strong> menu permite regenerar com o Perfil atual ou escolher outro via <span class="mono">provider.profiles.list</span> → <span class="mono">script.estimate { block, profileId }</span> → <span class="mono">&lt;ResumoCustoPrivacidade&gt;</span> → <span class="mono">script.regenerate</span>.</li>
+      <li><strong>Voz e modelo TTS:</strong> <span class="mono">tts.catalog</span> lista vozes compatíveis com o idioma e modelos baixados (<span class="mono">tts.models.choose</span>); se faltar <span class="mono">pocket-tts</span> ou modelo, o bloco 3A aparece inline.</li>
+      <li><strong>Revisão de desvios (<span class="mono">needs_review</span>):</strong> compara <em>Roteiro aprovado</em> × <em>Detectado na fala</em> e exige escolha explícita via <span class="mono">narration.review { choice: "script" | "spoken" }</span> para liberar a legenda do bloco.</li>
+      <li><strong>Limpeza de voz Antes/Depois:</strong> disponível apenas em blocos <span class="mono">recorded</span> ou <span class="mono">imported</span>; alternar para <em>Depois (limpa)</em> chama <span class="mono">narration.cleanup.prepare</span> sob demanda quando <span class="mono">ready === false</span>.</li>
+      <li><strong>Aparo Silero VAD pós-gravação:</strong> exibido quando <span class="mono">engineId === "recorded"</span> e <span class="mono">trimmed === false</span>; chama <span class="mono">narration.trim_block</span> se o Worker estiver pronto ou direciona para <span class="mono">#/config/componentes</span>.</li>
+      <li><strong>Instalador just-in-time 3A:</strong> exige confirmação de tamanho/licença (<span class="mono">components.download { id: "pocket-tts", confirmed: true }</span>) e aceite explícito do termo de uso proibido (<span class="mono">tts.models.download { termsAccepted: true }</span>); canceláveis por <span class="mono">components.cancel</span> e <span class="mono">tts.models.cancel</span>.</li>
+      <li><strong>Gravador com Teleprompter 3B:</strong> captura WAV 24 kHz mono via <span class="mono">narration.record_block</span>; em <kbd>Esc</kbd> fecha se não estiver gravando ou após confirmar descarte; <kbd>Espaço</kbd> pausa/retoma rolagem fora de campos de texto.</li>
+      <li><strong>Movimento reduzido (<span class="mono">prefers-reduced-motion</span>):</strong> desliga a rolagem contínua por padrão e ativa o modo <em>Passo</em> com botões e teclas <kbd>↑</kbd>/<kbd>↓</kbd> por frase.</li>
+      <li><strong>Falha <span class="mono">no_speech_detected</span>:</strong> preserva o áudio anterior do bloco, mantém o rascunho em cache com player de conferência e oferece <em>Descartar rascunho</em> (<span class="mono">narration.discard_draft</span>).</li>
+      <li><strong>Guarda pré-disparo:</strong> <span class="mono">&lt;ConfirmDialog&gt;</span> com <span class="mono">&lt;ResumoCustoPrivacidade&gt;</span> e foco inicial em <em>Cancelar</em>. Decisão de wireframe: o diálogo de confirmação de troca de ângulo (<span class="mono">angle_change_confirmation</span>) usa a mesma estrutura de <span class="mono">&lt;ConfirmDialog&gt;</span> modal descrita na nota 6, sem repetir um quadro separado só para texto.</li>
+      <li><strong>Fonte offline:</strong> conforme decisão #25 de <span class="mono">02-consolidacao.md</span>, textos de Roteiro e áudios de Narração permanecem editáveis via SQLite; apenas preview de vídeo e exportação ficam bloqueados até relocalizar.</li>
+      <li><strong>Trava pedagógica do Passo 3:</strong> clicar em <em>Voltar ao próximo bloco pendente</em> salta para o Passo 2 focando o primeiro bloco com status <span class="mono">Pendente</span>. Decisão de wireframe: o estado de erro <span class="mono">no_speech_detected</span> foi acoplado dentro da sub-superfície 3B (onde acontece na prática) e erros de importação/componente seguem o mesmo padrão <span class="mono">role="alert"</span> da variante 8.</li>
+    </ol>
+  </section>
+</main>
+<script src="kit.js"></script>
+</body>
+</html>
