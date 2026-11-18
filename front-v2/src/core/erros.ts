@@ -10,6 +10,8 @@ export type AcaoRecuperacao =
   | 'aceitar-termos'
   | 'recarregar'
   | 'importar-local'
+  | 'ir-para-cortes'
+  | 'escolher-pasta'
 
 export type Recuperacao = {
   rotulo: string
@@ -391,9 +393,11 @@ export const TABELA_ERROS: Record<string, MensagemErro> = {
   proxy_failed: entradaPreviaFalhou,
   export_exists: {
     titulo: 'Já existe um arquivo com esse nome na pasta escolhida.',
+    recuperacao: { rotulo: 'Escolher outro nome ou pasta', acao: 'escolher-pasta' },
   },
   export_destination: {
     titulo: 'Escolha uma pasta existente e um nome terminado em .mp4.',
+    recuperacao: { rotulo: 'Escolher outra pasta', acao: 'escolher-pasta' },
   },
   export_glyph_missing: {
     titulo: 'A fonte da legenda não possui alguns caracteres usados no texto.',
@@ -576,6 +580,45 @@ export const TABELA_ERROS: Record<string, MensagemErro> = {
   },
   cancelled: {
     titulo: 'Esta operação foi cancelada antes de concluir.',
+  },
+  export_batch_empty: {
+    titulo: 'Não há Cortes aprovados neste escopo para exportar.',
+    recuperacao: { rotulo: 'Ir para Cortes', acao: 'ir-para-cortes' },
+  },
+  batch_not_found: {
+    titulo: 'Este lote de exportação não foi encontrado no Projeto.',
+    recuperacao: { rotulo: 'Recarregar histórico', acao: 'recarregar' },
+  },
+  job_uncertain: {
+    titulo: 'Resolva primeiro o estado incerto deste job antes de refazê-lo.',
+    recuperacao: { rotulo: 'Abrir Fila de Jobs', acao: 'abrir-fila' },
+  },
+  job_not_redoable: {
+    titulo: 'Aguarde o job terminar ou cancele-o antes de refazer com outro Perfil.',
+  },
+  task_version_changed: {
+    titulo: 'A Tarefa de IA foi atualizada desde este job; dispare uma nova execução na tela de origem.',
+    recuperacao: { rotulo: 'Ir para Cortes', acao: 'ir-para-cortes' },
+  },
+  invalid_job_state: {
+    titulo: 'Este job não está no estado esperado para esta ação.',
+    recuperacao: { rotulo: 'Atualizar fila', acao: 'recarregar' },
+  },
+  invalid_job: {
+    titulo: 'Esta tarefa não foi encontrada na fila do Projeto.',
+    recuperacao: { rotulo: 'Atualizar fila', acao: 'recarregar' },
+  },
+  invalid_path: {
+    titulo: 'Escolha um caminho válido terminado em .txt para salvar o diagnóstico.',
+    recuperacao: { rotulo: 'Escolher destino novamente', acao: 'escolher-pasta' },
+  },
+  invalid_text: {
+    titulo: 'O texto do diagnóstico não pode estar vazio ao exportar.',
+    recuperacao: { rotulo: 'Recarregar diagnóstico padrão', acao: 'recarregar' },
+  },
+  settings: {
+    titulo: 'Não foi possível ler o histórico local de sonda de hardware.',
+    recuperacao: { rotulo: 'Tentar novamente', acao: 'recarregar' },
   },
 }
 

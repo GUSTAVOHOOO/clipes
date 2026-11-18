@@ -6,6 +6,8 @@ export type SecaoConfig =
   | 'aparencia'
   | 'projeto'
 
+export type TipoRelato = 'bug' | 'ideia' | 'provedor'
+
 export type Rota =
   | { tela: 'inicio' }
   | { tela: 'assistente'; passo: 1 | 2; retorno?: 'config' }
@@ -16,7 +18,7 @@ export type Rota =
   | { tela: 'corte'; projeto: string; corte: string; aba: 'editar' | 'transformar' | 'empacotar'; run?: string }
   | { tela: 'exportacao'; projeto: string; sub: 'prontidao' | 'lotes' }
   | { tela: 'config'; secao: SecaoConfig }
-  | { tela: 'relatos' }
+  | { tela: 'relatos'; tipo?: TipoRelato }
   | { tela: 'sobre' }
 
 export type Contexto = {
@@ -36,6 +38,7 @@ const SECOES_CONFIG = new Set<SecaoConfig>([
 ])
 
 const ABAS_CORTE = new Set(['editar', 'transformar', 'empacotar'] as const)
+const TIPOS_RELATO = new Set<TipoRelato>(['bug', 'ideia', 'provedor'])
 
 function decodificar(segmento: string): string {
   try {
@@ -198,7 +201,10 @@ export function resolver(hash: string, ctx: Contexto): Resolucao {
     }
   }
   if (raiz === 'relatos' && partes.length === 1) {
-    return { rota: { tela: 'relatos' } }
+    const tipoBruto = query.get('tipo')
+    const tipo =
+      tipoBruto && TIPOS_RELATO.has(tipoBruto as TipoRelato) ? (tipoBruto as TipoRelato) : undefined
+    return { rota: semIndefinidos({ tela: 'relatos', tipo }) }
   }
   if (raiz === 'sobre' && partes.length === 1) {
     return { rota: { tela: 'sobre' } }

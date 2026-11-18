@@ -114,8 +114,12 @@ describe('resolver rotas', () => {
     })
   })
 
-  it('resolve #/relatos e #/sobre', () => {
+  it('resolve #/relatos (com ?tipo= opcional) e #/sobre', () => {
     expect(resolver('#/relatos', semProjeto)).toEqual({ rota: { tela: 'relatos' } })
+    expect(resolver('#/relatos?tipo=bug', semProjeto)).toEqual({ rota: { tela: 'relatos', tipo: 'bug' } })
+    expect(resolver('#/relatos?tipo=ideia', semProjeto)).toEqual({ rota: { tela: 'relatos', tipo: 'ideia' } })
+    expect(resolver('#/relatos?tipo=provedor', semProjeto)).toEqual({ rota: { tela: 'relatos', tipo: 'provedor' } })
+    expect(resolver('#/relatos?tipo=invalido', semProjeto)).toEqual({ rota: { tela: 'relatos' } })
     expect(resolver('#/sobre', semProjeto)).toEqual({ rota: { tela: 'sobre' } })
   })
 
