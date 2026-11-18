@@ -543,4 +543,60 @@ describe('ConfigProvedores', () => {
     const blocoClaude = screen.getByRole('region', { name: /Claude Code CLI/i })
     expect(within(blocoClaude).getByText('Experimental')).toBeInTheDocument()
   })
+
+  it('UI-02: Testar de CLI não confirmada abre ConfirmDialog de consentimento antes de provider.test e cancelar não chama nada', async () => {
+    const user = userEvent.setup()
+    mockPadrao()
+    render(envolver(<ConfigProvedores projetoAberto="canal-1" />))
+
+    const blocoOpencode = await screen.findByRole('region', { name: /OpenCode CLI/i })
+    expect(within(blocoOpencode).getByText('Aguarda confirmação')).toBeInTheDocument()
+
+    await user.click(within(blocoOpencode).getByRole('button', { name: 'Testar' }))
+
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent(/apenas texto de transcrições/i)
+    expect(dialog).toHaveTextContent(/OpenCode/i)
+    expect(dialog).toHaveTextContent(/cota do seu plano/i)
+    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toHaveFocus()
+
+    expect(chamarMock).not.toHaveBeenCalledWith('provider.test', expect.anything())
+    expect(chamarMock).not.toHaveBeenCalledWith('provider.cli.confirm', expect.anything())
+    expect(chamarMock).not.toHaveBeenCalledWith('provider.cli.configure', expect.anything())
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    })
+
+    expect(chamarMock).not.toHaveBeenCalledWith('provider.test', expect.anything())
+    expect(chamarMock).not.toHaveBeenCalledWith('provider.cli.confirm', expect.anything())
+  })
+
+  it('UI-02: confirmar no ConfirmDialog de Testar CLI salva consentimento e chama provider.test', async () => {
+    const user = userEvent.setup()
+    mockPadrao()
+    render(envolver(<ConfigProvedores projetoAberto="canal-1" />))
+
+    const blocoOpencode = await screen.findByRole('region', { name: /OpenCode CLI/i })
+    await user.click(within(blocoOpencode).getByRole('button', { name: 'Testar' }))
+
+    const dialog = await screen.findByRole('alertdialog')
+    await user.click(within(dialog).getByRole('button', { name: /Concordo e testar|Ativar/i }))
+
+    await waitFor(() => {
+      expect(chamarMock).toHaveBeenCalledWith('provider.cli.configure', expect.objectContaining({ kind: 'opencode' }))
+      expect(chamarMock).toHaveBeenCalledWith('provider.cli.confirm', { kind: 'opencode' })
+      expect(chamarMock).toHaveBeenCalledWith('provider.test', {})
+    })
+  })
+
+  it('UI-05: Reabrir assistente inicial navega para #/assistente?passo=1&retorno=config', async () => {
+    const user = userEvent.setup()
+    mockPadrao()
+    render(envolver(<ConfigProvedores projetoAberto="canal-1" />))
+
+    await user.click(await screen.findByRole('button', { name: 'Reabrir assistente inicial' }))
+    expect(window.location.hash).toBe('#/assistente?passo=1&retorno=config')
+  })
 })

@@ -111,6 +111,14 @@ const GUIAS_CONTEXTO: Record<string, string> = {
   llamacpp: 'llama.cpp: inicie o servidor com `-c 16384` ou superior.',
 }
 
+const HASH_REABRIR_ASSISTENTE = '#/assistente?passo=1&retorno=config'
+
+const NOMES_CLI: Record<'codex' | 'claude' | 'opencode', string> = {
+  codex: 'Codex CLI',
+  claude: 'Claude Code CLI',
+  opencode: 'OpenCode CLI',
+}
+
 function normalizarEscolha(escolha: string, temLegacy: boolean): string {
   if (escolha === 'endpoint' && temLegacy) return 'profile:legacy'
   return escolha
@@ -172,7 +180,7 @@ export function ConfigProvedores({ projetoAberto, aoAtualizar }: ConfigProvedore
   const [consentirRemoto, setConsentirRemoto] = useState<PerfilProvedor | null>(null)
   const [confirmarCli, setConfirmarCli] = useState<{
     kind: 'codex' | 'claude' | 'opencode'
-    destino?: { tipo: 'default' } | { tipo: 'task'; task: TarefaId }
+    destino?: { tipo: 'default' } | { tipo: 'task'; task: TarefaId } | { tipo: 'test'; label: string }
   } | null>(null)
 
   const [ocupadoId, setOcupadoId] = useState<string | null>(null)
@@ -290,7 +298,7 @@ export function ConfigProvedores({ projetoAberto, aoAtualizar }: ConfigProvedore
           titulo: 'Reabrir assistente inicial',
           grupo: 'Configurações',
           executar: () => {
-            window.location.hash = '#/assistente?passo=1'
+            window.location.hash = HASH_REABRIR_ASSISTENTE
           },
         },
       ],
@@ -448,7 +456,9 @@ export function ConfigProvedores({ projetoAberto, aoAtualizar }: ConfigProvedore
     if (!confirmarCli) return
     const alvo = confirmarCli
     setConfirmarCli(null)
-    await executarAcao(`cli-confirm-${alvo.kind}`, async () => {
+    const acaoId =
+      alvo.destino?.tipo === 'test' ? `cli-test-${alvo.kind}` : `cli-confirm-${alvo.kind}`
+    await executarAcao(acaoId, async () => {
       await chamar('provider.cli.configure', {
         kind: alvo.kind,
         ...(alvo.kind === 'opencode' && opencodeModelo.trim() ? { model: opencodeModelo.trim() } : {}),
@@ -461,6 +471,11 @@ export function ConfigProvedores({ projetoAberto, aoAtualizar }: ConfigProvedore
       }
       await carregar()
       aoAtualizar?.()
+      if (alvo.destino?.tipo === 'test') {
+        await chamar('provider.test', {})
+        toast.add({ title: `${alvo.destino.label} validado.` })
+        return
+      }
       toast.add({ title: 'CLI confirmado e pronto para uso.' })
     })
   }
@@ -612,7 +627,7 @@ export function ConfigProvedores({ projetoAberto, aoAtualizar }: ConfigProvedore
           acaoSecundaria={{
             rotulo: 'Abrir assistente inicial',
             aoAcionar: () => {
-              window.location.hash = '#/assistente?passo=1'
+              window.location.hash = HASH_REABRIR_ASSISTENTE
             },
           }}
         />
@@ -913,12 +928,16 @@ export function ConfigProvedores({ projetoAberto, aoAtualizar }: ConfigProvedore
                         tamanho="p"
                         variante="fantasma"
                         carregando={ocupadoId === `cli-test-${kind}`}
-                        onClick={() =>
+                        onClick={() => {
+                          if (!confirmado) {
+                            setConfirmarCli({ kind, destino: { tipo: 'test', label: c.label } })
+                            return
+                          }
                           void executarAcao(`cli-test-${kind}`, async () => {
                             await chamar('provider.test', {})
                             toast.add({ title: `${c.label} validado.` })
                           })
-                        }
+                        }}
                       >
                         Testar
                       </Botao>
@@ -1058,7 +1077,7 @@ export function ConfigProvedores({ projetoAberto, aoAtualizar }: ConfigProvedore
         <Botao
           variante="secundario"
           onClick={() => {
-            window.location.hash = '#/assistente?passo=1'
+            window.location.hash = HASH_REABRIR_ASSISTENTE
           }}
         >
           Reabrir assistente inicial
@@ -1125,10 +1144,14 @@ export function ConfigProvedores({ projetoAberto, aoAtualizar }: ConfigProvedore
         titulo="Confirmar envio de texto via CLI?"
         descricao={
           confirmarCli?.kind === 'claude'
-            ? 'Claude Code CLI é experimental e aguarda confirmação formal da Anthropic. Apenas texto de transcrições é enviado usando a sua assinatura.'
-            : 'Este CLI executa usando a sua assinatura local e envia apenas texto de transcrições sem acesso a ferramentas.'
+            ? 'Claude Code CLI é experimental e aguarda confirmação formal da Anthropic. Apenas texto de transcrições sai do computador (vídeo e áudio nunca são enviados) para o Claude Code CLI. Custo: consome cota do seu plano.'
+            : confirmarCli
+              ? `Ao usar ou testar o ${NOMES_CLI[confirmarCli.kind]}, apenas texto de transcrições sai do computador (vídeo e áudio nunca são enviados) para o serviço da CLI. Custo: consome cota do seu plano.`
+              : ''
         }
-        rotuloConfirmar="Ativar e permitir envio"
+        rotuloConfirmar={
+          confirmarCli?.destino?.tipo === 'test' ? 'Concordo e testar' : 'Ativar e permitir envio'
+        }
         focoInicial="cancelar"
         aoConfirmar={confirmarUsoCli}
       />

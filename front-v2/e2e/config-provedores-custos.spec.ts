@@ -139,4 +139,49 @@ test.describe('Configurações: Provedores e Custos', () => {
 
     expect(erros).toEqual([])
   })
+
+  test('UI-02 e UI-05: Testar CLI não confirmada exige ConfirmDialog (cancelar não testa) e pular assistente volta para provedores em 1366x768', async ({
+    page,
+  }) => {
+    const erros: string[] = []
+    page.on('pageerror', (erro) => erros.push(erro.message))
+
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.goto('/#/config/provedores')
+    await expect(page.getByRole('heading', { name: 'Provedores e Tarefas de IA' })).toBeVisible()
+
+    const blocoCodex = page.getByRole('region', { name: 'Codex CLI' })
+    await expect(blocoCodex.getByText('Aguarda confirmação')).toBeVisible()
+
+    // Cancelar não chama provider.test nem confirma CLI
+    await blocoCodex.getByRole('button', { name: 'Testar' }).click()
+    const dialogoCli = page.getByRole('alertdialog')
+    await expect(dialogoCli).toBeVisible()
+    await expect(dialogoCli).toContainText(/apenas texto de transcrições/i)
+    await expect(dialogoCli).toContainText(/Codex CLI/i)
+    await expect(dialogoCli).toContainText(/cota do seu plano/i)
+    await expect(dialogoCli.getByRole('button', { name: 'Cancelar' })).toBeFocused()
+    await dialogoCli.getByRole('button', { name: 'Cancelar' }).click()
+    await expect(dialogoCli).toBeHidden()
+    await expect(blocoCodex.getByText('Aguarda confirmação')).toBeVisible()
+    await expect(page.getByText('Codex CLI validado.')).toBeHidden()
+
+    // Confirmar salva consentimento e executa teste
+    await blocoCodex.getByRole('button', { name: 'Testar' }).click()
+    await expect(dialogoCli).toBeVisible()
+    await dialogoCli.getByRole('button', { name: /Concordo e testar/i }).click()
+    await expect(dialogoCli).toBeHidden()
+    await expect(blocoCodex.getByText('Confirmado')).toBeVisible()
+    await expect(page.getByText('Codex CLI validado.')).toBeVisible()
+
+    // Reabrir assistente e pular retorna para #/config/provedores
+    await page.getByRole('button', { name: 'Reabrir assistente inicial' }).click()
+    await expect(page).toHaveURL(/#\/assistente\?passo=1&retorno=config$/)
+    await page.getByRole('button', { name: /Próximo: Provedor de IA/i }).click()
+    await expect(page).toHaveURL(/#\/assistente\?passo=2&retorno=config$/)
+    await page.getByRole('button', { name: /Pular por enquanto/i }).click()
+    await expect(page).toHaveURL(/#\/config\/provedores$/)
+
+    expect(erros).toEqual([])
+  })
 })
