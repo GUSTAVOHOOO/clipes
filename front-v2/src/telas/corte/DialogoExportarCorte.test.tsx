@@ -326,7 +326,9 @@ describe('DialogoExportarCorte', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Já existe um arquivo com esse nome na pasta escolhida.')
     })
-    expect(screen.getByRole('textbox', { name: 'Arquivo de destino (.mp4)' })).toHaveFocus()
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: 'Arquivo de destino (.mp4)' })).toHaveFocus()
+    })
 
     // export_destination foca campo de destino
     erroAtual = 'export_destination'
@@ -334,7 +336,9 @@ describe('DialogoExportarCorte', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Escolha uma pasta existente e um nome terminado em .mp4.')
     })
-    expect(screen.getByRole('textbox', { name: 'Arquivo de destino (.mp4)' })).toHaveFocus()
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: 'Arquivo de destino (.mp4)' })).toHaveFocus()
+    })
 
     // component_missing oferece recuperação
     erroAtual = 'component_missing'

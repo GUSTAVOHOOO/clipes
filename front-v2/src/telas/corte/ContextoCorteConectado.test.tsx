@@ -201,7 +201,7 @@ describe('ContextoCorteConectado', () => {
     })
   })
 
-  it('oculta Transformar em Corte direto e exibe "Converter em Vídeo transformado" desabilitado com <Dica> citando #292', async () => {
+  it('oculta Transformar em Corte direto e exibe "Converter em Vídeo transformado" desabilitado com <Dica> sem expor ticket (UI-12)', async () => {
     const user = userEvent.setup()
     window.location.hash = '#/projeto/demo/corte/102/editar'
 
@@ -223,11 +223,11 @@ describe('ContextoCorteConectado', () => {
     expect(btnConverter).toBeDisabled()
 
     await user.hover(btnConverter.parentElement!)
-    await waitFor(() => {
-      expect(
-        screen.getByText('Conversão individual para Vídeo transformado aguarda comando no núcleo (#292).'),
-      ).toBeInTheDocument()
-    })
+    const dicaTexto = await screen.findByText(
+      'A conversão individual para Vídeo transformado ainda não está disponível nesta versão.',
+    )
+    expect(dicaTexto).toBeInTheDocument()
+    expect(dicaTexto.textContent ?? '').not.toMatch(/#\d+/)
   })
 
   it('exibe "Corte #avulso-..." sem Transformar/Empacotar e desabilita navegação anterior/próximo', async () => {

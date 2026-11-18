@@ -445,7 +445,8 @@ export function ContextoCorteConectado({
               </h1>
               {!avulso && <SeloTipoVideo tipo={videoKind} className="ml-1 shrink-0" />}
               {videoKind === 'direct' && candidateId !== null && (
-                <Dica texto="Conversão individual para Vídeo transformado aguarda comando no núcleo (#292).">
+                /* Pendência no núcleo (#292): conversão individual para Vídeo transformado. */
+                <Dica texto="A conversão individual para Vídeo transformado ainda não está disponível nesta versão.">
                   <span tabIndex={0} className="inline-flex shrink-0 rounded-controle">
                     <Botao tamanho="p" variante="fantasma" icone={<Sparkles />} disabled>
                       Converter em Vídeo transformado
