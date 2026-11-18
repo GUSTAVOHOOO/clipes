@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { isTauri } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { listen, emit, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { PanelLeft, PanelRight } from 'lucide-react';
 import { ComandosProvider, useComandos } from '@/lib/comandos';
@@ -61,6 +61,7 @@ function App() {
 export type OpcoesFechamentoV1 = {
   isTauri?: () => boolean;
   listen?: typeof listen;
+  emit?: typeof emit;
   getCurrentWindow?: typeof getCurrentWindow;
 };
 
@@ -78,8 +79,10 @@ export function registrarFechamentoV1(opcoes: OpcoesFechamentoV1 = {}): () => vo
 
   if (!fechamentoAtivo) {
     const assinar = opcoes.listen ?? listen;
+    const emitir = opcoes.emit ?? emit;
     const janelaAtual = opcoes.getCurrentWindow ?? getCurrentWindow;
     const desligar = assinar('app-close-requested', () => {
+      void emitir('app-close-ack').catch(() => {});
       void janelaAtual()
         .destroy()
         .catch(() => {});

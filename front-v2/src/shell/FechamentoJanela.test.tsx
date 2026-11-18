@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { isTauri } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
+import { emit, listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { ProvedorDicas, ProvedorToast } from '@ds'
 import { ProvedorAtalhos } from '~/comandos/atalhos'
@@ -16,6 +16,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 }))
 
 vi.mock('@tauri-apps/api/event', () => ({
+  emit: vi.fn(async () => {}),
   listen: vi.fn(),
 }))
 
@@ -24,6 +25,7 @@ vi.mock('@tauri-apps/api/window', () => ({
 }))
 
 const mockIsTauri = vi.mocked(isTauri)
+const mockEmit = vi.mocked(emit)
 const mockListen = vi.mocked(listen)
 const mockGetCurrentWindow = vi.mocked(getCurrentWindow)
 
@@ -99,6 +101,8 @@ describe('Fechamento da janela no Shell (app-close-requested)', () => {
   beforeEach(() => {
     mockIsTauri.mockReset()
     mockIsTauri.mockReturnValue(false)
+    mockEmit.mockReset()
+    mockEmit.mockResolvedValue(undefined)
     mockListen.mockReset()
     mockGetCurrentWindow.mockReset()
     destroyMock = vi.fn(async () => {})
@@ -157,8 +161,10 @@ describe('Fechamento da janela no Shell (app-close-requested)', () => {
     })
 
     await waitFor(() => {
+      expect(mockEmit).toHaveBeenCalledWith('app-close-ack')
       expect(destroyMock).toHaveBeenCalledTimes(1)
     })
+    expect(mockEmit.mock.invocationCallOrder[0]).toBeLessThan(destroyMock.mock.invocationCallOrder[0])
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
 
     unmount()
@@ -190,6 +196,8 @@ describe('Fechamento da janela no Shell (app-close-requested)', () => {
     })
 
     const dialog = await screen.findByRole('alertdialog')
+    expect(mockEmit).toHaveBeenCalledTimes(1)
+    expect(mockEmit).toHaveBeenCalledWith('app-close-ack')
     expect(destroyMock).not.toHaveBeenCalled()
     expect(dialog).toHaveTextContent(/Fechar o Clipes com operações em andamento/i)
     expect(dialog).toHaveTextContent(/Provedor|Projeto/i)

@@ -31,11 +31,11 @@ describe('registrarFechamentoV1', () => {
     parar();
   });
 
-  it('registra um único listener de app-close-requested e chama getCurrentWindow().destroy() ao receber o evento', async () => {
+  it('registra um único listener de app-close-requested, envia app-close-ack e chama getCurrentWindow().destroy()', async () => {
     const { registrarFechamentoV1 } = await loadMain();
     let listenCalls = 0;
     let unlistenCalls = 0;
-    let destroyCalls = 0;
+    const ordem: string[] = [];
     let handler: ((event: unknown) => void) | undefined;
 
     const fakeListen = async (eventName: string, cb: (event: unknown) => void) => {
@@ -47,20 +47,27 @@ describe('registrarFechamentoV1', () => {
       };
     };
 
+    const fakeEmit = async (eventName: string) => {
+      assert.equal(eventName, 'app-close-ack');
+      ordem.push('ack');
+    };
+
     const fakeGetCurrentWindow = () => ({
       destroy: async () => {
-        destroyCalls += 1;
+        ordem.push('destroy');
       },
     });
 
     const parar1 = registrarFechamentoV1({
       isTauri: () => true,
       listen: fakeListen as never,
+      emit: fakeEmit as never,
       getCurrentWindow: fakeGetCurrentWindow as never,
     });
     const parar2 = registrarFechamentoV1({
       isTauri: () => true,
       listen: fakeListen as never,
+      emit: fakeEmit as never,
       getCurrentWindow: fakeGetCurrentWindow as never,
     });
 
@@ -74,7 +81,7 @@ describe('registrarFechamentoV1', () => {
     handler({ event: 'app-close-requested', id: 1, payload: null });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    assert.equal(destroyCalls, 1);
+    assert.deepEqual(ordem, ['ack', 'destroy']);
 
     parar1();
     assert.equal(unlistenCalls, 0);
