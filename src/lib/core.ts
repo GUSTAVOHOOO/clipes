@@ -243,7 +243,17 @@ let jobItems = [
 ];
 let transcribeMock: { transcript: object | null; job: object | null } = groqRetryTest ? {transcript:{id:1,engine:'groq',state:'running',resume_us:4e6,duration_us:10e6,words:1},job:{id:99,state:'cancelled',progress:40}} : { transcript: null, job: null };
 if (groqRetryTest || componentsMissing || hardwareCpuMode || hardwareProbeFallbackMode) sourceItems.push({id:4,path:'/test/downloaded.mp4',status:'available',available:true,verified:true,language:'pt',permission:{status:'none'}});
-let providerMock = { kind: 'openai', endpoint: '', model: '', nativeSchema: false, context: null as number | null, keyLastFour: null as string | null, remote: false, confirmed: false, confirmedEndpoints: [] as string[] };
+let providerMock = {
+  kind: 'openai',
+  endpoint: 'https://api.openai.com/v1',
+  model: 'gpt-4o-mini',
+  nativeSchema: false,
+  context: 128000 as number | null,
+  keyLastFour: '9a4f' as string | null,
+  remote: true,
+  confirmed: true,
+  confirmedEndpoints: ['https://api.openai.com/v1'] as string[],
+};
 type ProfileMock = { id: string; label: string; kind: string; endpoint: string; model: string; nativeSchema: boolean; ownKey: boolean; context: number | null; maxOutput?: number | null; timeoutSecs?: number | null; tokensPerRequest?: number | null; tokensPerMinute?: number | null; tokensPerDay?: number | null; keyLastFour: string | null };
 let profileMocks: ProfileMock[] = [];
 const isLocalHost = (endpoint: string) => {
@@ -1096,8 +1106,17 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       return { profileId: id, kind: p.kind, value: p.context ?? (p.kind === 'ollama' ? 4096 : 8192), source, detail: null, explanation: why[source], capped: false, warning: null, measured: false, userContext: p.context, loaded: null, maxContext: null, maxOutput: null, refreshed: !!(args as { refresh?: boolean }).refresh } as T;
     }
     if (name === 'provider.selection_state') {
-      const id = (args as { profileId?: string }).profileId ?? 'legacy';
+      const a = args as { profileId?: string; task?: string };
+      let id = a.profileId;
+      if (!id && a.task) {
+        const rota = assistantMock.tasks[a.task] || assistantMock.default;
+        if (!rota) return { applicable: false } as T;
+        if (['codex', 'claude', 'opencode'].includes(rota)) return { applicable: false } as T;
+        id = rota === 'endpoint' ? 'legacy' : rota.startsWith('profile:') ? rota.slice(8) : rota;
+      }
+      id = id ?? 'legacy';
       if (['codex', 'claude', 'opencode'].includes(id)) return { applicable: false } as T;
+      if (id === 'legacy' && !providerMock.endpoint) return { applicable: false } as T;
       const p = id === 'legacy' ? { id, context: providerMock.context, kind: providerMock.kind, endpoint: providerMock.endpoint, model: providerMock.model } : profileMocks.find(x => x.id === id);
       if (!p) throw { code: 'invalid_settings', message: 'Profile not found' };
       // Limites só do simulador (o núcleo real usa o planejador): abaixo de 11 mil bloqueia, abaixo de 16 mil reduz.
@@ -1107,14 +1126,39 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       return { applicable: true, profileId: id, kind: p.kind, model: p.model, contextTokens: tokens, origin: p.context ? 'user' : 'fallback', state,
         reference: { sourceMinutes: 60, maxWindowMinutes: 15, minWindowMinutes: 9, firstWindowMinutes: state === 'blocked' ? null : state === 'reduced' ? 12 : 15, windows: state === 'blocked' ? null : 5 }, guides } as T;
     }
-    if (name === 'provider.profiles.remove') { profileMocks = profileMocks.filter(p => p.id !== (args as { profileId: string }).profileId); return {} as T; }
-    if (name === 'provider.status') return { ...providerMock } as T;
+    if (name === 'provider.profiles.remove') {
+      const id = (args as { profileId?: string }).profileId;
+      if (!id || id === 'legacy' || !profileMocks.some(p => p.id === id)) {
+        throw { code: 'invalid_settings', message: 'Não é possível remover este perfil.' };
+      }
+      profileMocks = profileMocks.filter(p => p.id !== id);
+      return {} as T;
+    }
+    if (name === 'provider.status') return { ...providerMock, timeouts: { remote: 60, local: 300 } } as T;
     if (name === 'provider.cli.status') return { ...providerCliMock } as T;
     if (name === 'provider.cli.configure') {
       const a = args as { kind?: string; model?: string; timeoutSeconds?: number | null };
-      providerCliMock.selected = a.kind ?? '';
-      if ('model' in a && typeof a.model === 'string') providerCliMock.opencodeModel = a.model;
-      if ('timeoutSeconds' in a) providerCliMock.timeoutSeconds = a.timeoutSeconds ?? 300;
+      const kind = a.kind ?? '';
+      if (!['', 'codex', 'claude', 'opencode'].includes(kind)) {
+        throw { code: 'invalid_settings', message: 'CLI inválido.' };
+      }
+      if (kind === 'opencode' && 'model' in a) {
+        const m = String(a.model ?? '').trim();
+        if (!m || m.length > 200 || !m.includes('/')) {
+          throw { code: 'invalid_settings', message: 'Modelo OpenCode inválido (use provedor/modelo).' };
+        }
+        providerCliMock.opencodeModel = m;
+      }
+      if ('timeoutSeconds' in a) {
+        if (a.timeoutSeconds === null) {
+          providerCliMock.timeoutSeconds = 300;
+        } else if (typeof a.timeoutSeconds === 'number' && Number.isInteger(a.timeoutSeconds) && a.timeoutSeconds >= 1 && a.timeoutSeconds <= 3600) {
+          providerCliMock.timeoutSeconds = a.timeoutSeconds;
+        } else {
+          throw { code: 'invalid_settings', message: 'Timeout inválido (1..3600 s).' };
+        }
+      }
+      providerCliMock.selected = kind;
       return {} as T;
     }
     if (name === 'provider.cli.confirm') {
@@ -1126,14 +1170,20 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     }
     if (name === 'provider.configure' && (args as { profileId?: string }).profileId) {
       const a = args as { profileId: string; label: string; kind: string; endpoint: string; model: string; nativeSchema: boolean; ownKey?: boolean; context?: number | null; maxOutput?: number | null; timeoutSecs?: number | null; tokensPerRequest?: number | null; tokensPerMinute?: number | null; tokensPerDay?: number | null };
-      let parsedHost: string;
-      try {
-        parsedHost = new URL(a.endpoint).hostname;
-      } catch {
+      if (a.profileId === 'legacy' && a.ownKey) throw { code: 'invalid_settings', message: 'O perfil legado não aceita chave própria.' };
+      if (!a.model?.trim()) throw { code: 'invalid_settings', message: 'Informe o modelo.' };
+      let parsedUrl: URL;
+      try { parsedUrl = new URL(a.endpoint); } catch { throw { code: 'invalid_endpoint', message: 'Endereço do Provedor inválido.' }; }
+      if (!parsedUrl.hostname || !['http:', 'https:'].includes(parsedUrl.protocol) || parsedUrl.username || parsedUrl.password || parsedUrl.search || parsedUrl.hash) {
         throw { code: 'invalid_endpoint', message: 'Endereço do Provedor inválido.' };
       }
-      if (!parsedHost) throw { code: 'invalid_endpoint', message: 'Endereço do Provedor inválido.' };
-      if (a.profileId === 'legacy' && a.ownKey) throw { code: 'invalid_settings', message: 'Perfil legacy não suporta ownKey.' };
+      if (a.timeoutSecs !== undefined && a.timeoutSecs !== null && (typeof a.timeoutSecs !== 'number' || a.timeoutSecs < 1 || a.timeoutSecs > 3600)) {
+        throw { code: 'invalid_settings', message: 'Timeout inválido (1..3600 s).' };
+      }
+      if (a.profileId === 'legacy') {
+        providerMock = { ...providerMock, kind: a.kind, endpoint: a.endpoint, model: a.model, nativeSchema: a.nativeSchema, context: a.context ?? null, remote: !isLocalHost(a.endpoint), confirmed: providerMock.confirmedEndpoints.includes(a.endpoint) };
+        return { profileId: 'legacy' } as T;
+      }
       const old = profileMocks.find(p => p.id === a.profileId);
       const next = { id: a.profileId, label: a.label, kind: a.kind, endpoint: a.endpoint, model: a.model, nativeSchema: a.nativeSchema, context: a.context ?? null, maxOutput: 'maxOutput' in a ? a.maxOutput : old?.maxOutput ?? null, timeoutSecs: 'timeoutSecs' in a ? a.timeoutSecs : old?.timeoutSecs ?? null, tokensPerRequest: 'tokensPerRequest' in a ? a.tokensPerRequest : old?.tokensPerRequest ?? null, tokensPerMinute: 'tokensPerMinute' in a ? a.tokensPerMinute : old?.tokensPerMinute ?? null, tokensPerDay: 'tokensPerDay' in a ? a.tokensPerDay : old?.tokensPerDay ?? null, ownKey: a.ownKey ?? old?.ownKey ?? false, keyLastFour: old?.keyLastFour ?? null };
       profileMocks = old ? profileMocks.map(p => p.id === a.profileId ? next : p) : [...profileMocks, next];

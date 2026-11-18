@@ -7,6 +7,7 @@ import { useRota } from '~/rotas/useRota'
 import { ComEstado, useEstadoForcado } from '~/shell/EstadoForcado'
 import { Shell, useProjetoAtual, type ProjetoAtual } from '~/shell/Shell'
 import { Assistente } from '~/telas/assistente/Assistente'
+import { ConfigProvedores } from '~/telas/config/ConfigProvedores'
 import { ConfiguracoesLayout } from '~/telas/config/ConfiguracoesLayout'
 import { Inicio } from '~/telas/inicio/Inicio'
 
@@ -199,19 +200,23 @@ function AppRoteado({
 
   const conteudo =
     rota.tela === 'config' ? (
-      <ConfiguracoesLayout
-        secao={rota.secao}
-        projetoAberto={projetoAberto}
-        titulo={TITULOS_CONFIG[rota.secao]}
-      >
-        <ComEstado
-          estado={forcado ?? 'pronto'}
-          carregando={<Esqueleto variante="painel" />}
-          vazio={placeholder}
+      rota.secao === 'provedores' ? (
+        <ConfigProvedores projetoAberto={projetoAberto} />
+      ) : (
+        <ConfiguracoesLayout
+          secao={rota.secao}
+          projetoAberto={projetoAberto}
+          titulo={TITULOS_CONFIG[rota.secao]}
         >
-          {placeholder}
-        </ComEstado>
-      </ConfiguracoesLayout>
+          <ComEstado
+            estado={forcado ?? 'pronto'}
+            carregando={<Esqueleto variante="painel" />}
+            vazio={placeholder}
+          >
+            {placeholder}
+          </ComEstado>
+        </ConfiguracoesLayout>
+      )
     ) : (
       <ComEstado
         estado={forcado ?? 'pronto'}

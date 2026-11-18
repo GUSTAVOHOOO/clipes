@@ -1,8 +1,14 @@
 import { ProvedorDicas, ProvedorToast, useToast } from '@ds'
 import { render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { useRota } from '~/rotas/useRota'
 import { ConfiguracoesLayout } from '~/telas/config/ConfiguracoesLayout'
+
+beforeAll(() => {
+  if (!Element.prototype.getAnimations) {
+    Element.prototype.getAnimations = () => []
+  }
+})
 
 function envolver(ui: React.ReactNode) {
   return (
