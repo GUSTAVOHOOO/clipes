@@ -529,7 +529,8 @@ fn deletes_source_and_all_dependents_preserving_media_and_other_sources() {
     assert_eq!(res["selection_runs"], 1);
     assert_eq!(res["clip_edits"], 2);
     assert_eq!(res["batch_items"], 3); // 1 source_batch_item + 2 export_batch_items
-    assert_eq!(res["jobs"], 15);
+    assert_eq!(res["jobs"], 14);
+    assert_eq!(res["jobs_kept_for_costs"], 1);
 
     assert_foreign_keys_clean();
 
@@ -664,11 +665,11 @@ fn deletes_source_and_all_dependents_preserving_media_and_other_sources() {
     );
     assert_eq!(count_rows("proxy_jobs", "source_id=?1", a.source_id), 0);
     assert_eq!(count_rows("timeline_jobs", "source_id=?1", a.source_id), 0);
-    assert_eq!(count_rows("jobs", "id=?1", a.direct_job_id), 0);
+    assert_eq!(count_rows("jobs", "id=?1", a.direct_job_id), 1);
     assert_eq!(count_rows("jobs", "id=?1", a.ai_job_id), 0);
     assert_eq!(count_rows("jobs", "id=?1", a.narration_job_id), 0);
     assert_eq!(count_rows("jobs", "id=?1", a.translation_job_id), 0);
-    assert_eq!(count_rows("call_audit", "1=1 OR id=?1", 0), 1); // apenas a da Fonte B
+    assert_eq!(count_rows("call_audit", "1=1 OR id=?1", 0), 2); // histórico de auditoria preservado (A + B)
     assert_eq!(count_rows("narration_blocks", "1=1 OR id=?1", 0), 1);
     assert_eq!(count_rows("packaging_edits", "1=1 OR id=?1", 0), 1);
     assert_eq!(count_rows("exports", "1=1 OR job_id=?1", 0), 1);
@@ -850,4 +851,126 @@ fn v1_fixture_opens_and_supports_source_delete() {
         .query_row("PRAGMA integrity_check", [], |r| r.get(0))
         .unwrap();
     assert_eq!(integrity, "ok");
+}
+
+#[test]
+fn preserves_cost_history_and_audit_on_source_delete() {
+    let mut guard = SessionGuard::new();
+    guard.create_project("CanalCustos");
+    let media = guard.root().join("custos.mp4");
+    fs::write(&media, b"video").unwrap();
+
+    let (source_id, t_job_id, ai_job_id, tcall_id, cost_id) = with_writer(|c| {
+        c.execute(
+            "INSERT INTO sources(path,size,duration_us,partial_hash,metadata,permission,audio_track)
+             VALUES (?1,128,30000000,'hash-cost','{}','{\"status\":\"none\"}',0)",
+            [media.to_string_lossy().as_ref()],
+        )?;
+        let source_id = c.last_insert_rowid();
+
+        c.execute(
+            "INSERT INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,state,resume_us,duration_us)
+             VALUES (?1,0,'groq','whisper-large-v3','r1','remote','complete',30000000,30000000)",
+            [source_id],
+        )?;
+        let transcript_id = c.last_insert_rowid();
+
+        c.execute(
+            "INSERT INTO jobs(kind,safety,state,source_id,batch) VALUES ('transcription','paid','completed',?1,'sources-1')",
+            [source_id],
+        )?;
+        let t_job_id = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO transcription_calls(transcript_id,job_id,start_us,end_us,state,estimated_usd,created_at)
+             VALUES (?1,?2,0,10000000,'completed',0.25,1000)",
+            (transcript_id, t_job_id),
+        )?;
+        let tcall_id = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO call_audit(transcription_call_id,provider_kind,host,model,input_sha256,sent_bytes)
+             VALUES (?1,'transcription','api.groq.com','whisper-large-v3','0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',4096)",
+            [tcall_id],
+        )?;
+
+        c.execute(
+            "INSERT INTO selection_runs(transcript_id,task_version,prompt_sha256,profile,state,batch,min_us,max_us,weights,plan_state,windows_total)
+             VALUES (?1,1,'h','p','completed','sources-1',20000000,180000000,'[]','full',1)",
+            [transcript_id],
+        )?;
+        let run_id = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO jobs(kind,safety,state,batch) VALUES ('ai:selection','paid','completed','sources-1')",
+            [],
+        )?;
+        let ai_job_id = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO selection_windows(run_id,idx,first_id,last_id,start_us,end_us,job_id,attempts)
+             VALUES (?1,0,1,1,0,10000000,?2,1)",
+            (run_id, ai_job_id),
+        )?;
+        c.execute(
+            "INSERT INTO provider_costs(task,batch,provider,model,input_tokens,output_tokens,calls,cost_kind,cost_micro_usd,price_source,table_updated_at,job_id,task_version,attempt,outcome,code,created_at)
+             VALUES ('selection','sources-1','openai','gpt-4o-mini',100,20,1,'usd',50000,'embedded','2026-11-18',?1,1,0,'ok','ok',1000)",
+            [ai_job_id],
+        )?;
+        let cost_id = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO call_audit(cost_id,provider_kind,host,model,prompt_sha256)
+             VALUES (?1,'openai','api.openai.com','gpt-4o-mini','fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210')",
+            [cost_id],
+        )?;
+
+        c.execute(
+            "INSERT INTO ai_budgets(scope,key,max_cost_micro_usd,since) VALUES ('batch','sources-1',1000000,0)",
+            [],
+        )?;
+
+        c.execute_batch("PRAGMA foreign_keys = ON;")?;
+        Ok((source_id, t_job_id, ai_job_id, tcall_id, cost_id))
+    })
+    .unwrap();
+
+    let budget_before = run("jobs.budget.get", json!({})).unwrap();
+    let usage_before = &budget_before["budgets"][0]["usage"];
+    let audit_before = run("provider.audit.list", json!({})).unwrap();
+    assert_eq!(usage_before["audioMicroUsd"], 250_000);
+    assert_eq!(usage_before["microUsd"], 300_000);
+    assert_eq!(audit_before.as_array().unwrap().len(), 2);
+
+    let res = run("sources.delete", json!({ "id": source_id })).unwrap();
+    assert_eq!(res["deleted"], true);
+    assert_eq!(res["jobs_kept_for_costs"], 2);
+    assert_eq!(res["jobs"], 0);
+
+    let budget_after = run("jobs.budget.get", json!({})).unwrap();
+    let usage_after = &budget_after["budgets"][0]["usage"];
+    let audit_after = run("provider.audit.list", json!({})).unwrap();
+    assert_eq!(usage_after["audioMicroUsd"], usage_before["audioMicroUsd"]);
+    assert_eq!(usage_after["microUsd"], usage_before["microUsd"]);
+    assert_eq!(audit_after, audit_before);
+
+    // `jobs.source_id` e `transcription_calls.transcript_id` ficam NULL, sem violar FKs.
+    let (t_job_src, tcall_tr, ai_job_src): (Option<i64>, Option<i64>, Option<i64>) =
+        with_reader(|c| {
+            let tj = c.query_row("SELECT source_id FROM jobs WHERE id=?1", [t_job_id], |r| {
+                r.get(0)
+            })?;
+            let tc = c.query_row(
+                "SELECT transcript_id FROM transcription_calls WHERE id=?1",
+                [tcall_id],
+                |r| r.get(0),
+            )?;
+            let aj = c.query_row("SELECT source_id FROM jobs WHERE id=?1", [ai_job_id], |r| {
+                r.get(0)
+            })?;
+            Ok((tj, tc, aj))
+        })
+        .unwrap();
+    assert_eq!(t_job_src, None);
+    assert_eq!(tcall_tr, None);
+    assert_eq!(ai_job_src, None);
+    assert_eq!(count_rows("provider_costs", "id=?1", cost_id), 1);
+    assert_eq!(count_rows("transcription_calls", "id=?1", tcall_id), 1);
+    assert_eq!(count_rows("call_audit", "1=1 OR id=?1", 0), 2);
+    assert_foreign_keys_clean();
 }

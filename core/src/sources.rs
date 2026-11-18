@@ -678,11 +678,13 @@ fn delete_source(v: Value, _: &mut EventSink<'_>) -> CommandResult {
              DROP TABLE IF EXISTS _del_src_candidates;
              DROP TABLE IF EXISTS _del_src_clips;
              DROP TABLE IF EXISTS _del_src_jobs;
+             DROP TABLE IF EXISTS _del_src_cost_jobs;
              CREATE TEMP TABLE _del_src_transcripts (id INTEGER PRIMARY KEY);
              CREATE TEMP TABLE _del_src_runs (id INTEGER PRIMARY KEY);
              CREATE TEMP TABLE _del_src_candidates (id INTEGER PRIMARY KEY);
              CREATE TEMP TABLE _del_src_clips (id INTEGER PRIMARY KEY);
-             CREATE TEMP TABLE _del_src_jobs (id INTEGER PRIMARY KEY);",
+             CREATE TEMP TABLE _del_src_jobs (id INTEGER PRIMARY KEY);
+             CREATE TEMP TABLE _del_src_cost_jobs (id INTEGER PRIMARY KEY);",
         )?;
 
         tx.execute(
@@ -988,18 +990,10 @@ fn delete_source(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             "DELETE FROM sentence_energy WHERE transcript_id IN (SELECT id FROM _del_src_transcripts)",
             [],
         )?;
+        // Preserva histórico financeiro e auditoria (`transcription_calls`, `call_audit`, `provider_costs`).
         tx.execute(
-            "DELETE FROM call_audit WHERE transcription_call_id IN (
-               SELECT id FROM transcription_calls
-               WHERE transcript_id IN (SELECT id FROM _del_src_transcripts)
-                  OR job_id IN (SELECT id FROM _del_src_jobs)
-             )",
-            [],
-        )?;
-        tx.execute(
-            "DELETE FROM transcription_calls
-             WHERE transcript_id IN (SELECT id FROM _del_src_transcripts)
-                OR job_id IN (SELECT id FROM _del_src_jobs)",
+            "UPDATE transcription_calls SET transcript_id=NULL
+             WHERE transcript_id IN (SELECT id FROM _del_src_transcripts)",
             [],
         )?;
         let transcripts_deleted = tx.execute(
@@ -1007,7 +1001,7 @@ fn delete_source(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             [],
         )? as i64;
 
-        // Exportações, reframing, lotes, chat, jobs e a própria Fonte.
+        // Exportações, reframing, lotes, chat, jobs (preservando os ligados a custos) e a própria Fonte.
         tx.execute(
             "DELETE FROM exports WHERE job_id IN (SELECT id FROM _del_src_jobs)",
             [],
@@ -1037,14 +1031,29 @@ fn delete_source(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             tx.execute("DELETE FROM source_batch_items WHERE source_id=?1", [id])? as i64;
         tx.execute("DELETE FROM chat_series WHERE source_id=?1", [id])?;
         tx.execute("DELETE FROM chat_replays WHERE source_id=?1", [id])?;
+
+        tx.execute(
+            "INSERT OR IGNORE INTO _del_src_cost_jobs(id)
+             SELECT id FROM _del_src_jobs
+             WHERE id IN (SELECT job_id FROM transcription_calls)
+                OR id IN (SELECT job_id FROM provider_costs WHERE job_id IS NOT NULL)",
+            [],
+        )?;
+        let jobs_kept_for_costs = tx.execute(
+            "UPDATE jobs SET source_id=NULL WHERE id IN (SELECT id FROM _del_src_cost_jobs)",
+            [],
+        )? as i64;
         let jobs_deleted = tx.execute(
-            "DELETE FROM jobs WHERE id IN (SELECT id FROM _del_src_jobs)",
+            "DELETE FROM jobs
+             WHERE id IN (SELECT id FROM _del_src_jobs)
+               AND id NOT IN (SELECT id FROM _del_src_cost_jobs)",
             [],
         )? as i64;
         tx.execute("DELETE FROM sources WHERE id=?1", [id])?;
 
         tx.execute_batch(
-            "DROP TABLE _del_src_jobs;
+            "DROP TABLE _del_src_cost_jobs;
+             DROP TABLE _del_src_jobs;
              DROP TABLE _del_src_clips;
              DROP TABLE _del_src_candidates;
              DROP TABLE _del_src_runs;
@@ -1062,6 +1071,7 @@ fn delete_source(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             "clip_edits": clip_edits_deleted,
             "batch_items": source_batch_items_deleted + export_batch_items_deleted,
             "jobs": jobs_deleted,
+            "jobs_kept_for_costs": jobs_kept_for_costs,
         })))
     })?;
     outcome
