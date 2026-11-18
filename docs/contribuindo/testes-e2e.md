@@ -48,7 +48,7 @@ Para executar a suíte completa no Windows:
 bun run test:e2e
 ```
 
-> **Limitação no CI (`windows-latest`, [#282](https://github.com/GUSTAVOHOOO/clipes/issues/282)):** no GitHub Actions, o runner `windows-latest` executa os passos como administrador elevado (`runneradmin`), e a partir do WebView2 Runtime v150+ processos elevados ignoram variáveis `WEBVIEW2_*` (incluindo `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` usada pelo `tauri-driver`). Por isso, no CI o job `e2e` em [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) roda apenas em `ubuntu-latest`, enquanto no Windows a suíte E2E é executada localmente com usuário padrão (não elevado).
+> **Execução no CI (`windows-latest`, [#282](https://github.com/GUSTAVOHOOO/clipes/issues/282)):** no GitHub Actions, o runner `windows-latest` executa os passos como administrador elevado (`runneradmin`), e a partir do WebView2 Runtime v150+ processos elevados ignoram variáveis `WEBVIEW2_*` (incluindo `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` usada pelo `msedgedriver` sob o `tauri-driver`). Para que o job `e2e` em [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) rode também em `windows-latest`, um step exclusivo do Windows configura a política de máquina `HKLM:\SOFTWARE\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments` (`clipes.exe` = `--remote-debugging-port=0`), que continua sendo honrada em processos elevados. Localmente, execute a suíte E2E com usuário padrão (não elevado) para evitar alterar políticas do registro da máquina.
 
 ### Linux (Ubuntu/Debian e CI)
 
