@@ -252,13 +252,67 @@ export const TABELA_ERROS: Record<string, MensagemErro> = {
     titulo: 'A palavra selecionada não foi encontrada na Transcrição.',
   },
   nothing_to_undo: {
-    titulo: 'Não há correções para desfazer no Projeto.',
+    titulo: 'Não há mais decisões ou correções para desfazer.',
   },
   nothing_to_redo: {
     titulo: 'Não há correções desfeitas para refazer no Projeto.',
   },
   snapshot_missing: {
     titulo: 'O Snapshot selecionado não foi encontrado no Histórico deste Corte.',
+  },
+  run_not_found: {
+    titulo: 'Esta execução de seleção não foi encontrada.',
+  },
+  candidate_not_found: {
+    titulo: 'O candidato selecionado não foi encontrado nesta execução.',
+  },
+  window_not_redoable: {
+    titulo: 'Só é possível refazer Janelas concluídas, que falharam ou foram canceladas.',
+  },
+  windows_required: {
+    titulo: 'Escolha pelo menos uma Janela de seleção para refazer.',
+  },
+  window_not_found: {
+    titulo: 'A Janela de seleção informada não foi encontrada.',
+  },
+  adjust_out_of_transcript: {
+    titulo: 'A borda do Corte não pode sair dos limites da Transcrição.',
+  },
+  adjust_empty: {
+    titulo: 'O Corte precisa manter ao menos uma Frase inteira.',
+  },
+  adjust_too_short: {
+    titulo: 'O Corte ficaria abaixo da duração mínima desta execução.',
+  },
+  adjust_too_long: {
+    titulo: 'O Corte ficaria acima da duração máxima desta execução.',
+  },
+  transcript_incomplete: {
+    titulo: 'A Transcrição desta Fonte ainda não foi concluída.',
+  },
+  no_sentences: {
+    titulo: 'A Transcrição desta Fonte não tem Frases disponíveis para seleção.',
+  },
+  invalid_cut_range: {
+    titulo: 'A faixa de duração dos Cortes é inválida: o mínimo deve ser positivo e menor que o máximo.',
+  },
+  invalid_video_kind: {
+    titulo: 'Tipo de vídeo inválido: escolha Corte direto ou Vídeo transformado.',
+  },
+  invalid_selection_plan: {
+    titulo: 'O plano de Janelas de seleção é inválido para esta Transcrição.',
+  },
+  invalid_profile: {
+    titulo: 'Escolha um Perfil de Provedor válido para continuar.',
+    recuperacao: { rotulo: 'Configurar Provedores', rota: '#/config/provedores' },
+  },
+  verification_failed: {
+    titulo: 'A resposta do Provedor não passou na verificação de formato da Seleção.',
+    recuperacao: { rotulo: 'Refazer com outro Perfil', acao: 'refazer-outro-perfil' },
+  },
+  selection_windows_failed: {
+    titulo: 'Algumas Janelas da seleção falharam; refaça-as para completar a execução.',
+    recuperacao: { rotulo: 'Refazer com outro Perfil', acao: 'refazer-outro-perfil' },
   },
 }
 
