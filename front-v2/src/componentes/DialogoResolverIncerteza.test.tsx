@@ -160,4 +160,44 @@ describe('<DialogoResolverIncerteza>', () => {
     expect(aoResolver).toHaveBeenCalledWith('discard')
     expect(aoFechar).toHaveBeenCalledTimes(1)
   })
+
+  it('UI-34: usa tokens do design-system-v2 sem variáveis CSS v1 (--borda, --raio-m, --texto-*)', async () => {
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'jobs.estimate') {
+        return {
+          safety: 'paid',
+          estimate: { kind: 'usd', minMicroUsd: 500, maxMicroUsd: 1800, inputTokens: 8000, windows: 1 },
+        }
+      }
+      return null
+    })
+
+    render(
+      envolver(
+        <DialogoResolverIncerteza
+          aberto
+          jobId={2}
+          rotuloJanela="Janela 3"
+          aoFechar={vi.fn()}
+          aoResolver={vi.fn()}
+        />,
+      ),
+    )
+
+    const dialogo = await screen.findByRole('alertdialog')
+    const avisoPago = await within(dialogo).findByText('Cobrança possível')
+    const caixaAviso = avisoPago.closest('div')
+    expect(caixaAviso).not.toBeNull()
+    expect(caixaAviso).toHaveClass('bg-area', 'rounded-area')
+
+    const textoRodape = within(dialogo).getByText('Ou encerre esta tentativa pendente:')
+    expect(textoRodape).toHaveClass('text-pequeno', 'text-t3')
+    const rodape = textoRodape.closest('div')
+    expect(rodape).toHaveClass('border-t', 'border-linha')
+
+    const classes = Array.from(dialogo.querySelectorAll('*'))
+      .map((el) => el.getAttribute('class') ?? '')
+      .join(' ')
+    expect(classes).not.toMatch(/var\(--(borda|raio-|texto-|texto\))/)
+  })
 })

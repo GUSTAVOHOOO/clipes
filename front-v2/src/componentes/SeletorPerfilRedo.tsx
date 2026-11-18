@@ -1,7 +1,6 @@
 import {
   BannerErroCore,
   ConfirmDialog,
-  Dica,
   Esqueleto,
   ResumoCustoPrivacidade,
   Select,
@@ -57,9 +56,17 @@ function converterEstimativaParaDs(estimate: RespostaEstimativaRedo['estimate'])
   return estimate
 }
 
+function rotuloPerfilVisivel(label: string | null | undefined, id?: string | null): string {
+  const texto = (label ?? '').trim()
+  if (texto && texto.toLowerCase() !== 'legacy') return texto
+  if (id && id.trim().toLowerCase() === 'legacy') return 'Perfil configurado'
+  const idLimpo = (id ?? '').trim()
+  return idLimpo && idLimpo.toLowerCase() !== 'legacy' ? idLimpo : 'Perfil configurado'
+}
+
 /**
  * Diálogo para refazer Janelas específicas com outro Perfil de Provedor via `selection.estimate`
- * (Modo 3) + `selection.redo`, criando uma nova revisão da execução (nota `#304`).
+ * (Modo 3) + `selection.redo`, criando uma nova revisão da execução.
  */
 export function SeletorPerfilRedo({
   aberto,
@@ -165,7 +172,7 @@ export function SeletorPerfilRedo({
     () =>
       perfisElegiveis.map((p) => ({
         valor: p.id,
-        rotulo: p.label,
+        rotulo: rotuloPerfilVisivel(p.label, p.id),
         descricao: p.model ? `${p.local ? 'Local' : p.cli ? 'CLI' : 'Remoto'} · ${p.model}` : undefined,
       })),
     [perfisElegiveis],
@@ -220,7 +227,7 @@ export function SeletorPerfilRedo({
         if (!enviando) aoFechar()
       }}
       titulo="Refazer com outro Perfil de Provedor"
-      descricao={`As ${windows.length === 1 ? 'janela selecionada será refeita' : `${windows.length} Janelas selecionadas serão refeitas`} em uma nova revisão desta execução, preservando suas aprovações e ajustes.`}
+      descricao={`${windows.length === 1 ? 'A Janela selecionada será refeita' : `As ${windows.length} Janelas selecionadas serão refeitas`} em uma nova revisão desta execução, preservando suas aprovações e ajustes.`}
       rotuloCancelar="Cancelar"
       rotuloConfirmar="Refazer com este perfil"
       confirmarDesabilitado={
@@ -234,7 +241,7 @@ export function SeletorPerfilRedo({
         {carregandoPerfis ? (
           <Esqueleto variante="formulario" quantidade={2} rotuloAcessivel="Carregando Perfis de Provedor" />
         ) : semOutroPerfil ? (
-          <p className="text-[var(--texto-p)] text-[var(--texto-fraco)]">
+          <p className="text-pequeno text-t3">
             Nenhum outro Perfil de Provedor disponível para comparação. Cadastre um novo Perfil em Configurações.
           </p>
         ) : (
@@ -270,6 +277,10 @@ export function SeletorPerfilRedo({
             tarefa={`Refazer ${windows.length} ${windows.length === 1 ? 'Janela' : 'Janelas'} da Seleção`}
             perfil={{
               ...destino.perfil,
+              label:
+                destino.perfil.label && destino.perfil.label.trim().toLowerCase() !== 'legacy'
+                  ? rotuloPerfilVisivel(destino.perfil.label, destino.perfil.id)
+                  : rotuloPerfilVisivel(estimativa.profile.label, estimativa.profile.id),
               model: estimativa.profile.model ?? destino.perfil.model,
             }}
             localidade={destino.localidade}
@@ -280,13 +291,9 @@ export function SeletorPerfilRedo({
           />
         )}
 
-        <div className="flex items-center gap-2 text-[var(--texto-m)] text-[var(--texto-fraco)]">
-          <Dica texto="Na Fila Global, repetir execução por job único sem incremento de revisão aguarda #304. Aqui usa-se selection.redo, que gera nova revisão.">
-            <span className="inline-flex items-center gap-1.5">
-              <Info className="size-3.5 shrink-0" aria-hidden="true" />
-              <span>Gera uma nova revisão nesta execução (nota #304).</span>
-            </span>
-          </Dica>
+        <div className="flex items-center gap-1.5 text-pequeno text-t3">
+          <Info className="size-3.5 shrink-0" aria-hidden="true" />
+          <span>Gera uma nova revisão nesta execução.</span>
         </div>
       </div>
     </ConfirmDialog>

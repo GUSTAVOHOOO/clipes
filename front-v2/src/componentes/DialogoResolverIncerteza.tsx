@@ -184,16 +184,16 @@ export function DialogoResolverIncerteza({
         )}
 
         {ehPago && !carregando && (
-          <div className="flex items-start gap-2 rounded-[var(--raio-m)] border border-[var(--borda)] px-3 py-2">
+          <div className="flex items-start gap-2 rounded-area bg-area px-3 py-2.5">
             <Status tom="aviso">Cobrança possível</Status>
-            <p className="text-[var(--texto-m)] text-[var(--texto)]">
+            <p className="min-w-0 flex-1 text-pequeno text-t1">
               Esta tarefa usa chamada paga ao Provedor: repetir pode gerar nova cobrança se o pedido anterior tiver sido processado.
             </p>
           </div>
         )}
 
-        <div className="flex items-center justify-between border-t border-[var(--borda)] pt-2">
-          <span className="text-[var(--texto-m)] text-[var(--texto-fraco)]">
+        <div className="flex items-center justify-between border-t border-linha pt-2.5">
+          <span className="text-pequeno text-t3">
             Ou encerre esta tentativa pendente:
           </span>
           <Botao
