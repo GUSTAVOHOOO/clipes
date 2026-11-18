@@ -354,6 +354,48 @@ describe('mock TS de Fontes, Transcrição, Energia, Chat, Preview e Lotes', () 
     expect(stages).toContain('batch:cancelled')
   })
 
+  it('batches.create respeita local_only_violation com Groq, assistantTasks reflete projects.local_only e batchMock lê flags da query do hash', async () => {
+    await coreDispatch('projects.local_only.set', { enabled: true })
+
+    const tasks = await coreDispatch<{ projectLocalOnly: boolean }>('assistant.tasks', {})
+    expect(tasks.projectLocalOnly).toBe(true)
+
+    await expect(
+      coreDispatch('batches.create', {
+        sourceIds: [1, 4],
+        engine: 'groq',
+        videoKind: 'direct',
+      }),
+    ).rejects.toMatchObject({ code: 'local_only_violation' })
+
+    await coreDispatch('projects.local_only.set', { enabled: false })
+
+    // Flags passadas via hash query (#/projeto/...?batch-unknown=1) devem ser lidas pelo batchMock
+    window.location.hash = '#/projeto/meu-canal/fontes?sub=lotes&batch-unknown=1'
+    const loteUnknown = await coreDispatch<{ id: number; status: string; pause: string | null }>('batches.create', {
+      sourceIds: [1, 3, 4],
+      engine: 'local',
+      videoKind: 'direct',
+    })
+    expect(loteUnknown.status).toBe('budget_paused')
+    expect(loteUnknown.pause).toBe('cost_unknown')
+
+    await expect(
+      coreDispatch('jobs.budget.continue', { scope: 'batch', key: `sources-${loteUnknown.id}` }),
+    ).rejects.toMatchObject({ code: 'confirmation_required', usage: { reason: 'cost_unknown' } })
+
+    await coreDispatch('jobs.budget.continue', {
+      scope: 'batch',
+      key: `sources-${loteUnknown.id}`,
+      confirmed: true,
+    })
+    const retomado = await coreDispatch<{ status: string; pause: string | null }>('batches.get', {
+      id: loteUnknown.id,
+    })
+    expect(retomado.status).toBe('running')
+    expect(retomado.pause).toBeNull()
+  })
+
   it('mantém compatibilidade com ?hardware-cpu=1', async () => {
     window.history.replaceState(null, '', '/?hardware-cpu=1')
     const hw = await coreDispatch<{ cuda: boolean; effective: { device: string; model: string } }>(

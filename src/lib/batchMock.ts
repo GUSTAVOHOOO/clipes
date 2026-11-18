@@ -1,5 +1,11 @@
 // Lote de Fontes simulado (#56) e orçamentos por escopo (`task` | `batch`, ADR-0009).
-const flag = (name: string) => typeof location !== 'undefined' && new URLSearchParams(location.search).has(name);
+const flag = (name: string) => {
+  if (typeof location === 'undefined') return false;
+  if (new URLSearchParams(location.search).has(name)) return true;
+  const hash = location.hash ?? '';
+  const qIdx = hash.indexOf('?');
+  return qIdx >= 0 && new URLSearchParams(hash.slice(qIdx + 1)).has(name);
+};
 
 export type BatchProgressEmitter = (evento: {
   job: string;
@@ -250,6 +256,7 @@ export function batchMockDispatch(
   args: object,
   emitProgress?: BatchProgressEmitter,
   projectId: string | null = 'test-project',
+  sourceNames?: Record<number, string>,
 ): unknown {
   const a = args as {
     id?: number;
@@ -328,11 +335,12 @@ export function batchMockDispatch(
 
     const id = nextBatchId++;
     const items: Item[] = uniqueIds.map((sourceId, position) => {
+      const resolvedName = sourceNames?.[sourceId] ?? names[sourceId] ?? `live-${sourceId}.mp4`;
       if (position === 0) {
         return {
           position,
           sourceId,
-          name: names[sourceId] ?? `live-${sourceId}.mp4`,
+          name: resolvedName,
           state: 'completed',
           error: null,
           resetAtMs: null,
@@ -345,7 +353,7 @@ export function batchMockDispatch(
         return {
           position,
           sourceId,
-          name: names[sourceId] ?? `live-${sourceId}.mp4`,
+          name: resolvedName,
           state: 'paused',
           error: flag('batch-uncertain') ? 'timeout_uncertain' : 'provider_http',
           resetAtMs: null,
@@ -358,7 +366,7 @@ export function batchMockDispatch(
         return {
           position,
           sourceId,
-          name: names[sourceId] ?? `live-${sourceId}.mp4`,
+          name: resolvedName,
           state: 'selecting',
           error: null,
           resetAtMs: null,
@@ -371,7 +379,7 @@ export function batchMockDispatch(
         return {
           position,
           sourceId,
-          name: names[sourceId] ?? `live-${sourceId}.mp4`,
+          name: resolvedName,
           state: 'paused',
           error: 'timeout_uncertain',
           resetAtMs: null,
@@ -383,7 +391,7 @@ export function batchMockDispatch(
       return {
         position,
         sourceId,
-        name: names[sourceId] ?? `live-${sourceId}.mp4`,
+        name: resolvedName,
         state: 'pending',
         error: null,
         resetAtMs: null,

@@ -393,14 +393,14 @@ const taskTarget = (choice: string) => {
   const found = profileMocks.find(p => p.id === id);
   return found ? profileRow(found.id, found.label, found.kind, found.model, found.endpoint) : null;
 };
-const assistantTasks = () => ({ projectLocalOnly: sourceTest && projectVetoMock, tasks: Object.keys(assistantMock.tasks).map(task => {
+const assistantTasks = () => ({ projectLocalOnly: projectVetoMock, tasks: Object.keys(assistantMock.tasks).map(task => {
   const own = assistantMock.tasks[task];
   const choice = own || assistantMock.default;
   const profile = taskTarget(choice);
   const missing = !profile && staleProfile(choice) ? choice.slice(8) : null;
   const localOnly = assistantMock.localOnly[task] ?? false;
   const firstLocal = profileMocks.find(p => isLocalHost(p.endpoint));
-  return { task, choice: missing ? '' : own, source: missing ? 'none' : own ? 'task' : assistantMock.default ? 'default' : 'none', profile, localOnly, blocked: (localOnly || (sourceTest && projectVetoMock)) && !!profile && !profile.local, missing,
+  return { task, choice: missing ? '' : own, source: missing ? 'none' : own ? 'task' : assistantMock.default ? 'default' : 'none', profile, localOnly, blocked: (localOnly || projectVetoMock) && !!profile && !profile.local, missing,
     suggestion: !profile && firstLocal ? { choice: `profile:${firstLocal.id}`, label: firstLocal.label, measured: false } : null };
 }) });
 let groqKeyConfigured = groqRetryTest;
@@ -874,7 +874,17 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name.startsWith('batches.')) {
       const active = getActiveProjectMock();
       if (!active) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
-      const handled = batchMockDispatch(name, args, emitirProgressoMock, active.id);
+      if (name === 'batches.create') {
+        const eng = (args as { engine?: string }).engine;
+        const selectionBlocked = assistantTasks().tasks.find((t) => t.task === 'selection')?.blocked;
+        if ((eng === 'groq' && projectVetoMock) || selectionBlocked) {
+          throw { code: 'local_only_violation', message: 'Bloqueado pelo modo Somente local.' };
+        }
+      }
+      const sourceNames = Object.fromEntries(
+        sourceItems.map((s) => [s.id, s.path.split(/[\\/]/).pop() || s.path]),
+      );
+      const handled = batchMockDispatch(name, args, emitirProgressoMock, active.id, sourceNames);
       if (handled !== undefined) return handled as T;
     }
     if (name.startsWith('thumbnail.')) { const handled = thumbnailMockDispatch(name, args); if (handled !== undefined) return handled as T; }
