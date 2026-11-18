@@ -272,13 +272,44 @@ describe('mock TS de Fontes, Transcrição, Energia, Chat, Preview e Lotes', () 
     expect(energy.state).toBe('queued')
     expect(typeof energy.job).toBe('number')
 
-    const preview = await coreDispatch<{ waveform: string; thumbnails: string[] }>('jobs.preview', {
+    const preview = await coreDispatch<{
+      waveform: string
+      thumbnails: string[]
+      waveformKey: string
+      thumbnailKeys: string[]
+    }>('jobs.preview', {
+      source_id: 1,
+    })
+    const previewCamel = await coreDispatch<{
+      waveform: string
+      thumbnails: string[]
+      waveformKey: string
+      thumbnailKeys: string[]
+    }>('jobs.preview', {
+      sourceId: 1,
+    })
+    const previewBoth = await coreDispatch<{
+      waveform: string
+      thumbnails: string[]
+      waveformKey: string
+      thumbnailKeys: string[]
+    }>('jobs.preview', {
+      sourceId: 1,
       source_id: 1,
     })
     unsub()
 
     expect(preview.waveform).toBeTruthy()
     expect(preview.thumbnails.length).toBeGreaterThan(0)
+    expect(preview.waveformKey).toBe('preview-waveform/1')
+    expect(preview.thumbnailKeys).toEqual(['preview-thumb/1-0', 'preview-thumb/1-1'])
+    expect(previewCamel).toEqual(preview)
+    expect(previewBoth).toEqual(preview)
+
+    await expect(
+      coreDispatch('jobs.preview', { sourceId: 1, source_id: 2 }),
+    ).rejects.toMatchObject({ code: 'invalid_input' })
+    await expect(coreDispatch('jobs.preview', { sourceId: 999 })).rejects.toBeDefined()
     expect(eventos.some((e) => e.stage === 'energy')).toBe(true)
   })
 
