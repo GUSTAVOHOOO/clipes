@@ -182,10 +182,10 @@ export function ListaCandidatos({
           opcoes={opcoesEstado}
         />
 
-        <div className="flex items-end gap-3">
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="grid grid-cols-[minmax(0,1fr)_152px] items-end gap-3">
+          <div className="flex min-w-0 flex-col gap-0.5">
             <div className="flex items-baseline justify-between gap-2 text-pequeno">
-              <span className="text-t3">Nota mínima</span>
+              <span className="whitespace-nowrap text-t3">Nota mínima</span>
               <span className="num font-medio text-t2">{nota(notaMinima)}</span>
             </div>
             <Slider
@@ -204,7 +204,7 @@ export function ListaCandidatos({
             valor={ordenacao}
             aoMudar={aoMudarOrdenacao}
             opcoes={OPCOES_ORDENACAO}
-            className="min-w-[140px]"
+            className="min-w-0"
           />
         </div>
       </div>
@@ -216,7 +216,9 @@ export function ListaCandidatos({
             compacto={false}
             titulo="Nenhum candidato corresponde aos filtros atuais"
             descricao="Altere o estado selecionado ou reduza a Nota mínima para voltar a ver os candidatos."
-            acaoPrimaria={{ rotulo: 'Limpar filtros', aoAcionar: aoLimparFiltros }}
+            {...(selecionadoId !== null
+              ? { acaoSecundaria: { rotulo: 'Limpar filtros', aoAcionar: aoLimparFiltros } }
+              : { acaoPrimaria: { rotulo: 'Limpar filtros', aoAcionar: aoLimparFiltros } })}
           />
         </div>
       ) : (

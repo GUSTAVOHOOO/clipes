@@ -582,7 +582,7 @@ test.describe('Avaliação UI independente — Onda 3 (Seleção e Bancada de Re
       ;(window as unknown as { __releaseMockTimers?: () => void }).__releaseMockTimers?.()
     })
     await page.getByRole('button', { name: 'Gerar preview novamente' }).click()
-    await expect(page.locator('img[alt="Quadro do Corte"]')).toBeVisible()
+    await expect(page.getByRole('img', { name: 'Quadro do Corte' })).toBeVisible()
     await salvarCaptura('10-revisao-bancada-1366.png')
     relatorio.push(await auditarPagina(page, 'k-revisao-bancada', '1366x768', 'padrao'))
 

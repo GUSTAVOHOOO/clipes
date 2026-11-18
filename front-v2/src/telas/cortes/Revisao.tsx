@@ -334,16 +334,29 @@ export function Revisao({
     return { approved, rejected, pending }
   }, [candidatosCombinados])
 
-  // Monitora jobs de Redo em background via useFila()
-  const jobSelecaoAtivo = useMemo(
-    () =>
-      jobs.find(
-        (j) =>
-          j.id === `selection-${runId}` ||
-          (j.etapa.startsWith('ai:selection') && j.estado === 'rodando'),
-      ),
-    [jobs, runId],
-  )
+  // Monitora jobs de Redo da execução ativa via useFila() (nunca de outro run ou janela cancelada)
+  const jobsDoRun = useMemo(() => {
+    const ids = new Set<string>()
+    for (const w of janelas) {
+      if (w.jobId != null && w.state !== 'cancelled') {
+        ids.add(String(w.jobId))
+      }
+    }
+    return ids
+  }, [janelas])
+
+  const jobSelecaoAtivo = useMemo(() => {
+    const candidatos = jobs.filter(
+      (j) =>
+        j.id === `selection-${runId}` ||
+        (j.etapa.startsWith('ai:selection') && jobsDoRun.has(j.id)),
+    )
+    return (
+      candidatos.find((j) => j.estado === 'rodando') ??
+      candidatos.find((j) => j.estado === 'concluido') ??
+      candidatos[0]
+    )
+  }, [jobs, jobsDoRun, runId])
 
   const redoEmAndamento =
     redoSolicitado ||
@@ -892,7 +905,7 @@ export function Revisao({
       <nav
         ref={subcabecalhoRef}
         aria-label="Controles da revisão"
-        className="flex shrink-0 flex-wrap items-center gap-2 border-b border-linha pb-2.5 min-[1440px]:flex-nowrap"
+        className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-linha pb-2 min-[1280px]:flex-nowrap"
       >
         <Botao
           tamanho="p"
@@ -910,7 +923,7 @@ export function Revisao({
         </h1>
 
         {fonteAtiva && (
-          <span className="max-w-36 truncate text-pequeno text-t3" title={nomeArquivo(fonteAtiva.path)}>
+          <span className="max-w-24 truncate text-pequeno text-t3" title={nomeArquivo(fonteAtiva.path)}>
             {nomeArquivo(fonteAtiva.path)}
           </span>
         )}
@@ -918,14 +931,13 @@ export function Revisao({
         <SeloTipoVideo tipo={runAtivo.videoKind} />
 
         {revisoes.length > 1 && (
-          <div className="flex shrink-0 items-center gap-1.5">
-            <span className="text-pequeno text-t3">Revisão:</span>
+          <div className="w-[108px] shrink-0">
             <Select
               rotulo="Revisão da execução"
               valor={String(numeroRevisaoAtiva)}
               aoMudar={(v) => void aoMudarRevisao(Number(v))}
               opcoes={opcoesRevisao}
-              className="w-28 min-w-0"
+              className="min-w-0!"
             />
           </div>
         )}
@@ -934,21 +946,20 @@ export function Revisao({
           {contadores.approved} aprovados · {contadores.rejected} rejeitados · {contadores.pending} pendentes
         </span>
 
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
           <Dica texto="Desfaz a última aprovação, rejeição ou ajuste desta execução">
-            <span tabIndex={revisaoLocal?.canUndo ? undefined : 0} className="inline-flex">
-              <Botao
-                tamanho="p"
-                variante="secundario"
-                icone={<Undo2 />}
-                atalho={rotuloAtalhoDesfazer}
-                disabled={!revisaoLocal?.canUndo || desfazendo}
-                carregando={desfazendo}
-                onClick={() => void aoDesfazer()}
-              >
-                Desfazer
-              </Botao>
-            </span>
+            <Botao
+              tamanho="p"
+              variante="secundario"
+              icone={<Undo2 />}
+              atalho={rotuloAtalhoDesfazer}
+              aria-disabled={!revisaoLocal?.canUndo && !desfazendo ? true : undefined}
+              carregando={desfazendo}
+              className={!revisaoLocal?.canUndo ? 'pointer-events-auto!' : undefined}
+              onClick={revisaoLocal?.canUndo && !desfazendo ? () => void aoDesfazer() : undefined}
+            >
+              Desfazer
+            </Botao>
           </Dica>
 
           {temIncerta || janelasElegiveis.length === 0 ? (
@@ -959,11 +970,15 @@ export function Revisao({
                   : 'Nenhuma Janela disponível para refazer no momento.'
               }
             >
-              <span tabIndex={0} className="inline-flex">
-                <Botao tamanho="p" variante="secundario" icone={<RefreshCw />} disabled>
-                  Refazer com outro Perfil…
-                </Botao>
-              </span>
+              <Botao
+                tamanho="p"
+                variante="secundario"
+                icone={<RefreshCw />}
+                aria-disabled="true"
+                className="pointer-events-auto!"
+              >
+                Refazer com outro Perfil…
+              </Botao>
             </Dica>
           ) : (
             <Botao

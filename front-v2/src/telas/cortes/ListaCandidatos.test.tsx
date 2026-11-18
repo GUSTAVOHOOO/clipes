@@ -262,4 +262,23 @@ describe('ListaCandidatos (Coluna esquerda C.2)', () => {
       'Nota mínima 0,0 de 10',
     )
   })
+
+  it('UI-34b: não usa botão primário bg-sinal em "Limpar filtros" quando há candidato selecionado no detalhe', () => {
+    render(envolver(<ListaControlada />))
+
+    const slider = screen.getByRole('slider', { name: /Nota mínima/i })
+    fireEvent.change(slider, { target: { value: '9.5' } })
+
+    const btnLimpar = screen.getByRole('button', { name: 'Limpar filtros' })
+    expect(btnLimpar.className).not.toContain('bg-sinal')
+  })
+
+  it('UI-33b: mantém "Nota mínima" sem quebra de linha e reserva largura ao Slider ao lado do Select', () => {
+    render(envolver(<ListaControlada />))
+
+    const rotuloNota = screen.getByText('Nota mínima')
+    expect(rotuloNota.className).toContain('whitespace-nowrap')
+    const selectOrdem = screen.getByRole('combobox', { name: /Ordenar candidatos/i })
+    expect(selectOrdem.className).not.toContain('min-w-[140px]')
+  })
 })

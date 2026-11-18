@@ -7,6 +7,32 @@ test.describe('Tela Bancada de Revisão de Cortes (#/projeto/:id/cortes/revisao/
     const erros: string[] = []
     page.on('pageerror', (erro) => erros.push(erro.message))
 
+    await page.addInitScript(() => {
+      const origSetTimeout = window.setTimeout.bind(window)
+      const pendentes: Array<() => void> = []
+      ;(window as unknown as { __holdMockTimers?: boolean }).__holdMockTimers = false
+      ;(window as unknown as { __releaseMockTimers?: () => void }).__releaseMockTimers = () => {
+        ;(window as unknown as { __holdMockTimers?: boolean }).__holdMockTimers = false
+        while (pendentes.length > 0) {
+          const fn = pendentes.shift()
+          if (fn) fn()
+        }
+      }
+      window.setTimeout = ((fn: TimerHandler, delay?: number, ...args: unknown[]) => {
+        const d = typeof delay === 'number' ? delay : 0
+        if (
+          (window as unknown as { __holdMockTimers?: boolean }).__holdMockTimers &&
+          d >= 10 &&
+          d <= 50 &&
+          typeof fn === 'function'
+        ) {
+          pendentes.push(() => fn(...args))
+          return 0 as unknown as number
+        }
+        return origSetTimeout(fn, delay, ...args)
+      }) as typeof window.setTimeout
+    })
+
     await page.setViewportSize({ width: 1366, height: 768 })
     await page.goto('/#/inicio')
     await page.getByRole('button', { name: /Abrir Projeto Demo/i }).click()
@@ -27,12 +53,62 @@ test.describe('Tela Bancada de Revisão de Cortes (#/projeto/:id/cortes/revisao/
     const toggleEixos = page.getByRole('button', { name: /Ver os 5 eixos/i })
     await expect(toggleEixos).toHaveAttribute('aria-expanded', 'false')
 
-    // Zero scroll externo em 1366x768 + screenshot
+    // Zero scroll externo em 1366x768 + layout (subheader 1 linha, Aprovar acima da dobra, Transporte e Slider sem esmagar)
     const rolagem1366 = await page.evaluate(() => ({
       altura: document.documentElement.scrollHeight <= window.innerHeight,
       largura: document.documentElement.scrollWidth <= window.innerWidth,
     }))
     expect(rolagem1366).toEqual({ altura: true, largura: true })
+
+    const layout1366 = await page.evaluate(() => {
+      const nav = document.querySelector('nav[aria-label="Controles da revisão"]')!
+      const navRect = nav.getBoundingClientRect()
+      const selectRev = nav.querySelector('[role="combobox"]')
+      const statusCont = nav.querySelector('[role="status"]')
+      const selectRevNaoSobrepoe =
+        selectRev && statusCont
+          ? selectRev.getBoundingClientRect().right <= statusCont.getBoundingClientRect().left + 1
+          : true
+      const toolbar = document.querySelector('[role="toolbar"][aria-label="Controles de reprodução"]')!
+      const toolbarRect = toolbar.getBoundingClientRect()
+      const timecode = toolbar.querySelector('[aria-label^="Posição "]')!
+      const timecodeRect = timecode.getBoundingClientRect()
+      const sliderThumb = document.querySelector('[aria-label="Nota mínima"]')!
+      const track = sliderThumb.parentElement!.parentElement!
+      const trackRect = track.getBoundingClientRect()
+      const btnAprovar = Array.from(document.querySelectorAll('button')).find((b) =>
+        b.textContent?.includes('Aprovar'),
+      )!
+      const btnAprovarRect = btnAprovar.getBoundingClientRect()
+      const imagensQuebradas = Array.from(document.querySelectorAll('img')).filter(
+        (img) => img.complete && img.naturalWidth === 0,
+      ).length
+      const spansFocaveis = document.querySelectorAll('span[tabindex="0"]').length
+      return {
+        navHeight: Math.round(navRect.height),
+        navOverflowX: nav.scrollWidth > nav.clientWidth + 1,
+        navRightWithinViewport: navRect.right <= window.innerWidth,
+        selectRevNaoSobrepoe,
+        toolbarOverflowX: toolbar.scrollWidth > toolbar.clientWidth + 1,
+        toolbarHeight: Math.round(toolbarRect.height),
+        timecodeHeight: Math.round(timecodeRect.height),
+        sliderTrackWidth: Math.round(trackRect.width),
+        aprovarBottom: Math.round(btnAprovarRect.bottom),
+        imagensQuebradas,
+        spansFocaveis,
+      }
+    })
+    expect(layout1366.navHeight).toBeLessThanOrEqual(48)
+    expect(layout1366.navOverflowX).toBe(false)
+    expect(layout1366.navRightWithinViewport).toBe(true)
+    expect(layout1366.selectRevNaoSobrepoe).toBe(true)
+    expect(layout1366.toolbarOverflowX).toBe(false)
+    expect(layout1366.toolbarHeight).toBeLessThanOrEqual(40)
+    expect(layout1366.timecodeHeight).toBeLessThanOrEqual(24)
+    expect(layout1366.sliderTrackWidth).toBeGreaterThanOrEqual(80)
+    expect(layout1366.aprovarBottom).toBeLessThanOrEqual(768)
+    expect(layout1366.imagensQuebradas).toBe(0)
+    expect(layout1366.spansFocaveis).toBe(0)
     await page.screenshot({ path: 'test-results/cortes-revisao-1366.png' })
 
     // Critério 1: Tab foca role="listbox" (sem tabIndex=-1), ↓/↑ movem seleção, aria-activedescendant e ?corte=
@@ -69,6 +145,8 @@ test.describe('Tela Bancada de Revisão de Cortes (#/projeto/:id/cortes/revisao/
     await page.keyboard.press('ArrowLeft')
     await expect(sliderNota).toHaveAttribute('aria-valuetext', 'Nota mínima 8,5 de 10')
     await expect(page.getByText('Nenhum candidato corresponde aos filtros atuais')).toBeVisible()
+    // Regra da Luz Única: mesmo com filtro zerado, segue exatamente 1 botão primário (bg-sinal)
+    await expect(page.locator('button.bg-sinal')).toHaveCount(1)
 
     await page.getByRole('button', { name: 'Limpar filtros' }).click()
     await expect(listbox.getByRole('option')).toHaveCount(3)
@@ -180,6 +258,95 @@ test.describe('Tela Bancada de Revisão de Cortes (#/projeto/:id/cortes/revisao/
     await expect(
       page.getByText(/Próximo passo no Editor: escolher Ângulo → aprovar Roteiro → gerar Narração/i),
     ).toBeVisible()
+
+    expect(erros).toEqual([])
+  })
+
+  test('UI-32/UI-31: acompanha modo WCAG 2.1.4 nos <Kbd> e não vaza banner de redo de outro run após cancelar em C.1', async ({
+    page,
+  }) => {
+    const erros: string[] = []
+    page.on('pageerror', (erro) => erros.push(erro.message))
+
+    await page.addInitScript(() => {
+      const origSetTimeout = window.setTimeout.bind(window)
+      const pendentes: Array<() => void> = []
+      ;(window as unknown as { __holdMockTimers?: boolean }).__holdMockTimers = false
+      ;(window as unknown as { __releaseMockTimers?: () => void }).__releaseMockTimers = () => {
+        ;(window as unknown as { __holdMockTimers?: boolean }).__holdMockTimers = false
+        while (pendentes.length > 0) {
+          const fn = pendentes.shift()
+          if (fn) fn()
+        }
+      }
+      window.setTimeout = ((fn: TimerHandler, delay?: number, ...args: unknown[]) => {
+        const d = typeof delay === 'number' ? delay : 0
+        if (
+          (window as unknown as { __holdMockTimers?: boolean }).__holdMockTimers &&
+          d >= 10 &&
+          d <= 50 &&
+          typeof fn === 'function'
+        ) {
+          pendentes.push(() => fn(...args))
+          return 0 as unknown as number
+        }
+        return origSetTimeout(fn, delay, ...args)
+      }) as typeof window.setTimeout
+    })
+
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.goto('/#/inicio')
+    await page.getByRole('button', { name: /Abrir Projeto Demo/i }).click()
+    await expect(page).toHaveURL(/#\/projeto\/demo\/fontes$/)
+
+    // Seleciona WCAG 2.1.4 ("Exigir modificador Alt + tecla") e verifica <Kbd> na Bancada
+    await page.evaluate(() => {
+      window.location.hash = '#/config/aparencia'
+    })
+    await page.getByRole('radio', { name: /Exigir modificador Alt \+ tecla/i }).click()
+
+    await page.evaluate(() => {
+      window.location.hash = '#/projeto/demo/cortes/revisao/1'
+    })
+    await expect(page.getByRole('heading', { level: 1, name: /Execução #1/i })).toBeVisible()
+    const kbds = await page.locator('section[aria-label="Detalhe do Corte"] kbd').allInnerTexts()
+    expect(kbds).toContain('Alt+A')
+    expect(kbds).toContain('Alt+R')
+    expect(kbds).toContain('Alt+I')
+    expect(kbds).toContain('Alt+O')
+
+    // Restaura modo padrão
+    await page.evaluate(() => {
+      window.location.hash = '#/config/aparencia'
+    })
+    await page.getByRole('radio', { name: /Ativos fora de campos de texto/i }).click()
+
+    // Inicia seleção #2 em C.1 e cancela -> vai para Revisão #1 e confirma ausência do banner de redo
+    await page.evaluate(() => {
+      window.location.hash = '#/projeto/demo/cortes'
+      ;(window as unknown as { __holdMockTimers?: boolean }).__holdMockTimers = true
+    })
+    await page.getByRole('button', { name: 'Selecionar Cortes', exact: true }).click()
+    const dlgConfirm = page.getByRole('alertdialog')
+    await expect(dlgConfirm).toBeVisible()
+    await dlgConfirm.getByRole('button', { name: 'Confirmar e selecionar Cortes' }).click()
+    await expect(dlgConfirm).toBeHidden()
+    await page.getByRole('button', { name: 'Cancelar seleção' }).click()
+    const dlgCancel = page.getByRole('alertdialog')
+    await expect(dlgCancel).toBeVisible()
+    await dlgCancel.getByRole('button', { name: 'Cancelar seleção' }).click()
+    await expect(dlgCancel).toBeHidden()
+    await page.evaluate(() => {
+      ;(window as unknown as { __releaseMockTimers?: () => void }).__releaseMockTimers?.()
+    })
+
+    await page.evaluate(() => {
+      window.location.hash = '#/projeto/demo/cortes/revisao/1'
+    })
+    await expect(page.getByRole('heading', { level: 1, name: /Execução #1/i })).toBeVisible()
+    await expect(
+      page.getByText(/Gerando nova revisão da execução em segundo plano/i),
+    ).not.toBeVisible()
 
     expect(erros).toEqual([])
   })

@@ -1,10 +1,11 @@
 import { ProvedorDicas, ProvedorToast } from '@ds'
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ErroCore } from '~/core/cliente'
 import { criarFila, type Fila } from '~/core/progresso'
+import { CHAVE_PREFERENCIAS } from '~/preferencias/preferencias'
 import type { FonteProjeto } from '~/stores/fontesProjeto'
 import type { ResumoRunSelecao } from '~/stores/selecaoProjeto'
 import { DetalheCandidato, type CandidatoDetalhe } from '~/telas/cortes/DetalheCandidato'
@@ -44,7 +45,12 @@ beforeAll(() => {
   }
 })
 
+beforeEach(() => {
+  localStorage.clear()
+})
+
 afterEach(() => {
+  localStorage.clear()
   vi.clearAllMocks()
   window.location.hash = ''
 })
@@ -458,8 +464,8 @@ describe('DetalheCandidato (Coluna direita C.2)', () => {
 
     // Botão de conversão individual em Corte direto fica desabilitado e Dica explica sem expor nº de ticket (UI-12)
     const btnConverter = screen.getByRole('button', { name: /Converter em Vídeo transformado/i })
-    expect(btnConverter).toBeDisabled()
-    await user.hover(btnConverter.parentElement!)
+    expect(btnConverter).toHaveAttribute('aria-disabled', 'true')
+    await user.hover(btnConverter)
     expect(
       await screen.findByText(/A conversão individual para Vídeo transformado ainda não está disponível nesta versão\./i),
     ).toBeInTheDocument()
@@ -824,5 +830,249 @@ describe('DetalheCandidato (Coluna direita C.2)', () => {
     await user.keyboard('jkl')
     expect(aoMudarTempoUs).not.toHaveBeenCalled()
     expect(aoMudarReproduzindo).not.toHaveBeenCalled()
+  })
+
+  it('UI-31b: não força proxy para ready quando proxy.status retorna running nem quando jobId reutilizado já está concluído na Fila', async () => {
+    filaTeste = criarFila(() => 'demo')
+    let statusState: 'running' | 'ready' = 'running'
+    chamarMock.mockImplementation(async (cmd: string, args: unknown) => {
+      const a = (args ?? {}) as Record<string, unknown>
+      if (cmd === 'proxy.request') {
+        const ehSegundo = Number(a.start_us) > 200_000_000
+        return {
+          state: 'running',
+          key: ehSegundo ? '0004second' : '0004first',
+          job: 7,
+          progress: 40,
+          error: null,
+          windowStartUs: 0,
+          windowEndUs: 500_000_000,
+        }
+      }
+      if (cmd === 'proxy.status') {
+        return {
+          state: statusState,
+          key: String(a.key),
+          job: 7,
+          progress: statusState === 'ready' ? 100 : 40,
+          error: null,
+        }
+      }
+      return {}
+    })
+
+    const { rerender } = render(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_DIRETO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={CANDIDATO_BASE}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+
+    expect(await screen.findByRole('button', { name: /Cancelar preview/i })).toBeInTheDocument()
+
+    // 1) Se core-progress concluir mas proxy.status ainda responder 'running', NÃO força 'ready'
+    act(() => {
+      filaTeste.aplicar({
+        job: '7',
+        project: 'demo',
+        stage: 'complete',
+        percentage: 100,
+        message: 'Preview concluído.',
+        error: null,
+      })
+    })
+
+    await waitFor(() => {
+      expect(chamarMock).toHaveBeenCalledWith('proxy.status', { key: '0004first' })
+    })
+    expect(screen.queryByRole('img', { name: /Quadro do Corte/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Cancelar preview/i })).toBeInTheDocument()
+
+    // 2) Troca para 2º candidato que reutiliza o mesmo jobId 7 (já 'concluido' em filaTeste)
+    rerender(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_DIRETO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={{
+            ...CANDIDATO_BASE,
+            id: 102,
+            startUs: 390_000_000,
+            endUs: 410_000_000,
+          }}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+
+    expect(await screen.findByRole('button', { name: /Cancelar preview/i })).toBeInTheDocument()
+    // Não deve pular para 100% nem exibir PlayerProxy antes de o 2º proxy ficar ready
+    expect(screen.getByText('40%')).toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: /Quadro do Corte/i })).not.toBeInTheDocument()
+
+    // Agora o 2º proxy conclui e proxy.status retorna 'ready'
+    statusState = 'ready'
+    act(() => {
+      filaTeste.aplicar({
+        job: '7',
+        project: 'demo',
+        stage: 'complete',
+        percentage: 100,
+        message: 'Preview concluído.',
+        error: null,
+      })
+    })
+
+    const img = await screen.findByRole('img', { name: /Quadro do Corte/i })
+    expect(img).toHaveAttribute('src', '/__clipes-media__/proxy/0004second')
+  })
+
+  it('UI-32a/b: acompanha modo WCAG 2.1.4 nos <Kbd>, remove I/O do <Transporte> da Bancada e elimina <span tabIndex={0}>', async () => {
+    localStorage.setItem(
+      CHAVE_PREFERENCIAS,
+      JSON.stringify({ modoTeclasUnicas: 'alt', teclasUnicas: true }),
+    )
+    filaTeste = criarFila(() => 'demo')
+    chamarMock.mockResolvedValue({
+      state: 'ready',
+      key: '0004abab',
+      job: null,
+      progress: 100,
+      error: null,
+      windowStartUs: 0,
+      windowEndUs: 260_000_000,
+    })
+
+    const { container, unmount } = render(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_DIRETO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={CANDIDATO_BASE}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+
+    await screen.findByRole('img', { name: /Quadro do Corte/i })
+
+    // <Kbd> de A, R, I, O refletem Alt+tecla em modo 'alt'
+    const kbds = Array.from(container.querySelectorAll('kbd')).map((k) => k.textContent?.trim())
+    expect(kbds).toContain('Alt+A')
+    expect(kbds).toContain('Alt+R')
+    expect(kbds).toContain('Alt+I')
+    expect(kbds).toContain('Alt+O')
+    expect(kbds).not.toContain('A')
+    expect(kbds).not.toContain('R')
+
+    // <Transporte> na Bancada não renderiza botões I/O redundantes nem <span tabIndex={0}>
+    const toolbar = screen.getByRole('toolbar', { name: /Controles de reprodução/i })
+    expect(within(toolbar).queryByRole('button', { name: /Definir Entrada/i })).not.toBeInTheDocument()
+    expect(within(toolbar).queryByRole('button', { name: /Definir Saída/i })).not.toBeInTheDocument()
+    expect(container.querySelector('span[tabindex="0"]')).toBeNull()
+
+    const btnConverter = screen.getByRole('button', { name: /Converter em Vídeo transformado/i })
+    expect(btnConverter).toHaveAttribute('aria-disabled', 'true')
+    expect(btnConverter).not.toBeDisabled()
+
+    // Modo 'desligadas' oculta Kbd de teclas únicas mas preserva Enter
+    unmount()
+    localStorage.setItem(
+      CHAVE_PREFERENCIAS,
+      JSON.stringify({ modoTeclasUnicas: 'desligadas', teclasUnicas: false }),
+    )
+    const { container: containerDesligado } = render(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_DIRETO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={{ ...CANDIDATO_BASE, id: 109 }}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+    const kbdsDesligados = Array.from(containerDesligado.querySelectorAll('kbd')).map((k) =>
+      k.textContent?.trim(),
+    )
+    expect(kbdsDesligados).toEqual(['Enter'])
+  })
+
+  it('UI-34c: substitui <img> quebrada no <PlayerProxy> por placeholder limpo quando o poster falha ao carregar', async () => {
+    filaTeste = criarFila(() => 'demo')
+    chamarMock.mockResolvedValue({
+      state: 'ready',
+      key: '0004broken',
+      job: null,
+      progress: 100,
+      error: null,
+      windowStartUs: 0,
+      windowEndUs: 260_000_000,
+    })
+
+    const { container } = render(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_DIRETO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={CANDIDATO_BASE}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+
+    const img = await screen.findByRole('img', { name: /Quadro do Corte/i })
+    fireEvent.error(img)
+
+    expect(container.querySelector('img')).toBeNull()
+    expect(screen.getByRole('img', { name: /Quadro do Corte/i })).toBeInTheDocument()
+  })
+
+  it('UI-35b: traduz profile "legacy" para "Perfil configurado" sem expor "legacy"', async () => {
+    filaTeste = criarFila(() => 'demo')
+    chamarMock.mockResolvedValue({
+      state: 'ready',
+      key: '0004abab',
+      job: null,
+      progress: 100,
+      error: null,
+      windowStartUs: 0,
+      windowEndUs: 260_000_000,
+    })
+
+    render(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_DIRETO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={{ ...CANDIDATO_BASE, profile: 'legacy' }}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+
+    expect(await screen.findByText(/Gerado por Perfil configurado/i)).toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/\blegacy\b/i)
   })
 })
