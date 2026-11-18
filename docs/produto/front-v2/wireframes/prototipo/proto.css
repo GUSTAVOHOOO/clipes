@@ -1,0 +1,140 @@
+/* PROTÓTIPO DESCARTÁVEL — front v2 do Clipes, rodada minimalista.
+   Responde só a "como deve parecer e se organizar". Não é código de produto.
+   Mundo: Linear/Raycast (grafite, espaço, quase sem bordas) + Teenage Engineering
+   (grade rígida, um único laranja-sinal). Toda cor fora do laranja é cinza. */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  /* superfícies: um degrau de cada vez, nada de caixas */
+  --chao: #0f1012;        /* fundo da janela */
+  --area: #141518;        /* uma área de trabalho (painel), um degrau acima */
+  --elevado: #1a1b1f;     /* popover, linha selecionada, campo */
+  --hover: #202126;
+  --linha: #24252a;       /* divisória rara, 1px */
+
+  /* texto: três cinzas fazem a hierarquia */
+  --t1: #ececee;          /* principal  (16.6:1 no chão) */
+  --t2: #a1a1a8;          /* secundário (7.7:1) */
+  --t3: #85858d;          /* terciário, dicas, timecodes em repouso (≥4.7:1 até no --elevado) */
+
+  /* a única cor */
+  --sinal: #ff5a1f;       /* laranja-sinal: playhead, marca de seleção, ação primária */
+  --sinal-suave: rgb(255 90 31 / .14);
+  --no-sinal: #160700;    /* texto sobre o laranja (contraste 6.3:1) */
+
+  --r: 6px;
+  --r-s: 4px;
+  --fonte: 'Inter', system-ui, sans-serif;
+  --ease: cubic-bezier(.16, 1, .3, 1);
+
+  color-scheme: dark;
+  font-family: var(--fonte);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--t1);
+  background: var(--chao);
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--chao); overflow: hidden; -webkit-font-smoothing: antialiased; }
+
+/* superfícies do navegador também são do design */
+::selection { background: var(--sinal-suave); color: var(--t1); }
+:focus-visible { outline: 2px solid var(--sinal); outline-offset: 2px; border-radius: var(--r-s); }
+* { scrollbar-width: thin; scrollbar-color: var(--linha) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--linha); border-radius: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+.num, .tc { font-variant-numeric: tabular-nums; }
+.tc { color: var(--t3); }
+.t2 { color: var(--t2); }
+.t3 { color: var(--t3); }
+.peso { font-weight: 600; }
+.pequeno { font-size: 12px; }
+
+/* ---------- Janela ---------- */
+.janela { height: 100vh; display: flex; flex-direction: column; min-width: 0; }
+.topo {
+  height: 40px; flex: none; display: flex; align-items: center; gap: 20px; padding: 0 16px;
+}
+.marca { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.marca svg { width: 16px; height: 16px; color: var(--sinal); }
+.projeto { color: var(--t2); display: flex; align-items: center; gap: 4px; }
+.etapas { display: flex; gap: 2px; }
+.etapa { padding: 4px 10px; border-radius: var(--r-s); color: var(--t3); text-decoration: none; }
+.etapa:hover { color: var(--t2); background: var(--area); }
+.etapa[aria-current="page"] { color: var(--t1); }
+.direita { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+
+.subtopo { height: 44px; flex: none; display: flex; align-items: center; gap: 16px; padding: 0 16px; }
+.miolo { flex: 1; min-height: 0; display: flex; }
+.rodape { height: 28px; flex: none; display: flex; align-items: center; gap: 16px; padding: 0 16px; font-size: 12px; color: var(--t3); }
+
+/* ---------- Controles ---------- */
+.btn {
+  height: 28px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px;
+  border: 0; border-radius: var(--r-s); background: transparent; color: var(--t2);
+  font: inherit; cursor: pointer; white-space: nowrap;
+  transition: background .15s var(--ease), color .15s var(--ease);
+}
+.btn:hover { background: var(--hover); color: var(--t1); }
+.btn.sec { background: var(--elevado); color: var(--t1); }
+.btn.sec:hover { background: var(--hover); }
+.btn.prim { background: var(--sinal); color: var(--no-sinal); font-weight: 600; }
+.btn.prim:hover { filter: brightness(1.08); }
+.btn.icone { width: 28px; padding: 0; justify-content: center; }
+.btn[disabled] { opacity: .4; pointer-events: none; }
+.btn svg, .ic { width: 15px; height: 15px; stroke-width: 1.75; flex: none; }
+
+kbd {
+  font: 500 11px/1 var(--fonte); color: var(--t3); padding: 2px 5px; border-radius: 3px;
+  background: var(--elevado); font-variant-numeric: tabular-nums;
+}
+.btn.prim kbd { background: rgb(0 0 0 / .18); color: var(--no-sinal); }
+
+.busca {
+  height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 10px;
+  border-radius: var(--r-s); background: var(--area); color: var(--t3); min-width: 200px;
+}
+.busca kbd { margin-left: auto; }
+
+.abas { display: flex; gap: 2px; }
+.aba { padding: 5px 10px; border-radius: var(--r-s); color: var(--t3); cursor: pointer; border: 0; background: none; font: inherit; }
+.aba:hover { color: var(--t2); }
+.aba[aria-selected="true"] { color: var(--t1); background: var(--elevado); }
+
+.estado { display: inline-flex; align-items: center; gap: 4px; color: var(--t3); font-size: 12px; }
+.estado svg { width: 13px; height: 13px; }
+
+/* marca de seleção: 2px laranja, só onde está o foco do trabalho */
+.marcado { box-shadow: inset 2px 0 0 var(--sinal); }
+
+/* ---------- Mídia ---------- */
+.quadro916 {
+  aspect-ratio: 9 / 16; border-radius: var(--r); overflow: hidden; position: relative; background: #000;
+}
+.quadro916 img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.legenda {
+  position: absolute; left: 8%; right: 8%; bottom: 14%; text-align: center;
+  font: 700 clamp(14px, 2.2vh, 22px)/1.15 var(--fonte); color: #fff;
+  text-shadow: 0 2px 8px rgb(0 0 0 / .6);
+}
+.legenda b { color: #ffd23f; }   /* cor do conteúdo (legenda do vídeo), não do chassi */
+
+/* ---------- Timeline ---------- */
+.timeline { flex: none; padding: 8px 16px 10px; }
+.regua { display: flex; justify-content: space-between; color: var(--t3); font-size: 11px; padding-left: 72px; margin-bottom: 4px; font-variant-numeric: tabular-nums; }
+.faixa { display: grid; grid-template-columns: 72px 1fr; align-items: center; height: 30px; }
+.faixa > span { color: var(--t3); font-size: 12px; }
+.pista { position: relative; height: 22px; border-radius: 3px; overflow: hidden; background: var(--area); }
+.playhead { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--sinal); border-radius: 1px; pointer-events: none; }
+
+/* ---------- Popover ---------- */
+.popover {
+  background: var(--elevado); border-radius: var(--r); padding: 12px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / .45), 0 1px 0 rgb(255 255 255 / .03) inset;
+}

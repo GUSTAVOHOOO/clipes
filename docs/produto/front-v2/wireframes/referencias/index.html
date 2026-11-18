@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Referências visuais · Front v2 do Clipes</title>
+<link rel="stylesheet" href="../kit.css">
+<style>
+  .ref-pagina { padding: 24px; max-width: 1440px; margin: 0 auto; display: grid; gap: 28px; }
+  .ref-topo { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; border-bottom: 1px solid var(--borda); padding-bottom: 14px; }
+  .ref-topo h1 { font-size: 18px; margin: 0; }
+  .ref-topo p { margin: 4px 0 0; color: var(--texto-2); max-width: 85ch; }
+  .ref-nav { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .ref-nav a { color: var(--nota); text-decoration: none; padding: 4px 8px; background: var(--tela); border: 1px solid var(--borda); border-radius: var(--r); font-size: 12px; }
+  .ref-nav a:hover { background: var(--painel); }
+  .ref-grupo { display: grid; gap: 12px; }
+  .ref-grupo-cab { display: flex; align-items: baseline; gap: 10px; }
+  .ref-grupo-cab h2 { font-size: 15px; margin: 0; }
+  .ref-grupo-cab span { font-size: 12px; color: var(--texto-2); }
+  .ref-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+  .ref-card { background: var(--tela); border: 1px solid var(--borda); border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; }
+  .ref-thumb { display: block; background: #141517; aspect-ratio: 16 / 10; overflow: hidden; border-bottom: 1px solid var(--borda); }
+  .ref-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block; }
+  .ref-corpo { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .ref-cab { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .ref-cab h3 { font-size: 14px; margin: 0; }
+  .ref-fonte { font-size: 11px; color: var(--texto-2); word-break: break-all; }
+  .ref-fonte a { color: var(--nota); }
+  .ref-levar { font-size: 12.5px; line-height: 1.4; margin: 0; color: var(--texto); }
+  .ref-levar strong { font-weight: 600; }
+</style>
+</head>
+<body>
+<main class="ref-pagina">
+  <header class="ref-topo">
+    <div style="flex: 1 1 600px;">
+      <h1>Clipes · Painel de referências visuais (front v2)</h1>
+      <p>24 referências em três grupos para decisão estética do front v2 (cores, tipografia, densidade e assinatura). Análise completa em <span class="mono">docs/research/2026-11-17-referencias-visuais-front-v2.md</span>.</p>
+      <nav class="ref-nav">
+        <a href="#grupo-1">Grupo 1 · Mundo cultural (8)</a>
+        <a href="#grupo-2">Grupo 2 · Craft desktop (10)</a>
+        <a href="#grupo-3">Grupo 3 · Concorrentes / evitar (6)</a>
+        <a href="../index.html">← Voltar aos wireframes</a>
+      </nav>
+    </div>
+  </header>
+
+  <section id="grupo-1" class="ref-grupo">
+    <div class="ref-grupo-cab">
+      <h2>Grupo 1 · O mundo cultural do público</h2>
+      <span>8 referências — streams, esportes, podcasts BR, canais dark e formato 9:16</span>
+    </div>
+    <div class="ref-grade">
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g1-twitch.jpg" target="_blank"><img src="img/g1-twitch.jpg" alt="Twitch diretório e modo teatro"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>Twitch</h3><span class="selo">Live / Teatro</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://www.twitch.tv/" target="_blank" rel="noopener">twitch.tv</a> (captura pública)</div>
+          <p class="ref-levar"><strong>O que levar:</strong> palco de vídeo escuro sem distração, barra lateral densa e selos secos de estado (AO VIVO) sem gradientes.</p>
+        </div>
+      </article>
+
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g1-ytcreators.jpg" target="_blank"><img src="img/g1-ytcreators.jpg" alt="YouTube Creators"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>YouTube Creators &amp; Studio</h3><span class="selo">Publicação</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://www.youtube.com/creators/" target="_blank" rel="noopener">youtube.com/creators</a> (captura pública)</div>
+          <p class="ref-levar"><strong>O que levar:</strong> leitura direta de métricas, cartões planos com linha de 1 px e bom equilíbrio entre temas escuro e claro.</p>
+        </div>
+      </article>
+
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g1-kick.jpg" target="_blank"><img src="img/g1-kick.jpg" alt="Kick central oficial"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>Kick</h3><span class="selo">Stream</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://help.kick.com/en/" target="_blank" rel="noopener">help.kick.com</a> / <a href="https://kick.com/" target="_blank" rel="noopener">kick.com</a> (captura pública)</div>
+          <p class="ref-levar"><strong>O que levar:</strong> geometria seca de baixa ornamentação e sinalização imediata de atividade, sem usar o verde neon em áreas grandes.</p>
+        </div>
+      </article>
+
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g1-cazetv.jpg" target="_blank"><img src="img/g1-cazetv.jpg" alt="CazéTV placar e cortes esportivos"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>CazéTV &amp; Grafismo Esportivo</h3><span class="selo">Broadcast</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://www.youtube.com/@CazeTV" target="_blank" rel="noopener">youtube.com/@CazeTV</a> · <a href="https://www.vizrt.com/" target="_blank" rel="noopener">vizrt.com</a></div>
+          <p class="ref-levar"><strong>O que levar:</strong> disciplina de placar: algarismos tabulares ultra-legíveis, rótulos curtos e faixas de status opacas de alta leitura.</p>
+        </div>
+      </article>
+
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g1-shorts.jpg" target="_blank"><img src="img/g1-shorts.jpg" alt="YouTube Shorts 9:16"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>YouTube Shorts &amp; Karaokê 9:16</h3><span class="selo">Formato 9:16</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://www.youtube.com/creators/create/shorts/" target="_blank" rel="noopener">youtube.com/creators/create/shorts</a></div>
+          <p class="ref-levar"><strong>O que levar:</strong> quadro 9:16 com moldura neutra mostrando zonas seguras e destaque cirúrgico só na palavra falada no momento.</p>
+        </div>
+      </article>
+
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g1-flow.jpg" target="_blank"><img src="img/g1-flow.jpg" alt="Flow Podcast canal oficial"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>Cortes de Podcast BR (Flow / Podpah)</h3><span class="selo">Corte direto</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://www.youtube.com/@FlowPodcast" target="_blank" rel="noopener">youtube.com/@FlowPodcast</a> · <a href="https://www.youtube.com/@Podpah" target="_blank" rel="noopener">@Podpah</a></div>
+          <p class="ref-levar"><strong>O que levar:</strong> clima de estúdio escuro focado no falante e identificação clara de turnos de fala na Transcrição sem estética sensacionalista.</p>
+        </div>
+      </article>
+
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g1-kurzgesagt.jpg" target="_blank"><img src="img/g1-kurzgesagt.jpg" alt="Kurzgesagt canal visual"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>Canais Dark (ex.: Kurzgesagt)</h3><span class="selo">Transformado</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://www.youtube.com/@kurzgesagt" target="_blank" rel="noopener">youtube.com/@kurzgesagt</a> · <a href="https://kurzgesagt.org/" target="_blank" rel="noopener">kurzgesagt.org</a></div>
+          <p class="ref-levar"><strong>O que levar:</strong> separação limpa de camadas em blocos planos (Roteiro, Narração, vídeo) mantendo o chassi neutro para não brigar com o vídeo.</p>
+        </div>
+      </article>
+
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g1-overlays.jpg" target="_blank"><img src="img/g1-overlays.jpg" alt="Overlays.uno biblioteca de lower thirds e placares"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>Overlays &amp; Lower Thirds (Uno)</h3><span class="selo">HUD / Overlay</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://overlays.uno/library" target="_blank" rel="noopener">overlays.uno/library</a> (captura pública)</div>
+          <p class="ref-levar"><strong>O que levar:</strong> barras compactas estilo lower third para avisos e progresso de fila, e ícones geométricos simples para Layouts 9:16.</p>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section id="grupo-2" class="ref-grupo">
+    <div class="ref-grupo-cab">
+      <h2>Grupo 2 · Craft de app desktop de trabalho</h2>
+      <span>10 referências — barra de qualidade para densidade, teclado, painéis e timeline</span>
+    </div>
+    <div class="ref-grade">
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g2-linear.jpg" target="_blank"><img src="img/g2-linear.jpg" alt="Linear app UI"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>Linear</h3><span class="selo">Teclado / Escala</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://linear.app/" target="_blank" rel="noopener">linear.app</a> (captura pública)</div>
+          <p class="ref-levar"><strong>O que levar:</strong> degraus sutis de luminância em vez de sombras, divisórias de 1 px, paleta Ctrl+K central e um único acento cirúrgico.</p>
+        </div>
+      </article>
+
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g2-raycast.jpg" target="_blank"><img src="img/g2-raycast.jpg" alt="Raycast command palette"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>Raycast</h3><span class="selo">Comandos</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://www.raycast.com/press" target="_blank" rel="noopener">raycast.com/press</a> (press kit oficial)</div>
+          <p class="ref-levar"><strong>O que levar:</strong> listas de alta densidade com ícone + título + atalho à direita e rodapé fixo ensinando as teclas da ação atual.</p>
+        </div>
+      </article>
+
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g2-figma.jpg" target="_blank"><img src="img/g2-figma.jpg" alt="Figma Design UI"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>Figma</h3><span class="selo">Inspetor / Canvas</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://www.figma.com/design/" target="_blank" rel="noopener">figma.com/design</a> (imagem oficial)</div>
+          <p class="ref-levar"><strong>O que levar:</strong> canvas ocupando ~75% da tela e inspetor lateral enxuto com campos numéricos alinhados por seções curtas.</p>
+        </div>
+      </article>
+
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g2-ableton.jpg" target="_blank"><img src="img/g2-ableton.jpg" alt="Ableton Live em estúdio"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>Ableton Live</h3><span class="selo">Timeline / Áudio</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://www.ableton.com/en/live/" target="_blank" rel="noopener">ableton.com/en/live</a> (imagem oficial)</div>
+          <p class="ref-levar"><strong>O que levar:</strong> zero decoração, bordas nítidas de 1 px e contraste imediato entre estado ativo e repouso em longas sessões.</p>
+        </div>
+      </article>
+
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g2-blender.jpg" target="_blank"><img src="img/g2-blender.jpg" alt="Blender 4 interface padrão"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>Blender 4</h3><span class="selo">Workspaces</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://docs.blender.org/manual/en/latest/interface/window_system/introduction.html" target="_blank" rel="noopener">docs.blender.org</a> (manual oficial)</div>
+          <p class="ref-levar"><strong>O que levar:</strong> etapas fixas no topo, tipografia Inter compacta e barra de status inferior dinâmica mostrando modificadores (ex.: Alt).</p>
+        </div>
+      </article>
+
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g2-davinci.jpg" target="_blank"><img src="img/g2-davinci.jpg" alt="DaVinci Resolve ferramentas"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>DaVinci Resolve</h3><span class="selo">Cor / Edição</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://www.blackmagicdesign.com/products/davinciresolve" target="_blank" rel="noopener">blackmagicdesign.com</a> (imagem oficial)</div>
+          <p class="ref-levar"><strong>O que levar:</strong> cinza neutro calibrado para não enviesar cor do vídeo, navegação por etapas e timecode tabular nítido sob o player.</p>
+        </div>
+      </article>
+
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g2-fcp.jpg" target="_blank"><img src="img/g2-fcp.jpg" alt="Final Cut Pro interface"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>Final Cut Pro</h3><span class="selo">Timeline</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://www.apple.com/final-cut-pro/" target="_blank" rel="noopener">apple.com/final-cut-pro</a> (manual Apple oficial)</div>
+          <p class="ref-levar"><strong>O que levar:</strong> playhead fino de alta leitura e faixas ligadas com cores contidas (vídeo, diálogo, música) que não cobrem a onda.</p>
+        </div>
+      </article>
+
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g2-obs.jpg" target="_blank"><img src="img/g2-obs.jpg" alt="OBS Studio interface oficial"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>OBS Studio 30+</h3><span class="selo">Open source</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://obsproject.com/" target="_blank" rel="noopener">obsproject.com</a> (imagem oficial)</div>
+          <p class="ref-levar"><strong>O que levar:</strong> familiaridade imediata do público de lives: botões claros de ação direta, medidores tabulares e status técnico no rodapé.</p>
+        </div>
+      </article>
+
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g2-teenage.jpg" target="_blank"><img src="img/g2-teenage.jpg" alt="Teenage Engineering hardware"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>Teenage Engineering</h3><span class="selo">Tátil / Grid</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://teenage.engineering/" target="_blank" rel="noopener">teenage.engineering</a> (captura pública)</div>
+          <p class="ref-levar"><strong>O que levar:</strong> estética de instrumento de bancada: grades ortogonais secas, cinzas minerais e um único laranja de sinalização em controles críticos.</p>
+        </div>
+      </article>
+
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g2-things.jpg" target="_blank"><img src="img/g2-things.jpg" alt="Things 3 interface clara"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>Things 3</h3><span class="selo">Tema claro</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://culturedcode.com/things/" target="_blank" rel="noopener">culturedcode.com/things</a> (imagem oficial)</div>
+          <p class="ref-levar"><strong>O que levar:</strong> padrão ouro de tema claro sem ofuscamento, hierarquia limpa sem caixas aninhadas e expansão em linha do item selecionado.</p>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section id="grupo-3" class="ref-grupo">
+    <div class="ref-grupo-cab">
+      <h2>Grupo 3 · Concorrentes diretos (o que NÃO parecer)</h2>
+      <span>6 referências — contraexemplo do visual genérico de SaaS "AI magic"</span>
+    </div>
+    <div class="ref-grade">
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g3-opus.jpg" target="_blank"><img src="img/g3-opus.jpg" alt="Opus Clip interface"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>Opus Clip</h3><span class="selo">Contraexemplo</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://www.opus.pro/" target="_blank" rel="noopener">opus.pro</a> (imagem oficial)</div>
+          <p class="ref-levar"><strong>O que levar:</strong> leitura direta 16:9 → 9:16 com selo numérico visível; <strong>evitar:</strong> nota opaca "SCORE 99" sem explicação e cromo preto-brilhante de funil.</p>
+        </div>
+      </article>
+
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g3-vizard.jpg" target="_blank"><img src="img/g3-vizard.jpg" alt="Vizard página inicial"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>Vizard</h3><span class="selo">Contraexemplo</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://vizard.ai/" target="_blank" rel="noopener">vizard.ai</a> (captura pública)</div>
+          <p class="ref-levar"><strong>O que levar:</strong> fluxo rápido entre seleção e legenda 9:16; <strong>evitar:</strong> gradiente roxo-pêssego saturado, estrelas/sparkles e promessa de "AI magic".</p>
+        </div>
+      </article>
+
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g3-klap.jpg" target="_blank"><img src="img/g3-klap.jpg" alt="Klap exemplos de shorts"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>Klap</h3><span class="selo">Contraexemplo</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://klap.app/" target="_blank" rel="noopener">klap.app</a> (imagem oficial)</div>
+          <p class="ref-levar"><strong>O que levar:</strong> preview claro do recorte em tela dividida vs. rosto único; <strong>evitar:</strong> cara de landing descartável "cole o link e espere mágica".</p>
+        </div>
+      </article>
+
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g3-submagic.jpg" target="_blank"><img src="img/g3-submagic.jpg" alt="Submagic página inicial"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>Submagic</h3><span class="selo">Contraexemplo</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://www.submagic.co/" target="_blank" rel="noopener">submagic.co</a> (captura pública)</div>
+          <p class="ref-levar"><strong>O que levar:</strong> seletor visual direto de estilo de legenda; <strong>evitar:</strong> varinha mágica, botões com brilho neon laranja e micro-selos de IA por toda parte.</p>
+        </div>
+      </article>
+
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g3-captions.jpg" target="_blank"><img src="img/g3-captions.jpg" alt="Captions página inicial"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>Captions (Mirage)</h3><span class="selo">Contraexemplo</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://captions.ai/" target="_blank" rel="noopener">captions.ai</a> (captura pública)</div>
+          <p class="ref-levar"><strong>O que levar:</strong> cartões de estilo limpos com boa tipografia; <strong>evitar:</strong> gradientes pastel atmosféricos no workspace e caixa de chat no lugar do editor.</p>
+        </div>
+      </article>
+
+      <article class="ref-card">
+        <a class="ref-thumb" href="img/g3-eklipse.jpg" target="_blank"><img src="img/g3-eklipse.jpg" alt="Eklipse.gg página inicial"></a>
+        <div class="ref-corpo">
+          <div class="ref-cab"><h3>Eklipse.gg</h3><span class="selo">Contraexemplo</span></div>
+          <div class="ref-fonte">Fonte: <a href="https://eklipse.gg/" target="_blank" rel="noopener">eklipse.gg</a> (captura pública)</div>
+          <p class="ref-levar"><strong>O que levar:</strong> encaixe explícito para VODs longas (5h+) de Twitch/YouTube/Kick; <strong>evitar:</strong> gradiente laranja-roxo gamer e linguagem de "epic clip".</p>
+        </div>
+      </article>
+    </div>
+  </section>
+</main>
+</body>
+</html>

@@ -9,7 +9,7 @@ Bun.serve({
   port: porta,
   async fetch(req) {
     let caminho = decodeURIComponent(new URL(req.url).pathname);
-    if (caminho === '/') caminho = '/index.html';
+    if (caminho.endsWith('/')) caminho += 'index.html';
     const alvo = normalize(join(raiz, caminho));
     if (!alvo.startsWith(raiz)) return new Response('fora da pasta', { status: 403 });
     const arquivo = Bun.file(alvo);
