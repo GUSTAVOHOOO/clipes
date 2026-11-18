@@ -300,7 +300,7 @@ describe('<EntradaFonte>', () => {
     expect(screen.queryByRole('checkbox', { name: /Copiar vídeo para dentro do Projeto/i })).not.toBeInTheDocument()
   })
 
-  it('exibe InstaladorJustInTime com trava #301 quando yt-dlp falta no manifesto e trata js_runtime_missing e age_restricted', async () => {
+  it('exibe InstaladorJustInTime bloqueado sem ref de ticket quando yt-dlp falta no manifesto e trata js_runtime_missing e age_restricted', async () => {
     const user = userEvent.setup()
 
     // 1) yt-dlp ausente e fora do manifesto (#301)
@@ -324,7 +324,10 @@ describe('<EntradaFonte>', () => {
     await user.click(screen.getByRole('radio', { name: /URL \(VOD\)/i }))
     const btnInstalar = await screen.findByRole('button', { name: /Baixar e continuar/i })
     expect(btnInstalar).toBeDisabled()
-    expect(screen.getByText(/#301/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Download automático indisponível nesta plataforma\./i),
+    ).toBeInTheDocument()
+    expect(document.body.textContent ?? '').not.toMatch(/#\d+/)
     r1.unmount()
 
     // 2) js_runtime_missing e age_restricted
@@ -445,5 +448,109 @@ describe('<EntradaFonte>', () => {
     expect(btnImportar).toBeDisabled()
     await user.hover(btnImportar.parentElement as HTMLElement)
     expect(await screen.findByText(/#307/)).toBeInTheDocument()
+  })
+
+  it('UI-17: rebaixa "Baixar por URL" para secundário enquanto <InstaladorJustInTime> inline está aberto e devolve ao fechar', async () => {
+    const user = userEvent.setup()
+    let denoInstalado = false
+    const botoesPrimarios = () =>
+      screen
+        .getAllByRole('button')
+        .filter((b) => b.className.split(/\s+/).includes('bg-sinal'))
+
+    configurarMocksPadrao({
+      'components.deno.status': () => ({ installed: denoInstalado }),
+      'components.download': () => {
+        denoInstalado = true
+        return { path: '/dados/components/deno' }
+      },
+      'sources.url.download': () => {
+        throw new ErroCore('js_runtime_missing', 'deno required')
+      },
+    })
+
+    render(
+      envolver(
+        <EntradaFonte
+          projetoPath="/projetos/Canal.clipes"
+          copiaEmAndamento={false}
+          aoImportar={vi.fn()}
+          aoMudarCopiaAtiva={vi.fn()}
+        />,
+      ),
+    )
+
+    await user.click(screen.getByRole('radio', { name: /URL \(VOD\)/i }))
+    const btnBaixarUrl = await screen.findByRole('button', { name: 'Baixar por URL' })
+
+    // Antes do JIT abrir, "Baixar por URL" é o único botão primário
+    expect(botoesPrimarios()).toHaveLength(1)
+    expect(botoesPrimarios()[0]).toBe(btnBaixarUrl)
+
+    // Dispara js_runtime_missing para abrir <InstaladorJustInTime modo="inline">
+    await user.type(
+      screen.getByRole('textbox', { name: /URL do vídeo/i }),
+      'https://youtube.com/watch?v=js-test',
+    )
+    await user.click(btnBaixarUrl)
+
+    const btnBaixarJit = await screen.findByRole('button', { name: /Baixar e continuar/i })
+    expect(botoesPrimarios()).toHaveLength(1)
+    expect(botoesPrimarios()[0]).toBe(btnBaixarJit)
+    expect(btnBaixarUrl.className.split(/\s+/)).toContain('bg-elevado')
+    expect(btnBaixarUrl.className.split(/\s+/)).not.toContain('bg-sinal')
+
+    // Ao fechar pelo botão "Agora não", "Baixar por URL" volta a ser o único primário
+    await user.click(screen.getByRole('button', { name: 'Agora não' }))
+    expect(screen.queryByRole('button', { name: /Baixar e continuar/i })).not.toBeInTheDocument()
+    expect(botoesPrimarios()).toHaveLength(1)
+    expect(botoesPrimarios()[0]).toBe(btnBaixarUrl)
+
+    // Reabre o JIT e conclui a instalação; ao concluir, "Baixar por URL" volta a ser primário
+    await user.click(btnBaixarUrl)
+    await user.click(await screen.findByRole('button', { name: /Baixar e continuar/i }))
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /Baixar e continuar/i })).not.toBeInTheDocument()
+    })
+    expect(botoesPrimarios()).toHaveLength(1)
+    expect(botoesPrimarios()[0]).toBe(btnBaixarUrl)
+  })
+
+  it('UI-17: mantém um único botão primário mesmo com yt-dlp ausente na montagem e com arquivo já inspecionado', async () => {
+    const user = userEvent.setup()
+    const botoesPrimarios = () =>
+      screen
+        .getAllByRole('button')
+        .filter((b) => b.className.split(/\s+/).includes('bg-sinal'))
+
+    configurarMocksPadrao({
+      'components.ytdlp.status': () => ({ installed: false }),
+      'components.deno.status': () => ({ installed: false }),
+    })
+    window.__CLIPES_E2E__ = {
+      dialogQueue: ['/videos/live_obs.mkv'],
+      dialogCalls: [],
+    }
+
+    render(
+      envolver(
+        <EntradaFonte
+          projetoPath="/projetos/Canal.clipes"
+          copiaEmAndamento={false}
+          aoImportar={vi.fn()}
+          aoMudarCopiaAtiva={vi.fn()}
+        />,
+      ),
+    )
+
+    // Inspeciona arquivo local (exibe "Importar Fonte") e muda para URL (VOD) com JIT aberto
+    await user.click(screen.getByRole('button', { name: /Escolher arquivo/i }))
+    await screen.findByRole('button', { name: 'Importar Fonte' })
+
+    await user.click(screen.getByRole('radio', { name: /URL \(VOD\)/i }))
+    const btnBaixarJit = await screen.findByRole('button', { name: /Baixar e continuar/i })
+
+    expect(botoesPrimarios()).toHaveLength(1)
+    expect(botoesPrimarios()[0]).toBe(btnBaixarJit)
   })
 })
