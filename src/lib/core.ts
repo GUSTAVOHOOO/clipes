@@ -210,6 +210,9 @@ const sourceTest = hasSourceTest();
 const componentsMissing = typeof location !== 'undefined' && new URLSearchParams(location.search).has('components-missing');
 const assistantTestInit = hasSearchFlag('assistant-test');
 const ffmpegMock = { installed: !componentsMissing && !assistantTestInit, incomplete: false, path: null as string | null };
+const componentSettingsMock = { data_dir: '/test/data', cache_dir: '/test/cache', cache_limit_bytes: 10_000_000_000 };
+const isAbsolutePathMock = (value: unknown): value is string =>
+  typeof value === 'string' && /^(\/|[A-Za-z]:[\\/]|\\\\)/.test(value.trim());
 const ytdlpMock = { installed: !componentsMissing, version: 'test' };
 let workerInstalledMock = !componentsMissing;
 uvMock.installed = !componentsMissing;
@@ -1472,7 +1475,26 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       if (engine === 'groq' && !groqConsent) throw {code:'confirmation_required'};
       transcribeMock = { transcript: { id: 1, engine, state: 'running', resume_us: 4000000, duration_us: 10000000, words: 0 }, job: { id: 99, state: 'running', progress: 40 } }; return { transcript_id: 1, state: 'running', job_id: 99 } as T;
     }
-    if (name === 'components.settings.get') return { data_dir: '/test/data', cache_dir: '/test/cache', cache_limit_bytes: 10000000000, ffmpeg_path: ffmpegMock.path } as T;
+    if (name === 'components.settings.get') return { ...componentSettingsMock, ffmpeg_path: ffmpegMock.path } as T;
+    if (name === 'components.settings.set') {
+      const a = args as { data_dir?: unknown; cache_dir?: unknown; cache_limit_bytes?: unknown; ffmpeg_path?: unknown };
+      if (
+        !isAbsolutePathMock(a.data_dir) ||
+        !isAbsolutePathMock(a.cache_dir) ||
+        typeof a.cache_limit_bytes !== 'number' ||
+        !Number.isFinite(a.cache_limit_bytes) ||
+        a.cache_limit_bytes <= 0
+      ) {
+        throw { code: 'invalid_settings', message: 'Caminhos absolutos e limite positivo são obrigatórios.' };
+      }
+      componentSettingsMock.data_dir = a.data_dir.trim();
+      componentSettingsMock.cache_dir = a.cache_dir.trim();
+      componentSettingsMock.cache_limit_bytes = Math.trunc(a.cache_limit_bytes);
+      if (a.ffmpeg_path === null || typeof a.ffmpeg_path === 'string') {
+        ffmpegMock.path = a.ffmpeg_path;
+      }
+      return { ...componentSettingsMock, ffmpeg_path: ffmpegMock.path } as T;
+    }
     throw new Error(`Unknown core command: ${name}`);
   }
   return invoke<T>('core_dispatch', { name, arguments: args });
