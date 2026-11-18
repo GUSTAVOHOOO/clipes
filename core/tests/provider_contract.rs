@@ -10,7 +10,7 @@ use std::{
     net::TcpListener,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc,
+        mpsc, Arc,
     },
     thread,
     time::{Duration, Instant},
@@ -51,21 +51,58 @@ fn http(status: &str, headers: &str, body: &Value) -> String {
     )
 }
 
-/// Answers each request in turn; `None` reads the request and then holds the connection
-/// open (until `release` is set) without answering.
-fn serve(replies: Vec<Option<String>>) -> (String, Arc<AtomicBool>, thread::JoinHandle<usize>) {
+#[derive(Debug, PartialEq, Eq)]
+enum ServerEvent {
+    Accepted(usize),
+    Replied(usize),
+}
+
+/// Answers each request in turn and emits lifecycle events; `None` reads the request and
+/// then holds the connection open (until `release` is set) without answering. Stops on
+/// `release` or after a bounded accept deadline so a failed caller never hangs the runner.
+fn serve_with_events(
+    replies: Vec<Option<String>>,
+) -> (
+    String,
+    Arc<AtomicBool>,
+    mpsc::Receiver<ServerEvent>,
+    thread::JoinHandle<usize>,
+) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
     let endpoint = format!("http://{}/v1", listener.local_addr().unwrap());
     let release = Arc::new(AtomicBool::new(false));
     let flag = release.clone();
+    let (events_tx, events_rx) = mpsc::channel();
     let handle = thread::spawn(move || {
         let mut served = 0;
-        for reply in replies {
-            let (mut stream, _) = listener.accept().unwrap();
+        let accept_deadline = Instant::now() + Duration::from_secs(15);
+        for (idx, reply) in replies.into_iter().enumerate() {
+            let mut stream = loop {
+                if flag.load(Ordering::SeqCst) {
+                    return served;
+                }
+                match listener.accept() {
+                    Ok((stream, _)) => break stream,
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(
+                            Instant::now() < accept_deadline,
+                            "fake server timed out waiting for request #{idx}"
+                        );
+                        thread::sleep(Duration::from_millis(5));
+                    }
+                    Err(e) => panic!("fake server accept failed: {e}"),
+                }
+            };
             read_request(&mut stream);
             served += 1;
+            let _ = events_tx.send(ServerEvent::Accepted(served));
             match reply {
-                Some(text) => stream.write_all(text.as_bytes()).unwrap(),
+                Some(text) => {
+                    stream.write_all(text.as_bytes()).unwrap();
+                    let _ = stream.flush();
+                    let _ = events_tx.send(ServerEvent::Replied(served));
+                }
                 None => {
                     let deadline = Instant::now() + Duration::from_secs(10);
                     while !flag.load(Ordering::SeqCst) && Instant::now() < deadline {
@@ -76,6 +113,13 @@ fn serve(replies: Vec<Option<String>>) -> (String, Arc<AtomicBool>, thread::Join
         }
         served
     });
+    (endpoint, release, events_rx, handle)
+}
+
+/// Answers each request in turn; `None` reads the request and then holds the connection
+/// open (until `release` is set) without answering.
+fn serve(replies: Vec<Option<String>>) -> (String, Arc<AtomicBool>, thread::JoinHandle<usize>) {
+    let (endpoint, release, _events, handle) = serve_with_events(replies);
     (endpoint, release, handle)
 }
 
@@ -192,49 +236,104 @@ fn http_failure_after_a_repair_adds_up_both_calls() {
     server.join().unwrap();
 }
 
-fn cancel_after(token: &CancelToken, delay: Duration) {
-    let token = token.clone();
-    thread::spawn(move || {
-        thread::sleep(delay);
-        token.cancel();
-    });
-}
-
 #[test]
 fn cancelling_during_the_retry_after_wait_stops_without_another_request() {
-    let (endpoint, _, server) = serve(vec![Some(http(
+    let (endpoint, release, events, server) = serve_with_events(vec![Some(http(
         "429 Too Many Requests",
         "Retry-After: 20\r\n",
         &json!({}),
     ))]);
     let token = CancelToken::new();
-    cancel_after(&token, Duration::from_millis(400));
-    let started = Instant::now();
-    let error = openai(endpoint)
-        .structured_with(&request(), &token)
+    let worker_token = token.clone();
+    let (done_tx, done_rx) = mpsc::channel();
+    let worker = thread::spawn(move || {
+        let result = openai(endpoint).structured_with(&request(), &worker_token);
+        let _ = done_tx.send(result);
+    });
+
+    assert_eq!(
+        events
+            .recv_timeout(Duration::from_secs(10))
+            .expect("request never reached fake server"),
+        ServerEvent::Accepted(1)
+    );
+    assert_eq!(
+        events
+            .recv_timeout(Duration::from_secs(10))
+            .expect("429 reply was not sent"),
+        ServerEvent::Replied(1)
+    );
+    // Let the client enter the 20 s Retry-After wait before cancelling.
+    thread::sleep(Duration::from_millis(50));
+    let cancel_started = Instant::now();
+    token.cancel();
+
+    let error = done_rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("cancelled call did not return within 5s")
         .unwrap_err();
     assert_eq!(error.code, "cancelled");
-    assert!(started.elapsed() < Duration::from_secs(5));
+    assert!(cancel_started.elapsed() < Duration::from_secs(5));
+    release.store(true, Ordering::SeqCst);
+    worker.join().unwrap();
     assert_eq!(server.join().unwrap(), 1);
 }
 
 #[test]
 fn cancelling_a_request_in_flight_returns_without_waiting_for_the_timeout() {
-    let (endpoint, release, server) = serve(vec![None]);
+    let (endpoint, release, events, server) = serve_with_events(vec![None]);
     let token = CancelToken::new();
-    cancel_after(&token, Duration::from_millis(300));
-    let started = Instant::now();
-    let error = openai(endpoint)
-        .with_timeouts(Timeouts {
-            local: Some(60),
-            remote: None,
-        })
-        .structured_with(&request(), &token)
+    let worker_token = token.clone();
+    let (done_tx, done_rx) = mpsc::channel();
+    let worker = thread::spawn(move || {
+        let result = openai(endpoint)
+            .with_timeouts(Timeouts {
+                local: Some(60),
+                remote: None,
+            })
+            .structured_with(&request(), &worker_token);
+        let _ = done_tx.send(result);
+    });
+
+    assert_eq!(
+        events
+            .recv_timeout(Duration::from_secs(10))
+            .expect("in-flight request never reached fake server"),
+        ServerEvent::Accepted(1)
+    );
+    let cancel_started = Instant::now();
+    token.cancel();
+
+    let error = done_rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("cancelled in-flight call did not return within 5s")
         .unwrap_err();
     assert_eq!(error.code, "cancelled");
-    assert!(started.elapsed() < Duration::from_secs(5));
+    assert!(cancel_started.elapsed() < Duration::from_secs(5));
     release.store(true, Ordering::SeqCst);
-    server.join().unwrap();
+    worker.join().unwrap();
+    assert_eq!(server.join().unwrap(), 1);
+}
+
+#[test]
+fn cancelling_before_connect_does_not_hang_server_or_caller() {
+    let (done_tx, done_rx) = mpsc::channel();
+    thread::spawn(move || {
+        let (endpoint, release, server) = serve(vec![None]);
+        let token = CancelToken::new();
+        token.cancel();
+        let error = openai(endpoint)
+            .structured_with(&request(), &token)
+            .unwrap_err();
+        assert_eq!(error.code, "cancelled");
+        release.store(true, Ordering::SeqCst);
+        let served = server.join().unwrap();
+        assert_eq!(served, 0);
+        let _ = done_tx.send(());
+    });
+    done_rx
+        .recv_timeout(Duration::from_secs(3))
+        .expect("cancelling before connect hung the server or caller");
 }
 
 #[test]
