@@ -274,4 +274,70 @@ describe('mapeador de erros (erros.ts)', () => {
     expect(resultado.titulo).toMatch(/Corte/)
     expect(resultado.recuperacao).toBeUndefined()
   })
+
+  it('cobre todos os 19 códigos do Pacote C (Seleção, Revisão, Bordas e Redo)', () => {
+    const codigosPacoteC = [
+      'run_not_found',
+      'candidate_not_found',
+      'nothing_to_undo',
+      'window_uncertain',
+      'window_not_redoable',
+      'windows_required',
+      'window_not_found',
+      'adjust_out_of_transcript',
+      'adjust_empty',
+      'adjust_too_short',
+      'adjust_too_long',
+      'transcript_incomplete',
+      'no_sentences',
+      'invalid_cut_range',
+      'invalid_video_kind',
+      'invalid_selection_plan',
+      'invalid_profile',
+      'verification_failed',
+      'selection_windows_failed',
+    ]
+
+    for (const codigo of codigosPacoteC) {
+      expect(TABELA_ERROS[codigo], `código ausente na TABELA_ERROS: ${codigo}`).toBeDefined()
+      const msg = mensagemDeErro(new ErroCore(codigo, 'detalhe'))
+      expect(msg.titulo).not.toBe('Algo deu errado nesta operação.')
+      expect(msg.titulo.length).toBeGreaterThan(5)
+    }
+  })
+
+  it('mapeia mensagens e recuperações específicas do Pacote C', () => {
+    const runNotFound = mensagemDeErro(new ErroCore('run_not_found', ''))
+    expect(runNotFound.titulo).toMatch(/execução/i)
+
+    const uncertain = mensagemDeErro(new ErroCore('window_uncertain', ''))
+    expect(uncertain.recuperacao).toEqual({ rotulo: 'Abrir Fila de Jobs', acao: 'abrir-fila' })
+
+    const adjustShort = mensagemDeErro(new ErroCore('adjust_too_short', ''))
+    expect(adjustShort.titulo).toMatch(/mínima/i)
+
+    const adjustLong = mensagemDeErro(new ErroCore('adjust_too_long', ''))
+    expect(adjustLong.titulo).toMatch(/máxima/i)
+
+    const adjustOut = mensagemDeErro(new ErroCore('adjust_out_of_transcript', ''))
+    expect(adjustOut.titulo).toMatch(/Transcrição/i)
+
+    const transcriptInc = mensagemDeErro(new ErroCore('transcript_incomplete', ''))
+    expect(transcriptInc.titulo).toMatch(/Transcrição/i)
+
+    const noSentences = mensagemDeErro(new ErroCore('no_sentences', ''))
+    expect(noSentences.titulo).toMatch(/Frase/i)
+
+    const nothingUndo = mensagemDeErro(new ErroCore('nothing_to_undo', ''))
+    expect(nothingUndo.titulo).toMatch(/desfazer/i)
+
+    const verifFailed = mensagemDeErro(new ErroCore('verification_failed', ''))
+    expect(verifFailed.recuperacao?.acao).toBe('refazer-outro-perfil')
+
+    const windowsFailed = mensagemDeErro(new ErroCore('selection_windows_failed', ''))
+    expect(windowsFailed.recuperacao?.acao).toBe('refazer-outro-perfil')
+
+    const invalidProfile = mensagemDeErro(new ErroCore('invalid_profile', ''))
+    expect(invalidProfile.recuperacao?.rota).toBe('#/config/provedores')
+  })
 })

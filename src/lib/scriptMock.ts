@@ -37,7 +37,7 @@ const violation = (code: string) => ({ code: 'edit_invalid', message: 'Edição 
 /** `undefined` quando o comando não é do Roteiro. */
 export function scriptMockDispatch(name: string, args: object): unknown {
   const a = args as { block?: number; narration?: string; confirmed?: boolean; angle?: Angle; index?: number; generation?: number };
-  if (name === 'angles.estimate') return { paid: flag('script-paid'), estimate: flag('script-paid') ? { kind: 'usd', minMicroUsd: 100, maxMicroUsd: 300 } : { kind: 'zero', minMicroUsd: 0, maxMicroUsd: 0 } };
+  if (name === 'angles.estimate') return { paid: flag('script-paid'), profile: 'legacy', estimate: flag('script-paid') ? { kind: 'usd', minMicroUsd: 100, maxMicroUsd: 300 } : { kind: 'zero', minMicroUsd: 0, maxMicroUsd: 0 } };
   if (name === 'angles.generate') {
     if (flag('script-paid') && !a.confirmed) throw { code: 'confirmation_required' };
     anglePolls = 2; return { job: 100 + angleGeneration };
@@ -53,7 +53,7 @@ export function scriptMockDispatch(name: string, args: object): unknown {
       if (generation > 0 && !a.confirmed) throw { code: 'angle_change_confirmation' };
       angle = next; blocks.forEach(b => { b.stale = true; });
     }
-    return { selected: angle };
+    return { angles: angleGeneration > 0 ? suggestions : [], generation: angleGeneration || null, selected: angle, busy: anglePolls > 0, job: angleGeneration || anglePolls ? { state: anglePolls ? 'running' : 'completed', code: null } : null };
   }
   if (name === 'script.estimate') return { paid: flag('script-paid'), profile: 'legacy', language: 'pt-BR', estimate: flag('script-paid') ? { kind: 'usd', minMicroUsd: 400, maxMicroUsd: 2000 } : { kind: 'zero', minMicroUsd: 0, maxMicroUsd: 0 } };
   if (name === 'script.generate' || name === 'script.regenerate') {
