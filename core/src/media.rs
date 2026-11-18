@@ -30,6 +30,10 @@ pub(crate) enum Resource {
     /// Sprite de miniaturas da timeline (#61), na pasta do proxy.
     Thumbs(String),
     Source(i64),
+    /// Onda de áudio da prévia da Fonte (#296), dentro de `<cache>/previews/<key>/`.
+    PreviewWaveform(i64),
+    /// Miniatura da prévia da Fonte (#296), dentro de `<cache>/previews/<key>/`.
+    PreviewThumb(i64, usize),
     /// Áudio WAV da Narração por bloco (#79/#155), dentro da pasta do Projeto (ativo: limpo ou original).
     Narration(i64),
     /// Áudio WAV original da Narração sem limpeza (#155), para prévia "Antes".
@@ -40,7 +44,16 @@ pub(crate) enum Resource {
     Audio(i64),
 }
 
+pub(crate) fn preview_waveform_key(source_id: i64) -> String {
+    format!("preview-waveform/{source_id}")
+}
+
+pub(crate) fn preview_thumb_key(source_id: i64, index: usize) -> String {
+    format!("preview-thumb/{source_id}-{index}")
+}
+
 /// Aceita só `proxy/<64 hex minúsculo>`, `thumbs/<64 hex>`, `source/<dígitos>`,
+/// `preview-waveform/<id>`, `preview-thumb/<id>-<índice>`,
 /// `narration/<dígitos>`, `narration-original/<dígitos>`, `narration-clean/<dígitos>` e `audio/<dígitos>`;
 /// `%2F` (como o WebView codifica a barra com `convertFileSrc`) vale como `/`.
 pub(crate) fn parse_resource(raw: &str) -> Option<Resource> {
@@ -52,6 +65,23 @@ pub(crate) fn parse_resource(raw: &str) -> Option<Resource> {
             .then(|| s.parse().ok())
             .flatten()
     };
+    let parse_positive_id = |s: &str| -> Option<i64> {
+        (!s.is_empty()
+            && s.len() <= 18
+            && !s.starts_with('0')
+            && s.bytes().all(|b| b.is_ascii_digit()))
+        .then(|| s.parse::<i64>().ok())
+        .flatten()
+        .filter(|&n| n > 0)
+    };
+    let parse_index = |s: &str| -> Option<usize> {
+        (!s.is_empty()
+            && s.len() <= 9
+            && (s == "0" || !s.starts_with('0'))
+            && s.bytes().all(|b| b.is_ascii_digit()))
+        .then(|| s.parse::<usize>().ok())
+        .flatten()
+    };
     match kind {
         "proxy" if id.len() == 64 && id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) => {
             Some(Resource::Proxy(id.to_owned()))
@@ -62,6 +92,13 @@ pub(crate) fn parse_resource(raw: &str) -> Option<Resource> {
             Some(Resource::Thumbs(id.to_owned()))
         }
         "source" => parse_id(id).map(Resource::Source),
+        "preview-waveform" => parse_positive_id(id).map(Resource::PreviewWaveform),
+        "preview-thumb" => id.split_once('-').and_then(|(source_id, index)| {
+            Some(Resource::PreviewThumb(
+                parse_positive_id(source_id)?,
+                parse_index(index)?,
+            ))
+        }),
         "narration" => parse_id(id).map(Resource::Narration),
         "narration-original" => parse_id(id).map(Resource::NarrationOriginal),
         "narration-clean" => parse_id(id).map(Resource::NarrationClean),
@@ -200,6 +237,44 @@ fn source_path(id: i64) -> Option<PathBuf> {
     canonical.is_file().then_some(canonical)
 }
 
+fn preview_dir(source_id: i64) -> Option<PathBuf> {
+    let (hash, audio): (String, i64) = projects::with_reader(|c| {
+        c.query_row(
+            "SELECT partial_hash, audio_track FROM sources WHERE id=?1",
+            [source_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+    })
+    .ok()?;
+    if hash.is_empty() || hash == "." || hash == ".." || hash.contains(['/', '\\', '\0']) {
+        return None;
+    }
+    let (cache, _, _) = crate::components::cache_settings().ok()?;
+    let root = cache.join("previews").canonicalize().ok()?;
+    let dir = root
+        .join(crate::jobs::preview::key(&hash, audio))
+        .canonicalize()
+        .ok()?;
+    (dir.starts_with(&root) && dir.is_dir()).then_some(dir)
+}
+
+fn preview_file(dir: &Path, candidate: &Path) -> Option<PathBuf> {
+    let file = candidate.canonicalize().ok()?;
+    (file.starts_with(dir) && file.is_file()).then_some(file)
+}
+
+fn preview_waveform_path(source_id: i64) -> Option<PathBuf> {
+    let dir = preview_dir(source_id)?;
+    preview_file(&dir, &dir.join("waveform.bin"))
+}
+
+fn preview_thumb_path(source_id: i64, index: usize) -> Option<PathBuf> {
+    let dir = preview_dir(source_id)?;
+    let thumbs = crate::jobs::preview::sorted_thumbnails(&dir).ok()?;
+    let candidate = thumbs.get(index)?;
+    preview_file(&dir, candidate)
+}
+
 pub(crate) fn touch(path: &Path) {
     if let Ok(file) = fs::OpenOptions::new().write(true).open(path) {
         let _ = file.set_times(fs::FileTimes::new().set_modified(SystemTime::now()));
@@ -230,6 +305,8 @@ pub fn resolve(resource: &str) -> Option<ResolvedMedia> {
         Some(Resource::Proxy(key)) => (proxy_path(&key), true),
         Some(Resource::Thumbs(key)) => (thumbs_path(&key), true),
         Some(Resource::Source(id)) => (source_path(id), false),
+        Some(Resource::PreviewWaveform(id)) => (preview_waveform_path(id), true),
+        Some(Resource::PreviewThumb(id, index)) => (preview_thumb_path(id, index), true),
         Some(Resource::Narration(id)) => {
             (crate::narration_cleanup::media_active_audio_path(id), false)
         }
@@ -314,6 +391,22 @@ mod tests {
             Some(Resource::Proxy(key.clone()))
         );
         assert_eq!(parse_resource("source/12"), Some(Resource::Source(12)));
+        assert_eq!(
+            parse_resource("preview-waveform/12"),
+            Some(Resource::PreviewWaveform(12))
+        );
+        assert_eq!(
+            parse_resource("/preview-waveform%2F12"),
+            Some(Resource::PreviewWaveform(12))
+        );
+        assert_eq!(
+            parse_resource("preview-thumb/12-0"),
+            Some(Resource::PreviewThumb(12, 0))
+        );
+        assert_eq!(
+            parse_resource("/preview-thumb%2F12-34"),
+            Some(Resource::PreviewThumb(12, 34))
+        );
         for bad in [
             "",
             "proxy/",
@@ -324,6 +417,35 @@ mod tests {
             "source/1/extra",
             "source/1.mp4",
             "source/",
+            "preview-waveform/",
+            "preview-waveform/0",
+            "preview-waveform/01",
+            "preview-waveform/-1",
+            "preview-waveform/..",
+            "preview-waveform/../1",
+            "preview-waveform/1/extra",
+            "preview-waveform/1.bin",
+            "preview-waveform/%2e%2e",
+            "preview-waveform/1%2Fextra",
+            "preview-waveform\\..\\x",
+            "preview-waveform/99999999999999999999",
+            "preview-thumb/",
+            "preview-thumb/1",
+            "preview-thumb/1-",
+            "preview-thumb/0-0",
+            "preview-thumb/01-0",
+            "preview-thumb/1-01",
+            "preview-thumb/1--1",
+            "preview-thumb/1-0-2",
+            "preview-thumb/1-0/extra",
+            "preview-thumb/1-0.jpg",
+            "preview-thumb/1-..",
+            "preview-thumb/../1-0",
+            "preview-thumb/%2e%2e-0",
+            "preview-thumb/1-%2e%2e",
+            "preview-thumb/1%2F0",
+            "preview-thumb/1-99999999999999999999",
+            "preview-thumb/99999999999999999999-0",
             "..%2F..%2Fetc%2Fpasswd",
             "%2e%2e/secret",
             "proxy/%2e%2e%2f%2e%2e%2fsecret",

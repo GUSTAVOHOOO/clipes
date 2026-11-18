@@ -194,8 +194,18 @@ pub(crate) fn source(
     }
     Ok((path, hash, audio, duration, channels as usize))
 }
-fn key(hash: &str, audio: i64) -> String {
+pub(crate) fn key(hash: &str, audio: i64) -> String {
     format!("{hash}-{audio}")
+}
+
+pub(crate) fn sorted_thumbnails(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut thumbs = fs::read_dir(dir)?
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| p.is_file() && p.extension().is_some_and(|x| x == "jpg"))
+        .collect::<Vec<_>>();
+    thumbs.sort();
+    Ok(thumbs)
 }
 
 fn generate(
@@ -474,8 +484,37 @@ fn clean_cache(cache: &Path, limit: u64, _project: &Path) -> Result<(), crate::C
     Ok(())
 }
 
+fn invalid_input(message: &str) -> crate::CoreError {
+    error("invalid_input", message)
+}
+
+fn parse_source_id_field(v: &Value, field: &str) -> Result<Option<i64>, crate::CoreError> {
+    let Some(raw) = v.get(field) else {
+        return Ok(None);
+    };
+    if raw.is_null() {
+        return Ok(None);
+    }
+    raw.as_i64()
+        .filter(|&id| id > 0)
+        .map(Some)
+        .ok_or_else(|| invalid_input("Identificador da Fonte inválido."))
+}
+
+fn resolve_preview_source_id(v: &Value) -> Result<i64, crate::CoreError> {
+    let camel = parse_source_id_field(v, "sourceId")?;
+    let snake = parse_source_id_field(v, "source_id")?;
+    match (camel, snake) {
+        (Some(a), Some(b)) if a != b => Err(invalid_input(
+            "sourceId e source_id informados com valores diferentes.",
+        )),
+        (Some(id), _) | (None, Some(id)) => Ok(id),
+        (None, None) => Err(invalid_input("Informe sourceId ou source_id.")),
+    }
+}
+
 fn preview(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let id = v["source_id"].as_i64().ok_or_else(failed)?;
+    let id = resolve_preview_source_id(&v)?;
     let current = crate::dispatch("projects.current", json!({}), &mut |_| {})?;
     let project = current["path"].as_str().ok_or_else(failed)?;
     let (_, hash, audio, _, _) = source(id, Path::new(project))?;
@@ -485,18 +524,21 @@ fn preview(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     if !waveform.is_file() {
         return Err(error("preview_unavailable", "Prévia indisponível."));
     }
-    let mut thumbs = fs::read_dir(dir)
-        .map_err(|_| failed())?
-        .filter_map(Result::ok)
-        .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|x| x == "jpg"))
-        .collect::<Vec<_>>();
-    thumbs.sort();
+    let thumbs = sorted_thumbnails(&dir).map_err(|_| failed())?;
     for path in std::iter::once(&waveform).chain(thumbs.iter()) {
         if let Ok(f) = fs::OpenOptions::new().write(true).open(path) {
             let _ = f.set_times(fs::FileTimes::new().set_modified(SystemTime::now()));
         }
     }
-    Ok(json!({"waveform":waveform,"thumbnails":thumbs}))
+    let waveform_key = crate::media::preview_waveform_key(id);
+    let thumbnail_keys = (0..thumbs.len())
+        .map(|index| crate::media::preview_thumb_key(id, index))
+        .collect::<Vec<_>>();
+    Ok(json!({
+        "waveform": waveform,
+        "thumbnails": thumbs,
+        "waveformKey": waveform_key,
+        "thumbnailKeys": thumbnail_keys,
+    }))
 }
 inventory::submit! { CommandRegistration { name:"jobs.preview", execute:preview } }
