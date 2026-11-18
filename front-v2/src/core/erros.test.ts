@@ -265,4 +265,13 @@ describe('mapeador de erros (erros.ts)', () => {
     expect(resultado.titulo).toMatch(/Fonte/)
     expect(resultado.recuperacao).toEqual({ rotulo: 'Abrir Fila de Jobs', acao: 'abrir-fila' })
   })
+
+  it('mapeia snapshot_missing em PT-BR com vocabulário do domínio', () => {
+    const resultado = mensagemDeErro(new ErroCore('snapshot_missing', 'snapshot não encontrado'))
+    expect(resultado.titulo).not.toBe('Algo deu errado nesta operação.')
+    expect(resultado.titulo).toMatch(/Snapshot/)
+    expect(resultado.titulo).toMatch(/Histórico/)
+    expect(resultado.titulo).toMatch(/Corte/)
+    expect(resultado.recuperacao).toBeUndefined()
+  })
 })
