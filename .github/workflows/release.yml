@@ -86,6 +86,10 @@ jobs:
         with:
           path: installers
           merge-multiple: true
+      - name: Achatar os instaladores
+        # O artefato "linux" guarda appimage/ e deb/ em subpastas; o passo seguinte procura tudo na raiz.
+        shell: bash
+        run: find installers -mindepth 2 -type f -exec mv -n -t installers {} +
       - name: Gerar hashes e publicar
         env:
           GH_TOKEN: ${{ github.token }}
@@ -101,8 +105,12 @@ jobs:
           windows_signatures=( *.exe.sig )
           deb_signatures=( *.deb.sig )
           debs=( *.deb )
-          test "${#windows[@]}" -eq 1 && test "${#appimages[@]}" -eq 1 && test "${#debs[@]}" -eq 1
-          test "${#windows_signatures[@]}" -eq 1 && test "${#appimage_signatures[@]}" -eq 1
+          # Um test por linha: numa lista com &&, o set -e não interrompe o script quando um test do meio falha.
+          test "${#windows[@]}" -eq 1
+          test "${#appimages[@]}" -eq 1
+          test "${#debs[@]}" -eq 1
+          test "${#windows_signatures[@]}" -eq 1
+          test "${#appimage_signatures[@]}" -eq 1
           test "${#deb_signatures[@]}" -le 1
           sha256sum "${windows[@]}" "${appimages[@]}" "${debs[@]}" > SHA256SUMS.txt
           release_assets=( "${windows[@]}" "${appimages[@]}" "${debs[@]}" "${windows_signatures[@]}" "${appimage_signatures[@]}" SHA256SUMS.txt )

@@ -59,6 +59,15 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 ### Tickets da mesma onda mexendo nos mesmos arquivos da raiz
 - **Ação:** faça o merge de um PR e mande o outro worker fazer rebase em `origin/master` antes de abrir (ou atualizar) o PR. Nada de push forçado em branch alheia.
 
+### Release publicada sem `.AppImage`, `.deb` e `latest.json` (v1.0.0)
+- **Sintoma:** o job `release` cria a release só com o `.exe` e as `.sig`, e falha no Python com `StopIteration` ao procurar o `.deb`.
+- **Causa:** o artefato `linux` guarda `appimage/` e `deb/` em subpastas, e o `test a && test b` não para o script com `set -e` quando um `test` do meio falha.
+- **Ação:** `release.yml` achata `installers/` antes de publicar e faz um `test` por linha. Para completar uma release já criada, baixe os artefatos do run (`gh run download <id>`), confira os `.sig` com os já publicados, gere `SHA256SUMS.txt` e `latest.json` no formato do workflow e suba com `gh release upload <tag> ... --clobber`. Não mova a tag.
+
+### Catálogo (`catalog-*`) falha ao compilar `libdbus-sys`
+- **Causa:** o `keyring` com `sync-secret-service` (cofre do #165) precisa de `pkg-config` e `libdbus-1-dev` no Ubuntu.
+- **Ação:** `catalog.yml` instala os dois antes do `cargo test`. Uma tag `catalog-N` cujo run falhou antes de publicar pode ser apagada e criada de novo depois do conserto.
+
 ## Mídia do YouTube (yt-dlp)
 
 ### HTTP 403 ou download parado em 0 bytes
