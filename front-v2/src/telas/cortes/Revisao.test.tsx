@@ -436,7 +436,7 @@ describe('Bancada de Revisão de Cortes (#/projeto/:id/cortes/revisao/:runId)', 
     expect(await screen.findByText(/Esta execução de seleção não foi encontrada\./i)).toBeInTheDocument()
   })
 
-  it('cobre estados §6: loading (<Esqueleto>), empty 0 candidatos, empty de filtro, error e partial', async () => {
+  it('cobre estados §6: loading (<Esqueleto>), empty 0 candidatos e error', async () => {
     const user = userEvent.setup()
 
     // 1. loading forçado
@@ -482,7 +482,28 @@ describe('Bancada de Revisão de Cortes (#/projeto/:id/cortes/revisao/:runId)', 
     expect(window.location.hash).toMatch(/^#\/projeto\/demo\/cortes(\?|$)/)
     rEmpty.unmount()
 
-    // 2b. empty de filtro (Nota mínima / estado sem correspondência)
+    // 3. error via ?estado=erro
+    window.location.hash = '#/projeto/demo/cortes/revisao/1?estado=erro'
+    mockRevisaoBase()
+    const rErro = render(
+      envolver(
+        <Revisao
+          projetoId="demo"
+          projetoPath="/projetos/Demo.clipes"
+          runParam="1"
+          storeFontes={storeFontes}
+          fila={filaTeste}
+        />,
+      ),
+    )
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    rErro.unmount()
+  })
+
+  it('cobre estado empty de filtro ("Limpar filtros") e estado partial com bloqueio de redo em janela uncertain', async () => {
+    const user = userEvent.setup()
+
+    // empty de filtro (Nota mínima / estado sem correspondência)
     window.location.hash = '#/projeto/demo/cortes/revisao/1'
     mockRevisaoBase()
     const rFiltroVazio = render(
@@ -503,24 +524,7 @@ describe('Bancada de Revisão de Cortes (#/projeto/:id/cortes/revisao/:runId)', 
     expect(await screen.findByRole('heading', { level: 2, name: 'A virada do jogo' })).toBeInTheDocument()
     rFiltroVazio.unmount()
 
-    // 3. error via ?estado=erro
-    window.location.hash = '#/projeto/demo/cortes/revisao/1?estado=erro'
-    mockRevisaoBase()
-    const rErro = render(
-      envolver(
-        <Revisao
-          projetoId="demo"
-          projetoPath="/projetos/Demo.clipes"
-          runParam="1"
-          storeFontes={storeFontes}
-          fila={filaTeste}
-        />,
-      ),
-    )
-    expect(await screen.findByRole('alert')).toBeInTheDocument()
-    rErro.unmount()
-
-    // 4. partial com link para C.1
+    // partial com link para C.1 e bloqueio de redo (UI-12)
     window.location.hash = '#/projeto/demo/cortes/revisao/1'
     mockRevisaoBase({
       'selection.get': () => ({
@@ -741,8 +745,7 @@ describe('Bancada de Revisão de Cortes (#/projeto/:id/cortes/revisao/:runId)', 
     })
   })
 
-  it('registra todos os atalhos (A, R, I/Shift+I, O/Shift+O, Enter, Ctrl+Z, Espaço/J/K/L/←/→, F6) respeitando input e WCAG 2.1.4', async () => {
-    const user = userEvent.setup()
+  it('registra atalhos A, R, I/Shift+I, O/Shift+O, Ctrl+Z, Espaço/J/K/L/←/→ e F6 via useAtalhos', async () => {
     let statusCand1: 'pending' | 'approved' | 'rejected' = 'pending'
     mockRevisaoBase({
       'selection.decide': (args) => {
@@ -784,25 +787,17 @@ describe('Bancada de Revisão de Cortes (#/projeto/:id/cortes/revisao/:runId)', 
 
     render(
       envolver(
-        <div>
-          <input aria-label="Campo externo" />
-          <BotaoDesligarTeclasUnicas />
-          <Revisao
-            projetoId="demo"
-            projetoPath="/projetos/Demo.clipes"
-            runParam="1"
-            storeFontes={storeFontes}
-            fila={filaTeste}
-          />
-        </div>,
+        <Revisao
+          projetoId="demo"
+          projetoPath="/projetos/Demo.clipes"
+          runParam="1"
+          storeFontes={storeFontes}
+          fila={filaTeste}
+        />,
       ),
     )
 
     expect(await screen.findByRole('heading', { level: 2, name: 'A virada do jogo' })).toBeInTheDocument()
-
-    // Enter em pendente NÃO navega
-    fireEvent.keyDown(window, { key: 'Enter' })
-    expect(window.location.hash).not.toContain('/editar')
 
     // A aprova candidato
     fireEvent.keyDown(window, { key: 'a' })
@@ -885,6 +880,39 @@ describe('Bancada de Revisão de Cortes (#/projeto/:id/cortes/revisao/:runId)', 
     expect(screen.getByRole('region', { name: /Detalhe do Corte/i }).contains(document.activeElement)).toBe(true)
     fireEvent.keyDown(window, { key: 'F6', shiftKey: true })
     expect(screen.getByRole('region', { name: /Lista de candidatos/i }).contains(document.activeElement)).toBe(true)
+  })
+
+  it('respeita campos de texto e modo WCAG 2.1.4 e só abre Editor com Enter quando aprovado', async () => {
+    const user = userEvent.setup()
+    mockRevisaoBase({
+      'selection.decide': () => ({
+        run: 1,
+        item: { ...criarItensRevisaoPadrao(2)[0], status: 'approved' },
+        canUndo: true,
+      }),
+    })
+
+    render(
+      envolver(
+        <div>
+          <input aria-label="Campo externo" />
+          <BotaoDesligarTeclasUnicas />
+          <Revisao
+            projetoId="demo"
+            projetoPath="/projetos/Demo.clipes"
+            runParam="1"
+            storeFontes={storeFontes}
+            fila={filaTeste}
+          />
+        </div>,
+      ),
+    )
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'A virada do jogo' })).toBeInTheDocument()
+
+    // Enter em pendente NÃO navega
+    fireEvent.keyDown(window, { key: 'Enter' })
+    expect(window.location.hash).not.toContain('/editar')
 
     // Campo de texto bloqueia teclas únicas
     chamarMock.mockClear()
