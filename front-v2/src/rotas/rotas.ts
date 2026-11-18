@@ -8,7 +8,7 @@ export type SecaoConfig =
 
 export type Rota =
   | { tela: 'inicio' }
-  | { tela: 'assistente'; passo: 1 | 2 }
+  | { tela: 'assistente'; passo: 1 | 2; retorno?: 'config' }
   | { tela: 'fontes'; projeto: string; sub: 'fontes' | 'lotes' }
   | { tela: 'fonte'; projeto: string; fonte: string; frase?: number; row?: number }
   | { tela: 'cortes'; projeto: string; fonte?: string; run?: string; rev?: number }
@@ -188,7 +188,14 @@ export function resolver(hash: string, ctx: Contexto): Resolucao {
     return { rota: { tela: 'inicio' } }
   }
   if (raiz === 'assistente' && partes.length === 1) {
-    return { rota: { tela: 'assistente', passo: query.get('passo') === '2' ? 2 : 1 } }
+    const retorno = query.get('retorno') === 'config' ? ('config' as const) : undefined
+    return {
+      rota: semIndefinidos({
+        tela: 'assistente',
+        passo: query.get('passo') === '2' ? 2 : 1,
+        retorno,
+      }),
+    }
   }
   if (raiz === 'relatos' && partes.length === 1) {
     return { rota: { tela: 'relatos' } }

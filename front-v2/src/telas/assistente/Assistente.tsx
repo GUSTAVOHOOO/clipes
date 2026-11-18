@@ -9,14 +9,18 @@ export type AssistenteProps = {
   passo: 1 | 2
 }
 
-function destinoFinal(): string {
+function lerRetorno(): 'config' | null {
   const hash = typeof window !== 'undefined' ? window.location.hash : ''
   const qIdx = hash.indexOf('?')
   if (qIdx >= 0) {
     const retorno = new URLSearchParams(hash.slice(qIdx + 1)).get('retorno')
-    if (retorno === 'config') return '#/config/provedores'
+    if (retorno === 'config') return 'config'
   }
-  return '#/inicio'
+  return null
+}
+
+function destinoFinal(): string {
+  return lerRetorno() === 'config' ? '#/config/provedores' : '#/inicio'
 }
 
 /** Assistente de Primeiro Uso (`#/assistente?passo=1|2`): 2 passos para FFmpeg/Motor local e Provedor. */
@@ -24,7 +28,10 @@ export function Assistente({ passo }: AssistenteProps) {
   const [pulando, setPulando] = useState(false)
 
   const irParaPasso = useCallback((proximo: 1 | 2) => {
-    window.location.hash = `#/assistente?passo=${proximo}`
+    const retorno = lerRetorno()
+    window.location.hash = retorno
+      ? `#/assistente?passo=${proximo}&retorno=${retorno}`
+      : `#/assistente?passo=${proximo}`
   }, [])
 
   const concluirNavegacao = useCallback(() => {

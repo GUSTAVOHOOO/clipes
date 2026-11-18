@@ -106,4 +106,47 @@ test.describe('Tela Assistente de Primeiro Uso (#/assistente)', () => {
 
     expect(erros).toEqual([])
   })
+
+  test('UI-03 e UI-05: consentimento de CLI começa desmarcado e reabrir de provedores retorna para #/config/provedores em 1366x768', async ({
+    page,
+  }) => {
+    const erros: string[] = []
+    page.on('pageerror', (erro) => erros.push(erro.message))
+
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.goto('/#/config/provedores')
+    await expect(page.getByRole('heading', { name: 'Provedores e Tarefas de IA' })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Reabrir assistente inicial' }).click()
+    await expect(page).toHaveURL(/#\/assistente\?passo=1&retorno=config$/)
+
+    await page.getByRole('button', { name: /Próximo: Provedor de IA/i }).click()
+    await expect(page).toHaveURL(/#\/assistente\?passo=2&retorno=config$/)
+
+    // UI-03: Codex CLI e OpenCode CLI iniciam sem consentimento marcado
+    await page.getByRole('radio', { name: /Codex CLI/i }).click()
+    const checkCodex = page.getByRole('checkbox', {
+      name: /Concordo em enviar apenas texto de transcrições pela Codex CLI/i,
+    })
+    await expect(checkCodex).not.toBeChecked()
+    const btnConcluir = page.getByRole('button', { name: /Concluir configuração/i })
+    await expect(btnConcluir).toBeDisabled()
+
+    await page.getByRole('radio', { name: /OpenCode CLI/i }).click()
+    const checkOpencode = page.getByRole('checkbox', {
+      name: /Concordo em enviar apenas texto de transcrições pela OpenCode CLI/i,
+    })
+    await expect(checkOpencode).not.toBeChecked()
+    await expect(btnConcluir).toBeDisabled()
+
+    await checkOpencode.check()
+    await expect(btnConcluir).toBeEnabled()
+
+    // UI-05: concluir retorna para #/config/provedores
+    await btnConcluir.click()
+    await expect(page).toHaveURL(/#\/config\/provedores$/)
+    await expect(page.getByRole('heading', { name: 'Provedores e Tarefas de IA' })).toBeVisible()
+
+    expect(erros).toEqual([])
+  })
 })
