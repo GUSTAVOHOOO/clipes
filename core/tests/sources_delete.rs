@@ -722,10 +722,20 @@ fn refuses_delete_when_active_or_uncertain_job_exists_for_source() {
     let other = seed_full_source(&media_other, "other");
 
     // Job ativo em outra Fonte não deve bloquear a exclusão desta Fonte.
+    // Usa `kind` não consumido por `jobs::preview::run_queue` para que o executor em segundo plano
+    // não transicione os jobs `queued` para `failed` antes de `sources.delete` rodar.
     with_writer(|c| {
         c.execute(
             "UPDATE jobs SET state='running' WHERE id=?1",
             [other.direct_job_id],
+        )?;
+        c.execute(
+            "UPDATE jobs SET kind='test_direct' WHERE id=?1",
+            [seeded.direct_job_id],
+        )?;
+        c.execute(
+            "UPDATE jobs SET kind='test_indirect' WHERE id=?1",
+            [seeded.ai_job_id],
         )?;
         Ok(())
     })
