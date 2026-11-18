@@ -158,7 +158,7 @@ describe('mapeador de erros (erros.ts)', () => {
     expect(fonte.recuperacao?.acao).toBe('relocalizar-fonte')
   })
 
-  it.each(['desconhecido', 'codigo_nao_mapeado', ''])(
+  it.each(['desconhecido', 'codigo_nao_mapeado', '', 'constructor', 'toString', 'hasOwnProperty', '__proto__'])(
     'Review Focus 2: código "%s" devolve mensagem genérica sem recuperação',
     (codigo) => {
       const resultado = mensagemDeErro(new ErroCore(codigo, 'detalhe bruto'))

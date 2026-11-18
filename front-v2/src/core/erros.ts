@@ -154,5 +154,5 @@ const MENSAGEM_DESCONHECIDA: MensagemErro = {
 
 /** Traduz um `ErroCore` para mensagem humana em PT-BR e ação de recuperação opcional. */
 export function mensagemDeErro(e: ErroCore): MensagemErro {
-  return TABELA_ERROS[e.code] ?? MENSAGEM_DESCONHECIDA
+  return Object.hasOwn(TABELA_ERROS, e.code) ? TABELA_ERROS[e.code] : MENSAGEM_DESCONHECIDA
 }
