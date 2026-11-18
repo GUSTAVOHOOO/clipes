@@ -50,6 +50,11 @@ export interface DetalheCandidatoProps {
   candidato: CandidatoDetalhe | null
   erroAjuste?: ErroCore | null
   ocupadoAjuste?: boolean
+  tempoAtualUs?: number
+  aoMudarTempoUs?: (us: number) => void
+  reproduzindo?: boolean
+  aoMudarReproduzindo?: (tocando: boolean) => void
+  desabilitarAtalhosLocais?: boolean
   aoDecidir: (candidatoId: number, decisao: 'approved' | 'rejected') => Promise<void> | void
   aoAjustar: (candidatoId: number, borda: 'start' | 'end', delta: -1 | 1) => Promise<void> | void
   aoAbrirEditor: (candidatoId: number) => void
@@ -216,6 +221,11 @@ export function DetalheCandidato({
   candidato,
   erroAjuste,
   ocupadoAjuste = false,
+  tempoAtualUs: tempoAtualUsProp,
+  aoMudarTempoUs,
+  reproduzindo: reproduzindoProp,
+  aoMudarReproduzindo,
+  desabilitarAtalhosLocais = false,
   aoDecidir,
   aoAjustar,
   aoAbrirEditor,
@@ -228,9 +238,30 @@ export function DetalheCandidato({
 
   const [proxyState, setProxyState] = useState<EstadoProxyLocal>(ESTADO_PROXY_INICIAL)
   const [proxyTentativa, setProxyTentativa] = useState(0)
-  const [tempoAtualUs, setTempoAtualUs] = useState(0)
-  const [reproduzindo, setReproduzindo] = useState(false)
+  const [tempoAtualUsInterno, setTempoAtualUsInterno] = useState(0)
+  const [reproduzindoInterno, setReproduzindoInterno] = useState(false)
   const [mudo, setMudo] = useState(false)
+
+  const tempoAtualUs = tempoAtualUsProp ?? tempoAtualUsInterno
+  const reproduzindo = reproduzindoProp ?? reproduzindoInterno
+
+  const setTempoAtualUs = useCallback(
+    (prox: number | ((atual: number) => number)) => {
+      const valor = typeof prox === 'function' ? prox(tempoAtualUs) : prox
+      if (tempoAtualUsProp === undefined) setTempoAtualUsInterno(valor)
+      aoMudarTempoUs?.(valor)
+    },
+    [aoMudarTempoUs, tempoAtualUs, tempoAtualUsProp],
+  )
+
+  const setReproduzindo = useCallback(
+    (prox: boolean | ((atual: boolean) => boolean)) => {
+      const valor = typeof prox === 'function' ? prox(reproduzindo) : prox
+      if (reproduzindoProp === undefined) setReproduzindoInterno(valor)
+      aoMudarReproduzindo?.(valor)
+    },
+    [aoMudarReproduzindo, reproduzindo, reproduzindoProp],
+  )
 
   const [guardrails, setGuardrails] = useState<GuardrailsSingleResposta | null>(null)
   const [guardrailsPronto, setGuardrailsPronto] = useState(false)
@@ -249,9 +280,9 @@ export function DetalheCandidato({
 
   // Reinicia relógio do preview quando muda o candidato ativo
   useEffect(() => {
-    setTempoAtualUs(0)
-    setReproduzindo(false)
-  }, [candidato?.id])
+    if (tempoAtualUsProp === undefined) setTempoAtualUsInterno(0)
+    if (reproduzindoProp === undefined) setReproduzindoInterno(false)
+  }, [candidato?.id, tempoAtualUsProp, reproduzindoProp])
 
   // Solicita proxy 9:16 quando muda o candidato/fonte ou quando ±1 Frase sai da janela em cache
   useEffect(() => {
@@ -630,6 +661,7 @@ export function DetalheCandidato({
         <div
           className="flex w-[clamp(204px,28vh,250px)] shrink-0 flex-col gap-2"
           onKeyDown={(e) => {
+            if (desabilitarAtalhosLocais) return
             if ((e.target as HTMLElement).closest('input, textarea, [role="dialog"]')) return
             if (e.ctrlKey || e.metaKey || e.altKey) return
             const tecla = e.key.toLowerCase()

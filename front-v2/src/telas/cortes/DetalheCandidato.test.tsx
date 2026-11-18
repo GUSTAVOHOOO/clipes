@@ -769,4 +769,60 @@ describe('DetalheCandidato (Coluna direita C.2)', () => {
     const alerta = await screen.findByRole('alert')
     expect(alerta).toHaveTextContent('Há uma tarefa ativa bloqueando esta operação no Projeto.')
   })
+
+  it('suporta transporte controlado opcional e desabilitarAtalhosLocais sem quebrar modo padrão', async () => {
+    const user = userEvent.setup()
+    filaTeste = criarFila(() => 'demo')
+    chamarMock.mockResolvedValue({
+      state: 'ready',
+      key: '0004abab',
+      job: null,
+      progress: 100,
+      error: null,
+      windowStartUs: 0,
+      windowEndUs: 260_000_000,
+    })
+
+    const aoMudarTempoUs = vi.fn()
+    const aoMudarReproduzindo = vi.fn()
+
+    render(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_DIRETO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={CANDIDATO_BASE}
+          tempoAtualUs={12_000_000}
+          aoMudarTempoUs={aoMudarTempoUs}
+          reproduzindo
+          aoMudarReproduzindo={aoMudarReproduzindo}
+          desabilitarAtalhosLocais
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+
+    const toolbar = await screen.findByRole('toolbar', { name: /Controles de reprodução/i })
+    expect(within(toolbar).getByLabelText(/Posição 00:12,0 de 00:50,0/i)).toBeInTheDocument()
+
+    const btnPausar = within(toolbar).getByRole('button', { name: /Pausar/i })
+    await user.click(btnPausar)
+    expect(aoMudarReproduzindo).toHaveBeenCalledWith(false)
+
+    await user.click(within(toolbar).getByRole('button', { name: /Ir para Entrada/i }))
+    expect(aoMudarTempoUs).toHaveBeenCalledWith(0)
+
+    await user.click(within(toolbar).getByRole('button', { name: /Ir para Saída/i }))
+    expect(aoMudarTempoUs).toHaveBeenCalledWith(50_000_000)
+
+    aoMudarTempoUs.mockClear()
+    aoMudarReproduzindo.mockClear()
+    btnPausar.focus()
+    await user.keyboard('jkl')
+    expect(aoMudarTempoUs).not.toHaveBeenCalled()
+    expect(aoMudarReproduzindo).not.toHaveBeenCalled()
+  })
 })
