@@ -144,18 +144,6 @@ const STATUS_DECISAO: Record<CandidatoDetalhe['status'], { tom: TomStatus; rotul
   rejected: { tom: 'perigo', rotulo: 'Rejeitado' },
 }
 
-function normalizarErro(err: unknown): ErroCore {
-  if (err instanceof ErroCore) return err
-  if (err && typeof err === 'object' && 'code' in err) {
-    const e = err as { code?: unknown; message?: unknown }
-    return new ErroCore(
-      typeof e.code === 'string' && e.code ? e.code : 'desconhecido',
-      typeof e.message === 'string' ? e.message : '',
-    )
-  }
-  return new ErroCore('desconhecido', err instanceof Error ? err.message : String(err ?? ''))
-}
-
 function montarEixos(candidato: CandidatoDetalhe, run: ResumoRunSelecao): EixoNota[] {
   const basePesos =
     candidato.weights && candidato.weights.length > 0
@@ -246,8 +234,11 @@ export function DetalheCandidato({
 
   const [guardrails, setGuardrails] = useState<GuardrailsSingleResposta | null>(null)
   const [guardrailsPronto, setGuardrailsPronto] = useState(false)
+  const [erroGuardrails, setErroGuardrails] = useState<ErroCore | null>(null)
   const [angulos, setAngulos] = useState<AnglesGetResposta | null>(null)
   const [angulosPronto, setAngulosPronto] = useState(false)
+  const [erroAngulos, setErroAngulos] = useState<ErroCore | null>(null)
+  const [guardrailsTentativa, setGuardrailsTentativa] = useState(0)
   const [ackEmCurso, setAckEmCurso] = useState(false)
 
   const ultimoCandidatoSolicitadoRef = useRef<number | null>(null)
@@ -356,7 +347,7 @@ export function DetalheCandidato({
         setProxyState({
           ...ESTADO_PROXY_INICIAL,
           status: 'error',
-          erro: normalizarErro(err),
+          erro: err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err)),
         })
       })
 
@@ -408,7 +399,7 @@ export function DetalheCandidato({
           setProxyState((prev) => ({
             ...prev,
             status: 'error',
-            erro: normalizarErro(err),
+            erro: err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err)),
           }))
         })
     }
@@ -419,14 +410,18 @@ export function DetalheCandidato({
     if (!candidato || candidato.status !== 'approved') {
       setGuardrails(null)
       setGuardrailsPronto(false)
+      setErroGuardrails(null)
       setAngulos(null)
       setAngulosPronto(false)
+      setErroAngulos(null)
       return
     }
 
     let cancelado = false
     setGuardrailsPronto(false)
+    setErroGuardrails(null)
     setAngulosPronto(run.videoKind !== 'transformed')
+    setErroAngulos(null)
 
     void chamar<GuardrailsSingleResposta>('guardrails.check', {
       scope: 'single',
@@ -436,12 +431,16 @@ export function DetalheCandidato({
       .then((res) => {
         if (!cancelado) {
           setGuardrails(res)
+          setErroGuardrails(null)
           setGuardrailsPronto(true)
         }
       })
-      .catch(() => {
+      .catch((err) => {
         if (!cancelado) {
           setGuardrails(null)
+          setErroGuardrails(
+            err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err)),
+          )
           setGuardrailsPronto(true)
         }
       })
@@ -451,12 +450,16 @@ export function DetalheCandidato({
         .then((res) => {
           if (!cancelado) {
             setAngulos(res)
+            setErroAngulos(null)
             setAngulosPronto(true)
           }
         })
-        .catch(() => {
+        .catch((err) => {
           if (!cancelado) {
             setAngulos(null)
+            setErroAngulos(
+              err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err)),
+            )
             setAngulosPronto(true)
           }
         })
@@ -467,7 +470,15 @@ export function DetalheCandidato({
     return () => {
       cancelado = true
     }
-  }, [candidato?.id, candidato?.status, candidato?.startUs, candidato?.endUs, fonte?.id, run.videoKind])
+  }, [
+    candidato?.id,
+    candidato?.status,
+    candidato?.startUs,
+    candidato?.endUs,
+    fonte?.id,
+    run.videoKind,
+    guardrailsTentativa,
+  ])
 
   const cancelarPreview = useCallback(async () => {
     if (proxyState.jobId == null) return
@@ -611,6 +622,7 @@ export function DetalheCandidato({
   const erroOffline = codigoErroProxy === 'source_offline' || codigoErroProxy === 'source_changed'
   const erroComponente =
     codigoErroProxy === 'component_missing' || codigoErroProxy === 'ffprobe_missing'
+  const erroFaixaGuardrails = erroGuardrails ?? erroAngulos
 
   return (
     <section
@@ -762,7 +774,7 @@ export function DetalheCandidato({
               )}
             </span>
             {run.videoKind === 'direct' && (
-              <Dica texto="Conversão individual para Vídeo transformado aguarda comando no núcleo (#292).">
+              <Dica texto="A conversão individual para Vídeo transformado ainda não está disponível nesta versão.">
                 <span tabIndex={0} className="inline-flex" aria-describedby={idDicaDireto}>
                   <Botao
                     tamanho="p"
@@ -778,7 +790,7 @@ export function DetalheCandidato({
           </div>
           {run.videoKind === 'direct' && (
             <span id={idDicaDireto} className="sr-only">
-              Conversão individual para Vídeo transformado aguarda comando no núcleo (#292).
+              A conversão individual para Vídeo transformado ainda não está disponível nesta versão.
             </span>
           )}
 
@@ -931,22 +943,38 @@ export function DetalheCandidato({
       {/* Faixa contextual de guarda-corpos (visível apenas quando aprovado) */}
       {aprovado && guardrailsPronto && angulosPronto && (
         <div className="max-w-[640px]">
-          <ChecklistGuardaCorpos
-            key={`guard-${candidato.id}-${run.videoKind}`}
-            escopo="single"
-            itens={itensGuarda}
-            abertoPorPadrao={
-              itensGuarda.some((i) => i.estado !== 'ok') ||
-              (run.videoKind === 'direct' && Boolean(guardrails?.needsDirectNotice)) ||
-              run.videoKind === 'transformed'
-            }
-            aoConfirmarDireto={
-              run.videoKind === 'direct' && guardrails?.needsDirectNotice
-                ? confirmarDireto
-                : undefined
-            }
-            confirmado={Boolean(guardrails?.directMonetizationAck)}
-          />
+          {erroFaixaGuardrails ? (
+            <BannerErroCore
+              erro={{
+                code: erroFaixaGuardrails.code,
+                message: erroFaixaGuardrails.detalhe,
+              }}
+              traduzir={(code) =>
+                mensagemDeErro(new ErroCore(code, erroFaixaGuardrails.detalhe))
+              }
+              acaoRecuperacao={{
+                rotulo: 'Tentar de novo',
+                aoAcionar: () => setGuardrailsTentativa((n) => n + 1),
+              }}
+            />
+          ) : (
+            <ChecklistGuardaCorpos
+              key={`guard-${candidato.id}-${run.videoKind}`}
+              escopo="single"
+              itens={itensGuarda}
+              abertoPorPadrao={
+                itensGuarda.some((i) => i.estado !== 'ok') ||
+                (run.videoKind === 'direct' && Boolean(guardrails?.needsDirectNotice)) ||
+                run.videoKind === 'transformed'
+              }
+              aoConfirmarDireto={
+                run.videoKind === 'direct' && guardrails?.needsDirectNotice
+                  ? confirmarDireto
+                  : undefined
+              }
+              confirmado={Boolean(guardrails?.directMonetizationAck)}
+            />
+          )}
         </div>
       )}
     </section>

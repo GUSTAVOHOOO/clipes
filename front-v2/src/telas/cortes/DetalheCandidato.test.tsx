@@ -395,7 +395,7 @@ describe('DetalheCandidato (Coluna direita C.2)', () => {
     expect(alerta).toHaveTextContent(/abaixo da duração mínima/i)
   })
 
-  it('cumpre a Regra da Luz Única (único primário por estado) e carrega <ChecklistGuardaCorpos>, ack_direct_notice, angles.get e #292 após aprovação', async () => {
+  it('cumpre a Regra da Luz Única (único primário por estado) e carrega <ChecklistGuardaCorpos>, ack_direct_notice, angles.get e ação desabilitada sem expor ticket (UI-12)', async () => {
     const user = userEvent.setup()
     filaTeste = criarFila(() => 'demo')
     chamarMock.mockImplementation(async (cmd: string) => {
@@ -456,11 +456,14 @@ describe('DetalheCandidato (Coluna direita C.2)', () => {
     expect(btnAbrirEditor).toHaveAccessibleDescription(/Aprove este candidato para editar ou exportar/i)
     expect(screen.queryByRole('region', { name: /Antes de exportar/i })).not.toBeInTheDocument()
 
-    // Botão #292 em Corte direto fica desabilitado e sua Dica cita #292
+    // Botão de conversão individual em Corte direto fica desabilitado e Dica explica sem expor nº de ticket (UI-12)
     const btnConverter = screen.getByRole('button', { name: /Converter em Vídeo transformado/i })
     expect(btnConverter).toBeDisabled()
     await user.hover(btnConverter.parentElement!)
-    expect(await screen.findByText(/#292/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/A conversão individual para Vídeo transformado ainda não está disponível nesta versão\./i),
+    ).toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/#\d+/)
 
     // Aprovado (Corte direto): Abrir no editor vira o único primário; Aprovado vira secundário; ChecklistGuardaCorpos aparece
     rerender(
@@ -562,6 +565,130 @@ describe('DetalheCandidato (Coluna direita C.2)', () => {
     )
 
     expect(await screen.findByText(/Ângulo escolhido: Foco no risco/i)).toBeInTheDocument()
+  })
+
+  it('exibe BannerErroCore com "Tentar de novo" sem renderizar checklist quando guardrails.check falha e recarrega ao clicar', async () => {
+    const user = userEvent.setup()
+    filaTeste = criarFila(() => 'demo')
+    let tentativasGuardrails = 0
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'proxy.request') {
+        return {
+          state: 'ready',
+          key: '0004abab',
+          job: null,
+          progress: 100,
+          error: null,
+          windowStartUs: 0,
+          windowEndUs: 260_000_000,
+        }
+      }
+      if (cmd === 'guardrails.check') {
+        tentativasGuardrails += 1
+        if (tentativasGuardrails === 1) {
+          throw new ErroCore('project_busy', 'Projeto ocupado.')
+        }
+        return {
+          scope: 'single',
+          directMonetizationAck: true,
+          needsDirectNotice: false,
+          over60s: false,
+          permission: { status: 'granted', who: 'Criador X', where: 'YouTube', scope: 'Cortes' },
+        }
+      }
+      return {}
+    })
+
+    render(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_DIRETO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={{ ...CANDIDATO_BASE, status: 'approved' }}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+
+    const alerta = await screen.findByRole('alert')
+    expect(alerta).toHaveTextContent(/Há uma tarefa ativa bloqueando esta operação no Projeto\./i)
+    expect(screen.queryByRole('region', { name: /Antes de exportar/i })).not.toBeInTheDocument()
+
+    await user.click(within(alerta).getByRole('button', { name: 'Tentar de novo' }))
+
+    expect(await screen.findByRole('region', { name: /Antes de exportar/i })).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(tentativasGuardrails).toBe(2)
+  })
+
+  it('exibe BannerErroCore com "Tentar de novo" sem renderizar checklist quando angles.get falha em Vídeo transformado e recarrega ao clicar', async () => {
+    const user = userEvent.setup()
+    filaTeste = criarFila(() => 'demo')
+    let tentativasAngles = 0
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'proxy.request') {
+        return {
+          state: 'ready',
+          key: '0004abab',
+          job: null,
+          progress: 100,
+          error: null,
+          windowStartUs: 0,
+          windowEndUs: 260_000_000,
+        }
+      }
+      if (cmd === 'guardrails.check') {
+        return {
+          scope: 'single',
+          directMonetizationAck: true,
+          needsDirectNotice: false,
+          over60s: false,
+          permission: { status: 'granted', who: 'Criador X', where: 'YouTube', scope: 'Cortes' },
+        }
+      }
+      if (cmd === 'angles.get') {
+        tentativasAngles += 1
+        if (tentativasAngles === 1) {
+          throw new ErroCore('run_not_found', 'Execução não encontrada.')
+        }
+        return {
+          angles: [],
+          generation: null,
+          selected: { name: 'Foco no risco', promise: 'Mostra o que mudou.' },
+          busy: false,
+          job: null,
+        }
+      }
+      return {}
+    })
+
+    render(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_TRANSFORMADO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={{ ...CANDIDATO_BASE, status: 'approved' }}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+
+    const alerta = await screen.findByRole('alert')
+    expect(alerta).toHaveTextContent(/Esta execução de seleção não foi encontrada\./i)
+    expect(screen.queryByRole('region', { name: /Antes de exportar/i })).not.toBeInTheDocument()
+
+    await user.click(within(alerta).getByRole('button', { name: 'Tentar de novo' }))
+
+    const checklist = await screen.findByRole('region', { name: /Antes de exportar/i })
+    expect(within(checklist).getByText(/Ângulo escolhido: Foco no risco/i)).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(tentativasAngles).toBe(2)
   })
 
   it('renderiza <Transporte> com role="toolbar" e timecode tabular', async () => {
