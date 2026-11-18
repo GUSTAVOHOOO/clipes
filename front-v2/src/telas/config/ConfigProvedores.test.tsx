@@ -467,7 +467,9 @@ describe('ConfigProvedores', () => {
 
     const dialog = await screen.findByRole('alertdialog')
     const btnCancelar = within(dialog).getByRole('button', { name: 'Cancelar' })
-    expect(btnCancelar).toHaveFocus()
+    await waitFor(() => {
+      expect(btnCancelar).toHaveFocus()
+    })
 
     await user.click(within(dialog).getByRole('button', { name: 'Remover perfil' }))
 
@@ -488,7 +490,9 @@ describe('ConfigProvedores', () => {
     await user.click(btnRemoverGroq)
 
     const dialogGroq = await screen.findByRole('alertdialog')
-    expect(within(dialogGroq).getByRole('button', { name: 'Cancelar' })).toHaveFocus()
+    await waitFor(() => {
+      expect(within(dialogGroq).getByRole('button', { name: 'Cancelar' })).toHaveFocus()
+    })
     expect(chamarMock).not.toHaveBeenCalledWith('transcription.groq.key.remove', expect.anything())
 
     await user.click(within(dialogGroq).getByRole('button', { name: 'Remover chave' }))
@@ -560,7 +564,9 @@ describe('ConfigProvedores', () => {
     expect(dialog).toHaveTextContent(/apenas texto de transcrições/i)
     expect(dialog).toHaveTextContent(/OpenCode/i)
     expect(dialog).toHaveTextContent(/cota do seu plano/i)
-    expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toHaveFocus()
+    await waitFor(() => {
+      expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toHaveFocus()
+    })
 
     expect(chamarMock).not.toHaveBeenCalledWith('provider.test', expect.anything())
     expect(chamarMock).not.toHaveBeenCalledWith('provider.cli.confirm', expect.anything())

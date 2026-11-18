@@ -335,8 +335,23 @@ describe('Tela Fontes (#/projeto/:id/fontes)', () => {
       }))
       expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     })
+  })
 
-    // Edição rápida de Permissão e Idioma (Fonte 3 não transcrita)
+  it('edita Permissão de Fonte não transcrita', async () => {
+    const user = userEvent.setup()
+    mockBase({
+      overrides: {
+        'sources.permission.set': (args) => {
+          const a = args as { id: number; permission: FonteProjeto['permission'] }
+          return { ...FONTES_MISTAS[2], permission: a.permission }
+        },
+      },
+    })
+
+    render(
+      envolver(<Fontes projetoId="demo" projetoPath="/projetos/Demo.clipes" sub="fontes" store={store} />),
+    )
+
     const cardParaPerm = (await screen.findByText('Live_15_11_cortada.mp4')).closest('li') as HTMLElement
     await user.click(within(cardParaPerm).getByRole('button', { name: /^Permissão$/i }))
     const dlgPerm = await screen.findByRole('dialog', { name: /Editar Permissão/i })
@@ -354,6 +369,22 @@ describe('Tela Fontes (#/projeto/:id/fontes)', () => {
       })
       expect(screen.queryByRole('dialog', { name: /Editar Permissão/i })).not.toBeInTheDocument()
     })
+  })
+
+  it('altera Idioma de Fonte não transcrita', async () => {
+    const user = userEvent.setup()
+    mockBase({
+      overrides: {
+        'sources.language.set': (args) => {
+          const a = args as { id: number; language: string }
+          return { ...FONTES_MISTAS[2], language: a.language }
+        },
+      },
+    })
+
+    render(
+      envolver(<Fontes projetoId="demo" projetoPath="/projetos/Demo.clipes" sub="fontes" store={store} />),
+    )
 
     const cardParaIdioma = (await screen.findByText('Live_15_11_cortada.mp4')).closest('li') as HTMLElement
     await user.click(within(cardParaIdioma).getByRole('button', { name: /^Idioma$/i }))
