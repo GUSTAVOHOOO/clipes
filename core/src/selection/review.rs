@@ -21,6 +21,7 @@ use crate::{
 };
 use rusqlite::Connection;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 
 /// Maior deslocamento aceito num único pedido de ajuste, em Frases.
 const MAX_STEP: i64 = 1000;
@@ -237,6 +238,8 @@ fn item(
 
 struct Snapshot {
     run: i64,
+    transcript: i64,
+    source_id: i64,
     range: (i64, i64),
     frases: Vec<Sentence>,
     candidates: Vec<Candidate>,
@@ -266,6 +269,8 @@ fn snapshot(run: i64) -> Result<Snapshot, CoreError> {
     })?;
     Ok(Snapshot {
         run,
+        transcript: row.transcript,
+        source_id: row.source_id,
         range: (row.min_us, row.max_us),
         frases,
         candidates,
@@ -294,8 +299,9 @@ fn candidate_run(id: i64) -> Result<i64, CoreError> {
         .ok_or_else(not_found)
 }
 
-fn candidate_arg(v: &Value) -> Result<i64, CoreError> {
-    v["candidate"].as_i64().ok_or_else(not_found)
+/// Extrai o ID de um candidato a partir da chave JSON `key`; `candidate_not_found` se ausente.
+pub(crate) fn candidate_id_arg(v: &Value, key: &str) -> Result<i64, CoreError> {
+    v.get(key).and_then(Value::as_i64).ok_or_else(not_found)
 }
 
 fn outcome(run: i64, candidate: Option<i64>) -> CommandResult {
@@ -311,7 +317,9 @@ fn outcome(run: i64, candidate: Option<i64>) -> CommandResult {
 pub(crate) struct ApprovedCut {
     pub candidate: i64,
     pub run: i64,
+    pub source_id: i64,
     pub transcript: i64,
+    pub video_kind: super::VideoKind,
     /// Identidade `(Frase inicial, Frase final)` do candidato como o #53 o propôs.
     pub identity: (i64, i64),
     /// Frases (já ajustadas pelo usuário) que formam o Corte.
@@ -331,7 +339,7 @@ pub(crate) fn approved_cut(id: i64) -> Result<ApprovedCut, CoreError> {
     if state.status != "approved" {
         return Err(error(
             "not_approved",
-            "Aprove o candidato antes de gerar o empacotamento.",
+            "Aprove o candidato antes de continuar.",
         ));
     }
     let (Some(start), Some(end)) = (
@@ -346,10 +354,37 @@ pub(crate) fn approved_cut(id: i64) -> Result<ApprovedCut, CoreError> {
     Ok(ApprovedCut {
         candidate: id,
         run,
-        transcript: read_run(run)?.transcript,
+        source_id: snap.source_id,
+        transcript: snap.transcript,
+        video_kind: candidate.video_kind,
         identity: (candidate.start_id, candidate.end_id),
         sentences: snap.frases[start..=end].to_vec(),
     })
+}
+
+/// O Corte aprovado do candidato `id` apenas quando for do Vídeo transformado.
+pub(crate) fn approved_transformed_cut(id: i64, err_msg: &str) -> Result<ApprovedCut, CoreError> {
+    let cut = approved_cut(id)?;
+    if cut.video_kind != super::VideoKind::Transformed {
+        return Err(error("script_requires_transformed", err_msg));
+    }
+    Ok(cut)
+}
+
+/// Mapa `candidate_id -> (start_id, end_id)` com as bordas atuais dos candidatos aprovados de `run`.
+pub(crate) fn approved_borders_for_run(run: i64) -> Result<HashMap<i64, (i64, i64)>, CoreError> {
+    let snap = snapshot(run)?;
+    let mut borders = HashMap::new();
+    for candidate in &snap.candidates {
+        let state = state_of(candidate, &snap.decisions);
+        if state.status == "approved"
+            && index_of(&snap.frases, state.start_id).is_some()
+            && index_of(&snap.frases, state.end_id).is_some()
+        {
+            borders.insert(candidate.id, (state.start_id, state.end_id));
+        }
+    }
+    Ok(borders)
 }
 
 /// `selection.review {run}`: estado de revisão de cada candidato da execução (na ordem da Nota):
@@ -387,7 +422,7 @@ fn record(
 /// `selection.decide {candidate, decision}`: `approved` ou `rejected`. Repetir a decisão que já
 /// vale não grava nada; trocar de uma para a outra grava uma linha nova.
 fn cmd_decide(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let id = candidate_arg(&v)?;
+    let id = candidate_id_arg(&v, "candidate")?;
     let kind = match v["decision"].as_str() {
         Some("approved") => "approved",
         Some("rejected") => "rejected",
@@ -417,7 +452,7 @@ fn cmd_decide(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 /// inteiras (negativo = mais cedo). Estender ou encurtar, no início e no fim, sempre dentro da
 /// faixa de duração da execução; fora dela, erro fixo e nada é gravado.
 fn cmd_adjust(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let id = candidate_arg(&v)?;
+    let id = candidate_id_arg(&v, "candidate")?;
     let edge = match v["edge"].as_str() {
         Some("start") => Edge::Start,
         Some("end") => Edge::End,
@@ -495,7 +530,7 @@ fn cmd_undo(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 /// em Vídeo transformado (`videoKind: "transformed"`). Idempotente se já for transformado;
 /// voltar para `direct` não é suportado (`invalid_video_kind`).
 fn cmd_set_kind(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let id = candidate_arg(&v)?;
+    let id = candidate_id_arg(&v, "candidate")?;
     match v.get("videoKind").and_then(Value::as_str) {
         Some("transformed") => {}
         _ => {

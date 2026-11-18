@@ -470,25 +470,59 @@ pub(crate) fn project_change<T>(
     silences::clear_pcm_cache();
     result
 }
-pub(super) fn open(request: &Request, start: i64, end: i64) -> Result<Value, CoreError> {
-    let mut s = lock()?;
-    let identity = request
-        .candidate
-        .map(|id| format!("candidate:{id}"))
-        .unwrap_or_else(|| {
-            format!(
-                "source:{}:{}:{}",
-                request.source, request.start_id, request.end_id
-            )
-        });
-    let existing: Option<i64> = projects::with_reader(|c| {
+fn candidate_identity(candidate_id: i64) -> String {
+    format!("candidate:{candidate_id}")
+}
+
+fn source_range_identity(source_id: i64, start_id: i64, end_id: i64) -> String {
+    format!("source:{source_id}:{start_id}:{end_id}")
+}
+
+fn clip_id_by_identity(identity: &str) -> Result<Option<i64>, CoreError> {
+    projects::with_reader(|c| {
         c.query_row(
             "SELECT id FROM clip_edits WHERE identity=?1",
-            [&identity],
+            [identity],
+            |r| r.get(0),
+        )
+        .optional()
+    })
+}
+
+/// ID do registro em `clip_edits` vinculado a `candidate_id`, se existir.
+pub(crate) fn clip_id_for_candidate(candidate_id: i64) -> Result<Option<i64>, CoreError> {
+    clip_id_by_identity(&candidate_identity(candidate_id))
+}
+
+/// ID do registro em `clip_edits` vinculado a um Corte avulso por Fonte e bordas, se existir.
+pub(crate) fn clip_id_for_source_range(
+    source_id: i64,
+    start_id: i64,
+    end_id: i64,
+) -> Result<Option<i64>, CoreError> {
+    clip_id_by_identity(&source_range_identity(source_id, start_id, end_id))
+}
+
+/// ID do candidato vinculado ao `clip_id` em `clip_edits`, se a identidade for `candidate:{id}`.
+pub(crate) fn candidate_id_for_clip(clip_id: i64) -> Result<Option<i64>, CoreError> {
+    let identity: Option<String> = projects::with_reader(|c| {
+        c.query_row(
+            "SELECT identity FROM clip_edits WHERE id=?1",
+            [clip_id],
             |r| r.get(0),
         )
         .optional()
     })?;
+    Ok(identity.and_then(|id| id.strip_prefix("candidate:")?.parse::<i64>().ok()))
+}
+
+pub(super) fn open(request: &Request, start: i64, end: i64) -> Result<Value, CoreError> {
+    let mut s = lock()?;
+    let identity = request
+        .candidate
+        .map(candidate_identity)
+        .unwrap_or_else(|| source_range_identity(request.source, request.start_id, request.end_id));
+    let existing = clip_id_by_identity(&identity)?;
     let id = if let Some(id) = existing {
         id
     } else {
@@ -1409,15 +1443,7 @@ pub(crate) fn audio_asset_ids_for_clip(clip_id: i64) -> Result<Vec<i64>, CoreErr
 }
 
 pub(crate) fn audio_asset_ids_for_candidate(candidate_id: i64) -> Result<Vec<i64>, CoreError> {
-    let clip_id: Option<i64> = projects::with_reader(|c| {
-        c.query_row(
-            "SELECT id FROM clip_edits WHERE identity=?1",
-            [format!("candidate:{candidate_id}")],
-            |r| r.get(0),
-        )
-        .optional()
-    })?;
-    match clip_id {
+    match clip_id_for_candidate(candidate_id)? {
         Some(id) => audio_asset_ids_for_clip(id),
         None => Ok(Vec::new()),
     }
