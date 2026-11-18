@@ -305,6 +305,32 @@ ALTER TABLE selection_runs ADD COLUMN video_kind TEXT NOT NULL DEFAULT 'direct' 
 ALTER TABLE source_batches ADD COLUMN video_kind TEXT NOT NULL DEFAULT 'direct' CHECK(video_kind IN ('direct','transformed'));
 " } }
 
+// Conversão individual de Corte direto em Vídeo transformado (#292): override por candidato;
+// quando NULL, vale o `video_kind` da execução (`selection_runs`).
+inventory::submit! { projects::Migration { id: "0292_001_candidate_video_kind", sql: "
+ALTER TABLE selection_candidates ADD COLUMN video_kind TEXT CHECK(video_kind IS NULL OR video_kind IN ('direct','transformed'));
+" } }
+
+/// Tipo de vídeo efetivo de um candidato: aplica o override do candidato
+/// (`selection_candidates.video_kind`) antes do padrão da execução (`selection_runs.video_kind`).
+pub(crate) fn effective_video_kind(
+    conn: &rusqlite::Connection,
+    candidate_id: i64,
+) -> rusqlite::Result<Option<VideoKind>> {
+    use rusqlite::OptionalExtension;
+    let raw: Option<String> = conn
+        .query_row(
+            "SELECT COALESCE(c.video_kind, r.video_kind)
+             FROM selection_candidates c
+             JOIN selection_runs r ON r.id = c.run_id
+             WHERE c.id = ?1",
+            [candidate_id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    Ok(raw.as_deref().and_then(VideoKind::parse))
+}
+
 // ---------------------------------------------------------------- entrada de cada Janela
 
 struct Range {
@@ -1578,13 +1604,15 @@ fn run_json(run: i64, revision: Option<i64>) -> Result<Value, CoreError> {
             "SELECT id,rank,start_id,end_id,start_us,end_us,axes,total_centi,title,windows,adjust,chat_marks,revision,profile FROM selection_candidates WHERE run_id=?1 AND revision=COALESCE(?2,(SELECT revision FROM selection_runs WHERE id=?1)) ORDER BY rank",
         )?;
         let rows = q.query_map((run, revision), |r| {
+            let id: i64 = r.get(0)?;
             let axes: String = r.get(6)?;
             let origin: String = r.get(9)?;
             let adjust: Option<String> = r.get(10)?;
             let chat: Option<String> = r.get(11)?;
             let centi: i64 = r.get(7)?;
+            let kind = effective_video_kind(c, id)?.unwrap_or_default();
             Ok(json!({
-                "id": r.get::<_, i64>(0)?, "rank": r.get::<_, i64>(1)?,
+                "id": id, "rank": r.get::<_, i64>(1)?,
                 "startId": r.get::<_, i64>(2)?, "endId": r.get::<_, i64>(3)?,
                 "startUs": r.get::<_, i64>(4)?, "endUs": r.get::<_, i64>(5)?,
                 "axes": serde_json::from_str::<Value>(&axes).unwrap_or(Value::Null),
@@ -1593,6 +1621,7 @@ fn run_json(run: i64, revision: Option<i64>) -> Result<Value, CoreError> {
                 "windows": serde_json::from_str::<Value>(&origin).unwrap_or(Value::Null),
                 "chat": chat.and_then(|t| serde_json::from_str::<Value>(&t).ok()).unwrap_or_else(|| json!([])),
                 "revision": r.get::<_, i64>(12)?, "profile": r.get::<_, String>(13)?,
+                "videoKind": kind.as_str(),
                 "adjusted": adjust.is_some(),
                 "adjust": adjust.and_then(|t| serde_json::from_str::<Value>(&t).ok()).unwrap_or(Value::Null),
             }))

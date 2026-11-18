@@ -334,14 +334,10 @@ struct Cut {
 /// O Corte aprovado do candidato, só se for do Vídeo transformado.
 fn context(candidate: i64) -> Result<Cut, CoreError> {
     let cut = crate::selection::approved_cut(candidate)?;
-    let kind: String = projects::with_reader(|c| {
-        c.query_row(
-            "SELECT video_kind FROM selection_runs WHERE id=?1",
-            [cut.run],
-            |r| r.get(0),
-        )
-    })?;
-    if kind != "transformed" {
+    let is_transformed =
+        projects::with_reader(|c| crate::selection::effective_video_kind(c, candidate))?
+            == Some(crate::selection::cut::VideoKind::Transformed);
+    if !is_transformed {
         return Err(error(
             "script_requires_transformed",
             "O Roteiro só existe para Cortes do Vídeo transformado.",
@@ -1134,14 +1130,10 @@ pub(crate) struct MontageScript {
 /// jobs nem gravar no banco (seguro para prévias e leitura na timeline).
 pub(crate) fn montage_blocks_readonly(candidate: i64) -> Result<Option<MontageScript>, CoreError> {
     let cut = crate::selection::approved_cut(candidate)?;
-    let kind: String = projects::with_reader(|c| {
-        c.query_row(
-            "SELECT video_kind FROM selection_runs WHERE id=?1",
-            [cut.run],
-            |r| r.get(0),
-        )
-    })?;
-    if kind != "transformed" {
+    let is_transformed =
+        projects::with_reader(|c| crate::selection::effective_video_kind(c, candidate))?
+            == Some(crate::selection::cut::VideoKind::Transformed);
+    if !is_transformed {
         return Ok(None);
     }
     let gens = read_generations(cut.run, cut.identity)?;

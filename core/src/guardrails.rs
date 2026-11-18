@@ -128,29 +128,9 @@ fn sentence_range_duration(
 
 fn candidate_video_kind(c: &rusqlite::Connection, candidate_id: Option<i64>) -> Option<VideoKind> {
     let cid = candidate_id?;
-    let raw: String = c
-        .query_row(
-            "SELECT r.video_kind FROM selection_candidates c JOIN selection_runs r ON r.id=c.run_id WHERE c.id=?1",
-            [cid],
-            |r| r.get(0),
-        )
-        .optional()
-        .ok()??;
-    VideoKind::parse(&raw)
-}
-
-fn run_video_kind(c: &rusqlite::Connection, run_id: i64) -> VideoKind {
-    c.query_row(
-        "SELECT video_kind FROM selection_runs WHERE id=?1",
-        [run_id],
-        |r| r.get::<_, String>(0),
-    )
-    .optional()
-    .ok()
-    .flatten()
-    .as_deref()
-    .and_then(VideoKind::parse)
-    .unwrap_or_default()
+    crate::selection::effective_video_kind(c, cid)
+        .ok()
+        .flatten()
 }
 
 fn resolve_single_clip_id(
@@ -420,16 +400,11 @@ fn check_batch(scope: &str, v: &Value, ack: bool) -> CommandResult {
     let mut total_unverified_audio = 0usize;
 
     let mut perm_cache: HashMap<i64, PermissionInfo> = HashMap::new();
-    let mut kind_cache: HashMap<i64, VideoKind> = HashMap::new();
 
     for cut in &cuts {
-        let kind = if let Some(&k) = kind_cache.get(&cut.run_id) {
-            k
-        } else {
-            let k = projects::with_reader(|c| Ok(run_video_kind(c, cut.run_id)))?;
-            kind_cache.insert(cut.run_id, k);
-            k
-        };
+        let kind = projects::with_reader(|c| {
+            Ok(crate::selection::effective_video_kind(c, cut.candidate_id)?.unwrap_or_default())
+        })?;
         match kind {
             VideoKind::Direct => has_direct = true,
             VideoKind::Transformed => {

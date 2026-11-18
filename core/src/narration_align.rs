@@ -1318,14 +1318,10 @@ fn cmd_track_set(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 
     if let Some(cand) = candidate_id {
         if track == "narration" {
-            let cut = crate::selection::approved_cut(cand)?;
-            let is_transformed: bool = projects::with_reader(|c| {
-                c.query_row(
-                    "SELECT video_kind = 'transformed' FROM selection_runs WHERE id=?1",
-                    [cut.run],
-                    |r| r.get(0),
-                )
-            })?;
+            let _cut = crate::selection::approved_cut(cand)?;
+            let is_transformed =
+                projects::with_reader(|c| crate::selection::effective_video_kind(c, cand))?
+                    == Some(crate::selection::cut::VideoKind::Transformed);
             if !is_transformed {
                 return Err(error(
                     "script_requires_transformed",
