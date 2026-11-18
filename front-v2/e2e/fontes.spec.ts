@@ -167,6 +167,69 @@ test.describe('Tela Lista e Entrada de Fontes (#/projeto/:id/fontes)', () => {
     expect(erros).toEqual([])
   })
 
+  test('UI-21, UI-27c e UI-28: busca FTS5 em 1366x768 não esmaga ListaFontes, fechar antes de 220ms não reabre e Ir para Cortes sem seta dupla', async ({
+    page,
+  }) => {
+    const erros: string[] = []
+    page.on('pageerror', (erro) => erros.push(erro.message))
+
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.goto('/#/inicio')
+    await page.getByRole('button', { name: /Abrir Projeto Meu Canal de Cortes/i }).click()
+    await expect(page).toHaveURL(/#\/projeto\/meu-canal-de-cortes\/fontes$/)
+
+    // UI-28: "Ir para Cortes" sem seta dupla no texto
+    const btnIrCortes = page.getByRole('button', { name: 'Ir para Cortes' }).first()
+    await expect(btnIrCortes).toBeVisible()
+    expect((await btnIrCortes.innerText()).trim()).toBe('Ir para Cortes')
+
+    // UI-21: Ctrl+F + Enter + Fechar antes de 220 ms não reabre a gaveta e limpa o termo
+    await page.keyboard.press('Control+f')
+    const buscaGlobal = page.getByRole('searchbox', {
+      name: /Buscar falas em todas as Transcrições do Projeto/i,
+    })
+    await expect(buscaGlobal).toBeFocused()
+    await buscaGlobal.fill('frase 142')
+    await buscaGlobal.press('Enter')
+
+    const gaveta = page.getByRole('complementary', { name: /Resultados da busca/i })
+    await expect(gaveta).toBeVisible()
+    await gaveta.getByRole('button', { name: 'Fechar busca' }).click()
+    await expect(gaveta).toBeHidden()
+    await expect(buscaGlobal).toHaveValue('')
+    await expect(buscaGlobal).toBeFocused()
+
+    await page.waitForTimeout(320)
+    await expect(gaveta).toBeHidden()
+
+    // UI-27c: em 1366x768, GavetaBuscaFts ocupa a coluna direita sem esmagar ListaFontes
+    await buscaGlobal.fill('frase 142')
+    await buscaGlobal.press('Enter')
+    await expect(gaveta).toBeVisible()
+
+    const listaFontes = page.locator('section[aria-label="Fontes do Projeto"]')
+    await expect(listaFontes).toBeHidden()
+
+    const boxGaveta = await gaveta.boundingBox()
+    expect(boxGaveta).not.toBeNull()
+    expect(boxGaveta!.width).toBeGreaterThanOrEqual(600)
+
+    const rolagem = await page.evaluate(() => ({
+      altura: document.documentElement.scrollHeight <= window.innerHeight,
+      largura: document.documentElement.scrollWidth <= window.innerWidth,
+    }))
+    expect(rolagem).toEqual({ altura: true, largura: true })
+
+    await gaveta.getByRole('button', { name: 'Fechar busca' }).click()
+    await expect(gaveta).toBeHidden()
+    await expect(listaFontes).toBeVisible()
+    const boxLista = await listaFontes.boundingBox()
+    expect(boxLista).not.toBeNull()
+    expect(boxLista!.width).toBeGreaterThanOrEqual(700)
+
+    expect(erros).toEqual([])
+  })
+
   test('UI-17 e UI-12/UI-18a no fluxo URL/VOD + JIT em 1440x900', async ({ page }) => {
     const erros: string[] = []
     page.on('pageerror', (erro) => erros.push(erro.message))

@@ -475,27 +475,106 @@ describe('Tela Fontes (#/projeto/:id/fontes)', () => {
     expect(window.location.hash).toBe('#/projeto/demo/fontes/1?frase=142&row=142')
   })
 
-  it('renderiza <ListaVirtual> (role="listbox") quando há mais de 30 Fontes', async () => {
-    const muitas: FonteProjeto[] = Array.from({ length: 32 }, (_, idx) => ({
-      id: idx + 1,
-      path: `/videos/Live_${idx + 1}.mp4`,
-      status: 'available',
-      available: true,
-      verified: true,
-      audio_track: 1,
-      origin_url: null,
-      language: 'pt',
-      permission: { status: 'none' },
-      metadata: { format: { duration: '600.0' }, streams: [] },
-    }))
-    mockBase({ fontes: muitas })
+  it('UI-21: fechar GavetaBuscaFts antes de 220ms após Enter cancela debounce, limpa termo e não reabre sozinha', async () => {
+    const user = userEvent.setup()
+    mockBase({
+      fontes: FONTES_MISTAS,
+      overrides: {
+        'transcription.search': () => [
+          {
+            transcript_id: 1,
+            source_id: 1,
+            source: 'Live_12_11_final.mp4',
+            sentence_id: 142,
+            start_us: 142_000_000,
+            end_us: 143_000_000,
+            row: 142,
+            snippet: [{ text: 'jogada', match: true }],
+          },
+        ],
+      },
+    })
 
     render(
       envolver(<Fontes projetoId="demo" projetoPath="/projetos/Demo.clipes" sub="fontes" store={store} />),
     )
 
-    const listbox = await screen.findByRole('listbox', { name: /Fontes do Projeto/i })
-    expect(listbox).toBeInTheDocument()
+    await screen.findByText('Live_12_11_final.mp4')
+
+    await user.keyboard('{Control>}f{/Control}')
+    const campoBusca = screen.getByRole('searchbox', {
+      name: /Buscar falas em todas as Transcrições do Projeto/i,
+    })
+    await user.type(campoBusca, 'jogada{Enter}')
+
+    const gaveta = await screen.findByRole('complementary', { name: /Resultados da busca/i })
+    await user.click(within(gaveta).getByRole('button', { name: 'Fechar busca' }))
+
+    expect(screen.queryByRole('complementary', { name: /Resultados da busca/i })).not.toBeInTheDocument()
+    expect(campoBusca).toHaveValue('')
+
+    // Aguarda mais que os 220 ms do debounce para garantir que não reabre nem refaz busca
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 320))
+    })
+
+    expect(screen.queryByRole('complementary', { name: /Resultados da busca/i })).not.toBeInTheDocument()
+    expect(chamarMock.mock.calls.filter(([cmd]) => cmd === 'transcription.search')).toHaveLength(1)
+  })
+
+  it('UI-25b: renderiza <ListaVirtual> com role="region" (sem listbox/option) quando há mais de 30 Fontes', async () => {
+    const origGetRect = HTMLElement.prototype.getBoundingClientRect
+    const origClientHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight')
+    HTMLElement.prototype.getBoundingClientRect = function () {
+      if (this.hasAttribute('data-index')) {
+        return { width: 600, height: 128, top: 0, left: 0, bottom: 128, right: 600, x: 0, y: 0, toJSON: () => ({}) }
+      }
+      return { width: 640, height: 600, top: 0, left: 0, bottom: 600, right: 640, x: 0, y: 0, toJSON: () => ({}) }
+    }
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get() {
+        return 600
+      },
+    })
+
+    try {
+      const muitas: FonteProjeto[] = Array.from({ length: 32 }, (_, idx) => ({
+        id: idx + 1,
+        path: `/videos/Live_${idx + 1}.mp4`,
+        status: 'available',
+        available: true,
+        verified: true,
+        audio_track: 1,
+        origin_url: null,
+        language: 'pt',
+        permission: { status: 'none' },
+        metadata: { format: { duration: '600.0' }, streams: [] },
+      }))
+      mockBase({ fontes: muitas })
+
+      render(
+        envolver(<Fontes projetoId="demo" projetoPath="/projetos/Demo.clipes" sub="fontes" store={store} />),
+      )
+
+      const regiaoLista = await screen.findByRole('region', { name: 'Lista de Fontes' })
+      expect(regiaoLista).toBeInTheDocument()
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+      expect(screen.queryByRole('option')).not.toBeInTheDocument()
+
+      const chksRenderizados = await within(regiaoLista).findAllByRole('checkbox', {
+        name: /Selecionar Live_\d+\.mp4 para lote/i,
+      })
+      expect(chksRenderizados.length).toBeGreaterThan(0)
+      for (const chk of chksRenderizados) {
+        expect(chk.closest('[role="option"]')).toBeNull()
+      }
+    } finally {
+      HTMLElement.prototype.getBoundingClientRect = origGetRect
+      if (origClientHeight) {
+        Object.defineProperty(HTMLElement.prototype, 'clientHeight', origClientHeight)
+      }
+    }
   })
 
   it('exibe exatamente um <h1> visível "Fontes e Transcrição" em Fontes e na sub-aba Lotes (UI-16 / WCAG)', async () => {

@@ -516,7 +516,7 @@ export function ListaFontes({
                 window.location.hash = `#/projeto/${encProjeto}/cortes?fonte=${fonte.id}`
               }}
             >
-              Ir para Cortes →
+              Ir para Cortes
             </Botao>
           )}
 
@@ -709,8 +709,8 @@ export function ListaFontes({
           total={fontesFiltradas.length}
           alturaItem={128}
           obterId={(f) => f.id}
-          ariaLabel="Fontes do Projeto"
-          papel="listbox"
+          ariaLabel="Lista de Fontes"
+          papel="region"
           className="min-h-0 flex-1"
           renderizarItem={(fonte) => (
             <div className="pb-2">{renderizarCardFonte(fonte)}</div>
