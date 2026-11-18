@@ -325,7 +325,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'transcription.groq.key.set') { groqKeyConfigured = true; return {configured:true} as T; }
     if (name === 'transcription.groq.key.remove') { groqKeyConfigured = false; return {configured:false} as T; }
     if (name === 'transcription.groq.key.test') return {ok:true} as T;
-    if (name === 'diagnostic.get') return { text: "Clipes: 0.1.0\nSistema operacional: indisponível" } as T;
+    if (name === 'diagnostic.get') return { text: "Clipes: 1.0.0\nSistema operacional: indisponível" } as T;
     if (name === 'projects.recent') return [] as T;
     if (name === 'projects.current') return (sourceTest ? { name:'Teste', path:'/test/Teste.clipes', id:'test-project' } : null) as T;
     if (name === 'projects.local_only.get') return { open: sourceTest, enabled: sourceTest && projectVetoMock } as T;

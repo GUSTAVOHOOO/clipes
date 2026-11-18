@@ -686,7 +686,7 @@ async function runSession1(ui, ctx) {
     location.reload();
   });
   const updateText = await ui.waitForDialog('Atualização disponível', 'dialog');
-  assert.match(updateText, /0\.1\.0/);
+  assert.match(updateText, /1\.0\.0/);
   assert.match(updateText, /0\.2\.0/);
   await ui.clickButton('Atualizar agora', { scopeSelector: '[role="dialog"]' });
   await ui.waitForText('Atualização instalada', '[role="dialog"]');
@@ -699,7 +699,7 @@ async function runSession1(ui, ctx) {
   await ui.shot('02-palette.png');
   await ui.clickPaletteOption('Sobre');
   await ui.waitForDialogClosed('Paleta de comandos');
-  const aboutText = await ui.waitForText('0.1.0', 'main');
+  const aboutText = await ui.waitForText('1.0.0', 'main');
   assert.match(aboutText, /Apache-2\.0/);
   await ui.shot('03-about.png');
 
@@ -782,7 +782,7 @@ async function runSession1(ui, ctx) {
   await ui.clickButton('Revisar relato');
 
   await ui.browser.waitUntil(
-    async () => /Clipes: 0\.1\.0/.test(await ui.fieldValue('Diagnóstico', { exact: true })),
+    async () => /Clipes: 1\.0\.0/.test(await ui.fieldValue('Diagnóstico', { exact: true })),
     { timeout: 10_000 },
   );
   const diagReal = await ui.fieldValue('Diagnóstico', { exact: true });
@@ -802,7 +802,7 @@ async function runSession1(ui, ctx) {
   assert.equal(e2eState.openedUrls.length, 1);
   const firstUrl = new URL(e2eState.openedUrls[0]);
   assert.equal(firstUrl.searchParams.get('template'), 'bug.yml');
-  assert.match(firstUrl.searchParams.get('body') ?? '', /Clipes: 0\.1\.0/);
+  assert.match(firstUrl.searchParams.get('body') ?? '', /Clipes: 1\.0\.0/);
 
   const hugeDiag = 'x'.repeat(9000);
   await ui.fillField('Diagnóstico', hugeDiag, { exact: true, bulk: true });

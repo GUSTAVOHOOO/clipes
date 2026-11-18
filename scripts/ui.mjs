@@ -34,7 +34,7 @@ try {
   await page.goto(url);
   const updateDialog = page.getByRole('dialog', { name: 'Atualização disponível' });
   await updateDialog.waitFor();
-  assert.match(await updateDialog.innerText(), /0\.1\.0/);
+  assert.match(await updateDialog.innerText(), /1\.0\.0/);
   assert.match(await updateDialog.innerText(), /Novidades de teste/);
   await updateDialog.getByRole('button', { name: 'Agora não' }).click();
   assert.equal(await updateDialog.count(), 0);
@@ -50,7 +50,7 @@ try {
   await page.screenshot({ path: 'shots/palette.png' });
   await page.getByRole('option', { name: /Sobre/ }).click();
   await page.getByRole('heading', { name: 'Sobre' }).waitFor();
-  assert.match(await page.locator('main').innerText(), /0\.1\.0/);
+  assert.match(await page.locator('main').innerText(), /1\.0\.0/);
   assert.match(await page.locator('main').innerText(), /Apache-2\.0/);
   await page.screenshot({ path: 'shots/about.png' });
   await page.getByRole('button', { name: 'Componentes' }).click();
