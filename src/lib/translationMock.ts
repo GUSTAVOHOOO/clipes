@@ -60,13 +60,19 @@ function hasTranslationScope(scope?: string): boolean {
 }
 
 function permissionStateOf(sourceId: number): { permitted: boolean; permissionError: { code: string; message: string } | null } {
-  if (flag('translation-nopermission')) {
-    return {
-      permitted: false,
-      permissionError: { code: 'translation_permission_required', message: 'A Permissão desta Fonte não inclui o escopo “tradução”.' },
-    };
+  const override = permissionOverrides.get(sourceId) ?? null;
+  if (!override) {
+    if (flag('translation-nopermission')) {
+      return {
+        permitted: false,
+        permissionError: { code: 'translation_permission_required', message: 'A Permissão desta Fonte não inclui o escopo “tradução”.' },
+      };
+    }
+    if (flag('source-test') || flag('editor-test')) {
+      return { permitted: true, permissionError: null };
+    }
   }
-  const resolved = permissionOverrides.get(sourceId) ?? hooks.getSourcePermission?.(sourceId) ?? null;
+  const resolved = override ?? hooks.getSourcePermission?.(sourceId) ?? null;
   if (resolved) {
     if (resolved.status !== 'granted') {
       return {
