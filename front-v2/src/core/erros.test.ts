@@ -259,4 +259,10 @@ describe('mapeador de erros (erros.ts)', () => {
     expect(oom.titulo).toContain('memória')
     expect(oom.recuperacao?.rota).toBe('#/config/componentes')
   })
+
+  it('mapeia source_busy em PT-BR com recuperação para a Fila de Jobs', () => {
+    const resultado = mensagemDeErro(new ErroCore('source_busy', 'job ativo'))
+    expect(resultado.titulo).toMatch(/Fonte/)
+    expect(resultado.recuperacao).toEqual({ rotulo: 'Abrir Fila de Jobs', acao: 'abrir-fila' })
+  })
 })
