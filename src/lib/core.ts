@@ -543,6 +543,7 @@ type MockCandidate = {
   chat: { ratio: number; reaction: string | null; atUs: number }[];
   profile: string;
   revision: number;
+  videoKind?: 'direct' | 'transformed';
 };
 type MockDecisionEntry = {
   candStart: number;
@@ -616,6 +617,7 @@ function buildCandidatesForRevision(
       chat: withChat ? [{ ratio: 3.1, reaction: 'laugh', atUs: 95_000_000 }] : [],
       profile: p0,
       revision,
+      videoKind,
     },
     {
       id: idBase + 2,
@@ -634,6 +636,7 @@ function buildCandidatesForRevision(
       chat: withChat ? [{ ratio: 2.4, reaction: null, atUs: 395_000_000 }] : [],
       profile: p0,
       revision,
+      videoKind,
     },
     {
       id: idBase + 3,
@@ -652,6 +655,7 @@ function buildCandidatesForRevision(
       chat: [],
       profile: 'legacy',
       revision,
+      videoKind,
     },
   ];
 }
@@ -738,8 +742,13 @@ function ensureSelectionDemoInitialized() {
 }
 
 // Revisão simulada (#55): Frases de 10 s (a Frase k vai de 10(k-1) s a 10k s), faixa de [minUs, maxUs] e pilha de decisões.
-type MockReview = { status: 'pending' | 'approved' | 'rejected'; start: number; end: number; origin: [number, number] };
+type MockReview = { status: 'pending' | 'approved' | 'rejected'; start: number; end: number; origin: [number, number]; videoKindOverride?: 'transformed' };
 const reviewMock = { items: new Map<number, MockReview>([[1, { status: 'pending', start: 10, end: 14, origin: [10, 14] }], [2, { status: 'pending', start: 40, end: 41, origin: [40, 41] }], [3, { status: 'pending', start: 200, end: 203, origin: [200, 203] }]]), history: [] as { id: number; before: MockReview }[] };
+function effectiveCandidateKind(id: number): 'direct' | 'transformed' {
+  const r = reviewMock.items.get(id);
+  if (r?.videoKindOverride === 'transformed') return 'transformed';
+  return selectionMock.run?.videoKind === 'transformed' ? 'transformed' : 'direct';
+}
 function mockMovesForRange(start: number, end: number, minUs: number, maxUs: number) {
   const ok = (s: number, e: number) => {
     const dur = (e - s + 1) * 10_000_000;
@@ -752,9 +761,8 @@ function mockMoves(r: MockReview) {
 }
 function mockItem(id: number) {
   const r = reviewMock.items.get(id)!;
-  return { candidate: id, status: r.status, adjusted: r.start !== r.origin[0] || r.end !== r.origin[1], startId: r.start, endId: r.end, startUs: (r.start - 1) * 10_000_000, endUs: r.end * 10_000_000, startText: `Primeira frase ${r.start} do Corte.`, endText: `Última frase ${r.end} do Corte.`, moves: mockMoves(r) };
+  return { candidate: id, status: r.status, adjusted: r.start !== r.origin[0] || r.end !== r.origin[1], videoKind: effectiveCandidateKind(id), startId: r.start, endId: r.end, startUs: (r.start - 1) * 10_000_000, endUs: r.end * 10_000_000, startText: `Primeira frase ${r.start} do Corte.`, endText: `Última frase ${r.end} do Corte.`, moves: mockMoves(r) };
 }
-
 function candidateStateInRun(c: MockCandidate, decisions: MockDecisionEntry[]) {
   let status: 'pending' | 'approved' | 'rejected' = 'pending';
   let startId = c.startId;
@@ -772,13 +780,13 @@ function candidateStateInRun(c: MockCandidate, decisions: MockDecisionEntry[]) {
   }
   return { status, startId, endId, adjusted };
 }
-
 function buildReviewItemForRun(c: MockCandidate, run: MockSelectionRun) {
   const st = candidateStateInRun(c, run.decisions);
   return {
     candidate: c.id,
     status: st.status,
     adjusted: st.adjusted,
+    videoKind: c.videoKind ?? run.videoKind,
     startId: st.startId,
     endId: st.endId,
     startUs: (st.startId - 1) * 10_000_000,
@@ -804,7 +812,7 @@ function findRunAndCandidateById(candidateId: number): { run: MockSelectionRun; 
 
 function selectionReviewMock(name: string, args: object): unknown {
   if (hasSearchFlag('source-test')) {
-    const a = args as { candidate?: number; decision?: 'approved' | 'rejected'; edge?: 'start' | 'end'; delta?: number };
+    const a = args as { candidate?: number; decision?: 'approved' | 'rejected'; edge?: 'start' | 'end'; delta?: number; videoKind?: unknown };
     const answer = (id: number | null) => ({ run: 1, item: id === null ? null : mockItem(id), canUndo: reviewMock.history.length > 0 });
     if (name === 'selection.review') return { run: 1, items: [...reviewMock.items.keys()].map(mockItem), canUndo: reviewMock.history.length > 0 };
     if (name === 'selection.undo') {
@@ -812,6 +820,19 @@ function selectionReviewMock(name: string, args: object): unknown {
       if (!last) throw { code: 'nothing_to_undo', message: 'Não há decisão para desfazer.' };
       reviewMock.items.set(last.id, last.before);
       return answer(last.id);
+    }
+    if (name === 'selection.candidate.set_kind') {
+      if (typeof a.candidate !== 'number' || !Number.isInteger(a.candidate)) {
+        throw { code: 'candidate_not_found', message: 'Candidato não encontrado.' };
+      }
+      if (a.videoKind !== 'transformed') {
+        throw { code: 'invalid_video_kind', message: 'Tipo de vídeo inválido: só é permitido converter para transformed (Vídeo transformado).' };
+      }
+      const target = reviewMock.items.get(a.candidate);
+      if (!target) throw { code: 'candidate_not_found', message: 'Candidato não encontrado.' };
+      target.videoKindOverride = 'transformed';
+      const item = mockItem(a.candidate);
+      return { ...answer(a.candidate), candidate: a.candidate, videoKind: item.videoKind };
     }
     const r = reviewMock.items.get(a.candidate ?? -1);
     if (!r) throw { code: 'candidate_not_found', message: 'Candidato não encontrado.' };
@@ -832,7 +853,7 @@ function selectionReviewMock(name: string, args: object): unknown {
   }
 
   ensureSelectionDemoInitialized();
-  const a = args as { run?: number; revision?: number; candidate?: number; decision?: 'approved' | 'rejected'; edge?: 'start' | 'end'; delta?: number };
+  const a = args as { run?: number; revision?: number; candidate?: number; decision?: 'approved' | 'rejected'; edge?: 'start' | 'end'; delta?: number; videoKind?: unknown };
   if (name === 'selection.review') {
     const r = typeof a.run === 'number' ? selectionRuns.get(a.run) : undefined;
     if (!r) throw { code: 'run_not_found', message: 'Execução de seleção não encontrada.' };
@@ -855,6 +876,25 @@ function selectionReviewMock(name: string, args: object): unknown {
       run: r.id,
       item: cand ? buildReviewItemForRun(cand, r) : null,
       canUndo: r.decisions.length > 0,
+    };
+  }
+  if (name === 'selection.candidate.set_kind') {
+    if (typeof a.candidate !== 'number' || !Number.isInteger(a.candidate)) {
+      throw { code: 'candidate_not_found', message: 'Candidato não encontrado.' };
+    }
+    if (a.videoKind !== 'transformed') {
+      throw { code: 'invalid_video_kind', message: 'Tipo de vídeo inválido: só é permitido converter para transformed (Vídeo transformado).' };
+    }
+    const foundKind = findRunAndCandidateById(a.candidate);
+    if (!foundKind) throw { code: 'candidate_not_found', message: 'Candidato não encontrado.' };
+    foundKind.candidate.videoKind = 'transformed';
+    const item = buildReviewItemForRun(foundKind.candidate, foundKind.run);
+    return {
+      run: foundKind.run.id,
+      candidate: foundKind.candidate.id,
+      videoKind: item.videoKind,
+      item,
+      canUndo: foundKind.run.decisions.length > 0,
     };
   }
 
@@ -1163,7 +1203,7 @@ function selectionMockDispatch(name: string, args: object): unknown {
       if (run) { run.redone = true; run.state = 'completed'; run.cancelled = false; }
       return { run: 1, windows: [2] };
     }
-    if (name === 'selection.review' || name === 'selection.decide' || name === 'selection.adjust' || name === 'selection.undo') return selectionReviewMock(name, args);
+    if (name === 'selection.review' || name === 'selection.decide' || name === 'selection.adjust' || name === 'selection.undo' || name === 'selection.candidate.set_kind') return selectionReviewMock(name, args);
     if (name === 'selection.get' && run) {
       run.ticks += 1;
       const failing = !run.redone && !run.cancelled && run.ticks > 1;
@@ -1175,9 +1215,9 @@ function selectionMockDispatch(name: string, args: object): unknown {
       const done = states.filter(s => s === 'completed').length;
       const withChat = selectionFlag('selection-chat');
       const candidates = run.ticks === 1 && !run.cancelled ? [] : [
-        { id: 1, rank: 0, startId: 10, endId: 14, startUs: 90_000_000, endUs: 140_000_000, axes: selectionAxes([9, 8, 7, 9, 8], run.videoKind), total: 8.35, title: 'A virada do jogo', windows: [0, 1], adjusted: false, adjust: null, chat: withChat ? [{ ratio: 3.1, reaction: 'laugh', atUs: 95_000_000 }] : [], profile: made([0, 1]), revision: run.revision ?? 1 },
-        { id: 2, rank: 1, startId: 40, endId: 41, startUs: 390_000_000, endUs: 410_000_000, axes: selectionAxes([8, 6, 7, 9, 5], run.videoKind), total: 7.1, title: '', windows: [0], adjusted: true, adjust: { extendedAfter: 1 }, chat: withChat ? [{ ratio: 2.4, reaction: null, atUs: 395_000_000 }] : [], profile: made([0]), revision: run.revision ?? 1 },
-        { id: 3, rank: 2, startId: 200, endId: 203, startUs: 1_990_000_000, endUs: 2_030_000_000, axes: selectionAxes([4, 4, 4, 4, 4], run.videoKind), total: 4, title: 'Piada longa', windows: [2], adjusted: true, adjust: { trimmedEnd: 3 }, chat: [], profile: made([2]), revision: run.revision ?? 1 },
+        { id: 1, rank: 0, startId: 10, endId: 14, startUs: 90_000_000, endUs: 140_000_000, axes: selectionAxes([9, 8, 7, 9, 8], run.videoKind), total: 8.35, title: 'A virada do jogo', windows: [0, 1], adjusted: false, adjust: null, chat: withChat ? [{ ratio: 3.1, reaction: 'laugh', atUs: 95_000_000 }] : [], profile: made([0, 1]), revision: run.revision ?? 1, videoKind: effectiveCandidateKind(1) },
+        { id: 2, rank: 1, startId: 40, endId: 41, startUs: 390_000_000, endUs: 410_000_000, axes: selectionAxes([8, 6, 7, 9, 5], run.videoKind), total: 7.1, title: '', windows: [0], adjusted: true, adjust: { extendedAfter: 1 }, chat: withChat ? [{ ratio: 2.4, reaction: null, atUs: 395_000_000 }] : [], profile: made([0]), revision: run.revision ?? 1, videoKind: effectiveCandidateKind(2) },
+        { id: 3, rank: 2, startId: 200, endId: 203, startUs: 1_990_000_000, endUs: 2_030_000_000, axes: selectionAxes([4, 4, 4, 4, 4], run.videoKind), total: 4, title: 'Piada longa', windows: [2], adjusted: true, adjust: { trimmedEnd: 3 }, chat: [], profile: made([2]), revision: run.revision ?? 1, videoKind: effectiveCandidateKind(3) },
       ];
       return { run: { id: 1, state: run.state, videoKind: run.videoKind, summary: { energy: selectionFlag('selection-energy') ? { measured: true, high: 4, peak: 2 } : { measured: false }, chat: selectionFlag('selection-chat') ? { available: true, peaks: 3 } : { available: false } }, weights: weightsOf(run.videoKind), budgetPause: null, createdAt: '2026-11-15T12:00:00Z', counts: { windows: 4, completed: done, failed: states.filter(s => s === 'failed' || s === 'cancelled').length, kept: candidates.length, discarded: 0, merged: 1 } }, windows, candidates };
     }
@@ -1281,7 +1321,7 @@ function selectionMockDispatch(name: string, args: object): unknown {
   }
 
   ensureSelectionDemoInitialized();
-  if (name === 'selection.review' || name === 'selection.decide' || name === 'selection.adjust' || name === 'selection.undo') {
+  if (name === 'selection.review' || name === 'selection.decide' || name === 'selection.adjust' || name === 'selection.undo' || name === 'selection.candidate.set_kind') {
     return selectionReviewMock(name, args);
   }
 
@@ -1422,7 +1462,6 @@ function selectionMockDispatch(name: string, args: object): unknown {
     emitirProgressoMock({ job: `selection-${runObj.id}`, project: active?.id ?? null, stage: 'selection:done', percentage: 100, message: 'Seleção cancelada', error: null });
     return null;
   }
-
   if (name === 'selection.resume') {
     const runObj = typeof asked.run === 'number' ? selectionRuns.get(asked.run) : undefined;
     if (!runObj) throw { code: 'run_not_found', message: 'Execução de seleção não encontrada.' };
@@ -1694,7 +1733,16 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       const candidateHit = typeof a.candidate_id === 'number' && !hasSearchFlag('source-test')
         ? findRunAndCandidateById(a.candidate_id)
         : null;
-      const videoKind = candidateHit?.run.videoKind ?? selectionMock.run?.videoKind ?? latestRun?.videoKind ?? channelProfileMock.videoKind;
+      const candOverride = typeof a.candidate_id === 'number' && hasSearchFlag('source-test')
+        ? reviewMock.items.get(a.candidate_id)?.videoKindOverride
+        : undefined;
+      const videoKind =
+        candOverride ??
+        candidateHit?.candidate.videoKind ??
+        candidateHit?.run.videoKind ??
+        selectionMock.run?.videoKind ??
+        latestRun?.videoKind ??
+        channelProfileMock.videoKind;
       const hasDirect = videoKind === 'direct';
       const hasTransformed = videoKind === 'transformed';
       if (scope === 'single') {
@@ -1803,7 +1851,14 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         title: b.title,
         durationUs: generated.find(g => g.blockId === b.id)?.durationUs ?? null,
       }));
-      const kind = selectionMock.run?.videoKind ?? channelProfileMock.videoKind;
+      const candHit = !hasSearchFlag('source-test') ? findRunAndCandidateById(candidate) : null;
+      const kind =
+        (hasSearchFlag('source-test')
+          ? reviewMock.items.get(candidate)?.videoKindOverride
+          : candHit?.candidate.videoKind) ??
+        candHit?.run.videoKind ??
+        selectionMock.run?.videoKind ??
+        channelProfileMock.videoKind;
       const handled = packagingMockDispatch(name, args, {
         videoKind: kind === 'transformed' ? 'transformed' : 'direct',
         scriptAllowed: scriptDoc.narrationAllowed,

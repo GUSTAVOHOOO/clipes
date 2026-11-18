@@ -181,12 +181,9 @@ pub(crate) fn read_latest_script_in(
     c: &Connection,
     cut: &crate::selection::ApprovedCut,
 ) -> rusqlite::Result<Result<Option<LatestScript>, CoreError>> {
-    let kind: String = c.query_row(
-        "SELECT video_kind FROM selection_runs WHERE id=?1",
-        [cut.run],
-        |r| r.get(0),
-    )?;
-    if kind != "transformed" {
+    let is_transformed = crate::selection::effective_video_kind(c, cut.candidate)?
+        == Some(crate::selection::cut::VideoKind::Transformed);
+    if !is_transformed {
         return Ok(Err(error(
             "script_requires_transformed",
             "A Narração por Roteiro só existe para Cortes do Vídeo transformado.",

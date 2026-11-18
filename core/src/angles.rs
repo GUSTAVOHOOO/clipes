@@ -176,13 +176,10 @@ fn candidate_arg(v: &Value) -> Result<i64, CoreError> {
 }
 
 pub(crate) fn transformed(cut: &ApprovedCut) -> Result<bool, CoreError> {
-    projects::with_reader(|c| {
-        c.query_row(
-            "SELECT video_kind='transformed' FROM selection_runs WHERE id=?1",
-            [cut.run],
-            |r| r.get(0),
-        )
-    })
+    Ok(
+        projects::with_reader(|c| crate::selection::effective_video_kind(c, cut.candidate))?
+            == Some(crate::selection::cut::VideoKind::Transformed),
+    )
 }
 
 fn context(v: &Value) -> Result<ApprovedCut, CoreError> {

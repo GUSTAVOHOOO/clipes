@@ -47,6 +47,7 @@ struct Candidate {
     id: i64,
     start_id: i64,
     end_id: i64,
+    video_kind: super::VideoKind,
 }
 
 struct Decision {
@@ -87,12 +88,14 @@ fn read_candidate(c: &Connection, id: i64) -> rusqlite::Result<Option<(i64, Cand
         "SELECT run_id,id,start_id,end_id FROM selection_candidates WHERE id=?1",
         [id],
         |r| {
+            let cand_id: i64 = r.get(1)?;
             Ok((
                 r.get(0)?,
                 Candidate {
-                    id: r.get(1)?,
+                    id: cand_id,
                     start_id: r.get(2)?,
                     end_id: r.get(3)?,
+                    video_kind: super::effective_video_kind(c, cand_id)?.unwrap_or_default(),
                 },
             ))
         },
@@ -210,13 +213,18 @@ fn item(
         index_of(frases, state.start_id),
         index_of(frases, state.end_id),
     ) else {
-        return json!({"candidate": candidate.id, "status": state.status});
+        return json!({
+            "candidate": candidate.id,
+            "status": state.status,
+            "videoKind": candidate.video_kind.as_str(),
+        });
     };
     let can = |edge, delta| moved(frases, (start, end), edge, delta, range).is_ok();
     json!({
         "candidate": candidate.id,
         "status": state.status,
         "adjusted": state.adjusted,
+        "videoKind": candidate.video_kind.as_str(),
         "startId": state.start_id, "endId": state.end_id,
         "startUs": frases[start].start_us, "endUs": frases[end].end_us,
         "startText": excerpt(&frases[start].text), "endText": excerpt(&frases[end].text),
@@ -243,10 +251,12 @@ fn snapshot(run: i64) -> Result<Snapshot, CoreError> {
             "SELECT id,start_id,end_id FROM selection_candidates WHERE run_id=?1 AND revision=(SELECT revision FROM selection_runs WHERE id=?1) ORDER BY rank",
         )?;
         let rows = q.query_map([run], |r| {
+            let cand_id: i64 = r.get(0)?;
             Ok(Candidate {
-                id: r.get(0)?,
+                id: cand_id,
                 start_id: r.get(1)?,
                 end_id: r.get(2)?,
+                video_kind: super::effective_video_kind(c, cand_id)?.unwrap_or(row.kind),
             })
         })?;
         Ok((
@@ -299,6 +309,7 @@ fn outcome(run: i64, candidate: Option<i64>) -> CommandResult {
 
 /// Corte aprovado na revisão, com a identidade estável do candidato e as bordas atuais (#68).
 pub(crate) struct ApprovedCut {
+    pub candidate: i64,
     pub run: i64,
     pub transcript: i64,
     /// Identidade `(Frase inicial, Frase final)` do candidato como o #53 o propôs.
@@ -333,6 +344,7 @@ pub(crate) fn approved_cut(id: i64) -> Result<ApprovedCut, CoreError> {
         ));
     };
     Ok(ApprovedCut {
+        candidate: id,
         run,
         transcript: read_run(run)?.transcript,
         identity: (candidate.start_id, candidate.end_id),
@@ -479,10 +491,47 @@ fn cmd_undo(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     outcome(run, candidate)
 }
 
+/// `selection.candidate.set_kind {candidate, videoKind}`: converte um Corte direto individual
+/// em Vídeo transformado (`videoKind: "transformed"`). Idempotente se já for transformado;
+/// voltar para `direct` não é suportado (`invalid_video_kind`).
+fn cmd_set_kind(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let id = candidate_arg(&v)?;
+    match v.get("videoKind").and_then(Value::as_str) {
+        Some("transformed") => {}
+        _ => {
+            return Err(error(
+                "invalid_video_kind",
+                "Tipo de vídeo inválido: só é permitido converter para transformed (Vídeo transformado).",
+            ))
+        }
+    }
+    let run = candidate_run(id)?;
+    let snap = snapshot(run)?;
+    let candidate = snap
+        .candidates
+        .iter()
+        .find(|c| c.id == id)
+        .ok_or_else(not_found)?;
+    if candidate.video_kind != super::VideoKind::Transformed {
+        projects::with_writer(|c| {
+            c.execute(
+                "UPDATE selection_candidates SET video_kind='transformed' WHERE id=?1",
+                [id],
+            )?;
+            Ok(())
+        })?;
+    }
+    let mut out = outcome(run, Some(id))?;
+    out["candidate"] = json!(id);
+    out["videoKind"] = json!(super::VideoKind::Transformed.as_str());
+    Ok(out)
+}
+
 inventory::submit! { CommandRegistration { name: "selection.review", execute: cmd_review } }
 inventory::submit! { CommandRegistration { name: "selection.decide", execute: cmd_decide } }
 inventory::submit! { CommandRegistration { name: "selection.adjust", execute: cmd_adjust } }
 inventory::submit! { CommandRegistration { name: "selection.undo", execute: cmd_undo } }
+inventory::submit! { CommandRegistration { name: "selection.candidate.set_kind", execute: cmd_set_kind } }
 
 #[cfg(test)]
 mod tests {

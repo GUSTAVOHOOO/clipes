@@ -180,15 +180,11 @@ pub fn format_block(entries: &[ChapterEntry], lang: Lang) -> String {
 /// Resolve a elegibilidade e a sugestão de capítulos de um candidato aprovado.
 /// Retorna `applicable: false` para Corte direto (não gera capítulos).
 pub fn resolve(candidate_id: i64, lang: Lang) -> Result<ChapterResolution, CoreError> {
-    let cut = crate::selection::approved_cut(candidate_id)?;
-    let video_kind: String = projects::with_reader(|c| {
-        c.query_row(
-            "SELECT video_kind FROM selection_runs WHERE id=?1",
-            [cut.run],
-            |r| r.get(0),
-        )
-    })?;
-    if video_kind != "transformed" {
+    let _cut = crate::selection::approved_cut(candidate_id)?;
+    let is_transformed =
+        projects::with_reader(|c| crate::selection::effective_video_kind(c, candidate_id))?
+            == Some(crate::selection::cut::VideoKind::Transformed);
+    if !is_transformed {
         return Ok(ChapterResolution {
             applicable: false,
             status: "not_transformed",

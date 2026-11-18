@@ -340,4 +340,15 @@ describe('mapeador de erros (erros.ts)', () => {
     const invalidProfile = mensagemDeErro(new ErroCore('invalid_profile', ''))
     expect(invalidProfile.recuperacao?.rota).toBe('#/config/provedores')
   })
+
+  it('mapeia erros de conversão do tipo de vídeo (candidate_not_found e invalid_video_kind) em PT-BR com vocabulário do GLOSSARY', () => {
+    const naoEncontrado = mensagemDeErro(new ErroCore('candidate_not_found', 'Candidato não encontrado.'))
+    expect(naoEncontrado.titulo).not.toBe('Algo deu errado nesta operação.')
+    expect(naoEncontrado.titulo).toMatch(/Corte|candidato/i)
+
+    const tipoInvalido = mensagemDeErro(new ErroCore('invalid_video_kind', 'Tipo inválido.'))
+    expect(tipoInvalido.titulo).not.toBe('Algo deu errado nesta operação.')
+    expect(tipoInvalido.titulo).toContain('Corte direto')
+    expect(tipoInvalido.titulo).toContain('Vídeo transformado')
+  })
 })
