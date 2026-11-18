@@ -901,8 +901,23 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'jobs.preview') {
       const active = getActiveProjectMock();
       if (!active) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
-      const sid = (args as { source_id?: unknown }).source_id;
-      if (typeof sid !== 'number') throw { code: 'preview_failed', message: 'source_id inválido.' };
+      const raw = args as { sourceId?: unknown; source_id?: unknown };
+      const parsePositiveId = (val: unknown, label: string): number | null => {
+        if (val === undefined || val === null) return null;
+        if (typeof val !== 'number' || !Number.isInteger(val) || val <= 0) {
+          throw { code: 'invalid_input', message: `${label} inválido.` };
+        }
+        return val;
+      };
+      const camel = parsePositiveId(raw.sourceId, 'sourceId');
+      const snake = parsePositiveId(raw.source_id, 'source_id');
+      if (camel !== null && snake !== null && camel !== snake) {
+        throw { code: 'invalid_input', message: 'sourceId e source_id informados com valores diferentes.' };
+      }
+      const sid = camel ?? snake;
+      if (sid === null) {
+        throw { code: 'invalid_input', message: 'Informe sourceId ou source_id.' };
+      }
       const src = sourceItems.find((s) => s.id === sid);
       if (!src) throw { code: 'preview_failed', message: 'Fonte não encontrada.' };
       return {
@@ -910,6 +925,11 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         thumbnails: [
           `/test/cache/preview/${sid}/thumb-001.jpg`,
           `/test/cache/preview/${sid}/thumb-002.jpg`,
+        ],
+        waveformKey: `preview-waveform/${sid}`,
+        thumbnailKeys: [
+          `preview-thumb/${sid}-0`,
+          `preview-thumb/${sid}-1`,
         ],
       } as T;
     }
