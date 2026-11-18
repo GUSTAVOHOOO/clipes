@@ -9,6 +9,7 @@ export type AcaoRecuperacao =
   | 'relocalizar-fonte'
   | 'aceitar-termos'
   | 'recarregar'
+  | 'importar-local'
 
 export type Recuperacao = {
   rotulo: string
@@ -73,6 +74,24 @@ const entradaEspacoInsuficiente: MensagemErro = {
 const entradaRede: MensagemErro = {
   titulo: 'Falha de conexão ou endereço não usa HTTPS seguro para envio remoto.',
   recuperacao: { rotulo: 'Configurar Provedores', rota: '#/config/provedores' },
+}
+
+const entradaImportarLocal: MensagemErro = {
+  titulo: 'Este vídeo tem restrição de idade no YouTube e não pode ser baixado pelo app.',
+  recuperacao: { rotulo: 'Importar arquivo local', acao: 'importar-local' },
+}
+
+const entradaDownloadUrl: MensagemErro = {
+  titulo: 'Não foi possível baixar o vídeo por esta URL. Verifique o link ou atualize o yt-dlp em Componentes.',
+  recuperacao: { rotulo: 'Abrir Componentes', rota: '#/config/componentes' },
+}
+
+const entradaArquivoFonte: MensagemErro = {
+  titulo: 'Não foi possível ler este arquivo de vídeo. Verifique se ele não está corrompido ou em uso.',
+}
+
+const entradaIdiomaBloqueado: MensagemErro = {
+  titulo: 'O idioma não pode ser alterado porque a Transcrição desta Fonte já começou ou foi concluída.',
 }
 
 /** Tabela central de tradução `CoreError.code` → mensagem humana e recuperação (§6). */
@@ -150,6 +169,90 @@ export const TABELA_ERROS: Record<string, MensagemErro> = {
   network: entradaRede,
   insecure_endpoint: entradaRede,
   invalid_endpoint: entradaRede,
+  js_runtime_missing: {
+    titulo: 'Falta o componente deno para resolver este vídeo do YouTube.',
+    recuperacao: { rotulo: 'Instalar deno', rota: '#/config/componentes', acao: 'instalar-componente' },
+  },
+  age_restricted: entradaImportarLocal,
+  login_required: {
+    titulo: 'Este vídeo exige login no YouTube. O Clipes não usa seus cookies nem sua conta.',
+    recuperacao: { rotulo: 'Importar arquivo local', acao: 'importar-local' },
+  },
+  sabr_unavailable: entradaDownloadUrl,
+  download_failed: entradaDownloadUrl,
+  invalid_url: {
+    titulo: 'Cole um endereço válido começando com http:// ou https://.',
+  },
+  source_unavailable: entradaArquivoFonte,
+  probe_failed: entradaArquivoFonte,
+  invalid_source: entradaArquivoFonte,
+  copy_exists: {
+    titulo: 'Já existe um arquivo com este nome dentro da pasta do Projeto.',
+  },
+  transcription_busy: entradaIdiomaBloqueado,
+  transcript_complete: entradaIdiomaBloqueado,
+  transcript_partial: entradaIdiomaBloqueado,
+  uncertain_job: {
+    titulo: 'Esta Fonte tem uma chamada paga com resultado incerto. Resolva na Fila de Jobs antes de retomar o item.',
+    recuperacao: { rotulo: 'Abrir Fila de Jobs', acao: 'abrir-fila' },
+  },
+  transcription_uncertain: {
+    titulo: 'Uma chamada paga do Groq ficou sem confirmação de resposta. Resolva na Fila de Jobs antes de continuar.',
+    recuperacao: { rotulo: 'Abrir Fila de Jobs', acao: 'abrir-fila' },
+  },
+  invalid_batch: {
+    titulo: 'Lote inválido: selecione de 1 a 500 Fontes e informe uma faixa de duração válida.',
+  },
+  invalid_budget: {
+    titulo: 'Valor de orçamento inválido. Informe um limite maior ou igual a zero.',
+  },
+  invalid_batch_state: {
+    titulo: 'Este lote não permite esta ação no estado atual.',
+  },
+  invalid_item_state: {
+    titulo: 'Esta Fonte do lote não está pausada para retomada.',
+  },
+  out_of_memory: {
+    titulo: 'Faltou memória de vídeo/RAM durante a transcrição. Tente usar o modo CPU ou fechar outros programas.',
+    recuperacao: { rotulo: 'Ajustar hardware', rota: '#/config/componentes' },
+  },
+  groq_key_missing: {
+    titulo: 'Chave da API do Groq ausente ou inválida.',
+    recuperacao: { rotulo: 'Configurar chave do Groq', rota: '#/config/provedores' },
+  },
+  audio_too_large: {
+    titulo: 'O trecho de áudio excede o limite aceito pelo Groq. Use o Motor Local para esta Fonte.',
+  },
+  groq_http: {
+    titulo: 'O serviço do Groq retornou um erro na requisição. Tente retomar do último bloco salvo ou usar o Motor Local.',
+  },
+  invalid_correction: {
+    titulo: 'Digite entre 1 e 200 caracteres válidos para corrigir a palavra.',
+  },
+  invalid_permission: {
+    titulo: 'Informe se há Permissão registrada ou preencha quem autorizou, onde e o escopo.',
+  },
+  invalid_language: {
+    titulo: 'Idioma não suportado para esta Fonte.',
+  },
+  invalid_track: {
+    titulo: 'A faixa de áudio selecionada não é válida para este arquivo.',
+  },
+  source_missing: {
+    titulo: 'A Fonte selecionada não foi encontrada neste Projeto.',
+  },
+  transcript_missing: {
+    titulo: 'Esta Fonte ainda não possui Transcrição gravada.',
+  },
+  word_missing: {
+    titulo: 'A palavra selecionada não foi encontrada na Transcrição.',
+  },
+  nothing_to_undo: {
+    titulo: 'Não há correções para desfazer no Projeto.',
+  },
+  nothing_to_redo: {
+    titulo: 'Não há correções desfeitas para refazer no Projeto.',
+  },
 }
 
 const MENSAGEM_DESCONHECIDA: MensagemErro = {

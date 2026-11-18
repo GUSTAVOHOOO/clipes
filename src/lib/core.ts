@@ -112,11 +112,15 @@ const denoMock = { installed: false };
 const pocketTtsMock = { installed: false };
 const uvMock = { installed: false };
 const activeComponentJobs = new Map<string, { cancel: () => void }>();
+const activeSourceJobs = new Map<string, { cancel: () => void }>();
+const activeUrlJobs = new Map<string, { cancel: () => void }>();
 
 function runCancellableSteps(
   jobId: string,
   steps: Array<{ stage: string; percentage: number; message: string; delayMs?: number }>,
   onComplete: () => void,
+  registry: Map<string, { cancel: () => void }> = activeComponentJobs,
+  projectId: string | null = null,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     let cancelled = false;
@@ -125,15 +129,23 @@ function runCancellableSteps(
       if (cancelled) return;
       cancelled = true;
       if (timer !== null) clearTimeout(timer);
-      activeComponentJobs.delete(jobId);
+      registry.delete(jobId);
+      emitirProgressoMock({
+        job: jobId,
+        project: projectId,
+        stage: 'failed',
+        percentage: 0,
+        message: 'Operação cancelada.',
+        error: { code: 'cancelled', message: 'Operação cancelada.' },
+      });
       reject({ code: 'cancelled', message: 'Operação cancelada.' });
     };
-    activeComponentJobs.set(jobId, { cancel });
+    registry.set(jobId, { cancel });
 
     const runStep = (idx: number) => {
       if (cancelled) return;
       if (idx >= steps.length) {
-        activeComponentJobs.delete(jobId);
+        registry.delete(jobId);
         onComplete();
         resolve();
         return;
@@ -141,7 +153,7 @@ function runCancellableSteps(
       const step = steps[idx];
       emitirProgressoMock({
         job: jobId,
-        project: null,
+        project: projectId,
         stage: step.stage,
         percentage: step.percentage,
         message: step.message,
@@ -205,7 +217,7 @@ type MockCleanupInfo = {
   warning: string | null;
 };
 const narrationGenerated = new Map<number, { blockId: number; voiceId: string; modelId: string; engineId: string; trimmed?: boolean; cleanupEnabled?: boolean; cleanupReady?: boolean; durationUs: number; alignment: MockBlockAlignment }[]>();
-const hasSourceTest = () => typeof location !== 'undefined' && new URLSearchParams(location.search).has('source-test');
+const hasSourceTest = () => hasSearchFlag('source-test');
 const sourceTest = hasSourceTest();
 const componentsMissing = typeof location !== 'undefined' && new URLSearchParams(location.search).has('components-missing');
 const assistantTestInit = hasSearchFlag('assistant-test');
@@ -217,9 +229,11 @@ const ytdlpMock = { installed: !componentsMissing, version: 'test' };
 let workerInstalledMock = !componentsMissing;
 uvMock.installed = !componentsMissing;
 const budgetTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('budget-test');
-const transcriptTest = sourceTest && typeof location !== 'undefined' && new URLSearchParams(location.search).has('transcript-test');
-const hardwareCpuMode = typeof location !== 'undefined' && new URLSearchParams(location.search).has('hardware-cpu');
-const hardwareProbeFallbackMode = typeof location !== 'undefined' && new URLSearchParams(location.search).has('hardware-probe-fallback');
+const isTranscriptTest = () => hasSearchFlag('transcript-test');
+const isHardwareCpuMode = () => hasSearchFlag('hardware-cpu');
+const isHardwareProbeFallbackMode = () => hasSearchFlag('hardware-probe-fallback');
+const hardwareCpuMode = isHardwareCpuMode();
+const hardwareProbeFallbackMode = isHardwareProbeFallbackMode();
 // Transcrição simulada: a Frase n tem as palavras n*10 (“Frase”) e n*10+1 (“n”); correções, desfazer e refazer valem por Fonte e posição.
 let mockProxyPolls = 0;
 const mockCorrected = new Map<string, string>();
@@ -230,10 +244,30 @@ const mockFold = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f
 function mockWords(source: number, id: number) { return [0, 1].map(k => { const position = id * 10 + k; const value = mockCorrected.get(source + ':' + position); return { position, text: value ?? mockOriginal(position), corrected: value !== undefined, start_us: id * 1_000_000 + k * 500_000 }; }); }
 function mockApply(source: number, position: number, value: string | null) { if (value === null) mockCorrected.delete(source + ':' + position); else mockCorrected.set(source + ':' + position, value); }
 function mockStep(source: number, position: number, changed: boolean) { const value = mockCorrected.get(source + ':' + position); return { changed, source_id: source, transcript_id: 1, position, sentence_id: Math.floor(position / 10), text: ' ' + (value ?? mockOriginal(position)), corrected: value !== undefined, can_undo: mockDone.length > 0, can_redo: mockUndone.length > 0 }; }
-let sourceItems = [
-  { id: 1, path: '/test/changed.mp4', status: 'changed', available: false, verified: false, language: 'pt', permission: {status:'none'} },
-  { id: 2, path: '/test/offline.mp4', status: 'offline', available: false, verified: false, language: 'pt', permission: {status:'none'} },
-  { id: 3, path: '/test/mismatch.mp4', status: 'changed', available: false, verified: true, language: 'pt', permission: {status:'none'} },
+const makeSourceMetadata = (duration = '3600.0') => ({
+  format: { duration },
+  streams: [
+    { index: 0, codec_type: 'video', codec_name: 'h264', width: 1920, height: 1080, avg_frame_rate: '60/1' },
+    { index: 1, codec_type: 'audio', codec_name: 'aac', tags: { title: 'Mic OBS', language: 'por' } },
+    { index: 2, codec_type: 'audio', codec_name: 'aac', tags: { title: 'Jogo', language: 'por' } },
+  ],
+});
+type SourceMockItem = {
+  id: number;
+  path: string;
+  status: 'available' | 'offline' | 'changed';
+  available: boolean;
+  verified: boolean;
+  audio_track: number;
+  origin_url: string | null;
+  language: string;
+  permission: { status: 'none' } | { status: 'granted'; who: string; where: string; scope: string };
+  metadata: ReturnType<typeof makeSourceMetadata>;
+};
+let sourceItems: SourceMockItem[] = [
+  { id: 1, path: '/test/changed.mp4', status: 'changed', available: false, verified: false, audio_track: 1, origin_url: null, language: 'pt', permission: { status: 'none' }, metadata: makeSourceMetadata('3600.0') },
+  { id: 2, path: '/test/offline.mp4', status: 'offline', available: false, verified: false, audio_track: 1, origin_url: null, language: 'pt', permission: { status: 'none' }, metadata: makeSourceMetadata('6600.0') },
+  { id: 3, path: '/test/mismatch.mp4', status: 'changed', available: false, verified: true, audio_track: 1, origin_url: null, language: 'pt', permission: { status: 'none' }, metadata: makeSourceMetadata('1800.0') },
 ];
 let urlSettingsMock = {terms_accepted:false, download_dir:'/test/downloads'};
 let jobItems = [
@@ -245,8 +279,34 @@ let jobItems = [
     { id: 5, kind: 'ai:script', state: 'completed', progress: 100, project: 'test-project', budgetPause: null, taskCost: {costLabel: 'consome a cota do plano'} },
   ] : []),
 ];
-let transcribeMock: { transcript: object | null; job: object | null } = groqRetryTest ? {transcript:{id:1,engine:'groq',state:'running',resume_us:4e6,duration_us:10e6,words:1},job:{id:99,state:'cancelled',progress:40}} : { transcript: null, job: null };
-if (groqRetryTest || componentsMissing || hardwareCpuMode || hardwareProbeFallbackMode) sourceItems.push({id:4,path:'/test/downloaded.mp4',status:'available',available:true,verified:true,language:'pt',permission:{status:'none'}});
+type TranscriptStateMock = {
+  transcript: { id: number; engine: string; model: string; state: string; resume_us: number; duration_us: number; words: number } | null;
+  job: { id: number; state: string; progress: number; code?: string | null } | null;
+};
+const transcriptsBySource = new Map<number, TranscriptStateMock>([
+  [2, { transcript: { id: 2, engine: 'local', model: 'whisper-turbo', state: 'complete', resume_us: 6_600_000_000, duration_us: 6_600_000_000, words: 30000 }, job: null }],
+]);
+const energyMeasuredSources = new Set<number>();
+if (groqRetryTest || componentsMissing || hardwareCpuMode || hardwareProbeFallbackMode) {
+  sourceItems.push({ id: 4, path: '/test/downloaded.mp4', status: 'available', available: true, verified: true, audio_track: 1, origin_url: 'https://www.youtube.com/watch?v=downloaded', language: 'pt', permission: { status: 'none' }, metadata: makeSourceMetadata('3600.0') });
+  if (groqRetryTest) {
+    transcriptsBySource.set(4, { transcript: { id: 1, engine: 'groq', model: 'whisper-large-v3-turbo', state: 'running', resume_us: 4e6, duration_us: 10e6, words: 1 }, job: { id: 99, state: 'cancelled', progress: 40, code: null } });
+  }
+} else {
+  sourceItems.push({ id: 4, path: '/test/Live_12_11_final.mp4', status: 'available', available: true, verified: true, audio_track: 1, origin_url: 'https://www.youtube.com/watch?v=live1211', language: 'pt', permission: { status: 'granted', who: 'Criador Exemplo', where: 'Discord', scope: 'cortes e tradução' }, metadata: makeSourceMetadata('3600.0') });
+  transcriptsBySource.set(4, { transcript: { id: 4, engine: 'local', model: 'whisper-turbo', state: 'complete', resume_us: 3_600_000_000, duration_us: 3_600_000_000, words: 30000 }, job: null });
+}
+function requireProjectMock(args: object): ProjectMock {
+  const active = getActiveProjectMock();
+  if (!active) {
+    throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto no momento.' };
+  }
+  const project = (args as { project?: unknown }).project;
+  if (typeof project !== 'string' || !project.trim() || project !== active.path) {
+    throw { code: 'invalid_project', message: 'O Projeto informado não corresponde ao Projeto aberto.' };
+  }
+  return active;
+}
 let providerMock = hasSearchFlag('assistant-test')
   ? {
       kind: 'openai',
@@ -351,8 +411,9 @@ let providerCliMock = { selected: '', codexConfirmed: false, claudeConfirmed: fa
 const GIB = 1024 ** 3;
 const hardwareMock = { manual: null as { model: string; device: string; compute_type: string } | null, probed: false, groupingChoice: null as boolean | null };
 function hardwareMockDispatch(name: string, args: object): unknown {
-  const fallbackCpu = hardwareProbeFallbackMode && !hardwareMock.manual;
-  const auto = hardwareCpuMode || fallbackCpu ? { model: 'whisper-small', device: 'cpu', compute_type: 'int8' } : { model: 'whisper-turbo', device: 'cuda', compute_type: 'int8_float16' };
+  const cpuFlag = isHardwareCpuMode();
+  const fallbackCpu = isHardwareProbeFallbackMode() && !hardwareMock.manual;
+  const auto = cpuFlag || fallbackCpu ? { model: 'whisper-small', device: 'cpu', compute_type: 'int8' } : { model: 'whisper-turbo', device: 'cuda', compute_type: 'int8_float16' };
   const effective = hardwareMock.manual ?? auto;
   const cpu = effective.device === 'cpu';
   if (name === 'transcription.hardware.choose') {
@@ -393,14 +454,27 @@ function hardwareMockDispatch(name: string, args: object): unknown {
     return { enabled, mode: hardwareMock.groupingChoice === null ? 'auto' : 'manual', size, measured_size };
   }
   if (name === 'transcription.estimate') {
+    requireProjectMock(args);
+    const sid = (args as { source_id?: number }).source_id;
+    if (typeof sid !== 'number' || !sourceItems.some((s) => s.id === sid)) {
+      throw { code: 'source_missing', message: 'Fonte não encontrada.' };
+    }
     const rate = cpu ? (effective.model === 'whisper-turbo' ? 4.1 : 2.57) : 0.386;
     const seconds = 5 + rate * 36000;
-    return { ...effective, load_s: 5, rate, estimate_s: seconds, low_s: seconds * 0.7, high_s: seconds * 1.5, sample_start_us: 9e9, sample_us: 30e6, cached: false, measured_at: 1790000000, cpu, warnings: effective.model === 'whisper-turbo' && cpu ? ['low_ram'] : [] };
+    return runCancellableSteps(
+      'transcription-estimate',
+      [
+        { stage: 'estimate', percentage: 0, message: 'Extraindo amostra de 30 s' },
+        { stage: 'estimate', percentage: 50, message: 'Medindo velocidade da transcrição' },
+        { stage: 'estimate', percentage: 100, message: 'Estimativa concluída', delayMs: 5 },
+      ],
+      () => {},
+    ).then(() => ({ ...effective, load_s: 5, rate, estimate_s: seconds, low_s: seconds * 0.7, high_s: seconds * 1.5, sample_start_us: 9e9, sample_us: 30e6, cached: false, measured_at: 1790000000, cpu, warnings: effective.model === 'whisper-turbo' && cpu ? ['low_ram'] : [] }));
   }
-        const options = [['whisper-turbo', 'cuda', 'int8_float16'], ['whisper-turbo', 'cuda', 'float16'], ['whisper-turbo', 'cuda', 'int8'], ['whisper-turbo', 'cpu', 'int8'], ['whisper-small', 'cpu', 'int8']].map(([model, device, compute_type]) => ({ model, device, compute_type, installed: !componentsMissing && (model === 'whisper-small' ? modelInstalledRevs.has('whisper-small') : modelInstalledRevs.has('whisper-turbo')), enabled: !(hardwareCpuMode && device === 'cuda'), reason: hardwareCpuMode && device === 'cuda' ? 'no_cuda' : null }));
+        const options = [['whisper-turbo', 'cuda', 'int8_float16'], ['whisper-turbo', 'cuda', 'float16'], ['whisper-turbo', 'cuda', 'int8'], ['whisper-turbo', 'cpu', 'int8'], ['whisper-small', 'cpu', 'int8']].map(([model, device, compute_type]) => ({ model, device, compute_type, installed: !componentsMissing && (model === 'whisper-small' ? modelInstalledRevs.has('whisper-small') : modelInstalledRevs.has('whisper-turbo')), enabled: !(cpuFlag && device === 'cuda'), reason: cpuFlag && device === 'cuda' ? 'no_cuda' : null }));
         return {
-          gpu: hardwareCpuMode ? null : { name: 'NVIDIA GeForce RTX 3050 Laptop GPU', driver: '616.92', total_mib: 4096, free_mib: 3962 },
-          ram: { total: 16 * GIB, available: 9 * GIB }, cuda: !hardwareCpuMode, no_compatible_gpu: cpu, effective, manual: hardwareMock.manual !== null,
+          gpu: cpuFlag ? null : { name: 'NVIDIA GeForce RTX 3050 Laptop GPU', driver: '616.92', total_mib: 4096, free_mib: 3962 },
+          ram: { total: 16 * GIB, available: 9 * GIB }, cuda: !cpuFlag, no_compatible_gpu: cpu, effective, manual: hardwareMock.manual !== null,
           fallback_reason: fallbackCpu ? 'gpu_probe_failed' : null,
           probe: hardwareMock.probed ? { measured_at: 1790000000, verified: true, chosen: auto } : null, options, worker_installed: workerInstalledMock,
         };
@@ -473,11 +547,62 @@ function selectionMockDispatch(name: string, args: object): unknown {
   if (name === 'energy.status') {
     if (selectionFlag('selection-energy-queued')) return { measured: false, marks: { high: 0, peak: 0 }, job: { id: 1, state: 'queued', progress: 0 } };
     if (selectionFlag('selection-energy-running')) return { measured: false, marks: { high: 0, peak: 0 }, job: { id: 1, state: 'running', progress: 45 } };
-    if (selectionFlag('selection-energy')) return { measured: true, marks: { high: 4, peak: 2 }, job: { id: 1, state: 'completed', progress: 100 } };
+    const sid = (args as { source_id?: number }).source_id;
+    if (selectionFlag('selection-energy') || (typeof sid === 'number' && energyMeasuredSources.has(sid))) {
+      return { measured: true, marks: { high: 4, peak: 2 }, job: { id: 1, state: 'completed', progress: 100 } };
+    }
     return { measured: false, marks: { high: 0, peak: 0 }, job: null };
   }
-  if (name === 'chat.status') return { state: chatMock.fetched ? 'available' : 'none', canFetch: !selectionFlag('chat-local'), peaks: chatMock.fetched ? 3 : 0, job: null };
-  if (name === 'chat.fetch') { chatMock.fetched = true; return { state: 'queued', job: 1 }; }
+  if (name === 'energy.start') {
+    const active = getActiveProjectMock();
+    if (!active) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
+    const sid = (args as { source_id?: number }).source_id;
+    if (typeof sid !== 'number' || !sourceItems.some((s) => s.id === sid)) {
+      throw { code: 'source_missing', message: 'Fonte não encontrada.' };
+    }
+    const st = transcriptsBySource.get(sid);
+    const complete = isTranscriptTest() || st?.transcript?.state === 'complete';
+    if (!st?.transcript && !complete) throw { code: 'transcript_missing', message: 'Transcrição não encontrada.' };
+    if (!complete) throw { code: 'transcript_incomplete', message: 'A Transcrição ainda não foi concluída.' };
+    if (selectionFlag('selection-energy') || energyMeasuredSources.has(sid)) {
+      return { state: 'measured', job: null };
+    }
+    const jobId = 101;
+    emitirProgressoMock({ job: String(jobId), project: active.id, stage: 'energy', percentage: 0, message: 'Medindo energia do áudio', error: null });
+    emitirProgressoMock({ job: String(jobId), project: active.id, stage: 'energy', percentage: 60, message: 'Medindo energia do áudio', error: null });
+    energyMeasuredSources.add(sid);
+    emitirProgressoMock({ job: String(jobId), project: active.id, stage: 'complete', percentage: 100, message: 'Energia medida', error: null });
+    return { state: 'queued', job: jobId };
+  }
+  if (name === 'chat.status') {
+    const sid = (args as { source_id?: number }).source_id;
+    const src = typeof sid === 'number' ? sourceItems.find((s) => s.id === sid) : undefined;
+    const canFetch = !selectionFlag('chat-local') && (src ? Boolean(src.origin_url) || selectionFlag('selection-chat') : true);
+    return {
+      state: chatMock.fetched ? 'available' : 'none',
+      canFetch,
+      intervals: chatMock.fetched ? 42 : 0,
+      messages: chatMock.fetched ? 1280 : 0,
+      peaks: chatMock.fetched ? 3 : 0,
+      job: null,
+    };
+  }
+  if (name === 'chat.fetch') {
+    const active = getActiveProjectMock();
+    const sid = (args as { source_id?: number }).source_id;
+    const src = typeof sid === 'number' ? sourceItems.find((s) => s.id === sid) : undefined;
+    if (src && !src.origin_url && !selectionFlag('selection-chat')) {
+      throw { code: 'chat_needs_url', message: 'O chat só está disponível para Fontes importadas por URL.' };
+    }
+    chatMock.fetched = true;
+    const jobId = 102;
+    if (active) {
+      emitirProgressoMock({ job: String(jobId), project: active.id, stage: 'chat', percentage: 0, message: 'Buscando o chat da live', error: null });
+      emitirProgressoMock({ job: String(jobId), project: active.id, stage: 'chat', percentage: 50, message: 'Agregando o chat da live', error: null });
+      emitirProgressoMock({ job: String(jobId), project: active.id, stage: 'complete', percentage: 100, message: 'Chat da live pronto', error: null });
+    }
+    return { state: 'queued', job: jobId };
+  }
   if (name === 'selection.estimate') {
     if (selectionFlag('selection-blocked')) throw { code: 'context_too_small', message: 'O contexto efetivo de 4096 tokens (definido por você no perfil) não comporta a janela mínima. Aumente o contexto no Perfil de Provedor ou escolha outro perfil.' };
     const kind = (args as { videoKind?: string }).videoKind ?? 'direct';
@@ -521,8 +646,39 @@ function selectionMockDispatch(name: string, args: object): unknown {
 export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   if (import.meta.env.VITE_CORE_MOCK === '1' && !isTauri()) {
     if ((name.startsWith('export.') && name !== 'export.captions') || (name === 'jobs.cancel' && (args as {id: number}).id >= 5900)) return exportMock(name, args, (source, pos) => mockCorrected.has(`${source}:${pos}`)) as T;
-    if (name === 'transcription.groq.info') return {endpoint:'https://api.groq.com/openai/v1/audio/transcriptions',configured:groqKeyConfigured,confirmed:groqConsent,local_only:projectVetoMock} as T;
-    if (name === 'transcription.groq.estimate') return {kind:'usd',usd:0.00012,hourly_usd:0.04,checked:'2026-11-15',source:'https://console.groq.com/docs/speech-to-text'} as T;
+    if (name === 'transcription.groq.info') {
+      return {
+        endpoint: 'https://api.groq.com/openai/v1/audio/transcriptions',
+        model: 'whisper-large-v3-turbo',
+        configured: groqKeyConfigured,
+        confirmed: groqConsent,
+        local_only: projectVetoMock,
+        prices: {
+          source: 'https://console.groq.com/docs/speech-to-text',
+          checked: '2026-11-15',
+          currency: 'USD',
+          minimum_seconds: 10,
+          models: { 'whisper-large-v3-turbo': { hourly_usd: 0.04 } },
+        },
+      } as T;
+    }
+    if (name === 'transcription.groq.estimate') {
+      const sid = (args as { source_id?: number }).source_id;
+      const src = typeof sid === 'number' ? sourceItems.find((s) => s.id === sid) : undefined;
+      if (typeof sid === 'number' && !src) {
+        throw { code: 'source_missing', message: 'Fonte não encontrada.' };
+      }
+      return {
+        kind: 'usd',
+        usd: 0.00012,
+        minMicroUsd: 120,
+        maxMicroUsd: 240,
+        audio_us: 10_000_000,
+        hourly_usd: 0.04,
+        checked: '2026-11-15',
+        source: 'https://console.groq.com/docs/speech-to-text',
+      } as T;
+    }
     if (name === 'transcription.groq.confirm') { groqConsent = true; return {confirmed:true} as T; }
     if (name === 'transcription.groq.key.status') return {configured:groqKeyConfigured} as T;
     if (name === 'transcription.groq.key.set') { groqKeyConfigured = true; return {configured:true} as T; }
@@ -710,11 +866,17 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       } as T;
     }
     if (name === 'jobs.budget.get' || name === 'jobs.budget.set' || name === 'jobs.budget.continue') {
-      if (!getActiveProjectMock()) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
-      const handled = batchMockDispatch(name, args);
+      const active = getActiveProjectMock();
+      if (!active) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
+      const handled = batchMockDispatch(name, args, emitirProgressoMock, active.id);
       if (handled !== undefined) return handled as T;
     }
-    if (sourceTest && new URLSearchParams(location.search).has('batch-test')) { const handled = batchMockDispatch(name, args); if (handled !== undefined) return handled as T; }
+    if (name.startsWith('batches.')) {
+      const active = getActiveProjectMock();
+      if (!active) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
+      const handled = batchMockDispatch(name, args, emitirProgressoMock, active.id);
+      if (handled !== undefined) return handled as T;
+    }
     if (name.startsWith('thumbnail.')) { const handled = thumbnailMockDispatch(name, args); if (handled !== undefined) return handled as T; }
     if (name.startsWith('script.') || name.startsWith('angles.')) { const handled = scriptMockDispatch(name, args); if (handled !== undefined) return handled as T; }
     if (name.startsWith('packaging.')) {
@@ -735,10 +897,43 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       });
       if (handled !== undefined) return handled as T;
     }
-    if (name === 'jobs.list') return (sourceTest ? jobItems : []) as T;
-    if (name === 'jobs.cancel' && (args as { id: number }).id === 99) { transcribeMock = { ...transcribeMock, job: { id: 99, state: 'cancelled', progress: 40 } }; return null as T; }
-    if (sourceTest && name === 'jobs.estimate') return { safety: 'paid', estimate: { kind: 'unknown' } } as T;
-    if (sourceTest && (name === 'jobs.retry' || name === 'jobs.discard' || name === 'jobs.cancel')) {
+    if (name === 'jobs.list') return jobItems as T;
+    if (name === 'jobs.preview') {
+      const active = getActiveProjectMock();
+      if (!active) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
+      const sid = (args as { source_id?: unknown }).source_id;
+      if (typeof sid !== 'number') throw { code: 'preview_failed', message: 'source_id inválido.' };
+      const src = sourceItems.find((s) => s.id === sid);
+      if (!src) throw { code: 'preview_failed', message: 'Fonte não encontrada.' };
+      return {
+        waveform: `/test/cache/preview/${sid}/waveform.bin`,
+        thumbnails: [
+          `/test/cache/preview/${sid}/thumb-001.jpg`,
+          `/test/cache/preview/${sid}/thumb-002.jpg`,
+        ],
+      } as T;
+    }
+    if (name === 'jobs.cancel' && (args as { id: number }).id === 99) {
+      for (const [sid, st] of transcriptsBySource.entries()) {
+        if (st.job?.id === 99) {
+          transcriptsBySource.set(sid, { ...st, job: { id: 99, state: 'cancelled', progress: st.job.progress, code: 'cancelled' } });
+        }
+      }
+      const active = getActiveProjectMock();
+      if (active) {
+        emitirProgressoMock({
+          job: '99',
+          project: active.id,
+          stage: 'failed',
+          percentage: 0,
+          message: 'Transcrição cancelada',
+          error: { code: 'cancelled', message: 'Transcrição cancelada.' },
+        });
+      }
+      return null as T;
+    }
+    if (name === 'jobs.estimate') return { safety: 'paid', estimate: { kind: 'unknown' } } as T;
+    if (name === 'jobs.retry' || name === 'jobs.discard' || name === 'jobs.cancel') {
       const {id, confirmed} = args as {id:number; confirmed?:boolean};
       if (name === 'jobs.retry' && !confirmed) throw {code:'confirmation_required', message:'Confirmação obrigatória'};
       jobItems = jobItems.map(item => item.id === id ? {...item, state: name === 'jobs.retry' ? 'queued' : 'cancelled'} : item);
@@ -803,17 +998,154 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     }
     if (name === 'sources.url.settings.get') return urlSettingsMock as T;
     if (name === 'sources.url.settings.set') { urlSettingsMock = {...urlSettingsMock, ...(args as typeof urlSettingsMock)}; return urlSettingsMock as T; }
-    if (sourceTest && name === 'sources.list') return sourceItems as T;
-    if (sourceTest && name === 'sources.url.download') { const url=(args as {url:string}).url; if(url.endsWith('/age-test')) throw {code:'age_restricted',message:'test'}; if(url.endsWith('/js-test') && !denoMock.installed) throw {code:'js_runtime_missing',message:'test'}; return {path:'/test/downloaded.mp4',url} as T; }
-    if (sourceTest && name === 'sources.inspect') return {format:{duration:'12'},streams:[{index:0,codec_type:'audio',codec_name:'aac'}]} as T;
-    if (sourceTest && name === 'sources.import') { const a=args as {path:string;permission:{status:string};origin_url?:string;language?:string}; const item={id:4,path:a.path,status:'available',available:true,verified:true,language:a.language??channelProfileMock.language,permission:a.permission}; sourceItems.push(item); return {...item,origin_url:a.origin_url} as T; }
-    if (sourceTest && name === 'sources.language.set') { const { id, language } = args as { id: number; language: string }; sourceItems = sourceItems.map(item => item.id === id ? { ...item, language } : item); return sourceItems.find(item => item.id === id) as T; }
-    if (sourceTest && name === 'sources.permission.set') {
+    if (name === 'sources.cancel') {
+      const job = (args as { job?: string }).job;
+      if (job) activeSourceJobs.get(job)?.cancel();
+      return {} as T;
+    }
+    if (name === 'sources.url.cancel') {
+      const job = (args as { job?: string }).job;
+      if (job) activeUrlJobs.get(job)?.cancel();
+      return {} as T;
+    }
+    if (name === 'sources.list') {
+      requireProjectMock(args);
+      return sourceItems.map((s) => ({ ...s })) as T;
+    }
+    if (name === 'sources.url.download') {
+      requireProjectMock(args);
+      const a = args as { url?: string; job?: string };
+      const url = typeof a.url === 'string' ? a.url.trim() : '';
+      if (!url || !/^https?:\/\//i.test(url)) {
+        throw { code: 'invalid_url', message: 'Informe uma URL http:// ou https:// válida.' };
+      }
+      if (!urlSettingsMock.terms_accepted) {
+        throw { code: 'terms_required', message: 'Aceite os Termos do YouTube antes de baixar.' };
+      }
+      if (!ytdlpMock.installed) {
+        throw { code: 'component_missing', message: 'Instale o componente yt-dlp.' };
+      }
+      if (url.endsWith('/age-test')) throw { code: 'age_restricted', message: 'test' };
+      if (url.endsWith('/login-test')) throw { code: 'login_required', message: 'test' };
+      if (url.endsWith('/js-test') && !denoMock.installed) throw { code: 'js_runtime_missing', message: 'test' };
+      const job = a.job?.trim() || `url-${Date.now()}`;
+      await runCancellableSteps(
+        job,
+        [
+          { stage: 'download', percentage: 0, message: 'Baixando Fonte' },
+          { stage: 'download', percentage: 50, message: 'Baixando Fonte' },
+          { stage: 'download', percentage: 100, message: 'Download concluído', delayMs: 5 },
+        ],
+        () => {},
+        activeUrlJobs,
+        null,
+      );
+      return { path: '/test/downloaded.mp4', url } as T;
+    }
+    if (name === 'sources.inspect') {
+      const p = (args as { path?: string }).path;
+      if (typeof p !== 'string' || !p.trim()) {
+        throw { code: 'invalid_source', message: 'Caminho de arquivo inválido.' };
+      }
+      if (p.includes('indisponivel')) {
+        throw { code: 'source_unavailable', message: 'Não foi possível ler o arquivo.' };
+      }
+      return makeSourceMetadata('3600.0') as T;
+    }
+    if (name === 'sources.import') {
+      requireProjectMock(args);
+      const a = args as {
+        path: string;
+        audio_track?: number;
+        permission: { status: string; who?: string; where?: string; scope?: string };
+        origin_url?: string | null;
+        language?: string | null;
+        copy?: boolean;
+      };
+      if (typeof a.path !== 'string' || !a.path.trim()) {
+        throw { code: 'invalid_source', message: 'Caminho de arquivo inválido.' };
+      }
+      if (typeof a.audio_track !== 'number' || !Number.isInteger(a.audio_track) || a.audio_track < 0) {
+        throw { code: 'invalid_track', message: 'Faixa de áudio inválida.' };
+      }
+      const perm = a.permission;
+      if (perm?.status !== 'none' && !(perm?.status === 'granted' && perm.who?.trim() && perm.where?.trim() && perm.scope?.trim())) {
+        throw { code: 'invalid_permission', message: 'Registre a Permissão ou informe que não há permissão.' };
+      }
+      if (a.copy && a.path.includes('copy-exists')) {
+        throw { code: 'copy_exists', message: 'Já existe um arquivo com este nome dentro da pasta do Projeto.' };
+      }
+      if (a.copy) {
+        await runCancellableSteps(
+          'source-copy-original',
+          [
+            { stage: 'hash', percentage: 0, message: 'Verificando Fonte' },
+            { stage: 'hash', percentage: 50, message: 'Verificando Fonte' },
+            { stage: 'hash', percentage: 100, message: 'Verificando Fonte', delayMs: 5 },
+          ],
+          () => {},
+          activeSourceJobs,
+          null,
+        );
+        await runCancellableSteps(
+          'source-copy-check',
+          [
+            { stage: 'hash', percentage: 0, message: 'Verificando Fonte' },
+            { stage: 'hash', percentage: 100, message: 'Verificando Fonte', delayMs: 5 },
+          ],
+          () => {},
+          activeSourceJobs,
+          null,
+        );
+      }
+      const nextId = sourceItems.reduce((max, s) => Math.max(max, s.id), 0) + 1;
+      const normalizedPerm: SourceMockItem['permission'] =
+        perm.status === 'none'
+          ? { status: 'none' }
+          : { status: 'granted', who: perm.who!.trim(), where: perm.where!.trim(), scope: perm.scope!.trim() };
+      const item: SourceMockItem = {
+        id: nextId,
+        path: a.path,
+        status: 'available',
+        available: true,
+        verified: true,
+        audio_track: a.audio_track,
+        origin_url: a.origin_url ?? null,
+        language: a.language ?? channelProfileMock.language,
+        permission: normalizedPerm,
+        metadata: makeSourceMetadata('3600.0'),
+      };
+      sourceItems.push(item);
+      return { ...item } as T;
+    }
+    if (name === 'sources.language.set') {
+      requireProjectMock(args);
+      const { id, language } = args as { id: number; language: string };
+      const existing = sourceItems.find((item) => item.id === id);
+      if (!existing) throw { code: 'source_missing', message: 'Fonte não encontrada.' };
+      if (typeof language !== 'string' || !language.trim()) {
+        throw { code: 'invalid_language', message: 'Idioma inválido.' };
+      }
+      const st = transcriptsBySource.get(id);
+      if (st?.job && (st.job.state === 'queued' || st.job.state === 'running' || st.job.state === 'uncertain')) {
+        throw { code: 'transcription_busy', message: 'A Transcrição está em andamento.' };
+      }
+      if (st?.transcript?.state === 'complete') {
+        throw { code: 'transcript_complete', message: 'A Transcrição já foi concluída.' };
+      }
+      if (st?.transcript && st.transcript.resume_us > 0) {
+        throw { code: 'transcript_partial', message: 'A Transcrição já foi iniciada.' };
+      }
+      sourceItems = sourceItems.map((item) => (item.id === id ? { ...item, language } : item));
+      return sourceItems.find((item) => item.id === id) as T;
+    }
+    if (name === 'sources.permission.set') {
+      requireProjectMock(args);
       const { id, permission } = args as { id: number; permission: { status: string; who?: string; where?: string; scope?: string } };
       if (permission?.status !== 'none' && !(permission?.status === 'granted' && permission.who?.trim() && permission.where?.trim() && permission.scope?.trim())) {
         throw { code: 'invalid_permission', message: 'Registre a Permissão ou informe que não há permissão' };
       }
-      const normalized = permission.status === 'none'
+      const normalized: SourceMockItem['permission'] = permission.status === 'none'
         ? { status: 'none' }
         : { status: 'granted', who: permission.who!.trim(), where: permission.where!.trim(), scope: permission.scope!.trim() };
       if (!sourceItems.some(item => item.id === id)) throw { code: 'source_missing', message: 'Fonte não encontrada' };
@@ -823,11 +1155,43 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       return sourceItems.find(item => item.id === id) as T;
     }
 
-    if (sourceTest && (name === 'sources.hash' || name === 'sources.relocate')) {
-      const { id, confirmed } = args as { id: number; confirmed?: boolean };
-      if (!confirmed) throw { code:'confirmation_required', message:'confirmation required' };
-      sourceItems = sourceItems.map(item => item.id === id ? { ...item, status:'available', available:true, verified:true } : item);
-      return {} as T;
+    if (name === 'sources.hash' || name === 'sources.relocate') {
+      requireProjectMock(args);
+      const { id, confirmed, path, job } = args as { id: number; confirmed?: boolean; path?: string; job?: string };
+      const existing = sourceItems.find((item) => item.id === id);
+      if (!existing) throw { code: 'source_missing', message: 'Fonte não encontrada.' };
+      if (name === 'sources.relocate') {
+        if (typeof path !== 'string' || !path.trim()) {
+          throw { code: 'invalid_source', message: 'Caminho de arquivo inválido.' };
+        }
+        if (path.includes('mismatch')) {
+          throw { code: 'source_mismatch', message: 'O arquivo escolhido não corresponde à Fonte original.' };
+        }
+      }
+      if (!confirmed) throw { code: 'confirmation_required', message: 'confirmation required' };
+      const jobId = job?.trim() || (name === 'sources.hash' ? 'source-hash' : 'source-relocate');
+      await runCancellableSteps(
+        jobId,
+        [
+          { stage: 'hash', percentage: 0, message: 'Verificando Fonte' },
+          { stage: 'hash', percentage: 50, message: 'Verificando Fonte' },
+          { stage: 'hash', percentage: 100, message: 'Verificando Fonte', delayMs: 5 },
+        ],
+        () => {
+          const manterCaminhoV1 = name === 'sources.relocate' && hasSourceTest() && path === '/test/replacement.mp4';
+          sourceItems = sourceItems.map((item) =>
+            item.id === id
+              ? { ...item, ...(!manterCaminhoV1 && name === 'sources.relocate' && path ? { path } : {}), status: 'available', available: true, verified: true }
+              : item,
+          );
+        },
+        activeSourceJobs,
+        null,
+      );
+      if (name === 'sources.relocate') {
+        return sourceItems.find((item) => item.id === id) as T;
+      }
+      return { verified: true } as T;
     }
     if (name === 'app.version') return { version } as T;
     if (name === 'components.cancel') {
@@ -1449,31 +1813,166 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       );
       return { id: a.id } as T;
     }
-    if (sourceTest && new URLSearchParams(location.search).has('transcript-test') && name === 'transcription.segment') return {} as T;
+    if (name === 'transcription.segment') return { transcript_id: 1, sentences: 30000, changed: false } as T;
     // Preview do Corte simulado (#58): a Fonte 2 está offline; a primeira consulta de um Corte gera (40%), a seguinte já está pronta.
     if (editorTest && (name.startsWith('editor.') || name.startsWith('audio.') || name.startsWith('captions.') || name.startsWith('reframe.') || name === 'export.captions')) return editorMock(name, args as Record<string, number>) as T;
     const translated = translationMockDispatch(name, args);
     if (translated !== undefined) return translated as T;
-    if (transcriptTest && name === 'proxy.request') { const a = args as {source_id:number; start_us:number; end_us:number}; if (a.source_id === 2) throw {code:'source_offline', message:'A Fonte está offline: reconecte ou relocalize a Fonte para ver o preview.'}; const key = 'ab'.repeat(32); mockProxyPolls = 0; return {state:'running', key, job:7, progress:40, error:null, windowStartUs:Math.max(0, a.start_us - 120_000_000), windowEndUs:a.end_us + 120_000_000} as T; }
-    if (transcriptTest && name === 'proxy.status') { mockProxyPolls += 1; return {state:mockProxyPolls > 1 ? 'ready' : 'running', key:(args as {key:string}).key, job:7, progress:mockProxyPolls > 1 ? 100 : 60, error:null} as T; }
-    if (transcriptTest && (name.startsWith('selection.') || name.startsWith('chat.') || name.startsWith('energy.'))) return selectionMockDispatch(name, args) as T;
-    if (transcriptTest && name === 'transcription.timeline') { const {source_id, offset, limit} = args as {source_id:number; offset:number; limit:number}; const total=30001; return {total, items:Array.from({length:Math.min(limit,total-offset)}, (_, n) => { const i=offset+n; if (i===1) return {type:'silence',start_us:1000000,end_us:2000000}; const id=i===0?1:i; const words=mockWords(source_id,id); return {type:'sentence',id,start_us:i*1000000,end_us:(i+1)*1000000,language:'pt',text:words.map(w=>w.text).join(' '),first_position:id*10,last_position:id*10+1,words}; })} as T; }
-    if (transcriptTest && name === 'transcription.correct') { const {source_id, position, text} = args as {source_id:number; position:number; text:string}; const value=text.normalize('NFC').trim(); if (!value) throw {code:'invalid_correction',message:'O texto da correção é inválido.'}; const key=source_id+':'+position; const before=mockCorrected.get(key) ?? null; const after=value===mockOriginal(position) ? null : value; if ((after ?? mockOriginal(position)) === (before ?? mockOriginal(position))) return mockStep(source_id, position, false) as T; mockUndone = []; mockDone.push({source:source_id, position, before, after}); mockApply(source_id, position, after); return mockStep(source_id, position, true) as T; }
-    if (transcriptTest && (name === 'transcription.undo' || name === 'transcription.redo')) { const undo=name==='transcription.undo'; const entry=undo ? mockDone.pop() : mockUndone.pop(); if (!entry) throw {code:undo?'nothing_to_undo':'nothing_to_redo',message:'Nada a fazer.'}; (undo ? mockUndone : mockDone).push(entry); mockApply(entry.source, entry.position, undo ? entry.before : entry.after); return mockStep(entry.source, entry.position, true) as T; }
-    if (transcriptTest && name === 'transcription.corrections') return {can_undo:mockDone.length>0, can_redo:mockUndone.length>0} as T;
-    if (transcriptTest && name === 'transcription.search') { const q=mockFold(String((args as {query:string}).query)).trim(); const hits:object[]=[]; const row=(id:number)=>id<=1?0:id; for (const [key,value] of mockCorrected) { const [source,position]=key.split(':').map(Number); const id=Math.floor(position/10); const text=mockWords(source,id).map(w=>w.text).join(' '); if (q && mockFold(value).includes(q)) hits.push({transcript_id:1,source_id:source,source:'changed.mp4',sentence_id:id,start_us:id*1000000,end_us:(id+1)*1000000,row:row(id),snippet:text.split(value).flatMap((part,k,all)=>k<all.length-1?[{text:part,match:false},{text:value,match:true}]:[{text:part,match:false}]).filter(p=>p.text)}); } const m=/^frase\s*(\d+)$/.exec(q); if (m) { const id=Number(m[1]); hits.push({transcript_id:1,source_id:1,source:'changed.mp4',sentence_id:id,start_us:id*1000000,end_us:(id+1)*1000000,row:row(id),snippet:[{text:'Frase '+id,match:true}]}); } return hits as T; }
-    if (sourceTest && new URLSearchParams(location.search).has('transcript-test') && name === 'transcription.status') return {language:'pt',transcript:{id:1,state:'complete',resume_us:36000000000,duration_us:36000000000,words:30000},job:null} as T;
-    if (name === 'transcription.status') { const sid = (args as { source_id?: number }).source_id; const src = sourceItems.find(s => s.id === sid); return { language: src?.language ?? 'pt', transcript: transcribeMock.transcript, job: transcribeMock.job } as T; }
+    if (name === 'proxy.request') { const a = args as {source_id:number; start_us:number; end_us:number}; if (a.source_id === 2) throw {code:'source_offline', message:'A Fonte está offline: reconecte ou relocalize a Fonte para ver o preview.'}; const key = 'ab'.repeat(32); mockProxyPolls = 0; return {state:'running', key, job:7, progress:40, error:null, windowStartUs:Math.max(0, a.start_us - 120_000_000), windowEndUs:a.end_us + 120_000_000} as T; }
+    if (name === 'proxy.status') { mockProxyPolls += 1; return {state:mockProxyPolls > 1 ? 'ready' : 'running', key:(args as {key:string}).key, job:7, progress:mockProxyPolls > 1 ? 100 : 60, error:null} as T; }
+    if (name.startsWith('selection.') || name.startsWith('chat.') || name.startsWith('energy.')) return selectionMockDispatch(name, args) as T;
+    if (name === 'transcription.blocks') {
+      const sid = (args as { source_id?: number }).source_id;
+      const src = typeof sid === 'number' ? sourceItems.find((s) => s.id === sid) : undefined;
+      if (!src) throw { code: 'source_missing', message: 'Fonte não encontrada.' };
+      const st = transcriptsBySource.get(sid!);
+      if (!st?.transcript && !isTranscriptTest()) return [] as T;
+      const resumeUs = isTranscriptTest() ? 3_600_000_000 : (st?.transcript?.resume_us ?? 0);
+      const blockCount = Math.max(resumeUs > 0 ? 1 : 0, Math.floor(resumeUs / 600_000_000));
+      const device = isHardwareCpuMode() ? 'cpu' : 'cuda';
+      const compute_type = device === 'cpu' ? 'int8' : 'int8_float16';
+      return Array.from({ length: blockCount }, (_, idx) => ({
+        start_us: idx * 600_000_000,
+        end_us: Math.min(resumeUs, (idx + 1) * 600_000_000),
+        device,
+        compute_type,
+      })) as T;
+    }
+    if (name === 'transcription.sentences') {
+      const { source_id, after_id = 0, limit = 1000 } = args as { source_id: number; after_id?: number; limit?: number };
+      if (!sourceItems.some((s) => s.id === source_id)) throw { code: 'source_missing', message: 'Fonte não encontrada.' };
+      const capped = Math.max(1, Math.min(10000, limit));
+      const out = [];
+      for (let id = Math.max(1, after_id + 1); id <= 30000 && out.length < capped; id++) {
+        const words = mockWords(source_id, id);
+        out.push({
+          id,
+          start_us: id * 1_000_000,
+          end_us: (id + 1) * 1_000_000,
+          language: 'pt',
+          text: words.map((w) => w.text).join(' '),
+          first_position: id * 10,
+          last_position: id * 10 + 1,
+        });
+      }
+      return out as T;
+    }
+    if (name === 'transcription.words') {
+      const { source_id, from_us = 0, to_us = Number.MAX_SAFE_INTEGER, limit = 10000 } = args as { source_id: number; from_us?: number; to_us?: number; limit?: number };
+      if (!sourceItems.some((s) => s.id === source_id)) throw { code: 'source_missing', message: 'Fonte não encontrada.' };
+      const capped = Math.max(1, Math.min(100000, limit));
+      const out = [];
+      for (let id = 1; id <= 30000 && out.length < capped; id++) {
+        if (id === 2 && 2_000_000 >= from_us && 1_000_000 <= to_us) {
+          out.push({
+            position: 15,
+            kind: 'silence',
+            text: '',
+            start_us: 1_000_000,
+            end_us: 2_000_000,
+            language: null,
+            speaker: null,
+            original_text: '',
+            corrected: false,
+          });
+        }
+        const words = mockWords(source_id, id);
+        for (const w of words) {
+          if (out.length >= capped) break;
+          const endUs = w.start_us + 500_000;
+          if (endUs >= from_us && w.start_us <= to_us) {
+            out.push({
+              position: w.position,
+              kind: 'word',
+              text: w.text,
+              start_us: w.start_us,
+              end_us: endUs,
+              language: 'pt',
+              speaker: null,
+              original_text: mockOriginal(w.position),
+              corrected: w.corrected,
+            });
+          }
+        }
+      }
+      return out as T;
+    }
+    if (name === 'transcription.timeline') { const {source_id, offset = 0, limit = 500} = args as {source_id:number; offset?:number; limit?:number}; const total=30001; return {total, offset, items:Array.from({length:Math.min(limit,total-offset)}, (_, n) => { const i=offset+n; if (i===1) return {type:'silence',start_us:1000000,end_us:2000000}; const id=i===0?1:i; const words=mockWords(source_id,id); return {type:'sentence',id,start_us:i*1000000,end_us:(i+1)*1000000,language:'pt',text:words.map(w=>w.text).join(' '),first_position:id*10,last_position:id*10+1,words}; })} as T; }
+    if (name === 'transcription.correct') { const {source_id, position, text} = args as {source_id:number; position:number; text:string}; const value=text.normalize('NFC').trim(); if (!value || value.length > 200) throw {code:'invalid_correction',message:'O texto da correção é inválido.'}; const key=source_id+':'+position; const before=mockCorrected.get(key) ?? null; const after=value===mockOriginal(position) ? null : value; if ((after ?? mockOriginal(position)) === (before ?? mockOriginal(position))) return mockStep(source_id, position, false) as T; mockUndone = []; mockDone.push({source:source_id, position, before, after}); mockApply(source_id, position, after); return mockStep(source_id, position, true) as T; }
+    if (name === 'transcription.undo' || name === 'transcription.redo') { const undo=name==='transcription.undo'; const entry=undo ? mockDone.pop() : mockUndone.pop(); if (!entry) throw {code:undo?'nothing_to_undo':'nothing_to_redo',message:'Nada a fazer.'}; (undo ? mockUndone : mockDone).push(entry); mockApply(entry.source, entry.position, undo ? entry.before : entry.after); return mockStep(entry.source, entry.position, true) as T; }
+    if (name === 'transcription.corrections') return {can_undo:mockDone.length>0, can_redo:mockUndone.length>0} as T;
+    if (name === 'transcription.search') { const q=mockFold(String((args as {query:string}).query)).trim(); const hits:object[]=[]; const row=(id:number)=>id<=1?0:id; const sourceName=(id:number)=>sourceItems.find(s=>s.id===id)?.path.split(/[\\/]/).pop() ?? 'changed.mp4'; for (const [key,value] of mockCorrected) { const [source,position]=key.split(':').map(Number); const id=Math.floor(position/10); const text=mockWords(source,id).map(w=>w.text).join(' '); if (q && mockFold(value).includes(q)) hits.push({transcript_id:1,source_id:source,source:sourceName(source),sentence_id:id,start_us:id*1000000,end_us:(id+1)*1000000,row:row(id),snippet:text.split(value).flatMap((part,k,all)=>k<all.length-1?[{text:part,match:false},{text:value,match:true}]:[{text:part,match:false}]).filter(p=>p.text)}); } const m=/^frase\s*(\d+)$/.exec(q); if (m) { const id=Number(m[1]); hits.push({transcript_id:1,source_id:1,source:'changed.mp4',sentence_id:id,start_us:id*1000000,end_us:(id+1)*1000000,row:row(id),snippet:[{text:'Frase '+id,match:true}]}); } return hits as T; }
+    if (name === 'transcription.status') {
+      const sid = (args as { source_id?: number }).source_id;
+      const src = sourceItems.find((s) => s.id === sid);
+      if (isTranscriptTest()) {
+        return {
+          language: src?.language ?? 'pt',
+          transcript: { id: 1, state: 'complete', resume_us: 36000000000, duration_us: 36000000000, model: 'whisper-turbo', engine: 'local', words: 30000 },
+          job: null,
+        } as T;
+      }
+      const st = typeof sid === 'number' ? transcriptsBySource.get(sid) : undefined;
+      return {
+        language: src?.language ?? 'pt',
+        transcript: st?.transcript ?? null,
+        job: st?.job ?? null,
+      } as T;
+    }
     if (name === 'transcription.start') {
+      const active = requireProjectMock(args);
       if (componentsMissing) throw { code: 'component_missing', message: 'Instale o Componente FFmpeg.' };
-      const {source_id, language, engine = 'local', replace_confirmed, retry_confirmed} = args as {source_id?:number;language?:string;engine?:string;replace_confirmed?:boolean;retry_confirmed?:boolean};
-      if (language && source_id) sourceItems = sourceItems.map(item => item.id === source_id ? { ...item, language } : item);
-      if (engine === 'groq' && groqUncertain && !retry_confirmed) throw {code:'transcription_retry_confirmation',usage:{estimate:{kind:'usd',usd:0.00012}}};
+      const { source_id, language, engine = 'local', replace_confirmed, retry_confirmed } = args as { source_id?: number; language?: string; engine?: string; replace_confirmed?: boolean; retry_confirmed?: boolean };
+      if (typeof source_id !== 'number' || !sourceItems.some((s) => s.id === source_id)) {
+        throw { code: 'source_missing', message: 'Fonte não encontrada.' };
+      }
+      if (language) {
+        const currentSt = transcriptsBySource.get(source_id);
+        if (currentSt?.transcript && currentSt.transcript.resume_us === 0) {
+          sourceItems = sourceItems.map((item) => (item.id === source_id ? { ...item, language } : item));
+        } else if (!currentSt?.transcript) {
+          sourceItems = sourceItems.map((item) => (item.id === source_id ? { ...item, language } : item));
+        }
+      }
+      if (engine === 'groq' && projectVetoMock) {
+        throw { code: 'local_only_violation', message: 'Bloqueado pelo modo Somente local.' };
+      }
+      if (engine === 'groq' && groqUncertain && !retry_confirmed) throw { code: 'transcription_retry_confirmation', usage: { estimate: { kind: 'usd', usd: 0.00012 } } };
       groqUncertain = false;
-      const previous = transcribeMock.transcript as {engine?:string;state?:string} | null;
-      if (previous && previous.engine !== engine && !replace_confirmed) throw {code:'engine_change_confirmation',usage:{blocks:1,paid_audio_us:previous.engine==='groq'?4e6:0,paid_usd:previous.engine==='groq'?0.00012:0}};
-      if (engine === 'groq' && !groqConsent) throw {code:'confirmation_required'};
-      transcribeMock = { transcript: { id: 1, engine, state: 'running', resume_us: 4000000, duration_us: 10000000, words: 0 }, job: { id: 99, state: 'running', progress: 40 } }; return { transcript_id: 1, state: 'running', job_id: 99 } as T;
+      const previous = transcriptsBySource.get(source_id)?.transcript ?? null;
+      if (previous && previous.engine !== engine && !replace_confirmed) {
+        throw { code: 'engine_change_confirmation', usage: { blocks: 1, paid_audio_us: previous.engine === 'groq' ? 4e6 : 0, paid_usd: previous.engine === 'groq' ? 0.00012 : 0 } };
+      }
+      if (engine === 'groq' && !groqConsent) throw { code: 'confirmation_required' };
+      const model = engine === 'groq' ? 'whisper-large-v3-turbo' : (isHardwareCpuMode() ? 'whisper-small' : 'whisper-turbo');
+      transcriptsBySource.set(source_id, {
+        transcript: { id: source_id, engine, model, state: 'running', resume_us: 4000000, duration_us: 10000000, words: 0 },
+        job: { id: 99, state: 'running', progress: 40, code: null },
+      });
+      if (engine === 'local') {
+        emitirProgressoMock({
+          job: '99',
+          project: active.id,
+          stage: isHardwareProbeFallbackMode() ? 'gpu_probe_fallback' : 'probe',
+          percentage: 0,
+          message: isHardwareProbeFallbackMode() ? 'A verificação da GPU falhou; continuando na CPU.' : 'Verificando placa de vídeo',
+          error: null,
+        });
+      }
+      emitirProgressoMock({
+        job: '99',
+        project: active.id,
+        stage: 'transcribing',
+        percentage: 40,
+        message: 'Transcrevendo bloco 1',
+        error: null,
+      });
+      return {
+        transcript_id: source_id,
+        state: 'running',
+        job_id: 99,
+        warnings: isHardwareCpuMode() ? ['low_ram'] : [],
+      } as T;
     }
     if (name === 'components.settings.get') return { ...componentSettingsMock, ffmpeg_path: ffmpegMock.path } as T;
     if (name === 'components.settings.set') {
@@ -1502,7 +2001,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
 
 
 // Editor simulado (#61): a Frase n ocupa [(n-1)*10 s, n*10 s]; o Corte vale de 20 a 180 s; a janela do proxy é o Corte ±2 min.
-const editorTest = transcriptTest && typeof location !== 'undefined' && new URLSearchParams(location.search).has('editor-test');
+const editorTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('editor-test');
 const editorKey = 'ab'.repeat(32);
 function editorMock(name: string, a: Record<string, number>) {
   const edited = editorEditsMock(name, a);

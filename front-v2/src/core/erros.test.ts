@@ -188,4 +188,75 @@ describe('mapeador de erros (erros.ts)', () => {
     expect(resultado.titulo).toMatch(/Seleção/)
     expect(resultado.recuperacao).toEqual({ rotulo: 'Abrir Fila de Jobs', acao: 'abrir-fila' })
   })
+
+  it('cobre todos os 32 códigos adicionais do Pacote B (Fontes, Transcrição e Lotes)', () => {
+    const codigosPacoteB = [
+      'js_runtime_missing',
+      'age_restricted',
+      'login_required',
+      'sabr_unavailable',
+      'download_failed',
+      'invalid_url',
+      'source_unavailable',
+      'probe_failed',
+      'invalid_source',
+      'copy_exists',
+      'transcription_busy',
+      'transcript_complete',
+      'transcript_partial',
+      'uncertain_job',
+      'transcription_uncertain',
+      'invalid_batch',
+      'invalid_budget',
+      'invalid_batch_state',
+      'invalid_item_state',
+      'out_of_memory',
+      'groq_key_missing',
+      'audio_too_large',
+      'groq_http',
+      'invalid_correction',
+      'invalid_permission',
+      'invalid_language',
+      'invalid_track',
+      'source_missing',
+      'transcript_missing',
+      'word_missing',
+      'nothing_to_undo',
+      'nothing_to_redo',
+    ]
+
+    for (const codigo of codigosPacoteB) {
+      expect(TABELA_ERROS[codigo], `código ausente na TABELA_ERROS: ${codigo}`).toBeDefined()
+      const msg = mensagemDeErro(new ErroCore(codigo, 'detalhe'))
+      expect(msg.titulo).not.toBe('Algo deu errado nesta operação.')
+      expect(msg.titulo.length).toBeGreaterThan(5)
+    }
+  })
+
+  it('mapeia recuperações específicas do Pacote B', () => {
+    const deno = mensagemDeErro(new ErroCore('js_runtime_missing', ''))
+    expect(deno.titulo).toContain('deno')
+    expect(deno.recuperacao?.acao).toBe('instalar-componente')
+
+    const age = mensagemDeErro(new ErroCore('age_restricted', ''))
+    expect(age.titulo).toContain('restrição de idade')
+    expect(age.recuperacao?.rotulo).toBe('Importar arquivo local')
+
+    const login = mensagemDeErro(new ErroCore('login_required', ''))
+    expect(login.titulo).toContain('login')
+    expect(login.recuperacao?.rotulo).toBe('Importar arquivo local')
+
+    const uncertain = mensagemDeErro(new ErroCore('uncertain_job', ''))
+    expect(uncertain.recuperacao?.acao).toBe('abrir-fila')
+
+    const groqKey = mensagemDeErro(new ErroCore('groq_key_missing', ''))
+    expect(groqKey.recuperacao?.rota).toBe('#/config/provedores')
+
+    const corr = mensagemDeErro(new ErroCore('invalid_correction', ''))
+    expect(corr.titulo).toContain('200')
+
+    const oom = mensagemDeErro(new ErroCore('out_of_memory', ''))
+    expect(oom.titulo).toContain('memória')
+    expect(oom.recuperacao?.rota).toBe('#/config/componentes')
+  })
 })
