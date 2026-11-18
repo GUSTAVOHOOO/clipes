@@ -1,5 +1,6 @@
 import { isTauri } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { assinarProgressoMock } from '@core'
 import { useSyncExternalStore } from 'react'
 
 export type EventoProgresso = {
@@ -145,6 +146,11 @@ export async function iniciarProgresso(fila: Fila = filaAtiva): Promise<() => vo
   filaAtiva = fila
 
   if (!isTauri()) {
+    if (import.meta.env.VITE_CORE_MOCK === '1') {
+      return assinarProgressoMock((evento) => {
+        filaAtiva.aplicar(evento)
+      })
+    }
     return () => {}
   }
 

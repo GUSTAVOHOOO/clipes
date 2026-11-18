@@ -14,6 +14,95 @@ import { thumbnailMockDispatch } from './thumbnailMock';
 import { scriptMockDispatch } from './scriptMock';
 import { translationMockDispatch, setTranslationMockPermission } from './translationMock';
 
+export type EventoProgressoMock = {
+  job: string;
+  project?: string | null;
+  stage: string;
+  percentage: number;
+  message: string;
+  error: { code: string; message: string } | null;
+};
+
+const progressSubscribers = new Set<(evento: EventoProgressoMock) => void>();
+const activeMockJobs = new Map<string, Set<string>>();
+
+export function assinarProgressoMock(ouvinte: (evento: EventoProgressoMock) => void): () => void {
+  progressSubscribers.add(ouvinte);
+  return () => {
+    progressSubscribers.delete(ouvinte);
+  };
+}
+
+export function emitirProgressoMock(evento: EventoProgressoMock): void {
+  if (evento.project && evento.job && evento.job !== '0') {
+    let jobs = activeMockJobs.get(evento.project);
+    const terminal =
+      Boolean(evento.error) ||
+      evento.percentage >= 100 ||
+      evento.stage === 'complete' ||
+      evento.stage === 'failed' ||
+      evento.stage.endsWith(':done') ||
+      evento.stage.endsWith(':paused');
+    if (terminal) {
+      jobs?.delete(evento.job);
+    } else {
+      if (!jobs) {
+        jobs = new Set();
+        activeMockJobs.set(evento.project, jobs);
+      }
+      jobs.add(evento.job);
+    }
+  }
+  for (const ouvinte of progressSubscribers) {
+    ouvinte(evento);
+  }
+}
+
+type ProjectMock = { id: string; name: string; path: string; warning?: string | null };
+type RecentProjectMock = { available: boolean; name: string; path: string };
+
+const DEFAULT_RECENT_PROJECTS: RecentProjectMock[] = [
+  { available: true, name: 'Meu Canal de Cortes', path: '/projetos/MeuCanal.clipes' },
+  { available: true, name: 'Canal Dark História', path: '/projetos/Historia.clipes' },
+  { available: false, name: 'Live Antiga', path: '/backup/Antiga.clipes' },
+];
+
+let recentProjectsMock: RecentProjectMock[] = DEFAULT_RECENT_PROJECTS.map((p) => ({ ...p }));
+let currentProjectMock: ProjectMock | null = null;
+let currentProjectTouched = false;
+
+function hasSearchFlag(flag: string): boolean {
+  return typeof location !== 'undefined' && new URLSearchParams(location.search).has(flag);
+}
+
+function readEstadoParam(): string | null {
+  if (typeof location === 'undefined') return null;
+  const hash = location.hash ?? '';
+  const qIdx = hash.indexOf('?');
+  if (qIdx >= 0) {
+    const v = new URLSearchParams(hash.slice(qIdx + 1)).get('estado');
+    if (v) return v;
+  }
+  return new URLSearchParams(location.search).get('estado');
+}
+
+function getActiveProjectMock(): ProjectMock | null {
+  if (currentProjectTouched) return currentProjectMock;
+  return hasSearchFlag('source-test')
+    ? { id: 'test-project', name: 'Teste', path: '/test/Teste.clipes', warning: null }
+    : null;
+}
+
+function slugifyProjectId(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  return slug || 'projeto';
+}
+
 const groqRetryTest = typeof location !== 'undefined' && new URLSearchParams(location.search).has('groq-retry-test');
 const denoMock = { installed: false };
 const pocketTtsMock = { installed: false };
@@ -326,10 +415,89 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'transcription.groq.key.remove') { groqKeyConfigured = false; return {configured:false} as T; }
     if (name === 'transcription.groq.key.test') return {ok:true} as T;
     if (name === 'diagnostic.get') return { text: "Clipes: 1.0.0\nSistema operacional: indisponível" } as T;
-    if (name === 'projects.recent') return [] as T;
-    if (name === 'projects.current') return (sourceTest ? { name:'Teste', path:'/test/Teste.clipes', id:'test-project' } : null) as T;
-    if (name === 'projects.local_only.get') return { open: sourceTest, enabled: sourceTest && projectVetoMock } as T;
-    if (name === 'projects.local_only.set') { projectVetoMock = (args as { enabled: boolean }).enabled; return { open: true, enabled: projectVetoMock } as T; }
+    if (name === 'projects.recent') {
+      if (readEstadoParam() === 'vazio') return [] as T;
+      return recentProjectsMock.map((p) => ({ ...p })) as T;
+    }
+    if (name === 'projects.current') {
+      const active = getActiveProjectMock();
+      return (active ? { ...active } : null) as T;
+    }
+    if (name === 'projects.create') {
+      const a = args as { name?: unknown; parent?: unknown };
+      const rawName = typeof a.name === 'string' ? a.name.trim() : '';
+      if (!rawName || rawName === '.' || rawName === '..' || /[\\/:]/.test(rawName)) {
+        throw { code: 'invalid_project', message: 'Nome de Projeto inválido.' };
+      }
+      const rawParent = typeof a.parent === 'string' ? a.parent.trim() : '';
+      if (!rawParent) {
+        throw { code: 'invalid_project', message: 'Pasta de destino obrigatória.' };
+      }
+      const sep = rawParent.includes('\\') && !rawParent.includes('/') ? '\\' : '/';
+      const cleanParent = rawParent.replace(/[\\/]+$/, '') || sep;
+      const fullPath = cleanParent === sep ? `${sep}${rawName}.clipes` : `${cleanParent}${sep}${rawName}.clipes`;
+      const created: ProjectMock = { id: slugifyProjectId(rawName), name: rawName, path: fullPath, warning: null };
+      currentProjectMock = created;
+      currentProjectTouched = true;
+      recentProjectsMock = [
+        { available: true, name: created.name, path: created.path },
+        ...recentProjectsMock.filter((p) => p.path !== created.path),
+      ];
+      return { id: created.id, name: created.name, path: created.path } as T;
+    }
+    if (name === 'projects.open') {
+      const a = args as { path?: unknown };
+      const rawPath = typeof a.path === 'string' ? a.path.trim() : '';
+      const cleanPath = rawPath.replace(/[\\/]+$/, '');
+      if (!cleanPath || !cleanPath.toLowerCase().endsWith('.clipes')) {
+        throw { code: 'invalid_project', message: 'Escolha uma pasta .clipes válida.' };
+      }
+      if (cleanPath.toLowerCase().endsWith('futuro.clipes')) {
+        throw { code: 'newer_project', message: 'Este Projeto foi criado por uma versão mais nova do Clipes.' };
+      }
+      if (cleanPath.toLowerCase().endsWith('ocupado.clipes') || hasSearchFlag('project-busy')) {
+        throw { code: 'project_busy', message: 'Há uma tarefa ativa no Projeto atual impedindo a troca.' };
+      }
+      const base = cleanPath.split(/[\\/]/).pop() ?? cleanPath;
+      const derivedName = base.replace(/\.clipes$/i, '') || 'Projeto';
+      const existing = recentProjectsMock.find((p) => p.path === cleanPath);
+      const projName = existing?.name ?? derivedName;
+      const warning = cleanPath.toLowerCase().endsWith('aviso.clipes')
+        ? 'Backup automático falhou na última execução.'
+        : null;
+      const opened: ProjectMock = {
+        id: cleanPath === '/test/Teste.clipes' ? 'test-project' : slugifyProjectId(projName),
+        name: projName,
+        path: cleanPath,
+        warning,
+      };
+      currentProjectMock = opened;
+      currentProjectTouched = true;
+      recentProjectsMock = [
+        { available: true, name: opened.name, path: opened.path },
+        ...recentProjectsMock.filter((p) => p.path !== opened.path),
+      ];
+      return { id: opened.id, name: opened.name, path: opened.path } as T;
+    }
+    if (name === 'projects.close') {
+      const active = getActiveProjectMock();
+      if (active && (hasSearchFlag('project-busy') || (activeMockJobs.get(active.id)?.size ?? 0) > 0)) {
+        throw { code: 'project_busy', message: 'Há uma tarefa ativa bloqueando esta operação no Projeto.' };
+      }
+      currentProjectMock = null;
+      currentProjectTouched = true;
+      projectVetoMock = false;
+      return null as T;
+    }
+    if (name === 'projects.local_only.get') {
+      const active = getActiveProjectMock();
+      return { open: Boolean(active), enabled: Boolean(active) && projectVetoMock } as T;
+    }
+    if (name === 'projects.local_only.set') {
+      const active = getActiveProjectMock();
+      projectVetoMock = (args as { enabled: boolean }).enabled;
+      return { open: Boolean(active), enabled: Boolean(active) && projectVetoMock } as T;
+    }
     if (name === 'channel_profile.languages') return [{ code: 'pt', name: 'portuguese' }, { code: 'en', name: 'english' }, { code: 'es', name: 'spanish' }] as T;
     if (name === 'channel_profile.get') return channelProfileView() as T;
     if (name === 'channel_profile.set') {
