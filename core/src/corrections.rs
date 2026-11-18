@@ -256,6 +256,31 @@ fn redo(_: Value, _: &mut EventSink<'_>) -> CommandResult {
     step(false)
 }
 
+/// Próxima correção na pilha de desfazer (`undone = false`) ou refazer (`undone = true`).
+fn next_step(c: &rusqlite::Connection, undone: bool) -> rusqlite::Result<Option<Value>> {
+    let order = if undone { "ASC" } else { "DESC" };
+    let sql = format!(
+        "SELECT t.source_id, so.path, COALESCE(tc.after_text, w.text) \
+         FROM transcript_corrections tc \
+         JOIN transcripts t ON t.id = tc.transcript_id \
+         JOIN sources so ON so.id = t.source_id \
+         JOIN transcript_words w ON w.transcript_id = tc.transcript_id AND w.position = tc.position \
+         WHERE tc.undone = ?1 \
+         ORDER BY tc.seq {order} LIMIT 1"
+    );
+    c.query_row(&sql, [i64::from(undone)], |r| {
+        let source_id: i64 = r.get(0)?;
+        let path: String = r.get(1)?;
+        let word: String = r.get(2)?;
+        Ok(json!({
+            "source_id": source_id,
+            "source_name": file_name(&path),
+            "word": word.trim(),
+        }))
+    })
+    .optional()
+}
+
 /// `transcription.corrections`: estado da pilha do Projeto.
 fn state(_: Value, _: &mut EventSink<'_>) -> CommandResult {
     projects::with_reader(|c| {
@@ -263,6 +288,8 @@ fn state(_: Value, _: &mut EventSink<'_>) -> CommandResult {
         Ok(json!({
             "can_undo": flag("SELECT EXISTS(SELECT 1 FROM transcript_corrections WHERE undone=0)")?,
             "can_redo": flag("SELECT EXISTS(SELECT 1 FROM transcript_corrections WHERE undone=1)")?,
+            "next_undo": next_step(c, false)?,
+            "next_redo": next_step(c, true)?,
         }))
     })
 }

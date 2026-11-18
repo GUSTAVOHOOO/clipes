@@ -407,3 +407,98 @@ fn search_reports_the_timeline_row_after_silences() {
     assert!(starts.windows(2).all(|w| w[0] <= w[1]), "{starts:?}");
     assert!(starts[0] >= page["items"][2]["start_us"].as_i64().unwrap());
 }
+
+#[test]
+fn corrections_exposes_next_undo_and_next_redo_across_sources() {
+    let env = Env::new();
+    let empty = run("transcription.corrections", json!({})).unwrap();
+    assert_eq!(empty["can_undo"], false);
+    assert_eq!(empty["can_redo"], false);
+    assert_eq!(empty["next_undo"], json!(null));
+    assert_eq!(empty["next_redo"], json!(null));
+
+    let s1 = env.transcript("primeira.mp4", TALK);
+    let s2 = with_writer(|c| {
+        c.execute(
+            "INSERT INTO sources(path,size,duration_us,partial_hash,metadata,permission,audio_track) VALUES ('D:\\lives\\segunda.mkv',1,60000000,'h','{}','{}',0)",
+            [],
+        )?;
+        let source = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,state,resume_us,duration_us) VALUES (?1,0,'local','m','r','c','complete',60000000,60000000)",
+            [source],
+        )?;
+        let transcript = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO transcript_words(transcript_id,position,kind,text,start_us,end_us,language) VALUES (?1,0,'word',' jogo.',0,250000,'pt')",
+            [transcript],
+        )?;
+        Ok(source)
+    })
+    .unwrap();
+    run("transcription.segment", json!({"source_id": s2})).unwrap();
+
+    env.correct(s1, 1, "tive").unwrap();
+    let after_first = run("transcription.corrections", json!({})).unwrap();
+    assert_eq!(after_first["can_undo"], true);
+    assert_eq!(after_first["can_redo"], false);
+    assert_eq!(
+        after_first["next_undo"],
+        json!({"source_id": s1, "source_name": "primeira.mp4", "word": "tive"})
+    );
+    assert_eq!(after_first["next_redo"], json!(null));
+
+    env.correct(s2, 0, "partida.").unwrap();
+    let after_second = run("transcription.corrections", json!({})).unwrap();
+    assert_eq!(
+        after_second["next_undo"],
+        json!({"source_id": s2, "source_name": "segunda.mkv", "word": "partida."})
+    );
+    assert_eq!(after_second["next_redo"], json!(null));
+
+    run("transcription.undo", json!({})).unwrap();
+    let after_undo_one = run("transcription.corrections", json!({})).unwrap();
+    assert_eq!(after_undo_one["can_undo"], true);
+    assert_eq!(after_undo_one["can_redo"], true);
+    assert_eq!(
+        after_undo_one["next_undo"],
+        json!({"source_id": s1, "source_name": "primeira.mp4", "word": "tive"})
+    );
+    assert_eq!(
+        after_undo_one["next_redo"],
+        json!({"source_id": s2, "source_name": "segunda.mkv", "word": "partida."})
+    );
+
+    run("transcription.undo", json!({})).unwrap();
+    let after_undo_all = run("transcription.corrections", json!({})).unwrap();
+    assert_eq!(after_undo_all["can_undo"], false);
+    assert_eq!(after_undo_all["can_redo"], true);
+    assert_eq!(after_undo_all["next_undo"], json!(null));
+    assert_eq!(
+        after_undo_all["next_redo"],
+        json!({"source_id": s1, "source_name": "primeira.mp4", "word": "tive"})
+    );
+
+    run("transcription.redo", json!({})).unwrap();
+    env.reopen();
+    let after_reopen = run("transcription.corrections", json!({})).unwrap();
+    assert_eq!(
+        after_reopen["next_undo"],
+        json!({"source_id": s1, "source_name": "primeira.mp4", "word": "tive"})
+    );
+    assert_eq!(
+        after_reopen["next_redo"],
+        json!({"source_id": s2, "source_name": "segunda.mkv", "word": "partida."})
+    );
+
+    // Voltar para o texto original do Motor ainda entra na pilha e limpa next_redo.
+    env.correct(s1, 1, "teve").unwrap();
+    let reverted = run("transcription.corrections", json!({})).unwrap();
+    assert_eq!(reverted["can_undo"], true);
+    assert_eq!(reverted["can_redo"], false);
+    assert_eq!(
+        reverted["next_undo"],
+        json!({"source_id": s1, "source_name": "primeira.mp4", "word": "teve"})
+    );
+    assert_eq!(reverted["next_redo"], json!(null));
+}
