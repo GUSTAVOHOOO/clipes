@@ -192,7 +192,7 @@ cargo deny --locked check licenses bans advisories sources
 bun install --frozen-lockfile
 (cd design-system && bun install --frozen-lockfile)
 node --test scripts/license-policy.test.mjs
-bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start . --excludePackages 'clipes@0.1.0' --json | node scripts/check-licenses.mjs
+bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start . --excludePackages 'clipes@1.0.0' --json | node scripts/check-licenses.mjs
 bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start design-system --excludePackages '@clipes/design-system@0.1.0' --json | node scripts/check-licenses.mjs
 cargo test -p clipes-core --test components every_component_has_an_allowed_license
 ```

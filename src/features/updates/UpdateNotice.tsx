@@ -29,7 +29,7 @@ async function verificar(auto: boolean): Promise<{ update: Update | null; curren
   if (auto && typeof navigator !== 'undefined' && navigator.onLine === false) {
     return { update: null, currentVersion: '' };
   }
-  const currentVersion = isTauri() ? await getVersion() : '0.1.0';
+  const currentVersion = isTauri() ? await getVersion() : '1.0.0';
   if (behavior === 'mock-available') {
     const scenario = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('updater-test') : null;
     if (scenario === 'offline') {

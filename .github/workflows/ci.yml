@@ -95,5 +95,5 @@ jobs:
         shell: bash
         run: |
           node --test scripts/license-policy.test.mjs
-          bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start . --excludePackages 'clipes@0.1.0' --json | node scripts/check-licenses.mjs
+          bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start . --excludePackages 'clipes@1.0.0' --json | node scripts/check-licenses.mjs
           bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start design-system --excludePackages '@clipes/design-system@0.1.0' --json | node scripts/check-licenses.mjs
