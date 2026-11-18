@@ -881,7 +881,8 @@ fn snapshots_restore(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     }
     validate(&snap_doc, &snap_doc.range)?;
     validate_silences(&snap_doc.range, snap_doc.silences.as_ref())?;
-    if entry.doc.revision == u64::MAX {
+    let current_revision = entry.doc.revision;
+    if current_revision == u64::MAX || snap_doc.revision == u64::MAX {
         return Err(invalid());
     }
     push_history(entry);
@@ -891,9 +892,7 @@ fn snapshots_restore(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     entry.doc.narration_starts = snap_doc.narration_starts;
     entry.doc.soundtrack = snap_doc.soundtrack;
     entry.doc.sfx = snap_doc.sfx;
-    if entry.doc.revision <= snap_doc.revision {
-        entry.doc.revision = snap_doc.revision.saturating_add(1);
-    }
+    entry.doc.revision = current_revision.max(snap_doc.revision).saturating_add(1);
     start_autosave();
     Ok(answer(clip_id, &entry.doc))
 }

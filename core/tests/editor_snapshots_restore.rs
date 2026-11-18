@@ -441,3 +441,59 @@ fn v1_project_fixture_still_opens_cleanly() {
         .unwrap();
     assert_eq!(integrity, "ok");
 }
+
+#[test]
+fn editor_snapshots_restore_oldest_snapshot_always_increments_revision() {
+    let mut guard = SessionGuard::new();
+    guard.create_project("RestoreOldestRevision");
+    let source = seed_source_with_transcript();
+    let opened = call(
+        "editor.open",
+        json!({ "source_id": source, "start_id": 5, "end_id": 10 }),
+    );
+    let clip_id = opened["clipId"].as_i64().unwrap();
+
+    // Cria vários snapshots em sequência com revisões crescentes.
+    call(
+        "editor.adjust",
+        json!({ "clip_id": clip_id, "edge": "start", "sentence_delta": -1 }),
+    );
+    call("editor.flush", json!({}));
+
+    for n in 0..4 {
+        call(
+            "editor.adjust",
+            json!({ "clip_id": clip_id, "edge": "end", "time_us": if n % 2 == 0 { 110_000_000 } else { 120_000_000 } }),
+        );
+        call("editor.flush", json!({}));
+    }
+    let latest = call(
+        "editor.adjust",
+        json!({ "clip_id": clip_id, "edge": "start", "sentence_delta": -1 }),
+    );
+    let rev_before = latest["revision"].as_u64().unwrap();
+
+    let snaps = call("editor.snapshots", json!({ "clip_id": clip_id }));
+    let list = snaps.as_array().unwrap();
+    assert_eq!(list.len(), 5);
+    let oldest = list.last().unwrap();
+    let oldest_id = oldest["snapshot_id"].as_i64().unwrap();
+    let oldest_rev = oldest["revision"].as_u64().unwrap();
+    assert!(
+        oldest_rev < rev_before,
+        "snapshot mais antigo deve ter revisão menor que a atual"
+    );
+
+    let restored = call(
+        "editor.snapshots.restore",
+        json!({ "id": clip_id, "snapshot_id": oldest_id }),
+    );
+    let rev_restored = restored["revision"].as_u64().unwrap();
+    assert!(
+        rev_restored > rev_before,
+        "revisão após restaurar ({rev_restored}) deve ser maior que a anterior ({rev_before})"
+    );
+    assert_eq!(rev_restored, rev_before + 1);
+    assert_eq!(restored["startUs"], oldest["range"]["startUs"]);
+    assert_eq!(restored["endUs"], oldest["range"]["endUs"]);
+}
