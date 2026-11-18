@@ -257,6 +257,9 @@ export const TABELA_ERROS: Record<string, MensagemErro> = {
   nothing_to_redo: {
     titulo: 'Não há correções desfeitas para refazer no Projeto.',
   },
+  snapshot_missing: {
+    titulo: 'O Snapshot selecionado não foi encontrado no Histórico deste Corte.',
+  },
 }
 
 const MENSAGEM_DESCONHECIDA: MensagemErro = {
