@@ -11,7 +11,7 @@ import {
 } from '@ds'
 import { Download } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, paraErroCore, type ErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useFila } from '~/core/progresso'
 
@@ -145,18 +145,6 @@ function dominioDe(url?: string): string {
   }
 }
 
-function normalizarErro(erro: unknown): ErroCore {
-  if (erro instanceof ErroCore) return erro
-  if (erro && typeof erro === 'object' && 'code' in erro) {
-    const e = erro as { code?: unknown; message?: unknown }
-    return new ErroCore(
-      typeof e.code === 'string' ? e.code : 'desconhecido',
-      typeof e.message === 'string' ? e.message : '',
-    )
-  }
-  return new ErroCore('desconhecido', erro instanceof Error ? erro.message : String(erro ?? ''))
-}
-
 function traduzirErroJit(erro: ErroCore): { titulo: string; explicacao?: string } {
   switch (erro.code) {
     case 'component_integrity':
@@ -258,7 +246,7 @@ export function InstaladorJustInTime({
         if (resYtdlp.ok) {
           ytdlpInstalado = Boolean(resYtdlp.value?.installed)
         } else {
-          const e = normalizarErro(resYtdlp.reason)
+          const e = paraErroCore(resYtdlp.reason)
           if (e.code === 'component_integrity') {
             ytdlpErroIntegridade = true
             setErro(e)
@@ -445,7 +433,7 @@ export function InstaladorJustInTime({
       if (pronto) notificarConclusao()
     } catch (err) {
       if (seq !== seqRef.current) return
-      setErro(normalizarErro(err))
+      setErro(paraErroCore(err))
       setCarregando(false)
     }
   }, [idioma, notificarConclusao, recurso])
@@ -539,7 +527,7 @@ export function InstaladorJustInTime({
       notificarConclusao()
     } catch (err) {
       setJobAtivo(null)
-      const coreErr = normalizarErro(err)
+      const coreErr = paraErroCore(err)
       if (coreErr.code === 'component_integrity') {
         setReinstalarYtdlp(true)
       }

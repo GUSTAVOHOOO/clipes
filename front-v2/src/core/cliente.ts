@@ -16,7 +16,8 @@ export class ErroCore extends Error {
   }
 }
 
-function normalizarErro(erro: unknown): ErroCore {
+/** Normaliza qualquer falha (ErroCore, Error, objeto do núcleo, string ou nulo) em `ErroCore`. */
+export function paraErroCore(erro: unknown): ErroCore {
   if (erro instanceof ErroCore) return erro
 
   if (typeof erro === 'string') {
@@ -54,6 +55,6 @@ export async function chamar<T>(comando: string, args: object = {}): Promise<T> 
   try {
     return await coreDispatch<T>(comando, args)
   } catch (erro) {
-    throw normalizarErro(erro)
+    throw paraErroCore(erro)
   }
 }

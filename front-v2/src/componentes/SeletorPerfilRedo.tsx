@@ -9,7 +9,7 @@ import {
 } from '@ds'
 import { Info } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import {
   resolverDestinoSelecao,
@@ -42,14 +42,6 @@ type RespostaEstimativaRedo = {
     | { kind: 'plan_quota' }
     | { kind: 'unknown' }
     | { kind: 'usd'; minMicroUsd: number; maxMicroUsd: number; inputTokens?: number; windows?: number }
-}
-
-function normalizarErro(err: unknown): ErroCore {
-  if (err instanceof ErroCore) return err
-  if (err && typeof err === 'object' && 'code' in err && 'message' in err) {
-    return new ErroCore(String((err as { code: unknown }).code), String((err as { message: unknown }).message))
-  }
-  return new ErroCore('desconhecido', err instanceof Error ? err.message : String(err))
 }
 
 function converterEstimativaParaDs(estimate: RespostaEstimativaRedo['estimate']) {
@@ -128,7 +120,7 @@ export function SeletorPerfilRedo({
       })
       .catch((err) => {
         if (cancelado) return
-        setErro(normalizarErro(err))
+        setErro(paraErroCore(err))
         setCarregandoPerfis(false)
       })
 
@@ -160,7 +152,7 @@ export function SeletorPerfilRedo({
       .catch((err) => {
         if (cancelado) return
         setEstimativa(null)
-        setErro(normalizarErro(err))
+        setErro(paraErroCore(err))
         setCarregandoEstimativa(false)
       })
 
@@ -204,7 +196,7 @@ export function SeletorPerfilRedo({
       aoFechar()
     } catch (err) {
       houveErroAoConfirmarRef.current = true
-      setErro(normalizarErro(err))
+      setErro(paraErroCore(err))
       setEnviando(false)
     }
   }

@@ -11,7 +11,7 @@ import {
 import { ArrowRight, Cpu, Download, FolderCog } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { SeletorCaminho } from '~/componentes/SeletorCaminho'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useFila } from '~/core/progresso'
 import { useEstadoForcado } from '~/shell/EstadoForcado'
@@ -82,18 +82,6 @@ type PassoEssencialProps = {
   aoAvancar: () => void
   aoPular: () => Promise<void>
   pulando: boolean
-}
-
-function normalizarErro(erro: unknown): ErroCore {
-  if (erro instanceof ErroCore) return erro
-  if (erro && typeof erro === 'object' && 'code' in erro) {
-    const e = erro as { code?: unknown; message?: unknown }
-    return new ErroCore(
-      typeof e.code === 'string' ? e.code : 'desconhecido',
-      typeof e.message === 'string' ? e.message : '',
-    )
-  }
-  return new ErroCore('desconhecido', erro instanceof Error ? erro.message : String(erro ?? ''))
 }
 
 function traduzirErroPasso1(erro: ErroCore): { titulo: string; explicacao?: string } {
@@ -179,7 +167,7 @@ export function PassoEssencial({ aoAvancar, aoPular, pulando }: PassoEssencialPr
       setHardware(resHw)
       setAgrupamento(resGrp)
     } catch (e) {
-      setErro(normalizarErro(e))
+      setErro(paraErroCore(e))
     } finally {
       setCarregando(false)
     }
@@ -221,7 +209,7 @@ export function PassoEssencial({ aoAvancar, aoPular, pulando }: PassoEssencialPr
       await chamar('components.download', { id: 'ffmpeg', confirmed: true })
       await carregar()
     } catch (e) {
-      setErro(normalizarErro(e))
+      setErro(paraErroCore(e))
     } finally {
       setJobAtivoId(null)
     }
@@ -237,7 +225,7 @@ export function PassoEssencial({ aoAvancar, aoPular, pulando }: PassoEssencialPr
       )
       await carregar()
     } catch (e) {
-      setErro(normalizarErro(e))
+      setErro(paraErroCore(e))
     } finally {
       setValidandoSistema(false)
     }
@@ -261,7 +249,7 @@ export function PassoEssencial({ aoAvancar, aoPular, pulando }: PassoEssencialPr
       }
       await carregar()
     } catch (e) {
-      setErro(normalizarErro(e))
+      setErro(paraErroCore(e))
     } finally {
       setJobAtivoId(null)
     }
@@ -275,7 +263,7 @@ export function PassoEssencial({ aoAvancar, aoPular, pulando }: PassoEssencialPr
       await chamar('transcription.hardware.probe', {})
       await carregar()
     } catch (e) {
-      setErro(normalizarErro(e))
+      setErro(paraErroCore(e))
     } finally {
       setJobAtivoId(null)
       setSondando(false)

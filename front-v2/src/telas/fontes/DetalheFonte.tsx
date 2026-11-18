@@ -15,7 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { CampoPermissao, permissaoValida } from '~/componentes/CampoPermissao'
 import { PlayerReferenciaFonte } from '~/componentes/PlayerReferenciaFonte'
 import { SeletorCaminho } from '~/componentes/SeletorCaminho'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useEstadoForcado } from '~/shell/EstadoForcado'
 import type {
@@ -38,18 +38,6 @@ export type DetalheFonteProps = {
   fonteId: string
   frase?: number
   row?: number
-}
-
-function normalizarErro(err: unknown): ErroCore {
-  if (err instanceof ErroCore) return err
-  if (err && typeof err === 'object' && 'code' in err) {
-    const e = err as { code?: unknown; message?: unknown }
-    return new ErroCore(
-      typeof e.code === 'string' && e.code ? e.code : 'desconhecido',
-      typeof e.message === 'string' ? e.message : '',
-    )
-  }
-  return new ErroCore('desconhecido', err instanceof Error ? err.message : String(err ?? ''))
 }
 
 function formatarCabecalhoMeta(fonte: FonteProjeto): string {
@@ -149,7 +137,7 @@ export function DetalheFonte({
       setTranscriptStatus(st)
       setBlocosCount(Array.isArray(bl) ? bl.length : 0)
     } catch (err) {
-      setErroFatal(normalizarErro(err))
+      setErroFatal(paraErroCore(err))
     } finally {
       setCarregando(false)
     }
@@ -206,7 +194,7 @@ export function DetalheFonte({
       setFonte(atualizada ?? { ...fonte, language: novoIdioma })
       toast.add({ title: 'Idioma da Fonte atualizado.' })
     } catch (err) {
-      setErroLeitor(normalizarErro(err))
+      setErroLeitor(paraErroCore(err))
     }
   }
 
@@ -224,7 +212,7 @@ export function DetalheFonte({
       setEditandoPerm(false)
       toast.add({ title: 'Permissão da Fonte atualizada.' })
     } catch (err) {
-      setErroLeitor(normalizarErro(err))
+      setErroLeitor(paraErroCore(err))
     } finally {
       setSalvandoPerm(false)
     }
@@ -245,7 +233,7 @@ export function DetalheFonte({
       await carregarTudo()
       toast.add({ title: 'Identidade da Fonte verificada.' })
     } catch (err) {
-      const e = normalizarErro(err)
+      const e = paraErroCore(err)
       if (e.code === 'confirmation_required' && !confirmed) {
         setConfirmacaoIntegridade({ tipo: 'hash' })
       } else {
@@ -273,7 +261,7 @@ export function DetalheFonte({
       await carregarTudo()
       toast.add({ title: 'Fonte relocalizada com sucesso.' })
     } catch (err) {
-      const e = normalizarErro(err)
+      const e = paraErroCore(err)
       if (e.code === 'confirmation_required' && !confirmed) {
         setRelocalizando(false)
         setConfirmacaoIntegridade({ tipo: 'relocate', path })
@@ -302,7 +290,7 @@ export function DetalheFonte({
       })
       await atualizarStatus()
     } catch (err) {
-      setErroLeitor(normalizarErro(err))
+      setErroLeitor(paraErroCore(err))
     }
   }
 

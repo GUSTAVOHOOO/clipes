@@ -21,7 +21,7 @@ import {
 } from '@ds'
 import { AlertTriangle, Check, FileQuestion, MessageSquare, Sparkles, X } from 'lucide-react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useFila } from '~/core/progresso'
 import type { FonteProjeto } from '~/stores/fontesProjeto'
@@ -347,7 +347,7 @@ export function DetalheCandidato({
         setProxyState({
           ...ESTADO_PROXY_INICIAL,
           status: 'error',
-          erro: err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err)),
+          erro: paraErroCore(err),
         })
       })
 
@@ -399,7 +399,7 @@ export function DetalheCandidato({
           setProxyState((prev) => ({
             ...prev,
             status: 'error',
-            erro: err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err)),
+            erro: paraErroCore(err),
           }))
         })
     }
@@ -438,9 +438,7 @@ export function DetalheCandidato({
       .catch((err) => {
         if (!cancelado) {
           setGuardrails(null)
-          setErroGuardrails(
-            err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err)),
-          )
+          setErroGuardrails(paraErroCore(err))
           setGuardrailsPronto(true)
         }
       })
@@ -457,9 +455,7 @@ export function DetalheCandidato({
         .catch((err) => {
           if (!cancelado) {
             setAngulos(null)
-            setErroAngulos(
-              err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err)),
-            )
+            setErroAngulos(paraErroCore(err))
             setAngulosPronto(true)
           }
         })

@@ -7,7 +7,7 @@ import {
   Status,
 } from '@ds'
 import { useEffect, useRef, useState } from 'react'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 
 export interface PropsDialogoResolverIncerteza {
@@ -25,14 +25,6 @@ type RespostaEstimativaJob = {
     | { kind: 'plan_quota' }
     | { kind: 'unknown' }
     | { kind: 'usd'; minMicroUsd: number; maxMicroUsd: number; inputTokens?: number; windows?: number }
-}
-
-function normalizarErro(err: unknown): ErroCore {
-  if (err instanceof ErroCore) return err
-  if (err && typeof err === 'object' && 'code' in err && 'message' in err) {
-    return new ErroCore(String((err as { code: unknown }).code), String((err as { message: unknown }).message))
-  }
-  return new ErroCore('desconhecido', err instanceof Error ? err.message : String(err))
 }
 
 function converterEstimativa(estimate: RespostaEstimativaJob['estimate']) {
@@ -86,7 +78,7 @@ export function DialogoResolverIncerteza({
       })
       .catch((err) => {
         if (cancelado) return
-        setErro(normalizarErro(err))
+        setErro(paraErroCore(err))
         setCarregando(false)
       })
 
@@ -110,7 +102,7 @@ export function DialogoResolverIncerteza({
       aoFechar()
     } catch (err) {
       houveErroAoConfirmarRef.current = true
-      setErro(normalizarErro(err))
+      setErro(paraErroCore(err))
       setOcupado(null)
     }
   }
@@ -128,7 +120,7 @@ export function DialogoResolverIncerteza({
       aoResolver?.('discard')
       aoFechar()
     } catch (err) {
-      setErro(normalizarErro(err))
+      setErro(paraErroCore(err))
       setOcupado(null)
     }
   }

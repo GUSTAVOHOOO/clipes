@@ -1,7 +1,7 @@
 import { Abas, BannerErroCore, Busca, Esqueleto, EstadoTela, type Aba } from '@ds'
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { formatarTecla, useAtalhos, type Atalho } from '~/comandos/atalhos'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useEstadoForcado } from '~/shell/EstadoForcado'
 import {
@@ -19,18 +19,6 @@ export type FontesProps = {
   projetoPath: string | null
   sub: 'fontes' | 'lotes'
   store?: StoreFontesProjeto
-}
-
-function normalizarErro(err: unknown): ErroCore {
-  if (err instanceof ErroCore) return err
-  if (err && typeof err === 'object' && 'code' in err) {
-    const e = err as { code?: unknown; message?: unknown }
-    return new ErroCore(
-      typeof e.code === 'string' && e.code ? e.code : 'desconhecido',
-      typeof e.message === 'string' ? e.message : '',
-    )
-  }
-  return new ErroCore('desconhecido', err instanceof Error ? err.message : String(err ?? ''))
 }
 
 /** Tela principal da Macro-etapa 1: Lista e Entrada de Fontes, Busca FTS5 e sub-aba Lotes (`#/projeto/:id/fontes`). */
@@ -92,7 +80,7 @@ export function Fontes({
       setResultadosFts(Array.isArray(hits) ? hits : [])
     } catch (err) {
       if (seq !== seqBuscaRef.current) return
-      setErroFts(normalizarErro(err))
+      setErroFts(paraErroCore(err))
       setResultadosFts([])
     } finally {
       if (seq === seqBuscaRef.current) {

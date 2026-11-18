@@ -22,7 +22,7 @@ import {
   type KeyboardEvent,
   type RefObject,
 } from 'react'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useFila, type Job } from '~/core/progresso'
 import type { FonteProjeto } from '~/stores/fontesProjeto'
@@ -393,7 +393,7 @@ export function ConfiguradorSelecao({
       })
       .catch((err) => {
         if (cancelado) return
-        setErroEstimativa(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? '')))
+        setErroEstimativa(paraErroCore(err))
         setCarregandoInicial(false)
       })
 
@@ -483,7 +483,7 @@ export function ConfiguradorSelecao({
         .catch((err) => {
           if (cancelado) return
           setEstimativa(null)
-          setErroEstimativa(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? '')))
+          setErroEstimativa(paraErroCore(err))
         })
     }
 
@@ -585,7 +585,7 @@ export function ConfiguradorSelecao({
       setPrecisaAvisoDireto(false)
       setCanalPerfil((prev) => (prev ? { ...prev, directMonetizationAck: true } : prev))
     } catch (err) {
-      setErroDisparo(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? '')))
+      setErroDisparo(paraErroCore(err))
     } finally {
       setConfirmandoAvisoDireto(false)
     }
@@ -599,7 +599,7 @@ export function ConfiguradorSelecao({
       await recarregarSinais()
       setVersaoSinais((v) => v + 1)
     } catch (err) {
-      setErroSinais(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? '')))
+      setErroSinais(paraErroCore(err))
     } finally {
       setOcupadoEnergia(false)
     }
@@ -613,7 +613,7 @@ export function ConfiguradorSelecao({
       await recarregarSinais()
       setVersaoSinais((v) => v + 1)
     } catch (err) {
-      setErroSinais(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? '')))
+      setErroSinais(paraErroCore(err))
     } finally {
       setOcupadoChat(false)
     }
@@ -626,7 +626,7 @@ export function ConfiguradorSelecao({
       await chamar('jobs.cancel', { id: jobId })
       await recarregarSinais()
     } catch (err) {
-      setErroSinais(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? '')))
+      setErroSinais(paraErroCore(err))
     }
   }
 
@@ -645,7 +645,7 @@ export function ConfiguradorSelecao({
       setConfirmacaoAberta(false)
       aoIniciarSelecao?.(res)
     } catch (err) {
-      const e = err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? ''))
+      const e = paraErroCore(err)
       if (e.code === 'confirmation_required' && !confirmed) {
         setConfirmacaoAberta(true)
       } else {

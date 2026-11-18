@@ -18,7 +18,7 @@ import {
 import { Eye, EyeOff, Lock, Plus } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAtalhos } from '~/comandos/atalhos'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { useFila } from '~/core/progresso'
 import { useEstadoForcado } from '~/shell/EstadoForcado'
 import { ConfiguracoesLayout } from '~/telas/config/ConfiguracoesLayout'
@@ -244,7 +244,7 @@ export function ConfigProvedores({ projetoAberto, aoAtualizar }: ConfigProvedore
       }
       setContextos(mapaCtx)
     } catch (err) {
-      setErroFatal(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err)))
+      setErroFatal(paraErroCore(err))
     } finally {
       setCarregando(false)
     }
@@ -270,7 +270,7 @@ export function ConfigProvedores({ projetoAberto, aoAtualizar }: ConfigProvedore
       await chamar('transcription.groq.key.test', {})
       toast.add({ title: 'Chave Groq validada com sucesso.' })
     } catch (err) {
-      setErroAcao(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err)))
+      setErroAcao(paraErroCore(err))
     } finally {
       setOcupadoId(null)
     }
@@ -339,7 +339,7 @@ export function ConfigProvedores({ projetoAberto, aoAtualizar }: ConfigProvedore
     try {
       await fn()
     } catch (err) {
-      setErroAcao(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err)))
+      setErroAcao(paraErroCore(err))
     } finally {
       setOcupadoId(null)
     }
@@ -352,7 +352,7 @@ export function ConfigProvedores({ projetoAberto, aoAtualizar }: ConfigProvedore
       await carregar()
       aoAtualizar?.()
     } catch (err) {
-      const e = err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err))
+      const e = paraErroCore(err)
       if (e.code === 'confirmation_required' && ['codex', 'claude', 'opencode'].includes(choice)) {
         setConfirmarCli({ kind: choice as 'codex' | 'claude' | 'opencode', destino: { tipo: 'default' } })
         return
@@ -368,7 +368,7 @@ export function ConfigProvedores({ projetoAberto, aoAtualizar }: ConfigProvedore
       await carregar()
       aoAtualizar?.()
     } catch (err) {
-      const e = err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err))
+      const e = paraErroCore(err)
       if (e.code === 'confirmation_required' && ['codex', 'claude', 'opencode'].includes(choice)) {
         setConfirmarCli({
           kind: choice as 'codex' | 'claude' | 'opencode',

@@ -28,7 +28,7 @@ import {
 import { CampoPermissao, permissaoValida } from '~/componentes/CampoPermissao'
 import { InstaladorJustInTime } from '~/componentes/InstaladorJustInTime'
 import { SeletorCaminho } from '~/componentes/SeletorCaminho'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useFila } from '~/core/progresso'
 import type { FonteProjeto, PermissaoFonte, StreamMetadata } from '~/stores/fontesProjeto'
@@ -101,18 +101,6 @@ export function formatarNomeIdioma(codigo: string): string {
 export function basenameCaminho(caminho: string): string {
   const partes = caminho.split(/[\\/]/).filter(Boolean)
   return partes[partes.length - 1] ?? caminho
-}
-
-function normalizarErro(err: unknown): ErroCore {
-  if (err instanceof ErroCore) return err
-  if (err && typeof err === 'object' && 'code' in err) {
-    const e = err as { code?: unknown; message?: unknown }
-    return new ErroCore(
-      typeof e.code === 'string' && e.code ? e.code : 'desconhecido',
-      typeof e.message === 'string' ? e.message : '',
-    )
-  }
-  return new ErroCore('desconhecido', err instanceof Error ? err.message : String(err ?? ''))
 }
 
 function calcularFps(avgFrameRate?: string): string | null {
@@ -277,7 +265,7 @@ export function EntradaFonte({
         }
         setIdioma(idiomaPadrao)
       } catch (err) {
-        setErro(normalizarErro(err))
+        setErro(paraErroCore(err))
         setInspecao(null)
       } finally {
         setInspecionando(false)
@@ -313,7 +301,7 @@ export function EntradaFonte({
         await inspecionarArquivo(res.path, res.url || url)
       } catch (err) {
         setJobUrlAtivo(null)
-        const coreErr = normalizarErro(err)
+        const coreErr = paraErroCore(err)
         if (coreErr.code === 'component_missing' || coreErr.code === 'js_runtime_missing') {
           setMostrarJit(true)
         }
@@ -353,7 +341,7 @@ export function EntradaFonte({
       setUrlCfg(atualizado)
       await executarDownloadUrl(urlVideo.trim())
     } catch (err) {
-      setErro(normalizarErro(err))
+      setErro(paraErroCore(err))
     }
   }
 
@@ -384,7 +372,7 @@ export function EntradaFonte({
       setDialogoPastaAberto(false)
       toast.add({ title: 'Pasta de downloads atualizada.' })
     } catch (err) {
-      setErro(normalizarErro(err))
+      setErro(paraErroCore(err))
     } finally {
       setSalvandoPasta(false)
     }
@@ -430,7 +418,7 @@ export function EntradaFonte({
       toast.add({ title: `Fonte ${basenameCaminho(importado.path)} importada.` })
       await aoImportar(importado)
     } catch (err) {
-      const coreErr = normalizarErro(err)
+      const coreErr = paraErroCore(err)
       if (coreErr.code !== 'cancelled') {
         setErro(coreErr)
       }

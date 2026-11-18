@@ -21,7 +21,7 @@ import { ArrowRight, Languages, RefreshCw, ShieldCheck, Trash2, Wrench } from 'l
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { CampoPermissao, permissaoValida } from '~/componentes/CampoPermissao'
 import { SeletorCaminho } from '~/componentes/SeletorCaminho'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, paraErroCore, type ErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useFila } from '~/core/progresso'
 import type {
@@ -57,18 +57,6 @@ const OPCOES_FILTRO: OpcaoSelect<FiltroEstadoFonte>[] = [
   { valor: 'pendencia', rotulo: 'Offline / Alteradas' },
   { valor: 'prontas', rotulo: 'Prontas para Cortes' },
 ]
-
-function normalizarErro(err: unknown): ErroCore {
-  if (err instanceof ErroCore) return err
-  if (err && typeof err === 'object' && 'code' in err) {
-    const e = err as { code?: unknown; message?: unknown }
-    return new ErroCore(
-      typeof e.code === 'string' && e.code ? e.code : 'desconhecido',
-      typeof e.message === 'string' ? e.message : '',
-    )
-  }
-  return new ErroCore('desconhecido', err instanceof Error ? err.message : String(err ?? ''))
-}
 
 function formatarMetadadosFonte(fonte: FonteProjeto): string {
   const seg = Number(fonte.metadata?.format?.duration ?? 0)
@@ -272,7 +260,7 @@ export function ListaFontes({
         await aoAtualizarFonte(fonte.id)
         toast.add({ title: `Identidade de ${basenameCaminho(fonte.path)} verificada.` })
       } catch (err) {
-        const coreErr = normalizarErro(err)
+        const coreErr = paraErroCore(err)
         if (coreErr.code === 'confirmation_required') {
           setConfirmacaoPendente({ tipo: 'hash', fonte })
         } else if (coreErr.code !== 'cancelled') {
@@ -304,7 +292,7 @@ export function ListaFontes({
         await aoAtualizarFonte(fonte.id)
         toast.add({ title: `Fonte ${basenameCaminho(novoCaminho)} relocalizada.` })
       } catch (err) {
-        const coreErr = normalizarErro(err)
+        const coreErr = paraErroCore(err)
         if (coreErr.code === 'confirmation_required') {
           setAlvoRelocalizar(null)
           setConfirmacaoPendente({ tipo: 'relocate', fonte, path: novoCaminho })
@@ -355,7 +343,7 @@ export function ListaFontes({
       await aoAtualizarTodas()
       toast.add({ title: 'Permissão da Fonte atualizada.' })
     } catch (err) {
-      setErroAcao(normalizarErro(err))
+      setErroAcao(paraErroCore(err))
     } finally {
       setSalvandoPerm(false)
     }
@@ -375,7 +363,7 @@ export function ListaFontes({
       await aoAtualizarFonte(alvoIdioma.id)
       toast.add({ title: 'Idioma da Fonte atualizado.' })
     } catch (err) {
-      setErroAcao(normalizarErro(err))
+      setErroAcao(paraErroCore(err))
     } finally {
       setSalvandoIdioma(false)
     }
@@ -406,7 +394,7 @@ export function ListaFontes({
       })
     } catch (err) {
       setAlvoExcluir(null)
-      setErroAcao(normalizarErro(err))
+      setErroAcao(paraErroCore(err))
     } finally {
       setExcluindoFonte(false)
     }

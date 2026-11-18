@@ -23,7 +23,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import { DialogoResolverIncerteza } from '~/componentes/DialogoResolverIncerteza'
 import { SeletorPerfilRedo } from '~/componentes/SeletorPerfilRedo'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useFila, type Fila, type Job } from '~/core/progresso'
 import {
@@ -317,7 +317,7 @@ export function AcompanhamentoSelecao({
       setConfirmCancelAberta(false)
       await aoRecarregar()
     } catch (err) {
-      setErroAcao(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? '')))
+      setErroAcao(paraErroCore(err))
     } finally {
       setOcupadoAcao(false)
     }
@@ -339,7 +339,7 @@ export function AcompanhamentoSelecao({
       await chamar('selection.resume', { run: runAtivo.id, confirmed: false })
       await aoRecarregar()
     } catch (err) {
-      setErroAcao(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? '')))
+      setErroAcao(paraErroCore(err))
     } finally {
       setOcupadoAcao(false)
     }
@@ -355,7 +355,7 @@ export function AcompanhamentoSelecao({
       await aoRecarregar()
     } catch (err) {
       setResumeConfirm(null)
-      setErroAcao(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? '')))
+      setErroAcao(paraErroCore(err))
     } finally {
       setOcupadoAcao(false)
     }
@@ -373,7 +373,7 @@ export function AcompanhamentoSelecao({
       })
       await aoRecarregar()
     } catch (err) {
-      setErroAcao(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? '')))
+      setErroAcao(paraErroCore(err))
     } finally {
       setOcupadoAcao(false)
     }
@@ -394,7 +394,7 @@ export function AcompanhamentoSelecao({
       }
       setBudgetDialogAberto(true)
     } catch (err) {
-      setErroAcao(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? '')))
+      setErroAcao(paraErroCore(err))
     }
   }
 
@@ -425,7 +425,7 @@ export function AcompanhamentoSelecao({
       setBudgetDialogAberto(false)
       await aoRecarregar()
     } catch (err) {
-      setBudgetErro(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? '')))
+      setBudgetErro(paraErroCore(err))
     } finally {
       setOcupadoAcao(false)
     }

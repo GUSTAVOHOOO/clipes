@@ -14,7 +14,7 @@ import {
   type ResumoCustoPrivacidadeProps,
 } from '@ds'
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import type {
   FonteProjeto,
@@ -270,7 +270,7 @@ export function ConstrutorLote({
       aoMudarSelecionadas?.([])
       await aoCriarLote(criado)
     } catch (err) {
-      const coreErr = err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? ''))
+      const coreErr = paraErroCore(err)
       if (coreErr.code === 'confirmation_required' && !confirmar) {
         const rawUsage = coreErr.usage
         const usageObj =

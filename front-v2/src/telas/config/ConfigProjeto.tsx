@@ -21,7 +21,7 @@ import {
 } from '@ds'
 import { AlertCircle, Lock, Plus, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useFila, type Fila } from '~/core/progresso'
 import { ComEstado, useEstadoForcado } from '~/shell/EstadoForcado'
@@ -218,7 +218,7 @@ export function ConfigProjeto({ projetoAberto, projeto, fila: filaProp }: Config
       setCopiasMantidas(String(cfg.copies))
       setBackups(lista)
     } catch (e) {
-      setErroFatal(e instanceof ErroCore ? e : new ErroCore('desconhecido', String(e)))
+      setErroFatal(paraErroCore(e))
     } finally {
       setCarregandoBackups(false)
     }
@@ -250,7 +250,7 @@ export function ConfigProjeto({ projetoAberto, projeto, fila: filaProp }: Config
       setBackups(listaBackups)
       setCarregandoBackups(false)
     } catch (e) {
-      setErroFatal(e instanceof ErroCore ? e : new ErroCore('desconhecido', String(e)))
+      setErroFatal(paraErroCore(e))
     } finally {
       setCarregando(false)
     }
@@ -359,7 +359,7 @@ export function ConfigProjeto({ projetoAberto, projeto, fila: filaProp }: Config
       aplicarPerfilCarregado(atualizado)
       toast.add({ title: 'Perfil de canal salvo.' })
     } catch (e) {
-      setErroAcao(e instanceof ErroCore ? e : new ErroCore('desconhecido', String(e)))
+      setErroAcao(paraErroCore(e))
     } finally {
       setOcupado(false)
     }
@@ -380,7 +380,7 @@ export function ConfigProjeto({ projetoAberto, projeto, fila: filaProp }: Config
           : 'Modo Somente local desativado neste Projeto.',
       })
     } catch (e) {
-      setErroAcao(e instanceof ErroCore ? e : new ErroCore('desconhecido', String(e)))
+      setErroAcao(paraErroCore(e))
     } finally {
       setOcupado(false)
     }
@@ -403,7 +403,7 @@ export function ConfigProjeto({ projetoAberto, projeto, fila: filaProp }: Config
       await carregarBackups()
       toast.add({ title: 'Configuração de backups salva.' })
     } catch (e) {
-      setErroAcao(e instanceof ErroCore ? e : new ErroCore('desconhecido', String(e)))
+      setErroAcao(paraErroCore(e))
     } finally {
       setOcupado(false)
     }
@@ -417,7 +417,7 @@ export function ConfigProjeto({ projetoAberto, projeto, fila: filaProp }: Config
       await carregarBackups()
       toast.add({ title: 'Backup criado com sucesso.' })
     } catch (e) {
-      setErroAcao(e instanceof ErroCore ? e : new ErroCore('desconhecido', String(e)))
+      setErroAcao(paraErroCore(e))
     } finally {
       setOcupado(false)
     }
@@ -435,7 +435,7 @@ export function ConfigProjeto({ projetoAberto, projeto, fila: filaProp }: Config
       toast.add({ title: 'Backup restaurado com sucesso.' })
     } catch (e) {
       setBackupParaRestaurar(null)
-      setErroAcao(e instanceof ErroCore ? e : new ErroCore('desconhecido', String(e)))
+      setErroAcao(paraErroCore(e))
     } finally {
       setOcupado(false)
     }
