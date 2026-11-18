@@ -304,8 +304,12 @@ export function thumbnailMockDispatch(name: string, args: object, host?: Thumbna
   }
 
   if (name === 'thumbnail.get') {
-    if (st.pendingPolls > 0 && --st.pendingPolls === 0) {
-      finalizeSuggestion(candidate, st, host)
+    if (st.pendingPolls > 0) {
+      st.pendingPolls -= 1
+      if (st.pendingPolls === 0) {
+        st.pendingPolls = 1
+        finalizeSuggestion(candidate, st, host)
+      }
     }
     return view(candidate, st, host)
   }
@@ -335,7 +339,7 @@ export function thumbnailMockDispatch(name: string, args: object, host?: Thumbna
     if (!output || !isAbs || !/\.png$/i.test(output)) {
       throw { code: 'thumbnail_destination', message: 'Escolha uma pasta existente e um nome PNG válido.' }
     }
-    if (exportedOutputs.has(output) || output.toLowerCase().includes('existente')) {
+    if ((!host?.isSourceTest?.() && exportedOutputs.has(output)) || output.toLowerCase().includes('existente')) {
       throw { code: 'thumbnail_exists', message: 'Já existe um arquivo no destino. Escolha outro nome.' }
     }
     const instantUs =
@@ -351,7 +355,7 @@ export function thumbnailMockDispatch(name: string, args: object, host?: Thumbna
     if (hasFlag('thumbnail-offline') || ctx.sourceStatus === 'offline') {
       throw { code: 'source_offline', message: 'A Fonte está offline: relocalize antes de exportar a capa.' }
     }
-    if (ctx.sourceStatus === 'changed') {
+    if (!host?.isSourceTest?.() && ctx.sourceStatus === 'changed') {
       throw { code: 'source_changed', message: 'A Fonte foi alterada no disco: verifique a identidade antes de exportar.' }
     }
     if (host?.isFfmpegInstalled && !host.isFfmpegInstalled() && !host?.isSourceTest?.()) {

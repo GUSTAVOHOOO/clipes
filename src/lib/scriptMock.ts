@@ -485,6 +485,11 @@ function resolveRouteInfo(host: ScriptMockHost | undefined, profileId?: string) 
   }
 }
 
+/** Lê o estado atual do Roteiro sem avançar contadores de polling. */
+export function peekScriptMock(candidate: number) {
+  return scriptView(candidate, getState(candidate))
+}
+
 /** `undefined` quando o comando não é do Roteiro/Ângulos. */
 export function scriptMockDispatch(name: string, args: object, host?: ScriptMockHost): unknown {
   if (!name.startsWith('angles.') && !name.startsWith('script.')) return undefined
@@ -558,8 +563,12 @@ export function scriptMockDispatch(name: string, args: object, host?: ScriptMock
   }
 
   if (name === 'angles.get') {
-    if (st.anglePolls > 0 && --st.anglePolls === 0) {
-      finalizeAngleGeneration(st, host)
+    if (st.anglePolls > 0) {
+      st.anglePolls -= 1
+      if (st.anglePolls === 0) {
+        st.anglePolls = 1
+        finalizeAngleGeneration(st, host)
+      }
     }
     return anglesView(st)
   }
@@ -673,8 +682,12 @@ export function scriptMockDispatch(name: string, args: object, host?: ScriptMock
   }
 
   if (name === 'script.get') {
-    if (st.pendingPolls > 0 && --st.pendingPolls === 0) {
-      finalizeScriptGeneration(candidate, st, host)
+    if (st.pendingPolls > 0) {
+      st.pendingPolls -= 1
+      if (st.pendingPolls === 0) {
+        st.pendingPolls = 1
+        finalizeScriptGeneration(candidate, st, host)
+      }
     }
     return scriptView(candidate, st)
   }

@@ -24,6 +24,7 @@ import {
 } from './thumbnailMock';
 import {
   cancelScriptMockJob,
+  peekScriptMock,
   resetScriptMockState,
   scriptMockDispatch,
   seedScriptMockCandidate,
@@ -2335,7 +2336,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         },
         isFfmpegInstalled: () => ffmpegMock.installed,
         isSourceTest: () => hasSearchFlag('source-test'),
-        resolveRoute: () => resolveAiTaskRoute('packaging'),
+        resolveRoute: hasSearchFlag('source-test') ? undefined : () => resolveAiTaskRoute('packaging'),
         emitProgress: emitirProgressoMock,
         projectId: () => getActiveProjectMock()?.id ?? null,
       });
@@ -2346,7 +2347,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       ensureSelectionDemoInitialized();
       const handled = scriptMockDispatch(name, args, {
         checkTransformed: checkCandidateTransformed,
-        resolveRoute: (task, profileId) => resolveAiTaskRoute(task, profileId),
+        resolveRoute: hasSearchFlag('source-test') ? undefined : (task, profileId) => resolveAiTaskRoute(task, profileId),
         emitProgress: emitirProgressoMock,
         projectId: () => getActiveProjectMock()?.id ?? null,
       });
@@ -2360,10 +2361,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       let scriptAllowed = false;
       let blocks: { id: number; position: number; title: string; durationUs: number | null }[] = [];
       if (info.videoKind === 'transformed') {
-        const scriptDoc = scriptMockDispatch('script.get', { candidate }) as {
-          narrationAllowed: boolean;
-          current: { blocks: { id: number; position: number; title: string }[] } | null;
-        };
+        const scriptDoc = peekScriptMock(candidate);
         scriptAllowed = scriptDoc.narrationAllowed;
         const generated = narrationGenerated.get(candidate) ?? [];
         blocks = (scriptDoc.current?.blocks ?? []).map((b) => ({
@@ -2382,7 +2380,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         originUrl: info.originUrl,
         detectedLanguage: info.detectedLanguage,
         languageRequired: info.languageRequired,
-        resolveRoute: () => resolveAiTaskRoute('packaging'),
+        resolveRoute: hasSearchFlag('source-test') ? undefined : () => resolveAiTaskRoute('packaging'),
         emitProgress: emitirProgressoMock,
         projectId: () => getActiveProjectMock()?.id ?? null,
       });
@@ -2927,12 +2925,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       const a = args as { candidate: number; block?: number; voiceId?: string; choice?: 'script' | 'spoken'; audioBase64?: string; enabled?: boolean; path?: string };
       const cand = a.candidate ?? 1;
       if (!hasSearchFlag('source-test')) checkCandidateTransformed(cand);
-      const s = scriptMockDispatch('script.get', { candidate: cand }, { checkTransformed: checkCandidateTransformed }) as {
-        narrationAllowed: boolean;
-        busy?: boolean;
-        detectedLanguage?: string | null;
-        current: { language?: string; blocks: { id: number; position: number; title: string; narration: string | null }[] } | null;
-      };
+      const s = peekScriptMock(cand);
       const recordNoWorker = typeof location !== 'undefined' && new URLSearchParams(location.search).has('record-no-worker');
       const recordNoSpeech = typeof location !== 'undefined' && new URLSearchParams(location.search).has('record-no-speech');
       const vadReady = !componentsMissing && !recordNoWorker;

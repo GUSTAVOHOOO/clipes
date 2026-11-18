@@ -108,7 +108,6 @@ export function cancelPackagingMockJob(
 const utf8Bytes = (text: string): number => new TextEncoder().encode(text).length
 
 function buildCreditText(lang: string, ctx?: PackagingMockContext): string | null {
-  if (flag('packaging-nopermission')) return null
   if (permissionOverride !== null) {
     if (permissionOverride.status !== 'granted' || !permissionOverride.who?.trim()) return null
     const who = permissionOverride.who.trim()
@@ -116,6 +115,7 @@ function buildCreditText(lang: string, ctx?: PackagingMockContext): string | nul
       ? `Credit: original video by ${who}.`
       : `Crédito: vídeo original de ${who}.`
   }
+  if (flag('packaging-nopermission')) return null
   if (ctx?.permission) {
     if (ctx.permission.status !== 'granted' || !ctx.permission.who?.trim()) return null
     const who = ctx.permission.who.trim()
@@ -541,8 +541,12 @@ export function packagingMockDispatch(name: string, args: object, ctx?: Packagin
 
   if (name === 'packaging.get') {
     const pending = pendingByCandidate.get(candidate)
-    if (pending && pending.polls > 0 && --pending.polls === 0) {
-      finalizeGeneration(candidate, ctx)
+    if (pending && pending.polls > 0) {
+      pending.polls -= 1
+      if (pending.polls === 0) {
+        pending.polls = 1
+        finalizeGeneration(candidate, ctx)
+      }
     }
     return view(candidate, ctx)
   }
