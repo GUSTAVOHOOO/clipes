@@ -204,17 +204,22 @@ export function Fontes({
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       {/* Subnavegação + Busca Global FTS5 */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-linha pb-2.5">
-        <Abas
-          rotulo="Subnavegação de Fontes"
-          valor={sub}
-          aoMudar={(proxima) => {
-            window.location.hash =
-              proxima === 'lotes'
-                ? `#/projeto/${encProjeto}/fontes?sub=lotes`
-                : `#/projeto/${encProjeto}/fontes`
-          }}
-          abas={abasSubnav}
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-titulo font-forte tracking-[-0.01em] text-t1">
+            Fontes e Transcrição
+          </h1>
+          <Abas
+            rotulo="Subnavegação de Fontes"
+            valor={sub}
+            aoMudar={(proxima) => {
+              window.location.hash =
+                proxima === 'lotes'
+                  ? `#/projeto/${encProjeto}/fontes?sub=lotes`
+                  : `#/projeto/${encProjeto}/fontes`
+            }}
+            abas={abasSubnav}
+          />
+        </div>
 
         <form onSubmit={aoSubmeterBusca} className="w-full sm:w-96 lg:w-[430px]">
           <Busca
