@@ -30,6 +30,210 @@ use std::{
 
 pub(super) const KIND_PREFIX: &str = "ai:";
 
+/// Resumo público seguro de um Perfil de Provedor (sem endpoint nem chave).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct ProfileSummary {
+    pub id: String,
+    pub label: String,
+    pub kind: String,
+    pub model: Option<String>,
+}
+
+/// Rota resolvida para uma Tarefa de IA, já após o veto "somente local" (tarefa e Projeto).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiRoute {
+    pub profile: ProfileSummary,
+    pub safety: Safety,
+}
+
+impl AiRoute {
+    pub fn paid(&self) -> bool {
+        matches!(self.safety, Safety::Paid)
+    }
+
+    pub fn preview(&self, estimate: Value) -> Value {
+        json!({
+            "profile": self.profile,
+            "paid": self.paid(),
+            "leavesMachine": self.paid(),
+            "estimate": estimate,
+        })
+    }
+}
+
+/// Pedido único de pré-vôo + enfileiramento de 1..N unidades de uma Tarefa de IA.
+pub struct EnqueueAiRequest<'a> {
+    pub task_id: &'a str,
+    pub profile_id: Option<&'a str>,
+    pub batch: Option<&'a str>,
+    pub inputs: &'a [TaskInput],
+    pub confirmed: bool,
+    pub confirmation_message: &'a str,
+}
+
+/// Códigos sanitizados de falha/violação extraídos de `jobs.result` (ADR-0006).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct JobOutcomeCodes {
+    pub code: Option<String>,
+    pub violations: Vec<String>,
+}
+
+/// Resolve rota já aplicando os dois vetos "somente local" (por Tarefa e por Projeto).
+pub fn resolve_route(task_id: &str, profile_id: Option<&str>) -> Result<AiRoute, CoreError> {
+    Ok(match crate::provider::routed(Some(task_id), profile_id)? {
+        crate::provider::Routed::Cli(name) => AiRoute {
+            profile: ProfileSummary {
+                id: name.clone(),
+                label: name.clone(),
+                kind: name,
+                model: None,
+            },
+            safety: Safety::Paid,
+        },
+        crate::provider::Routed::Api { profile, local } => AiRoute {
+            profile: ProfileSummary {
+                id: profile.id,
+                label: profile.label,
+                kind: profile.kind,
+                model: Some(profile.model),
+            },
+            safety: if local { Safety::Local } else { Safety::Paid },
+        },
+    })
+}
+
+/// Estima 1..N unidades para a tarefa e rota informadas; custo desconhecido nunca vira zero.
+pub fn estimate_units(
+    task_id: &str,
+    inputs: &[TaskInput],
+    safety: Safety,
+    profile_id: Option<&str>,
+) -> Value {
+    let paid = matches!(safety, Safety::Paid);
+    let mut kind = String::from("unknown");
+    let (mut input_tokens, mut min, mut max) = (0_u64, Some(0_u64), Some(0_u64));
+    if inputs.is_empty() {
+        min = None;
+        max = None;
+    } else if let (Some(definition), Ok((target, profile))) = (
+        ai_task::find(task_id),
+        route_of_profile(task_id, paid, profile_id),
+    ) {
+        for (i, input) in inputs.iter().enumerate() {
+            let estimate = request_for(definition, input)
+                .and_then(|request| cost::estimate_for(&target, &profile, &request).ok());
+            let Some(estimate) = estimate else {
+                kind = "unknown".into();
+                min = None;
+                max = None;
+                break;
+            };
+            let this = estimate["kind"].as_str().unwrap_or("unknown").to_owned();
+            if i == 0 {
+                kind = this;
+            } else if kind != this {
+                kind = "unknown".into();
+            }
+            input_tokens += estimate["inputTokens"].as_u64().unwrap_or(0);
+            min = min
+                .zip(estimate["minMicroUsd"].as_u64())
+                .map(|(a, b)| a + b);
+            max = max
+                .zip(estimate["maxMicroUsd"].as_u64())
+                .map(|(a, b)| a + b);
+        }
+    } else {
+        min = None;
+        max = None;
+    }
+    json!({
+        "kind": kind,
+        "units": inputs.len(),
+        "windows": inputs.len(),
+        "inputTokens": input_tokens,
+        "minMicroUsd": min,
+        "maxMicroUsd": max,
+    })
+}
+
+pub(crate) fn confirmation_error(
+    route: &AiRoute,
+    estimate: Value,
+    include_profile: bool,
+    message: &str,
+) -> CoreError {
+    let usage = if include_profile {
+        json!({
+            "estimate": estimate,
+            "profile": route.profile,
+            "leavesMachine": route.paid(),
+        })
+    } else {
+        json!({"estimate": estimate})
+    };
+    CoreError {
+        code: "confirmation_required".into(),
+        message: message.into(),
+        usage: Some(usage),
+    }
+}
+
+/// Garante confirmação paga (calculando a estimativa apenas se necessário) e enfileira todas as unidades.
+pub fn enqueue_checked(req: EnqueueAiRequest<'_>) -> Result<(AiRoute, Vec<i64>), CoreError> {
+    let route = resolve_route(req.task_id, req.profile_id)?;
+    if route.paid() && !req.confirmed {
+        let estimate = estimate_units(req.task_id, req.inputs, route.safety, req.profile_id);
+        return Err(confirmation_error(
+            &route,
+            estimate,
+            req.profile_id.is_some(),
+            req.confirmation_message,
+        ));
+    }
+    let mut ids = Vec::with_capacity(req.inputs.len());
+    for input in req.inputs {
+        ids.push(enqueue_ai_with_profile(
+            req.task_id,
+            input,
+            route.safety,
+            req.batch,
+            req.profile_id,
+        )?);
+    }
+    Ok((route, ids))
+}
+
+fn is_safe_code(code: &str) -> bool {
+    !code.is_empty()
+        && code.len() <= 48
+        && code
+            .chars()
+            .all(|ch| ch.is_ascii_lowercase() || ch == '_' || ch.is_ascii_digit())
+}
+
+/// Extrai `code` e `violations[].code` de `jobs.result` somente no formato identificador seguro (`[a-z0-9_]`).
+pub fn outcome_codes(result: Option<&Value>) -> JobOutcomeCodes {
+    let Some(result) = result else {
+        return JobOutcomeCodes::default();
+    };
+    let code = result["code"]
+        .as_str()
+        .filter(|c| is_safe_code(c))
+        .map(str::to_owned);
+    let violations = result["violations"]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item["code"].as_str())
+                .filter(|c| is_safe_code(c))
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+    JobOutcomeCodes { code, violations }
+}
+
 fn error(code: &str, message: &str) -> CoreError {
     CoreError {
         code: code.into(),
@@ -63,7 +267,7 @@ pub fn set_ai_route(route: Option<(Target, String)>) {
 /// explícito vale no lugar dos outros dois e passa pelo veto "somente local" (por tarefa e por
 /// Projeto) antes de qualquer envio. Sem configuração, um Provedor pago fica sem preço (custo
 /// desconhecido, nunca zero) e um local custa zero.
-pub(crate) fn route_of_profile(
+fn route_of_profile(
     task: &str,
     paid: bool,
     profile: Option<&str>,
