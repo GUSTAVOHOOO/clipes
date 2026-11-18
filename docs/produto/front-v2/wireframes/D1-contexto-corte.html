@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>D1 · ContextoCorte e Exportação Individual — Wireframes front v2</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .shell.com-contexto.shell-duas-linhas { grid-template-rows: 44px auto 1fr 30px; }
+  .ctx-empilhado { flex-direction: column; align-items: stretch; gap: 6px; padding: 6px 12px; height: auto; }
+  .ctx-subabas { display: flex; gap: 4px; align-items: center; }
+  .ctx-subaba {
+    padding: 4px 10px; border: 1px solid var(--borda); border-radius: var(--r);
+    background: var(--tela); color: var(--texto-2); font-size: 12px; text-decoration: none;
+  }
+  .ctx-subaba.atual { background: var(--sutil); color: var(--texto); font-weight: 600; border-color: var(--texto); }
+  .titulo-corte { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .check-item { display: flex; align-items: flex-start; gap: 8px; padding: 6px 8px; border: 1px solid var(--sutil); border-radius: var(--r); background: var(--painel); }
+  .check-icone { font-family: ui-monospace, monospace; font-weight: 700; width: 24px; text-align: center; flex: none; }
+  .placeholder-subaba {
+    flex: 1; display: grid; place-items: center; padding: 24px;
+    background: var(--painel); color: var(--texto-2);
+  }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>D1 · Cabeçalho &lt;ContextoCorte&gt; e Exportação Individual</h1>
+    <p>Rotas: <span class="mono">#/projeto/:id/corte/:corteId/editar|transformar|empacotar</span>.
+      Especificação: <span class="mono">telas/D-corte-editar.md</span> (Superfície 1) e <span class="mono">02-consolidacao.md</span> (§2.2).</p>
+    <nav>
+      <a href="#transformado-1366">Vídeo transformado (1366)</a>
+      <a href="#direto-1440">Corte direto (1440)</a>
+      <a href="#avulso-1366">Corte avulso (1366)</a>
+      <a href="#exportar-1366">Diálogo Exportação (1366)</a>
+      <a href="#exportando-1366">Exportando e fallback CPU (1366)</a>
+      <a href="#flush-erro-1366">Falha de editor.flush (1366)</a>
+    </nav>
+  </header>
+
+  <!-- 1. Vídeo transformado em 1366 -->
+  <section class="wf-variante" id="transformado-1366">
+    <h2>Vídeo transformado · 1366 × 768 (sub-cabeçalho em 2 linhas compactas)</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto shell-duas-linhas">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Dark História ▾</button>
+          <nav class="etapas">
+            <span class="etapa">1. Fontes e Transcrição<small>4</small></span>
+            <span class="etapa atual">2. Cortes<small>8 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra">
+            <span class="selo">Somente local</span>
+            <button class="btn">Fila · 0 ativos</button>
+            <button class="btn">Comandos <kbd>Ctrl K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+          </div>
+        </div>
+
+        <div class="contexto-corte ctx-empilhado">
+          <div class="linha">
+            <button class="btn fantasma">← Cortes</button><span class="n">1</span>
+            <span class="titulo-corte">Corte <span class="mono">2/8</span>: "Como o navegador bloqueou o vazamento em 2019"</span><span class="n">2</span>
+            <span class="selo cheio empurra">Vídeo transformado</span><span class="n">3</span>
+          </div>
+          <div class="linha">
+            <button class="btn">&lt; Anterior <kbd>Alt+PgUp</kbd></button>
+            <button class="btn">Próximo aprovado &gt; <kbd>Alt+PgDn</kbd></button><span class="n">4</span>
+            <nav class="ctx-subabas" aria-label="Etapas do Corte" style="margin-left: 8px">
+              <span class="ctx-subaba atual" aria-current="page">Editar</span>
+              <span class="ctx-subaba">Transformar</span>
+              <span class="ctx-subaba">Empacotar</span>
+            </nav><span class="n">5</span>
+            <button class="btn prim empurra">Exportar Corte <kbd>Ctrl E</kbd></button><span class="n">6</span>
+          </div>
+        </div>
+
+        <div class="conteudo">
+          <div class="placeholder-subaba">
+            <div class="caixa tracejada" style="padding: 20px 28px; text-align: center">
+              <strong>Área da sub-aba ativa (<span class="mono">/editar</span>, <span class="mono">/transformar</span> ou <span class="mono">/empacotar</span>)</strong>
+              <p class="rotulo" style="margin: 6px 0 0">O cabeçalho &lt;ContextoCorte&gt; permanece fixo acima das 3 sub-abas sem rolagem externa.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="barra-status">
+          <span>Salvo</span><span>Sem jobs ativos</span>
+          <span class="empurra"><kbd>F6</kbd> trocar região · <kbd>?</kbd> atalhos</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Corte direto em 1440 -->
+  <section class="wf-variante" id="direto-1440">
+    <h2>Corte direto · 1440 × 900 (linha única folgada; sub-aba Transformar oculta)</h2>
+    <div class="wf-quadro w1440">
+      <div class="shell com-contexto">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <nav class="etapas">
+            <span class="etapa">1. Fontes e Transcrição<small>2</small></span>
+            <span class="etapa atual">2. Cortes<small>12 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra">
+            <button class="btn">Fila · 1 ativo</button>
+            <button class="btn">Comandos <kbd>Ctrl K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+          </div>
+        </div>
+
+        <div class="contexto-corte">
+          <button class="btn fantasma">← Cortes</button>
+          <button class="btn">&lt; Anterior</button>
+          <span class="titulo-corte">Corte <span class="mono">5/12</span>: "Reação ao anúncio da placa nova na live"</span>
+          <button class="btn">Próximo aprovado &gt;</button>
+          <span class="selo">Corte direto</span>
+          <button class="btn fantasma" disabled title="Disponível após implementação no núcleo">Converter em Vídeo transformado</button><span class="n">7</span>
+          <nav class="ctx-subabas empurra" aria-label="Etapas do Corte">
+            <span class="ctx-subaba atual" aria-current="page">Editar</span>
+            <span class="ctx-subaba">Empacotar</span>
+          </nav><span class="n">8</span>
+          <button class="btn prim">Exportar Corte <kbd>Ctrl E</kbd></button>
+        </div>
+
+        <div class="conteudo">
+          <div class="placeholder-subaba">
+            <div class="caixa tracejada" style="padding: 20px 28px; text-align: center">
+              <strong>Corte direto em <span class="mono">1440 × 900</span></strong>
+              <p class="rotulo" style="margin: 6px 0 0">A sub-aba <span class="mono">Transformar</span> é omitida; acesso direto por URL redireciona para <span class="mono">/editar</span> com toast explicativo.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="barra-status">
+          <span>Salvo</span><span>Proxy pronto</span>
+          <span class="empurra"><kbd>Alt+PgUp/PgDn</kbd> trocar Corte · <kbd>F6</kbd> regiões</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Corte avulso em 1366 -->
+  <section class="wf-variante" id="avulso-1366">
+    <h2>Corte avulso (<span class="mono">avulso-3-14-19</span>) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <nav class="etapas">
+            <span class="etapa">1. Fontes e Transcrição<small>2</small></span>
+            <span class="etapa atual">2. Cortes<small>12 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra">
+            <button class="btn">Fila · 0 ativos</button>
+            <button class="btn">Comandos <kbd>Ctrl K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+          </div>
+        </div>
+
+        <div class="contexto-corte">
+          <button class="btn fantasma">← Cortes</button>
+          <span class="titulo-corte">Corte <span class="mono">#avulso-3-14-19</span> · Fonte: Live #03</span><span class="n">9</span>
+          <span class="selo">Corte avulso</span>
+          <nav class="ctx-subabas empurra" aria-label="Etapas do Corte">
+            <span class="ctx-subaba atual" aria-current="page">Editar</span>
+          </nav><span class="n">10</span>
+          <button class="btn prim">Exportar Corte <kbd>Ctrl E</kbd></button>
+        </div>
+
+        <div class="conteudo">
+          <div class="placeholder-subaba">
+            <div class="caixa tracejada" style="padding: 20px 28px; text-align: center">
+              <strong>Corte avulso sem <span class="mono">candidateId</span></strong>
+              <p class="rotulo" style="margin: 6px 0 0">Navegação Anterior/Próximo, conversão, <span class="mono">Transformar</span> e <span class="mono">Empacotar</span> não se aplicam a Cortes avulsos.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="barra-status">
+          <span>Salvo</span><span>Sem jobs ativos</span>
+          <span class="empurra"><kbd>Ctrl E</kbd> exportar · <kbd>F6</kbd> regiões</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Diálogo de Exportação Individual -->
+  <section class="wf-variante" id="exportar-1366">
+    <h2>Diálogo de Exportação Individual (<span class="mono">guardrails.check</span> + destino) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <nav class="etapas">
+            <span class="etapa">1. Fontes e Transcrição</span>
+            <span class="etapa atual">2. Cortes<small>12 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra"><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </div>
+        <div class="contexto-corte">
+          <button class="btn fantasma">← Cortes</button>
+          <span class="titulo-corte">Corte <span class="mono">5/12</span>: "Reação ao anúncio da placa nova na live"</span>
+          <span class="selo">Corte direto</span>
+          <button class="btn prim empurra">Exportar Corte <kbd>Ctrl E</kbd></button>
+        </div>
+        <div class="conteudo"><div class="placeholder-subaba">Editor em segundo plano (inerte)</div></div>
+        <div class="barra-status"><span>Salvo antes de abrir diálogo</span></div>
+      </div>
+
+      <div class="dialogo-fundo">
+        <div class="dialogo" style="width: 560px" role="dialog" aria-modal="true" aria-labelledby="dlg-exp-tit">
+          <div class="linha">
+            <strong id="dlg-exp-tit">Exportar Corte em MP4 (<span class="mono">1080×1920</span>)</strong><span class="n">11</span>
+            <button class="btn icone empurra" aria-label="Fechar">✕</button>
+          </div>
+
+          <div class="coluna" style="gap: 6px">
+            <span class="rotulo">Conferência pré-exportação (<span class="mono">guardrails.check</span> — informativa)</span>
+            <div class="check-item">
+              <span class="check-icone">[✓]</span>
+              <div class="cresce"><strong>Permissão registrada</strong><div class="rotulo">Criador TechBR · YouTube (uso autorizado com crédito)</div></div>
+            </div>
+            <div class="check-item">
+              <span class="check-icone">[!]</span>
+              <div class="cresce">
+                <strong>Aviso de Corte direto</strong>
+                <div class="rotulo">Cortes sem Transformação têm risco de recusa por conteúdo reutilizado.</div>
+              </div>
+              <button class="btn">Entendi o risco</button><span class="n">12</span>
+            </div>
+            <div class="check-item">
+              <span class="check-icone">[!]</span>
+              <div class="cresce">
+                <strong>1 trilha sonora com licença "Desconhecida"</strong>
+                <div class="rotulo">Verifique os direitos na aba Áudio e SFX antes de publicar.</div>
+              </div>
+            </div>
+            <div class="check-item">
+              <span class="check-icone">[✕]</span>
+              <div class="cresce">
+                <strong>Caractere ausente na fonte da legenda (<span class="mono">missingGlyphs: "🔥"</span>)</strong>
+                <div class="rotulo">A fonte atual não renderiza este caractere na exportação.</div>
+              </div>
+              <button class="btn">Corrigir na Transcrição</button><span class="n">13</span>
+            </div>
+          </div>
+
+          <div class="coluna" style="gap: 4px">
+            <label class="rotulo">Pasta e nome do arquivo (<span class="mono">export.settings</span>)</label>
+            <div class="linha">
+              <div class="campo cresce mono" style="color: var(--texto)">C:\Users\dev\Videos\Clipes\corte-05-placa-nova.mp4</div>
+              <button class="btn">Escolher…</button><span class="n">14</span>
+            </div>
+          </div>
+
+          <div class="linha" style="justify-content: flex-end">
+            <button class="btn">Cancelar</button>
+            <button class="btn prim" disabled title="Corrija glifos ausentes para liberar">Iniciar exportação</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Exportação em andamento e fallback para CPU -->
+  <section class="wf-variante" id="exportando-1366">
+    <h2>Exportação em andamento e aviso de fallback para CPU · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <nav class="etapas">
+            <span class="etapa">1. Fontes e Transcrição</span>
+            <span class="etapa atual">2. Cortes<small>12 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+          <div class="linha empurra"><button class="btn">Fila · 1 ativo</button></div>
+        </div>
+        <div class="contexto-corte">
+          <button class="btn fantasma">← Cortes</button>
+          <span class="titulo-corte">Corte <span class="mono">5/12</span>: "Reação ao anúncio da placa nova na live"</span>
+          <span class="selo">Corte direto</span>
+          <span class="selo cheio empurra mono">Exportando 48%</span>
+        </div>
+        <div class="conteudo"><div class="placeholder-subaba">Editor em segundo plano</div></div>
+        <div class="barra-status"><span>Salvo</span><span>Exportação em curso (1/1)</span></div>
+      </div>
+
+      <div class="dialogo-fundo">
+        <div class="dialogo" style="width: 520px" role="dialog" aria-modal="true">
+          <div class="linha">
+            <strong>Exportando Corte em MP4</strong>
+            <button class="btn icone empurra" aria-label="Minimizar para fila">✕</button>
+          </div>
+          <div class="coluna" style="gap: 6px">
+            <div class="linha">
+              <span>Renderizando vídeo e legendas (<span class="mono">-14 LUFS</span>)…</span>
+              <span class="mono empurra">48%</span>
+            </div>
+            <div class="barra-prog"><i style="--p: 48%"></i></div>
+            <p class="rotulo" style="margin: 0">Você pode fechar esta janela e continuar editando outro Corte; o job segue na Fila Global.</p>
+          </div>
+
+          <div class="banner">
+            <span class="selo cheio">Aviso</span>
+            <span style="font-size: 12px">Após concluir: se houver falha de GPU, exibe <em>"A exportação usou a CPU porque o encoder de placa de vídeo falhou."</em> (<span class="mono">encoder_fallback</span>)</span><span class="n">15</span>
+          </div>
+
+          <div class="linha" style="justify-content: flex-end">
+            <button class="btn perigo">Cancelar exportação</button>
+            <button class="btn">Continuar em segundo plano</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Diálogo de 3 ações da falha de editor.flush -->
+  <section class="wf-variante" id="flush-erro-1366">
+    <h2>Falha de <span class="mono">editor.flush</span> ao sair de Editar (diálogo de 3 ações) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Dark História ▾</button>
+          <nav class="etapas">
+            <span class="etapa">1. Fontes e Transcrição</span>
+            <span class="etapa atual">2. Cortes<small>8 aprovados</small></span>
+            <span class="etapa">3. Exportação</span>
+          </nav>
+        </div>
+        <div class="contexto-corte">
+          <button class="btn fantasma">← Cortes</button>
+          <span class="titulo-corte">Corte <span class="mono">2/8</span>: "Como o navegador bloqueou o vazamento em 2019"</span>
+          <button class="btn empurra">Próximo aprovado &gt;</button>
+        </div>
+        <div class="conteudo"><div class="placeholder-subaba">Rota /editar mantida (navegação cancelada)</div></div>
+        <div class="barra-status"><span>Falha ao salvar (tentar novamente)</span></div>
+      </div>
+
+      <div class="dialogo-fundo">
+        <div class="dialogo" style="width: 520px" role="alertdialog" aria-modal="true" aria-labelledby="dlg-flush-tit">
+          <div class="linha">
+            <strong id="dlg-flush-tit">Não foi possível salvar suas alterações</strong><span class="n">16</span>
+          </div>
+          <p style="margin: 0">Espaço livre insuficiente no disco do Projeto para gravar as últimas edições antes de sair deste Corte.</p>
+          <div class="caixa" style="font-size: 12px; color: var(--texto-2)">
+            ▸ Ver detalhe técnico (<span class="mono">insufficient_space</span>)
+          </div>
+          <div class="coluna" style="gap: 6px; align-items: stretch">
+            <button class="btn prim" style="justify-content: center">Tentar salvar novamente</button>
+            <button class="btn" style="justify-content: center">Continuar editando</button>
+            <div class="linha">
+              <button class="btn perigo cresce" style="justify-content: center">Sair descartando alterações não salvas</button><span class="n">17</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li><strong>Voltar para Cortes:</strong> executa <span class="mono">editor.flush</span> antes de desmontar <span class="mono">/editar</span> e retorna para <span class="mono">#/projeto/:id/cortes</span> (ou à execução <span class="mono">?run=:runId</span> de origem).</li>
+      <li><strong>Identificação do Corte:</strong> exibe <span class="mono">Corte i/N: "Título"</span> em <span class="mono">tabular-nums</span>. Quando vem da Revisão (<span class="mono">?run=:runId</span>), <span class="mono">N</span> é o total de aprovados da execução; quando vem da Exportação, usa todos os aprovados do Projeto. Títulos longos truncam com reticências sem quebrar a barra.</li>
+      <li><strong>Selo de tipo de vídeo:</strong> <span class="mono">&lt;SeloTipoVideo&gt;</span> diferencia <strong>Vídeo transformado</strong> e <strong>Corte direto</strong> com ícone + rótulo textual (SC 1.4.1).</li>
+      <li><strong>Navegação sequencial (<kbd>Alt+PgUp</kbd> / <kbd>Alt+PgDn</kbd>):</strong> chama <span class="mono">editor.flush</span> (se em <span class="mono">/editar</span>) e troca <span class="mono">:corteId</span> mantendo a sub-aba atual. Se o vizinho for Corte direto estando em <span class="mono">/transformar</span>, cai na guarda de rota, redireciona para <span class="mono">/editar</span> e exibe toast informativo.</li>
+      <li><strong>Sub-abas (<span class="mono">nav aria-label="Etapas do Corte"</span>):</strong> links reais com <span class="mono">aria-current="page"</span>. <span class="mono">Transformar</span> só aparece quando <span class="mono">videoKind === 'transformed'</span> e <span class="mono">candidateId !== null</span>.</li>
+      <li><strong>Exportar Corte (<kbd>Ctrl+E</kbd>):</strong> salva pendências com <span class="mono">editor.flush</span> e consulta <span class="mono">guardrails.check</span>, <span class="mono">export.captions</span> e <span class="mono">export.settings</span> antes de abrir o diálogo.</li>
+      <li><strong>Ação discreta de conversão:</strong> em Corte direto, botão <em>"Converter em Vídeo transformado"</em> permanece desabilitado com tooltip até existir o ticket #4 do núcleo (<span class="mono">selection.candidate.set_kind</span>).</li>
+      <li><strong>Omissão de <span class="mono">Transformar</span>:</strong> em Corte direto, a aba é removida do DOM (não apenas desabilitada) para manter o fluxo enxuto (Princípio 5).</li>
+      <li><strong>Corte avulso (<span class="mono">avulso-&lt;sourceId&gt;-&lt;startId&gt;-&lt;endId&gt;</span>):</strong> criado por <span class="mono">editor.open</span> sem <span class="mono">candidate_id</span>. Sem paginação <span class="mono">i/N</span> nem botões Anterior/Próximo.</li>
+      <li><strong>Sub-abas de Corte avulso:</strong> exibe apenas <span class="mono">Editar</span> (<span class="mono">Transformar</span> e <span class="mono">Empacotar</span> exigem <span class="mono">candidateId</span>).</li>
+      <li><strong>Estado carregando do diálogo:</strong> enquanto <span class="mono">guardrails.check</span> / <span class="mono">export.captions</span> / <span class="mono">export.settings</span> respondem, exibe <span class="mono">&lt;Esqueleto variante="linha" /&gt;</span> no checklist e mantém <em>Iniciar exportação</em> desabilitado.</li>
+      <li><strong>Ciência de risco único:</strong> clicar em <em>Entendi o risco</em> chama <span class="mono">guardrails.ack_direct_notice</span>, atualiza o item sem fechar o diálogo e grava <span class="mono">directMonetizationAck: true</span> no Perfil de canal.</li>
+      <li><strong>Bloqueio apenas onde há erro real:</strong> itens de Permissão, Corte direto, licença de áudio, <span class="mono">over60s</span> e <span class="mono">longFreezeTail</span> são informativos; apenas <span class="mono">missingGlyphs</span> não vazio, <span class="mono">export_exists</span>, <span class="mono">source_offline</span> ou ausência de FFmpeg impedem iniciar a exportação, oferecendo ação direta de correção.</li>
+      <li><strong>Campo de destino editável:</strong> pré-preenchido com <span class="mono">last_directory</span> + <span class="mono">exportFilename</span>; o input é editável diretamente (para Playwright/E2E) além do botão nativo <span class="mono">Escolher…</span> (<span class="mono">@tauri-apps/plugin-dialog</span>).</li>
+      <li><strong>Fallback de encoder e conclusão:</strong> ao terminar (<span class="mono">core-progress stage: "complete"</span>), chama <span class="mono">export.status { job }</span>. Se caiu para CPU, exibe <span class="mono">&lt;Status tom="aviso"&gt;</span> (depende do ticket #1 do núcleo para serializar <span class="mono">encoder_fallback</span>).</li>
+      <li><strong>Cancelamento de saída:</strong> se <span class="mono">editor.flush</span> falhar ao trocar de rota ou fechar a janela (<span class="mono">WindowEvent::CloseRequested</span>), a navegação/fechamento é abortado e o <span class="mono">alertdialog</span> mantém o usuário no editor com foco inicial em <em>Tentar salvar novamente</em>.</li>
+      <li><strong>Válvula de escape (Decisão #4):</strong> <em>"Sair descartando alterações não salvas"</em> (variante perigo) evita loop infinito caso o disco esteja bloqueado ou cheio.</li>
+    </ol>
+  </section>
+
+</main>
+<script src="kit.js"></script>
+</body>
+</html>

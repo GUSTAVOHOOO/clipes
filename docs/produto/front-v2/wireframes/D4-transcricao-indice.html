@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>D4 · Transcrição do Corte e Índice do Corte — Wireframes front v2</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .shell-editor { grid-template-rows: 44px auto 1fr 30px; }
+  .ctx-compacto { padding: 5px 12px; }
+  .seg-btn { padding: 3px 8px; border: 1px solid var(--borda); background: var(--tela); font-size: 12px; color: var(--texto-2); }
+  .seg-btn.ativo { background: var(--sutil); color: var(--texto); font-weight: 600; border-color: var(--texto); }
+  .trilho-recolhido {
+    width: 42px; flex: none; background: var(--painel); border-left: 1px solid var(--borda);
+    display: flex; flex-direction: column; align-items: center; padding: 8px 4px; gap: 8px;
+  }
+  .rotulo-vertical { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 11px; color: var(--texto-2); font-weight: 600; }
+
+  .frase-card {
+    padding: 8px 10px; border: 1px solid var(--borda); border-radius: var(--r);
+    background: var(--tela); display: flex; flex-direction: column; gap: 6px; font-size: 12px;
+  }
+  .frase-card.vizinha { background: var(--painel); opacity: .65; border-style: dashed; }
+  .frase-card.ativa { outline: 2px solid var(--texto); }
+  .palavras { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; line-height: 1.8; }
+  .palavra {
+    display: inline-flex; align-items: center; gap: 2px; min-width: 24px; min-height: 24px;
+    padding: 0 5px; border-radius: 3px; border: 1px solid transparent;
+  }
+  .palavra.tocando { background: var(--forte); color: #fff; font-weight: 600; }
+  .palavra.baixa-conf { border-bottom: 2px dotted var(--texto); }
+  .palavra.override { border: 1px solid var(--texto); background: var(--sutil); }
+  .palavra.busca-hit { background: var(--sutil); outline: 1px solid var(--texto); }
+  .palavra-edit {
+    display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px;
+    border: 2px solid var(--texto); border-radius: var(--r); background: var(--tela);
+  }
+  .sil-inline {
+    display: inline-flex; align-items: center; gap: 4px; min-height: 24px; padding: 0 6px;
+    border: 1px dashed var(--texto-2); border-radius: 3px; font-size: 11px;
+    background: repeating-linear-gradient(45deg, var(--sutil), var(--sutil) 4px, var(--tela) 4px, var(--tela) 8px);
+  }
+  .sil-inline .tachado { text-decoration: line-through; }
+  .menu-palavra {
+    border: 1px solid var(--texto); border-radius: var(--r); background: var(--tela);
+    box-shadow: 0 4px 12px rgb(0 0 0 / .16); padding: 4px; display: flex; flex-direction: column; gap: 2px;
+    font-size: 12px; width: 260px;
+  }
+  .menu-palavra > div { padding: 5px 8px; border-radius: 3px; display: flex; justify-content: space-between; }
+  .menu-palavra > div.foco { background: var(--sutil); font-weight: 600; }
+
+  .idx-filtros { display: flex; flex-wrap: wrap; gap: 4px; }
+  .idx-chip { padding: 3px 7px; border: 1px solid var(--borda); border-radius: 10px; font-size: 11px; background: var(--tela); }
+  .idx-chip.ativo { background: var(--forte); color: #fff; border-color: var(--forte); }
+  .idx-linha {
+    padding: 7px 8px; border-bottom: 1px solid var(--sutil); background: var(--tela);
+    display: flex; flex-direction: column; gap: 4px; font-size: 12px;
+  }
+  .idx-linha.sel { background: var(--sutil); outline: 2px solid var(--texto); outline-offset: -2px; }
+  .btn-xs { height: 24px; padding: 0 6px; font-size: 11px; }
+  .palco-mini { flex: 1; background: var(--fundo); display: flex; flex-direction: column; min-width: 0; }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>D4 · Painel Esquerdo: Transcrição do Corte e Índice do Corte</h1>
+    <p>Rota: <span class="mono">#/projeto/:id/corte/:corteId/editar</span> (Zona 1 — acoplado à esquerda, <kbd>Ctrl+[</kbd>).
+      Especificação: <span class="mono">telas/D-corte-editar.md</span> (Zona 1) e <span class="mono">02-consolidacao.md</span> (§2.7 e "Avaliação objetiva do Pacote D").</p>
+    <nav>
+      <a href="#transcricao-1366">Transcrição do Corte (1366)</a>
+      <a href="#indice-1366">Índice do Corte — Lista Virtual (1366)</a>
+      <a href="#estados-1440">Estados: Carregando, Busca vazia e Anatomia (1440)</a>
+    </nav>
+  </header>
+
+  <!-- 1. Transcrição do Corte -->
+  <section class="wf-variante" id="transcricao-1366">
+    <h2>Transcrição do Corte (Frases vizinhas, silêncios, F2 inline e menu da palavra) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto shell-editor">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Dark História ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes e Transcrição</span><span class="etapa atual">2. Cortes</span><span class="etapa">3. Exportação</span></nav>
+          <div class="linha empurra"><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </div>
+        <div class="contexto-corte ctx-compacto">
+          <button class="btn fantasma" style="height: 24px">← Cortes</button>
+          <strong>Corte 2/8: "Como o navegador bloqueou o vazamento em 2019"</strong>
+          <span class="selo cheio">Vídeo transformado</span>
+          <button class="btn prim empurra" style="height: 24px">Exportar Corte <kbd>Ctrl E</kbd></button>
+        </div>
+
+        <div class="conteudo">
+          <!-- Painel Esquerdo: Transcrição -->
+          <aside class="painel" style="width: 470px" aria-label="Transcrição e Índice do Corte">
+            <div class="painel-cab" style="padding: 6px 10px">
+              <div class="linha" style="gap: 0">
+                <span class="seg-btn ativo" aria-pressed="true">Transcrição</span>
+                <span class="seg-btn" aria-pressed="false">Índice do Corte</span>
+              </div><span class="n">1</span>
+              <button class="btn icone empurra" style="height: 24px; width: 24px" title="Recolher (Ctrl+[)">×</button>
+            </div>
+
+            <div class="painel-corpo" style="padding: 8px 10px">
+              <!-- Busca local -->
+              <div class="linha">
+                <div class="campo cresce" style="color: var(--texto); height: 26px">vazamento</div>
+                <span class="mono rotulo">2/3</span>
+                <button class="btn btn-xs">↑</button><button class="btn btn-xs">↓</button><button class="btn btn-xs">×</button><span class="n">2</span>
+              </div>
+
+              <!-- Frase vizinha antes do corte (atenuada) -->
+              <div class="frase-card vizinha">
+                <div class="linha">
+                  <span class="mono rotulo">Frase 11 · 00:08.4 (fora do Corte)</span>
+                  <button class="btn btn-xs empurra">Incluir no Corte</button><span class="n">3</span>
+                </div>
+                <div>Naquela transmissão ninguém imaginava o que estava prestes a acontecer.</div>
+              </div>
+
+              <!-- Frase 12 com edição inline F2 -->
+              <div class="frase-card">
+                <div class="linha"><span class="mono rotulo">Frase 12 · 00:11.9</span></div>
+                <div class="palavras">
+                  <span class="palavra">Quando</span>
+                  <span class="palavra">o</span>
+                  <span class="palavra-edit">
+                    <strong>navegador</strong>
+                    <span class="rotulo"><kbd>Enter</kbd> salva · <kbd>Esc</kbd> cancela</span>
+                  </span><span class="n">4</span>
+                  <span class="palavra">bloqueou</span>
+                  <span class="palavra">tudo</span>
+                </div>
+              </div>
+
+              <!-- Frase 13 ativa com palavra tocando, silêncio inline, baixa confiança e menu -->
+              <div class="frase-card ativa">
+                <div class="linha">
+                  <span class="mono rotulo"><strong>Frase 13 · 00:14.2 (ativa)</strong></span>
+                  <span class="selo empurra">Entrada aqui</span>
+                </div>
+                <div class="palavras">
+                  <span class="palavra">e</span>
+                  <span class="palavra">foi</span>
+                  <span class="palavra override" title="Destaque de legenda (captions.override)">★ exatamente</span><span class="n">5</span>
+                  <span class="palavra tocando">▶ vazamento</span><span class="n">6</span>
+                  <span class="sil-inline">
+                    <span class="tachado">[pausa 1,8 s removida]</span>
+                    <button class="btn btn-xs" style="height: 20px; padding: 0 5px">Restaurar</button>
+                  </span><span class="n">7</span>
+                  <span class="palavra baixa-conf" title="Baixa confiança na transcrição">? instantâneo</span><span class="n">8</span>
+                </div>
+
+                <!-- Menu da palavra selecionada -->
+                <div class="linha" style="align-items: flex-end">
+                  <div class="menu-palavra" role="menu" aria-label="Ações da palavra">
+                    <div class="foco"><span>Corrigir grafia</span><kbd>F2 / Enter</kbd></div>
+                    <div><span>Definir Entrada aqui</span><span class="rotulo">editor.adjust</span></div>
+                    <div><span>Definir Saída aqui</span><span class="rotulo">editor.adjust</span></div>
+                    <div><span>Personalizar estilo da palavra</span><span class="rotulo">Legendas</span></div>
+                    <div><span>Ancorar SFX nesta palavra</span><span class="rotulo">Áudio/SFX</span></div>
+                  </div><span class="n">9</span>
+                </div>
+              </div>
+
+              <!-- Frase vizinha depois do corte -->
+              <div class="frase-card vizinha">
+                <div class="linha">
+                  <span class="mono rotulo">Frase 14 · 00:57.1 (fora do Corte)</span>
+                  <button class="btn btn-xs empurra">Estender Saída</button>
+                </div>
+                <div>Depois disso o chat inteiro começou a comentar o caso.</div>
+              </div>
+            </div>
+          </aside>
+
+          <!-- Palco resumido no centro -->
+          <main class="palco-mini">
+            <div class="palco-cab" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--painel); border-bottom: 1px solid var(--borda)">
+              <strong>Palco 9:16 sincronizado</strong>
+              <span class="rotulo empurra">1 painel por vez em 1366 px</span>
+            </div>
+            <div style="flex: 1; display: grid; place-items: center; padding: 12px">
+              <div class="midia r916" style="height: 360px">
+                <div style="text-align: center; padding: 12px">
+                  Prévia 9:16<br>
+                  <span class="rotulo">Clicar em qualquer palavra posiciona a agulha aqui (<span class="mono">seek</span>).</span>
+                </div>
+              </div>
+            </div>
+            <div style="padding: 8px 12px; background: var(--painel); border-top: 1px solid var(--borda); font-size: 12px">
+              Timeline na base (detalhada em D2) · bordas e silêncios sincronizados em tempo real.
+            </div>
+          </main>
+
+          <aside class="trilho-recolhido">
+            <button class="btn icone" title="Abrir Inspetor (Ctrl+])">«</button>
+            <span class="rotulo-vertical">Inspetor <kbd>Ctrl+]</kbd></span>
+          </aside>
+        </div>
+
+        <div class="barra-status">
+          <span>Salvo</span><span>Escopo Ctrl+Z: Correção da Transcrição (Projeto)</span>
+          <span class="empurra"><kbd>F2</kbd>/<kbd>Enter</kbd> corrigir · <kbd>Ctrl+F</kbd> buscar</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Índice do Corte (Lista Virtual) -->
+  <section class="wf-variante" id="indice-1366">
+    <h2>Índice do Corte — Alternativa textual completa da Timeline (&lt;ListaVirtual&gt;) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto shell-editor">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Dark História ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes e Transcrição</span><span class="etapa atual">2. Cortes</span><span class="etapa">3. Exportação</span></nav>
+          <div class="linha empurra"><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </div>
+        <div class="contexto-corte ctx-compacto">
+          <button class="btn fantasma" style="height: 24px">← Cortes</button>
+          <strong>Corte 2/8: "Como o navegador bloqueou o vazamento em 2019"</strong>
+          <span class="selo cheio">Vídeo transformado</span>
+          <button class="btn prim empurra" style="height: 24px">Exportar Corte <kbd>Ctrl E</kbd></button>
+        </div>
+
+        <div class="conteudo">
+          <aside class="painel" style="width: 530px" aria-label="Índice do Corte">
+            <div class="painel-cab" style="padding: 6px 10px">
+              <div class="linha" style="gap: 0">
+                <span class="seg-btn" aria-pressed="false">Transcrição</span>
+                <span class="seg-btn ativo" aria-pressed="true">Índice do Corte</span>
+              </div>
+              <span class="rotulo empurra mono">14 itens</span><span class="n">12</span>
+            </div>
+
+            <div class="painel-corpo" style="padding: 8px 10px">
+              <div class="campo" style="height: 26px">Filtrar no Índice… <kbd style="margin-left: auto">Ctrl F</kbd></div>
+              <div class="linha" style="align-items: flex-start">
+                <div class="idx-filtros cresce" role="group" aria-label="Filtros por tipo">
+                  <span class="idx-chip ativo">Tudo</span>
+                  <span class="idx-chip">Frases</span>
+                  <span class="idx-chip">Silêncios</span>
+                  <span class="idx-chip">Enquadramento</span>
+                  <span class="idx-chip">Narração</span>
+                  <span class="idx-chip">Áudio e SFX</span>
+                </div><span class="n">10</span>
+              </div>
+
+              <!-- Lista Virtual (role="listbox") -->
+              <div class="caixa" style="padding: 0; overflow: hidden" role="listbox" tabindex="0" aria-label="Itens do Índice do Corte">
+                <!-- Linha-tipo 1: Frase -->
+                <div class="idx-linha" role="option">
+                  <div class="linha">
+                    <span class="selo">¶ Frase #13</span>
+                    <span class="mono" style="white-space: nowrap">00:14.200 – 00:21.850</span>
+                    <div class="linha empurra" style="gap: 4px">
+                      <button class="btn btn-xs">Ir</button><button class="btn btn-xs">Entrada</button><button class="btn btn-xs">Saída</button>
+                    </div>
+                  </div>
+                  <div class="rotulo">"…e foi exatamente ali que o navegador bloqueou tudo…"</div>
+                </div>
+
+                <!-- Linha-tipo 2: Silêncio (selecionada) -->
+                <div class="idx-linha sel" role="option" aria-selected="true">
+                  <div class="linha">
+                    <span class="selo cheio">◫ Silêncio · removida</span>
+                    <span class="mono" style="white-space: nowrap">00:18.100 · 1,8 s</span><span class="n">11</span>
+                    <div class="linha empurra" style="gap: 4px">
+                      <button class="btn btn-xs">Ouvir</button><button class="btn btn-xs">Manter pausa</button>
+                    </div>
+                  </div>
+                  <div class="rotulo">"…vazamento [pausa] instantâneo…"</div>
+                </div>
+
+                <!-- Linha-tipo 3: Keyframe de Enquadramento -->
+                <div class="idx-linha" role="option">
+                  <div class="linha">
+                    <span class="selo">◆ Keyframe · Topo · Corte seco</span>
+                    <span class="mono" style="white-space: nowrap">00:19.400</span>
+                    <div class="linha empurra" style="gap: 4px">
+                      <button class="btn btn-xs">Ir</button><button class="btn btn-xs">Editar</button><button class="btn btn-xs">Excluir</button>
+                    </div>
+                  </div>
+                  <div class="rotulo mono">x: 420 · y: 80 · w: 608 · h: 1080</div>
+                </div>
+
+                <!-- Linha-tipo 4: Narração -->
+                <div class="idx-linha" role="option">
+                  <div class="linha">
+                    <span class="selo">🎙 Narração · Bloco 2</span>
+                    <span class="mono" style="white-space: nowrap">00:22.150 · 4,2 s</span>
+                    <span class="selo cheio">+0,3 s</span>
+                    <div class="linha empurra" style="gap: 4px">
+                      <button class="btn btn-xs">-1F</button><button class="btn btn-xs">+1F</button><button class="btn btn-xs">Auto</button>
+                    </div>
+                  </div>
+                  <div class="rotulo">"Contexto sobre o vazamento (empurrado +0,3 s)…"</div>
+                </div>
+
+                <!-- Linha-tipo 5: Áudio e SFX -->
+                <div class="idx-linha" role="option" style="border-bottom: 0">
+                  <div class="linha">
+                    <span class="selo">♪ SFX · Impacto leve</span>
+                    <span class="mono" style="white-space: nowrap">00:14.850 · 80%</span>
+                    <div class="linha empurra" style="gap: 4px">
+                      <button class="btn btn-xs">Ir</button><button class="btn btn-xs">Mover</button><button class="btn btn-xs">Remover</button>
+                    </div>
+                  </div>
+                  <div class="rotulo">Ancorado na palavra "exatamente"</div>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          <main class="palco-mini">
+            <div style="flex: 1; display: grid; place-items: center; padding: 16px">
+              <div class="midia r916" style="height: 360px">
+                <div style="text-align: center; padding: 12px">
+                  Palco 9:16<br>
+                  <span class="rotulo">Selecionar um item no Índice move a agulha ou destaca o elemento correspondente.</span>
+                </div>
+              </div>
+            </div>
+            <div style="padding: 8px 12px; background: var(--painel); border-top: 1px solid var(--borda); font-size: 12px">
+              Alternativa integralmente operável por teclado e leitor de tela para todas as 5 faixas da timeline.
+            </div>
+          </main>
+
+          <aside class="trilho-recolhido">
+            <button class="btn icone">«</button>
+            <span class="rotulo-vertical">Inspetor <kbd>Ctrl+]</kbd></span>
+          </aside>
+        </div>
+
+        <div class="barra-status">
+          <span>Salvo</span><span>Índice do Corte: 14 itens (lista virtual)</span>
+          <span class="empurra"><kbd>↑</kbd>/<kbd>↓</kbd> navegar · <kbd>Enter</kbd> acionar</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Estados (Carregando + Busca sem resultado) -->
+  <section class="wf-variante" id="estados-1440">
+    <h2>Estados: Carregando (&lt;Esqueleto&gt;) e Busca sem ocorrências · 1440 × 900</h2>
+    <div class="wf-quadro w1440">
+      <div class="shell com-contexto shell-editor">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Dark História ▾</button>
+          <span class="rotulo">Estados padronizados da Zona 1</span>
+        </div>
+        <div class="contexto-corte ctx-compacto">
+          <strong>Corte 2/8: "Como o navegador bloqueou o vazamento em 2019"</strong>
+        </div>
+        <div class="conteudo">
+          <aside class="painel" style="width: 420px">
+            <div class="painel-cab"><span>Estado &lt;Esqueleto variante="transcricao"&gt;</span></div>
+            <div class="painel-corpo">
+              <div class="caixa"><div class="texto-ph" style="width: 40%; margin-bottom: 8px"></div><div class="texto-ph" style="width: 90%; margin-bottom: 6px"></div><div class="texto-ph" style="width: 72%"></div></div>
+              <div class="caixa"><div class="texto-ph" style="width: 35%; margin-bottom: 8px"></div><div class="texto-ph" style="width: 85%; margin-bottom: 6px"></div><div class="texto-ph" style="width: 60%"></div></div>
+              <div class="caixa"><div class="texto-ph" style="width: 45%; margin-bottom: 8px"></div><div class="texto-ph" style="width: 95%; margin-bottom: 6px"></div><div class="texto-ph" style="width: 55%"></div></div>
+            </div>
+          </aside>
+          <aside class="painel" style="width: 420px">
+            <div class="painel-cab"><span>Busca sem ocorrências (Transcrição / Índice)</span></div>
+            <div class="painel-corpo">
+              <div class="campo" style="color: var(--texto)">termo-inexistente</div>
+              <div class="caixa tracejada" style="text-align: center; padding: 24px">
+                <strong>Nenhuma ocorrência na janela ±2 min</strong>
+                <p class="rotulo" style="margin: 6px 0 12px">Não encontramos "termo-inexistente" nas Frases nem nos itens do Índice deste Corte.</p>
+                <button class="btn">Limpar busca</button>
+              </div>
+            </div>
+          </aside>
+          <div class="cresce" style="background: var(--fundo); padding: 24px">
+            <div class="caixa" style="max-width: 460px">
+              <strong>Regras de acessibilidade da Transcrição e do Índice</strong>
+              <ul style="margin: 8px 0 0; padding-left: 18px; color: var(--texto-2)">
+                <li>Alvos clicáveis ≥ 24×24 CSS px inclusive em palavras curtas ("e", "o", "a") via padding/min-width (WCAG 2.5.8).</li>
+                <li>Silêncios removidos usam tachado + hachura + rótulo (WCAG 1.4.1).</li>
+                <li>Baixa confiança usa sublinhado pontilhado + ícone <span class="mono">?</span> (nunca só cor).</li>
+                <li>Container da lista virtual usa <span class="mono">tabIndex=0</span> e <span class="mono">aria-activedescendant</span> (corrige bug <span class="mono">tabIndex=-1</span> da v1).</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="barra-status"><span>Salvo</span><span>Estados de carregamento e vazio</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li><strong>Alternador segmentado (<span class="mono">aria-pressed</span>):</strong> alterna entre a leitura fluida da <strong>Transcrição</strong> e a lista estruturada do <strong>Índice do Corte</strong> sem fechar o painel esquerdo.</li>
+      <li><strong>Busca local (<kbd>Ctrl+F</kbd>):</strong> filtra e destaca ocorrências nas Frases da janela ±2 min do proxy (ou filtra itens no Índice do Corte).</li>
+      <li><strong>Frases vizinhas atenuadas:</strong> Frases antes de <span class="mono">start_id</span> e depois de <span class="mono">end_id</span> (dentro da janela ±2 min) permitem estender o Corte com 1 clique via <span class="mono">editor.adjust</span> sem abrir outra tela.</li>
+      <li><strong>Edição inline de grafia (<kbd>F2</kbd> / <kbd>Enter</kbd>):</strong> chama <span class="mono">transcription.correct</span> preservando timestamps e bordas, atualizando a Frase, o índice FTS5 e <span class="mono">export.captions</span>. <kbd>Ctrl+Z</kbd> com foco aqui aciona <span class="mono">transcription.undo</span>.</li>
+      <li><strong>Indicador de <span class="mono">captions.override</span>:</strong> palavras com destaque ou ocultação personalizada mostram selo/ícone discreto vinculado à aba <em>Legendas e Tradução</em>.</li>
+      <li><strong>Sincronia bidirecional Palco ↔ Transcrição:</strong> a palavra ativa no playhead recebe destaque visual + leitura semântica; clicar em qualquer palavra faz <span class="mono">seek</span> no Palco.</li>
+      <li><strong>Silêncio inline reversível:</strong> mostra duração e estado removido com tachado + hachura + botão rápido <span class="mono">Restaurar</span>/<span class="mono">Remover</span> (<span class="mono">editor.silences.toggle</span>, reversível via <span class="mono">editor.undo</span>).</li>
+      <li><strong>Baixa confiança (WCAG 1.4.1):</strong> palavras com confiança baixa exibem sublinhado pontilhado + ícone <span class="mono">?</span> (não depende apenas de cor).</li>
+      <li><strong>Menu contextual da palavra:</strong> acessível por botão discreto de menu ou clique direito/<kbd>Shift+F10</kbd>, permitindo definir Entrada/Saída, personalizar estilo ou ancorar SFX na palavra.</li>
+      <li><strong>Filtros do Índice do Corte:</strong> permitem isolar <span class="mono">Frases</span>, <span class="mono">Silêncios</span>, <span class="mono">Enquadramento</span>, <span class="mono">Narração</span> (apenas Vídeo transformado) ou <span class="mono">Áudio e SFX</span>.</li>
+      <li><strong>Foco na <span class="mono">&lt;ListaVirtual role="listbox"&gt;</span>:</strong> usa <span class="mono">tabIndex={0}</span> e <span class="mono">aria-activedescendant</span> com <span class="mono">aria-posinset</span>/<span class="mono">aria-setsize</span> (WCAG/APG).</li>
+      <li><strong>Equivalência completa com a Timeline:</strong> toda ação visual da Timeline (mover bordas, alternar silêncio, editar/excluir keyframe, ajustar início de Narração ±1 Frase ou reancorar/remover SFX) possui botões operáveis por teclado na linha-tipo correspondente.</li>
+    </ol>
+  </section>
+
+</main>
+<script src="kit.js"></script>
+</body>
+</html>

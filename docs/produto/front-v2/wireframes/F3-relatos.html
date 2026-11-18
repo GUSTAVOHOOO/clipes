@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F3 · Relatos e Diagnóstico — Wireframes Clipes v2</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .centro-leitura { width: 100%; max-width: 72ch; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+  .radio-grupo { display: flex; gap: 10px; flex-wrap: wrap; }
+  .radio-opcao {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px;
+    border: 1px solid var(--borda); border-radius: var(--r); background: var(--tela);
+  }
+  .radio-opcao.ativo { border-color: var(--texto); background: var(--sutil); font-weight: 600; }
+  .detalhe-hw { border: 1px solid var(--borda); border-radius: var(--r); background: var(--painel); padding: 8px 10px; }
+  .detalhe-hw summary { cursor: pointer; font-weight: 600; }
+  .kv-hw { display: grid; grid-template-columns: 160px 1fr; gap: 3px 10px; font-size: 12px; margin-top: 8px; }
+  .kv-hw > :nth-child(odd) { color: var(--texto-2); }
+  .editor-diag {
+    border: 1px solid var(--borda); border-radius: var(--r); background: var(--tela);
+    padding: 10px; font-family: ui-monospace, monospace; font-size: 12px; line-height: 1.45;
+    white-space: pre-wrap; overflow: auto;
+  }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>F3 · Relatos e Diagnóstico (ADR-0006, sem telemetria)</h1>
+    <p>Rota: <span class="mono">#/relatos</span> (aceita <span class="mono">?tipo=bug|ideia|provedor</span>).
+      Especificação: <span class="mono">telas/F-exportacao-fila-relatos.md</span> §3, <span class="mono">01-arquitetura.md</span> §3 e §6.</p>
+    <nav>
+      <a href="#passo1-1366">Passo 1: Edição (1366)</a>
+      <a href="#passo2-1366">Passo 2: Revisão editável (1366)</a>
+      <a href="#passo2-1440">Passo 2: Revisão lado a lado (1440)</a>
+      <a href="#estados-1366">Carregando, Sonda vazia, URL &gt; 8 KB e Erro</a>
+    </nav>
+  </header>
+
+  <!-- 1. Passo 1 (1366x768) -->
+  <section class="wf-variante" id="passo1-1366">
+    <h2>1. Passo 1 — Edição do relato, aviso de segredo e sonda de hardware · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <strong style="padding: 0 8px">Clipes</strong>
+          <div class="linha empurra">
+            <span class="selo">Somente local</span>
+            <button class="btn">Fila · 0 ativos</button>
+            <button class="btn">Comandos <kbd>Ctrl+K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+            <button class="btn sel">Relatos</button>
+            <button class="btn fantasma">Sobre</button>
+          </div>
+        </header>
+
+        <div class="conteudo">
+          <main class="cresce secao" style="overflow: auto; padding: 12px 16px">
+            <div class="centro-leitura" style="gap: 8px">
+              <div>
+                <h3 style="margin: 0 0 2px">Relatos e Diagnóstico (sem telemetria)</h3>
+                <span class="rotulo">Nada sai da sua máquina sem você ler e editar antes. Funciona mesmo sem Projeto aberto.</span>
+              </div>
+
+              <div class="coluna" style="gap: 3px">
+                <span class="rotulo" id="lbl-tipo">Tipo de envio</span>
+                <div class="linha">
+                  <div class="radio-grupo" role="radiogroup" aria-labelledby="lbl-tipo">
+                    <span class="radio-opcao ativo" role="radio" aria-checked="true">(*) Relatar problema</span>
+                    <span class="radio-opcao" role="radio" aria-checked="false">( ) Sugerir ideia</span>
+                    <span class="radio-opcao" role="radio" aria-checked="false">( ) Propor Provedor ou modelo</span>
+                  </div><span class="n">1</span>
+                </div>
+              </div>
+
+              <div class="coluna" style="gap: 3px">
+                <label class="rotulo" for="rel-titulo">Título</label>
+                <div class="campo" id="rel-titulo" style="color: var(--texto)">Exportação falhou ao usar legenda com emoji</div>
+              </div>
+
+              <div class="coluna" style="gap: 3px">
+                <label class="rotulo" for="rel-desc">Descrição</label>
+                <div class="campo area" id="rel-desc" style="color: var(--texto); min-height: 52px; padding-bottom: 6px; flex-direction: column">
+                  <span>Tentei exportar o Corte aprovado e usei minha chave de acesso, mas a renderização parou aos 40%.</span>
+                </div>
+              </div>
+
+              <div class="banner" role="alert" style="border-color: var(--texto); padding: 6px 10px">
+                <span>⚠ <strong>Atenção:</strong> seu texto menciona "chave". Nunca cole chaves de API ou segredos no relato.</span><span class="n">2</span>
+              </div>
+
+              <div class="caixa coluna" style="gap: 3px; background: var(--painel); padding: 7px 10px">
+                <div class="linha"><label class="linha"><input type="checkbox" checked> <strong>Incluir diagnóstico técnico local (allowlist)</strong></label><span class="n">3</span></div>
+                <span class="rotulo">Entra apenas: versão, SO, GPU/encoder, Motor, Provedor, hash da Tarefa, contexto e últimas ~200 linhas limpas. Nunca entram chaves, caminhos, Fontes ou Transcrições.</span>
+              </div>
+
+              <details class="detalhe-hw" open style="padding: 6px 10px">
+                <summary>Diagnóstico da sonda de hardware (Transcrição) <span class="n" style="vertical-align: middle">4</span></summary>
+                <div class="kv-hw" style="margin-top: 4px; gap: 2px 10px">
+                  <span>GPU / Driver:</span><span class="mono">NVIDIA GeForce RTX 3060 · Driver 555.85</span>
+                  <span>CT2 / Modelo:</span><span class="mono">4.3.1 · faster-whisper-large-v3-turbo</span>
+                  <span>Escolha verificada:</span><span class="mono">cuda / float16 (verificado) · lote: 8 · VRAM livre: 9.420 MiB</span>
+                </div>
+                <div style="margin-top: 6px">
+                  <button class="btn" style="height: 24px; font-size: 12px">Anexar resumo de hardware ao diagnóstico</button>
+                </div>
+              </details>
+
+              <div class="linha" style="margin-top: 2px">
+                <button class="btn prim">Revisar relato antes de enviar</button><span class="n">5</span>
+                <span class="rotulo empurra">Vulnerabilidade de segurança? <span style="text-decoration: underline">Reportar em privado (SECURITY.md) ↗</span></span><span class="n">6</span>
+              </div>
+            </div>
+          </main>
+        </div>
+
+        <footer class="barra-status">
+          <span>Sem Projeto aberto</span><span>·</span><span>Diagnóstico local pronto</span>
+          <span class="empurra"><kbd>F6</kbd> alternar região · <kbd>?</kbd> atalhos</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Passo 2 (1366x768) -->
+  <section class="wf-variante" id="passo2-1366">
+    <h2>2. Passo 2 — Pré-visualização editável obrigatória (ADR-0006) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <strong style="padding: 0 8px">Clipes</strong>
+          <div class="linha empurra">
+            <span class="selo">Somente local</span>
+            <button class="btn">Fila · 0 ativos</button>
+            <button class="btn">Comandos <kbd>Ctrl+K</kbd></button>
+            <button class="btn icone" aria-label="Configurações">⚙</button>
+            <button class="btn sel">Relatos</button>
+          </div>
+        </header>
+
+        <div class="conteudo">
+          <main class="cresce secao" style="overflow: auto">
+            <div class="centro-leitura">
+              <div class="linha">
+                <div class="coluna" style="gap: 2px">
+                  <h3 style="margin: 0">Revisar e editar relato antes de enviar</h3>
+                  <span class="rotulo">Template: <span class="mono">bug.yml</span> · Edite ou apague qualquer linha abaixo antes de copiar, exportar ou abrir no GitHub.</span>
+                </div>
+                <span class="selo empurra">Passo 2 de 2</span>
+              </div>
+
+              <div class="coluna" style="gap: 4px">
+                <div class="linha">
+                  <label class="rotulo" for="diag-editavel">Texto completo + diagnóstico técnico editável (<span class="mono">diagnostic.get</span>)</label><span class="n">7</span>
+                </div>
+                <div class="editor-diag" id="diag-editavel" style="height: 360px">### Descrição
+Tentei exportar o Corte aprovado, mas a renderização parou aos 40%.
+
+### Diagnóstico técnico (allowlist)
+app_version: 0.1.0
+os: windows 11 x86_64
+encoder: h264_nvenc (fallback: disabled)
+transcription_engine: local (faster-whisper-large-v3-turbo)
+provider: perfil local (loopback) · task_hash: 8f3a91c2
+context_window: 16384 tokens
+hardware_probe: RTX 3060 | cuda/float16 | batch=8 | vram_free=9420 MiB
+
+### Últimas linhas limpas de erro
+[export] ffmpeg exited with status 1: font glyph missing in ASS subtitle track</div>
+              </div>
+
+              <div class="linha">
+                <button class="btn">Voltar para editar</button>
+                <div class="linha empurra">
+                  <button class="btn">Copiar texto</button>
+                  <button class="btn">Exportar diagnóstico (.txt)</button><span class="n">8</span>
+                  <button class="btn prim">Abrir no GitHub ↗</button><span class="n">9</span>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+
+        <footer class="barra-status">
+          <span>Tamanho estimado da URL: 1.420 / 8.000 bytes UTF-8</span>
+          <span class="empurra"><kbd>F6</kbd> alternar região · <kbd>?</kbd> atalhos</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Passo 2 (1440x900) -->
+  <section class="wf-variante" id="passo2-1440">
+    <h2>3. Passo 2 · 1440 × 900 (o que muda: pré-visualização editável à esquerda 60% + Hardware e Allowlist à direita 40%)</h2>
+    <div class="wf-quadro w1440">
+      <div class="shell">
+        <header class="barra-sup">
+          <strong style="padding: 0 8px">Clipes</strong>
+          <div class="linha empurra">
+            <span class="selo">Somente local</span>
+            <button class="btn">Fila · 0 ativos</button>
+            <button class="btn">Comandos <kbd>Ctrl+K</kbd></button>
+            <button class="btn icone">⚙</button>
+            <button class="btn sel">Relatos</button>
+            <button class="btn fantasma">Sobre</button>
+          </div>
+        </header>
+
+        <div class="conteudo">
+          <main class="cresce secao" style="flex: 3; overflow: auto">
+            <div class="linha">
+              <div class="coluna" style="gap: 2px">
+                <h3 style="margin: 0">Revisar e editar relato antes de enviar</h3>
+                <span class="rotulo">Template: <span class="mono">bug.yml</span> · Título: <em>Exportação falhou ao usar legenda com emoji</em></span>
+              </div>
+              <span class="selo empurra">Passo 2 de 2</span>
+            </div>
+
+            <label class="rotulo">Corpo completo editável</label>
+            <div class="editor-diag cresce" style="min-height: 440px">### Descrição
+Tentei exportar o Corte aprovado, mas a renderização parou aos 40%.
+
+### Diagnóstico técnico (allowlist)
+app_version: 0.1.0
+os: windows 11 x86_64
+encoder: h264_nvenc
+transcription_engine: local (faster-whisper-large-v3-turbo)
+provider: perfil local (loopback) · task_hash: 8f3a91c2
+context_window: 16384 tokens
+hardware_probe: RTX 3060 | cuda/float16 | batch=8 | vram_free=9420 MiB
+
+### Últimas linhas limpas de erro
+[export] ffmpeg exited with status 1: font glyph missing in ASS subtitle track</div>
+
+            <div class="linha">
+              <button class="btn">Voltar para editar</button>
+              <div class="linha empurra">
+                <button class="btn">Copiar texto</button>
+                <button class="btn">Exportar diagnóstico (.txt)</button>
+                <button class="btn prim">Abrir no GitHub ↗</button>
+              </div>
+            </div>
+          </main>
+
+          <aside class="painel dir" style="flex: 2; max-width: 520px" aria-label="Sonda de hardware e allowlist">
+            <div class="painel-cab">Sonda de hardware e Allowlist</div>
+            <div class="painel-corpo" style="gap: 12px">
+              <div class="caixa coluna" style="gap: 6px">
+                <strong>O que entra e o que nunca entra (ADR-0006)</strong>
+                <span class="rotulo"><strong>Entra:</strong> versão do Clipes, SO, GPU/encoder, Motor, Provedor, versão da Tarefa/hash do prompt, contexto efetivo e últimas ~200 linhas limpas de erro.</span>
+                <span class="rotulo"><strong>Nunca entra:</strong> chaves de API, caminhos pessoais do disco, nomes de Fontes, textos de Transcrição ou Roteiros.</span>
+              </div>
+
+              <div class="caixa coluna" style="gap: 6px">
+                <strong>Resumo técnico da sonda de hardware</strong>
+                <div class="kv-hw" style="margin-top: 2px">
+                  <span>GPU:</span><span class="mono">NVIDIA GeForce RTX 3060</span>
+                  <span>Driver:</span><span class="mono">555.85</span>
+                  <span>CT2 / Modelo:</span><span class="mono">4.3.1 · large-v3-turbo</span>
+                  <span>Escolhido:</span><span class="mono">cuda / float16 (verificado)</span>
+                  <span>Lote / VRAM:</span><span class="mono">batch=8 · 9.420 MiB livres</span>
+                  <span>Tentativas:</span><span class="mono">1 tentativa · sem fallback</span>
+                </div>
+                <div style="margin-top: 4px"><button class="btn">Anexar resumo ao texto</button></div>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <footer class="barra-status">
+          <span>Tamanho estimado da URL: 1.420 / 8.000 bytes UTF-8</span>
+          <span class="empurra"><kbd>F6</kbd> alterna entre editor e painel auxiliar</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Estados: Carregando, Sonda vazia, URL > 8KB e Erro -->
+  <section class="wf-variante" id="estados-1366">
+    <h2>4. Estados: Carregando (&lt;Skeleton&gt;), Sonda vazia (null), URL &gt; 8 KB e Erro acionável · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <strong style="padding: 0 8px">Clipes</strong>
+          <div class="linha empurra"><button class="btn">Fila · 0 ativos</button><button class="btn sel">Relatos</button></div>
+        </header>
+
+        <div class="conteudo">
+          <main class="cresce secao" style="overflow: auto">
+            <div class="centro-leitura">
+              <!-- Carregando -->
+              <div class="caixa coluna" style="gap: 6px" aria-busy="true">
+                <strong>Carregamento inicial (<span class="mono">loading</span>)</strong>
+                <span class="rotulo">Campos de Título e Descrição ficam editáveis imediatamente; apenas diagnóstico e sonda exibem &lt;Skeleton&gt;:</span>
+                <div class="texto-ph" style="width: 70%"></div>
+                <div class="texto-ph" style="width: 45%"></div>
+              </div>
+
+              <!-- Sonda null -->
+              <div class="caixa coluna" style="gap: 4px; background: var(--painel)">
+                <strong>Diagnóstico da sonda de hardware (quando retorna <span class="mono">null</span>)</strong>
+                <span class="rotulo">Nenhuma sonda de hardware gravada ainda.</span>
+              </div>
+
+              <!-- URL > 8.000 bytes -->
+              <div class="banner" role="status">
+                <span>ℹ <strong>URL do GitHub excedeu 8.000 bytes:</strong> o diagnóstico completo foi copiado para sua área de transferência — cole na issue aberta.</span><span class="n">10</span>
+              </div>
+
+              <!-- Erro acionável (export_failed) -->
+              <div class="banner coluna" role="alert" style="border-color: var(--texto); align-items: stretch; padding: 12px; gap: 8px">
+                <div class="coluna" style="gap: 4px">
+                  <strong>Não foi possível gravar o arquivo de diagnóstico na pasta escolhida.</strong>
+                  <span class="rotulo">Você pode copiar o texto completo para a área de transferência ou escolher outra pasta.</span>
+                  <details style="font-size: 12px; color: var(--texto-2)">
+                    <summary>Ver detalhe técnico</summary>
+                    <div class="mono" style="margin-top: 4px">code: export_failed · command: diagnostic.export</div>
+                  </details>
+                </div>
+                <div class="linha">
+                  <button class="btn prim">Copiar texto para área de transferência</button>
+                  <button class="btn">Tentar outra pasta</button>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+
+        <footer class="barra-status"><span>Sem Projeto aberto</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li><strong>Seletor de tipo (<span class="mono">radiogroup</span>):</strong> <em>Relatar problema</em> (<span class="mono">bug.yml</span>) marca <span class="mono">Incluir diagnóstico técnico local</span> por padrão; <em>Sugerir ideia</em> (<span class="mono">ideia.yml</span>) e <em>Propor Provedor ou modelo</em> (<span class="mono">provedor-modelo.yml</span>) desmarcam automaticamente.</li>
+      <li><strong>Detector local de segredos:</strong> regex <span class="mono">/token|chave|\bkey\b/i</span> no Título ou Descrição exibe alerta não intrusivo (<span class="mono">role="alert"</span>) sem roubar o foco do usuário durante a digitação.</li>
+      <li><strong>Allowlist estrita (<span class="mono">diagnostic.get</span>):</strong> coleta apenas versão, SO, GPU/encoder, Motor, Provedor, versão da Tarefa/hash do prompt, contexto efetivo e últimas ~200 linhas limpas de erro. Nota: aguarda correção da etapa fixa <span class="mono">"componente"</span> no Rust (lacuna #12 da consolidação).</li>
+      <li><strong>Sonda de hardware (<span class="mono">transcription.hardware.diagnostic</span>):</strong> exibe GPU, driver, CT2, modelo, escolha verificada, lote seguro e VRAM livre em <span class="mono">&lt;details&gt;</span>; botão anexa resumo ao texto do diagnóstico.</li>
+      <li><strong>Regra obrigatória de 2 passos (ADR-0006):</strong> os botões <em>Copiar texto</em>, <em>Exportar diagnóstico (.txt)</em> e <em>Abrir no GitHub</em> <strong>não existem no DOM</strong> antes do clique em <em>Revisar relato antes de enviar</em>.</li>
+      <li><strong>Segurança privada:</strong> link externo para <span class="mono">SECURITY.md</span> via <span class="mono">openUrl</span>.</li>
+      <li><strong>Pré-visualização editável:</strong> o usuário pode editar ou apagar qualquer linha do diagnóstico antes de copiar, salvar ou abrir no GitHub.</li>
+      <li><strong>Exportação <span class="mono">.txt</span>:</strong> abre diálogo nativo <span class="mono">save</span> e chama <span class="mono">diagnostic.export { path, text }</span> enviando exatamente o texto editado pelo usuário.</li>
+      <li><strong>Abrir no GitHub (<span class="mono">openUrl</span>):</strong> pré-preenche template, título e corpo em <span class="mono">issues/new</span>.</li>
+      <li><strong>Limite de 8.000 bytes na URL:</strong> se <span class="mono">issueUrl(fullText)</span> exceder 8.000 bytes UTF-8, copia automaticamente o diagnóstico para a área de transferência, preenche a URL com a descrição + aviso <em>"Diagnóstico copiado — cole aqui"</em> e notifica via <span class="mono">role="status"</span>. Se ainda passar de 8.000 bytes, orienta usar <em>Copiar texto completo</em>.</li>
+    </ol>
+  </section>
+</main>
+<script src="kit.js"></script>
+</body>
+</html>

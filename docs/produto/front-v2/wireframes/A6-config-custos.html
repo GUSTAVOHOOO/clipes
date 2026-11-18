@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A6 · Config: Custos, Orçamentos e Auditoria — Wireframes Clipes v2</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .config-nav { width: 220px; flex-shrink: 0; }
+  .config-nav-item {
+    padding: 9px 12px; border-bottom: 1px solid var(--sutil);
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    color: var(--texto-2);
+  }
+  .config-nav-item.ativo { background: var(--sutil); color: var(--texto); font-weight: 600; }
+  .config-nav-item.desab { color: var(--texto-3); }
+  .config-conteudo {
+    flex: 1; min-width: 0; min-height: 0; overflow: auto;
+    padding: 20px 24px; display: flex; flex-direction: column; gap: 14px;
+  }
+  .bloco-cfg { border: 1px solid var(--borda); border-radius: var(--r); background: var(--tela); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .resumo-custo { border: 1px solid var(--texto-2); border-radius: var(--r); background: var(--painel); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .estado-vazio { border: 1px dashed var(--borda); border-radius: var(--r); padding: 32px 24px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; background: var(--painel); }
+  .erro-core { border: 1px solid var(--texto); border-radius: var(--r); background: var(--painel); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>A6 · Config: Custos, Orçamentos e Auditoria</h1>
+    <p>Rota: <span class="mono">#/config/custos</span> (acessível mesmo sem Projeto aberto para Tabela de Preços e Estimador). Fonte:
+      <span class="mono">telas/A-shell-inicio-config.md</span> (Tela 6),
+      <span class="mono">01-arquitetura.md</span> §3 e §7,
+      <span class="mono">02-consolidacao.md</span> §5 e §13.</p>
+    <nav>
+      <a href="#orcamentos">1. Orçamentos e Gastos (com Projeto)</a>
+      <a href="#auditoria">2. Auditoria SHA-256</a>
+      <a href="#precos">3. Preços e Estimador (sem Projeto)</a>
+      <a href="#sem-projeto">4. Sem Projeto aberto (Orçamentos)</a>
+      <a href="#erro">5. Erro acionável (?estado=erro)</a>
+    </nav>
+  </header>
+
+  <!-- 1. Orçamentos e Gastos -->
+  <section class="wf-variante" id="orcamentos">
+    <h2>1. Aba Orçamentos e Gastos (com Projeto aberto + pausa por orçamento) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Meu canal ▾</button>
+          <nav class="etapas" aria-label="Etapas do Projeto">
+            <span class="etapa">1. Fontes <small>3</small></span>
+            <span class="etapa">2. Cortes <small>12</small></span>
+            <span class="etapa">3. Exportação <small>4</small></span>
+          </nav>
+          <div class="linha empurra">
+            <button class="btn sel" style="height:24px;font-size:12px">⚠ Pausado por orçamento</button>
+            <button class="btn">Fila · 1 pausada</button>
+            <button class="btn">Buscar <kbd>Ctrl+K</kbd></button>
+            <button class="btn icone sel" aria-label="Configurações">⚙</button>
+            <button class="btn">Mais ▾</button>
+          </div>
+        </header>
+
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações <kbd class="empurra">Ctrl+,</kbd></div>
+            <nav class="lista" aria-label="Seções de Configurações">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item ativo" aria-current="page">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item">Componentes e Armazenamento</div>
+              <div class="config-nav-item">Exportação e Encoder</div>
+              <div class="config-nav-item">Aparência e Teclado</div>
+              <div class="config-nav-item">Projeto atual</div>
+            </nav>
+          </aside>
+
+          <div class="config-conteudo">
+            <h2 style="margin: 0; font-size: 18px">Custos, Orçamentos e Auditoria</h2>
+            <div class="abas" role="tablist">
+              <span class="aba atual" role="tab" aria-selected="true">Orçamentos e Gastos</span>
+              <span class="aba" role="tab">Auditoria</span>
+              <span class="aba" role="tab">Tabela de Preços e Estimador</span>
+            </div>
+
+            <div class="banner" role="alert">
+              <strong>⚠ Fila pausada em Lote #3:</strong>
+              <span>O teto de custo (<span class="mono">US$ 1,00</span>) foi atingido com <span class="mono">US$ 1,05</span> gasto.</span><span class="n">1</span>
+              <button class="btn prim empurra">Ajustar e continuar fila</button>
+            </div>
+
+            <!-- Orçamentos do Projeto -->
+            <div class="bloco-cfg">
+              <div class="linha">
+                <strong>Orçamentos ativos do Projeto</strong>
+                <button class="btn empurra">+ Definir orçamento por tarefa</button>
+              </div>
+              <table class="tabela" role="grid">
+                <thead>
+                  <tr><th>Escopo</th><th>Custo / Teto USD</th><th>Chamadas</th><th>Tokens</th><th>Estado</th><th>Ações</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Tarefa: Seleção de Cortes</strong></td>
+                    <td class="mono">US$ 0,42 / US$ 1,00<div class="barra-prog" style="margin-top:4px;width:140px"><i style="--p:42%"></i></div></td>
+                    <td class="mono">8 / 20</td>
+                    <td class="mono">42.100 / 100.000</td>
+                    <td><span class="selo">Ativo</span></td>
+                    <td><button class="btn">Editar tetos</button></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Lote #3 (3 Fontes)</strong></td>
+                    <td class="mono">US$ 1,05 / US$ 1,00<div class="barra-prog" style="margin-top:4px;width:140px"><i style="--p:100%"></i></div></td>
+                    <td class="mono">14 / —</td>
+                    <td class="mono">118.400 / —</td>
+                    <td><span class="selo cheio">Pausado (teto de custo)</span></td>
+                    <td><button class="btn prim">Ajustar e continuar</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Histórico real de chamadas -->
+            <div class="bloco-cfg">
+              <div class="linha">
+                <strong>Histórico real de chamadas</strong>
+                <span class="selo mono">Total: US$ 1,47</span>
+                <span class="selo mono">Cota do plano: 2</span>
+                <span class="selo mono">Desconhecido: 0</span><span class="n">2</span>
+                <div class="linha empurra">
+                  <div class="campo" style="width: 140px; color: var(--texto)">Todas as tarefas ▾</div>
+                  <label class="linha rotulo"><input type="checkbox"> Somente falhas cobradas</label>
+                </div>
+              </div>
+              <table class="tabela" role="grid">
+                <thead>
+                  <tr><th>Data</th><th>Tarefa</th><th>Perfil / Modelo</th><th>Tokens (ent / saí)</th><th>Custo real (est.)</th><th>Desfecho</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="mono">17/11 19:14</td>
+                    <td>Seleção de Cortes</td>
+                    <td>OpenAI Rápido · <span class="mono">gpt-4o-mini</span></td>
+                    <td class="mono">14.200 / 1.180</td>
+                    <td class="mono">US$ 0,03 (est. 0,03)</td>
+                    <td><span class="selo">✓ Concluído</span></td>
+                  </tr>
+                  <tr>
+                    <td class="mono">17/11 19:08</td>
+                    <td>Empacotamento</td>
+                    <td>OpenAI Rápido · <span class="mono">gpt-4o-mini</span></td>
+                    <td class="mono">6.400 / 920</td>
+                    <td class="mono">US$ 0,04 (est. 0,03)</td>
+                    <td><span class="selo cheio">⚠ Falha cobrada (schema)</span><span class="n">3</span></td>
+                  </tr>
+                  <tr>
+                    <td class="mono">17/11 18:55</td>
+                    <td>Roteiro</td>
+                    <td>Codex CLI</td>
+                    <td class="mono">8.900 / 1.400</td>
+                    <td class="mono">Consome cota do plano</td>
+                    <td><span class="selo">✓ Concluído</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </main>
+
+        <footer class="barra-status"><span>Salvo</span><span>·</span><span>Pausa por orçamento no Lote #3</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Auditoria -->
+  <section class="wf-variante" id="auditoria">
+    <h2>2. Aba Auditoria (trilha SHA-256 sem texto) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Meu canal ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes <small>3</small></span><span class="etapa">2. Cortes <small>12</small></span><span class="etapa">3. Exportação <small>4</small></span></nav>
+          <div class="linha empurra"><button class="btn">Fila · 0</button><button class="btn">Buscar <kbd>Ctrl+K</kbd></button><button class="btn icone sel">⚙</button></div>
+        </header>
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações <kbd class="empurra">Ctrl+,</kbd></div>
+            <nav class="lista">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item ativo">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item">Componentes e Armazenamento</div>
+              <div class="config-nav-item">Exportação e Encoder</div>
+              <div class="config-nav-item">Aparência e Teclado</div>
+              <div class="config-nav-item">Projeto atual</div>
+            </nav>
+          </aside>
+          <div class="config-conteudo">
+            <h2 style="margin: 0; font-size: 18px">Custos, Orçamentos e Auditoria</h2>
+            <div class="abas" role="tablist">
+              <span class="aba" role="tab">Orçamentos e Gastos</span>
+              <span class="aba atual" role="tab" aria-selected="true">Auditoria</span>
+              <span class="aba" role="tab">Tabela de Preços e Estimador</span>
+            </div>
+
+            <div class="banner leitura">
+              <span>🔒</span>
+              <span>Nenhum texto de Transcrição, Roteiro ou chave de API é salvo aqui. A trilha registra apenas destino, tamanho em bytes e assinaturas criptográficas SHA-256 para verificação.</span><span class="n">4</span>
+            </div>
+
+            <div class="linha">
+              <div class="campo" style="width: 140px">Filtrar por Job #…</div>
+              <div class="campo" style="width: 180px; color: var(--texto)">Todas as tarefas ▾</div>
+            </div>
+
+            <div class="bloco-cfg">
+              <table class="tabela" role="grid" aria-label="Trilha de auditoria SHA-256">
+                <thead>
+                  <tr><th>Job</th><th>Tarefa / Versão</th><th>Provedor / Modelo</th><th>Host de destino</th><th>Bytes enviados</th><th>Desfecho</th><th>Hashes SHA-256</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="mono">#48</td>
+                    <td>Seleção · <span class="mono">v4</span></td>
+                    <td>openai · <span class="mono">gpt-4o-mini</span></td>
+                    <td class="mono">api.openai.com</td>
+                    <td class="mono">54.120 B</td>
+                    <td><span class="selo">ok</span></td>
+                    <td><span class="mono rotulo">in: 8f3a…91c2</span> <button class="btn" style="height:22px;font-size:11px">Copiar</button></td>
+                  </tr>
+                  <tr>
+                    <td class="mono">#47</td>
+                    <td>Empacotamento · <span class="mono">v2</span></td>
+                    <td>ollama · <span class="mono">qwen2.5:14b</span></td>
+                    <td class="mono">127.0.0.1:11434 (loopback)</td>
+                    <td class="mono">18.904 B</td>
+                    <td><span class="selo">ok</span></td>
+                    <td><span class="mono rotulo">in: 3c1d…44b0</span> <button class="btn" style="height:22px;font-size:11px">Copiar</button></td>
+                  </tr>
+                  <tr>
+                    <td class="mono">#46</td>
+                    <td>Empacotamento · <span class="mono">v2</span></td>
+                    <td>openai · <span class="mono">gpt-4o-mini</span></td>
+                    <td class="mono">api.openai.com</td>
+                    <td class="mono">19.110 B</td>
+                    <td><span class="selo cheio">invalid_json</span></td>
+                    <td><span class="mono rotulo">in: 7a09…e211</span> <button class="btn" style="height:22px;font-size:11px">Copiar</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </main>
+        <footer class="barra-status"><span>Salvo</span><span>·</span><span>Sem tarefas em andamento</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Tabela de Preços e Estimador (sem Projeto aberto) -->
+  <section class="wf-variante" id="precos">
+    <h2>3. Aba Tabela de Preços e Estimador (acessível mesmo sem Projeto aberto) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <strong>Clipes</strong><span class="rotulo">Projetos</span>
+          <div class="linha empurra"><button class="btn">Fila · 0</button><button class="btn">Buscar <kbd>Ctrl+K</kbd></button><button class="btn icone sel">⚙</button></div>
+        </header>
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações <kbd class="empurra">Ctrl+,</kbd></div>
+            <nav class="lista">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item ativo">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item">Componentes e Armazenamento</div>
+              <div class="config-nav-item">Exportação e Encoder</div>
+              <div class="config-nav-item">Aparência e Teclado</div>
+              <div class="config-nav-item desab">Projeto atual <span class="rotulo">Abra um Projeto</span></div>
+            </nav>
+          </aside>
+          <div class="config-conteudo">
+            <h2 style="margin: 0; font-size: 18px">Custos, Orçamentos e Auditoria</h2>
+            <div class="abas" role="tablist">
+              <span class="aba" role="tab">Orçamentos e Gastos</span>
+              <span class="aba" role="tab">Auditoria</span>
+              <span class="aba atual" role="tab" aria-selected="true">Tabela de Preços e Estimador</span>
+            </div>
+
+            <!-- Estimador manual -->
+            <div class="bloco-cfg leitura">
+              <strong>Estimador manual de custo</strong>
+              <div class="linha">
+                <div class="campo cresce" style="color: var(--texto)">Perfil: OpenAI Rápido (gpt-4o-mini) ▾</div>
+                <div class="campo" style="width: 170px; color: var(--texto)">Tamanho: 60 min de fala</div>
+                <button class="btn prim">Simular custo</button>
+              </div>
+              <div class="resumo-custo">
+                <div class="linha">
+                  <strong>&lt;ResumoCustoPrivacidade&gt;</strong><span class="n">5</span>
+                  <span class="selo empurra">Remoto (HTTPS · api.openai.com)</span>
+                </div>
+                <span class="rotulo">Texto enviado apenas para <span class="mono">api.openai.com</span> (nunca vídeo ou áudio).</span>
+                <div class="linha">
+                  <span style="white-space: nowrap">Estimativa: <strong class="mono">~US$ 0,031 – US$ 0,048</strong></span>
+                  <span class="rotulo mono">(~18.500 tokens · Fonte: sobrescrita)</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tabela de preços -->
+            <div class="bloco-cfg">
+              <div class="linha">
+                <strong>Tabela de preços de referência</strong>
+                <span class="rotulo">Atualizada em 15/11/2026</span>
+                <button class="btn empurra">+ Sobrescrever preço</button>
+              </div>
+              <table class="tabela" role="grid">
+                <thead>
+                  <tr><th>Provedor</th><th>Modelo</th><th>Entrada / 1M tokens</th><th>Saída / 1M tokens</th><th>Origem</th><th>Ações</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>openai</td>
+                    <td class="mono">gpt-4o-mini</td>
+                    <td class="mono">US$ 0,20</td>
+                    <td class="mono">US$ 0,80</td>
+                    <td><span class="selo cheio">Personalizado</span><span class="n">6</span></td>
+                    <td><button class="btn">Editar</button> <button class="btn">Restaurar padrão</button></td>
+                  </tr>
+                  <tr>
+                    <td>anthropic</td>
+                    <td class="mono">claude-3-5-sonnet</td>
+                    <td class="mono">US$ 3,00</td>
+                    <td class="mono">US$ 15,00</td>
+                    <td><span class="selo">Embutido</span></td>
+                    <td><button class="btn">Sobrescrever</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </main>
+        <footer class="barra-status"><span>Sem tarefas em andamento</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Sem Projeto aberto -->
+  <section class="wf-variante" id="sem-projeto">
+    <h2>4. Sem Projeto aberto na aba Orçamentos e Gastos (e Auditoria) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <strong>Clipes</strong><span class="rotulo">Projetos</span>
+          <div class="linha empurra"><button class="btn">Fila · 0</button><button class="btn">Buscar <kbd>Ctrl+K</kbd></button><button class="btn icone sel">⚙</button></div>
+        </header>
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações</div>
+            <nav class="lista">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item ativo">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item">Componentes e Armazenamento</div>
+              <div class="config-nav-item">Exportação e Encoder</div>
+              <div class="config-nav-item">Aparência e Teclado</div>
+              <div class="config-nav-item desab">Projeto atual <span class="rotulo">Abra um Projeto</span></div>
+            </nav>
+          </aside>
+          <div class="config-conteudo">
+            <h2 style="margin: 0; font-size: 18px">Custos, Orçamentos e Auditoria</h2>
+            <div class="abas" role="tablist">
+              <span class="aba atual" role="tab" aria-selected="true">Orçamentos e Gastos</span>
+              <span class="aba" role="tab">Auditoria</span>
+              <span class="aba" role="tab">Tabela de Preços e Estimador</span>
+            </div>
+            <div class="estado-vazio leitura">
+              <strong>Nenhum Projeto aberto</strong><span class="n">7</span>
+              <span class="rotulo">Abra um Projeto para acompanhar orçamentos, gastos reais e trilha de auditoria. A aba <em>Tabela de Preços e Estimador</em> continua disponível normalmente.</span>
+              <div class="linha">
+                <button class="btn prim">Ir para Início</button>
+                <button class="btn">Abrir Tabela de Preços</button>
+              </div>
+            </div>
+          </div>
+        </main>
+        <footer class="barra-status"><span>Sem tarefas em andamento</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Erro acionável -->
+  <section class="wf-variante" id="erro">
+    <h2>5. Erro acionável (?estado=erro — falha ao carregar custos) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup"><button class="btn fantasma">Meu canal ▾</button><div class="linha empurra"><button class="btn icone sel">⚙</button></div></header>
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações</div>
+            <nav class="lista">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item ativo">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item">Componentes e Armazenamento</div>
+              <div class="config-nav-item">Exportação e Encoder</div>
+              <div class="config-nav-item">Aparência e Teclado</div>
+              <div class="config-nav-item">Projeto atual</div>
+            </nav>
+          </aside>
+          <div class="config-conteudo">
+            <h2 style="margin: 0; font-size: 18px">Custos, Orçamentos e Auditoria</h2>
+            <div class="erro-core leitura" role="alert">
+              <strong>⚠ Não foi possível carregar os registros de custo do Projeto.</strong><span class="n">8</span>
+              <span class="rotulo">O banco de custos do Projeto não respondeu como esperado.</span>
+              <div class="linha">
+                <button class="btn prim">Tentar novamente</button>
+                <button class="btn">Relatar problema</button>
+              </div>
+              <details>
+                <summary class="rotulo" style="cursor: pointer">Ver detalhe técnico</summary>
+                <span class="mono rotulo">Código: project_open (falha de leitura em provider.cost.list)</span>
+              </details>
+            </div>
+          </div>
+        </main>
+        <footer class="barra-status"><span>Salvo</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li><strong>Retomada de fila pausada:</strong> clicar em <em>"Ajustar e continuar fila"</em> chama <span class="mono">jobs.budget.continue</span> (exige confirmação explícita se o motivo for <span class="mono">cost_unknown</span>), remove a pausa em <span class="mono">ai_pauses</span> e limpa o aviso do Shell.</li>
+      <li><strong>Totalizadores e tabela:</strong> usam sempre <span class="mono">tabular-nums</span> e diferenciam <span class="mono">US$</span>, <span class="mono">US$ 0,00</span>, <em>"Consome cota do plano"</em> e <em>"Desconhecido"</em>.</li>
+      <li><strong>Falha cobrada (ADR-0009):</strong> chamadas com <span class="mono">outcome !== "ok"</span> e <span class="mono">microUsd &gt; 0</span> são somadas ao gasto real e marcadas explicitamente com ícone + rótulo textual.</li>
+      <li><strong>Privacidade da auditoria:</strong> nenhum conteúdo de Transcrição ou Roteiro entra no banco de auditoria; o botão <em>Copiar</em> tem <span class="mono">aria-label</span> específico e anuncia <em>"Hash copiado"</em> em <span class="mono">role="status"</span>.</li>
+      <li><strong>Estimador (<span class="mono">&lt;ResumoCustoPrivacidade&gt;</span>):</strong> chama <span class="mono">provider.cost.estimate</span>; se o modo <span class="mono">Somente local</span> bloquear o perfil escolhido, exibe o aviso de bloqueio inline.</li>
+      <li><strong>Sobrescrita de preço:</strong> <span class="mono">provider.prices.set</span> valida valores não negativos e faixas (<span class="mono">tiers</span>) crescentes; <em>"Restaurar padrão"</em> chama <span class="mono">provider.prices.clear</span>.</li>
+      <li><strong>Sem Projeto aberto:</strong> a seção permanece acessível (ao contrário de <span class="mono">#/config/projeto</span>); apenas as abas dependentes de Projeto mostram <span class="mono">&lt;EstadoTela tipo="vazio"&gt;</span> acionável.</li>
+      <li><strong>Sem silêncio em erro:</strong> falhas em <span class="mono">provider.cost.list</span> nunca são engolidas em <span class="mono">catch {}</span>; exibem <span class="mono">&lt;BannerErroCore&gt;</span> com recuperação. No estado <span class="mono">?estado=carregando</span>, cada aba exibe <span class="mono">&lt;Esqueleto&gt;</span> de tabela.</li>
+    </ol>
+  </section>
+
+</main>
+<script src="kit.js"></script>
+</body>
+</html>

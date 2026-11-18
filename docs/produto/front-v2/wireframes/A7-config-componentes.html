@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A7 · Config: Componentes e Armazenamento — Wireframes Clipes v2</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .config-nav { width: 220px; flex-shrink: 0; }
+  .config-nav-item {
+    padding: 9px 12px; border-bottom: 1px solid var(--sutil);
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    color: var(--texto-2);
+  }
+  .config-nav-item.ativo { background: var(--sutil); color: var(--texto); font-weight: 600; }
+  .config-nav-item.desab { color: var(--texto-3); }
+  .config-conteudo {
+    flex: 1; min-width: 0; min-height: 0; overflow: auto;
+    padding: 14px 20px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .bloco-cfg { border: 1px solid var(--borda); border-radius: var(--r); background: var(--tela); padding: 10px 12px; display: flex; flex-direction: column; gap: 7px; }
+  .opcao-hw { border: 1px solid var(--borda); border-radius: var(--r); padding: 6px 10px; display: flex; align-items: center; gap: 10px; background: var(--tela); }
+  .opcao-hw.sel { background: var(--painel); border-color: var(--texto); }
+  .opcao-hw.desab { opacity: .6; background: var(--painel); }
+  .radio-sim { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--texto); font-size: 9px; flex: none; }
+  .comp-cartao { border: 1px solid var(--borda); border-radius: var(--r); background: var(--painel); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .erro-core { border: 1px solid var(--texto); border-radius: var(--r); background: var(--painel); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>A7 · Config: Componentes e Armazenamento</h1>
+    <p>Rota: <span class="mono">#/config/componentes</span>. Fonte:
+      <span class="mono">telas/A-shell-inicio-config.md</span> (Tela 7),
+      <span class="mono">01-arquitetura.md</span> §3 e §6,
+      <span class="mono">02-consolidacao.md</span> §18 e dependência #279.</p>
+    <nav>
+      <a href="#hardware">1. Hardware de Transcrição e VAD #279</a>
+      <a href="#componentes">2. Componentes e Modelos</a>
+      <a href="#tts">3. Vozes TTS (Narração)</a>
+      <a href="#armazenamento">4. Pastas e Armazenamento</a>
+      <a href="#dialogo">5. Confirmação de download</a>
+      <a href="#erro">6. Erro de hardware / worker ausente</a>
+    </nav>
+  </header>
+
+  <!-- 1. Hardware de Transcrição + VAD #279 -->
+  <section class="wf-variante" id="hardware">
+    <h2>1. Sub-aba Hardware de Transcrição + Agrupamento VAD (#279) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Meu canal ▾</button>
+          <nav class="etapas" aria-label="Etapas do Projeto">
+            <span class="etapa">1. Fontes <small>3</small></span>
+            <span class="etapa">2. Cortes <small>12</small></span>
+            <span class="etapa">3. Exportação <small>4</small></span>
+          </nav>
+          <div class="linha empurra">
+            <button class="btn">Fila · 0</button>
+            <button class="btn">Buscar <kbd>Ctrl+K</kbd></button>
+            <button class="btn icone sel" aria-label="Configurações">⚙</button>
+            <button class="btn">Mais ▾</button>
+          </div>
+        </header>
+
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações <kbd class="empurra">Ctrl+,</kbd></div>
+            <nav class="lista" aria-label="Seções de Configurações">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item ativo" aria-current="page">Componentes e Armazenamento</div>
+              <div class="config-nav-item">Exportação e Encoder</div>
+              <div class="config-nav-item">Aparência e Teclado</div>
+              <div class="config-nav-item">Projeto atual</div>
+            </nav>
+          </aside>
+
+          <div class="config-conteudo">
+            <h2 style="margin: 0; font-size: 18px">Componentes e Armazenamento</h2>
+            <div class="abas" role="tablist">
+              <span class="aba atual" role="tab" aria-selected="true">Hardware de Transcrição</span>
+              <span class="aba" role="tab">Componentes e Modelos</span>
+              <span class="aba" role="tab">Vozes TTS (Narração)</span>
+              <span class="aba" role="tab">Pastas e Armazenamento</span>
+            </div>
+
+            <!-- Diagnóstico de Hardware -->
+            <div class="bloco-cfg leitura">
+              <div class="linha">
+                <strong>Diagnóstico de hardware</strong>
+                <span class="selo cheio empurra">✓ Aceleração NVIDIA ativa</span><span class="n">1</span>
+              </div>
+              <span>Placa detectada: <strong>NVIDIA RTX 3050 (4 GB VRAM)</strong> · <strong>16 GB RAM</strong></span>
+              <span>Configuração ativa: <strong>Automática — Modelo rápido de alta precisão · Placa NVIDIA</strong></span>
+              <details>
+                <summary class="rotulo" style="cursor: pointer">Detalhes técnicos</summary>
+                <span class="mono rotulo">effective: whisper-turbo · device: cuda · compute_type: int8_float16 · CUDA 12.4</span>
+              </details>
+              <div class="linha">
+                <button class="btn prim">Testar hardware novamente</button>
+                <button class="btn" disabled>Restaurar automático</button>
+              </div>
+            </div>
+
+            <!-- Agrupamento VAD #279 -->
+            <div class="bloco-cfg leitura">
+              <div class="linha">
+                <strong>Agrupamento de falas por silêncio (VAD)</strong><span class="n">2</span>
+                <span class="selo empurra">Vale para o app inteiro</span>
+              </div>
+              <div class="coluna" role="radiogroup" aria-label="Modo de agrupamento VAD">
+                <label class="linha"><span class="radio-sim">●</span> <strong>Automático</strong> <span class="rotulo">(ligado na CPU, desligado na GPU · estado atual: desligado)</span></label>
+                <label class="linha"><span class="radio-sim"></span> <span>Manual:</span> <input type="checkbox" disabled> <span class="rotulo">Agrupar trechos consecutivos antes de transcrever</span></label>
+              </div>
+              <div class="banner">
+                <span>ℹ</span>
+                <span>No modo automático, fica ligado na CPU e desligado na GPU: na CPU acelera ~18%; na GPU usa ~1 GB a mais de VRAM sem ganho medido.</span>
+              </div>
+            </div>
+
+            <!-- Troca manual de modelo/dispositivo -->
+            <div class="bloco-cfg leitura">
+              <strong>Escolha manual de modelo e dispositivo</strong>
+              <div class="coluna" role="radiogroup" aria-label="Combinações de hardware">
+                <div class="opcao-hw sel">
+                  <span class="radio-sim">●</span>
+                  <span class="cresce"><strong>Modelo rápido de alta precisão · Placa NVIDIA</strong></span>
+                  <span class="selo cheio">Recomendado</span>
+                </div>
+                <div class="opcao-hw">
+                  <span class="radio-sim"></span>
+                  <span class="cresce">Modelo leve · Placa NVIDIA</span>
+                  <span class="selo">Disponível</span>
+                </div>
+                <div class="opcao-hw">
+                  <span class="radio-sim"></span>
+                  <span class="cresce">Modelo rápido de alta precisão · Processador (CPU)</span>
+                  <span class="selo">Disponível (mais lento)</span>
+                </div>
+                <div class="opcao-hw desab">
+                  <span class="radio-sim"></span>
+                  <span class="cresce">Modelo máximo · Processador (CPU)<br><span class="rotulo">Exige 8 GB de RAM livres para este modelo na CPU</span></span>
+                  <span class="selo">Indisponível</span><span class="n">3</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="barra-status"><span>Salvo</span><span>·</span><span>Sem tarefas em andamento</span><span class="empurra"><kbd>F6</kbd> alternar região</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Componentes e Modelos -->
+  <section class="wf-variante" id="componentes">
+    <h2>2. Sub-aba Componentes e Modelos (progresso isolado por job) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Meu canal ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes <small>3</small></span><span class="etapa">2. Cortes <small>12</small></span><span class="etapa">3. Exportação <small>4</small></span></nav>
+          <div class="linha empurra"><button class="btn sel">Fila · 1 ativa (62%)</button><button class="btn">Buscar <kbd>Ctrl+K</kbd></button><button class="btn icone sel">⚙</button></div>
+        </header>
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações</div>
+            <nav class="lista">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item ativo">Componentes e Armazenamento</div>
+              <div class="config-nav-item">Exportação e Encoder</div>
+              <div class="config-nav-item">Aparência e Teclado</div>
+              <div class="config-nav-item">Projeto atual</div>
+            </nav>
+          </aside>
+          <div class="config-conteudo">
+            <h2 style="margin: 0; font-size: 18px">Componentes e Armazenamento</h2>
+            <div class="abas" role="tablist">
+              <span class="aba" role="tab">Hardware de Transcrição</span>
+              <span class="aba atual" role="tab" aria-selected="true">Componentes e Modelos</span>
+              <span class="aba" role="tab">Vozes TTS (Narração)</span>
+              <span class="aba" role="tab">Pastas e Armazenamento</span>
+            </div>
+
+            <div class="leitura coluna">
+              <!-- FFmpeg -->
+              <div class="comp-cartao">
+                <div class="linha">
+                  <strong>FFmpeg e FFprobe</strong>
+                  <span class="selo cheio">✓ Pronto (v7.1 · gerenciado)</span>
+                  <button class="btn empurra">Reinstalar</button>
+                </div>
+                <span class="rotulo">Leitura de vídeo, previews e exportação · ~150 MB · GPL</span>
+                <details>
+                  <summary class="rotulo" style="cursor: pointer">Usar FFmpeg já instalado no sistema</summary>
+                  <div class="linha" style="margin-top: 6px">
+                    <div class="campo cresce mono">C:\ffmpeg\bin\ffmpeg.exe</div>
+                    <button class="btn">Validar caminho</button>
+                  </div>
+                </details>
+              </div>
+
+              <!-- Ferramentas de URL -->
+              <div class="comp-cartao">
+                <div class="linha">
+                  <strong>yt-dlp</strong>
+                  <span class="selo">✓ Instalado (2025.10.22)</span>
+                  <button class="btn empurra">Atualizar yt-dlp</button>
+                </div>
+                <div class="linha" style="margin-top: 4px">
+                  <strong>deno (runtime JS para YouTube)</strong>
+                  <span class="selo cheio empurra">Baixando… 62%</span><span class="n">4</span>
+                </div>
+                <div class="linha">
+                  <div class="barra-prog cresce" role="progressbar" aria-valuenow="62"><i style="--p:62%"></i></div>
+                  <button class="btn" aria-label="Cancelar download de deno">Cancelar</button>
+                </div>
+              </div>
+
+              <!-- Worker Python e Catálogo -->
+              <div class="comp-cartao">
+                <div class="linha">
+                  <strong>Ambiente Python isolado (Worker)</strong>
+                  <span class="selo cheio">✓ Pronto</span>
+                  <button class="btn empurra">Reparar ambiente</button>
+                </div>
+                <div class="linha">
+                  <span class="rotulo">Catálogo de modelos: <span class="mono">v2026.11</span> (assinatura verificada)</span>
+                  <button class="btn empurra">Verificar catálogo</button><span class="n">5</span>
+                </div>
+              </div>
+
+              <!-- Modelos ML -->
+              <div class="comp-cartao">
+                <div class="linha"><strong>Modelos de Transcrição e Enquadramento</strong></div>
+                <div class="linha">
+                  <div class="coluna cresce" style="gap: 2px">
+                    <span><strong>Whisper Turbo</strong> · Transcrição de alta precisão</span>
+                    <span class="rotulo">1,6 GB · MIT · <a href="#componentes" style="color:var(--texto-2)">Ver código-fonte</a></span>
+                  </div>
+                  <span class="selo cheio">✓ Instalado</span>
+                </div>
+                <div class="linha">
+                  <div class="coluna cresce" style="gap: 2px">
+                    <span><strong>YuNet</strong> · Detector de rostos para Reenquadramento 9:16</span>
+                    <span class="rotulo">230 KB · MIT · <a href="#componentes" style="color:var(--texto-2)">Ver código-fonte</a></span>
+                  </div>
+                  <span class="selo">Não instalado</span>
+                  <button class="btn prim">Baixar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+        <footer class="barra-status"><span>Salvo</span><span>·</span><span>Baixando deno · 62%</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Vozes TTS -->
+  <section class="wf-variante" id="tts">
+    <h2>3. Sub-aba Vozes TTS (Narração) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup"><button class="btn fantasma">Meu canal ▾</button><nav class="etapas"><span class="etapa">1. Fontes <small>3</small></span><span class="etapa">2. Cortes <small>12</small></span><span class="etapa">3. Exportação <small>4</small></span></nav><div class="linha empurra"><button class="btn icone sel">⚙</button></div></header>
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações</div>
+            <nav class="lista">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item ativo">Componentes e Armazenamento</div>
+              <div class="config-nav-item">Exportação e Encoder</div>
+              <div class="config-nav-item">Aparência e Teclado</div>
+              <div class="config-nav-item">Projeto atual</div>
+            </nav>
+          </aside>
+          <div class="config-conteudo">
+            <h2 style="margin: 0; font-size: 18px">Componentes e Armazenamento</h2>
+            <div class="abas" role="tablist">
+              <span class="aba" role="tab">Hardware de Transcrição</span>
+              <span class="aba" role="tab">Componentes e Modelos</span>
+              <span class="aba atual" role="tab" aria-selected="true">Vozes TTS (Narração)</span>
+              <span class="aba" role="tab">Pastas e Armazenamento</span>
+            </div>
+
+            <div class="leitura coluna">
+              <div class="comp-cartao">
+                <div class="linha">
+                  <strong>pocket-tts (motor local de voz)</strong>
+                  <span class="selo cheio">✓ Instalado · 42 MB · MIT</span>
+                  <button class="btn empurra">Reinstalar</button>
+                </div>
+              </div>
+
+              <div class="bloco-cfg">
+                <strong>Modelos e vozes por idioma</strong>
+                <div class="linha">
+                  <span class="rotulo" style="width: 140px">Português (PT-BR):</span>
+                  <div class="campo cresce" style="color: var(--texto)">portuguese_24l (310 MB · CC-BY-4.0) ▾</div>
+                  <span class="selo">Não baixado</span>
+                </div>
+                <div class="linha">
+                  <span class="rotulo" style="width: 140px">Inglês (EN):</span>
+                  <div class="campo cresce" style="color: var(--texto)">english (280 MB · CC-BY-4.0) ▾</div>
+                  <span class="selo cheio">✓ Instalado</span>
+                </div>
+                <div class="caixa">
+                  <strong>Termo de uso responsável (obrigatório para download)</strong>
+                  <p class="rotulo" style="margin: 4px 0">Não use síntese de voz para se passar por outra pessoa sem autorização, criar fraude, assédio ou desinformação.</p>
+                  <label class="linha rotulo"><input type="checkbox"> Li e concordo com os termos de uso deste modelo de voz</label><span class="n">6</span>
+                </div>
+                <div class="linha" style="justify-content: flex-end">
+                  <button class="btn prim" disabled>Baixar portuguese_24l (310 MB)</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+        <footer class="barra-status"><span>Salvo</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Pastas e Armazenamento -->
+  <section class="wf-variante" id="armazenamento">
+    <h2>4. Sub-aba Pastas e Armazenamento · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup"><button class="btn fantasma">Meu canal ▾</button><nav class="etapas"><span class="etapa">1. Fontes <small>3</small></span><span class="etapa">2. Cortes <small>12</small></span><span class="etapa">3. Exportação <small>4</small></span></nav><div class="linha empurra"><button class="btn icone sel">⚙</button></div></header>
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações</div>
+            <nav class="lista">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item ativo">Componentes e Armazenamento</div>
+              <div class="config-nav-item">Exportação e Encoder</div>
+              <div class="config-nav-item">Aparência e Teclado</div>
+              <div class="config-nav-item">Projeto atual</div>
+            </nav>
+          </aside>
+          <div class="config-conteudo">
+            <h2 style="margin: 0; font-size: 18px">Componentes e Armazenamento</h2>
+            <div class="abas" role="tablist">
+              <span class="aba" role="tab">Hardware de Transcrição</span>
+              <span class="aba" role="tab">Componentes e Modelos</span>
+              <span class="aba" role="tab">Vozes TTS (Narração)</span>
+              <span class="aba atual" role="tab" aria-selected="true">Pastas e Armazenamento</span>
+            </div>
+
+            <div class="bloco-cfg leitura">
+              <div class="coluna" style="gap: 4px">
+                <label class="rotulo"><strong>Pasta de componentes e modelos (data_dir)</strong></label>
+                <div class="linha">
+                  <div class="campo cresce mono" style="color: var(--texto)">C:\Users\Dev\AppData\Local\Clipes\data</div>
+                  <button class="btn">Escolher pasta…</button>
+                </div>
+              </div>
+              <div class="banner">
+                <span>⚠</span>
+                <span>Alterar a pasta de componentes vale apenas para downloads futuros. Arquivos já baixados não são movidos automaticamente (e listas de Projetos, histórico de encoder e diagnóstico continuam na pasta padrão de dados do app).</span><span class="n">7</span>
+              </div>
+              <div class="coluna" style="gap: 4px">
+                <label class="rotulo"><strong>Pasta de cache temporário (cache_dir)</strong> — proxies, ondas de áudio e miniaturas</label>
+                <div class="linha">
+                  <div class="campo cresce mono" style="color: var(--texto)">D:\ClipesCache</div>
+                  <button class="btn">Escolher pasta…</button>
+                </div>
+              </div>
+              <div class="coluna" style="gap: 4px">
+                <label class="rotulo"><strong>Limite do cache temporário (GB)</strong> — limpeza automática dos itens mais antigos</label>
+                <div class="linha">
+                  <div class="campo mono" style="width: 110px; color: var(--texto)">10</div>
+                  <span class="rotulo">GB (atual: 3,4 GB usados)</span>
+                </div>
+              </div>
+              <div class="linha" style="justify-content: flex-end">
+                <button class="btn prim">Salvar pastas e limite</button>
+              </div>
+            </div>
+          </div>
+        </main>
+        <footer class="barra-status"><span>Salvo</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Diálogo de confirmação de download -->
+  <section class="wf-variante" id="dialogo">
+    <h2>5. Confirmação de download de modelo (&lt;ConfirmDialog&gt;) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup"><button class="btn fantasma">Meu canal ▾</button></header>
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações</div>
+            <nav class="lista">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item ativo">Componentes e Armazenamento</div>
+              <div class="config-nav-item">Exportação e Encoder</div>
+              <div class="config-nav-item">Aparência e Teclado</div>
+              <div class="config-nav-item">Projeto atual</div>
+            </nav>
+          </aside>
+          <div class="config-conteudo"><div class="caixa tracejada cresce"></div></div>
+        </main>
+        <footer class="barra-status"><span>Salvo</span></footer>
+      </div>
+      <div class="dialogo-fundo" role="presentation">
+        <div class="dialogo" role="alertdialog" aria-modal="true" aria-labelledby="tit-dl">
+          <h3 id="tit-dl" style="margin: 0">Baixar modelo YuNet?</h3>
+          <span>Detector de rostos usado no Reenquadramento automático 9:16.</span>
+          <div class="comp-cartao">
+            <span>Tamanho: <strong>230 KB</strong> · Licença: <strong>MIT</strong></span>
+            <span class="mono rotulo">Origem: github.com/opencv/opencv_zoo</span>
+            <span class="mono rotulo">Destino: C:\Users\Dev\AppData\Local\Clipes\data\models</span>
+          </div>
+          <div class="linha" style="justify-content: flex-end">
+            <button class="btn sel">Cancelar</button><span class="n">8</span>
+            <button class="btn prim">Baixar agora</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Erro de hardware / worker ausente -->
+  <section class="wf-variante" id="erro">
+    <h2>6. Erro acionável (?estado=erro — Worker ausente / fallback de sonda) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup"><button class="btn fantasma">Meu canal ▾</button><div class="linha empurra"><button class="btn icone sel">⚙</button></div></header>
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações</div>
+            <nav class="lista">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item ativo">Componentes e Armazenamento</div>
+              <div class="config-nav-item">Exportação e Encoder</div>
+              <div class="config-nav-item">Aparência e Teclado</div>
+              <div class="config-nav-item">Projeto atual</div>
+            </nav>
+          </aside>
+          <div class="config-conteudo">
+            <h2 style="margin: 0; font-size: 18px">Componentes e Armazenamento</h2>
+            <div class="erro-core leitura" role="alert">
+              <strong>⚠ Ambiente Python ou modelo recomendado ausente</strong>
+              <span>Instale o ambiente Python e o modelo recomendado antes de testar o hardware.</span>
+              <div class="linha">
+                <button class="btn prim">Ir para Componentes e Modelos</button>
+                <button class="btn">Relatar problema</button>
+              </div>
+              <details>
+                <summary class="rotulo" style="cursor: pointer">Ver detalhe técnico</summary>
+                <span class="mono rotulo">Código: worker_missing</span>
+              </details>
+            </div>
+            <div class="banner leitura">
+              <span>ℹ</span>
+              <span><strong>Fallback de sonda:</strong> O teste na placa de vídeo falhou ou expirou; usando processador como alternativa segura.</span>
+            </div>
+          </div>
+        </main>
+        <footer class="barra-status"><span>Salvo</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li><strong>Diagnóstico de hardware:</strong> traduz <span class="mono">transcription.hardware.status</span> sem jargões técnicos (<span class="mono">int8_float16</span>, <span class="mono">handshake</span>) fora de <span class="mono">&lt;details&gt;</span>.</li>
+      <li><strong>Agrupamento VAD (#279):</strong> chama <span class="mono">transcription.grouping</span> (<span class="mono">{ auto: true }</span> ou <span class="mono">{ enabled }</span>); o aviso sobre CPU (+18%) vs GPU (+1 GB VRAM) fica sempre visível sem precisar expandir nada.</li>
+      <li><strong>Opções indisponíveis:</strong> opções com <span class="mono">enabled: false</span> continuam visíveis na lista com o motivo em PT-BR (<span class="mono">reason</span>) para o usuário entender por que não podem ser escolhidas.</li>
+      <li><strong>Progresso isolado por job:</strong> cada cartão escuta apenas seu próprio <span class="mono">job</span> em <span class="mono">core-progress</span> (ex.: <span class="mono">"deno"</span>, <span class="mono">"ffmpeg"</span>, <span class="mono">"yunet"</span>, <span class="mono">"tts:&lt;id&gt;"</span>).</li>
+      <li><strong>Catálogo assinado:</strong> <span class="mono">components.catalog.check</span> verifica assinatura Ed25519; em falha (<span class="mono">catalog_signature_invalid</span> / <span class="mono">catalog_rollback</span>), mantém o catálogo seguro embutido e exibe aviso.</li>
+      <li><strong>Vozes TTS:</strong> o checkbox de termo de uso proibido (<span class="mono">termsAccepted: true</span>) bloqueia o botão de download até ser marcado; cancelar chama <span class="mono">tts.models.cancel</span> (nunca <span class="mono">components.cancel</span>).</li>
+      <li><strong>Pastas e cache:</strong> <span class="mono">components.settings.set</span> exige caminhos absolutos e limite &gt; 0 (<span class="mono">invalid_settings</span> caso contrário); campo editável acompanha o seletor nativo.</li>
+      <li><strong>Confirmação obrigatória:</strong> downloads de componentes/modelos usam <span class="mono">&lt;ConfirmDialog&gt;</span> com foco inicial em <em>"Cancelar"</em>, enviando <span class="mono">confirmed: true</span> apenas após aceite. No estado <span class="mono">?estado=carregando</span>, cada sub-aba exibe <span class="mono">&lt;Esqueleto&gt;</span>.</li>
+    </ol>
+  </section>
+
+</main>
+<script src="kit.js"></script>
+</body>
+</html>

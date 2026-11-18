@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>D5 · Enquadrar na Fonte 16:9 (Crop, Alças, Tela Dividida e Borda ao Vivo) — Wireframes front v2</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .shell-editor { grid-template-rows: 44px auto 1fr 30px; }
+  .ctx-compacto { padding: 5px 12px; }
+  .seg-btn { padding: 3px 8px; border: 1px solid var(--borda); background: var(--tela); font-size: 12px; color: var(--texto-2); }
+  .seg-btn.ativo { background: var(--sutil); color: var(--texto); font-weight: 600; border-color: var(--texto); }
+  .trilho-recolhido {
+    width: 42px; flex: none; background: var(--painel); border-right: 1px solid var(--borda);
+    display: flex; flex-direction: column; align-items: center; padding: 8px 4px; gap: 8px;
+  }
+  .rotulo-vertical { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 11px; color: var(--texto-2); font-weight: 600; }
+
+  .palco-area { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--fundo); }
+  .palco-cab { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--painel); border-bottom: 1px solid var(--borda); }
+  .palco-centro { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px; gap: 8px; position: relative; }
+
+  .quadro-169 {
+    width: 100%; max-width: 660px; aspect-ratio: 16 / 9; position: relative; overflow: hidden;
+    background: var(--sutil); border: 1px solid var(--borda); border-radius: var(--r);
+  }
+  .w1440 .quadro-169 { max-width: 720px; }
+  .mascara-fora {
+    position: absolute; inset: 0;
+    background: rgb(0 0 0 / .22);
+  }
+  .crop-rect {
+    position: absolute; background: rgb(255 255 255 / .42);
+    border: 2px solid var(--texto);
+    display: grid; place-items: center;
+  }
+  .crop-rect.inativo {
+    background: rgb(255 255 255 / .18);
+    border: 2px dashed var(--texto-2);
+  }
+  .crop-tag {
+    position: absolute; top: 6px; left: 6px; background: var(--forte); color: #fff;
+    font-size: 11px; padding: 2px 6px; border-radius: 3px; white-space: nowrap;
+  }
+  .crop-rect.inativo .crop-tag { background: var(--painel); color: var(--texto); border: 1px solid var(--borda); }
+
+  /* 8 alças de redimensionamento (>= 24px de área de toque via hit-box conceitual, 10px visual) */
+  .alca-crop {
+    position: absolute; width: 12px; height: 12px; background: var(--tela);
+    border: 2px solid var(--texto); border-radius: 2px;
+  }
+  .alca-crop.foco { background: var(--forte); outline: 2px solid var(--tela); box-shadow: 0 0 0 4px var(--texto); }
+  .alca-tl { top: -6px; left: -6px; }
+  .alca-tc { top: -6px; left: calc(50% - 6px); }
+  .alca-tr { top: -6px; right: -6px; }
+  .alca-ml { top: calc(50% - 6px); left: -6px; }
+  .alca-mr { top: calc(50% - 6px); right: -6px; }
+  .alca-bl { bottom: -6px; left: -6px; }
+  .alca-bc { bottom: -6px; left: calc(50% - 6px); }
+  .alca-br { bottom: -6px; right: -6px; }
+  .centro-move {
+    width: 24px; height: 24px; border: 1px solid var(--texto); border-radius: 50%;
+    background: var(--tela); display: grid; place-items: center; font-size: 12px;
+  }
+
+  .hud-teclado {
+    width: 100%; max-width: 660px; background: var(--tela); border: 1px solid var(--borda);
+    border-radius: var(--r); padding: 5px 10px; font-size: 11px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  }
+  .w1440 .hud-teclado { max-width: 720px; }
+
+  .badge-borda {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    background: var(--forte); color: #fff; font-size: 12px; padding: 4px 10px;
+    border-radius: var(--r); white-space: nowrap; z-index: 4;
+  }
+  .insp-abas { display: flex; flex-wrap: wrap; gap: 2px; padding: 4px 8px; border-bottom: 1px solid var(--borda); background: var(--tela); }
+  .insp-aba { padding: 4px 7px; font-size: 11px; border-radius: 3px; color: var(--texto-2); }
+  .insp-aba.atual { background: var(--sutil); color: var(--texto); font-weight: 600; }
+  .campo-num {
+    height: 24px; border: 1px solid var(--borda); border-radius: var(--r); background: var(--tela);
+    padding: 0 6px; display: flex; align-items: center; justify-content: space-between; font-size: 11px;
+  }
+  .btn-sm { height: 24px; padding: 0 8px; font-size: 11px; }
+
+  .mini-916 {
+    width: 112px; aspect-ratio: 9 / 16; border: 1px solid var(--texto); border-radius: var(--r);
+    background: var(--tela); display: flex; flex-direction: column; overflow: hidden; flex: none;
+  }
+  .mini-916-topo { height: 30%; background: var(--sutil); border-bottom: 2px solid var(--texto); display: grid; place-items: center; font-size: 10px; font-weight: 600; }
+  .mini-916-base { flex: 1; background: var(--painel); display: grid; place-items: center; font-size: 10px; color: var(--texto-2); }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>D5 · Modo Enquadrar na Fonte 16:9 e Badge de Borda ao Vivo</h1>
+    <p>Rota: <span class="mono">#/projeto/:id/corte/:corteId/editar</span> (Palco em modo <span class="mono">fonte_16_9</span>).
+      Especificação: <span class="mono">telas/D-corte-editar.md</span> (Zona 2 e Aba Enquadramento) e <span class="mono">02-consolidacao.md</span> ("Avaliação objetiva do Pacote D").</p>
+    <nav>
+      <a href="#simples-1366">Layout simples + alças e teclado (1366)</a>
+      <a href="#dividido-1440">Tela dividida Topo/Base (1440)</a>
+      <a href="#borda-ao-vivo-1366">Badge de borda ao vivo (1366)</a>
+    </nav>
+  </header>
+
+  <!-- 1. Layout simples com 8 alças e foco por teclado -->
+  <section class="wf-variante" id="simples-1366">
+    <h2>Layout simples (<span class="mono">face</span> / <span class="mono">fullscreen_roi</span>) · Alças de crop e operação por teclado · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto shell-editor">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes e Transcrição</span><span class="etapa atual">2. Cortes</span><span class="etapa">3. Exportação</span></nav>
+          <div class="linha empurra"><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </div>
+        <div class="contexto-corte ctx-compacto">
+          <button class="btn fantasma" style="height: 24px">← Cortes</button>
+          <strong>Corte 5/12: "Reação ao anúncio da placa nova"</strong>
+          <span class="selo">Corte direto</span>
+          <button class="btn prim empurra" style="height: 24px">Exportar Corte <kbd>Ctrl E</kbd></button>
+        </div>
+
+        <div class="conteudo">
+          <aside class="trilho-recolhido">
+            <button class="btn icone">»</button>
+            <span class="rotulo-vertical">Transcrição <kbd>Ctrl+[</kbd></span>
+          </aside>
+
+          <main class="palco-area">
+            <div class="palco-cab">
+              <div class="linha" style="gap: 0">
+                <span class="seg-btn" aria-pressed="false">Prévia 9:16</span>
+                <span class="seg-btn ativo" aria-pressed="true">Enquadrar na Fonte 16:9</span>
+              </div><span class="n">1</span>
+              <span class="rotulo mono empurra">Fonte 1920×1080 · Keyframe em 00:14.200</span>
+            </div>
+
+            <div class="palco-centro">
+              <div class="quadro-169" aria-label="Quadro da Fonte 16:9 com retângulo de crop">
+                <div class="mascara-fora"></div>
+                <div class="crop-rect" style="left: 34%; top: 0; width: 31.6%; height: 100%">
+                  <span class="crop-tag">Crop 9:16 · Manual</span>
+                  <div class="alca-crop alca-tl" title="Canto superior esquerdo"></div>
+                  <div class="alca-crop alca-tc" title="Borda superior"></div>
+                  <div class="alca-crop alca-tr" title="Canto superior direito"></div>
+                  <div class="alca-crop alca-ml" title="Borda esquerda"></div>
+                  <div class="alca-crop alca-mr" title="Borda direita"></div>
+                  <div class="alca-crop alca-bl" title="Canto inferior esquerdo"></div>
+                  <div class="alca-crop alca-bc" title="Borda inferior"></div>
+                  <div class="alca-crop alca-br foco" tabindex="0" aria-label="Alça inferior direita focada"></div><span class="n" style="position: absolute; bottom: 8px; right: 10px">2</span>
+                  <div class="centro-move" title="Arrastar ou setas para mover">✥</div>
+                </div>
+              </div>
+
+              <div class="hud-teclado">
+                <strong>Teclado no canvas:</strong>
+                <span><kbd>Tab</kbd> alternar retângulo / 8 alças</span>
+                <span><kbd>←↑↓→</kbd> mover/redimensionar (1 px)</span>
+                <span><kbd>Shift+Setas</kbd> passo largo (10 px)</span>
+                <span><kbd>Enter</kbd> gravar keyframe</span><span class="n">3</span>
+              </div>
+            </div>
+          </main>
+
+          <aside class="painel dir" style="width: 360px">
+            <div class="painel-cab" style="padding: 6px 10px"><span>Inspetor</span></div>
+            <div class="insp-abas">
+              <span class="insp-aba atual">Enquadramento</span><span class="insp-aba">Legendas</span><span class="insp-aba">Silêncios</span><span class="insp-aba">Áudio</span><span class="insp-aba">Hist.</span>
+            </div>
+            <div class="painel-corpo" style="padding: 10px; font-size: 12px">
+              <div class="caixa">
+                <strong>Coordenadas ao vivo (<span class="mono">editor.crop.set_edits</span>)</strong>
+                <div class="grade" style="grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px">
+                  <div class="campo-num"><span>x</span><span class="mono">656</span></div>
+                  <div class="campo-num"><span>y</span><span class="mono">0</span></div>
+                  <div class="campo-num"><span>w</span><span class="mono">608</span></div>
+                  <div class="campo-num"><span>h</span><span class="mono">1080</span></div>
+                </div>
+                <label style="display: block; margin-top: 8px"><input type="checkbox"> Corte seco neste keyframe (<span class="mono">cut</span>)</label>
+                <div class="linha" style="margin-top: 8px">
+                  <button class="btn prim btn-sm">Atualizar na agulha</button>
+                  <button class="btn btn-sm empurra">Remover</button>
+                </div>
+              </div>
+              <div class="rotulo">Durante o arrasto no canvas envia <span class="mono">preview: true</span>; ao soltar ou teclar <kbd>Enter</kbd>, grava na pilha <span class="mono">undo</span> (<span class="mono">preview: false</span>).</div>
+            </div>
+          </aside>
+        </div>
+
+        <div class="barra-status">
+          <span>Salvo</span><span>Foco: Alça inferior direita (x:656 y:0 w:608 h:1080)</span>
+          <span class="empurra"><kbd>Ctrl+Z</kbd> desfazer ajuste</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Layout Tela Dividida Topo/Base em 1440 -->
+  <section class="wf-variante" id="dividido-1440">
+    <h2>Tela dividida (<span class="mono">gameplay_webcam</span> / <span class="mono">two_people</span>) · Seleção Topo/Base e <span class="mono">splitRatio</span> · 1440 × 900</h2>
+    <div class="wf-quadro w1440">
+      <div class="shell com-contexto shell-editor">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes e Transcrição</span><span class="etapa atual">2. Cortes</span><span class="etapa">3. Exportação</span></nav>
+          <div class="linha empurra"><button class="btn">Comandos <kbd>Ctrl K</kbd></button></div>
+        </div>
+        <div class="contexto-corte ctx-compacto">
+          <button class="btn fantasma" style="height: 24px">← Cortes</button>
+          <strong>Corte 5/12: "Reação ao anúncio da placa nova"</strong>
+          <span class="selo">Corte direto</span>
+          <button class="btn prim empurra" style="height: 24px">Exportar Corte <kbd>Ctrl E</kbd></button>
+        </div>
+
+        <div class="conteudo">
+          <aside class="painel" style="width: 260px">
+            <div class="painel-cab"><span>Transcrição</span></div>
+            <div class="painel-corpo" style="padding: 8px; font-size: 12px">
+              <div class="caixa"><strong>Frase 13 (ativa)</strong><div class="rotulo">…e foi exatamente ali…</div></div>
+              <div class="rotulo">Em ≥ 1440 px, ambos painéis permanecem abertos ao lado do canvas 16:9.</div>
+            </div>
+          </aside>
+
+          <main class="palco-area">
+            <div class="palco-cab">
+              <div class="linha" style="gap: 0">
+                <span class="seg-btn">Prévia 9:16</span>
+                <span class="seg-btn ativo">Enquadrar na Fonte 16:9</span>
+              </div>
+              <div class="linha empurra" style="gap: 0">
+                <span class="seg-btn ativo">Editando: Topo (Webcam)</span>
+                <span class="seg-btn">Base (Jogo)</span>
+              </div><span class="n">4</span>
+            </div>
+
+            <div class="palco-centro" style="flex-direction: row; gap: 16px">
+              <div class="coluna" style="align-items: center; flex: 1">
+                <div class="quadro-169">
+                  <div class="mascara-fora"></div>
+                  <!-- Retângulo Base (inativo) -->
+                  <div class="crop-rect inativo" style="left: 16%; top: 5%; width: 58%; height: 90%">
+                    <span class="crop-tag">Base (70%) · Jogo · clique ou Tab para ativar</span>
+                  </div><span class="n" style="position: absolute; top: 8%; right: 27%">5</span>
+                  <!-- Retângulo Topo (ativo) -->
+                  <div class="crop-rect" style="left: 72%; top: 56%; width: 24%; height: 36%">
+                    <span class="crop-tag">Topo (30%) · Webcam · Ativo</span>
+                    <div class="alca-crop alca-tl"></div><div class="alca-crop alca-tc"></div><div class="alca-crop alca-tr"></div>
+                    <div class="alca-crop alca-ml"></div><div class="alca-crop alca-mr"></div>
+                    <div class="alca-crop alca-bl"></div><div class="alca-crop alca-bc"></div><div class="alca-crop alca-br foco"></div>
+                    <div class="centro-move">✥</div>
+                  </div>
+                </div>
+                <div class="hud-teclado">
+                  <span>Clique num retângulo ou use <kbd>Tab</kbd> para alternar entre <strong>Topo</strong> e <strong>Base</strong>.</span>
+                  <span class="empurra mono">Webcam: x:1382 y:604 w:460 h:388</span>
+                </div>
+              </div>
+
+              <!-- Mini-prévia 9:16 empilhada -->
+              <div class="coluna" style="align-items: center">
+                <span class="rotulo">Resultado 9:16</span>
+                <div class="mini-916">
+                  <div class="mini-916-topo">Topo · 30%</div>
+                  <div class="mini-916-base">Base · 70%</div>
+                </div><span class="n">6</span>
+              </div>
+            </div>
+          </main>
+
+          <aside class="painel dir" style="width: 340px">
+            <div class="painel-cab"><span>Inspetor — Enquadramento</span></div>
+            <div class="painel-corpo" style="padding: 10px; font-size: 12px">
+              <div class="caixa">
+                <strong>Layout: Jogo + Webcam</strong>
+                <div class="linha" style="margin-top: 6px"><span>Proporção vertical (<span class="mono">splitRatio</span>)</span><span class="mono empurra">0.30</span></div>
+                <div class="barra-prog" style="margin: 6px 0"><i style="--p: 30%"></i></div>
+                <div class="rotulo">Intervalo: <span class="mono">0.20..=0.50</span> em Jogo+Webcam (<span class="mono">0.30..=0.70</span> em Duas pessoas).</div>
+              </div>
+              <div class="caixa">
+                <strong>Painel selecionado: Topo</strong>
+                <div class="rotulo" style="margin-top: 4px">Em Jogo + Webcam, o retângulo manual da webcam é o caminho principal (YuNet é opcional).</div>
+                <div class="grade" style="grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px">
+                  <div class="campo-num"><span>x</span><span class="mono">1382</span></div>
+                  <div class="campo-num"><span>y</span><span class="mono">604</span></div>
+                  <div class="campo-num"><span>w</span><span class="mono">460</span></div>
+                  <div class="campo-num"><span>h</span><span class="mono">388</span></div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <div class="barra-status">
+          <span>Salvo</span><span>Tela dividida · painel ativo: Topo (30%)</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Badge de borda ao vivo durante arrasto na timeline -->
+  <section class="wf-variante" id="borda-ao-vivo-1366">
+    <h2>Badge de borda ao vivo durante arrasto na timeline (<span class="mono">overlayBorda</span>) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto shell-editor">
+        <div class="barra-sup">
+          <button class="btn fantasma">Canal Cortes Tech ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes e Transcrição</span><span class="etapa atual">2. Cortes</span><span class="etapa">3. Exportação</span></nav>
+        </div>
+        <div class="contexto-corte ctx-compacto">
+          <button class="btn fantasma" style="height: 24px">← Cortes</button>
+          <strong>Corte 5/12: "Reação ao anúncio da placa nova"</strong>
+        </div>
+
+        <div class="conteudo">
+          <div class="coluna cresce" style="gap: 0">
+            <main class="palco-area">
+              <div class="palco-cab">
+                <div class="linha" style="gap: 0"><span class="seg-btn ativo">Prévia 9:16</span><span class="seg-btn">Enquadrar na Fonte 16:9</span></div>
+                <span class="rotulo empurra">Arrastando alça Entrada com <kbd>Alt</kbd> pressionado</span>
+              </div>
+              <div class="palco-centro">
+                <div class="badge-borda mono">Entrada · 00:14.208 na Fonte · Livre por quadro (Alt)</div><span class="n" style="position: absolute; top: 10px; right: 20px">7</span>
+                <div class="midia r916" style="height: 310px">
+                  <div style="text-align: center; padding: 12px">
+                    <strong>Quadro exato da borda</strong>
+                    <div class="rotulo" style="margin-top: 4px">Sem <kbd>Alt</kbd>, exibe o selo:<br><span class="mono">Encaixe em Frase</span></div>
+                  </div>
+                </div>
+              </div>
+            </main>
+
+            <section class="timeline" style="padding: 8px 12px; gap: 6px; flex: none">
+              <div class="linha">
+                <strong>Timeline (<span class="mono">preview: true</span> durante arrasto)</strong>
+                <span class="selo cheio mono">Entrada: 00:14.208</span>
+                <span class="selo">Livre por quadro (Alt)</span>
+              </div>
+              <div class="faixa" style="background: var(--tela); height: 34px">
+                <span>1. Vídeo</span>
+                <div>
+                  <div class="bloco" style="left: 22%; width: 58%; padding-left: 18px; display: flex; align-items: center; font-size: 11px">Trecho do Corte</div>
+                  <div style="position: absolute; left: 22%; top: 2px; bottom: 2px; width: 12px; background: var(--forte); color: #fff; outline: 2px solid var(--texto); display: grid; place-items: center; font-size: 10px; font-weight: 700">I</div>
+                  <div style="position: absolute; left: 79%; top: 2px; bottom: 2px; width: 10px; background: var(--texto-2); color: #fff; display: grid; place-items: center; font-size: 10px">O</div>
+                </div>
+              </div>
+              <div class="faixa" style="background: var(--tela); height: 28px; border-bottom: 0">
+                <span>3. Frases</span>
+                <div>
+                  <div class="bloco" style="left: 14%; width: 18%; opacity: .6">Frase 12</div>
+                  <div class="bloco" style="left: 32.5%; width: 25%">Frase 13</div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div class="barra-status"><span>Alterações pendentes…</span><span>Arrasto em prévia contínua (não empilhado no undo até soltar)</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li><strong>Alternância de visualização:</strong> <span class="mono">Prévia 9:16</span> mostra o corte final composto; <span class="mono">Enquadrar na Fonte 16:9</span> expõe o quadro original completo com máscara fora da área selecionada e retângulo(s) de crop manipuláveis.</li>
+      <li><strong>8 alças de redimensionamento (SC 2.5.8):</strong> embora o marcador visual da alça tenha 12×12 px para não obstruir o vídeo, a área clicável/focável de cada alça e do manipulador central é expandida para ≥ 24×24 CSS px.</li>
+      <li><strong>Decisão de wireframe — Operação por teclado no canvas 16:9:</strong> <kbd>Tab</kbd> navega entre o retângulo inteiro e as 8 alças de borda/canto; <kbd>←↑↓→</kbd> move ou redimensiona em passo fino (1 px) e <kbd>Shift+Setas</kbd> em passo largo (10 px); <kbd>Enter</kbd> confirma o keyframe (<span class="mono">editor.crop.set_edits { preview: false }</span>). Os campos numéricos no Inspetor (<span class="mono">x/y/w/h</span>) espelham a mesma edição em tempo real.</li>
+      <li><strong>Seleção de painel em Tela dividida:</strong> nos layouts <span class="mono">gameplay_webcam</span> e <span class="mono">two_people</span>, o usuário alterna o painel ativo (<span class="mono">Topo</span> vs. <span class="mono">Base</span>) clicando diretamente no retângulo no canvas, pelo atalho de teclado (<kbd>Tab</kbd> entre painéis) ou pelo seletor no topo do Palco/Inspetor.</li>
+      <li><strong>Hierarquia visual ativo vs. inativo:</strong> o retângulo ativo exibe borda sólida dupla + 8 alças de redimensionamento; o retângulo inativo exibe borda tracejada e rótulo clicável para troca rápida sem poluir o quadro.</li>
+      <li><strong>Decisão de wireframe — Mini-prévia 9:16 acoplada em 1440+:</strong> em layouts divididos (<span class="mono">gameplay_webcam</span> / <span class="mono">two_people</span>), mostrar a proporção empilhada resultante ao lado do canvas 16:9 ajuda a validar o efeito do <span class="mono">splitRatio</span> sem alternar de volta para <em>Prévia 9:16</em>.</li>
+      <li><strong>Badge de borda ao vivo (<span class="mono">overlayBorda</span>):</strong> enquanto o usuário arrasta a alça <span class="mono">Entrada</span> ou <span class="mono">Saída</span> (<span class="mono">preview: true</span>), o Palco exibe o quadro exato da borda e o badge <span class="mono">tabular-nums</span> indicando o timecode na Fonte e o modo (<em>Encaixe em Frase</em> por padrão ou <em>Livre por quadro (Alt)</em>).</li>
+    </ol>
+  </section>
+
+</main>
+<script src="kit.js"></script>
+</body>
+</html>

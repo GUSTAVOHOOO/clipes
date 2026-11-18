@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A4 · Instalador Just-in-Time — Wireframes Clipes v2</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .jit-modal { width: 520px; }
+  .jit-inline { max-width: 720px; border: 1px solid var(--borda); border-radius: 6px; padding: 16px; background: var(--tela); display: flex; flex-direction: column; gap: 12px; }
+  .jit-item { border: 1px solid var(--borda); border-radius: var(--r); padding: 10px 12px; background: var(--painel); display: flex; flex-direction: column; gap: 4px; }
+  .jit-termo { border: 1px solid var(--borda); border-radius: var(--r); padding: 10px 12px; background: var(--tela); display: flex; flex-direction: column; gap: 6px; }
+  .jit-erro { border: 1px solid var(--texto); border-radius: var(--r); padding: 12px; background: var(--painel); display: flex; flex-direction: column; gap: 8px; }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>A4 · Instalador Just-in-Time (&lt;InstaladorJustInTime&gt;)</h1>
+    <p>Superfície reutilizável (<span class="mono">yt-dlp/deno</span>, <span class="mono">YuNet</span>, <span class="mono">pocket-tts</span>) em modo modal ou cartão inline. Fonte:
+      <span class="mono">telas/A-shell-inicio-config.md</span> (Superfície 4) e
+      <span class="mono">02-consolidacao.md</span> §9.</p>
+    <nav>
+      <a href="#oferta-tts">Oferta: pocket-tts (modal)</a>
+      <a href="#oferta-url">Oferta: yt-dlp/deno (inline)</a>
+      <a href="#baixando-yunet">Baixando: YuNet (modal)</a>
+      <a href="#falha">Falha acionável</a>
+    </nav>
+  </header>
+
+  <!-- 1. Oferta modal: pocket-tts (Transformar -> Narração) -->
+  <section class="wf-variante" id="oferta-tts">
+    <h2>1. Oferta (modal) · pocket-tts e modelo de voz em Transformar · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto">
+        <header class="barra-sup">
+          <button class="btn fantasma">Meu canal ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes <small>3</small></span><span class="etapa atual">2. Cortes <small>12</small></span><span class="etapa">3. Exportação <small>4</small></span></nav>
+          <div class="linha empurra"><button class="btn">Fila · 0</button><button class="btn">Buscar <kbd>Ctrl+K</kbd></button><button class="btn icone">⚙</button></div>
+        </header>
+        <div class="contexto-corte">
+          <button class="btn fantasma">← Cortes</button>
+          <strong>Corte 2/12: Como configurar áudio</strong>
+          <span class="selo">Vídeo transformado</span>
+          <div class="abas empurra"><span class="aba">Editar</span><span class="aba atual">Transformar</span><span class="aba">Empacotar</span></div>
+        </div>
+        <main class="conteudo"><div class="cresce secao"><div class="caixa tracejada cresce"></div></div></main>
+        <footer class="barra-status"><span>Salvo</span><span>·</span><span>Sem tarefas em andamento</span></footer>
+      </div>
+
+      <div class="dialogo-fundo" role="presentation">
+        <div class="dialogo jit-modal" role="dialog" aria-modal="true" aria-labelledby="tit-tts">
+          <div class="linha">
+            <h3 id="tit-tts" style="margin: 0">Recurso necessário para esta ação</h3><span class="n">1</span>
+            <button class="btn icone empurra" aria-label="Fechar">×</button>
+          </div>
+
+          <span>Para gerar <strong>Narração por voz local</strong>, o Clipes precisa baixar:</span>
+
+          <div class="jit-item">
+            <div class="linha"><strong>pocket-tts — motor de voz local</strong><span class="selo empurra">42 MB · MIT</span></div>
+            <span class="rotulo mono">Origem: github.com/kyutai-labs/pocket-tts</span>
+          </div>
+
+          <div class="jit-item">
+            <div class="linha"><strong>Modelo de voz Português (portuguese_24l)</strong><span class="selo empurra">310 MB · CC-BY-4.0</span></div>
+            <span class="rotulo">Inclui pesos do modelo e vozes padrão para o idioma do Projeto.</span>
+          </div>
+
+          <div class="jit-termo">
+            <strong>Termo de uso responsável</strong>
+            <span class="rotulo">Não use síntese de voz para se passar por outra pessoa sem autorização, criar fraude, assédio ou desinformação.</span>
+            <details>
+              <summary class="rotulo" style="cursor: pointer">Ver texto original completo</summary>
+              <span class="rotulo">Texto completo em inglês (prohibitedUse.textEn)…</span>
+            </details>
+            <div class="linha" style="margin-top: 4px">
+              <label class="linha"><input type="checkbox"> <span>Li e concordo com os termos de uso deste modelo de voz</span></label><span class="n">2</span>
+            </div>
+          </div>
+
+          <span class="rotulo mono">Destino: C:\Users\Maria\AppData\Local\Clipes\data\tts (42 GB livres)</span>
+
+          <div class="linha" style="justify-content: flex-end; margin-top: 4px">
+            <button class="btn">Cancelar</button>
+            <button class="btn prim" disabled title="Aceite os termos de uso para continuar">Baixar e continuar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Oferta inline: yt-dlp / deno (Importar por URL em Fontes) -->
+  <section class="wf-variante" id="oferta-url">
+    <h2>2. Oferta (cartão inline) · yt-dlp e deno em Fontes · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Meu canal ▾</button>
+          <nav class="etapas"><span class="etapa atual">1. Fontes <small>3</small></span><span class="etapa">2. Cortes <small>12</small></span><span class="etapa">3. Exportação <small>4</small></span></nav>
+          <div class="linha empurra"><button class="btn">Fila · 0</button><button class="btn">Buscar <kbd>Ctrl+K</kbd></button><button class="btn icone">⚙</button></div>
+        </header>
+
+        <main class="conteudo">
+          <div class="cresce secao" style="overflow: auto">
+            <div class="linha">
+              <h2 style="margin: 0; font-size: 17px">1. Fontes e Transcrição</h2>
+              <button class="btn empurra">Importar arquivo local</button>
+              <button class="btn sel">Importar por URL</button>
+            </div>
+
+            <div class="linha" style="max-width: 720px">
+              <div class="campo cresce mono" style="color: var(--texto)">https://www.youtube.com/watch?v=dQw4w9WgXcQ</div>
+              <button class="btn" disabled>Baixar Fonte</button>
+            </div>
+
+            <section class="jit-inline" aria-label="Instalação necessária">
+              <div class="linha">
+                <strong>Recurso necessário para esta ação</strong><span class="n">3</span>
+                <span class="selo empurra">Instalação sob demanda</span>
+              </div>
+              <span>Para <strong>baixar vídeos por URL</strong>, o Clipes precisa instalar:</span>
+
+              <div class="jit-item">
+                <div class="linha"><strong>yt-dlp — extrator de vídeo por URL</strong><span class="selo empurra">12 MB · Unlicense</span></div>
+                <span class="rotulo mono">Origem: github.com/yt-dlp/yt-dlp</span>
+              </div>
+
+              <div class="jit-item">
+                <div class="linha"><strong>deno — runtime JavaScript (recomendado para YouTube)</strong><span class="selo empurra">38 MB · MIT</span><span class="n">4</span></div>
+                <span class="rotulo mono">Origem: deno.com</span>
+              </div>
+
+              <label class="linha"><input type="checkbox" checked> Confirmo que tenho direito de uso do material e não contornarei proteção DRM ou login privado.</label>
+
+              <span class="rotulo mono">Destino: C:\Users\Maria\AppData\Local\Clipes\data\bin (42 GB livres)</span>
+
+              <div class="linha" style="justify-content: flex-end">
+                <button class="btn">Cancelar</button>
+                <button class="btn prim">Baixar e continuar</button>
+              </div>
+            </section>
+          </div>
+        </main>
+
+        <footer class="barra-status"><span>Salvo</span><span>·</span><span>Sem tarefas em andamento</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Baixando: YuNet (Editar -> Reenquadramento 9:16) -->
+  <section class="wf-variante" id="baixando-yunet">
+    <h2>3. Baixando · YuNet (Reenquadramento automático 9:16) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell com-contexto">
+        <header class="barra-sup">
+          <button class="btn fantasma">Meu canal ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes <small>3</small></span><span class="etapa atual">2. Cortes <small>12</small></span><span class="etapa">3. Exportação <small>4</small></span></nav>
+          <div class="linha empurra"><button class="btn">Fila · 1 ativa</button><button class="btn">Buscar <kbd>Ctrl+K</kbd></button><button class="btn icone">⚙</button></div>
+        </header>
+        <div class="contexto-corte">
+          <button class="btn fantasma">← Cortes</button>
+          <strong>Corte 2/12: Como configurar áudio</strong>
+          <div class="abas empurra"><span class="aba atual">Editar</span><span class="aba">Transformar</span><span class="aba">Empacotar</span></div>
+        </div>
+        <main class="conteudo"><div class="cresce secao"><div class="caixa tracejada cresce"></div></div></main>
+        <footer class="barra-status"><span>Salvo</span><span>·</span><span>Download global: YuNet · 64%</span></footer>
+      </div>
+
+      <div class="dialogo-fundo" role="presentation">
+        <div class="dialogo jit-modal" role="dialog" aria-modal="true" aria-labelledby="tit-yunet">
+          <div class="linha">
+            <h3 id="tit-yunet" style="margin: 0">Recurso necessário para esta ação</h3>
+            <button class="btn icone empurra" aria-label="Fechar" disabled>×</button>
+          </div>
+
+          <span>Para <strong>detectar rostos no reenquadramento automático 9:16</strong>, o Clipes precisa instalar:</span>
+
+          <div class="jit-item">
+            <div class="linha"><strong>Ambiente Python isolado (Worker)</strong><span class="selo cheio empurra">✓ Instalado</span><span class="n">5</span></div>
+            <span class="rotulo">Já disponível na máquina; nenhuma ação necessária.</span>
+          </div>
+
+          <div class="jit-item">
+            <div class="linha"><strong>YuNet — detector de rostos</strong><span class="selo empurra">230 KB · MIT</span></div>
+            <span class="rotulo mono">Origem: github.com/opencv/opencv_zoo</span>
+          </div>
+
+          <div class="caixa coluna" style="gap: 6px" role="progressbar" aria-valuenow="64" aria-valuemin="0" aria-valuemax="100">
+            <div class="linha">
+              <span>Baixando YuNet…</span>
+              <span class="mono empurra">64% · 147 KB / 230 KB</span>
+            </div>
+            <div class="barra-prog" style="--p: 64%"><i></i></div>
+            <div class="linha">
+              <span class="rotulo">Registrado na Fila global de downloads</span>
+              <button class="btn empurra">Cancelar</button><span class="n">6</span>
+            </div>
+          </div>
+
+          <div class="linha" style="justify-content: flex-end; margin-top: 4px">
+            <button class="btn prim" disabled>Baixar e continuar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Falha acionável -->
+  <section class="wf-variante" id="falha">
+    <h2>4. Falha acionável (component_integrity / hash_mismatch) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Meu canal ▾</button>
+          <nav class="etapas"><span class="etapa atual">1. Fontes <small>3</small></span><span class="etapa">2. Cortes <small>12</small></span><span class="etapa">3. Exportação <small>4</small></span></nav>
+          <div class="linha empurra"><button class="btn">Fila · 0</button><button class="btn">Buscar <kbd>Ctrl+K</kbd></button><button class="btn icone">⚙</button></div>
+        </header>
+        <main class="conteudo"><div class="cresce secao"><div class="caixa tracejada cresce"></div></div></main>
+        <footer class="barra-status"><span>Salvo</span><span>·</span><span>Sem tarefas em andamento</span></footer>
+      </div>
+
+      <div class="dialogo-fundo" role="presentation">
+        <div class="dialogo jit-modal" role="dialog" aria-modal="true" aria-labelledby="tit-falha">
+          <div class="linha">
+            <h3 id="tit-falha" style="margin: 0">Recurso necessário para esta ação</h3>
+            <button class="btn icone empurra" aria-label="Fechar">×</button>
+          </div>
+
+          <div class="jit-erro" role="alert">
+            <div class="linha"><strong>⚠ Falha na verificação do yt-dlp</strong><span class="n">7</span></div>
+            <span>O arquivo do yt-dlp não passou na verificação de integridade. Reinstale para continuar.</span>
+            <details>
+              <summary class="rotulo" style="cursor: pointer">Ver detalhe técnico</summary>
+              <span class="mono rotulo">Código: component_integrity (hash SHA-256 divergente em bin/yt-dlp.exe)</span>
+            </details>
+          </div>
+
+          <span class="rotulo mono">Destino: C:\Users\Maria\AppData\Local\Clipes\data\bin</span>
+
+          <div class="linha" style="justify-content: flex-end; margin-top: 4px">
+            <button class="btn">Cancelar</button>
+            <button class="btn prim">Reinstalar yt-dlp</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li><strong>Desbloqueio automático:</strong> o componente verifica <span class="mono">*.status</span> e manifestos ao montar (mostrando <span class="mono">&lt;Esqueleto&gt;</span> de 2 linhas durante a consulta). Se tudo já estiver instalado e íntegro, devolve controle imediato à tela chamadora sem exibir este modal.</li>
+      <li><strong>Termo obrigatório para TTS (<span class="mono">pocket-tts</span>):</strong> o botão <em>"Baixar e continuar"</em> permanece desabilitado até o usuário marcar a concordância (<span class="mono">termsAccepted: true</span>), exigido por <span class="mono">tts.models.download</span>.</li>
+      <li><strong>Modos <span class="mono">inline</span> vs. <span class="mono">modal</span>:</strong> <span class="mono">&lt;InstaladorJustInTime&gt;</span> renderiza em <span class="mono">&lt;section aria-label="Instalação necessária"&gt;</span> quando embutido na tela (ex.: entrada por URL) ou em <span class="mono">&lt;Dialog&gt;</span> até 520 px quando acionado por botão de ferramenta.</li>
+      <li><strong>Estado parcial (<span class="mono">partial</span>):</strong> se <span class="mono">yt-dlp</span> já estiver instalado e apenas <span class="mono">deno</span> faltar (ou falhar <span class="mono">js_runtime_missing</span>), ou se <span class="mono">pocket-tts</span> estiver pronto faltando apenas o modelo do idioma, o já presente recebe selo <em>"✓ Instalado"</em> e apenas o faltante é baixado.</li>
+      <li><strong>Encadeamento de dependências (<span class="mono">YuNet</span>):</strong> se <span class="mono">worker_installed === false</span>, o componente informa que precisa do ambiente Python e encadeia <span class="mono">components.worker.install { confirmed: true }</span> → <span class="mono">components.models.download { id: "yunet", confirmed: true }</span>.</li>
+      <li><strong>Roteamento de cancelamento:</strong> downloads de <span class="mono">yt-dlp</span>, <span class="mono">deno</span>, <span class="mono">worker</span>, <span class="mono">yunet</span> e <span class="mono">pocket-tts</span> chamam <span class="mono">components.cancel { id }</span>; modelos e vozes TTS (<span class="mono">tts:&lt;model_id&gt;</span>) chamam exclusivamente <span class="mono">tts.models.cancel { id }</span>.</li>
+      <li><strong>Outros códigos de erro tratados:</strong> <span class="mono">hash_mismatch</span> / <span class="mono">download</span> → <em>"Falha ao baixar ou verificar o arquivo. Você pode retomar de onde parou."</em> + <em>"Tentar novamente"</em>; <span class="mono">terms_acceptance_required</span> → pede marcar os termos; <span class="mono">unknown_component</span> (ex.: <span class="mono">yt-dlp</span>/<span class="mono">uv</span> no macOS) → informa indisponibilidade automática no SO com orientação alternativa.</li>
+    </ol>
+  </section>
+</main>
+<script src="kit.js"></script>
+</body>
+</html>

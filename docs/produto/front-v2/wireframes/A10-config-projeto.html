@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A10 · Config: Projeto atual — Wireframes Clipes v2</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .config-nav { width: 220px; flex-shrink: 0; }
+  .config-nav-item {
+    padding: 9px 12px; border-bottom: 1px solid var(--sutil);
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    color: var(--texto-2);
+  }
+  .config-nav-item.ativo { background: var(--sutil); color: var(--texto); font-weight: 600; }
+  .config-conteudo {
+    flex: 1; min-width: 0; min-height: 0; overflow: auto;
+    padding: 20px 24px; display: flex; flex-direction: column; gap: 14px;
+  }
+  .bloco-cfg { border: 1px solid var(--borda); border-radius: var(--r); background: var(--tela); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .radio-sim { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--texto); font-size: 9px; flex: none; }
+  .switch-sim {
+    display: inline-flex; align-items: center; width: 32px; height: 18px; border-radius: 9px;
+    border: 1px solid var(--borda); background: var(--sutil); padding: 2px; flex: none;
+  }
+  .switch-sim i { display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--texto-2); }
+  .switch-sim.on { background: var(--forte); border-color: var(--forte); justify-content: flex-end; }
+  .switch-sim.on i { background: var(--tela); }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>A10 · Config: Projeto atual</h1>
+    <p>Rota: <span class="mono">#/config/projeto</span> (requer Projeto aberto; sem Projeto redireciona para <span class="mono">#/config/provedores</span>). Fonte:
+      <span class="mono">telas/A-shell-inicio-config.md</span> (Tela 10),
+      <span class="mono">01-arquitetura.md</span> §3 e §6.</p>
+    <nav>
+      <a href="#perfil">1. Perfil de canal</a>
+      <a href="#privacidade">2. Privacidade (Somente local)</a>
+      <a href="#backups">3. Backups do Projeto</a>
+      <a href="#dialogo-restaurar">4. Restaurar backup (&lt;ConfirmDialog&gt;)</a>
+      <a href="#carregando">5. Carregando (?estado=carregando)</a>
+    </nav>
+  </header>
+
+  <!-- 1. Aba Perfil de canal -->
+  <section class="wf-variante" id="perfil">
+    <h2>1. Aba Perfil de canal · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Meu canal ▾</button>
+          <nav class="etapas" aria-label="Etapas do Projeto">
+            <span class="etapa">1. Fontes <small>3</small></span>
+            <span class="etapa">2. Cortes <small>12</small></span>
+            <span class="etapa">3. Exportação <small>4</small></span>
+          </nav>
+          <div class="linha empurra">
+            <button class="btn">Fila · 0</button>
+            <button class="btn">Buscar <kbd>Ctrl+K</kbd></button>
+            <button class="btn icone sel" aria-label="Configurações">⚙</button>
+            <button class="btn">Mais ▾</button>
+          </div>
+        </header>
+
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações <kbd class="empurra">Ctrl+,</kbd></div>
+            <nav class="lista" aria-label="Seções de Configurações">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item">Componentes e Armazenamento</div>
+              <div class="config-nav-item">Exportação e Encoder</div>
+              <div class="config-nav-item">Aparência e Teclado</div>
+              <div class="config-nav-item ativo" aria-current="page">Projeto atual</div>
+            </nav>
+          </aside>
+
+          <div class="config-conteudo">
+            <div class="linha">
+              <h2 style="margin: 0; font-size: 18px">Projeto atual: Meu Canal</h2>
+              <span class="mono rotulo">C:\Videos\MeuCanal.clipes</span><span class="n">1</span>
+            </div>
+
+            <div class="abas" role="tablist">
+              <span class="aba atual" role="tab" aria-selected="true">Perfil de canal</span>
+              <span class="aba" role="tab">Privacidade (Somente local)</span>
+              <span class="aba" role="tab">Backups do Projeto</span>
+            </div>
+
+            <div class="bloco-cfg leitura">
+              <strong>Tipo de vídeo padrão</strong>
+              <div class="coluna" role="radiogroup" aria-label="Tipo de vídeo padrão">
+                <label class="linha"><span class="radio-sim">●</span> <span><strong>Corte direto</strong> (Canal de cortes — legenda e enquadramento, sem Roteiro/Narração)</span></label>
+                <label class="linha"><span class="radio-sim"></span> <span><strong>Vídeo transformado</strong> (Canal dark — exige Roteiro revisado + Narração bloco a bloco)</span></label>
+              </div>
+              <span class="rotulo">Aviso único de monetização de Corte direto: <strong>já visualizado</strong>.</span><span class="n">2</span>
+
+              <div class="linha">
+                <div class="coluna cresce" style="gap: 4px">
+                  <label class="rotulo">Idioma principal</label>
+                  <div class="campo" style="color: var(--texto)">Português (pt) ▾</div>
+                </div>
+                <div class="coluna cresce" style="gap: 4px">
+                  <label class="rotulo">Voz padrão da Narração</label>
+                  <div class="campo" style="color: var(--texto)">Feminina PT (Helena) ▾</div>
+                </div>
+              </div>
+
+              <div class="linha" style="flex-wrap: wrap">
+                <span class="rotulo" style="white-space: nowrap">Duração dos Cortes:</span>
+                <span class="rotulo">Mín</span>
+                <div class="campo mono" style="width: 56px; color: var(--texto); white-space: nowrap">20</div>
+                <span class="rotulo">s · Máx</span>
+                <div class="campo mono" style="width: 56px; color: var(--texto); white-space: nowrap">60</div>
+                <span class="rotulo" style="white-space: nowrap">s (máx. 180 s)</span><span class="n">3</span>
+              </div>
+
+              <div class="linha" style="flex-wrap: wrap">
+                <span class="rotulo" style="white-space: nowrap">Estilo da legenda:</span>
+                <div class="campo" style="width: 110px; color: var(--texto); white-space: nowrap">Vertical ▾</div>
+                <div class="campo" style="width: 120px; color: var(--texto); white-space: nowrap">Noto Sans ▾</div>
+                <div class="campo mono" style="width: 72px; color: var(--texto); white-space: nowrap">54 px</div>
+                <label class="linha rotulo" style="white-space: nowrap"><input type="checkbox" checked> Destaque karaokê</label><span class="n">4</span>
+              </div>
+
+              <div class="coluna" style="gap: 6px">
+                <div class="linha">
+                  <strong>Fontes / Criadores permitidos</strong>
+                  <button class="btn empurra">+ Adicionar criador/URL</button>
+                </div>
+                <div class="caixa linha">
+                  <span><strong>Podcast Exemplo</strong> · <span class="mono rotulo">https://youtube.com/@podcast</span></span>
+                  <span class="rotulo empurra">Autorização por e-mail</span>
+                  <button class="btn">Remover</button>
+                </div>
+              </div>
+
+              <div class="banner">
+                <span>ℹ</span>
+                <span>Ritmo de publicação sugerido: publique em ritmo regular e moderado (por exemplo, 1 a 3 vídeos por dia por canal) e evite enviar lotes grandes de vídeos parecidos em sequência, para reduzir risco de filtros de spam.</span>
+              </div>
+
+              <div class="linha" style="justify-content: flex-end">
+                <button class="btn prim">Salvar Perfil</button>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="barra-status"><span>Salvo</span><span>·</span><span>Sem tarefas em andamento</span><span class="empurra"><kbd>F6</kbd> alternar região</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Aba Privacidade (Somente local) -->
+  <section class="wf-variante" id="privacidade">
+    <h2>2. Aba Privacidade (Somente local ativo no Projeto) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Meu canal ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes <small>3</small></span><span class="etapa">2. Cortes <small>12</small></span><span class="etapa">3. Exportação <small>4</small></span></nav>
+          <div class="linha empurra">
+            <span class="selo cheio">🔒 Somente local</span><span class="n">5</span>
+            <button class="btn">Fila · 0</button>
+            <button class="btn">Buscar <kbd>Ctrl+K</kbd></button>
+            <button class="btn icone sel">⚙</button>
+          </div>
+        </header>
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações</div>
+            <nav class="lista">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item">Componentes e Armazenamento</div>
+              <div class="config-nav-item">Exportação e Encoder</div>
+              <div class="config-nav-item">Aparência e Teclado</div>
+              <div class="config-nav-item ativo">Projeto atual</div>
+            </nav>
+          </aside>
+          <div class="config-conteudo">
+            <div class="linha"><h2 style="margin: 0; font-size: 18px">Projeto atual: Meu Canal</h2><span class="mono rotulo">C:\Videos\MeuCanal.clipes</span></div>
+            <div class="abas" role="tablist">
+              <span class="aba" role="tab">Perfil de canal</span>
+              <span class="aba atual" role="tab" aria-selected="true">Privacidade (Somente local)</span>
+              <span class="aba" role="tab">Backups do Projeto</span>
+            </div>
+
+            <div class="bloco-cfg leitura">
+              <div class="linha">
+                <span class="switch-sim on" role="switch" aria-checked="true"><i></i></span>
+                <strong>Ativar veto Somente local para este Projeto</strong>
+              </div>
+              <p style="margin: 0; color: var(--texto-2)">
+                Quando ligado, nenhuma chamada deste Projeto pode enviar texto ou áudio para fora deste computador (incluindo APIs remotas, Groq e CLIs). Este veto apenas bloqueia envios externos; ele nunca troca seu Provedor sozinho.
+              </p>
+              <div class="banner">
+                <span>🔒</span>
+                <span>As Tarefas de IA atribuídas a Provedores remotos ou CLIs serão bloqueadas até você escolher um Perfil local em <span class="mono">#/config/provedores</span>.</span>
+              </div>
+            </div>
+          </div>
+        </main>
+        <footer class="barra-status"><span>Salvo</span><span>·</span><span>Modo Somente local ativo no Projeto</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Aba Backups do Projeto -->
+  <section class="wf-variante" id="backups">
+    <h2>3. Aba Backups do Projeto (com alerta de falha e jobs ativos) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Meu canal ▾</button>
+          <nav class="etapas"><span class="etapa">1. Fontes <small>3</small></span><span class="etapa">2. Cortes <small>12</small></span><span class="etapa">3. Exportação <small>4</small></span></nav>
+          <div class="linha empurra"><button class="btn sel">Fila · 1 ativa</button><button class="btn">Buscar <kbd>Ctrl+K</kbd></button><button class="btn icone sel">⚙</button></div>
+        </header>
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações</div>
+            <nav class="lista">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item">Componentes e Armazenamento</div>
+              <div class="config-nav-item">Exportação e Encoder</div>
+              <div class="config-nav-item">Aparência e Teclado</div>
+              <div class="config-nav-item ativo">Projeto atual</div>
+            </nav>
+          </aside>
+          <div class="config-conteudo">
+            <div class="linha"><h2 style="margin: 0; font-size: 18px">Projeto atual: Meu Canal</h2><span class="mono rotulo">C:\Videos\MeuCanal.clipes</span></div>
+            <div class="abas" role="tablist">
+              <span class="aba" role="tab">Perfil de canal</span>
+              <span class="aba" role="tab">Privacidade (Somente local)</span>
+              <span class="aba atual" role="tab" aria-selected="true">Backups do Projeto</span>
+            </div>
+
+            <div class="banner leitura" role="alert">
+              <strong>⚠ O último backup automático falhou:</strong>
+              <span>Verifique espaço e permissões da pasta do Projeto ou crie um backup manual agora.</span><span class="n">6</span>
+            </div>
+
+            <div class="bloco-cfg leitura">
+              <strong>Configuração automática de rotação</strong>
+              <div class="linha">
+                <span class="rotulo" style="white-space: nowrap">Intervalo (s):</span>
+                <div class="campo mono" style="width: 78px; color: var(--texto); white-space: nowrap">1800</div>
+                <span class="rotulo" style="white-space: nowrap">(30 min) · Cópias mantidas:</span>
+                <div class="campo mono" style="width: 56px; color: var(--texto); white-space: nowrap">10</div>
+              </div>
+              <div class="linha">
+                <button class="btn prim">Salvar configuração</button>
+                <button class="btn">Restaurar padrão (30 min · 10 cópias)</button>
+              </div>
+            </div>
+
+            <div class="bloco-cfg leitura">
+              <div class="linha">
+                <strong>Backups salvos (2)</strong>
+                <button class="btn prim empurra">Criar backup agora</button>
+              </div>
+              <span class="rotulo">⚠ Há 1 job em andamento na Fila. Aguarde concluir ou cancele na Fila para restaurar um backup.</span><span class="n">7</span>
+              <table class="tabela" role="grid">
+                <thead><tr><th>Data e hora</th><th>Arquivo</th><th>Tipo</th><th>Ação</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td class="mono">17/11/2026 19:30</td>
+                    <td class="mono">backup-20261117-193000.sqlite</td>
+                    <td><span class="selo">Automático</span></td>
+                    <td><button class="btn" disabled>Restaurar</button></td>
+                  </tr>
+                  <tr>
+                    <td class="mono">17/11/2026 18:45</td>
+                    <td class="mono">before-restore-20261117-184500.sqlite</td>
+                    <td><span class="selo cheio">Pré-restauração</span></td>
+                    <td><button class="btn" disabled>Restaurar</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </main>
+        <footer class="barra-status"><span>Salvo</span><span>·</span><span>⚠ Falha no backup automático</span><span>·</span><span>Transcrição em andamento</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Diálogo Restaurar backup -->
+  <section class="wf-variante" id="dialogo-restaurar">
+    <h2>4. Confirmação antes de restaurar backup (&lt;ConfirmDialog&gt;) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup"><button class="btn fantasma">Meu canal ▾</button></header>
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações</div>
+            <nav class="lista">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item">Componentes e Armazenamento</div>
+              <div class="config-nav-item">Exportação e Encoder</div>
+              <div class="config-nav-item">Aparência e Teclado</div>
+              <div class="config-nav-item ativo">Projeto atual</div>
+            </nav>
+          </aside>
+          <div class="config-conteudo"><div class="caixa tracejada cresce"></div></div>
+        </main>
+        <footer class="barra-status"><span>Salvo</span></footer>
+      </div>
+      <div class="dialogo-fundo" role="presentation">
+        <div class="dialogo" role="alertdialog" aria-modal="true" aria-labelledby="tit-bak">
+          <h3 id="tit-bak" style="margin: 0">Restaurar backup de 17/11/2026 19:30?</h3>
+          <span>Restaurar este backup substituirá o estado atual do Projeto. O estado atual será preservado em uma cópia <strong>"Pré-restauração"</strong> antes da troca. Deseja continuar?</span>
+          <div class="linha" style="justify-content: flex-end">
+            <button class="btn sel">Cancelar</button><span class="n">8</span>
+            <button class="btn perigo">Restaurar backup</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Carregando -->
+  <section class="wf-variante" id="carregando">
+    <h2>5. Carregando (?estado=carregando) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup"><button class="btn fantasma">Meu canal ▾</button><div class="linha empurra"><button class="btn icone sel">⚙</button></div></header>
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações</div>
+            <nav class="lista">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item">Componentes e Armazenamento</div>
+              <div class="config-nav-item">Exportação e Encoder</div>
+              <div class="config-nav-item">Aparência e Teclado</div>
+              <div class="config-nav-item ativo">Projeto atual</div>
+            </nav>
+          </aside>
+          <div class="config-conteudo" aria-busy="true" aria-label="Carregando backups do Projeto">
+            <h2 style="margin: 0; font-size: 18px">Projeto atual: Meu Canal</h2>
+            <div class="abas"><span class="aba">Perfil de canal</span><span class="aba">Privacidade (Somente local)</span><span class="aba atual">Backups do Projeto</span></div>
+            <div class="bloco-cfg leitura">
+              <div class="texto-ph" style="width: 240px; height: 14px"></div>
+              <div class="texto-ph" style="width: 100%; height: 34px"></div>
+              <div class="texto-ph" style="width: 100%; height: 34px"></div>
+              <div class="texto-ph" style="width: 85%; height: 34px"></div>
+            </div>
+          </div>
+        </main>
+        <footer class="barra-status"><span>Carregando backups…</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li><strong>Guarda de rota:</strong> se <span class="mono">projects.current === null</span>, navegar para <span class="mono">#/config/projeto</span> redireciona para <span class="mono">#/config/provedores</span> com aviso informativo.</li>
+      <li><strong>Ciência de Corte direto:</strong> campo somente leitura exibindo <span class="mono">directMonetizationAck</span> do Perfil de canal.</li>
+      <li><strong>Validação da faixa de corte:</strong> <span class="mono">minUs &gt; 0</span>, <span class="mono">minUs &lt; maxUs</span> e <span class="mono">maxUs &lt;= 180_000_000</span> (<span class="mono">invalid_cut_range</span> validado antes de enviar <span class="mono">channel_profile.set</span>).</li>
+      <li><strong>Estilo padrão de legenda:</strong> atualiza apenas o padrão para novos Cortes; Cortes já editados preservam sua própria revisão.</li>
+      <li><strong>Veto Somente local do Projeto:</strong> chama <span class="mono">projects.local_only.set { enabled }</span> e mantém o selo permanente visível na Barra Superior.</li>
+      <li><strong>Aviso de backup automático:</strong> exibido tanto na Barra de Status quanto no topo da aba Backups quando <span class="mono">backups.settings.get().warning !== null</span>; os dados são recarregados ao focar a aba ou após jobs (já que backups automáticos ainda não emitem <span class="mono">core-progress</span>).</li>
+      <li><strong>Bloqueio preventivo de restauração:</strong> quando há jobs ativos (<span class="mono">jobs &gt; 0</span>), o botão <em>"Restaurar"</em> fica desabilitado com dica explícita para evitar erro <span class="mono">project_busy</span>.</li>
+      <li><strong>Restauração segura:</strong> <span class="mono">&lt;ConfirmDialog&gt;</span> abre com foco inicial em <em>"Cancelar"</em>; <span class="mono">backups.restore</span> cria automaticamente a cópia <span class="mono">before-restore-*</span> antes de substituir o banco. No estado vazio da lista de backups, exibe CTA <em>"Criar primeiro backup agora"</em>.</li>
+    </ol>
+  </section>
+
+</main>
+<script src="kit.js"></script>
+</body>
+</html>

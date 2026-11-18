@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A8 · Config: Exportação e Encoder — Wireframes Clipes v2</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+  .config-nav { width: 220px; flex-shrink: 0; }
+  .config-nav-item {
+    padding: 9px 12px; border-bottom: 1px solid var(--sutil);
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    color: var(--texto-2);
+  }
+  .config-nav-item.ativo { background: var(--sutil); color: var(--texto); font-weight: 600; }
+  .config-nav-item.desab { color: var(--texto-3); }
+  .config-conteudo {
+    flex: 1; min-width: 0; min-height: 0; overflow: auto;
+    padding: 20px 24px; display: flex; flex-direction: column; gap: 14px;
+  }
+  .bloco-cfg { border: 1px solid var(--borda); border-radius: var(--r); background: var(--tela); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .opcao-enc { border: 1px solid var(--borda); border-radius: var(--r); padding: 10px 12px; display: flex; align-items: center; gap: 10px; background: var(--tela); }
+  .opcao-enc.sel { background: var(--painel); border-color: var(--texto); }
+  .opcao-enc.desab { opacity: .6; background: var(--painel); }
+  .radio-sim { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--texto); font-size: 9px; flex: none; }
+  .estado-vazio { border: 1px dashed var(--borda); border-radius: var(--r); padding: 28px 24px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; background: var(--painel); }
+  .erro-core { border: 1px solid var(--texto); border-radius: var(--r); background: var(--painel); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+</style>
+</head>
+<body>
+<main class="wf-pagina">
+
+  <header class="wf-cabecalho">
+    <h1>A8 · Config: Exportação e Encoder</h1>
+    <p>Rota: <span class="mono">#/config/exportacao</span>. Fonte:
+      <span class="mono">telas/A-shell-inicio-config.md</span> (Tela 8),
+      <span class="mono">01-arquitetura.md</span> §3 e §6.</p>
+    <nav>
+      <a href="#normal">1. Normal 1366 (detected: true)</a>
+      <a href="#nao-detectado">2. Ainda não testado (detected: false)</a>
+      <a href="#testando">3. Stale + Testando encoders (job_running)</a>
+      <a href="#sem-ffmpeg">4. FFmpeg ausente (erro)</a>
+    </nav>
+  </header>
+
+  <!-- 1. Normal 1366x768 -->
+  <section class="wf-variante" id="normal">
+    <h2>1. Normal · 1366 × 768 (encoders detectados, Automático ativo)</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup">
+          <button class="btn fantasma">Meu canal ▾</button>
+          <nav class="etapas" aria-label="Etapas do Projeto">
+            <span class="etapa">1. Fontes <small>3</small></span>
+            <span class="etapa">2. Cortes <small>12</small></span>
+            <span class="etapa">3. Exportação <small>4</small></span>
+          </nav>
+          <div class="linha empurra">
+            <button class="btn">Fila · 0</button>
+            <button class="btn">Buscar <kbd>Ctrl+K</kbd></button>
+            <button class="btn icone sel" aria-label="Configurações">⚙</button>
+            <button class="btn">Mais ▾</button>
+          </div>
+        </header>
+
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações <kbd class="empurra">Ctrl+,</kbd></div>
+            <nav class="lista" aria-label="Seções de Configurações">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item">Componentes e Armazenamento</div>
+              <div class="config-nav-item ativo" aria-current="page">Exportação e Encoder</div>
+              <div class="config-nav-item">Aparência e Teclado</div>
+              <div class="config-nav-item">Projeto atual</div>
+            </nav>
+          </aside>
+
+          <div class="config-conteudo">
+            <div class="coluna leitura" style="gap: 4px">
+              <h2 style="margin: 0; font-size: 18px">Exportação e Encoder</h2>
+              <span class="rotulo">Exporta vídeos em 1080×1920 (H.264) usando aceleração quando disponível, com fallback seguro para CPU (x264).</span>
+            </div>
+
+            <!-- Status atual -->
+            <div class="bloco-cfg leitura">
+              <div class="linha">
+                <strong>Status atual</strong>
+                <span class="selo cheio empurra">✓ Placa NVIDIA (NVENC) · Automático</span><span class="n">1</span>
+              </div>
+              <div class="linha">
+                <span class="rotulo">Última verificação: <span class="mono">17/11/2026 19:42</span></span>
+                <button class="btn empurra">Detectar encoders novamente</button><span class="n">2</span>
+              </div>
+            </div>
+
+            <!-- Seletor de Encoder -->
+            <div class="bloco-cfg leitura">
+              <strong>Escolha de encoder</strong>
+              <div class="coluna" role="radiogroup" aria-label="Escolha de encoder H.264">
+                <div class="opcao-enc sel">
+                  <span class="radio-sim">●</span>
+                  <div class="coluna cresce" style="gap: 2px">
+                    <strong>Automático (recomendado)</strong>
+                    <span class="rotulo">Usa o encoder mais rápido aprovado neste computador (NVENC ativo).</span>
+                  </div>
+                  <span class="selo cheio">Em uso</span><span class="n">3</span>
+                </div>
+
+                <div class="opcao-enc">
+                  <span class="radio-sim"></span>
+                  <div class="coluna cresce" style="gap: 2px">
+                    <strong>Placa NVIDIA (NVENC)</strong>
+                    <span class="rotulo mono">h264_nvenc</span>
+                  </div>
+                  <span class="selo">✓ Aprovado</span>
+                </div>
+
+                <div class="opcao-enc">
+                  <span class="radio-sim"></span>
+                  <div class="coluna cresce" style="gap: 2px">
+                    <strong>Processador / CPU (x264)</strong>
+                    <span class="rotulo mono">libx264</span>
+                  </div>
+                  <span class="selo">✓ Aprovado (fallback universal)</span>
+                </div>
+
+                <div class="opcao-enc desab">
+                  <span class="radio-sim"></span>
+                  <div class="coluna cresce" style="gap: 2px">
+                    <span>Intel Quick Sync (<span class="mono">h264_qsv</span>)</span>
+                    <span class="rotulo">Indisponível neste computador</span>
+                  </div>
+                  <span class="selo">✕ Indisponível</span><span class="n">4</span>
+                </div>
+
+                <div class="opcao-enc desab">
+                  <span class="radio-sim"></span>
+                  <div class="coluna cresce" style="gap: 2px">
+                    <span>AMD AMF (<span class="mono">h264_amf</span>)</span>
+                    <span class="rotulo">Indisponível neste computador</span>
+                  </div>
+                  <span class="selo">✕ Indisponível</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="barra-status"><span>Salvo</span><span>·</span><span>Sem tarefas em andamento</span><span class="empurra"><kbd>F6</kbd> alternar região</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Ainda não detectado -->
+  <section class="wf-variante" id="nao-detectado">
+    <h2>2. Ainda não detectado (detected: false / estado vazio) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup"><button class="btn fantasma">Meu canal ▾</button><nav class="etapas"><span class="etapa">1. Fontes <small>3</small></span><span class="etapa">2. Cortes <small>12</small></span><span class="etapa">3. Exportação <small>4</small></span></nav><div class="linha empurra"><button class="btn icone sel">⚙</button></div></header>
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações</div>
+            <nav class="lista">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item">Componentes e Armazenamento</div>
+              <div class="config-nav-item ativo">Exportação e Encoder</div>
+              <div class="config-nav-item">Aparência e Teclado</div>
+              <div class="config-nav-item">Projeto atual</div>
+            </nav>
+          </aside>
+          <div class="config-conteudo">
+            <h2 style="margin: 0; font-size: 18px">Exportação e Encoder</h2>
+            <div class="estado-vazio leitura">
+              <strong>Nenhum teste de encoder realizado ainda</strong>
+              <span class="rotulo">Ainda não testamos os encoders deste computador. Por padrão usaremos o processador (x264).</span>
+              <button class="btn prim">Detectar encoders agora</button>
+            </div>
+          </div>
+        </main>
+        <footer class="barra-status"><span>Salvo</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Stale + Testando encoders -->
+  <section class="wf-variante" id="testando">
+    <h2>3. Verificação desatualizada (stale) e teste em andamento · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup"><button class="btn fantasma">Meu canal ▾</button><div class="linha empurra"><button class="btn icone sel">⚙</button></div></header>
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações</div>
+            <nav class="lista">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item">Componentes e Armazenamento</div>
+              <div class="config-nav-item ativo">Exportação e Encoder</div>
+              <div class="config-nav-item">Aparência e Teclado</div>
+              <div class="config-nav-item">Projeto atual</div>
+            </nav>
+          </aside>
+          <div class="config-conteudo">
+            <h2 style="margin: 0; font-size: 18px">Exportação e Encoder</h2>
+            <div class="banner leitura">
+              <span>⚠</span>
+              <span>O FFmpeg ou o driver de vídeo mudou desde o último teste. Recomendamos testar novamente.</span><span class="n">5</span>
+            </div>
+            <div class="bloco-cfg leitura">
+              <div class="linha">
+                <strong>Status atual</strong>
+                <button class="btn empurra" disabled aria-busy="true">⟳ Testando encoders (pode levar alguns segundos)…</button><span class="n">6</span>
+              </div>
+              <div class="coluna" style="opacity: .55">
+                <div class="opcao-enc sel"><span class="radio-sim">●</span> <span>Automático (recomendado)</span></div>
+                <div class="opcao-enc"><span class="radio-sim"></span> <span>Processador / CPU (libx264)</span></div>
+              </div>
+            </div>
+          </div>
+        </main>
+        <footer class="barra-status"><span>Salvo</span><span>·</span><span>Testando encoders locais…</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. FFmpeg ausente -->
+  <section class="wf-variante" id="sem-ffmpeg">
+    <h2>4. Erro: FFmpeg ausente (ffmpeg: false / ?estado=erro) · 1366 × 768</h2>
+    <div class="wf-quadro w1366">
+      <div class="shell">
+        <header class="barra-sup"><button class="btn fantasma">Meu canal ▾</button><div class="linha empurra"><button class="btn icone sel">⚙</button></div></header>
+        <main class="conteudo">
+          <aside class="painel config-nav">
+            <div class="painel-cab">Configurações</div>
+            <nav class="lista">
+              <div class="config-nav-item">Provedores e Tarefas de IA</div>
+              <div class="config-nav-item">Custos, Orçamentos e Auditoria</div>
+              <div class="config-nav-item">Componentes e Armazenamento</div>
+              <div class="config-nav-item ativo">Exportação e Encoder</div>
+              <div class="config-nav-item">Aparência e Teclado</div>
+              <div class="config-nav-item">Projeto atual</div>
+            </nav>
+          </aside>
+          <div class="config-conteudo">
+            <h2 style="margin: 0; font-size: 18px">Exportação e Encoder</h2>
+            <div class="erro-core leitura" role="alert">
+              <strong>⚠ FFmpeg não está instalado</strong><span class="n">7</span>
+              <span>Instale o FFmpeg para detectar encoders de vídeo e exportar Cortes.</span>
+              <div class="linha">
+                <button class="btn prim">Ir para Componentes</button>
+              </div>
+              <details>
+                <summary class="rotulo" style="cursor: pointer">Ver detalhe técnico</summary>
+                <span class="mono rotulo">Código: component_missing (ffmpeg / ffprobe)</span>
+              </details>
+            </div>
+          </div>
+        </main>
+        <footer class="barra-status"><span>Salvo</span></footer>
+      </div>
+    </div>
+  </section>
+
+  <section class="wf-notas">
+    <h2>Notas</h2>
+    <ol>
+      <li><strong>Nome amigável do encoder:</strong> traduz <span class="mono">h264_nvenc</span>, <span class="mono">h264_qsv</span>, <span class="mono">h264_amf</span>, <span class="mono">h264_videotoolbox</span> e <span class="mono">libx264</span> para nomes legíveis.</li>
+      <li><strong>Sonda real de 1 s:</strong> <span class="mono">export.encoder.detect</span> executa teste real de codificação de 1 s por candidato, atualiza <span class="mono">passed</span> e limpa <span class="mono">stale</span>.</li>
+      <li><strong>Escolha imediata:</strong> clicar em uma opção chama <span class="mono">export.encoder.set { encoder }</span> (ou <span class="mono">{ encoder: null }</span> em <em>Automático</em>).</li>
+      <li><strong>WCAG 1.4.1:</strong> opções aprovadas vs. indisponíveis combinam ícone + rótulo textual (nunca só cor); opções não aprovadas ficam desabilitadas para evitar erro na exportação.</li>
+      <li><strong>Estado <span class="mono">stale</span>:</strong> quando a versão do FFmpeg ou hardware muda após a última detecção, mantém o encoder anterior utilizável com faixa de recomendação de novo teste.</li>
+      <li><strong>Chamada síncrona:</strong> <span class="mono">export.encoder.detect</span> não emite eventos <span class="mono">core-progress</span>; durante a sonda, o botão exibe carregamento e os rádios ficam desabilitados.</li>
+      <li><strong>Recuperação de FFmpeg ausente:</strong> <span class="mono">&lt;BannerErroCore&gt;</span> com CTA levando diretamente para <span class="mono">#/config/componentes</span>. No estado <span class="mono">?estado=carregando</span>, exibe <span class="mono">&lt;Esqueleto&gt;</span> de 3 linhas.</li>
+    </ol>
+  </section>
+
+</main>
+<script src="kit.js"></script>
+</body>
+</html>
