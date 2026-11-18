@@ -33,12 +33,12 @@ describe('App', () => {
     expect(encoder.effective).toBe('libx264')
   })
 
-  it('renderiza o placeholder da rota Início e respeita ?estado=erro', async () => {
+  it('renderiza a tela Início e respeita ?estado=erro', async () => {
     vi.stubEnv('VITE_CORE_MOCK', '1')
     window.location.hash = '#/inicio'
     const { rerender } = render(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Início e Projetos' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Projetos' })).toBeInTheDocument()
 
     window.location.hash = '#/inicio?estado=erro'
     window.dispatchEvent(new HashChangeEvent('hashchange'))

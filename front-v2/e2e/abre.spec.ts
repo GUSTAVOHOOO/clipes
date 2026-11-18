@@ -9,6 +9,6 @@ test('abre o app em 1366x768 sem pageerror', async ({ page }) => {
   })
 
   await page.goto('/')
-  await expect(page.getByText('Clipes')).toBeVisible()
+  await expect(page.getByText('Clipes', { exact: true })).toBeVisible()
   expect(erros).toEqual([])
 })
