@@ -4,7 +4,7 @@
 
 O Clipes é um app de desktop gratuito e open source. Você dá a ele uma live de 4 horas e ele acha os melhores momentos, corta, coloca legenda palavra por palavra, ajusta para o formato vertical (9:16) e exporta. Tudo roda na sua máquina, sem marca d'água, sem assinatura e sem mandar seu vídeo para a nuvem.
 
-> **Status: pré-v1 (núcleo completo).** O núcleo da v1 já executa o fluxo inteiro (da importação da live à exportação dos Cortes), ligado às telas iniciais; a interface ainda está sendo refinada antes da primeira versão estável. Veja [Em que pé estamos](#em-que-pé-estamos).
+> **Status: v1 lançada.** A primeira versão está disponível em [releases](https://github.com/GUSTAVOHOOO/clipes/releases). A v2 (interface nova, refeita do zero sobre o mesmo núcleo) está em construção — acompanhe na issue [#288](https://github.com/GUSTAVOHOOO/clipes/issues/288) e veja [Em que pé estamos](#em-que-pé-estamos).
 
 ## Por que existe
 
@@ -27,29 +27,29 @@ Dois tipos de canal, com dois tipos de vídeo:
 | **Corte direto** | Canais de cortes | Automático e rápido: pega os melhores momentos de uma live e corta. |
 | **Vídeo transformado** | Canais dark | Um Corte com Roteiro próprio revisado por você e Narração (voz sintética, gravada ou importada). Nunca é 100% automático, para evitar conteúdo em massa. |
 
-## Como vai funcionar
+## Como funciona
 
 1. Você cria um **Projeto** (um por canal) e importa uma **Fonte**: um arquivo local ou um link de VOD.
 2. O app **transcreve** o áudio na sua máquina, palavra por palavra.
 3. A IA que você escolheu **aponta os melhores momentos** e dá uma nota explicada para cada um.
-4. O app ajusta as bordas do corte para não cortar uma frase no meio, sugere o enquadramento 9:16 e gera a **legenda karaokê**.
-5. Você **revisa no editor**: preview, timeline, transcrição clicável.
-6. **Exporta** em lote, já com título, descrição, tags e capítulos sugeridos (em PT-BR ou EN).
+4. O app ajusta as bordas do corte para não cortar uma frase no meio e gera a **legenda karaokê**.
+5. Você **revisa no editor**: preview, timeline, transcrição clicável e enquadramento 9:16 (com sugestão automática ou ajuste manual).
+6. **Empacota e exporta** um corte por vez ou em lote, com título, descrição e tags sugeridos (em PT-BR ou EN; capítulos automáticos no Vídeo transformado).
 
 ## Em que pé estamos
 
-Atualizado em 17/11/2026. O plano completo está na issue [#26](https://github.com/GUSTAVOHOOO/clipes/issues/26).
+Atualizado em 18/11/2026. O plano da v1 está na issue [#26](https://github.com/GUSTAVOHOOO/clipes/issues/26).
 
-### O que já foi construído
+### O que a v1 traz
 
 **A base do app**
-- Aplicativo desktop com instaladores para Windows e Linux (validado em ambos no CI), atualização assinada e CI automatizado.
+- Aplicativo desktop com instaladores para Windows e Linux (validados no CI) e atualização assinada.
 - Download sob demanda de FFmpeg, yt-dlp, deno e Pocket TTS, com verificação de integridade. Nada é baixado sem você confirmar.
 - Checagem automática de licenças e vulnerabilidades das dependências.
 
 **O design system "Foco"**
 - Interface em tema escuro e claro, em PT-BR e EN, com atalhos de teclado.
-- Telas de Fontes, Cortes, Editor, Roteiro e Narração, Empacotamento, Exportação e Configurações.
+- Fluxos de Projetos, Fontes, Cortes, Editor, Roteiro e Narração, Empacotamento, Exportação, Componentes, Preferências e Relatos.
 - Há uma [demo interativa](design-system/README.md) que roda no navegador, com dados de exemplo.
 
 **Projetos e Fontes**
@@ -62,7 +62,7 @@ Atualizado em 17/11/2026. O plano completo está na issue [#26](https://github.c
 - Roda no seu PC com faster-whisper, detectando GPU NVIDIA ou CPU automaticamente. Numa RTX 3050 ficou mais rápida que o tempo real.
 - Opção de transcrição remota pelo Groq (envia só o áudio, com estimativa de custo e confirmação).
 - Trabalha em blocos com checkpoint, divide em frases navegáveis e tem correção e busca na transcrição.
-- Foi medida contra um conjunto de VODs reais, em português e inglês.
+- Medida contra um conjunto de VODs reais, em português e inglês.
 
 **IA e provedores**
 - Funciona com OpenAI, Anthropic, Gemini, Ollama, qualquer endpoint compatível com OpenAI e os CLIs Codex, Claude Code e OpenCode (experimentais).
@@ -78,12 +78,18 @@ Atualizado em 17/11/2026. O plano completo está na issue [#26](https://github.c
 - Escolha de ângulo, Roteiro em blocos com trava antes da narração, Narração (Pocket TTS local, gravação com teleprompter ou áudio importado), alinhamento por palavra, redução automática do volume da Fonte (ducking), trilha sonora e efeitos.
 - Empacotamento (título, descrição, tags, ideia de thumbnail/capa, capítulos), tradução de legenda (PT-BR ↔ EN), Perfil de canal e guarda-corpos de monetização antes de exportar.
 
-### O que falta para a v1
+### v2: em construção
 
-- **Interface v2:** reorganizar as telas atuais para deixar a jornada mais fluida (o núcleo já expõe todas as funcionalidades da v1; veja [funcionalidades do núcleo](docs/produto/funcionalidades.md)).
-- **Lançamento:** publicar a primeira release estável assinada.
+A v2 é a nova interface do Clipes, refeita do zero a partir do [catálogo de funcionalidades](docs/produto/funcionalidades.md) do núcleo, sem mudar o que o núcleo faz. A especificação e o progresso ficam na issue [#288](https://github.com/GUSTAVOHOOO/clipes/issues/288).
 
-O que fica para depois da v1 está listado em [melhorias futuras](docs/futuro.md).
+- **Fases já concluídas:**
+  - Levantamento do núcleo ([funcionalidades](docs/produto/funcionalidades/)).
+  - Pesquisa de UX ([mapa total](docs/research/2026-11-17-ux-mapa-total.md) e estudos `2026-11-17-ux-*.md` em [docs/research/](docs/research/)).
+  - Arquitetura de informação e telas ([arquitetura](docs/produto/front-v2/01-arquitetura.md), [consolidação](docs/produto/front-v2/02-consolidacao.md) e [telas](docs/produto/front-v2/telas/)).
+  - [Wireframes navegáveis](docs/produto/front-v2/wireframes/) e [direção visual](docs/produto/front-v2/03-direcao-visual.md) (minimalista, grafite com um laranja, referências Linear e Raycast).
+- **Em andamento e próximos passos:** novo design system, tickets de ajuste do núcleo ([#289](https://github.com/GUSTAVOHOOO/clipes/issues/289)–[#307](https://github.com/GUSTAVOHOOO/clipes/issues/307)) e implementação da interface por ondas.
+
+O que fica para depois da v1 — incluindo clonagem de voz ([#214](https://github.com/GUSTAVOHOOO/clipes/issues/214)) e servidor MCP ([#192](https://github.com/GUSTAVOHOOO/clipes/issues/192)) — está em [melhorias futuras](docs/futuro.md).
 
 ## Tecnologias
 
@@ -110,6 +116,7 @@ As decisões e os motivos estão nos [ADRs](docs/adr/). O vocabulário do projet
 | `worker/` | Worker Python de transcrição |
 | `design-system/` | Demo do design system |
 | `benchmarks/` | Dataset de VODs e benchmark de transcrição |
+| `docs/produto/` | Funcionalidades do núcleo e especificação do front v2 |
 | `docs/` | ADRs, pesquisas e guias |
 
 ## Instalação
@@ -122,7 +129,7 @@ No Linux, o pacote `.deb` já declara as dependências GStreamer para o preview 
 sudo apt install gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav
 ```
 
-O beta do Windows ainda não tem assinatura de código. Por isso, o Microsoft Defender SmartScreen pode avisar que o aplicativo é desconhecido. Confira a origem e o SHA-256 do arquivo com o `SHA256SUMS.txt` publicado na release; se confiar no arquivo, escolha **Mais informações** e depois **Executar assim mesmo** no aviso. No PowerShell, calcule o hash com `Get-FileHash .\<instalador.exe> -Algorithm SHA256`.
+O instalador do Windows ainda não tem assinatura de código (a assinatura gratuita para projetos open source pela SignPath Foundation é planejada, sem data definida — veja a issue [#24](https://github.com/GUSTAVOHOOO/clipes/issues/24)). Por isso, o Microsoft Defender SmartScreen pode avisar que o aplicativo é desconhecido. Confira a origem e o SHA-256 do arquivo com o `SHA256SUMS.txt` publicado na release; se confiar no arquivo, escolha **Mais informações** e depois **Executar assim mesmo** no aviso. No PowerShell, calcule o hash com `Get-FileHash .\<instalador.exe> -Algorithm SHA256`.
 
 ## Quer ajudar?
 
