@@ -329,10 +329,6 @@ export const TABELA_ERROS: Record<string, MensagemErro> = {
     titulo: 'Algumas Janelas da seleção falharam; refaça-as para completar a execução.',
     recuperacao: { rotulo: 'Refazer com outro Perfil', acao: 'refazer-outro-perfil' },
   },
-  selection_windows_failed: {
-    titulo: 'Algumas Janelas da seleção falharam; refaça-as para completar a execução.',
-    recuperacao: { rotulo: 'Refazer com outro Perfil', acao: 'refazer-outro-perfil' },
-  },
   invalid_clip: {
     titulo: 'Este Corte não está aberto ou não foi encontrado no Editor.',
   },
