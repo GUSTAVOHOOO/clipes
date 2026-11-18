@@ -510,4 +510,65 @@ describe('<PainelMotorSinais>', () => {
     }
     expect(screen.queryByRole('button', { name: /Buscar chat da live/i })).not.toBeInTheDocument()
   })
+
+  it('preserva usage ao normalizar objeto bruto { code, message, usage } em troca de motor', async () => {
+    const user = userEvent.setup()
+    mockBase({
+      'transcription.groq.info': () => ({
+        endpoint: 'https://api.groq.com/openai/v1/audio/transcriptions',
+        model: 'whisper-large-v3-turbo',
+        configured: true,
+        confirmed: true,
+        local_only: false,
+        prices: {
+          minimum_seconds: 10,
+          models: { 'whisper-large-v3-turbo': { hourly_usd: 0.04 } },
+        },
+      }),
+      'transcription.start': () => {
+        throw {
+          code: 'engine_change_confirmation',
+          message: 'Confirme troca de motor',
+          usage: {
+            blocks: 3,
+            paid_audio_us: 900_000_000,
+            paid_usd: 0.02,
+          },
+        }
+      },
+    })
+
+    const parcial: TranscriptStatusFonte = {
+      language: 'pt',
+      transcript: {
+        id: 4,
+        state: 'running',
+        resume_us: 1_200_000_000,
+        duration_us: 3_600_000_000,
+        model: 'whisper-turbo',
+        engine: 'local',
+        words: 0,
+      },
+      job: null,
+    }
+
+    render(
+      envolver(
+        <PainelMotorSinais
+          projetoPath="/projetos/Demo.clipes"
+          fonte={FONTE_DISPONIVEL}
+          transcriptStatus={parcial}
+          aoAtualizarStatus={vi.fn(async () => {})}
+        />,
+      ),
+    )
+
+    await user.click(await screen.findByRole('radio', { name: /Groq remoto/i }))
+    await user.click(screen.getByRole('button', { name: /Retomar de 00:20:00/i }))
+
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText(/3 bloco/i)).toBeInTheDocument()
+    expect(within(dialog).getByText(/15 min/i)).toBeInTheDocument()
+    expect(within(dialog).getByText(/US\$\s*0,02/i)).toBeInTheDocument()
+  })
 })

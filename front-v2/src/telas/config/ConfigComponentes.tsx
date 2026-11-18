@@ -21,7 +21,7 @@ import {
 import { Download, FolderCog, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { SeletorCaminho } from '~/componentes/SeletorCaminho'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useFila } from '~/core/progresso'
 import { useEstadoForcado } from '~/shell/EstadoForcado'
@@ -192,18 +192,6 @@ const ABAS: Array<Aba<AbaComponentes> & { rotulo: string }> = [
 // Pendência de manifesto macOS (#301)
 const DICA_INDISPONIVEL_PLATAFORMA =
   'Download automático indisponível nesta plataforma; disponível em breve.'
-
-function normalizarErro(erro: unknown): ErroCore {
-  if (erro instanceof ErroCore) return erro
-  if (erro && typeof erro === 'object' && 'code' in erro) {
-    const e = erro as { code?: unknown; message?: unknown }
-    return new ErroCore(
-      typeof e.code === 'string' ? e.code : 'desconhecido',
-      typeof e.message === 'string' ? e.message : '',
-    )
-  }
-  return new ErroCore('desconhecido', erro instanceof Error ? erro.message : String(erro ?? ''))
-}
 
 function traduzirErroComponentes(erro: ErroCore): { titulo: string; explicacao?: string } {
   switch (erro.code) {
@@ -405,7 +393,7 @@ export function ConfigComponentes({ projetoAberto }: { projetoAberto: string | n
       if (resYtdlp.ok) {
         setYtdlpStatus(resYtdlp.value ?? { installed: false })
       } else {
-        const e = normalizarErro(resYtdlp.reason)
+        const e = paraErroCore(resYtdlp.reason)
         if (e.code === 'component_integrity') {
           setYtdlpErroIntegridade(true)
           setYtdlpStatus({ installed: false })
@@ -421,7 +409,7 @@ export function ConfigComponentes({ projetoAberto }: { projetoAberto: string | n
       setModelos(resModelos ?? [])
       setTtsCatalogo(resTts)
     } catch (e) {
-      setErro(normalizarErro(e))
+      setErro(paraErroCore(e))
     } finally {
       setCarregando(false)
     }
@@ -462,7 +450,7 @@ export function ConfigComponentes({ projetoAberto }: { projetoAberto: string | n
       await fn()
       await carregar()
     } catch (e) {
-      const err = normalizarErro(e)
+      const err = paraErroCore(e)
       if (err.code !== 'cancelled') {
         setErro(err)
       }
@@ -502,7 +490,7 @@ export function ConfigComponentes({ projetoAberto }: { projetoAberto: string | n
       const grp = await chamar<StatusAgrupamento>('transcription.grouping', {})
       setAgrupamento(grp)
     } catch (e) {
-      setErro(normalizarErro(e))
+      setErro(paraErroCore(e))
     }
   }
 
@@ -512,7 +500,7 @@ export function ConfigComponentes({ projetoAberto }: { projetoAberto: string | n
       const prox = await chamar<StatusAgrupamento>('transcription.grouping', args)
       setAgrupamento(prox)
     } catch (e) {
-      setErro(normalizarErro(e))
+      setErro(paraErroCore(e))
     }
   }
 
@@ -527,7 +515,7 @@ export function ConfigComponentes({ projetoAberto }: { projetoAberto: string | n
       await carregar()
       toast.add({ title: 'FFmpeg do sistema validado.' })
     } catch (e) {
-      setErro(normalizarErro(e))
+      setErro(paraErroCore(e))
     } finally {
       setValidandoFfmpeg(false)
     }
@@ -546,7 +534,7 @@ export function ConfigComponentes({ projetoAberto }: { projetoAberto: string | n
           : 'Catálogo já está na versão mais recente.',
       })
     } catch (e) {
-      setErro(normalizarErro(e))
+      setErro(paraErroCore(e))
     } finally {
       setVerificandoCatalogo(false)
     }
@@ -558,7 +546,7 @@ export function ConfigComponentes({ projetoAberto }: { projetoAberto: string | n
       const atualizado = await chamar<TtsCatalogo>('tts.models.choose', { language, modelId })
       setTtsCatalogo(atualizado)
     } catch (e) {
-      setErro(normalizarErro(e))
+      setErro(paraErroCore(e))
     }
   }
 
@@ -579,7 +567,7 @@ export function ConfigComponentes({ projetoAberto }: { projetoAberto: string | n
       await carregar()
       toast.add({ title: 'Pastas e limite de cache salvos.' })
     } catch (e2) {
-      setErro(normalizarErro(e2))
+      setErro(paraErroCore(e2))
     } finally {
       setSalvandoPastas(false)
     }

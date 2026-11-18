@@ -8,7 +8,7 @@ import {
 } from '@ds'
 import { CircleDashed, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, paraErroCore, type ErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useEstadoForcado } from '~/shell/EstadoForcado'
 import { ConfiguracoesLayout } from '~/telas/config/ConfiguracoesLayout'
@@ -43,18 +43,6 @@ const ENCODERS_CONHECIDOS = [
 
 function rotuloEncoder(id: string): string {
   return ROTULOS_ENCODER[id] ?? id
-}
-
-function normalizarErro(erro: unknown): ErroCore {
-  if (erro instanceof ErroCore) return erro
-  if (erro && typeof erro === 'object' && 'code' in erro) {
-    const e = erro as { code?: unknown; message?: unknown }
-    return new ErroCore(
-      typeof e.code === 'string' ? e.code : 'desconhecido',
-      typeof e.message === 'string' ? e.message : '',
-    )
-  }
-  return new ErroCore('desconhecido', erro instanceof Error ? erro.message : String(erro ?? ''))
 }
 
 function traduzirErroEncoder(erro: ErroCore): { titulo: string; explicacao?: string } {
@@ -109,7 +97,7 @@ export function ConfigExportacao({ projetoAberto }: { projetoAberto: string | nu
       const res = await chamar<EncoderStatus>('export.encoder.status', {})
       setStatus(res)
     } catch (e) {
-      setErro(normalizarErro(e))
+      setErro(paraErroCore(e))
     } finally {
       setCarregando(false)
     }
@@ -127,7 +115,7 @@ export function ConfigExportacao({ projetoAberto }: { projetoAberto: string | nu
       setStatus(res)
       toast.add({ title: `Encoder ativo: ${rotuloEncoder(res.effective)}.` })
     } catch (e) {
-      setErro(normalizarErro(e))
+      setErro(paraErroCore(e))
     } finally {
       setDetectando(false)
     }
@@ -141,7 +129,7 @@ export function ConfigExportacao({ projetoAberto }: { projetoAberto: string | nu
       const res = await chamar<EncoderStatus>('export.encoder.set', { encoder })
       setStatus(res)
     } catch (e) {
-      setErro(normalizarErro(e))
+      setErro(paraErroCore(e))
     } finally {
       setSalvando(false)
     }

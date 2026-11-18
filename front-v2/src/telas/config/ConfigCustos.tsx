@@ -22,7 +22,7 @@ import {
 } from '@ds'
 import { Copy, Lock } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useFila } from '~/core/progresso'
 import { useEstadoForcado } from '~/shell/EstadoForcado'
@@ -303,7 +303,7 @@ export function ConfigCustos({ projetoAberto }: ConfigCustosProps) {
         setEstPerfil(lista[0].id)
       }
     } catch (err) {
-      setErroGlobal(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err)))
+      setErroGlobal(paraErroCore(err))
     } finally {
       setCarregandoGlobal(false)
     }
@@ -332,21 +332,21 @@ export function ConfigCustos({ projetoAberto }: ConfigCustosProps) {
       setBudgets(resB.value?.budgets ?? [])
     } else {
       const r = resB.reason
-      setErroCustos(r instanceof ErroCore ? r : new ErroCore('desconhecido', String(r)))
+      setErroCustos(paraErroCore(r))
     }
 
     if (resC.status === 'fulfilled') {
       setCosts(Array.isArray(resC.value) ? resC.value : [])
     } else {
       const r = resC.reason
-      setErroCustos(r instanceof ErroCore ? r : new ErroCore('desconhecido', String(r)))
+      setErroCustos(paraErroCore(r))
     }
 
     if (resA.status === 'fulfilled') {
       setAudit(Array.isArray(resA.value) ? resA.value : [])
     } else {
       const r = resA.reason
-      setErroAuditoria(r instanceof ErroCore ? r : new ErroCore('desconhecido', String(r)))
+      setErroAuditoria(paraErroCore(r))
     }
 
     setCarregandoProjeto(false)
@@ -458,7 +458,7 @@ export function ConfigCustos({ projetoAberto }: ConfigCustosProps) {
       })
     } catch (err) {
       setErroDialogoOrcamento(
-        err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err)),
+        paraErroCore(err),
       )
     } finally {
       setSalvandoOrcamento(false)
@@ -481,7 +481,7 @@ export function ConfigCustos({ projetoAberto }: ConfigCustosProps) {
       })
       setEstimativa(resp)
     } catch (err) {
-      setErroPrecos(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err)))
+      setErroPrecos(paraErroCore(err))
     } finally {
       setEstimando(false)
     }
@@ -510,7 +510,7 @@ export function ConfigCustos({ projetoAberto }: ConfigCustosProps) {
       setOvOut('')
       toast.add({ title: 'Sobrescrita de preço salva.' })
     } catch (err) {
-      setErroPrecos(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err)))
+      setErroPrecos(paraErroCore(err))
     } finally {
       setSalvandoPreco(false)
     }
@@ -523,7 +523,7 @@ export function ConfigCustos({ projetoAberto }: ConfigCustosProps) {
       setPrecos(resp)
       toast.add({ title: `Preço padrão restaurado para ${model}.` })
     } catch (err) {
-      setErroPrecos(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err)))
+      setErroPrecos(paraErroCore(err))
     }
   }
 

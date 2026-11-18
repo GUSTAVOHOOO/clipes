@@ -23,7 +23,7 @@ import {
   type KeyboardEvent,
   type RefObject,
 } from 'react'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, paraErroCore, type ErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useFila } from '~/core/progresso'
 import type { FonteProjeto, TranscriptStatusFonte } from '~/stores/fontesProjeto'
@@ -124,18 +124,6 @@ type ConfirmacaoMotor =
     }
 
 const BLOCO_PADRAO_US = 600_000_000
-
-function normalizarErro(err: unknown): ErroCore {
-  if (err instanceof ErroCore) return err
-  if (err && typeof err === 'object' && 'code' in err) {
-    const e = err as { code?: unknown; message?: unknown }
-    return new ErroCore(
-      typeof e.code === 'string' && e.code ? e.code : 'desconhecido',
-      typeof e.message === 'string' ? e.message : '',
-    )
-  }
-  return new ErroCore('desconhecido', err instanceof Error ? err.message : String(err ?? ''))
-}
 
 function moverFocoRadio(e: KeyboardEvent<HTMLElement>) {
   if (!['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft'].includes(e.key)) return
@@ -389,7 +377,7 @@ export function PainelMotorSinais({
       const prox = await chamar<GroupingStatus>('transcription.grouping', args)
       setAgrupamento(prox)
     } catch (err) {
-      setErroLocal(normalizarErro(err))
+      setErroLocal(paraErroCore(err))
     }
   }
 
@@ -405,7 +393,7 @@ export function PainelMotorSinais({
       })
       setEstimativa(res)
     } catch (err) {
-      const e = normalizarErro(err)
+      const e = paraErroCore(err)
       if (e.code !== 'cancelled') {
         setErroLocal(e)
       }
@@ -432,7 +420,7 @@ export function PainelMotorSinais({
       })
       setGroqInfo((prev) => (prev ? { ...prev, confirmed: true } : prev))
     } catch (err) {
-      setErroLocal(normalizarErro(err))
+      setErroLocal(paraErroCore(err))
     }
   }
 
@@ -457,7 +445,7 @@ export function PainelMotorSinais({
       })
       await Promise.all([aoAtualizarStatus(), carregarBlocosESinais()])
     } catch (err) {
-      const e = normalizarErro(err)
+      const e = paraErroCore(err)
       if (e.code === 'engine_change_confirmation') {
         const uso = extrairUsoTroca(e.usage)
         setConfirmacao({
@@ -519,7 +507,7 @@ export function PainelMotorSinais({
       await chamar('jobs.cancel', { id: jobId })
       await Promise.all([aoAtualizarStatus(), carregarBlocosESinais()])
     } catch (err) {
-      setErroLocal(normalizarErro(err))
+      setErroLocal(paraErroCore(err))
     } finally {
       setCancelandoJob(false)
     }
@@ -533,7 +521,7 @@ export function PainelMotorSinais({
       toast.add({ title: 'Medição de energia do áudio iniciada.' })
       await carregarBlocosESinais()
     } catch (err) {
-      setErroLocal(normalizarErro(err))
+      setErroLocal(paraErroCore(err))
     }
   }
 
@@ -544,7 +532,7 @@ export function PainelMotorSinais({
       toast.add({ title: 'Busca do replay de chat iniciada.' })
       await carregarBlocosESinais()
     } catch (err) {
-      setErroLocal(normalizarErro(err))
+      setErroLocal(paraErroCore(err))
     }
   }
 

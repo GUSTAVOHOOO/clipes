@@ -15,7 +15,7 @@ import {
   type TomStatus,
 } from '@ds'
 import { useCallback, useMemo, useState } from 'react'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import type { Job } from '~/core/progresso'
 import type { LoteFontes, LoteItem } from '~/stores/fontesProjeto'
@@ -167,7 +167,7 @@ export function ListaLotes({
       setLoteCancelar(null)
       await aoAtualizar()
     } catch (err) {
-      setErroAcao(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? '')))
+      setErroAcao(paraErroCore(err))
     } finally {
       setOcupadoId(null)
     }
@@ -186,7 +186,7 @@ export function ListaLotes({
       setConfirmacaoItem(null)
       await aoAtualizar()
     } catch (err) {
-      const coreErr = err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? ''))
+      const coreErr = paraErroCore(err)
       if (coreErr.code === 'uncertain_job') {
         setItensIncertos((prev) => ({ ...prev, [`${loteId}:${item.sourceId}`]: true }))
         setConfirmacaoItem(null)
@@ -250,7 +250,7 @@ export function ListaLotes({
       setLoteOrcamento(null)
       await aoAtualizar()
     } catch (err) {
-      const coreErr = err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err ?? ''))
+      const coreErr = paraErroCore(err)
       const usage = coreErr.usage as { reason?: string } | undefined
       if (coreErr.code === 'confirmation_required' && usage?.reason === 'cost_unknown') {
         setExigeCienciaDesconhecido(true)

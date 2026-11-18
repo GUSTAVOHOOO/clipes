@@ -722,4 +722,51 @@ describe('DetalheCandidato (Coluna direita C.2)', () => {
     expect(within(toolbar).getByRole('button', { name: /Reproduzir/i })).toBeInTheDocument()
     expect(within(toolbar).getByRole('button', { name: /Ir para Entrada/i })).toBeInTheDocument()
   })
+
+  it('preserva code de objeto bruto { code, message } quando angles.get rejeita sem ErroCore', async () => {
+    filaTeste = criarFila(() => 'demo')
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'proxy.request') {
+        return {
+          state: 'ready',
+          key: '0004abab',
+          job: null,
+          progress: 100,
+          error: null,
+          windowStartUs: 0,
+          windowEndUs: 260_000_000,
+        }
+      }
+      if (cmd === 'guardrails.check') {
+        return {
+          scope: 'single',
+          directMonetizationAck: true,
+          needsDirectNotice: false,
+          over60s: false,
+          permission: { status: 'granted', who: 'Criador X', where: 'YouTube', scope: 'Cortes' },
+        }
+      }
+      if (cmd === 'angles.get') {
+        throw { code: 'project_busy', message: 'Projeto ocupado' }
+      }
+      return {}
+    })
+
+    render(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_TRANSFORMADO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={{ ...CANDIDATO_BASE, status: 'approved' }}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+
+    const alerta = await screen.findByRole('alert')
+    expect(alerta).toHaveTextContent('Há uma tarefa ativa bloqueando esta operação no Projeto.')
+  })
 })

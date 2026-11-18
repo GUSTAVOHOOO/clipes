@@ -20,7 +20,7 @@ import {
   type KeyboardEvent,
 } from 'react'
 import { formatarTecla, useAtalhos, type Atalho } from '~/comandos/atalhos'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, paraErroCore, type ErroCore } from '~/core/cliente'
 
 export type PalavraTimeline = {
   position: number
@@ -89,18 +89,6 @@ const OPCOES_ESCOPO: OpcaoSelect<EscopoBusca>[] = [
 ]
 
 const TAMANHO_PAGINA = 200
-
-function normalizarErro(err: unknown): ErroCore {
-  if (err instanceof ErroCore) return err
-  if (err && typeof err === 'object' && 'code' in err) {
-    const e = err as { code?: unknown; message?: unknown }
-    return new ErroCore(
-      typeof e.code === 'string' && e.code ? e.code : 'desconhecido',
-      typeof e.message === 'string' ? e.message : '',
-    )
-  }
-  return new ErroCore('desconhecido', err instanceof Error ? err.message : String(err ?? ''))
-}
 
 export type LeitorTranscricaoProps = {
   projetoId: string
@@ -173,7 +161,7 @@ export function LeitorTranscricao({
           return prox
         })
       } catch (err) {
-        aoErroRef.current?.(normalizarErro(err))
+        aoErroRef.current?.(paraErroCore(err))
       } finally {
         paginasEmVooRef.current.delete(inicioPagina)
       }
@@ -221,7 +209,7 @@ export function LeitorTranscricao({
         }
       })
       .catch((err) => {
-        if (!cancelado) aoErroRef.current?.(normalizarErro(err))
+        if (!cancelado) aoErroRef.current?.(paraErroCore(err))
       })
       .finally(() => {
         if (!cancelado) setCarregandoInicial(false)
@@ -301,7 +289,7 @@ export function LeitorTranscricao({
       devolverFocoPosRef.current = res.position
       setEditandoPos(null)
     } catch (err) {
-      aoErro?.(normalizarErro(err))
+      aoErro?.(paraErroCore(err))
     } finally {
       setSalvandoCorrecao(false)
     }
@@ -340,7 +328,7 @@ export function LeitorTranscricao({
           })
         }
       } catch (err) {
-        const e = normalizarErro(err)
+        const e = paraErroCore(err)
         if (e.code === 'nothing_to_undo' || e.code === 'nothing_to_redo') {
           setCanUndo(e.code !== 'nothing_to_undo' ? canUndo : false)
           setCanRedo(e.code !== 'nothing_to_redo' ? canRedo : false)
@@ -372,7 +360,7 @@ export function LeitorTranscricao({
         escopoBusca === 'fonte' ? lista.filter((h) => h.source_id === fonteId) : lista,
       )
     } catch (err) {
-      aoErro?.(normalizarErro(err))
+      aoErro?.(paraErroCore(err))
       setResultadosBusca([])
     } finally {
       setBuscando(false)

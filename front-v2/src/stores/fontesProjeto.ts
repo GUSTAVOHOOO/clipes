@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, paraErroCore, type ErroCore } from '~/core/cliente'
 import { useFila, type EventoProgresso, type Fila, type Job } from '~/core/progresso'
 
 export type PermissaoFonte =
@@ -159,18 +159,6 @@ function estadoInicial(projetoPath: string | null): EstadoFontesProjeto {
   }
 }
 
-function normalizarErro(err: unknown): ErroCore {
-  if (err instanceof ErroCore) return err
-  if (err && typeof err === 'object' && 'code' in err) {
-    const e = err as { code?: unknown; message?: unknown }
-    return new ErroCore(
-      typeof e.code === 'string' && e.code ? e.code : 'desconhecido',
-      typeof e.message === 'string' ? e.message : '',
-    )
-  }
-  return new ErroCore('desconhecido', err instanceof Error ? err.message : String(err ?? ''))
-}
-
 /** Cria um store reativo em memória para Fontes, status de Transcrição (#302) e Lotes do Projeto. */
 export function criarStoreFontesProjeto(): StoreFontesProjeto {
   let atual: EstadoFontesProjeto = estadoInicial(null)
@@ -231,7 +219,7 @@ export function criarStoreFontesProjeto(): StoreFontesProjeto {
       return fontes
     } catch (err) {
       if (seq !== seqProjeto || atual.projetoPath !== caminho) return []
-      atualizar({ carregando: false, erro: normalizarErro(err) })
+      atualizar({ carregando: false, erro: paraErroCore(err) })
       return []
     }
   }
@@ -250,7 +238,7 @@ export function criarStoreFontesProjeto(): StoreFontesProjeto {
       return lotes
     } catch (err) {
       if (seq !== seqProjeto || atual.projetoPath !== caminho) return []
-      atualizar({ carregandoLotes: false, erroLotes: normalizarErro(err) })
+      atualizar({ carregandoLotes: false, erroLotes: paraErroCore(err) })
       return []
     }
   }
@@ -267,7 +255,7 @@ export function criarStoreFontesProjeto(): StoreFontesProjeto {
       await carregarStatusTranscricao(id, seq)
     } catch (err) {
       if (seq !== seqProjeto || atual.projetoPath !== caminho) return
-      atualizar({ erro: normalizarErro(err) })
+      atualizar({ erro: paraErroCore(err) })
     }
   }
 

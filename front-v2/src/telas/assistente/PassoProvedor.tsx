@@ -11,7 +11,7 @@ import {
 } from '@ds'
 import { ArrowLeft, Check, Eye, EyeOff, Lock } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useFila } from '~/core/progresso'
 import { useEstadoForcado } from '~/shell/EstadoForcado'
@@ -72,18 +72,6 @@ const PRESETS_API: Record<
     endpoint: '',
     modelo: '',
   },
-}
-
-function normalizarErro(erro: unknown): ErroCore {
-  if (erro instanceof ErroCore) return erro
-  if (erro && typeof erro === 'object' && 'code' in erro) {
-    const e = erro as { code?: unknown; message?: unknown }
-    return new ErroCore(
-      typeof e.code === 'string' ? e.code : 'desconhecido',
-      typeof e.message === 'string' ? e.message : '',
-    )
-  }
-  return new ErroCore('desconhecido', erro instanceof Error ? erro.message : String(erro ?? ''))
 }
 
 function hostDe(url: string): string {
@@ -150,7 +138,7 @@ export function PassoProvedor({ aoVoltar, aoConcluir, aoPular, pulando }: PassoP
       else if (res.opencode?.found) setSelecionada('opencode')
       else setSelecionada('api')
     } catch (e) {
-      setErro(normalizarErro(e))
+      setErro(paraErroCore(e))
     } finally {
       setCarregando(false)
     }
@@ -287,7 +275,7 @@ export function PassoProvedor({ aoVoltar, aoConcluir, aoPular, pulando }: PassoP
       await chamar('provider.test', profileId ? { profileId } : {})
       setTesteOk('Conexão verificada com sucesso.')
     } catch (e) {
-      setErro(normalizarErro(e))
+      setErro(paraErroCore(e))
     } finally {
       setTestando(false)
     }
@@ -302,7 +290,7 @@ export function PassoProvedor({ aoVoltar, aoConcluir, aoPular, pulando }: PassoP
       await chamar('assistant.complete', { skipped: false })
       aoConcluir()
     } catch (e) {
-      setErro(normalizarErro(e))
+      setErro(paraErroCore(e))
     } finally {
       setSalvando(false)
     }

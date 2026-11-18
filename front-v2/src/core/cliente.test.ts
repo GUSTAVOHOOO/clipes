@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { coreDispatch } from '@core'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 
 vi.mock('@core', () => ({
   coreDispatch: vi.fn(),
@@ -111,5 +111,67 @@ describe('ErroCore.usage (confirmações com custo)', () => {
     const erro = await chamar('projects.open', {}).catch((e: unknown) => e)
 
     expect((erro as ErroCore).usage).toBeUndefined()
+  })
+})
+
+describe('paraErroCore', () => {
+  it('devolve a mesma instância quando já é ErroCore', () => {
+    const original = new ErroCore('project_busy', 'ocupado', { tokens: 10 })
+    expect(paraErroCore(original)).toBe(original)
+  })
+
+  it('normaliza string para ErroCore com code desconhecido e detalhe preservado', () => {
+    const res = paraErroCore('falha direta')
+    expect(res).toBeInstanceOf(ErroCore)
+    expect(res.code).toBe('desconhecido')
+    expect(res.detalhe).toBe('falha direta')
+    expect(res.usage).toBeUndefined()
+  })
+
+  it('normaliza Error preservando code (com trim), message e usage', () => {
+    const usage = { estimate: { minMicroUsd: 10, maxMicroUsd: 20 } }
+    const err = Object.assign(new Error('precisa confirmar'), {
+      code: '  confirmation_required  ',
+      usage,
+    })
+
+    const res = paraErroCore(err)
+    expect(res).toBeInstanceOf(ErroCore)
+    expect(res.code).toBe('confirmation_required')
+    expect(res.detalhe).toBe('precisa confirmar')
+    expect(res.usage).toEqual(usage)
+  })
+
+  it('normaliza objeto { code, message, usage } preservando todos os campos', () => {
+    const usage = { selectionPaid: true, audioEstimateMicroUsd: 250_000 }
+    const res = paraErroCore({ code: 'confirmation_required', message: 'custo alto', usage })
+
+    expect(res).toBeInstanceOf(ErroCore)
+    expect(res.code).toBe('confirmation_required')
+    expect(res.detalhe).toBe('custo alto')
+    expect(res.usage).toEqual(usage)
+  })
+
+  it.each([null, undefined])('normaliza %s para code desconhecido com detalhe vazio', (entrada) => {
+    const res = paraErroCore(entrada)
+    expect(res).toBeInstanceOf(ErroCore)
+    expect(res.code).toBe('desconhecido')
+    expect(res.detalhe).toBe('')
+  })
+
+  it.each([
+    { code: '', message: 'vazio' },
+    { code: '   ', message: 'só espaços' },
+    new Error('sem code'),
+  ])('normaliza code vazio, só com espaços ou ausente para desconhecido ($code)', (entrada) => {
+    const res = paraErroCore(entrada)
+    expect(res).toBeInstanceOf(ErroCore)
+    expect(res.code).toBe('desconhecido')
+  })
+
+  it('normaliza code com espaços ao redor aplicando trim', () => {
+    const res = paraErroCore({ code: '  project_busy ', message: 'em uso' })
+    expect(res.code).toBe('project_busy')
+    expect(res.detalhe).toBe('em uso')
   })
 })

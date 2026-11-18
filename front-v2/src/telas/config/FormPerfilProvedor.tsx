@@ -11,7 +11,7 @@ import {
 } from '@ds'
 import { Eye, EyeOff } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 
 export type TipoProvedor = 'openai' | 'anthropic' | 'gemini' | 'ollama'
@@ -305,7 +305,7 @@ export function FormPerfilProvedor({
       await aoSalvar()
       aoMudarAberto(false)
     } catch (err) {
-      setErro(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err)))
+      setErro(paraErroCore(err))
     } finally {
       setSalvando(false)
     }
@@ -320,7 +320,7 @@ export function FormPerfilProvedor({
       setConfirmarRemoverChave(false)
       await aoSalvar()
     } catch (err) {
-      setErro(err instanceof ErroCore ? err : new ErroCore('desconhecido', String(err)))
+      setErro(paraErroCore(err))
     } finally {
       setSalvando(false)
     }

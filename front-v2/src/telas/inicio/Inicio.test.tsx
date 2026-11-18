@@ -385,4 +385,19 @@ describe('Tela Início e Projetos (#/inicio)', () => {
     )
     expect(within(alerta).getByRole('button', { name: 'Abrir pasta .clipes' })).toBeInTheDocument()
   })
+
+  it('normaliza code só com espaços para desconhecido ao exibir erro em BannerErroCore', async () => {
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'projects.recent') throw { code: '   ', message: 'falha no catálogo' }
+      if (cmd === 'projects.current') return null
+      if (cmd === 'assistant.status') return { needsSetup: false }
+      return null
+    })
+
+    render(envolver(<Inicio />))
+
+    const alerta = await screen.findByRole('alert')
+    expect(alerta).toHaveTextContent('Algo deu errado nesta operação.')
+    expect(alerta).toHaveTextContent(/desconhecido/i)
+  })
 })

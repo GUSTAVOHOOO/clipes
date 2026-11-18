@@ -13,7 +13,7 @@ import { AlertTriangle, FolderOpen, Plus } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useAtalhos, type Atalho } from '~/comandos/atalhos'
 import { SeletorCaminho } from '~/componentes/SeletorCaminho'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro, type Recuperacao } from '~/core/erros'
 import { useEstadoForcado } from '~/shell/EstadoForcado'
 import { notificarMudancaProjeto, type ProjetoAtual } from '~/shell/Shell'
@@ -39,18 +39,6 @@ function atalhoMod(tecla: string): string {
   const ehMac =
     typeof navigator !== 'undefined' && /mac/i.test(navigator.platform || navigator.userAgent)
   return ehMac ? `⌘${tecla}` : `Ctrl+${tecla}`
-}
-
-function normalizarErro(erro: unknown): ErroCore {
-  if (erro instanceof ErroCore) return erro
-  if (erro && typeof erro === 'object' && 'code' in erro) {
-    const e = erro as { code?: unknown; message?: unknown }
-    return new ErroCore(
-      typeof e.code === 'string' ? e.code : 'desconhecido',
-      typeof e.message === 'string' ? e.message : '',
-    )
-  }
-  return new ErroCore('desconhecido', erro instanceof Error ? erro.message : String(erro ?? ''))
 }
 
 function traduzirErroInicio(erro: ErroCore): ErroTraduzido {
@@ -135,7 +123,7 @@ export function Inicio() {
       setRecentes(Array.isArray(resRecentes.value) ? resRecentes.value : [])
     } else {
       setRecentes([])
-      setErroBanner(normalizarErro(resRecentes.reason))
+      setErroBanner(paraErroCore(resRecentes.reason))
     }
 
     setCarregando(false)
@@ -181,7 +169,7 @@ export function Inicio() {
         }
         window.location.hash = destinoDoProjeto(aberto)
       } catch (erro) {
-        const coreErr = normalizarErro(erro)
+        const coreErr = paraErroCore(erro)
         if (fecharDialogoAbrir && coreErr.code === 'invalid_project') {
           setErroAbrir('Escolha uma pasta .clipes válida.')
           inputAbrirRef.current?.focus()
@@ -235,7 +223,7 @@ export function Inicio() {
       setProjetoAtual(null)
       notificarMudancaProjeto(null)
     } catch (erro) {
-      setErroBanner(normalizarErro(erro))
+      setErroBanner(paraErroCore(erro))
     } finally {
       setFechando(false)
     }

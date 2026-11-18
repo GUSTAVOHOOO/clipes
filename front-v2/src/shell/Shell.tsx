@@ -21,7 +21,7 @@ import {
 } from 'react'
 import { flushSync } from 'react-dom'
 import { useAtalhos, usePaleta, type Atalho } from '~/comandos/atalhos'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useFila, type Fila } from '~/core/progresso'
 import { resolver, type Rota } from '~/rotas/rotas'
@@ -309,8 +309,7 @@ export function Shell({
 
   const notificarErroProjeto = useCallback(
     (erro: unknown) => {
-      const coreErr =
-        erro instanceof ErroCore ? erro : new ErroCore('desconhecido', String(erro ?? ''))
+      const coreErr = paraErroCore(erro)
       const traducao = mensagemDeErro(coreErr)
       toast.add({
         type: 'erro',

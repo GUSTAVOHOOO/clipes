@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, paraErroCore, type ErroCore } from '~/core/cliente'
 import { useFila, type EventoProgresso, type Fila, type Job } from '~/core/progresso'
 
 export interface PerfilProvedorLista {
@@ -160,14 +160,6 @@ function extrairHost(endpoint: string | null | undefined): { host: string | null
   } catch {
     return { host: null, loopback: false }
   }
-}
-
-function normalizarErro(err: unknown): ErroCore {
-  if (err instanceof ErroCore) return err
-  if (err && typeof err === 'object' && 'code' in err && 'message' in err) {
-    return new ErroCore(String((err as { code: unknown }).code), String((err as { message: unknown }).message))
-  }
-  return new ErroCore('desconhecido', err instanceof Error ? err.message : String(err))
 }
 
 /**
@@ -335,7 +327,7 @@ export function criarStoreSelecaoProjeto(): StoreSelecaoProjeto {
       estado = {
         ...estado,
         carregandoRunsPorFonte: { ...estado.carregandoRunsPorFonte, [sourceId]: false },
-        erroRunsPorFonte: { ...estado.erroRunsPorFonte, [sourceId]: normalizarErro(err) },
+        erroRunsPorFonte: { ...estado.erroRunsPorFonte, [sourceId]: paraErroCore(err) },
       }
       notificar()
       return []
@@ -377,7 +369,7 @@ export function criarStoreSelecaoProjeto(): StoreSelecaoProjeto {
       estado = {
         ...estado,
         carregandoExecucao: false,
-        erroExecucao: normalizarErro(err),
+        erroExecucao: paraErroCore(err),
       }
       notificar()
       return null
@@ -415,7 +407,7 @@ export function criarStoreSelecaoProjeto(): StoreSelecaoProjeto {
       estado = {
         ...estado,
         carregandoRevisao: false,
-        erroRevisao: normalizarErro(err),
+        erroRevisao: paraErroCore(err),
       }
       notificar()
       return null

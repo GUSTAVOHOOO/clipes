@@ -299,4 +299,20 @@ describe('criarStoreSelecaoProjeto e useSelecaoProjeto', () => {
     expect(result.current.execucaoAtiva).toBeNull()
     expect(result.current.revisaoAtiva).toBeNull()
   })
+
+  it('preserva code e usage ao normalizar erro bruto sem propriedade message', async () => {
+    const usage = { estimate: { kind: 'usd', minMicroUsd: 1000, maxMicroUsd: 2000 } }
+    chamarMock.mockRejectedValueOnce({ code: 'window_uncertain', usage })
+
+    const store = criarStoreSelecaoProjeto()
+    store.definirProjeto('/projetos/Demo.clipes')
+
+    expect(await store.carregarExecucao(7)).toBeNull()
+
+    expect(store.obterSnapshot().erroExecucao).toMatchObject({
+      code: 'window_uncertain',
+      detalhe: '',
+      usage,
+    })
+  })
 })

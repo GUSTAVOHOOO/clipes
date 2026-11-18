@@ -1,7 +1,7 @@
 import { BannerErroCore, Botao, Campo, Dialogo, Entrada } from '@ds'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { SeletorCaminho } from '~/componentes/SeletorCaminho'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, paraErroCore, type ErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { notificarMudancaProjeto } from '~/shell/Shell'
 
@@ -97,7 +97,7 @@ export function DialogoNovoProjeto({ aberto, aoMudarAberto, aoCriar }: DialogoNo
         window.location.hash = `#/projeto/${encodeURIComponent(id)}/fontes`
       }
     } catch (erro) {
-      const coreErr = erro instanceof ErroCore ? erro : new ErroCore('desconhecido', String(erro))
+      const coreErr = paraErroCore(erro)
       if (coreErr.code === 'invalid_project') {
         setErroNome('Escolha um nome válido (sem barras ou dois-pontos) e uma pasta válida.')
         nomeRef.current?.focus()
