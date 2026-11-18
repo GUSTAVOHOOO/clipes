@@ -574,6 +574,9 @@ export const TABELA_ERROS: Record<string, MensagemErro> = {
   too_few_chapters: {
     titulo: 'O YouTube exige pelo menos 3 capítulos com duração mínima de 10 s cada.',
   },
+  cancelled: {
+    titulo: 'Esta operação foi cancelada antes de concluir.',
+  },
 }
 
 const MENSAGEM_DESCONHECIDA: MensagemErro = {

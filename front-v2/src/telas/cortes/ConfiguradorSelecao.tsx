@@ -300,6 +300,7 @@ export function ConfiguradorSelecao({
   const [orcamentoSelecao, setOrcamentoSelecao] = useState<BudgetItemResp | null>(null)
 
   const [estimativa, setEstimativa] = useState<SelectionEstimateModo1Resp | null>(null)
+  const [estimativaPendente, setEstimativaPendente] = useState(true)
   const [erroEstimativa, setErroEstimativa] = useState<ErroCore | null>(null)
   const [erroDisparo, setErroDisparo] = useState<ErroCore | null>(null)
   const [confirmacaoAberta, setConfirmacaoAberta] = useState(false)
@@ -342,6 +343,7 @@ export function ConfiguradorSelecao({
     let cancelado = false
     estimativaIniciadaFonteRef.current = null
     setCarregandoInicial(true)
+    setEstimativaPendente(true)
     setErroEstimativa(null)
     setErroDisparo(null)
     setErroSinais(null)
@@ -462,12 +464,17 @@ export function ConfiguradorSelecao({
 
   // Estimativa Modo 1: imediata na abertura e debounced quando parâmetros mudam
   useEffect(() => {
-    if (carregandoInicial || minUs === null || maxUs === null) return
+    if (carregandoInicial) return
+    if (minUs === null || maxUs === null) {
+      setEstimativaPendente(false)
+      return
+    }
     let cancelado = false
     const primeiraDaFonte = estimativaIniciadaFonteRef.current !== fonte.id
 
     const executar = () => {
       estimativaIniciadaFonteRef.current = fonte.id
+      setEstimativaPendente(true)
       setErroEstimativa(null)
       void chamar<SelectionEstimateModo1Resp>('selection.estimate', {
         source_id: fonte.id,
@@ -479,11 +486,13 @@ export function ConfiguradorSelecao({
           if (cancelado) return
           setEstimativa(res)
           setErroEstimativa(null)
+          setEstimativaPendente(false)
         })
         .catch((err) => {
           if (cancelado) return
           setEstimativa(null)
           setErroEstimativa(paraErroCore(err))
+          setEstimativaPendente(false)
         })
     }
 
@@ -521,11 +530,14 @@ export function ConfiguradorSelecao({
     ) {
       return true
     }
+    if (erroEstimativa || erroDisparo || estimativaPendente) {
+      return false
+    }
     if (tarefas && !tarefaSelecao?.profile && !estimativa) {
       return true
     }
     return false
-  }, [erroEstimativa?.code, erroDisparo?.code, tarefas, tarefaSelecao?.profile, estimativa])
+  }, [erroEstimativa, erroDisparo, estimativaPendente, tarefas, tarefaSelecao?.profile, estimativa])
 
   const estadoContextoEfetivo = useMemo(() => {
     if (!selectionState) return null

@@ -543,4 +543,11 @@ describe('mapeador de erros (erros.ts)', () => {
     const termsReq = mensagemDeErro(new ErroCore('terms_acceptance_required', ''))
     expect(termsReq.recuperacao?.acao).toBe('aceitar-termos')
   })
+
+  it('UI-35: mapeia cancelled em PT-BR sem cair na mensagem genérica', () => {
+    const cancelado = mensagemDeErro(new ErroCore('cancelled', 'Operação cancelada.'))
+    expect(cancelado.titulo).not.toBe('Algo deu errado nesta operação.')
+    expect(cancelado.titulo).toMatch(/cancelad/i)
+    expect(cancelado.recuperacao).toBeUndefined()
+  })
 })
