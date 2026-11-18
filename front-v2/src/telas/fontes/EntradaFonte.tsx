@@ -745,7 +745,7 @@ export function EntradaFonte({
               Limpar seleção
             </Botao>
             {copiaTravada ? (
-              <Dica texto="Aguarde a cópia em andamento concluir antes de copiar outra Fonte (#307).">
+              <Dica texto="Aguarde a cópia em andamento concluir antes de copiar outra Fonte.">
                 <span tabIndex={0} className="inline-flex">
                   {botaoImportar}
                 </span>

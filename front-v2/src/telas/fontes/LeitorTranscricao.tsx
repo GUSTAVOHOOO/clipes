@@ -21,6 +21,8 @@ import {
 } from 'react'
 import { formatarTecla, useAtalhos, type Atalho } from '~/comandos/atalhos'
 import { chamar, paraErroCore, type ErroCore } from '~/core/cliente'
+import { storeFontesProjeto, type FonteProjeto } from '~/stores/fontesProjeto'
+import { basenameCaminho } from '~/telas/fontes/EntradaFonte'
 
 export type PalavraTimeline = {
   position: number
@@ -119,6 +121,7 @@ export function LeitorTranscricao({
   const [itensMap, setItensMap] = useState<Map<number, ItemTimeline>>(() => new Map())
   const [carregandoInicial, setCarregandoInicial] = useState(true)
   const [rolarPara, setRolarPara] = useState<number | null>(scrollPara?.row ?? null)
+  const [focoPendente, setFocoPendente] = useState<{ row: number; direcao: 1 | -1 } | null>(null)
   const [fraseDestacada, setFraseDestacada] = useState<number | null>(scrollPara?.frase ?? null)
 
   const [canUndo, setCanUndo] = useState(false)
@@ -175,6 +178,7 @@ export function LeitorTranscricao({
     setItensMap(new Map())
     setTotalLinhas(0)
     setEditandoPos(null)
+    setFocoPendente(null)
     setCarregandoInicial(true)
 
     const linhaAlvo = scrollPara?.row ?? null
@@ -295,6 +299,32 @@ export function LeitorTranscricao({
     }
   }
 
+  const resolverNomeFonte = useCallback(async (targetSourceId: number): Promise<string | null> => {
+    const estadoStore = storeFontesProjeto.estado()
+    const noStore = estadoStore.fontes.find((f) => f.id === targetSourceId)
+    if (noStore) return basenameCaminho(noStore.path)
+
+    try {
+      let projPath = estadoStore.projetoPath
+      if (!projPath) {
+        const atual = await chamar<{ path?: string } | null>('projects.current', {}).catch(
+          () => null,
+        )
+        projPath = atual?.path ?? null
+      }
+      const lista = await chamar<FonteProjeto[]>(
+        'sources.list',
+        projPath ? { project: projPath } : {},
+      )
+      const encontrada = Array.isArray(lista)
+        ? lista.find((f) => f.id === targetSourceId)
+        : undefined
+      return encontrada ? basenameCaminho(encontrada.path) : null
+    } catch {
+      return null
+    }
+  }, [])
+
   const executarPassoHistorico = useCallback(
     async (tipo: 'undo' | 'redo') => {
       try {
@@ -313,12 +343,13 @@ export function LeitorTranscricao({
               ?.focus()
           })
         } else {
+          const nomeFonteAfetada = await resolverNomeFonte(res.source_id)
           toastRef.current.add({
             title:
               tipo === 'undo'
                 ? 'Correção desfeita em outra Fonte do Projeto.'
                 : 'Correção refeita em outra Fonte do Projeto.',
-            description: `Fonte #${res.source_id}`,
+            description: nomeFonteAfetada ?? undefined,
             actionProps: {
               children: 'Ir para Fonte afetada',
               onClick: () => {
@@ -337,7 +368,7 @@ export function LeitorTranscricao({
         aoErro?.(e)
       }
     },
-    [aoErro, atualizarPalavraNoMapa, canRedo, canUndo, encProjeto, fonteId],
+    [aoErro, atualizarPalavraNoMapa, canRedo, canUndo, encProjeto, fonteId, resolverNomeFonte],
   )
 
   const executarBusca = async (e?: FormEvent) => {
@@ -412,20 +443,117 @@ export function LeitorTranscricao({
 
   useAtalhos(atalhos)
 
-  const moverParaPalavraPorOffset = (atualPos: number, delta: number) => {
+  useEffect(() => {
+    if (rolarPara === null || carregandoInicial || focoPendente !== null) return
+    const rafId = requestAnimationFrame(() => setRolarPara(null))
+    return () => cancelAnimationFrame(rafId)
+  }, [carregandoInicial, focoPendente, rolarPara])
+
+  useEffect(() => {
+    if (!focoPendente) return
+    const { row, direcao } = focoPendente
+    if (row < 0 || row >= totalLinhas) {
+      setFocoPendente(null)
+      setRolarPara(null)
+      return
+    }
+    const item = itensMap.get(row)
+    if (item === undefined) {
+      void carregarPagina(row, TAMANHO_PAGINA)
+      return
+    }
+    if (item.type !== 'sentence' || item.words.length === 0) {
+      const prox = row + direcao
+      if (prox < 0 || prox >= totalLinhas) {
+        setFocoPendente(null)
+        setRolarPara(null)
+        return
+      }
+      setFocoPendente({ row: prox, direcao })
+      setRolarPara(prox)
+      return
+    }
+
+    const targetPos =
+      direcao > 0 ? item.words[0].position : item.words[item.words.length - 1].position
+    const seletor = `button[data-word="${targetPos}"]`
+    const elImediato = containerRef.current?.querySelector<HTMLButtonElement>(seletor)
+    if (elImediato) {
+      elImediato.focus()
+      setFocoPendente(null)
+      setRolarPara(null)
+      return
+    }
+
+    let cancelado = false
+    let tentativas = 0
+    let rafId = 0
+    const tentarFocar = () => {
+      if (cancelado) return
+      const el = containerRef.current?.querySelector<HTMLButtonElement>(seletor)
+      if (el) {
+        el.focus()
+        setFocoPendente(null)
+        setRolarPara(null)
+        return
+      }
+      tentativas += 1
+      if (tentativas < 20) {
+        rafId = requestAnimationFrame(tentarFocar)
+      } else {
+        setFocoPendente(null)
+        setRolarPara(null)
+      }
+    }
+    rafId = requestAnimationFrame(tentarFocar)
+    return () => {
+      cancelado = true
+      cancelAnimationFrame(rafId)
+    }
+  }, [carregarPagina, focoPendente, itensMap, totalLinhas])
+
+  const agendarFocoLinhaAdjacente = useCallback(
+    (rowInicial: number, direcao: 1 | -1) => {
+      let r = rowInicial
+      while (r >= 0 && r < totalLinhas) {
+        const item = itensMap.get(r)
+        if (item === undefined) {
+          setFocoPendente({ row: r, direcao })
+          setRolarPara(r)
+          void carregarPagina(r, TAMANHO_PAGINA)
+          return
+        }
+        if (item.type === 'sentence' && item.words.length > 0) {
+          setFocoPendente({ row: r, direcao })
+          setRolarPara(r)
+          return
+        }
+        r += direcao
+      }
+    },
+    [carregarPagina, itensMap, totalLinhas],
+  )
+
+  const moverParaPalavraPorOffset = (atualPos: number, delta: number, rowIdx: number) => {
     const botoes = Array.from(
       containerRef.current?.querySelectorAll<HTMLButtonElement>('button[data-word]') ?? [],
     )
     const idx = botoes.findIndex((b) => Number(b.dataset.word) === atualPos)
     if (idx < 0) return
     const alvo = botoes[idx + delta]
-    alvo?.focus()
+    if (alvo) {
+      alvo.focus()
+      return
+    }
+    const direcao: 1 | -1 = delta > 0 ? 1 : -1
+    agendarFocoLinhaAdjacente(rowIdx + direcao, direcao)
   }
 
   const tratarTeclaPalavra = (
     e: KeyboardEvent<HTMLButtonElement>,
     frase: Extract<ItemTimeline, { type: 'sentence' }>,
     palavra: PalavraTimeline,
+    rowIdx: number,
   ) => {
     if (e.key === 'F2' || e.key === 'Enter') {
       e.preventDefault()
@@ -439,12 +567,12 @@ export function LeitorTranscricao({
     }
     if (e.key === 'ArrowRight') {
       e.preventDefault()
-      moverParaPalavraPorOffset(palavra.position, 1)
+      moverParaPalavraPorOffset(palavra.position, 1, rowIdx)
       return
     }
     if (e.key === 'ArrowLeft') {
       e.preventDefault()
-      moverParaPalavraPorOffset(palavra.position, -1)
+      moverParaPalavraPorOffset(palavra.position, -1, rowIdx)
       return
     }
     if (e.key === 'Home' && frase.words.length > 0) {
@@ -477,7 +605,7 @@ export function LeitorTranscricao({
     }
   }
 
-  const renderizarItem = (item: ItemTimeline) => {
+  const renderizarItem = (item: ItemTimeline, rowIdx: number) => {
     if (item.type === 'silence') {
       const seg = ((item.end_us - item.start_us) / 1_000_000).toLocaleString('pt-BR', {
         minimumFractionDigits: 1,
@@ -561,7 +689,7 @@ export function LeitorTranscricao({
                   data-word={w.position}
                   aria-description={w.corrected ? 'Palavra corrigida' : undefined}
                   onClick={() => aoFocarPalavraTempo?.(w.start_us)}
-                  onKeyDown={(e) => tratarTeclaPalavra(e, item, w)}
+                  onKeyDown={(e) => tratarTeclaPalavra(e, item, w, rowIdx)}
                   className={cn(
                     'foco inline-flex min-h-6 min-w-6 cursor-pointer items-center gap-1 rounded-mini border-0 bg-transparent px-1 py-0.5 text-left text-base text-t1 hover:bg-hover',
                     w.corrected && 'border-b-2 border-dotted border-linha-forte bg-elevado',
@@ -585,7 +713,7 @@ export function LeitorTranscricao({
     <div ref={containerRef} className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden">
       {/* Barra de ferramentas do Leitor */}
       <div className="flex flex-wrap items-center gap-2 rounded-area bg-area px-3 py-2">
-        <Dica texto="Desfaz a última correção de palavra no Projeto inteiro; prévia da Fonte afetada aguarda #302.">
+        <Dica texto="Desfaz a última correção de palavra no Projeto inteiro.">
           <span className="inline-flex">
             <Botao
               variante="secundario"
@@ -600,12 +728,13 @@ export function LeitorTranscricao({
           </span>
         </Dica>
 
-        <Dica texto="Refaz a última correção desfeita no Projeto inteiro (#302).">
+        <Dica texto="Refaz a última correção desfeita no Projeto inteiro.">
           <span className="inline-flex">
             <Botao
               variante="secundario"
               tamanho="p"
               icone={<Redo2 />}
+              atalho={formatarTecla('Mod+Shift+Z')}
               disabled={!canRedo}
               onClick={() => void executarPassoHistorico('redo')}
             >
@@ -718,7 +847,7 @@ export function LeitorTranscricao({
             item.type === 'silence' ? `silence-${item.start_us}` : `sentence-${item.id}`
           }
           rolarParaIndice={rolarPara}
-          renderizarItem={(item) => renderizarItem(item)}
+          renderizarItem={(item, indice) => renderizarItem(item, indice)}
           className="min-h-0 flex-1 rounded-area bg-chao"
         />
       )}
