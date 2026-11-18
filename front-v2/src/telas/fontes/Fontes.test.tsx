@@ -467,4 +467,16 @@ describe('Tela Fontes (#/projeto/:id/fontes)', () => {
     const listbox = await screen.findByRole('listbox', { name: /Fontes do Projeto/i })
     expect(listbox).toBeInTheDocument()
   })
+
+  it('exibe exatamente um <h1> visível "Fontes e Transcrição" (UI-10 / WCAG)', async () => {
+    mockBase({ fontes: FONTES_MISTAS })
+
+    render(
+      envolver(<Fontes projetoId="demo" projetoPath="/projetos/Demo.clipes" sub="fontes" store={store} />),
+    )
+
+    const h1 = await screen.findByRole('heading', { level: 1, name: 'Fontes e Transcrição' })
+    expect(h1).toBeVisible()
+    expect(document.querySelectorAll('h1')).toHaveLength(1)
+  })
 })

@@ -16,6 +16,7 @@ import { ConfigExportacao } from '~/telas/config/ConfigExportacao'
 import { ConfigProjeto } from '~/telas/config/ConfigProjeto'
 import { ConfigProvedores } from '~/telas/config/ConfigProvedores'
 import { ConfiguracoesLayout } from '~/telas/config/ConfiguracoesLayout'
+import { DetalheFonte } from '~/telas/fontes/DetalheFonte'
 import { Fontes } from '~/telas/fontes/Fontes'
 import { Inicio } from '~/telas/inicio/Inicio'
 
@@ -233,6 +234,20 @@ function AppRoteado({
           projetoId={rota.projeto}
           projetoPath={projeto?.path ?? null}
           sub={rota.sub}
+        />
+      </Shell>
+    )
+  }
+
+  if (rota.tela === 'fonte') {
+    return (
+      <Shell rota={rota} projeto={projeto} somenteLocal={somenteLocal}>
+        <DetalheFonte
+          projetoId={rota.projeto}
+          projetoPath={projeto?.path ?? null}
+          fonteId={rota.fonte}
+          frase={rota.frase}
+          row={rota.row}
         />
       </Shell>
     )
