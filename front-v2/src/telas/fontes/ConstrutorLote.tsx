@@ -191,10 +191,19 @@ export function ConstrutorLote({
 
   const [enviando, setEnviando] = useState(false)
   const [erroCriar, setErroCriar] = useState<ErroCore | null>(null)
+  const erroBannerRef = useRef<HTMLDivElement>(null)
   const [confirmacaoPendente, setConfirmacaoPendente] = useState<{
     payload: Record<string, unknown>
     usage: ConfirmacaoLoteUsage
   } | null>(null)
+
+  useEffect(() => {
+    if (!erroCriar) return
+    const el = erroBannerRef.current
+    if (!el) return
+    el.scrollIntoView({ block: 'nearest' })
+    el.focus({ preventScroll: true })
+  }, [erroCriar])
 
   useEffect(() => {
     let cancelado = false
@@ -280,7 +289,7 @@ export function ConstrutorLote({
                 selectionPaid: Boolean(rotaSelecao?.profile && !rotaSelecao.profile.local && !rotaSelecao.profile.cli),
                 transcriptionPaid: motor === 'groq',
                 audioEstimateMicroUsd: motor === 'groq' ? 12000 : null,
-                profile: rotaSelecao?.profile?.id ?? 'legacy',
+                profile: rotaSelecao?.profile?.id ?? null,
                 maxCostMicroUsd: Number.isFinite(tetoMicroUsd ?? NaN) ? tetoMicroUsd : null,
                 sources: selecionadas.length,
               }
@@ -368,43 +377,45 @@ export function ConstrutorLote({
       </div>
 
       {erroExibido && traducaoErro && (
-        <BannerErroCore
-          erro={{
-            code: erroExibido.code,
-            message: erroExibido.detalhe || erroExibido.message,
-          }}
-          traduzir={() => ({ titulo: traducaoErro.titulo })}
-          acaoRecuperacao={
-            erroExibido.code === 'local_only_violation'
-              ? {
-                  rotulo: 'Escolher Perfil local',
-                  aoAcionar: () => {
-                    window.location.hash = '#/config/provedores'
-                  },
-                }
-              : traducaoErro.recuperacao
+        <div ref={erroBannerRef} tabIndex={-1} className="rounded-area foco-interno">
+          <BannerErroCore
+            erro={{
+              code: erroExibido.code,
+              message: erroExibido.detalhe || erroExibido.message,
+            }}
+            traduzir={() => ({ titulo: traducaoErro.titulo })}
+            acaoRecuperacao={
+              erroExibido.code === 'local_only_violation'
                 ? {
-                    rotulo: traducaoErro.recuperacao.rotulo,
+                    rotulo: 'Escolher Perfil local',
                     aoAcionar: () => {
-                      if (traducaoErro.recuperacao?.rota) {
-                        window.location.hash = traducaoErro.recuperacao.rota
-                      }
+                      window.location.hash = '#/config/provedores'
+                    },
+                  }
+                : traducaoErro.recuperacao
+                  ? {
+                      rotulo: traducaoErro.recuperacao.rotulo,
+                      aoAcionar: () => {
+                        if (traducaoErro.recuperacao?.rota) {
+                          window.location.hash = traducaoErro.recuperacao.rota
+                        }
+                      },
+                    }
+                  : undefined
+            }
+            acaoSecundaria={
+              erroExibido.code === 'local_only_violation'
+                ? {
+                    rotulo: 'Revisar Somente local',
+                    aoAcionar: () => {
+                      window.location.hash = '#/config/projeto'
                     },
                   }
                 : undefined
-          }
-          acaoSecundaria={
-            erroExibido.code === 'local_only_violation'
-              ? {
-                  rotulo: 'Revisar Somente local',
-                  aoAcionar: () => {
-                    window.location.hash = '#/config/projeto'
-                  },
-                }
-              : undefined
-          }
-          aoDispensar={() => setErroCriar(null)}
-        />
+            }
+            aoDispensar={() => setErroCriar(null)}
+          />
+        </div>
       )}
 
       <form onSubmit={(e) => void aoSubmeter(e)} className="flex flex-col gap-2.5">
@@ -639,8 +650,18 @@ export function ConstrutorLote({
                       model: rotaSelecao.profile.model,
                     }
                   : {
-                      id: confirmacaoPendente.usage.profile ?? 'legacy',
-                      label: confirmacaoPendente.usage.profile ?? 'Perfil configurado',
+                      id:
+                        confirmacaoPendente.usage.profile &&
+                        confirmacaoPendente.usage.profile !== 'legacy'
+                          ? confirmacaoPendente.usage.profile
+                          : 'nao-configurado',
+                      label:
+                        confirmacaoPendente.usage.profile &&
+                        confirmacaoPendente.usage.profile !== 'legacy'
+                          ? confirmacaoPendente.usage.profile
+                          : confirmacaoPendente.usage.selectionPaid
+                            ? 'Perfil configurado'
+                            : 'Não configurado',
                       kind: 'api',
                       model: null,
                     }
@@ -654,7 +675,9 @@ export function ConstrutorLote({
               }
               saiDaMaquina={!rotaSelecao?.profile?.local}
               estimativa={
-                confirmacaoPendente.usage.selectionPaid ? { kind: 'unknown' } : { kind: 'zero' }
+                confirmacaoPendente.usage.selectionPaid
+                  ? { kind: 'unknown' }
+                  : resumoPreview.estimativa
               }
               orcamento={
                 typeof confirmacaoPendente.usage.maxCostMicroUsd === 'number'

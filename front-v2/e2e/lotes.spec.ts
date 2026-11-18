@@ -159,4 +159,47 @@ test.describe('Tela Lotes de Fontes (#/projeto/:id/fontes?sub=lotes)', () => {
 
     expect(erros).toEqual([])
   })
+
+  test('UI-22: rola até o BannerErroCore e move foco para o alerta quando falha após rolar em 1366x768', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.goto('/#/inicio')
+    await page.getByRole('button', { name: /Abrir Projeto Meu Canal de Cortes/i }).click()
+    await expect(page).toHaveURL(/#\/projeto\/meu-canal-de-cortes\/fontes$/)
+
+    await page.evaluate(() => {
+      window.location.hash = '#/config/projeto'
+    })
+    await page.getByRole('tab', { name: /Privacidade/i }).click()
+    await page.getByRole('switch', { name: /Somente local/i }).click()
+
+    await page.evaluate(() => {
+      window.location.hash = '#/projeto/meu-canal-de-cortes/fontes?sub=lotes'
+    })
+    await expect(page.getByText('Bloqueado por Somente local').first()).toBeVisible()
+    await page.getByRole('checkbox', { name: /changed\.mp4/i }).click()
+    await page.getByRole('radio', { name: /Groq \(remoto\)/i }).click()
+    const btnIniciar = page.getByRole('button', { name: 'Iniciar lote com 1 Fonte' })
+    await btnIniciar.scrollIntoViewIfNeeded()
+    await btnIniciar.click()
+
+    const alertaLocalOnly = page
+      .getByRole('region', { name: 'Construtor de Lote de Fontes' })
+      .getByRole('alert')
+    await expect(alertaLocalOnly).toBeVisible()
+
+    const visibilidadeErro = await alertaLocalOnly.evaluate((el) => {
+      const rect = el.getBoundingClientRect()
+      const parentScroll = el.closest('.overflow-y-auto')
+      const pRect = parentScroll ? parentScroll.getBoundingClientRect() : null
+      const active = document.activeElement
+      return {
+        naViewport: rect.top >= 0 && rect.bottom <= window.innerHeight,
+        naColuna: pRect ? rect.top >= pRect.top - 1 && rect.bottom <= pRect.bottom + 1 : true,
+        focado: Boolean(active && (active === el || el.contains(active) || active.contains(el))),
+      }
+    })
+    expect(visibilidadeErro).toEqual({ naViewport: true, naColuna: true, focado: true })
+  })
 })

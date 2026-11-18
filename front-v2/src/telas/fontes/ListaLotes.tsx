@@ -389,6 +389,8 @@ export function ListaLotes({
         />
       )}
 
+      {lotes.length > 0 && <h2 className="sr-only">Lotes do Projeto</h2>}
+
       {lotes.map((lote) => {
         const st = statusLote(lote)
         const gastoTexto =

@@ -699,4 +699,145 @@ describe('Tela Lotes de Fontes (#/projeto/:id/fontes?sub=lotes)', () => {
     await user.click(btnRevisar)
     expect(window.location.hash).toBe('#/projeto/demo/cortes?fonte=1&run=7')
   })
+
+  it('UI-22: rola até o BannerErroCore e move o foco para ele ao ocorrer erro na criação do lote', async () => {
+    const user = userEvent.setup()
+    const scrollSpy = vi.fn()
+    const scrollOriginal = HTMLElement.prototype.scrollIntoView
+    HTMLElement.prototype.scrollIntoView = function (this: HTMLElement, arg?: boolean | ScrollIntoViewOptions) {
+      scrollSpy(this, arg)
+    }
+
+    try {
+      mockBase({
+        fontes: FONTES_LOTES,
+        lotes: [],
+        localOnly: true,
+        overrides: {
+          'batches.create': () => {
+            throw erroComUsage('local_only_violation', 'Bloqueado pelo modo Somente local.')
+          },
+        },
+      })
+
+      render(
+        envolver(<LotesFontes projetoId="demo" projetoPath="/projetos/Demo.clipes" store={store} />),
+      )
+
+      await user.click(await screen.findByRole('checkbox', { name: /Live_12_11_final\.mp4/i }))
+      await user.click(screen.getByRole('radio', { name: /Groq \(remoto\)/i }))
+      await user.click(screen.getByRole('button', { name: /Iniciar lote com 1 Fonte/i }))
+
+      const alerta = await screen.findByRole('alert')
+      await waitFor(() => {
+        const alvoFocado = document.activeElement
+        expect(alvoFocado).not.toBeNull()
+        expect(
+          alvoFocado === alerta ||
+            alerta.contains(alvoFocado) ||
+            Boolean(alvoFocado?.contains(alerta)),
+        ).toBe(true)
+      })
+      expect(
+        scrollSpy.mock.calls.some(([el]) => el instanceof HTMLElement && (el === alerta || el.contains(alerta))),
+      ).toBe(true)
+    } finally {
+      HTMLElement.prototype.scrollIntoView = scrollOriginal
+    }
+  })
+
+  it('UI-25a: mantém hierarquia sem salto h1→h3 na lista de lotes', async () => {
+    mockBase({ fontes: FONTES_LOTES, lotes: [LOTE_RUNNING] })
+
+    render(
+      envolver(<Fontes projetoId="demo" projetoPath="/projetos/Demo.clipes" sub="lotes" store={store} />),
+    )
+
+    expect(await screen.findByRole('heading', { level: 3, name: 'Lote #4' })).toBeInTheDocument()
+    const listaRegiao = screen.getByRole('heading', { level: 3, name: 'Lote #4' }).closest('article')?.parentElement
+    expect(listaRegiao).not.toBeNull()
+    expect(within(listaRegiao!).getByRole('heading', { level: 2, name: /Lotes do Projeto/i })).toBeInTheDocument()
+
+    const niveis = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, h6')).map((h) =>
+      Number(h.tagName.slice(1)),
+    )
+    for (let i = 1; i < niveis.length; i += 1) {
+      expect(niveis[i]).toBeLessThanOrEqual(niveis[i - 1] + 1)
+    }
+  })
+
+  it('UI-28: não exibe "legacy" nem custo US$ 0,00 conflitante no ConfirmDialog quando seleção não tem perfil resolvido', async () => {
+    const user = userEvent.setup()
+
+    // Caso 1: rotaSelecao.profile === null e selectionPaid: false -> "Não configurado" + "Custo desconhecido"
+    mockBase({
+      fontes: FONTES_LOTES,
+      selecaoPerfil: null,
+      overrides: {
+        'batches.create': () => {
+          throw erroComUsage('confirmation_required', 'confirme o custo', {
+            selectionPaid: false,
+            transcriptionPaid: true,
+            audioEstimateMicroUsd: 12_000,
+            profile: 'legacy',
+            maxCostMicroUsd: null,
+            sources: 1,
+          })
+        },
+      },
+    })
+
+    const rSemPerfil = render(
+      envolver(<LotesFontes projetoId="demo" projetoPath="/projetos/Demo.clipes" store={store} />),
+    )
+
+    await user.click(await screen.findByRole('checkbox', { name: /Live_12_11_final\.mp4/i }))
+    await user.click(screen.getByRole('radio', { name: /Groq \(remoto\)/i }))
+    await user.click(screen.getByRole('button', { name: 'Iniciar lote com 1 Fonte' }))
+
+    const dlg1 = await screen.findByRole('alertdialog')
+    expect(dlg1).not.toHaveTextContent(/\blegacy\b/i)
+    const resumoSel1 = within(dlg1).getByRole('region', {
+      name: /Resumo de custo e privacidade: Seleção de Cortes/i,
+    })
+    expect(within(resumoSel1).getByText('Não configurado')).toBeInTheDocument()
+    expect(within(resumoSel1).getByText('Custo desconhecido')).toBeInTheDocument()
+    expect(within(resumoSel1).queryByText('US$ 0,00')).not.toBeInTheDocument()
+    rSemPerfil.unmount()
+
+    // Caso 2: rotaSelecao.profile === null mas selectionPaid: true e usage.profile: 'legacy' -> "Perfil configurado"
+    store = criarStoreFontesProjeto()
+    mockBase({
+      fontes: FONTES_LOTES,
+      selecaoPerfil: null,
+      overrides: {
+        'batches.create': () => {
+          throw erroComUsage('confirmation_required', 'confirme o custo', {
+            selectionPaid: true,
+            transcriptionPaid: true,
+            audioEstimateMicroUsd: 12_000,
+            profile: 'legacy',
+            maxCostMicroUsd: null,
+            sources: 1,
+          })
+        },
+      },
+    })
+
+    render(
+      envolver(<LotesFontes projetoId="demo" projetoPath="/projetos/Demo.clipes" store={store} />),
+    )
+
+    await user.click(await screen.findByRole('checkbox', { name: /Live_12_11_final\.mp4/i }))
+    await user.click(screen.getByRole('radio', { name: /Groq \(remoto\)/i }))
+    await user.click(screen.getByRole('button', { name: 'Iniciar lote com 1 Fonte' }))
+
+    const dlg2 = await screen.findByRole('alertdialog')
+    expect(dlg2).not.toHaveTextContent(/\blegacy\b/i)
+    const resumoSel2 = within(dlg2).getByRole('region', {
+      name: /Resumo de custo e privacidade: Seleção de Cortes/i,
+    })
+    expect(within(resumoSel2).getByText('Perfil configurado')).toBeInTheDocument()
+    expect(within(resumoSel2).getByText('Custo desconhecido')).toBeInTheDocument()
+  })
 })
