@@ -435,12 +435,10 @@ fn view(id: i64) -> Result<Value, CoreError> {
         } else {
             None
         };
-        let fallback = row.fallback_from.as_deref().map(|from| {
-            json!({
-                "from": from,
-                "reason": row.fallback_reason.as_deref().unwrap_or(super::encoder::REASON_ENCODER_FAILED),
-            })
-        });
+        let fallback = super::encoder::fallback_view(
+            row.fallback_from.as_deref(),
+            row.fallback_reason.as_deref(),
+        );
         items_json.push(json!({
             "position": row.position,
             "sourceId": row.source_id,

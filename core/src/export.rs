@@ -1128,6 +1128,9 @@ fn cmd_status(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         let code:Option<String>=r.get(3)?;
         let message:Option<String>=r.get(4)?;
         let details:Option<String>=r.get(5)?;
+        let encoder:Option<String>=r.get(6)?;
+        let fallback_from:Option<String>=r.get(7)?;
+        let fallback_reason:Option<String>=r.get(8)?;
         let error=code.map(|code| {
             let mut obj=json!({"code":code,"message":message});
             if let Some(usage)=details.and_then(|raw| serde_json::from_str::<Value>(&raw).ok()) {
@@ -1135,7 +1138,16 @@ fn cmd_status(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             }
             obj
         });
-        Ok(json!({"job":id,"state":r.get::<_,String>(0)?,"progress":r.get::<_,i64>(1)?,"output":request["output"],"error":error}))
+        let encoder_fallback = encoder::fallback_view(fallback_from.as_deref(), fallback_reason.as_deref());
+        Ok(json!({
+            "job": id,
+            "state": r.get::<_,String>(0)?,
+            "progress": r.get::<_,i64>(1)?,
+            "output": request["output"],
+            "error": error,
+            "encoder": encoder,
+            "encoderFallback": encoder_fallback,
+        }))
     })
     })
 }
@@ -1333,5 +1345,65 @@ pub(crate) fn glyph_missing_error(
             "font": font,
             "missing_glyphs": missing,
         })),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn export_status_serializes_encoder_and_encoder_fallback() {
+        let root = tempfile::Builder::new()
+            .prefix("clipes-289-")
+            .tempdir()
+            .unwrap();
+        let _data_dir = crate::test_env::set_data_dir(&root.path().join("data"));
+        let call = |name, args| crate::dispatch(name, args, &mut |_| {}).unwrap();
+        call(
+            "projects.create",
+            json!({"parent": root.path(), "name": "Canal"}),
+        );
+
+        let (fallback_job, direct_job) = projects::with_writer(|c| {
+            c.execute(
+                "INSERT INTO jobs(kind,safety,state,progress) VALUES (?1,'local','completed',100)",
+                [JOB_KIND],
+            )?;
+            let fallback_job = c.last_insert_rowid();
+            c.execute(
+                "INSERT INTO exports(job_id,request,encoder,fallback_from,fallback_reason) VALUES (?1,?2,'libx264','h264_nvenc',?3)",
+                (
+                    fallback_job,
+                    json!({"output": "fallback.mp4"}).to_string(),
+                    encoder::REASON_ENCODER_FAILED,
+                ),
+            )?;
+
+            c.execute(
+                "INSERT INTO jobs(kind,safety,state,progress) VALUES (?1,'local','completed',100)",
+                [JOB_KIND],
+            )?;
+            let direct_job = c.last_insert_rowid();
+            c.execute(
+                "INSERT INTO exports(job_id,request,encoder,fallback_from,fallback_reason) VALUES (?1,?2,'h264_nvenc',NULL,NULL)",
+                (direct_job, json!({"output": "direct.mp4"}).to_string()),
+            )?;
+            Ok((fallback_job, direct_job))
+        })
+        .unwrap();
+
+        let fallback_status = call("export.status", json!({"job": fallback_job}));
+        assert_eq!(fallback_status["encoder"], "libx264");
+        assert_eq!(
+            fallback_status["encoderFallback"],
+            json!({"from": "h264_nvenc", "reason": encoder::REASON_ENCODER_FAILED})
+        );
+
+        let direct_status = call("export.status", json!({"job": direct_job}));
+        assert_eq!(direct_status["encoder"], "h264_nvenc");
+        assert_eq!(direct_status["encoderFallback"], Value::Null);
+
+        call("projects.close", json!({}));
     }
 }

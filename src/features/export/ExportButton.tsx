@@ -11,7 +11,7 @@ import { coreDispatch, type ExportRequest } from '@/lib/core';
 import { useText } from '@/lib/i18n';
 
 type ExportError = { code: string; message?: string; usage?: { font?: string; missing_glyphs?: MissingGlyph[] } | null };
-type Status = { job: number; state: 'queued' | 'running' | 'completed' | 'cancelled' | 'failed'; progress: number; error?: ExportError | null; encoder_fallback?: { from: string; reason: string } | null };
+type Status = { job: number; state: 'queued' | 'running' | 'completed' | 'cancelled' | 'failed'; progress: number; error?: ExportError | null; encoder?: string | null; encoderFallback?: { from: string; reason: string } | null };
 const texts = {
   'pt-BR': {
     export: 'Exportar', save: 'Salvar Corte', pending: 'Aprove este candidato para exportar.', queued: 'Export na fila.', running: 'Exportando Corte', cancel: 'Cancelar export', completed: 'Corte exportado.', cancelled: 'Export cancelado.', fallback: 'O encoder de hardware falhou; este Corte foi exportado com x264, mais lento. Veja Preferências.',
@@ -187,7 +187,7 @@ export function ExportButton({ sourceId, candidateId, clipId, title, startId, en
     {active && <Button tamanho="sm" disabled={busy} onClick={() => void cancel()}>{t.cancel}</Button>}
     {status && <span role="status" className="text-sm text-fg-2">{status.state === 'running' ? `${t.running} · ${status.progress}%` : status.state === 'failed' ? '' : t[status.state]}</span>}
     {active && <progress value={status?.progress ?? 0} max={100} aria-label={t.running} className="w-28 max-w-full" />}
-    {status?.state === 'completed' && status.encoder_fallback && <p role="status" className="text-sm text-fg-2" data-export-fallback>{t.fallback}</p>}
+    {status?.state === 'completed' && status.encoderFallback && <p role="status" className="text-sm text-fg-2" data-export-fallback>{t.fallback}</p>}
     {errorMessage && <p role="alert" className="text-sm text-danger">{errorMessage}</p>}
     {rawError?.code === 'export_glyph_missing' && missingGlyphs.length > 0 && (
       <Button ref={fixTrigger} tamanho="sm" onClick={() => openFix(missingGlyphs[0])} data-export-fix-glyph>{t.fixWord}</Button>

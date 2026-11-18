@@ -1,5 +1,5 @@
 // Só o harness de navegador usa este módulo; o desktop sempre chama o núcleo.
-type Mock = { job: number; state: string; progress: number; started: number; error: { code: string } | null };
+type Mock = { job: number; state: string; progress: number; started: number; error: { code: string } | null; encoder: string | null; encoderFallback: { from: string; reason: string } | null };
 type BatchItemMock = {
   position: number; sourceId: number; candidateId: number; clipId: number | null; jobId: number | null;
   title: string; filename: string; durationUs: number;
@@ -131,13 +131,13 @@ export function exportMock(
       };
     }
     const job = ++serial;
-    jobs.set(job, { job, state: 'running', progress: 35, started: Date.now(), error: null });
+    jobs.set(job, { job, state: 'running', progress: 35, started: Date.now(), error: null, encoder: null, encoderFallback: null });
     return { job, state: 'queued' };
   }
   const item = jobs.get(a.job ?? a.id ?? -1);
   if (!item) throw { code: 'invalid_job' };
   if (name === 'jobs.cancel') item.state = 'cancelled';
-  if (item.state === 'running' && Date.now() - item.started > 1500) { item.state = 'completed'; item.progress = 100; }
-  if (item.state === 'completed' && new URLSearchParams(location.search).has('export-fallback')) return { ...item, encoder: 'libx264', encoder_fallback: { from: 'h264_nvenc', reason: 'encoder_failed' } };
+  if (item.state === 'running' && Date.now() - item.started > 1500) { item.state = 'completed'; item.progress = 100; item.encoder = 'h264_nvenc'; }
+  if (item.state === 'completed' && new URLSearchParams(location.search).has('export-fallback')) return { ...item, encoder: 'libx264', encoderFallback: { from: 'h264_nvenc', reason: 'encoder_failed' } };
   return item;
 }

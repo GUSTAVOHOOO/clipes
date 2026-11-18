@@ -353,6 +353,23 @@ pub struct Fallback {
     pub from: String,
     pub reason: &'static str,
 }
+
+/// Representação JSON de fallback compartilhada entre `export.status` e `export.batch.*`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct FallbackView<'a> {
+    pub(crate) from: &'a str,
+    pub(crate) reason: &'a str,
+}
+
+pub(crate) fn fallback_view<'a>(
+    from: Option<&'a str>,
+    reason: Option<&'a str>,
+) -> Option<FallbackView<'a>> {
+    from.map(|from| FallbackView {
+        from,
+        reason: reason.unwrap_or(REASON_ENCODER_FAILED),
+    })
+}
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Outcome {
     /// Encoder que de fato gerou o arquivo.
