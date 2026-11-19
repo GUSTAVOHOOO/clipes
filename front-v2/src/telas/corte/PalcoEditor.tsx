@@ -395,10 +395,11 @@ export function PalcoEditor({
 
   // Sincronização de elementos <video> / <audio>
   const urlProxy = editor.proxy.key ? mediaUrl(`proxy/${editor.proxy.key}`) : null
+  const origemProxyUs = doc?.windowStartUs ?? Math.max(0, startUs - 120_000_000)
 
   useEffect(() => {
     const videos = [refVideoPrincipal.current, refVideoSecundario.current, refVideoFonte.current]
-    const targetSec = Math.max(0, tempoUs / 1_000_000)
+    const targetSec = Math.max(0, (tempoUs - origemProxyUs) / 1_000_000)
     for (const v of videos) {
       if (!v) continue
       v.muted = mudo || v !== refVideoPrincipal.current
@@ -429,7 +430,7 @@ export function PalcoEditor({
         v.pause?.()
       }
     }
-  }, [ganhoProxy, mudo, reproduzindo, taxa, tempoUs, urlProxy, modo])
+  }, [ganhoProxy, mudo, origemProxyUs, reproduzindo, taxa, tempoUs, urlProxy, modo])
 
   useEffect(() => {
     const audio = refAudioTrilha.current

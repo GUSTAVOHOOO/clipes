@@ -673,4 +673,149 @@ describe('<PalcoEditor>', () => {
     unmount()
     localStorage.clear()
   })
+
+  it('posiciona <video> do proxy relativo a windowStartUs (e usa fallback max(0, startUs - 120 s) quando ausente)', async () => {
+    const user = userEvent.setup()
+
+    // 1) Corte depois de 2 min na Fonte com windowStartUs explícito (layout duplo cobre principal + secundário, e alterna para Fonte 16:9)
+    const docComJanela = criarDoc({
+      startUs: 600_000_000,
+      endUs: 630_000_000,
+      windowStartUs: 480_000_000,
+      windowEndUs: 750_000_000,
+      crop: {
+        layout: 'gameplay_webcam',
+        explicitLayout: 'gameplay_webcam',
+        splitRatio: 0.3,
+        suggested: null,
+        edits: [],
+        gameplayWebcam: {
+          top: { suggested: null, edits: [{ timeUs: 600_000_000, x: 0.05, y: 0.05, width: 0.3, height: 0.3 }] },
+          bottom: { suggested: null, edits: [{ timeUs: 600_000_000, x: 0.2, y: 0.2, width: 0.6, height: 0.7 }] },
+        },
+        twoPeople: null,
+        resolved: [],
+        hasCrop: true,
+      },
+    })
+    const storeComJanela = await prepararSessao({ doc: docComJanela })
+    const snapComJanela = storeComJanela.obterSnapshot()
+
+    const { unmount: unmount1 } = render(
+      envolver(
+        <PalcoEditor
+          projetoPath="/projetos/demo.clipes"
+          corteId="10"
+          estadoEditor={{
+            ...snapComJanela,
+            documentoAtivo: snapComJanela.previaLocal ?? snapComJanela.oficial,
+            store: storeComJanela,
+            abrir: storeComJanela.abrir,
+            salvarAgora: storeComJanela.salvarAgora,
+            garantirSalvoParaSaida: storeComJanela.garantirSalvoParaSaida,
+          }}
+          tempoUs={605_000_000}
+          reproduzindo={false}
+          acoesBarra={ACOES_EXEMPLO}
+          popoverAberto={null}
+          aoMudarPopoverAberto={() => {}}
+          aoMudarTempoUs={() => {}}
+          aoMudarReproduzindo={() => {}}
+          aoRelocalizarFonte={() => {}}
+        />,
+      ),
+    )
+
+    const videosDuplo = Array.from(document.querySelectorAll('video'))
+    expect(videosDuplo).toHaveLength(2)
+    for (const v of videosDuplo) {
+      expect(v.currentTime).toBeCloseTo(125, 3)
+    }
+
+    await user.click(screen.getByRole('radio', { name: 'Enquadrar na Fonte 16:9' }))
+    const videoFonte = screen.getByTestId('quadro-fonte-16-9').querySelector('video')
+    expect(videoFonte).not.toBeNull()
+    expect(videoFonte!.currentTime).toBeCloseTo(125, 3)
+    unmount1()
+
+    // 2) Ausência de windowStartUs com startUs > 120 s (fallback: startUs - 120 s = 480 s)
+    const docSemJanela = criarDoc({
+      startUs: 600_000_000,
+      endUs: 630_000_000,
+      windowStartUs: undefined,
+      windowEndUs: undefined,
+    })
+    const storeSemJanela = await prepararSessao({ doc: docSemJanela })
+    const snapSemJanela = storeSemJanela.obterSnapshot()
+
+    const { unmount: unmount2 } = render(
+      envolver(
+        <PalcoEditor
+          projetoPath="/projetos/demo.clipes"
+          corteId="10"
+          estadoEditor={{
+            ...snapSemJanela,
+            documentoAtivo: snapSemJanela.previaLocal ?? snapSemJanela.oficial,
+            store: storeSemJanela,
+            abrir: storeSemJanela.abrir,
+            salvarAgora: storeSemJanela.salvarAgora,
+            garantirSalvoParaSaida: storeSemJanela.garantirSalvoParaSaida,
+          }}
+          tempoUs={605_000_000}
+          reproduzindo={false}
+          acoesBarra={ACOES_EXEMPLO}
+          popoverAberto={null}
+          aoMudarPopoverAberto={() => {}}
+          aoMudarTempoUs={() => {}}
+          aoMudarReproduzindo={() => {}}
+          aoRelocalizarFonte={() => {}}
+        />,
+      ),
+    )
+
+    const videoFallback = document.querySelector('video')
+    expect(videoFallback).not.toBeNull()
+    expect(videoFallback!.currentTime).toBeCloseTo(125, 3)
+    unmount2()
+
+    // 3) Ausência de windowStartUs nos primeiros 2 min (fallback limitado a 0)
+    const docInicio = criarDoc({
+      startUs: 30_000_000,
+      endUs: 60_000_000,
+      windowStartUs: undefined,
+      windowEndUs: undefined,
+    })
+    const storeInicio = await prepararSessao({ doc: docInicio })
+    const snapInicio = storeInicio.obterSnapshot()
+
+    const { unmount: unmount3 } = render(
+      envolver(
+        <PalcoEditor
+          projetoPath="/projetos/demo.clipes"
+          corteId="10"
+          estadoEditor={{
+            ...snapInicio,
+            documentoAtivo: snapInicio.previaLocal ?? snapInicio.oficial,
+            store: storeInicio,
+            abrir: storeInicio.abrir,
+            salvarAgora: storeInicio.salvarAgora,
+            garantirSalvoParaSaida: storeInicio.garantirSalvoParaSaida,
+          }}
+          tempoUs={35_000_000}
+          reproduzindo={false}
+          acoesBarra={ACOES_EXEMPLO}
+          popoverAberto={null}
+          aoMudarPopoverAberto={() => {}}
+          aoMudarTempoUs={() => {}}
+          aoMudarReproduzindo={() => {}}
+          aoRelocalizarFonte={() => {}}
+        />,
+      ),
+    )
+
+    const videoInicio = document.querySelector('video')
+    expect(videoInicio).not.toBeNull()
+    expect(videoInicio!.currentTime).toBeCloseTo(35, 3)
+    unmount3()
+  })
 })
