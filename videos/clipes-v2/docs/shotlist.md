@@ -40,3 +40,6 @@ Kit `audio/kit.json` a partir do preset `launch` do earshot 0.4.1. Os papéis es
 
 ## Perguntas em aberto
 - Nenhuma: o brief responde ao intake. Sem locução.
+
+## Nota do diretor (rodada 6)
+Nos últimos 0,4 s (a partir da batida 58,7) o texto do cartão final sai por máscara e o filme termina em marca + faixa de telas: a emenda do loop (9:16 repete sozinho em Reels/Shorts) pede um último quadro próximo do primeiro (`loop_seam_jump` ≈ 10). CTA e URL ficam legíveis de 26,0 a 29,4 s.

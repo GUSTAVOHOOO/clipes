@@ -267,16 +267,16 @@
       S.F = foot(S.scr.cam, 68, 120, rectCss(R.prevEd, 'border-radius:6px'));
       S.leg = reg(el('img', { class: 'abs', src: CAP + 'corte-editar.leg.png', style: rectCss(R.prevEd) }, S.scr.cam));
       S.cur = cursor(root);
-      S.h = head(root, P(['Legenda *palavra *por *palavra.'], ['Legenda', '*palavra *por', '*palavra.']), { size: P(92, 96), y: P(800, 290) });
+      S.h = head(root, P(['Legenda *palavra *por *palavra.'], ['Legenda', '*palavra *por', '*palavra.']), { size: P(92, 96), y: P(840, 290) });
       S.e = TALL ? eyebrow(root, ['Estilo, fonte e posição', 'no painel Legenda.'], 290 + 3 * 96 * 1.12 + 36)
-        : head(root, ['Estilo, fonte e posição no painel Legenda.'], { cls: 'eyebrow', size: ES, y: 925 });
+        : head(root, ['Estilo, fonte e posição no painel Legenda.'], { cls: 'eyebrow', size: ES, y: 962 });
     },
     run(t, b, S) {
       drawFoot(S.F, t);
       const [cx, cy, z] = camTrk(t, P(
         [[28, 700, 380, 1.3], [29.3, 700, 470, 1.6], [32.4, 720, 400, 1.25], [36.1, 990, 400, 1.95]],
-        [[28, 300, 380, 1.8], [29.3, 943, 470, 2.6], [32.4, 540, 420, 1.0], [36.1, 1180, 390, 1.9]]));
-      const f = frame(S.scr, P({ x: 60, y: 56, w: 1800, h: 700 }, VP), cx, cy, z * (1 + 0.025 * seg(t, 36, 40)), P(0, -2), 1);
+        [[28, 300, 380, 1.8], [29.3, 943, 470, 2.6], [32.4, 556, 420, 0.89], [36.1, 1180, 390, 1.9]]));
+      const f = frame(S.scr, P({ x: 60, y: 64, w: 1800, h: 740 }, VP), cx, cy, z * (1 + 0.025 * seg(t, 36, 40)), P(0, -2), 1);
       // a legenda real se revela palavra a palavra (mesma ordem do destaque do app)
       const edge = trk(t, [[28, R.leg[0] - 4], [beatOf('s5_w1') - 0.3 * LEADB, R.leg[1] + 2, 'snappy'], [beatOf('s5_w2') - 0.3 * LEADB, R.leg[2] + 2, 'snappy'], [beatOf('s5_w3') - 0.3 * LEADB, R.leg[3] + 8, 'snappy']]);
       put(S.leg, { clip: `inset(0px ${(R.prevEd.x + R.prevEd.w - edge).toFixed(1)}px 0px 0px)` });
@@ -320,10 +320,10 @@
       put(S.btn, { filter: `brightness(${(1 - 0.2 * press).toFixed(3)})` });
       // o botão (a única luz da tela) cresce e cobre o quadro: a saída colapsa no que vem depois
       // a luz do botão cresce levando o rótulo junto (até LBLMAX): o quadro laranja nunca fica vazio
-      const g = ease.inOut(seg(t, 46.9, 47.62));
+      const gx = seg(t, 46.9, 47.62), g = Math.pow(gx, 1.7);   // acelera até cobrir o quadro (pouco laranja chapado antes da wipe)
       const [bx, by] = toStage(f, R.lote.x, R.lote.y);
       const r = lerpR({ x: bx, y: by, w: R.lote.w * f.z, h: R.lote.h * f.z }, { x: -20, y: -20, w: W + 40, h: H + 40 }, g);
-      put(S.cover, { o: b >= 46.9 ? 1 : 0, x: r.x, y: r.y, css: { width: r.w + 'px', height: r.h + 'px', borderRadius: lerp(8 * f.z, 0, g) + 'px' } });
+      put(S.cover, { o: b >= 46.9 ? 1 : 0, x: r.x, y: r.y, css: { width: r.w + 'px', height: r.h + 'px', borderRadius: lerp(8 * f.z, 0, g) + 'px', filter: `blur(${(7 * Math.pow(clamp((gx - 0.45) / 0.5), 1.5) * (1 - seg(gx, 0.93, 1))).toFixed(2)}px)` } });
       const sl = Math.min(r.w / 351, LBLMAX);
       put(S.lbl, { x: (r.w - 351 * sl) / 2, y: (r.h - 36 * sl) / 2, s: sl });
       const wIn = 1 - ease.expoOut(seg(t, 40, 40.45));
@@ -336,7 +336,7 @@
   // ================================================================= 7 · Cartão final (48 → 60)
   const SCISSORS = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--sinal)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">'
     + '<g class="bl1"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M14.8 14.8 20 20"/></g><g class="bl2"><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/></g></svg>';
-  const XOUT = 58.9;   // beat em que o texto do cartão final começa a sair
+  const XOUT = 58.7;   // beat em que o texto do cartão final começa a sair
   scene({
     name: 'final', from: 'logo', to: 'done', pre: 0.34, cut: true,   // entra quando a luz do botão completa: no máximo 1 quadro laranja chapado
     build(root, S) {
@@ -356,7 +356,7 @@
       // marca reconstruída do componente Marca (design-system-v2/src/componentes/Tela.tsx:100-105):
       // ícone lucide Scissors (stroke 1.75, --sinal) + "Clipes" em Inter 600, gap 8/13 do corpo
       const LS = P(80, 76);
-      S.mask = el('div', { class: 'abs', style: `left:${PAD - 8}px;top:${P(150, 290)}px;overflow:hidden;padding:${LS * 0.2}px 8px;` }, S.push);
+      S.mask = el('div', { class: 'abs', style: `left:${PAD - 8}px;top:${P(150, 290) - LS * 1.2}px;overflow:hidden;padding:${LS * 1.4}px 8px ${LS * 0.2}px;` }, S.push);
       S.lock = reg(el('div', { style: `display:flex;align-items:center;gap:${LS * 0.6}px;font:600 ${LS}px/1 Display;letter-spacing:-0.02em;color:var(--t1)` }, S.mask,
         `<span style="width:${LS * 1.23}px;height:${LS * 1.23}px;display:block">${SCISSORS}</span><span>Clipes</span>`));
       S.bl = [...S.lock.querySelectorAll('.bl1, .bl2')].map((g) => reg(g));
@@ -381,16 +381,16 @@
       const LS = P(80, 76), lk = C.sp(t, 47.74, { response: 0.32, damping: 0.55 });   // cai de cima, pousa no beat 48 e assenta com overshoot visível
       put(S.lock, { y: -LS * 1.1 * (1 - lk) });   // começa acima da própria máscara: a borda da wipe nunca corta glifo
       const pl = spHit(t, 48.6, 'snappy');
-      const pO = sp(t, beatOf(XOUT) - 0.14, 'snappy');   // saída do pílula junto com as linhas (emenda do loop)
-      put(S.pill, { y: 80 * (1 - pl) - 80 * pO, hide: pl < 0.01 || pO > 0.995 });
+      const pO = sp(t, beatOf(XOUT) - 0.14, 'default');   // saída do pílula junto com as linhas (emenda do loop)
+      put(S.pill, { y: 80 * (1 - pl) - 80 * pO, hide: pl < 0.01 || pO > 0.6 });
       const sn = spHit(t, 'snip', 'snappy') - sp(t, beatOf('snip') + 0.35, 'default');
       S.bl.forEach((g, i) => put(g, { css: { transformOrigin: '12px 12px', transformBox: 'view-box', transform: `rotate(${((i ? -1 : 1) * 28 * sn).toFixed(3)}deg)` } }));
       // últimos 0,4 s: as linhas saem por máscara (de cima para baixo na ordem de leitura) e sobram marca + telas, perto do f0 (emenda do loop)
-      riseRows(t, S.tag, 'tag', XOUT, { exitStagger: 0 });
-      riseRows(t, [S.cta[0]], beatOf('cta') - 0.6, XOUT, { exitStagger: 0 });   // a linha de ênfase (Windows e Linux.) é a que cai no cue
-      riseRows(t, [S.cta[1]], 'cta', XOUT, { stagger: 0.03, exitStagger: 0 });
-      riseRows(t, S.url, 'url', XOUT, { stagger: 0.02, exitStagger: 0 });
-      riseRows(t, S.lic, 'lic', XOUT, { preset: 'snappy', stagger: 0.02, rowGap: 0.05, exitStagger: 0 });
+      riseRows(t, S.tag, 'tag', XOUT, { exitStagger: 0, exitPreset: 'default' });
+      riseRows(t, [S.cta[0]], beatOf('cta') - 0.6, XOUT, { exitStagger: 0, exitPreset: 'default' });   // a linha de ênfase (Windows e Linux.) é a que cai no cue
+      riseRows(t, [S.cta[1]], 'cta', XOUT, { stagger: 0.03, exitStagger: 0, exitPreset: 'default' });
+      riseRows(t, S.url, 'url', XOUT, { stagger: 0.02, exitStagger: 0, exitPreset: 'default' });
+      riseRows(t, S.lic, 'lic', XOUT, { preset: 'snappy', stagger: 0.02, rowGap: 0.05, exitStagger: 0, exitPreset: 'default' });
       // parallax: as telas sobem/andam mais devagar que a tipografia e nunca param
       const e = sp(t, 48.3, CAMSP), d = seg(t, 48, 60);
       const stp = ['tag', 'cta', 'url', 'lic', 'snip'].reduce((a, m) => a + sp(t, beatOf(m) - 0.1, 'default'), 0);
