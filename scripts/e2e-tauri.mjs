@@ -1223,7 +1223,11 @@ async function runSession2(ui, ctx) {
   await ui.waitForText(/Transcrição parcial salva até/, 'main', 20_000);
   await rm(ctx.holdFile, { force: true });
   await ui.clickButton('Retomar de', { exact: false });
-  const timelineText = await ui.waitForText('palavra', 'section[aria-label="Leitor da Transcrição"]', 40_000);
+  const timelineText = await ui.waitForText(
+    /palavra[\s\S]*[Ss]ilêncio|[Ss]ilêncio[\s\S]*palavra/,
+    'section[aria-label="Leitor da Transcrição"]',
+    40_000,
+  );
   assert.match(timelineText, /[Ss]ilêncio/);
   await ui.shot('09-transcription-timeline.png');
 
@@ -1417,7 +1421,7 @@ async function runSession3(ui, ctx) {
     const html = await ui.browser.execute(() =>
       Array.from(document.querySelectorAll('button'))
         .filter(x => (x.textContent || '').includes('Converter'))
-        .map(x => x.outerHTML.slice(0, 400)),
+        .map(x => ({ attrs: x.getAttributeNames().map(n => n + '=' + String(x.getAttribute(n)).slice(0, 40)).filter(s => !s.startsWith('class=')), text: x.textContent })),
     );
     console.log('[e2e] Botões Converter:', JSON.stringify(html));
     throw error;
