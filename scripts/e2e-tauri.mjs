@@ -218,9 +218,10 @@ async function startFakeProviderServer() {
       authorization: req.headers.authorization ?? null,
       body,
     });
-    const content = body.includes('"candidates"')
-      ? '{"schemaVersion":1,"candidates":[]}'
-      : '{"schemaVersion":1}';
+    const content =
+      body.includes('#JANELA') || body.includes('candidates')
+        ? '{"schemaVersion":1,"candidates":[]}'
+        : '{"schemaVersion":1}';
     const payload = JSON.stringify({
       choices: [{ message: { content } }],
       usage: { prompt_tokens: 14, completion_tokens: 5 },
@@ -1477,23 +1478,28 @@ async function runSession2(ui, ctx) {
   await ui.navigateHash(`#/projeto/${encodeURIComponent(ctx.canalId)}/cortes`);
   await ui.clickButton('Selecionar Cortes');
 
-  let aiConsoleData;
-  await ui.browser.waitUntil(
-    async () => {
-      aiConsoleData = await ui.readConsoleEvents();
-      const aiLive = aiConsoleData.live.filter(ev => ev.origin === 'ai');
-      const hasStart = aiLive.some(ev => /Seleção de Cortes/.test(ev.simple) && /qwen-local/.test(ev.simple));
-      const hasDone = aiLive.some(
-        ev => /Seleção de Cortes/.test(ev.simple) && /concluída/.test(ev.simple) && /tokens/.test(ev.simple),
-      );
-      return hasStart && hasDone;
-    },
-    {
-      timeout: 30_000,
-      interval: 250,
-      timeoutMsg: `WebView não recebeu eventos core-console completos da Seleção de Cortes (IA): ${JSON.stringify(aiConsoleData)}`,
-    },
-  );
+  let aiConsoleData = null;
+  try {
+    await ui.browser.waitUntil(
+      async () => {
+        aiConsoleData = await ui.readConsoleEvents();
+        const aiLive = aiConsoleData.live.filter(ev => ev.origin === 'ai');
+        const hasStart = aiLive.some(ev => /Seleção de Cortes/.test(ev.simple) && /qwen-local/.test(ev.simple));
+        const hasDone = aiLive.some(
+          ev => /Seleção de Cortes/.test(ev.simple) && /concluída/.test(ev.simple) && /tokens/.test(ev.simple),
+        );
+        return hasStart && hasDone;
+      },
+      {
+        timeout: 30_000,
+        interval: 250,
+      },
+    );
+  } catch (err) {
+    throw new Error(
+      `WebView não recebeu eventos core-console completos da Seleção de Cortes (IA): ${JSON.stringify(aiConsoleData)} (${err?.message ?? err})`,
+    );
+  }
   await ui.assertConsolePrivacy(ctx, aiConsoleData);
   const aiHistoryJoined = JSON.stringify(aiConsoleData.history.filter(ev => ev.origin === 'ai'));
   assert.match(aiHistoryJoined, /Seleção de Cortes/);
