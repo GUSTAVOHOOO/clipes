@@ -149,7 +149,7 @@
       const ry = (-2 * u - 9 * Math.sin(Math.PI * clamp(u))) * (1 - p);
       frame(S.scr, lerpR(r0, TALL ? { ...VP, y: VP.y + 40 } : VP, u), cx, cy, z, TALL ? 0 : ry, TALL ? 0 : 2 * u * (1 - p), lerp(TALL ? 0 : 14, 14, u));
       put(S.scr.img, { filter: `blur(${(6 * (1 - u) + 4 * p).toFixed(2)}px)` });
-      if (TALL) put(S.scrim, { o: 1 - u, hide: u > 0.995 });  // entorno fora de foco no close
+      if (TALL) put(S.scrim, { o: 1 - clamp((u - 0.8) / 0.2), hide: u > 0.995 });  // entorno fora de foco no close
       // manchete legível no quadro 0: as palavras são soltas antes de t = 0; "Corte." assenta no beat 0
       // manchete inteira já no quadro 0 (soltas antes de t = 0); sai pela máscara antes do mergulho no vídeo
       rise(t, S.h[0], [-1.5, -1.42], 6.9);
@@ -250,7 +250,7 @@
       // whip pan de saída: o quadro inteiro corre para a esquerda (o blur do render faz o chicote)
       const wo = ease.expoIn(seg(t, 27.6, 28));
       put(S.root, { x: -P(700, 420) * wo, filter: whipBlur(seg(t, 27.6, 28) > 0 ? 0.5 * wo + 0.25 : 0) });
-      riseRows(t, [S.h[0]], 20.5);
+      riseRows(t, [S.h[0]], P(20.5, 20.08));
       riseRows(t, [S.h[1]], 's4_ok');
       riseRows(t, S.e, 's4_ia', null, { preset: 'snappy', stagger: 0.05 });
     },
@@ -284,13 +284,14 @@
       const fo = spHit(t, 's5_rack', 'default', 0.13) - sp(t, 35.6, 'default');
       put(S.scr.img, { filter: `blur(${(3.5 * fo).toFixed(2)}px)` });
       put(S.btn, { filter: `blur(${(3.5 * fo).toFixed(2)}px)` });
+      put(S.fr13, { filter: `brightness(${(1 + 0.3 * fo).toFixed(3)})` });
       const press = moveCursor(t, S.cur, f, [[34.6, 1060, 560], [35.8, ...ctr(R.legendaBtn)]], 's5_leg');
       if (b < 35.86) put(S.btn, { filter: `blur(${(3.5 * fo).toFixed(2)}px) brightness(${(1 - 0.2 * press).toFixed(3)})` });
       put(S.pan, { o: b >= 35.86 ? 1 : 0 });
       // whip de entrada e de saída
       const wIn = 1 - ease.expoOut(seg(t, 28, 28.45)), wOut = ease.expoIn(seg(t, 39.6, 40));
       put(S.root, { x: P(700, 420) * wIn - P(700, 420) * wOut, filter: wIn > 0.01 ? whipBlur(1 - 0.5 * wIn) : wOut > 0.01 ? whipBlur(0.5 * wOut) : 'none' });
-      riseRows(t, S.h, 28.5);
+      riseRows(t, S.h, P(28.5, 28.1));
       riseRows(t, S.e, 36.4, null, { preset: 'snappy', stagger: 0.05 });
     },
   });
@@ -319,7 +320,7 @@
       put(S.btn, { filter: `brightness(${(1 - 0.2 * press).toFixed(3)})` });
       // o botão (a única luz da tela) cresce e cobre o quadro: a saída colapsa no que vem depois
       // a luz do botão cresce levando o rótulo junto (até LBLMAX): o quadro laranja nunca fica vazio
-      const g = ease.inOut(seg(t, 46.9, 47.82));
+      const g = ease.inOut(seg(t, 46.9, 47.62));
       const [bx, by] = toStage(f, R.lote.x, R.lote.y);
       const r = lerpR({ x: bx, y: by, w: R.lote.w * f.z, h: R.lote.h * f.z }, { x: -20, y: -20, w: W + 40, h: H + 40 }, g);
       put(S.cover, { o: b >= 46.9 ? 1 : 0, x: r.x, y: r.y, css: { width: r.w + 'px', height: r.h + 'px', borderRadius: lerp(8 * f.z, 0, g) + 'px' } });
@@ -336,7 +337,7 @@
   const SCISSORS = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--sinal)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">'
     + '<g class="bl1"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M14.8 14.8 20 20"/></g><g class="bl2"><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/></g></svg>';
   scene({
-    name: 'final', from: 'logo', to: 'done', pre: 0.12, cut: true,   // entra quando a luz do botão completa: no máximo 1 quadro laranja chapado
+    name: 'final', from: 'logo', to: 'done', pre: 0.34, cut: true,   // entra quando a luz do botão completa: no máximo 1 quadro laranja chapado
     build(root, S) {
       root.style.background = 'var(--area)';
       // faixa de telas reais ao fundo (parallax), escurecida: profundidade sem gradiente
@@ -349,14 +350,14 @@
       S.push = reg(el('div', { class: 'abs', style: `width:${W}px;height:${H}px;transform-origin:${PAD}px ${H / 2}px` }, root));
       // marca reconstruída do componente Marca (design-system-v2/src/componentes/Tela.tsx:100-105):
       // ícone lucide Scissors (stroke 1.75, --sinal) + "Clipes" em Inter 600, gap 8/13 do corpo
-      const LS = P(100, 116);
-      S.mask = el('div', { class: 'abs', style: `left:${PAD - 8}px;top:${P(120, 200)}px;overflow:hidden;padding:${LS * 0.2}px 8px;` }, S.push);
+      const LS = P(80, 76);
+      S.mask = el('div', { class: 'abs', style: `left:${PAD - 8}px;top:${P(150, 290)}px;overflow:hidden;padding:${LS * 0.2}px 8px;` }, S.push);
       S.lock = reg(el('div', { style: `display:flex;align-items:center;gap:${LS * 0.6}px;font:600 ${LS}px/1 Display;letter-spacing:-0.02em;color:var(--t1)` }, S.mask,
         `<span style="width:${LS * 1.23}px;height:${LS * 1.23}px;display:block">${SCISSORS}</span><span>Clipes</span>`));
       S.bl = [...S.lock.querySelectorAll('.bl1, .bl2')].map((g) => reg(g));
-      S.pmask = el('div', { class: 'abs', style: `left:${PAD}px;top:${P(330, 460)}px;width:200px;height:60px;overflow:hidden` }, S.push);
+      S.pmask = el('div', { class: 'abs', style: `left:${PAD}px;top:${P(290, 420)}px;width:200px;height:60px;overflow:hidden` }, S.push);
       S.pill = reg(el('div', { class: 'pill', style: 'left:0;top:0' }, S.pmask, 'v2.0.0'), { y: 80 });
-      const Y = P(420, 540);
+      const Y = P(380, 520);
       S.tag = head(S.push, ['Interface nova. Mesmo núcleo.'], { y: Y, size: P(60, 54) });
       S.cta = head(S.push, ['Baixe grátis para', 'Windows e Linux.'], { y: Y + P(100, 100), size: P(104, 96) });
       S.url = head(S.push, ['github.com/GUSTAVOHOOO/clipes'], { y: Y + P(360, 345), size: P(54, 50) });
@@ -368,15 +369,15 @@
     run(t, b, S) {
       // a cobertura laranja do plano 6 recolhe para cima e revela o cartão
       // a cobertura recolhe para BAIXO: o logo (no alto) aparece primeiro e nunca é cruzado por ela
-      const c = ease.inOut(seg(t, 47.76, 48.2));   // wipe contínuo de ~0,22 s; nada laranja depois de 24,1 s
+      const c = ease.inOut(seg(t, 47.72, 48.08));   // wipe contínuo de ~0,22 s; nada laranja depois de 24,1 s
       put(S.cover, { clip: `inset(${(100 * c).toFixed(3)}% 0 0 0)`, hide: c > 0.999 });
       put(S.push, { s: 1 + 0.08 * seg(t, 48, 60) });   // linear: nunca para, nem no último quadro
-      const LS = P(100, 116), lk = C.sp(t, 47.55, { response: 0.55, damping: 0.62 });   // cai de cima, pousa no beat 48 e assenta com overshoot visível
-      put(S.lock, { y: -LS * 0.75 * (1 - lk) });
+      const LS = P(80, 76), lk = C.sp(t, 47.66, { response: 0.32, damping: 0.55 });   // cai de cima, pousa no beat 48 e assenta com overshoot visível
+      put(S.lock, { y: -LS * 0.8 * (1 - lk) });
       const pl = spHit(t, 48.6, 'snappy');
       put(S.pill, { y: 80 * (1 - pl), hide: pl < 0.01 });
       const sn = spHit(t, 'snip', 'snappy') - sp(t, beatOf('snip') + 0.35, 'default');
-      S.bl.forEach((g, i) => put(g, { css: { transformOrigin: '12px 12px', transformBox: 'view-box', transform: `rotate(${((i ? -1 : 1) * 9 * sn).toFixed(3)}deg)` } }));
+      S.bl.forEach((g, i) => put(g, { css: { transformOrigin: '12px 12px', transformBox: 'view-box', transform: `rotate(${((i ? -1 : 1) * 28 * sn).toFixed(3)}deg)` } }));
       riseRows(t, S.tag, 'tag');
       riseRows(t, [S.cta[0]], beatOf('cta') - 0.6);   // a linha de ênfase (Windows e Linux.) é a que cai no cue
       riseRows(t, [S.cta[1]], 'cta', null, { stagger: 0.03 });
@@ -388,8 +389,8 @@
       S.shots.forEach((s, i) => {
         const sc = P(0.4, 0.42);
         const x = P(1210 + i * 70, 40 + i * (1440 * 0.42 + 36)) - P(0, 300) * d - P(0, 150) * stp;
-        const y = P(-120 + i * (900 * 0.4 + 36), 1060 + i * 30) - P(140, 0) * d - P(95, 0) * stp + 160 * (1 - e);
-        put(s, { x, y, s: sc, css: { transform: `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) perspective(2400px) rotateY(${P(-16, -10)}deg) rotateX(4deg) scale(${sc})`, filter: 'brightness(1.2) saturate(0)' } });
+        const y = P(-120 + i * (900 * 0.4 + 36), 1090 + i * 30) - P(140, 0) * d - P(95, 0) * stp + 160 * (1 - e);
+        put(s, { x, y, s: sc, css: { transform: `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) perspective(2400px) rotateY(${P(-16, -10)}deg) rotateX(4deg) scale(${sc})`, filter: 'brightness(1.55) saturate(.25)' } });
       });
     },
   });
