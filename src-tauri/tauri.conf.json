@@ -9,7 +9,45 @@
     "beforeBuildCommand": "bun run --cwd front-v2 build",
     "frontendDist": "../front-v2/dist"
   },
-  "app": { "windows": [{ "title": "Clipes", "width": 900, "height": 600 }] },
+  "app": {
+    "windows": [{ "title": "Clipes", "width": 900, "height": 600 }],
+    "security": {
+      "csp": {
+        "default-src": ["'self'"],
+        "script-src": ["'self'"],
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "img-src": [
+          "'self'",
+          "clipes-media:",
+          "http://clipes-media.localhost",
+          "http://127.0.0.1:*",
+          "blob:",
+          "data:"
+        ],
+        "media-src": [
+          "'self'",
+          "clipes-media:",
+          "http://clipes-media.localhost",
+          "http://127.0.0.1:*",
+          "blob:",
+          "data:"
+        ],
+        "font-src": ["'self'"],
+        "connect-src": [
+          "'self'",
+          "ipc:",
+          "http://ipc.localhost",
+          "clipes-media:",
+          "http://clipes-media.localhost",
+          "http://127.0.0.1:*"
+        ],
+        "object-src": ["'none'"],
+        "base-uri": ["'self'"],
+        "form-action": ["'self'"],
+        "frame-ancestors": ["'none'"]
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": ["nsis", "appimage", "deb"],

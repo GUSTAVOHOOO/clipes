@@ -256,7 +256,7 @@ jobs:
       - name: Check JS production licenses
         shell: bash
         run: |
-          node --test scripts/license-policy.test.mjs scripts/linux-validation.test.mjs scripts/smoke-package.test.mjs
+          node --test scripts/license-policy.test.mjs scripts/linux-validation.test.mjs scripts/smoke-package.test.mjs scripts/tauri-csp.test.mjs
           bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start . --excludePackages 'clipes@2.0.0' --json | node scripts/check-licenses.mjs
           bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start design-system --excludePackages '@clipes/design-system@0.1.0' --json | node scripts/check-licenses.mjs
           bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start front-v2 --excludePackages '@clipes/front-v2@2.0.0' --json | node scripts/check-licenses.mjs
