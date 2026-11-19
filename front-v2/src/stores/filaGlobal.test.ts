@@ -164,7 +164,7 @@ describe('store filaGlobal (filaGlobal.ts)', () => {
     chamarMock.mockImplementation(async (cmd: string) => {
       if (cmd === 'jobs.list') {
         return [
-          { id: 15, kind: 'export', safety: 'local', state: 'running', attempts: 1, checkpoint: null, progress: 55, project: 'demo', outcome: null, cost: null, batch: null, profile: null, budgetPause: null },
+          { id: 15, kind: 'export', safety: 'local', state: 'running', attempts: 1, checkpoint: null, progress: 55, project: 'demo', outcome: null, cost: null, batch: null, profile: null, budgetPause: null, startedAtMs: 1_700_000_000_000, targetLabel: 'Melhor jogada da live' },
         ]
       }
       if (cmd === 'batches.list') return []
@@ -182,6 +182,10 @@ describe('store filaGlobal (filaGlobal.ts)', () => {
       const criticos = operacoesCriticasEmVoo(fila.jobs())
       expect(criticos.some((j) => j.id === '15' && j.etapa === 'export')).toBe(true)
     })
+
+    const job15 = fila.jobs().find((j) => j.id === '15')
+    expect(job15?.startedAtMs).toBe(1_700_000_000_000)
+    expect(job15?.alvo).toBe('Melhor jogada da live')
 
     expect(mockListen).not.toHaveBeenCalled()
   })

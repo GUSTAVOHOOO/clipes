@@ -1,7 +1,7 @@
 import { isTauri } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { assinarProgressoMock } from '@core'
-import { useCallback, useMemo, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { ErroCore } from '~/core/cliente'
 
 export type EventoProgresso = {
@@ -24,6 +24,8 @@ export type Job = {
   erro?: { code: string; message: string }
   inicioMs: number
   etaMs?: number
+  startedAtMs?: number | null
+  alvo?: string | null
 }
 
 export type EstadoSalvamentoEditor = {
@@ -43,6 +45,8 @@ export type JobExterno = {
   mensagem: string
   estado: EstadoJob
   erro?: { code: string; message: string }
+  startedAtMs?: number | null
+  alvo?: string | null
 }
 
 export type Fila = {
@@ -188,6 +192,8 @@ export function criarFila(
       mensagem,
       estado,
       inicioMs,
+      ...(anterior?.job.startedAtMs !== undefined ? { startedAtMs: anterior.job.startedAtMs } : {}),
+      ...(anterior?.job.alvo !== undefined ? { alvo: anterior.job.alvo } : {}),
     }
 
     if (e.error) {
@@ -227,15 +233,27 @@ export function criarFila(
       }
 
       const percentual = anterior ? Math.max(anterior.job.percentual, bruto) : bruto
+      const startedAtMs =
+        item.startedAtMs !== undefined ? item.startedAtMs : (anterior?.job.startedAtMs ?? null)
+      const alvo = item.alvo !== undefined ? item.alvo : (anterior?.job.alvo ?? null)
       const mesmoEstado =
         anterior &&
         anterior.job.etapa === item.etapa &&
         anterior.job.percentual === percentual &&
         anterior.job.mensagem === item.mensagem &&
         anterior.job.estado === item.estado &&
-        anterior.job.erro?.code === item.erro?.code
+        anterior.job.erro?.code === item.erro?.code &&
+        (anterior.job.startedAtMs ?? null) === startedAtMs &&
+        (anterior.job.alvo ?? null) === alvo
 
       if (mesmoEstado) continue
+
+      const inicioMs =
+        typeof startedAtMs === 'number' && Number.isFinite(startedAtMs) && startedAtMs > 0
+          ? startedAtMs
+          : anterior
+            ? anterior.job.inicioMs
+            : agora()
 
       const proximo: Job = {
         id: item.id,
@@ -243,7 +261,9 @@ export function criarFila(
         percentual,
         mensagem: item.mensagem,
         estado: item.estado,
-        inicioMs: anterior ? anterior.job.inicioMs : agora(),
+        inicioMs,
+        startedAtMs,
+        alvo,
       }
       if (item.erro) {
         proximo.erro = { code: item.erro.code, message: item.erro.message }
@@ -382,6 +402,42 @@ export async function iniciarProgresso(fila: Fila = filaPadrao): Promise<() => v
       unlisten()
     }
   }
+}
+
+/** Formata tempo decorrido a partir de `startedAtMs` em PT-BR (`45 s`, `2 min 5 s`, `1 h 1 min`). */
+export function formatarTempoDecorrido(
+  startedAtMs: number | null | undefined,
+  agoraMs: number = Date.now(),
+): string | null {
+  if (typeof startedAtMs !== 'number' || !Number.isFinite(startedAtMs) || startedAtMs <= 0) {
+    return null
+  }
+  const totalSeg = Math.max(0, Math.floor((agoraMs - startedAtMs) / 1000))
+  if (totalSeg < 60) return `${totalSeg} s`
+  if (totalSeg < 3600) {
+    const min = Math.floor(totalSeg / 60)
+    const seg = totalSeg % 60
+    return seg > 0 ? `${min} min ${seg} s` : `${min} min`
+  }
+  const horas = Math.floor(totalSeg / 3600)
+  const min = Math.floor((totalSeg % 3600) / 60)
+  return min > 0 ? `${horas} h ${min} min` : `${horas} h`
+}
+
+/** Mantém o relógio atualizado apenas enquanto `ativo` for verdadeiro (para tempo decorrido). */
+export function useAgoraMs(ativo: boolean, intervaloMs = 1000): number {
+  const [agoraMs, setAgoraMs] = useState(() => Date.now())
+
+  useEffect(() => {
+    if (!ativo) return
+    setAgoraMs(Date.now())
+    const id = setInterval(() => {
+      setAgoraMs(Date.now())
+    }, intervaloMs)
+    return () => clearInterval(id)
+  }, [ativo, intervaloMs])
+
+  return agoraMs
 }
 
 /** Hook reativo para ler a lista de jobs da Fila via `useSyncExternalStore`. */

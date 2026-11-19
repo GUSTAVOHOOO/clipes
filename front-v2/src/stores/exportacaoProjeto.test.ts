@@ -446,4 +446,35 @@ describe('store exportacaoProjeto (exportacaoProjeto.ts)', () => {
     expect(result.current.totalAprovados).toBe(0)
     expect(result.current.totalProjeto).toBe(0)
   })
+
+  it('salvarPastaPadrao chama export.settings.set, atualiza settings e preserva valor anterior em erro (#484)', async () => {
+    const itens = criarItensReadiness(1)
+    instalarMocksBase(itens)
+    const implBase = chamarMock.getMockImplementation()!
+    chamarMock.mockImplementation(async (cmd: string, args: Record<string, unknown> = {}) => {
+      if (cmd === 'export.settings.set') {
+        if (args.last_directory === 'relativa') {
+          throw { code: 'export_destination', message: 'Escolha uma pasta existente.' }
+        }
+        return { last_directory: args.last_directory }
+      }
+      return implBase(cmd, args)
+    })
+
+    const store = criarStoreExportacaoProjeto()
+    await store.definirProjeto('/projetos/Demo.clipes')
+    expect(store.estado().settings).toEqual({ last_directory: '/exports' })
+
+    const salvo = await store.salvarPastaPadrao('/novos/cortes')
+    expect(salvo).toEqual({ last_directory: '/novos/cortes' })
+    expect(chamarMock).toHaveBeenCalledWith('export.settings.set', {
+      last_directory: '/novos/cortes',
+    })
+    expect(store.estado().settings).toEqual({ last_directory: '/novos/cortes' })
+
+    await expect(store.salvarPastaPadrao('relativa')).rejects.toMatchObject({
+      code: 'export_destination',
+    })
+    expect(store.estado().settings).toEqual({ last_directory: '/novos/cortes' })
+  })
 })

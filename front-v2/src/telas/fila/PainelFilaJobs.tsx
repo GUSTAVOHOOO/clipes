@@ -42,7 +42,7 @@ import { formatarTecla } from '~/comandos/atalhos'
 import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { abrirNoSistema } from '~/core/desktop'
 import { mensagemDeErro } from '~/core/erros'
-import { useFila, type Fila, type Job } from '~/core/progresso'
+import { formatarTempoDecorrido, useAgoraMs, useFila, type Fila, type Job } from '~/core/progresso'
 import { useEstadoForcado } from '~/shell/EstadoForcado'
 import {
   useFilaGlobal,
@@ -545,6 +545,21 @@ export function PainelFilaJobs({
     [filtro, operacoesGlobais],
   )
 
+  const temJobComStartedAt = useMemo(
+    () =>
+      aberto &&
+      Boolean(projetoAberto) &&
+      jobsFiltrados.some((job) => {
+        const live = mapaAoVivo.get(String(job.id))
+        const rodando = job.state === 'running' || (job.state === 'queued' && live?.estado === 'rodando')
+        if (!rodando) return false
+        const inicio = job.startedAtMs ?? live?.startedAtMs
+        return typeof inicio === 'number' && inicio > 0
+      }),
+    [aberto, jobsFiltrados, mapaAoVivo, projetoAberto],
+  )
+  const agoraMs = useAgoraMs(temJobComStartedAt)
+
   if (!aberto) return null
 
   const encProjeto = projetoAberto
@@ -845,6 +860,18 @@ export function PainelFilaJobs({
                     const podeEta =
                       estadoEfetivo === 'running' && !ehAi && live?.etaMs != null
                     const estagioTxt = live?.etapa ? traduzirEstagioAoVivo(live.etapa) : null
+                    const startedAtMsEfetivo = job.startedAtMs ?? live?.startedAtMs ?? null
+                    const decorridoTxt =
+                      estadoEfetivo === 'running'
+                        ? formatarTempoDecorrido(startedAtMsEfetivo, agoraMs)
+                        : null
+                    const detalheProgresso = [
+                      `${Math.round(pct)}%`,
+                      decorridoTxt ? `decorrido ${decorridoTxt}` : null,
+                      podeEta ? formatarEtaMs(live!.etaMs!) : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')
 
                     return (
                       <div
@@ -868,6 +895,14 @@ export function PainelFilaJobs({
                                 {nomeHumanoKind(job.kind)}
                               </strong>
                               <span className="num text-pequeno text-t3">#{job.id}</span>
+                              {job.targetLabel && (
+                                <span
+                                  className="max-w-full truncate text-pequeno text-t2"
+                                  title={job.targetLabel}
+                                >
+                                  · {job.targetLabel}
+                                </span>
+                              )}
                               {job.profile && (
                                 <span className="text-pequeno text-t3">
                                   · {rotuloPerfilVisivel(job.profile, job.profile)}
@@ -891,11 +926,7 @@ export function PainelFilaJobs({
                             <Progresso
                               valor={pct}
                               rotulo={estagioTxt ?? 'Processando'}
-                              detalhe={
-                                podeEta
-                                  ? `${Math.round(pct)}% · ${formatarEtaMs(live!.etaMs!)}`
-                                  : `${Math.round(pct)}%`
-                              }
+                              detalhe={detalheProgresso}
                             />
                             {!podeEta && (
                               <div className="flex items-center gap-1 text-micro text-t3">

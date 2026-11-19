@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProvedorAtalhos } from '~/comandos/atalhos'
 import { ErroCore } from '~/core/cliente'
+import { criarFila, type Fila } from '~/core/progresso'
 import type { ResultadoUseExportacaoProjeto, StoreExportacaoProjeto } from '~/stores/exportacaoProjeto'
 import type { LoteExportacao } from '~/stores/filaGlobal'
 import { Exportacao } from '~/telas/exportacao/Exportacao'
@@ -144,7 +145,7 @@ function criarEstado(
   }
 }
 
-function renderizar(sub: 'prontidao' | 'lotes' = 'prontidao') {
+function renderizar(sub: 'prontidao' | 'lotes' = 'prontidao', fila?: Fila) {
   return render(
     <ProvedorDicas>
       <ProvedorToast>
@@ -159,6 +160,7 @@ function renderizar(sub: 'prontidao' | 'lotes' = 'prontidao') {
                 projetoPath="/projetos/Demo.clipes"
                 sub={sub}
                 store={{} as StoreExportacaoProjeto}
+                fila={fila}
               />
             </main>
             <footer data-regiao="rodape">
@@ -371,5 +373,56 @@ describe('Exportacao (#/projeto/:id/exportacao)', () => {
     const evento = new KeyboardEvent('keydown', { key: 'F6', cancelable: true, bubbles: true })
     window.dispatchEvent(evento)
     expect(evento.defaultPrevented).toBe(false)
+  })
+
+  it('FaixaJob exibe targetLabel e tempo decorrido a partir de startedAtMs do job ativo na fila (#484)', () => {
+    const agoraFixo = Date.now()
+    const fila = criarFila(() => 'demo', () => agoraFixo)
+    fila.sincronizarExterno?.([
+      {
+        id: '5901',
+        etapa: 'export',
+        percentual: 45,
+        mensagem: 'export',
+        estado: 'rodando',
+        startedAtMs: agoraFixo - 35_000,
+        alvo: 'A virada do jogo',
+      },
+    ])
+
+    const loteAtivo: LoteExportacao = {
+      id: 6411,
+      scope: 'project',
+      sourceId: null,
+      outputDir: '/test/exports',
+      state: 'running',
+      status: 'running',
+      progress: 45,
+      counts: { total: 4, queued: 2, running: 1, completed: 1, failed: 0, cancelled: 0 },
+      items: [
+        {
+          position: 0,
+          sourceId: 4,
+          candidateId: 101,
+          clipId: null,
+          jobId: 5901,
+          title: 'A virada do jogo',
+          filename: 'virada.mp4',
+          durationUs: 20_000_000,
+          state: 'running',
+          progress: 45,
+          error: null,
+          encoder: null,
+          encoderFallback: null,
+        },
+      ],
+    }
+
+    estadoMockUseExportacao = criarEstado({ lotes: [loteAtivo] })
+    renderizar('prontidao', fila)
+
+    const faixa = screen.getByRole('status')
+    expect(faixa).toHaveTextContent(/A virada do jogo/)
+    expect(faixa).toHaveTextContent(/decorrido 3[56] s/i)
   })
 })

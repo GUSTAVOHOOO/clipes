@@ -209,6 +209,7 @@ export type StoreExportacaoProjeto = {
   atualizarProntidao: () => Promise<void>
   tentarNovamenteProntidao: () => Promise<void>
   carregarGuardrailsEscopo: (sourceId?: number | null) => Promise<RespostaGuardrails | null>
+  salvarPastaPadrao: (pasta: string) => Promise<ConfiguracoesExportacao>
   sincronizarJobs: (jobs: readonly Job[]) => void
 }
 
@@ -582,6 +583,14 @@ export function criarStoreExportacaoProjeto(opcoes?: {
     }
   }
 
+  async function salvarPastaPadrao(pasta: string): Promise<ConfiguracoesExportacao> {
+    const res = await chamar<ConfiguracoesExportacao>('export.settings.set', {
+      last_directory: pasta,
+    })
+    atualizar({ settings: res })
+    return res
+  }
+
   return {
     estado: () => atual,
     assinar: (fn) => {
@@ -596,6 +605,7 @@ export function criarStoreExportacaoProjeto(opcoes?: {
     atualizarProntidao,
     tentarNovamenteProntidao,
     carregarGuardrailsEscopo,
+    salvarPastaPadrao,
     sincronizarJobs,
   }
 }
@@ -610,6 +620,7 @@ export type ResultadoUseExportacaoProjeto = EstadoExportacaoProjeto & {
   atualizarProntidao: () => Promise<void>
   tentarNovamenteProntidao: () => Promise<void>
   carregarGuardrailsEscopo: (sourceId?: number | null) => Promise<RespostaGuardrails | null>
+  salvarPastaPadrao?: (pasta: string) => Promise<ConfiguracoesExportacao>
 }
 
 /** Hook reativo da Mesa de Prontidão e Lotes de Exportação via `export.readiness`. */
@@ -643,6 +654,7 @@ export function useExportacaoProjeto(
       atualizarProntidao: store.atualizarProntidao,
       tentarNovamenteProntidao: store.tentarNovamenteProntidao,
       carregarGuardrailsEscopo: store.carregarGuardrailsEscopo,
+      salvarPastaPadrao: store.salvarPastaPadrao,
     }),
     [estado, store],
   )

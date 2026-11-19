@@ -668,4 +668,47 @@ describe('Shell', () => {
     closeHandler?.({ event: 'app-close-requested', id: 1, payload: null })
     expect(await screen.findByRole('alertdialog')).toHaveTextContent(/Fechar o Clipes com operações em andamento/i)
   })
+
+  it('exibe targetLabel e tempo decorrido de startedAtMs na BarraStatus para job ativo de jobs.list (#484)', async () => {
+    mockIsTauri.mockReturnValue(false)
+    const agoraFixo = Date.now()
+    window.location.hash = '#/projeto/demo/cortes'
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'projects.current') return { id: 'demo', name: 'Demo', path: '/projetos/Demo.clipes' }
+      if (cmd === 'projects.local_only.get') return { open: true, enabled: false }
+      if (cmd === 'projects.recent') return []
+      if (cmd === 'jobs.list') {
+        return [
+          {
+            id: 9,
+            kind: 'export',
+            safety: 'local',
+            state: 'running',
+            attempts: 1,
+            checkpoint: null,
+            progress: 40,
+            project: 'demo',
+            outcome: null,
+            cost: null,
+            batch: null,
+            profile: null,
+            budgetPause: null,
+            startedAtMs: agoraFixo - 42_000,
+            targetLabel: 'Corte da final',
+          },
+        ]
+      }
+      if (cmd === 'batches.list' || cmd === 'export.batch.list') return []
+      if (cmd === 'jobs.budget.get') return { budgets: [] }
+      return null
+    })
+
+    const fila = criarFila(() => 'demo')
+    render(envolver(<Shell fila={fila}><div>Conteúdo</div></Shell>))
+
+    const footer = document.querySelector('footer')!
+    expect(await within(footer).findByText(/Corte da final/)).toBeInTheDocument()
+    expect(within(footer).getByText(/40%/)).toBeInTheDocument()
+    expect(within(footer).getByText(/4[23] s/)).toBeInTheDocument()
+  })
 })

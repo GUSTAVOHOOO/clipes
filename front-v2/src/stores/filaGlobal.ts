@@ -37,6 +37,8 @@ export type JobPersistido = {
   batch: string | null
   profile: string | null
   budgetPause: string | null
+  startedAtMs?: number | null
+  targetLabel?: string | null
   taskCost?: ResumoCustoJob | null
   profileCost?: ResumoCustoJob | null
   batchCost?: ResumoCustoJob | null
@@ -198,6 +200,8 @@ function paraJobExterno(job: JobPersistido): JobExterno {
     percentual: job.progress,
     mensagem: job.kind,
     estado: 'rodando',
+    startedAtMs: job.startedAtMs ?? null,
+    alvo: job.targetLabel ?? null,
   }
 }
 

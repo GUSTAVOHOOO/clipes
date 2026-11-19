@@ -450,7 +450,7 @@ function createInitialJobItems(): JobItemMock[] {
       batch: null,
       profile: null,
       budgetPause: null,
-      startedAtMs: 1_700_000_000_000,
+      startedAtMs: Date.now() - 45_000,
       targetLabel: 'changed.mp4',
       taskCost: null,
       profileCost: null,
@@ -2513,7 +2513,27 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       exportLastDirectoryMock = next;
       return { last_directory: exportLastDirectoryMock } as T;
     }
-    if ((name.startsWith('export.') && name !== 'export.captions') || (name === 'jobs.cancel' && (args as {id: number}).id >= 5900)) return exportMock(name, args, (source, pos) => mockCorrected.has(`${source}:${pos}`), { project: getActiveProjectMock(), emitProgress: emitirProgressoMock }) as T;
+    if ((name.startsWith('export.') && name !== 'export.captions') || (name === 'jobs.cancel' && (args as {id: number}).id >= 5900)) {
+      const result = exportMock(name, args, (source, pos) => mockCorrected.has(`${source}:${pos}`), { project: getActiveProjectMock(), emitProgress: emitirProgressoMock });
+      if (name === 'export.batch.start') {
+        const dir = (args as { output_dir?: unknown }).output_dir;
+        if (typeof dir === 'string' && dir.trim() && (dir.startsWith('/') || /^[A-Za-z]:[\\/]/.test(dir))) {
+          exportLastDirectoryMock = dir.trim();
+        }
+      } else if (name === 'export.start') {
+        const out = (args as { output?: unknown }).output;
+        if (typeof out === 'string' && out.trim()) {
+          const sep = Math.max(out.lastIndexOf('/'), out.lastIndexOf('\\'));
+          if (sep > 0) {
+            const dir = out.slice(0, sep);
+            if (dir.startsWith('/') || /^[A-Za-z]:/.test(dir)) {
+              exportLastDirectoryMock = dir;
+            }
+          }
+        }
+      }
+      return result as T;
+    }
     if (name === 'transcription.groq.info') {
       return {
         endpoint: 'https://api.groq.com/openai/v1/audio/transcriptions',

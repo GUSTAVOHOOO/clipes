@@ -63,6 +63,31 @@ test.describe('Tela Exportação — Mesa de Prontidão e Histórico de Lotes (#
     await expect(page.getByRole('article').first()).toBeVisible()
     expect(await page.getByRole('article').count()).toBeGreaterThanOrEqual(3)
 
+    // #484 / #303: Salvar pasta padrão via export.settings.set e persistir entre rotas
+    const campoPastaPadrao = page.getByRole('textbox', { name: /Pasta de saída/i })
+    await expect(campoPastaPadrao).toHaveValue('/test/exports')
+    await campoPastaPadrao.fill('/test/pasta-padrao-e2e')
+    await page.getByRole('button', { name: 'Salvar pasta padrão' }).click()
+    await expect(page.getByText('Pasta padrão de exportação salva.').first()).toBeVisible()
+
+    // Caminho relativo é recusado sem sobrescrever a pasta padrão salva
+    await campoPastaPadrao.fill('pasta/relativa')
+    await page.getByRole('button', { name: 'Salvar pasta padrão' }).click()
+    await expect(
+      page.getByText('Informe uma pasta existente com caminho completo.'),
+    ).toBeVisible()
+
+    await page.getByRole('link', { name: /Cortes/i }).click()
+    await expect(page).toHaveURL(/#\/projeto\/demo\/cortes$/)
+    await page.getByRole('link', { name: /Exportação/i }).click()
+    await expect(page).toHaveURL(/#\/projeto\/demo\/exportacao$/)
+    await expect(page.getByRole('textbox', { name: /Pasta de saída/i })).toHaveValue(
+      '/test/pasta-padrao-e2e',
+    )
+    await page.getByRole('textbox', { name: /Pasta de saída/i }).fill('/test/exports')
+    await page.getByRole('button', { name: 'Salvar pasta padrão' }).click()
+    await expect(page.getByText('Pasta padrão de exportação salva.').first()).toBeVisible()
+
     await verificarSemRolagemExterna(page)
     await page.screenshot({ path: 'test-results/exportacao-prontidao-1366.png' })
 

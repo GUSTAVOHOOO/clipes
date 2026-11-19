@@ -54,6 +54,15 @@ test.describe('Painel Global da Fila de Jobs (Ctrl+J)', () => {
     await expect(aside.getByText(/Provedor sem preço conhecido/i)).toBeVisible()
     await expect(aside.getByText(/ETA indisponível/i)).toBeVisible()
 
+    // #484 / #303: PainelFilaJobs e BarraStatus exibem targetLabel e tempo decorrido de startedAtMs
+    const cardRunning = aside.getByTestId('fila-job-1')
+    await expect(cardRunning).toContainText('changed.mp4')
+    await expect(cardRunning).toContainText(/decorrido \d+/i)
+    await expect(aside.getByTestId('fila-job-4')).toContainText('Melhor jogada da live')
+    const rodape = page.locator('[data-regiao="rodape"]')
+    await expect(rodape).toContainText('changed.mp4')
+    await expect(rodape).toContainText(/\d+\s*(s|min|h)/)
+
     await page.screenshot({ path: 'test-results/fila-jobs-1366.png' })
 
     // 3. Ajustar orçamento e continuar (cost_unknown -> exige checkbox confirmed: true)
