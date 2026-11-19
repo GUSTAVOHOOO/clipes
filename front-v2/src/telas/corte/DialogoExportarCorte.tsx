@@ -324,6 +324,8 @@ export function DialogoExportarCorte({
   fila,
 }: DialogoExportarCorteProps) {
   const toast = useToast()
+  const toastRef = useRef(toast)
+  toastRef.current = toast
   const forcado = useEstadoForcado()
   const jobs = useFila(fila)
   const refDestino = useRef<HTMLInputElement>(null)
@@ -498,11 +500,11 @@ export function DialogoExportarCorte({
           return
         }
         if (res.state === 'cancelled') {
-          toast.add({ title: 'Exportação cancelada.' })
+          toastRef.current.add({ title: 'Exportação cancelada.' })
           return
         }
         setStatusFinal(res)
-        toast.add({ title: 'Corte exportado com sucesso.' })
+        toastRef.current.add({ title: 'Corte exportado com sucesso.' })
       })
       .catch((err) => {
         if (cancelado) return
@@ -513,7 +515,7 @@ export function DialogoExportarCorte({
     return () => {
       cancelado = true
     }
-  }, [jobAtivoId, jobFilaAtivo, toast])
+  }, [jobAtivoId, jobFilaAtivo])
 
   const confirmarDireto = useCallback(async () => {
     if (ackEmCurso) return

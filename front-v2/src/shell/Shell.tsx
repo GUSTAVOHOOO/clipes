@@ -310,6 +310,8 @@ export function Shell({
 
   const { aberta: paletaAberta, abrir: abrirPaleta } = usePaleta()
   const toast = useToast()
+  const toastRef = useRef(toast)
+  toastRef.current = toast
   const mainRef = useRef<HTMLElement>(null)
   const refGatilhoFila = useRef<HTMLElement | null>(null)
   const [filaAberta, setFilaAberta] = useState(false)
@@ -410,7 +412,7 @@ export function Shell({
 
   useEffect(() => {
     return storeFila.registrarNotificacao((n) => {
-      toast.add({
+      toastRef.current.add({
         type: n.tipo === 'falha' ? 'erro' : n.tipo === 'orcamento' ? 'aviso' : undefined,
         title: n.titulo,
         description: n.corpo,
@@ -420,7 +422,7 @@ export function Shell({
         },
       })
     })
-  }, [abrirFilaDoAlerta, storeFila, toast])
+  }, [abrirFilaDoAlerta, storeFila])
 
   const notificarErroProjeto = useCallback(
     (erro: unknown) => {
