@@ -25,6 +25,7 @@ import { SeletorCaminho } from '~/componentes/SeletorCaminho'
 import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import type {
+  ConfiguracoesExportacao,
   CorteAprovadoProntidao,
   RespostaGuardrails,
   ResultadoUseExportacaoProjeto,
@@ -475,6 +476,8 @@ export function MesaProntidao({
   zonaDireitaRef,
 }: MesaProntidaoProps) {
   const toast = useToast()
+  const toastRef = useRef(toast)
+  toastRef.current = toast
   const inputPastaRef = useRef<HTMLInputElement>(null)
 
   const [filtroFonte, setFiltroFonte] = useState<string>(() =>
@@ -489,6 +492,8 @@ export function MesaProntidao({
   )
   const [pastaSaida, setPastaSaida] = useState('')
   const pastaEditadaRef = useRef(false)
+  const [salvandoPasta, setSalvandoPasta] = useState(false)
+  const [erroPasta, setErroPasta] = useState<string | null>(null)
 
   const [corteExportarIndividual, setCorteExportarIndividual] = useState<CorteParaExportar | null>(
     null,
@@ -507,6 +512,35 @@ export function MesaProntidao({
       setPastaSaida(exportacao.settings.last_directory)
     }
   }, [exportacao.settings?.last_directory])
+
+  const salvarPastaPadrao = useCallback(async () => {
+    const pasta = pastaSaida.trim()
+    if (!pasta || salvandoPasta) return
+    setSalvandoPasta(true)
+    setErroPasta(null)
+    try {
+      const res = exportacao.salvarPastaPadrao
+        ? await exportacao.salvarPastaPadrao(pasta)
+        : await chamar<ConfiguracoesExportacao>('export.settings.set', {
+            last_directory: pasta,
+          })
+      pastaEditadaRef.current = false
+      if (res?.last_directory) {
+        setPastaSaida(res.last_directory)
+      }
+      toastRef.current.add({ title: 'Pasta padrão de exportação salva.' })
+    } catch (err) {
+      const coreErr = paraErroCore(err)
+      setErroPasta(
+        coreErr.code === 'export_destination'
+          ? 'Informe uma pasta existente com caminho completo.'
+          : mensagemDeErro(coreErr).titulo,
+      )
+      queueMicrotask(() => inputPastaRef.current?.focus())
+    } finally {
+      setSalvandoPasta(false)
+    }
+  }, [exportacao, pastaSaida, salvandoPasta])
 
   const fonteFiltroNum = filtroFonte === 'todas' ? null : Number(filtroFonte)
 
@@ -968,20 +1002,25 @@ export function MesaProntidao({
                   aoMudar={(v) => {
                     pastaEditadaRef.current = true
                     setPastaSaida(v)
+                    if (erroPasta) setErroPasta(null)
                   }}
+                  erro={erroPasta ?? undefined}
                   modo="pasta"
                   inputRef={inputPastaRef}
                   placeholder="Escolha a pasta de saída…"
                   ajuda="Formato: MP4 1080×1920 (H.264), áudio normalizado (-14 LUFS / -1 dBTP), sem marca d'água. Arquivos: <fonte>-<nn>-<tempo>.mp4."
                 />
 
-                {/* Pendência no núcleo (#303): export.settings.set */}
                 <div className="flex justify-end">
-                  <Dica texto="Salvar a pasta padrão sem exportar ainda não está disponível nesta versão.">
-                    <Botao tamanho="p" variante="fantasma" aria-disabled="true">
-                      Salvar pasta padrão
-                    </Botao>
-                  </Dica>
+                  <Botao
+                    tamanho="p"
+                    variante="fantasma"
+                    carregando={salvandoPasta}
+                    disabled={!pastaSaida.trim() || salvandoPasta}
+                    onClick={() => void salvarPastaPadrao()}
+                  >
+                    Salvar pasta padrão
+                  </Botao>
                 </div>
               </div>
 

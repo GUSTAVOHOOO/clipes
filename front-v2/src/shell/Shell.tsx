@@ -28,6 +28,8 @@ import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import {
   filaPadraoExportada,
+  formatarTempoDecorrido,
+  useAgoraMs,
   useFila,
   useSalvamentoEditor,
   type Fila,
@@ -291,6 +293,14 @@ export function Shell({
 
   const jobsAtivos = jobs.filter((j) => j.estado === 'rodando')
   const primeiroAtivo = jobsAtivos[jobsAtivos.length - 1]
+  const jobPersistidoAtivo = primeiroAtivo
+    ? estadoFilaGlobal.jobs.find((j) => String(j.id) === primeiroAtivo.id)
+    : undefined
+  const alvoPrimeiroAtivo = primeiroAtivo?.alvo ?? jobPersistidoAtivo?.targetLabel ?? null
+  const startedAtMsPrimeiroAtivo =
+    primeiroAtivo?.startedAtMs ?? jobPersistidoAtivo?.startedAtMs ?? null
+  const agoraMsBarra = useAgoraMs(Boolean(primeiroAtivo && startedAtMsPrimeiroAtivo != null))
+  const decorridoPrimeiroAtivo = formatarTempoDecorrido(startedAtMsPrimeiroAtivo, agoraMsBarra)
   const ativosEmMemoriaExtras = jobsAtivos.filter(
     (j) =>
       !estadoFilaGlobal.operacoesGlobais.some((o) => o.id === j.id) &&
@@ -305,7 +315,14 @@ export function Shell({
       : nomeHumanoKind(primeiroAtivo.etapa)
     : undefined
   const resumoFila = primeiroAtivo
-    ? `${rotuloPrimeiroAtivo} · ${Math.round(primeiroAtivo.percentual)}%`
+    ? [
+        rotuloPrimeiroAtivo,
+        alvoPrimeiroAtivo,
+        `${Math.round(primeiroAtivo.percentual)}%`,
+        decorridoPrimeiroAtivo,
+      ]
+        .filter(Boolean)
+        .join(' · ')
     : undefined
 
   const { aberta: paletaAberta, abrir: abrirPaleta } = usePaleta()
@@ -789,11 +806,17 @@ export function Shell({
                       onClick={abrirFilaDoAlerta}
                       className="foco flex min-w-0 cursor-pointer items-center gap-1.5 rounded-controle border-0 bg-transparent min-h-6 px-1 py-0.5 text-pequeno text-t2 hover:bg-area hover:text-t1"
                     >
-                      <Status tom="rodando">
+                      <Status tom="rodando" className="min-w-0">
                         <span className="truncate">{rotuloPrimeiroAtivo}</span>
+                        {alvoPrimeiroAtivo && (
+                          <span className="truncate text-t3">· {alvoPrimeiroAtivo}</span>
+                        )}
                         <span className="num text-t3">
                           {Math.round(primeiroAtivo.percentual)}%
                         </span>
+                        {decorridoPrimeiroAtivo && (
+                          <span className="num text-t3">· {decorridoPrimeiroAtivo}</span>
+                        )}
                       </Status>
                     </button>
                   ) : estadoFilaGlobal.contagemIncertos > 0 ? (

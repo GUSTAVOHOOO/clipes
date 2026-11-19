@@ -6,6 +6,7 @@ import { emitirProgressoMock } from '@core'
 import {
   criarFila,
   definirProjetoDaFila,
+  formatarTempoDecorrido,
   iniciarProgresso,
   useFila,
   useSalvamentoEditor,
@@ -402,5 +403,47 @@ describe('Fila de jobs sobre core-progress (progresso.ts)', () => {
     // Ao fechar Projeto, limparProjeto remove jobs de Projeto mantendo o global ao vivo
     fila.limparProjeto?.()
     expect(fila.jobs().map((j) => j.id)).toEqual(['ffmpeg'])
+  })
+
+  it('formatarTempoDecorrido formata segundos, minutos e horas e ignora nulos ou inválidos', () => {
+    expect(formatarTempoDecorrido(null, 50_000)).toBeNull()
+    expect(formatarTempoDecorrido(undefined, 50_000)).toBeNull()
+    expect(formatarTempoDecorrido(0, 50_000)).toBeNull()
+    expect(formatarTempoDecorrido(60_000, 50_000)).toBe('0 s')
+    expect(formatarTempoDecorrido(10_000, 55_000)).toBe('45 s')
+    expect(formatarTempoDecorrido(1_000, 126_000)).toBe('2 min 5 s')
+    expect(formatarTempoDecorrido(1_000, 121_000)).toBe('2 min')
+    expect(formatarTempoDecorrido(1_000, 3_661_000)).toBe('1 h 1 min')
+    expect(formatarTempoDecorrido(1_000, 7_201_000)).toBe('2 h')
+  })
+
+  it('sincronizarExterno propaga startedAtMs e alvo e aplicar preserva-os em core-progress', () => {
+    let t = 100_000
+    const fila = criarFila(() => 'canal-a', () => t)
+
+    fila.sincronizarExterno?.([
+      {
+        id: '15',
+        etapa: 'export',
+        percentual: 20,
+        mensagem: 'export',
+        estado: 'rodando',
+        startedAtMs: 55_000,
+        alvo: 'Melhor jogada da live',
+      },
+    ])
+
+    const hidratado = fila.jobs().find((j) => j.id === '15')
+    expect(hidratado?.startedAtMs).toBe(55_000)
+    expect(hidratado?.alvo).toBe('Melhor jogada da live')
+    expect(hidratado?.inicioMs).toBe(55_000)
+    expect(hidratado?.etaMs).toBeUndefined()
+
+    t = 110_000
+    fila.aplicar(evento({ job: '15', project: 'canal-a', stage: 'export', percentage: 60 }))
+    const atualizado = fila.jobs().find((j) => j.id === '15')
+    expect(atualizado?.percentual).toBe(60)
+    expect(atualizado?.startedAtMs).toBe(55_000)
+    expect(atualizado?.alvo).toBe('Melhor jogada da live')
   })
 })

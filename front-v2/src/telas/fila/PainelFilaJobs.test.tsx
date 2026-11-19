@@ -664,4 +664,75 @@ describe('PainelFilaJobs', () => {
     expect(screen.getByTestId('fila-job-12')).toBeInTheDocument()
     expect(screen.queryByTestId('fila-job-10')).not.toBeInTheDocument()
   })
+
+  it('exibe targetLabel e tempo decorrido a partir de startedAtMs em PainelFilaJobs e omite tempo decorrido quando startedAtMs é null (#484)', async () => {
+    const agoraFixo = Date.now()
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'jobs.list') {
+        return [
+          {
+            id: 20,
+            kind: 'export',
+            safety: 'local',
+            state: 'running',
+            attempts: 1,
+            checkpoint: null,
+            progress: 35,
+            project: 'demo',
+            outcome: null,
+            cost: null,
+            batch: null,
+            profile: null,
+            budgetPause: null,
+            startedAtMs: agoraFixo - 75_000,
+            targetLabel: 'Melhor jogada da live',
+          },
+          {
+            id: 21,
+            kind: 'ai:selection',
+            safety: 'paid',
+            state: 'queued',
+            attempts: 1,
+            checkpoint: null,
+            progress: 0,
+            project: 'demo',
+            outcome: null,
+            cost: null,
+            batch: null,
+            profile: 'codex',
+            budgetPause: null,
+            startedAtMs: null,
+            targetLabel: 'live_sabado.mp4',
+          },
+        ]
+      }
+      if (cmd === 'batches.list' || cmd === 'export.batch.list') return []
+      if (cmd === 'jobs.budget.get') return { budgets: [] }
+      return null
+    })
+
+    const fila = criarFila(() => 'demo')
+    const store = criarStoreFilaGlobal({ fila, debounceMs: 0 })
+
+    render(
+      envolver(
+        <PainelFilaJobs
+          aberto
+          aoFechar={vi.fn()}
+          projetoAberto={PROJETO_DEMO}
+          store={store}
+          fila={fila}
+        />,
+      ),
+    )
+
+    const card20 = await screen.findByTestId('fila-job-20')
+    expect(within(card20).getByText(/Melhor jogada da live/)).toBeInTheDocument()
+    expect(within(card20).getByText(/decorrido 1 min 1[56] s/i)).toBeInTheDocument()
+    expect(within(card20).getByText(/ETA indisponível/i)).toBeInTheDocument()
+
+    const card21 = screen.getByTestId('fila-job-21')
+    expect(within(card21).getByText(/live_sabado\.mp4/)).toBeInTheDocument()
+    expect(within(card21).queryByText(/decorrido/i)).not.toBeInTheDocument()
+  })
 })

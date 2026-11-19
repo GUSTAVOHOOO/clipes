@@ -13,7 +13,7 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import { useAtalhos, type Atalho } from '~/comandos/atalhos'
 import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
-import type { Fila } from '~/core/progresso'
+import { formatarTempoDecorrido, useAgoraMs, useFila, type Fila } from '~/core/progresso'
 import { useEstadoForcado } from '~/shell/EstadoForcado'
 import {
   storeExportacaoProjeto,
@@ -45,6 +45,7 @@ export function Exportacao({
   const toast = useToast()
   const forcado = useEstadoForcado()
   const exportacao = useExportacaoProjeto(projetoPath, { store, fila })
+  const jobsFila = useFila(fila)
 
   const [loteSelecionadoId, setLoteSelecionadoId] = useState<number | null>(null)
   const [loteParaCancelarFaixa, setLoteParaCancelarFaixa] = useState<number | null>(null)
@@ -61,6 +62,27 @@ export function Exportacao({
     [exportacao.lotes],
   )
   const loteAtivoPrincipal = lotesAtivos[0] ?? null
+  const itemAtivoFaixa = useMemo(
+    () =>
+      loteAtivoPrincipal?.items.find((it) => it.state === 'running') ??
+      loteAtivoPrincipal?.items.find((it) => it.jobId != null) ??
+      null,
+    [loteAtivoPrincipal],
+  )
+  const jobAtivoFaixa = useMemo(() => {
+    if (!loteAtivoPrincipal) return undefined
+    if (itemAtivoFaixa?.jobId != null) {
+      const porId = jobsFila.find((j) => j.id === String(itemAtivoFaixa.jobId))
+      if (porId) return porId
+    }
+    return jobsFila.find((j) => j.estado === 'rodando' && j.etapa === 'export')
+  }, [itemAtivoFaixa?.jobId, jobsFila, loteAtivoPrincipal])
+  const alvoAtivoFaixa = jobAtivoFaixa?.alvo ?? itemAtivoFaixa?.title ?? null
+  const startedAtMsFaixa = jobAtivoFaixa?.startedAtMs ?? null
+  const agoraMsFaixa = useAgoraMs(
+    sub === 'prontidao' && Boolean(loteAtivoPrincipal) && startedAtMsFaixa != null,
+  )
+  const decorridoAtivoFaixa = formatarTempoDecorrido(startedAtMsFaixa, agoraMsFaixa)
 
   const irParaSub = useCallback(
     (proxima: 'prontidao' | 'lotes') => {
@@ -189,15 +211,20 @@ export function Exportacao({
       {sub === 'prontidao' && loteAtivoPrincipal && estadoTela === 'pronto' && (
         <div className="flex flex-col gap-2">
           <FaixaJob
-            rotulo={`Lote #${loteAtivoPrincipal.id}: exportando ${loteAtivoPrincipal.counts.completed}/${loteAtivoPrincipal.counts.total} (${Math.round(loteAtivoPrincipal.progress)}%)`}
+            rotulo={`Lote #${loteAtivoPrincipal.id}: exportando ${loteAtivoPrincipal.counts.completed}/${loteAtivoPrincipal.counts.total} (${Math.round(loteAtivoPrincipal.progress)}%)${alvoAtivoFaixa ? ` · ${alvoAtivoFaixa}` : ''}`}
             detalhe={
-              <button
-                type="button"
-                onClick={() => aoAbrirLote(loteAtivoPrincipal.id)}
-                className="foco cursor-pointer rounded-controle border-0 bg-transparent min-h-6 px-1.5 py-0.5 text-pequeno text-t1 underline hover:bg-hover"
-              >
-                Ver em Histórico
-              </button>
+              <span className="inline-flex items-center gap-2">
+                {decorridoAtivoFaixa && (
+                  <span className="num text-t3">decorrido {decorridoAtivoFaixa}</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => aoAbrirLote(loteAtivoPrincipal.id)}
+                  className="foco cursor-pointer rounded-controle border-0 bg-transparent min-h-6 px-1.5 py-0.5 text-pequeno text-t1 underline hover:bg-hover"
+                >
+                  Ver em Histórico
+                </button>
+              </span>
             }
             aoCancelar={() => setLoteParaCancelarFaixa(loteAtivoPrincipal.id)}
           >

@@ -452,7 +452,7 @@ describe('MesaProntidao', () => {
     expect(screen.getAllByRole('article')).toHaveLength(1)
   })
 
-  it('navega para Empacotar/Transformar/Relocalizar, abre DialogoExportarCorte em "Exportar só este" e exibe Dicas #292 e #303', async () => {
+  it('navega para Empacotar/Transformar/Relocalizar, abre DialogoExportarCorte em "Exportar só este" e exibe Dica #292', async () => {
     const user = userEvent.setup()
     const exp = criarExportacaoMock()
     renderizar(exp)
@@ -483,23 +483,59 @@ describe('MesaProntidao', () => {
     expect(dicaConverter).toBeInTheDocument()
     expect(dicaConverter.textContent).not.toMatch(/#\d+/)
 
-    // Dica da ação indisponível "Salvar pasta padrão" (#303) sem expor ticket nem comando interno (UI-12)
-    const btnSalvarPasta = screen.getByRole('button', { name: /Salvar pasta padrão/i })
-    expect(btnSalvarPasta).toHaveAttribute('aria-disabled', 'true')
-    expect(document.querySelectorAll('span[tabindex="0"]')).toHaveLength(0)
     expect(
       screen.getByRole('heading', { level: 2, name: 'Cortes aprovados' }),
     ).toBeInTheDocument()
-    await user.hover(btnSalvarPasta)
-    const dicaPasta = await screen.findByText(
-      /salvar a pasta padrão sem exportar ainda não está disponível nesta versão/i,
-    )
-    expect(dicaPasta).toBeInTheDocument()
-    expect(dicaPasta.textContent).not.toMatch(/#\d+|export\.settings/)
 
     // "Exportar só este" no card 102 abre <DialogoExportarCorte>
     await user.click(within(card102).getByRole('button', { name: 'Exportar só este' }))
     expect(await screen.findByRole('dialog', { name: /Exportar Corte em MP4/i })).toBeInTheDocument()
+  })
+
+  it('persiste pasta padrão via export.settings.set e trata erro export_destination sem expor código cru (#484)', async () => {
+    const user = userEvent.setup()
+    const salvarPastaPadrao = vi
+      .fn()
+      .mockResolvedValueOnce({ last_directory: '/exports/canal' })
+      .mockRejectedValueOnce(new ErroCore('export_destination', 'Escolha uma pasta existente.'))
+
+    const exp = criarExportacaoMock({
+      salvarPastaPadrao,
+    })
+    renderizar(exp)
+
+    const campoPasta = screen.getByRole('textbox', { name: /Pasta de saída/i })
+    expect(campoPasta).toHaveValue('/test/exports')
+
+    const btnSalvarPasta = screen.getByRole('button', { name: 'Salvar pasta padrão' })
+    expect(btnSalvarPasta).toBeEnabled()
+
+    // Campo vazio desabilita o botão
+    await user.clear(campoPasta)
+    expect(btnSalvarPasta).toBeDisabled()
+
+    // Pasta válida persiste via export.settings.set e exibe toast
+    await user.type(campoPasta, '/exports/canal')
+    expect(btnSalvarPasta).toBeEnabled()
+    await user.click(btnSalvarPasta)
+
+    await waitFor(() => {
+      expect(salvarPastaPadrao).toHaveBeenCalledWith('/exports/canal')
+    })
+    expect(await screen.findByText('Pasta padrão de exportação salva.')).toBeInTheDocument()
+
+    // Pasta inválida exibe erro humano sem código cru e devolve foco ao campo
+    await user.clear(campoPasta)
+    await user.type(campoPasta, 'pasta/relativa')
+    await user.click(btnSalvarPasta)
+
+    expect(
+      await screen.findByText(/Informe uma pasta existente com caminho completo\./i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/export_destination/)).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(campoPasta).toHaveFocus()
+    })
   })
 
   it('bloqueia exportação em lote quando !ffmpeg e exibe CTA para #/config/componentes', async () => {

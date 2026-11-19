@@ -294,4 +294,51 @@ describe('mock TS da Onda 6 (jobs.*, export.batch.*, diagnostic.*, transcription
       jobs.some((j) => (j.batchCost?.costLabel ?? j.taskCost?.costLabel) === 'consome a cota do plano'),
     ).toBe(true)
   })
+
+  it('contrato #303 no mock TS: jobs.list expõe startedAtMs/targetLabel e export.settings.set persiste/valida last_directory', async () => {
+    const jobs = await coreDispatch<
+      Array<{
+        id: number
+        state: string
+        startedAtMs: number | null
+        targetLabel: string | null
+      }>
+    >('jobs.list', {})
+
+    const ativo = jobs.find((j) => j.state === 'running')!
+    expect(typeof ativo.startedAtMs).toBe('number')
+    expect(ativo.startedAtMs!).toBeGreaterThan(Date.now() - 3_600_000)
+    expect(ativo.targetLabel).toBeTruthy()
+
+    const naFila = jobs.find((j) => j.state === 'queued')!
+    expect(naFila.startedAtMs).toBeNull()
+    expect(naFila.targetLabel).toBeTruthy()
+
+    const salvoSnake = await coreDispatch<{ last_directory: string }>('export.settings.set', {
+      last_directory: '/test/pasta-a',
+    })
+    expect(salvoSnake.last_directory).toBe('/test/pasta-a')
+    expect(await coreDispatch('export.settings', {})).toEqual({ last_directory: '/test/pasta-a' })
+
+    const salvoCamel = await coreDispatch<{ last_directory: string }>('export.settings.set', {
+      lastDirectory: '/test/pasta-b',
+    })
+    expect(salvoCamel.last_directory).toBe('/test/pasta-b')
+    expect(await coreDispatch('export.settings', {})).toEqual({ last_directory: '/test/pasta-b' })
+
+    for (const payload of [
+      { last_directory: 'relativa/pasta' },
+      { last_directory: '' },
+      { last_directory: '/test/pasta-invalida' },
+      { last_directory: '/a', lastDirectory: '/b' },
+      {},
+    ]) {
+      await expect(coreDispatch('export.settings.set', payload)).rejects.toMatchObject({
+        code: 'export_destination',
+      })
+      expect(await coreDispatch('export.settings', {})).toEqual({ last_directory: '/test/pasta-b' })
+    }
+
+    await coreDispatch('export.settings.set', { last_directory: '/test/exports' })
+  })
 })
