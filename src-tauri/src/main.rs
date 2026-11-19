@@ -250,6 +250,10 @@ fn main() {
             let _ = clipes_core::set_event_emitter(std::sync::Arc::new(move |event| {
                 let _ = handle.emit("core-progress", event);
             }));
+            let console_handle = app.handle().clone();
+            let _ = clipes_core::set_console_emitter(std::sync::Arc::new(move |event| {
+                let _ = console_handle.emit("core-console", event);
+            }));
             Ok(())
         })
         .plugin(tauri_plugin_process::init())
