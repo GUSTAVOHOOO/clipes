@@ -986,6 +986,7 @@ export function EditarCorte({
     const obterRegioes = (): HTMLElement[] => {
       if (!containerRef.current) return []
       const topo = document.querySelector<HTMLElement>('[data-regiao="topo"]')
+      const contexto = document.querySelector<HTMLElement>('[data-regiao="contexto"]')
       const painel = painelEsquerdoAbertoRef.current
         ? containerRef.current?.querySelector<HTMLElement>(
             'aside[aria-label="Transcrição e Índice do Corte"]',
@@ -1004,20 +1005,14 @@ export function EditarCorte({
       const filaRegiao = document.querySelector<HTMLElement>('[data-regiao="fila"]')
       const rodape = document.querySelector<HTMLElement>('[data-regiao="rodape"]')
 
-      return [topo, painel, palco, popover, timeline, filaRegiao, rodape].filter(
+      return [topo, contexto, painel, palco, popover, timeline, filaRegiao, rodape].filter(
         (el): el is HTMLElement => el !== null,
       )
     }
 
     const indiceDoElemento = (el: EventTarget | null, regioes: HTMLElement[]): number => {
       if (!(el instanceof Node)) return -1
-      const direto = regioes.findIndex((r) => r === el || r.contains(el))
-      if (direto >= 0) return direto
-      const contexto = document.querySelector<HTMLElement>('[data-regiao="contexto"]')
-      if (contexto && (contexto === el || contexto.contains(el))) {
-        return 0
-      }
-      return -1
+      return regioes.findIndex((r) => r === el || r.contains(el))
     }
 
     const aoFocusIn = (e: FocusEvent) => {

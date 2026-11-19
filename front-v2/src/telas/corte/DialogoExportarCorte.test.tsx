@@ -442,6 +442,11 @@ describe('DialogoExportarCorte', () => {
       ).toBeInTheDocument()
     })
     expect(screen.getByText('/test/exports/A virada do jogo.mp4')).toBeInTheDocument()
+
+    // UI-71: o aviso quebra linha dentro do diálogo (sem whitespace-nowrap)
+    const aviso = screen.getByText(/A exportação usou a CPU .* porque o encoder de placa de vídeo falhou/i)
+    expect(aviso.closest('.whitespace-nowrap')).toBeNull()
+    expect(aviso.className).toMatch(/break-words/)
   })
 
   it('executa aoAntesDeAbrir (cancela se false), suporta Corte avulso e botão Escolher arquivo via __CLIPES_E2E__', async () => {

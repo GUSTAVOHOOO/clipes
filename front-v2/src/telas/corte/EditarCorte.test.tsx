@@ -821,6 +821,10 @@ describe('Tela EditarCorte (#/projeto/:id/corte/:corteId/editar)', () => {
     fireEvent.keyDown(window, { key: 'F6' })
     expect(topo.contains(document.activeElement)).toBe(true)
 
+    // UI-72: contexto é parada própria entre topo e painel
+    fireEvent.keyDown(window, { key: 'F6' })
+    expect(document.querySelector('[data-regiao="contexto"]')!.contains(document.activeElement)).toBe(true)
+
     fireEvent.keyDown(window, { key: 'F6' })
     expect(painel.contains(document.activeElement)).toBe(true)
 
@@ -893,7 +897,12 @@ describe('Tela EditarCorte (#/projeto/:id/corte/:corteId/editar)', () => {
     const gatilhoTopo = topo.querySelector('button, a') as HTMLElement
     gatilhoTopo.focus()
 
+    // UI-72: contexto é parada própria logo após o topo (mesma ordem do Shell)
+    const contexto = document.querySelector<HTMLElement>('[data-regiao="contexto"]')!
     fireEvent.keyDown(gatilhoTopo, { key: 'F6', bubbles: true, cancelable: true })
+    expect(contexto.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(document.activeElement!, { key: 'F6', bubbles: true, cancelable: true })
     expect(painel.contains(document.activeElement)).toBe(true)
 
     fireEvent.keyDown(document.activeElement!, { key: 'F6', bubbles: true, cancelable: true })
@@ -910,6 +919,10 @@ describe('Tela EditarCorte (#/projeto/:id/corte/:corteId/editar)', () => {
 
     fireEvent.keyDown(document.activeElement!, { key: 'F6', bubbles: true, cancelable: true })
     expect(topo.contains(document.activeElement)).toBe(true)
+
+    // UI-72: Shift+F6 do topo volta ao rodapé
+    fireEvent.keyDown(document.activeElement!, { key: 'F6', shiftKey: true, bubbles: true, cancelable: true })
+    expect(rodape.contains(document.activeElement)).toBe(true)
 
     // UI-64: Ctrl+] aparece na Paleta
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
