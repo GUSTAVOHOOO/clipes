@@ -1,5 +1,5 @@
 import { Esqueleto, EstadoTela, ProvedorDicas, ProvedorToast, useToast } from '@ds'
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { ProvedorAtalhos } from '~/comandos/atalhos'
 import { definirProjetoDaFila, iniciarProgresso } from '~/core/progresso'
 import { aplicarPreferencias } from '~/preferencias/aplicarPreferencias'
@@ -16,6 +16,12 @@ import { ConfigExportacao } from '~/telas/config/ConfigExportacao'
 import { ConfigProjeto } from '~/telas/config/ConfigProjeto'
 import { ConfigProvedores } from '~/telas/config/ConfigProvedores'
 import { ConfiguracoesLayout } from '~/telas/config/ConfiguracoesLayout'
+import { ContextoCorteConectado } from '~/telas/corte/ContextoCorteConectado'
+import {
+  EditarCorte,
+  type AcoesExternasEditarCorte,
+  type MetaCorteResolvida,
+} from '~/telas/corte/EditarCorte'
 import { Revisao } from '~/telas/cortes/Revisao'
 import { Selecao } from '~/telas/cortes/Selecao'
 import { DetalheFonte } from '~/telas/fontes/DetalheFonte'
@@ -33,6 +39,17 @@ const TITULOS_CONFIG: Record<SecaoConfig, string> = {
 
 function irPara(hash: string) {
   window.location.hash = hash
+}
+
+function mesmaSessaoEditar(a: Rota, b: Rota): boolean {
+  return (
+    a.tela === 'corte' &&
+    a.aba === 'editar' &&
+    b.tela === 'corte' &&
+    b.aba === 'editar' &&
+    a.projeto === b.projeto &&
+    a.corte === b.corte
+  )
 }
 
 function PlaceholderTela({
@@ -213,98 +230,211 @@ function AppRoteado({
   const rota = useRota({ projetoAberto }, aoRedirecionar)
   const forcado = useEstadoForcado()
 
-  if (rota.tela === 'inicio') {
+  const guardaSaidaRef = useRef<(() => Promise<boolean>) | null>(null)
+  const saidaLiberadaRef = useRef(false)
+  const verificandoSaidaRef = useRef(false)
+  const rotaEstavelRef = useRef<Rota>(rota)
+  const hashEstavelRef = useRef<string>(window.location.hash)
+
+  const [metaCorte, setMetaCorte] = useState<MetaCorteResolvida>({
+    clipId: undefined,
+    fonte: null,
+    videoKind: 'direct',
+  })
+  const [statusSalvamentoEditor, setStatusSalvamentoEditor] = useState<ReactNode>(null)
+  const acoesEditarRef = useRef<AcoesExternasEditarCorte | null>(null)
+
+  const estavel = rotaEstavelRef.current
+  const tentandoSairSemLiberacao =
+    estavel.tela === 'corte' &&
+    estavel.aba === 'editar' &&
+    !mesmaSessaoEditar(estavel, rota) &&
+    !saidaLiberadaRef.current &&
+    guardaSaidaRef.current !== null
+
+  const rotaExibida = tentandoSairSemLiberacao ? estavel : rota
+
+  useEffect(() => {
+    if (tentandoSairSemLiberacao) {
+      if (verificandoSaidaRef.current) return
+      verificandoSaidaRef.current = true
+      const destino = window.location.hash
+      const origem = hashEstavelRef.current
+      window.history.replaceState(null, '', origem)
+
+      const guarda = guardaSaidaRef.current
+      if (!guarda) {
+        verificandoSaidaRef.current = false
+        saidaLiberadaRef.current = true
+        window.location.hash = destino
+        return
+      }
+
+      void guarda().then((podeSair) => {
+        verificandoSaidaRef.current = false
+        if (podeSair) {
+          saidaLiberadaRef.current = true
+          window.location.hash = destino
+          window.dispatchEvent(new HashChangeEvent('hashchange'))
+        } else {
+          window.dispatchEvent(new HashChangeEvent('hashchange'))
+        }
+      })
+      return
+    }
+
+    saidaLiberadaRef.current = false
+    rotaEstavelRef.current = rota
+    hashEstavelRef.current = window.location.hash
+  }, [rota, tentandoSairSemLiberacao])
+
+  const aoRegistrarGuardaSaida = useCallback((fn: () => Promise<boolean>) => {
+    guardaSaidaRef.current = fn
+  }, [])
+
+  const aoAntesDeNavegarEditar = useCallback(async () => {
+    const guarda = guardaSaidaRef.current
+    if (!guarda) return true
+    const pode = await guarda()
+    if (pode) {
+      saidaLiberadaRef.current = true
+    }
+    return pode
+  }, [])
+
+  if (rotaExibida.tela === 'inicio') {
     return (
-      <Shell rota={rota} projeto={projeto} somenteLocal={somenteLocal}>
+      <Shell rota={rotaExibida} projeto={projeto} somenteLocal={somenteLocal}>
         <Inicio />
       </Shell>
     )
   }
 
-  if (rota.tela === 'assistente') {
+  if (rotaExibida.tela === 'assistente') {
     return (
-      <Shell rota={rota} projeto={projeto} somenteLocal={somenteLocal}>
-        <Assistente passo={rota.passo} />
+      <Shell rota={rotaExibida} projeto={projeto} somenteLocal={somenteLocal}>
+        <Assistente passo={rotaExibida.passo} />
       </Shell>
     )
   }
 
-  if (rota.tela === 'fontes') {
+  if (rotaExibida.tela === 'fontes') {
     return (
-      <Shell rota={rota} projeto={projeto} somenteLocal={somenteLocal}>
+      <Shell rota={rotaExibida} projeto={projeto} somenteLocal={somenteLocal}>
         <Fontes
-          projetoId={rota.projeto}
+          projetoId={rotaExibida.projeto}
           projetoPath={projeto?.path ?? null}
-          sub={rota.sub}
+          sub={rotaExibida.sub}
         />
       </Shell>
     )
   }
 
-  if (rota.tela === 'fonte') {
+  if (rotaExibida.tela === 'fonte') {
     return (
-      <Shell rota={rota} projeto={projeto} somenteLocal={somenteLocal}>
+      <Shell rota={rotaExibida} projeto={projeto} somenteLocal={somenteLocal}>
         <DetalheFonte
-          projetoId={rota.projeto}
+          projetoId={rotaExibida.projeto}
           projetoPath={projeto?.path ?? null}
-          fonteId={rota.fonte}
-          frase={rota.frase}
-          row={rota.row}
+          fonteId={rotaExibida.fonte}
+          frase={rotaExibida.frase}
+          row={rotaExibida.row}
         />
       </Shell>
     )
   }
 
-  if (rota.tela === 'cortes') {
+  if (rotaExibida.tela === 'cortes') {
     return (
-      <Shell rota={rota} projeto={projeto} somenteLocal={somenteLocal}>
+      <Shell rota={rotaExibida} projeto={projeto} somenteLocal={somenteLocal}>
         <Selecao
-          projetoId={rota.projeto}
+          projetoId={rotaExibida.projeto}
           projetoPath={projeto?.path ?? null}
-          fonteParam={rota.fonte}
-          runParam={rota.run}
-          revParam={rota.rev}
+          fonteParam={rotaExibida.fonte}
+          runParam={rotaExibida.run}
+          revParam={rotaExibida.rev}
         />
       </Shell>
     )
   }
 
-  if (rota.tela === 'revisao') {
+  if (rotaExibida.tela === 'revisao') {
     return (
-      <Shell rota={rota} projeto={projeto} somenteLocal={somenteLocal}>
+      <Shell rota={rotaExibida} projeto={projeto} somenteLocal={somenteLocal}>
         <Revisao
-          projetoId={rota.projeto}
+          projetoId={rotaExibida.projeto}
           projetoPath={projeto?.path ?? null}
-          runParam={rota.run}
-          revParam={rota.rev}
-          corteParam={rota.corte}
+          runParam={rotaExibida.run}
+          revParam={rotaExibida.rev}
+          corteParam={rotaExibida.corte}
         />
       </Shell>
     )
   }
 
-  const placeholder = <PlaceholderTela rota={rota} />
-  const placeholderConfig = <PlaceholderTela rota={rota} nivelTitulo="h2" />
+  if (rotaExibida.tela === 'corte' && rotaExibida.aba === 'editar') {
+    return (
+      <Shell
+        rota={rotaExibida}
+        projeto={projeto}
+        somenteLocal={somenteLocal}
+        semPaddingConteudo
+        statusSalvamento={statusSalvamentoEditor}
+        meio={
+          <ContextoCorteConectado
+            projetoId={rotaExibida.projeto}
+            corteId={rotaExibida.corte}
+            subAbaAtiva="editar"
+            runId={rotaExibida.run}
+            fonte={metaCorte.fonte}
+            clipId={metaCorte.clipId}
+            aoAntesDeNavegar={aoAntesDeNavegarEditar}
+            aoIrParaTranscricaoPalavra={(pos) =>
+              acoesEditarRef.current?.irParaTranscricaoPalavra(pos)
+            }
+            aoIrParaAudio={() => acoesEditarRef.current?.abrirAbaAudio()}
+            aoFonteRelocalizada={(atualizada) =>
+              setMetaCorte((prev) => ({ ...prev, fonte: atualizada }))
+            }
+          />
+        }
+      >
+        <EditarCorte
+          projetoId={rotaExibida.projeto}
+          projetoPath={projeto?.path ?? null}
+          corteId={rotaExibida.corte}
+          runId={rotaExibida.run}
+          aoRegistrarGuardaSaida={aoRegistrarGuardaSaida}
+          aoAtualizarMeta={setMetaCorte}
+          aoMudarStatusSalvamento={setStatusSalvamentoEditor}
+          acoesExternasRef={acoesEditarRef}
+        />
+      </Shell>
+    )
+  }
+
+  const placeholder = <PlaceholderTela rota={rotaExibida} />
+  const placeholderConfig = <PlaceholderTela rota={rotaExibida} nivelTitulo="h2" />
 
   const conteudo =
-    rota.tela === 'config' ? (
-      rota.secao === 'provedores' ? (
+    rotaExibida.tela === 'config' ? (
+      rotaExibida.secao === 'provedores' ? (
         <ConfigProvedores projetoAberto={projetoAberto} />
-      ) : rota.secao === 'custos' ? (
+      ) : rotaExibida.secao === 'custos' ? (
         <ConfigCustos projetoAberto={projetoAberto} />
-      ) : rota.secao === 'componentes' ? (
+      ) : rotaExibida.secao === 'componentes' ? (
         <ConfigComponentes projetoAberto={projetoAberto} />
-      ) : rota.secao === 'exportacao' ? (
+      ) : rotaExibida.secao === 'exportacao' ? (
         <ConfigExportacao projetoAberto={projetoAberto} />
-      ) : rota.secao === 'aparencia' ? (
+      ) : rotaExibida.secao === 'aparencia' ? (
         <ConfigAparencia projetoAberto={projetoAberto} />
-      ) : rota.secao === 'projeto' ? (
+      ) : rotaExibida.secao === 'projeto' ? (
         <ConfigProjeto projetoAberto={projetoAberto} projeto={projeto} />
       ) : (
         <ConfiguracoesLayout
-          secao={rota.secao}
+          secao={rotaExibida.secao}
           projetoAberto={projetoAberto}
-          titulo={TITULOS_CONFIG[rota.secao]}
+          titulo={TITULOS_CONFIG[rotaExibida.secao]}
         >
           <ComEstado
             estado={forcado ?? 'pronto'}
@@ -326,7 +456,7 @@ function AppRoteado({
     )
 
   return (
-    <Shell rota={rota} projeto={projeto} somenteLocal={somenteLocal}>
+    <Shell rota={rotaExibida} projeto={projeto} somenteLocal={somenteLocal}>
       {conteudo}
     </Shell>
   )
