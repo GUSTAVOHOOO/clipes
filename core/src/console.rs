@@ -89,8 +89,73 @@ pub(crate) fn emit_console(draft: ConsoleDraft<'_>) {
         let mut store = global_store().lock().unwrap_or_else(|e| e.into_inner());
         store.record_at(draft, now_instant, now_ms)
     };
-    if let (Some(ev), Some(emitter)) = (event, CONSOLE_EMITTER.get()) {
-        emitter(ev);
+    if let Some(ev) = event {
+        #[cfg(test)]
+        {
+            let mut list = test_listeners()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            list.retain(|(_, tx)| tx.send(ev.clone()).is_ok());
+        }
+        if let Some(emitter) = CONSOLE_EMITTER.get() {
+            emitter(ev);
+        }
+    }
+}
+
+#[cfg(test)]
+type TestConsoleListeners = Mutex<Vec<(u64, std::sync::mpsc::Sender<ConsoleEvent>)>>;
+
+#[cfg(test)]
+fn test_listeners() -> &'static TestConsoleListeners {
+    static LISTENERS: OnceLock<TestConsoleListeners> = OnceLock::new();
+    LISTENERS.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+#[cfg(test)]
+/// Captura eventos emitidos por `emit_console` em testes sem disputar o `OnceLock` global.
+pub(crate) struct TestConsoleCapture {
+    id: u64,
+    rx: std::sync::mpsc::Receiver<ConsoleEvent>,
+    collected: Mutex<Vec<ConsoleEvent>>,
+}
+
+#[cfg(test)]
+impl TestConsoleCapture {
+    pub(crate) fn new() -> Self {
+        static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        let id = NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let (tx, rx) = std::sync::mpsc::channel();
+        test_listeners()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push((id, tx));
+        Self {
+            id,
+            rx,
+            collected: Mutex::new(Vec::new()),
+        }
+    }
+
+    pub(crate) fn events(&self) -> Vec<ConsoleEvent> {
+        let mut guard = self.collected.lock().unwrap_or_else(|e| e.into_inner());
+        while let Ok(ev) = self.rx.try_recv() {
+            guard.push(ev);
+        }
+        guard.clone()
+    }
+
+    pub(crate) fn events_for_job(&self, job: &str) -> Vec<ConsoleEvent> {
+        self.events().into_iter().filter(|e| e.job == job).collect()
+    }
+}
+
+#[cfg(test)]
+impl Drop for TestConsoleCapture {
+    fn drop(&mut self) {
+        if let Ok(mut list) = test_listeners().lock() {
+            list.retain(|(id, _)| *id != self.id);
+        }
     }
 }
 

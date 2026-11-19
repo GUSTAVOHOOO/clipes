@@ -9,6 +9,7 @@ use super::catalog::{self, normalize_language};
 use crate::{
     channel_profile,
     components::pocket_tts_executable,
+    console::{emit_console, ConsoleDraft, ConsoleKind, ConsoleLevel},
     jobs::{self, preview, Safety},
     process::spawn_managed_with,
     projects, script, CommandRegistration, CommandResult, CoreError, EventSink,
@@ -715,8 +716,11 @@ fn cmd_regenerate_block(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     enqueue_narration(&v, Some(block_id))
 }
 
-fn synthesize_block(
+#[allow(clippy::too_many_arguments)]
+fn synthesize_block_with_console(
     job_id: i64,
+    project_id: Option<&str>,
+    block_id: Option<i64>,
     exe: &Path,
     bundle: &catalog::InstalledTtsBundle,
     quantize: bool,
@@ -724,8 +728,33 @@ fn synthesize_block(
     out_wav: &Path,
     stop: &AtomicBool,
 ) -> Result<WavInfo, CoreError> {
+    let job_str = job_id.to_string();
+    let emit_tts_err = |code: &str, is_cancel: bool| {
+        let mut tech = format!("code={code}");
+        if let Some(bid) = block_id {
+            tech.push_str(&format!(" block_id={bid}"));
+        }
+        emit_console(ConsoleDraft {
+            job: &job_str,
+            project: project_id,
+            origin: "tts",
+            level: if is_cancel {
+                ConsoleLevel::Warn
+            } else {
+                ConsoleLevel::Error
+            },
+            kind: ConsoleKind::Milestone,
+            simple: if is_cancel {
+                "Síntese de Narração cancelada"
+            } else {
+                "Falha ao sintetizar bloco com Pocket TTS"
+            },
+            technical: Some(&tech),
+        });
+    };
     if let Some(parent) = out_wav.parent() {
         fs::create_dir_all(parent).map_err(|_| {
+            emit_tts_err("narration_failed", false);
             error(
                 "narration_failed",
                 "Não foi possível preparar a pasta de Narração do Projeto.",
@@ -755,6 +784,7 @@ fn synthesize_block(
         cmd.stdin(Stdio::piped());
     })
     .map_err(|_| {
+        emit_tts_err("component_missing", false);
         error(
             "component_missing",
             "Não foi possível iniciar o motor Pocket TTS.",
@@ -771,12 +801,14 @@ fn synthesize_block(
             group.terminate();
             let _ = child.wait();
             let _ = fs::remove_file(&tmp_wav);
+            emit_tts_err(&err.code, matches!(err.code.as_str(), "cancelled" | "interrupted"));
             return Err(err);
         }
         match child.try_wait() {
             Ok(Some(status)) => {
                 if !status.success() {
                     let _ = fs::remove_file(&tmp_wav);
+                    emit_tts_err("narration_failed", false);
                     return Err(error(
                         "narration_failed",
                         "O motor Pocket TTS falhou ao sintetizar este bloco.",
@@ -789,6 +821,7 @@ fn synthesize_block(
                 group.terminate();
                 let _ = child.wait();
                 let _ = fs::remove_file(&tmp_wav);
+                emit_tts_err("narration_failed", false);
                 return Err(error(
                     "narration_failed",
                     "Erro ao aguardar o motor Pocket TTS.",
@@ -799,12 +832,14 @@ fn synthesize_block(
 
     let info = parse_wav_info(&tmp_wav).inspect_err(|_| {
         let _ = fs::remove_file(&tmp_wav);
+        emit_tts_err("narration_failed", false);
     })?;
     if out_wav.exists() {
         let _ = fs::remove_file(out_wav);
     }
     fs::rename(&tmp_wav, out_wav).map_err(|_| {
         let _ = fs::remove_file(&tmp_wav);
+        emit_tts_err("narration_failed", false);
         error(
             "narration_failed",
             "Não foi possível gravar o áudio da Narração.",
@@ -814,6 +849,13 @@ fn synthesize_block(
 }
 
 pub fn run(job_id: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreError> {
+    let project_id = projects::with_reader(|c| {
+        c.query_row("SELECT id FROM queue_project_identity", [], |r| {
+            r.get::<_, String>(0)
+        })
+    })
+    .ok();
+    let job_str = job_id.to_string();
     let (candidate_id, only_block_id, voice_id, model_id, quantize): (
         i64,
         Option<i64>,
@@ -847,6 +889,23 @@ pub fn run(job_id: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreErr
 
     let norm_lang = normalize_language(&latest.language).to_owned();
     let total = targets.len();
+    let run_simple = format!(
+        "Iniciando Narração ({total} bloco(s)) · voz {}",
+        bundle.voice_id
+    );
+    let run_tech = format!(
+        "engine=pocket-tts model={} voice={} quantize={quantize} blocks={total}",
+        bundle.model_id, bundle.voice_id
+    );
+    emit_console(ConsoleDraft {
+        job: &job_str,
+        project: project_id.as_deref(),
+        origin: "tts",
+        level: ConsoleLevel::Info,
+        kind: ConsoleKind::Milestone,
+        simple: &run_simple,
+        technical: Some(&run_tech),
+    });
     for (idx, block) in targets.into_iter().enumerate() {
         preview::check(job_id, stop)?;
         let version_id = block.version_id.ok_or_else(|| {
@@ -867,7 +926,50 @@ pub fn run(job_id: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreErr
             block.block_id
         );
         let out_wav = project.join(&rel_path);
-        let info = synthesize_block(job_id, &exe, &bundle, quantize, text, &out_wav, stop)?;
+        let blk_simple = format!("Sintetizando bloco {} de {total}", idx + 1);
+        let blk_tech = format!("block_id={} index={}/{total}", block.block_id, idx + 1);
+        emit_console(ConsoleDraft {
+            job: &job_str,
+            project: project_id.as_deref(),
+            origin: "tts",
+            level: ConsoleLevel::Info,
+            kind: ConsoleKind::Milestone,
+            simple: &blk_simple,
+            technical: Some(&blk_tech),
+        });
+        let info = synthesize_block_with_console(
+            job_id,
+            project_id.as_deref(),
+            Some(block.block_id),
+            &exe,
+            &bundle,
+            quantize,
+            text,
+            &out_wav,
+            stop,
+        )?;
+        let done_simple = format!(
+            "Bloco {} de {total} sintetizado ({:.1}s)",
+            idx + 1,
+            info.duration_us as f64 / 1_000_000.0
+        );
+        let done_tech = format!(
+            "block_id={} duration_ms={} sample_rate={} channels={} bytes={}",
+            block.block_id,
+            info.duration_us / 1000,
+            info.sample_rate,
+            info.channels,
+            info.bytes
+        );
+        emit_console(ConsoleDraft {
+            job: &job_str,
+            project: project_id.as_deref(),
+            origin: "tts",
+            level: ConsoleLevel::Info,
+            kind: ConsoleKind::Milestone,
+            simple: &done_simple,
+            technical: Some(&done_tech),
+        });
 
         let bundle_voice_id = bundle.voice_id.as_str();
         let bundle_model_id = bundle.model_id.as_str();
@@ -921,6 +1023,16 @@ pub fn run(job_id: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreErr
         let _ = jobs::progress(job_id, "narration", pct, "Narração gerada");
     }
 
+    let finish_tech = format!("blocks={total} status=ok");
+    emit_console(ConsoleDraft {
+        job: &job_str,
+        project: project_id.as_deref(),
+        origin: "tts",
+        level: ConsoleLevel::Info,
+        kind: ConsoleKind::Milestone,
+        simple: "Narração concluída",
+        technical: Some(&finish_tech),
+    });
     crate::narration_align::enqueue_after_tts(candidate_id, only_block_id);
     Ok(())
 }
@@ -969,5 +1081,104 @@ mod tests {
         let bad = dir.path().join("bad.wav");
         fs::write(&bad, b"not-a-wav").unwrap();
         assert_eq!(parse_wav_info(&bad).unwrap_err().code, "narration_failed");
+    }
+
+    #[test]
+    fn tts_synthesis_emits_milestones_and_never_leaks_script_text_or_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join(if cfg!(windows) {
+            "pocket-tts.exe"
+        } else {
+            "pocket-tts"
+        });
+        let rustc = PathBuf::from(env!("CARGO")).with_file_name(if cfg!(windows) {
+            "rustc.exe"
+        } else {
+            "rustc"
+        });
+        assert!(std::process::Command::new(rustc)
+            .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fake_pocket_tts.rs"))
+            .arg("-o")
+            .arg(&exe)
+            .status()
+            .unwrap()
+            .success());
+
+        let config_path = dir.path().join("AliceSecretConfig.yaml");
+        let voice_path = dir.path().join("AliceSecretVoice.safetensors");
+        fs::write(&config_path, b"weights_path: 'model.safetensors'\n").unwrap();
+        fs::write(&voice_path, b"voice").unwrap();
+        let bundle = catalog::InstalledTtsBundle {
+            model_id: "portuguese".into(),
+            voice_id: "voz-padrao".into(),
+            config_path,
+            voice_path,
+        };
+        let out_wav = dir.path().join("narracao_privada.wav");
+
+        let data_dir = dir.path().join("data");
+        let _data_guard = crate::test_env::set_data_dir(&data_dir);
+        let call = |name, args| crate::dispatch(name, args, &mut |_| {}).unwrap();
+        call(
+            "projects.create",
+            json!({"parent": dir.path(), "name": "CanalTTS"}),
+        );
+        let job_id = projects::with_writer(|c| {
+            c.execute(
+                "INSERT INTO jobs(kind,safety,state) VALUES ('narration','local','running')",
+                [],
+            )?;
+            Ok(c.last_insert_rowid())
+        })
+        .unwrap();
+
+        let capture = crate::console::TestConsoleCapture::new();
+        let stop = AtomicBool::new(false);
+        let secret_text = "Texto confidencial do roteiro sk-proj-secret123";
+        let info = synthesize_block_with_console(
+            job_id,
+            Some("proj-tts"),
+            Some(77),
+            &exe,
+            &bundle,
+            false,
+            secret_text,
+            &out_wav,
+            &stop,
+        )
+        .unwrap();
+        assert!(info.duration_us >= 400_000);
+
+        // Falha tipada deve emitir erro sem vazar caminhos ou texto.
+        let missing_exe = dir.path().join("nao-existe-pocket-tts");
+        let err = synthesize_block_with_console(
+            job_id,
+            Some("proj-tts"),
+            Some(78),
+            &missing_exe,
+            &bundle,
+            false,
+            secret_text,
+            &out_wav,
+            &stop,
+        )
+        .unwrap_err();
+        assert_eq!(err.code, "component_missing");
+
+        call("projects.close", json!({}));
+
+        let events = capture.events_for_job(&job_id.to_string());
+        assert!(events.iter().any(|ev| {
+            ev.origin == "tts"
+                && ev.level == ConsoleLevel::Error
+                && ev.technical.as_deref() == Some("code=component_missing block_id=78")
+        }));
+        for ev in &events {
+            let joined = format!("{} {}", ev.simple, ev.technical.as_deref().unwrap_or(""));
+            assert!(!joined.contains("Texto confidencial"));
+            assert!(!joined.contains("sk-proj-secret123"));
+            assert!(!joined.contains("AliceSecret"));
+            assert!(!joined.contains("narracao_privada"));
+        }
     }
 }

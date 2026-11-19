@@ -3,8 +3,14 @@ use super::{
     captions::{self, CaptionWord},
     error, failed, pipeline,
 };
-use crate::{editor::silences::KeptSegment, provider::CancelToken, CoreError};
+use crate::{
+    console::{emit_console, ConsoleDraft, ConsoleKind, ConsoleLevel},
+    editor::silences::KeptSegment,
+    provider::CancelToken,
+    CoreError,
+};
 use std::{
+    cell::RefCell,
     ffi::OsString,
     fs,
     io::{BufRead, BufReader},
@@ -12,6 +18,63 @@ use std::{
     sync::mpsc,
     time::{Duration, Instant},
 };
+
+#[derive(Clone, Debug)]
+struct RenderConsoleContext {
+    job: String,
+    project: Option<String>,
+}
+
+thread_local! {
+    static RENDER_CONSOLE_CTX: RefCell<Option<RenderConsoleContext>> = const { RefCell::new(None) };
+}
+
+/// Executa `f` associando os eventos de console do render ao `job` e `project` da fila.
+pub(crate) fn with_console_context<R>(
+    job: impl Into<String>,
+    project: Option<String>,
+    f: impl FnOnce() -> R,
+) -> R {
+    struct Guard(Option<RenderConsoleContext>);
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            RENDER_CONSOLE_CTX.with(|cell| *cell.borrow_mut() = self.0.take());
+        }
+    }
+    let prev = RENDER_CONSOLE_CTX.with(|cell| {
+        cell.borrow_mut().replace(RenderConsoleContext {
+            job: job.into(),
+            project,
+        })
+    });
+    let _guard = Guard(prev);
+    f()
+}
+
+fn current_console_context() -> (String, Option<String>) {
+    RENDER_CONSOLE_CTX.with(|cell| match cell.borrow().as_ref() {
+        Some(ctx) => (ctx.job.clone(), ctx.project.clone()),
+        None => ("export".to_string(), None),
+    })
+}
+
+fn emit_render_console(
+    level: ConsoleLevel,
+    kind: ConsoleKind<'_>,
+    simple: &str,
+    technical: Option<&str>,
+) {
+    let (job, project) = current_console_context();
+    emit_console(ConsoleDraft {
+        job: &job,
+        project: project.as_deref(),
+        origin: "ffmpeg",
+        level,
+        kind,
+        simple,
+        technical,
+    });
+}
 
 pub const FONT_BYTES: &[u8] = include_bytes!("../../assets/fonts/NotoSans-Bold.ttf");
 pub const SERIF_FONT_BYTES: &[u8] = include_bytes!("../../assets/fonts/NotoSerif-Bold.ttf");
@@ -161,6 +224,137 @@ impl ProgressNormalizer {
     }
 }
 
+/// Métricas seguras extraídas da saída `-progress pipe:1` do FFmpeg (sem caminhos nem stderr).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct FfmpegProgressMetrics {
+    pub out_time_us: Option<i64>,
+    pub frame: Option<u64>,
+    pub fps: Option<String>,
+    pub speed: Option<String>,
+    pub bitrate: Option<String>,
+    pub ended: bool,
+}
+
+impl FfmpegProgressMetrics {
+    fn is_empty(&self) -> bool {
+        self.out_time_us.is_none()
+            && self.frame.is_none()
+            && self.fps.is_none()
+            && self.speed.is_none()
+            && self.bitrate.is_none()
+            && !self.ended
+    }
+
+    pub(crate) fn format_technical(&self, encoder: Option<&str>) -> String {
+        let mut parts = Vec::new();
+        if let Some(frame) = self.frame {
+            parts.push(format!("frame={frame}"));
+        }
+        if let Some(ref fps) = self.fps {
+            parts.push(format!("fps={fps}"));
+        }
+        if let Some(ref speed) = self.speed {
+            parts.push(format!("speed={speed}"));
+        }
+        if let Some(ref bitrate) = self.bitrate {
+            parts.push(format!("bitrate={bitrate}"));
+        }
+        if self.frame.is_none() {
+            if let Some(us) = self.out_time_us {
+                parts.push(format!("out_time_us={us}"));
+            }
+        }
+        if let Some(enc) = encoder {
+            parts.push(format!("encoder={enc}"));
+        }
+        parts.join(" ")
+    }
+}
+
+/// Acumula blocos `key=value` de `-progress pipe:1` do FFmpeg até `progress=continue`/`end`.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct FfmpegProgressParser {
+    current: FfmpegProgressMetrics,
+}
+
+impl FfmpegProgressParser {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    pub(crate) fn parse_line(&mut self, line: &str) -> Option<FfmpegProgressMetrics> {
+        let trimmed = line.trim();
+        let (key, raw_val) = trimmed.split_once('=')?;
+        let val = raw_val.trim();
+        let valid_metric = |s: &str| !s.is_empty() && !s.eq_ignore_ascii_case("N/A");
+        match key {
+            "frame" => {
+                if let Ok(f) = val.parse::<u64>() {
+                    self.current.frame = Some(f);
+                }
+            }
+            "fps" => {
+                if valid_metric(val) {
+                    self.current.fps = Some(val.to_string());
+                }
+            }
+            "bitrate" => {
+                if valid_metric(val) {
+                    self.current.bitrate = Some(val.to_string());
+                }
+            }
+            "speed" => {
+                if valid_metric(val) {
+                    self.current.speed = Some(val.to_string());
+                }
+            }
+            "out_time_us" => {
+                if let Ok(us) = val.parse::<i64>() {
+                    self.current.out_time_us = Some(us);
+                }
+            }
+            "progress" => {
+                let mut block = std::mem::take(&mut self.current);
+                block.ended = val == "end";
+                if !block.is_empty() {
+                    return Some(block);
+                }
+            }
+            _ => {}
+        }
+        None
+    }
+
+    pub(crate) fn finish(&mut self) -> Option<FfmpegProgressMetrics> {
+        let block = std::mem::take(&mut self.current);
+        (!block.is_empty()).then_some(block)
+    }
+}
+
+enum ProgressUpdate {
+    TimeUs(i64),
+    Metrics(FfmpegProgressMetrics),
+}
+
+fn emit_ffmpeg_progress_console(
+    phase: &str,
+    encoder: Option<&str>,
+    pct: u8,
+    metrics: &FfmpegProgressMetrics,
+) {
+    let simple = match metrics.speed.as_deref() {
+        Some(speed) => format!("{phase} · {pct}% · {speed}"),
+        None => format!("{phase} · {pct}%"),
+    };
+    let technical = metrics.format_technical(encoder);
+    emit_render_console(
+        ConsoleLevel::Info,
+        ConsoleKind::Continuous("progress"),
+        &simple,
+        (!technical.is_empty()).then_some(technical.as_str()),
+    );
+}
+
 #[allow(clippy::too_many_arguments)]
 fn execute(
     program: &Path,
@@ -172,6 +366,7 @@ fn execute(
     range: (u64, u64),
     tracker: &mut ProgressNormalizer,
     progress: &mut dyn FnMut(u8),
+    console_meta: Option<(&str, Option<&str>)>,
 ) -> Result<Report, CoreError> {
     let probe = font_file.is_none();
     let font_file = font_file.unwrap_or("NotoSans-Bold.ttf");
@@ -190,14 +385,21 @@ fn execute(
     let (tx, rx) = mpsc::channel();
     let reader = std::thread::spawn(move || {
         let mut help = String::new();
+        let mut parser = FfmpegProgressParser::new();
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             if probe && help.len() < 65_536 {
                 help.push_str(&line);
                 help.push('\n');
             }
             if let Some(value) = parse_out_time_us(&line) {
-                let _ = tx.send(value);
+                let _ = tx.send(ProgressUpdate::TimeUs(value));
             }
+            if let Some(metrics) = parser.parse_line(&line) {
+                let _ = tx.send(ProgressUpdate::Metrics(metrics));
+            }
+        }
+        if let Some(metrics) = parser.finish() {
+            let _ = tx.send(ProgressUpdate::Metrics(metrics));
         }
         help
     });
@@ -237,6 +439,18 @@ fn execute(
         }
         (selected, fallback, loaded, measured)
     });
+    let mut handle_update = |update: ProgressUpdate, tracker: &mut ProgressNormalizer| match update {
+        ProgressUpdate::TimeUs(value) => {
+            if let Some(pct) = tracker.push_time_us(value, duration_us, range) {
+                progress(pct);
+            }
+        }
+        ProgressUpdate::Metrics(metrics) => {
+            if let Some((phase, encoder)) = console_meta {
+                emit_ffmpeg_progress_console(phase, encoder, tracker.last_percent, &metrics);
+            }
+        }
+    };
     let started = Instant::now();
     let status = loop {
         if cancel.is_cancelled() || (probe && started.elapsed() > PROBE_TIMEOUT) {
@@ -248,10 +462,8 @@ fn execute(
                 failed()
             });
         }
-        for value in rx.try_iter() {
-            if let Some(pct) = tracker.push_time_us(value, duration_us, range) {
-                progress(pct);
-            }
+        for update in rx.try_iter() {
+            handle_update(update, tracker);
         }
         match child.try_wait() {
             Ok(Some(status)) => {
@@ -273,10 +485,8 @@ fn execute(
     let (font_selected, font_fallback, font_loaded, measured) =
         errors.join().map_err(|_| failed())?;
     status?;
-    for value in rx.try_iter() {
-        if let Some(pct) = tracker.push_time_us(value, duration_us, range) {
-            progress(pct);
-        }
+    for update in rx.try_iter() {
+        handle_update(update, tracker);
     }
     Ok(Report {
         measured,
@@ -300,6 +510,7 @@ pub fn check_ass(ffmpeg: &Path, cancel: &CancelToken) -> Result<(), CoreError> {
         (0, 0),
         &mut tracker,
         &mut |_| {},
+        None,
     )?;
     if !report.help.lines().any(|s| s.trim() == "Filter ass") || !report.help.contains("fontsdir") {
         return Err(error(
@@ -920,6 +1131,7 @@ fn render_ass_spliced_plan(
             plan.audio_filters.join(",").into(),
         ]);
     }
+    let encoder_name = plan.encoder.clone();
     args.extend([
         "-c:v".into(),
         plan.encoder.into(),
@@ -947,7 +1159,15 @@ fn render_ass_spliced_plan(
         "-y".into(),
         partial.path().as_os_str().to_owned(),
     ]);
-    let report = execute(
+    let start_simple = format!("Renderizando Corte com {encoder_name}");
+    let start_tech = format!("pass=render encoder={encoder_name}");
+    emit_render_console(
+        ConsoleLevel::Info,
+        ConsoleKind::Milestone,
+        &start_simple,
+        Some(&start_tech),
+    );
+    let report = match execute(
         ffmpeg,
         &args,
         Some(work.path()),
@@ -957,13 +1177,38 @@ fn render_ass_spliced_plan(
         (MEASURE_END, RENDER_END),
         &mut tracker,
         progress,
-    )?;
+        Some(("Exportando", Some(encoder_name.as_str()))),
+    ) {
+        Ok(report) => report,
+        Err(err) => {
+            let is_cancel = err.code == "cancelled";
+            let level = if is_cancel || encoder_name != super::encoder::X264 {
+                ConsoleLevel::Warn
+            } else {
+                ConsoleLevel::Error
+            };
+            let msg = if is_cancel {
+                "Renderização cancelada".to_string()
+            } else {
+                format!("Falha ao renderizar com {encoder_name}")
+            };
+            let tech = format!("encoder={encoder_name} code={}", err.code);
+            emit_render_console(level, ConsoleKind::Milestone, &msg, Some(&tech));
+            return Err(err);
+        }
+    };
     if cancel.is_cancelled() {
         return Err(cancelled());
     }
     if !captions::layout(&input.words).is_empty()
         && (!report.font_selected || report.font_fallback || !report.font_loaded)
     {
+        emit_render_console(
+            ConsoleLevel::Error,
+            ConsoleKind::Milestone,
+            "Fonte empacotada da legenda não foi aplicada pelo FFmpeg",
+            Some("code=export_font_missing"),
+        );
         return Err(error(
             "export_font_missing",
             "A fonte empacotada da legenda não foi usada pelo FFmpeg.",
@@ -986,6 +1231,13 @@ fn render_ass_spliced_plan(
     if let Some(pct) = tracker.finish() {
         progress(pct);
     }
+    let done_tech = format!("encoder={encoder_name} status=ok");
+    emit_render_console(
+        ConsoleLevel::Info,
+        ConsoleKind::Milestone,
+        "Renderização concluída",
+        Some(&done_tech),
+    );
     Ok(())
 }
 pub fn seconds(us: i64) -> String {
@@ -1059,6 +1311,12 @@ fn measure_loudness(
         "null".into(),
         "-".into(),
     ]);
+    emit_render_console(
+        ConsoleLevel::Info,
+        ConsoleKind::Milestone,
+        "Medindo volume do áudio (loudnorm)",
+        Some("pass=loudnorm-measure"),
+    );
     let report = execute(
         ffmpeg,
         &args,
@@ -1069,6 +1327,7 @@ fn measure_loudness(
         (0, MEASURE_END),
         tracker,
         progress,
+        Some(("Medindo áudio", None)),
     )?;
     // O FFmpeg sempre imprime o JSON; a falta dele é falha. `-inf` (áudio mudo) não é.
     let [Some(input_i), Some(input_tp), Some(input_lra), Some(input_thresh), Some(target_offset)] =
@@ -1079,6 +1338,24 @@ fn measure_loudness(
     let finite = [input_i, input_tp, input_lra, input_thresh, target_offset]
         .iter()
         .all(|v| v.is_finite());
+    if finite {
+        let tech = format!(
+            "input_i={input_i:.2} input_tp={input_tp:.2} input_lra={input_lra:.2}"
+        );
+        emit_render_console(
+            ConsoleLevel::Info,
+            ConsoleKind::Milestone,
+            "Volume do áudio medido",
+            Some(&tech),
+        );
+    } else {
+        emit_render_console(
+            ConsoleLevel::Info,
+            ConsoleKind::Milestone,
+            "Áudio silencioso; normalização ignorada",
+            Some("loudnorm=skipped_silent"),
+        );
+    }
     Ok(finite.then_some(pipeline::Measured {
         input_i,
         input_tp,
@@ -1158,5 +1435,120 @@ mod tests {
 
         assert_eq!(emitted, vec![1, 5, 10, 52, 95, 100]);
         assert!(emitted.windows(2).all(|w| w[0] < w[1]));
+    }
+
+    #[test]
+    fn ffmpeg_progress_parser_extracts_metrics_without_leaking_secrets() {
+        let capture = crate::console::TestConsoleCapture::new();
+        let mut parser = FfmpegProgressParser::new();
+        assert!(parser.parse_line("frame=1420").is_none());
+        assert!(parser.parse_line("fps=84.20").is_none());
+        assert!(parser.parse_line("bitrate=3412.5kbits/s").is_none());
+        assert!(parser.parse_line("out_time_us=5000000").is_none());
+        assert!(parser.parse_line("speed=2.84x").is_none());
+        let metrics = parser.parse_line("progress=continue").expect("metrics block");
+        assert_eq!(metrics.frame, Some(1420));
+        assert_eq!(metrics.fps.as_deref(), Some("84.20"));
+        assert_eq!(metrics.speed.as_deref(), Some("2.84x"));
+        assert_eq!(metrics.bitrate.as_deref(), Some("3412.5kbits/s"));
+        assert_eq!(
+            metrics.format_technical(Some("h264_nvenc")),
+            "frame=1420 fps=84.20 speed=2.84x bitrate=3412.5kbits/s encoder=h264_nvenc"
+        );
+
+        with_console_context("render-parser-unit", Some("proj-r1".to_string()), || {
+            emit_ffmpeg_progress_console("Exportando", Some("h264_nvenc"), 48, &metrics);
+        });
+
+        let events = capture.events_for_job("render-parser-unit");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].origin, "ffmpeg");
+        assert_eq!(events[0].project.as_deref(), Some("proj-r1"));
+        assert_eq!(events[0].simple, "Exportando · 48% · 2.84x");
+        assert_eq!(
+            events[0].technical.as_deref(),
+            Some("frame=1420 fps=84.20 speed=2.84x bitrate=3412.5kbits/s encoder=h264_nvenc")
+        );
+    }
+
+    #[test]
+    fn execute_emits_ffmpeg_metrics_and_never_forwards_stderr_secrets() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("fake_ffmpeg.rs");
+        let exe = dir
+            .path()
+            .join(if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" });
+        fs::write(
+            &src,
+            r#"
+fn main() {
+    println!("frame=120");
+    println!("fps=60.0");
+    println!("bitrate=2500.0kbits/s");
+    println!("out_time_us=2500000");
+    println!("speed=2.0x");
+    println!("progress=continue");
+    println!("out_time_us=5000000");
+    println!("progress=end");
+    eprintln!("ERROR in C:\\Users\\Alice\\secret.mp4 sk-proj-secret123456 Bearer supersecret99");
+    eprintln!("Loading font file 'fonts/NotoSans-Bold.ttf'");
+    eprintln!("fontselect: (Noto Sans, 700, 0) -> NotoSans-Bold, 0, NotoSans-Bold");
+}
+"#,
+        )
+        .unwrap();
+        let rustc = PathBuf::from(env!("CARGO")).with_file_name(if cfg!(windows) {
+            "rustc.exe"
+        } else {
+            "rustc"
+        });
+        assert!(std::process::Command::new(rustc)
+            .arg(&src)
+            .arg("-o")
+            .arg(&exe)
+            .status()
+            .unwrap()
+            .success());
+
+        let capture = crate::console::TestConsoleCapture::new();
+        let cancel = CancelToken::new();
+        let mut tracker = ProgressNormalizer::new();
+        let report = with_console_context("render-exec-unit", Some("proj-r2".into()), || {
+            execute(
+                &exe,
+                &[],
+                None,
+                &cancel,
+                5_000_000,
+                Some("NotoSans-Bold.ttf"),
+                (MEASURE_END, RENDER_END),
+                &mut tracker,
+                &mut |_| {},
+                Some(("Exportando", Some("h264_nvenc"))),
+            )
+            .unwrap()
+        });
+        assert!(report.font_selected);
+
+        let events = capture.events_for_job("render-exec-unit");
+        assert!(!events.is_empty());
+        assert!(events.iter().any(|ev| {
+            ev.origin == "ffmpeg"
+                && ev.simple.contains("Exportando")
+                && ev.technical.as_deref().is_some_and(|t| {
+                    t.contains("frame=120")
+                        && t.contains("fps=60.0")
+                        && t.contains("speed=2.0x")
+                        && t.contains("bitrate=2500.0kbits/s")
+                        && t.contains("encoder=h264_nvenc")
+                })
+        }));
+        for ev in &events {
+            let joined = format!("{} {}", ev.simple, ev.technical.as_deref().unwrap_or(""));
+            assert!(!joined.contains("Alice"), "vazou caminho: {joined}");
+            assert!(!joined.contains("secret.mp4"), "vazou arquivo: {joined}");
+            assert!(!joined.contains("sk-proj-secret123456"), "vazou chave: {joined}");
+            assert!(!joined.contains("supersecret99"), "vazou token: {joined}");
+        }
     }
 }

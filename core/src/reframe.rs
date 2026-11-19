@@ -2,6 +2,7 @@
 //! Nenhum Provedor é chamado; o veto somente local é preservado por construção.
 use crate::{
     components,
+    console::{emit_console, ConsoleDraft, ConsoleKind, ConsoleLevel},
     jobs::{self, preview},
     projects,
     provider::CancelToken,
@@ -195,6 +196,32 @@ fn status(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 pub(crate) fn run(job: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreError> {
     let outcome = analyze(job, project, stop);
     if let Err(ref err) = outcome {
+        let project_id = projects::with_reader(|c| {
+            c.query_row("SELECT id FROM queue_project_identity", [], |r| {
+                r.get::<_, String>(0)
+            })
+        })
+        .ok();
+        let job_str = job.to_string();
+        let is_cancel = matches!(err.code.as_str(), "cancelled" | "interrupted");
+        let tech = format!("code={}", err.code);
+        emit_console(ConsoleDraft {
+            job: &job_str,
+            project: project_id.as_deref(),
+            origin: "worker",
+            level: if is_cancel {
+                ConsoleLevel::Warn
+            } else {
+                ConsoleLevel::Error
+            },
+            kind: ConsoleKind::Milestone,
+            simple: if is_cancel {
+                "Análise de enquadramento cancelada"
+            } else {
+                "Falha na análise de enquadramento"
+            },
+            technical: Some(&tech),
+        });
         projects::with_writer(|c| {
             c.execute(
                 "UPDATE reframe_suggestions SET error_code=?2 WHERE job_id=?1",
@@ -224,7 +251,29 @@ fn analyze(job: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreError>
     let ffmpeg =
         ffmpeg.ok_or_else(|| error("component_missing", "Instale o Componente FFmpeg."))?;
     let (model, device) = components::models::reframe_model()?;
+    let project_id = projects::with_reader(|c| {
+        c.query_row("SELECT id FROM queue_project_identity", [], |r| {
+            r.get::<_, String>(0)
+        })
+    })
+    .ok();
+    let job_str = job.to_string();
+    let start_simple = format!("Iniciando análise de enquadramento ({layout})");
+    let start_tech = format!(
+        "layout={layout} device={device} duration_ms={}",
+        (end - start) / 1000
+    );
+    emit_console(ConsoleDraft {
+        job: &job_str,
+        project: project_id.as_deref(),
+        origin: "worker",
+        level: ConsoleLevel::Info,
+        kind: ConsoleKind::Milestone,
+        simple: &start_simple,
+        technical: Some(&start_tech),
+    });
     let mut client = components::worker::start_worker()?;
+    client.set_console_context(job_str.clone(), project_id.clone());
     let token = CancelToken::new();
     let finished = AtomicBool::new(false);
     let result = std::thread::scope(|scope| {
@@ -291,6 +340,16 @@ fn analyze(job: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreError>
         Ok(!cancel)
     })?;
     if committed {
+        let done_tech = format!("layout={layout} status=ok");
+        emit_console(ConsoleDraft {
+            job: &job_str,
+            project: project_id.as_deref(),
+            origin: "worker",
+            level: ConsoleLevel::Info,
+            kind: ConsoleKind::Milestone,
+            simple: "Análise de enquadramento concluída",
+            technical: Some(&done_tech),
+        });
         Ok(())
     } else {
         Err(error("cancelled", "Tarefa cancelada."))
@@ -299,3 +358,139 @@ fn analyze(job: i64, project: &Path, stop: &AtomicBool) -> Result<(), CoreError>
 
 inventory::submit! { CommandRegistration { name: "reframe.start", execute: start } }
 inventory::submit! { CommandRegistration { name: "reframe.status", execute: status } }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sha2::{Digest, Sha256};
+    use std::{fs, path::PathBuf};
+
+    #[test]
+    fn reframe_run_emits_worker_model_and_progress_without_leaking_paths() {
+        let root = tempfile::tempdir().unwrap();
+        let data = root.path().join("data");
+        let _data_guard = crate::test_env::set_data_dir(&data);
+
+        let src = root.path().join("fake_worker_reframe.rs");
+        let venv_python = data.join(if cfg!(windows) {
+            "worker/venv/Scripts/python.exe"
+        } else {
+            "worker/venv/bin/python"
+        });
+        fs::create_dir_all(venv_python.parent().unwrap()).unwrap();
+        fs::write(
+            &src,
+            r##"
+use std::io::{BufRead, Write};
+fn main() {
+    let stdin = std::io::stdin();
+    let mut stdout = std::io::stdout();
+    for line in stdin.lock().lines().map_while(Result::ok) {
+        if line.contains("\"hello\"") {
+            writeln!(stdout, r#"{{"v":1,"type":"handshake","protocol":1,"worker":"fake","python":"3.11","libs":{{"opencv":"4.0"}}}}"#).unwrap();
+            stdout.flush().unwrap();
+        } else if line.contains("\"request\"") {
+            eprintln!("stderr C:\\Users\\Alice\\modelo_privado.onnx sk-proj-secret123");
+            writeln!(stdout, r#"{{"v":1,"type":"event","event":"model_loaded","model":"yunet"}}"#).unwrap();
+            writeln!(stdout, r#"{{"v":1,"type":"progress","id":"r1","stage":"reframe_scenes","percentage":25,"message":"Analisando cenas do Corte"}}"#).unwrap();
+            writeln!(stdout, r#"{{"v":1,"type":"result","id":"r1","data":{{"schemaVersion":1,"revision":1,"status":"suggestion","segments":[{{"startUs":0,"endUs":4000000,"reason":"start","keyframes":[{{"timeUs":0,"x":0.25,"y":0.0,"width":0.5,"height":1.0,"confidence":0.9}}]}}],"metrics":{{"device":"cpu","frames":120,"elapsedMs":100}}}}}}"#).unwrap();
+            stdout.flush().unwrap();
+        } else if line.contains("\"shutdown\"") {
+            break;
+        }
+    }
+}
+"##,
+        )
+        .unwrap();
+        let rustc = PathBuf::from(env!("CARGO")).with_file_name(if cfg!(windows) {
+            "rustc.exe"
+        } else {
+            "rustc"
+        });
+        assert!(std::process::Command::new(rustc)
+            .arg(&src)
+            .arg("-o")
+            .arg(&venv_python)
+            .status()
+            .unwrap()
+            .success());
+        fs::write(data.join("worker/worker.state.json"), b"{\"cuda\":false}").unwrap();
+        let model = data.join("models/yunet");
+        fs::create_dir_all(&model).unwrap();
+        fs::write(
+            model.join("model.state.json"),
+            br#"{"revision":"48b10fa505aeb51fbd127fc60a5c660040e823b7"}"#,
+        )
+        .unwrap();
+        fs::write(model.join("face_detection_yunet_2023mar.onnx"), b"fake").unwrap();
+
+        let call = |name, args| crate::dispatch(name, args, &mut |_| {}).unwrap();
+        call(
+            "components.settings.set",
+            json!({
+                "data_dir": data,
+                "cache_dir": root.path().join("cache"),
+                "cache_limit_bytes": 1_000_000,
+                "ffmpeg_path": venv_python
+            }),
+        );
+        let proj = call(
+            "projects.create",
+            json!({"parent": root.path(), "name": "CanalReframe"}),
+        );
+        let project_path = PathBuf::from(proj["path"].as_str().unwrap());
+        let media = root.path().join("fonte_secreta_reframe.mp4");
+        fs::write(&media, b"synthetic media").unwrap();
+        let bytes = fs::read(&media).unwrap();
+        let hash = format!("{:x}", Sha256::digest(bytes.repeat(3)));
+        let job_id = projects::with_writer(|c| {
+            c.execute(
+                "INSERT INTO sources(id,path,size,duration_us,partial_hash,metadata,permission,audio_track) VALUES (1,?1,?2,10000000,?3,'{\"streams\":[]}','{}',0)",
+                (media.to_str().unwrap(), bytes.len() as i64, hash),
+            )?;
+            c.execute(
+                "INSERT INTO jobs(kind,safety,state) VALUES ('reframe','local','running')",
+                [],
+            )?;
+            let jid = c.last_insert_rowid();
+            c.execute(
+                "INSERT INTO reframe_suggestions(job_id,source_id,start_us,end_us,layout) VALUES (?1,1,0,4000000,'face')",
+                [jid],
+            )?;
+            Ok(jid)
+        })
+        .unwrap();
+
+        let capture = crate::console::TestConsoleCapture::new();
+        let stop = AtomicBool::new(false);
+        run(job_id, &project_path, &stop).unwrap();
+
+        let events = capture.events_for_job(&job_id.to_string());
+        assert!(events.iter().any(|ev| {
+            ev.origin == "worker" && ev.simple.contains("Iniciando análise de enquadramento")
+        }));
+        assert!(events.iter().any(|ev| {
+            ev.origin == "worker"
+                && ev.technical.as_deref() == Some("event=model_loaded model=yunet")
+        }));
+        assert!(events.iter().any(|ev| {
+            ev.origin == "worker"
+                && ev.simple == "Analisando cenas do Corte · 25%"
+                && ev.technical.as_deref()
+                    == Some("stage=reframe_scenes progress=25% message=Analisando cenas do Corte")
+        }));
+        assert!(events.iter().any(|ev| {
+            ev.origin == "worker" && ev.simple == "Análise de enquadramento concluída"
+        }));
+        for ev in &events {
+            let joined = format!("{} {}", ev.simple, ev.technical.as_deref().unwrap_or(""));
+            assert!(!joined.contains("fonte_secreta_reframe"), "vazou fonte: {joined}");
+            assert!(!joined.contains("face_detection_yunet"), "vazou modelo: {joined}");
+            assert!(!joined.contains("modelo_privado"), "vazou stderr: {joined}");
+            assert!(!joined.contains("sk-proj-secret123"), "vazou segredo: {joined}");
+        }
+
+        call("projects.close", json!({}));
+    }
+}

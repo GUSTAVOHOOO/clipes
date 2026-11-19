@@ -7,7 +7,11 @@
 //! sua medição fica em docs/research/2026-11-15-busca-no-proxy.md. Não há detecção de encoder
 //! de vídeo no núcleo (a de `hardware.rs` é só da
 //! Transcrição), então o encoder é sempre x264 (ADR-0003: o FFmpeg baixado é a build GPL).
-use crate::{jobs, projects, CommandRegistration, CommandResult, CoreError, EventSink};
+use crate::{
+    console::{emit_console, ConsoleDraft, ConsoleKind, ConsoleLevel},
+    export::render::FfmpegProgressParser,
+    jobs, projects, CommandRegistration, CommandResult, CoreError, EventSink,
+};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
@@ -454,7 +458,23 @@ fn generate(id: i64, source_id: i64, project: &Path, stop: &AtomicBool) -> Resul
     let (cache, user_limit, ffmpeg) = crate::components::cache_settings()?;
     let ffmpeg =
         ffmpeg.ok_or_else(|| error("component_missing", "Instale o Componente FFmpeg."))?;
+    let project_id = projects::with_reader(|c| {
+        c.query_row("SELECT id FROM queue_project_identity", [], |r| {
+            r.get::<_, String>(0)
+        })
+    })
+    .ok();
+    let job_str = id.to_string();
     if ready_file(&cache, &key).is_some() {
+        emit_console(ConsoleDraft {
+            job: &job_str,
+            project: project_id.as_deref(),
+            origin: "ffmpeg",
+            level: ConsoleLevel::Info,
+            kind: ConsoleKind::Milestone,
+            simple: "Preview do Corte já disponível em cache",
+            technical: Some("cache=hit"),
+        });
         return Ok(());
     }
     let root = proxies_root(&cache);
@@ -462,7 +482,17 @@ fn generate(id: i64, source_id: i64, project: &Path, stop: &AtomicBool) -> Resul
     let stage = root.join(format!(".{key}.part"));
     let _ = fs::remove_dir_all(&stage);
     fs::create_dir_all(&stage).map_err(|_| failed())?;
-    let outcome = encode(id, &ffmpeg, &source, audio, start, end, &stage, stop);
+    let outcome = encode(
+        id,
+        project_id.as_deref(),
+        &ffmpeg,
+        &source,
+        audio,
+        start,
+        end,
+        &stage,
+        stop,
+    );
     if let Err(e) = outcome {
         let _ = fs::remove_dir_all(&stage);
         return Err(e);
@@ -481,6 +511,7 @@ fn generate(id: i64, source_id: i64, project: &Path, stop: &AtomicBool) -> Resul
 #[allow(clippy::too_many_arguments)]
 fn encode(
     id: i64,
+    project_id: Option<&str>,
     ffmpeg: &Path,
     source: &Path,
     audio: i64,
@@ -489,13 +520,41 @@ fn encode(
     stage: &Path,
     stop: &AtomicBool,
 ) -> Result<(), CoreError> {
+    let job_str = id.to_string();
+    let start_tech = format!("codec=libx264 preset=veryfast duration_ms={}", (end - start) / 1000);
+    emit_console(ConsoleDraft {
+        job: &job_str,
+        project: project_id,
+        origin: "ffmpeg",
+        level: ConsoleLevel::Info,
+        kind: ConsoleKind::Milestone,
+        simple: "Gerando preview do Corte com FFmpeg",
+        technical: Some(&start_tech),
+    });
     jobs::progress(id, "proxy", 1, "Gerando o preview do Corte")?;
     let output = stage.join(FILE_NAME);
     let args = encode_args(source, audio, start, end, &output);
     let total = (end - start).max(1);
     let mut pending = String::new();
     let mut last = 1u8;
-    jobs::preview::run_process(ffmpeg, args, id, stop, |bytes| {
+    let mut parser = FfmpegProgressParser::new();
+    let emit_metrics = |metrics: crate::export::render::FfmpegProgressMetrics, pct: u8| {
+        let simple = match metrics.speed.as_deref() {
+            Some(speed) => format!("Gerando preview · {pct}% · {speed}"),
+            None => format!("Gerando preview · {pct}%"),
+        };
+        let tech = metrics.format_technical(Some("libx264"));
+        emit_console(ConsoleDraft {
+            job: &job_str,
+            project: project_id,
+            origin: "ffmpeg",
+            level: ConsoleLevel::Info,
+            kind: ConsoleKind::Continuous("progress"),
+            simple: &simple,
+            technical: (!tech.is_empty()).then_some(tech.as_str()),
+        });
+    };
+    let run_res = jobs::preview::run_process(ffmpeg, args, id, stop, |bytes| {
         pending.push_str(&String::from_utf8_lossy(bytes));
         while let Some(line_end) = pending.find('\n') {
             let line: String = pending.drain(..=line_end).collect();
@@ -510,15 +569,68 @@ fn encode(
                     let _ = jobs::progress(id, "proxy", pct, "Gerando o preview do Corte");
                 }
             }
+            if let Some(metrics) = parser.parse_line(&line) {
+                emit_metrics(metrics, last);
+            }
         }
     })
     .map_err(|e| match e.code.as_str() {
         "cancelled" | "interrupted" => e,
         _ => failed(),
-    })?;
-    if fs::metadata(&output).map(|m| m.len()).unwrap_or(0) == 0 {
+    });
+    if let Err(err) = run_res {
+        let is_cancel = matches!(err.code.as_str(), "cancelled" | "interrupted");
+        let err_tech = format!("code={}", err.code);
+        emit_console(ConsoleDraft {
+            job: &job_str,
+            project: project_id,
+            origin: "ffmpeg",
+            level: if is_cancel {
+                ConsoleLevel::Warn
+            } else {
+                ConsoleLevel::Error
+            },
+            kind: ConsoleKind::Milestone,
+            simple: if is_cancel {
+                "Geração de preview cancelada"
+            } else {
+                "Falha ao gerar preview do Corte"
+            },
+            technical: Some(&err_tech),
+        });
+        return Err(err);
+    }
+    if !pending.trim().is_empty() {
+        if let Some(metrics) = parser.parse_line(&pending) {
+            emit_metrics(metrics, last);
+        }
+    }
+    if let Some(metrics) = parser.finish() {
+        emit_metrics(metrics, last);
+    }
+    let size = fs::metadata(&output).map(|m| m.len()).unwrap_or(0);
+    if size == 0 {
+        emit_console(ConsoleDraft {
+            job: &job_str,
+            project: project_id,
+            origin: "ffmpeg",
+            level: ConsoleLevel::Error,
+            kind: ConsoleKind::Milestone,
+            simple: "Falha ao gerar preview do Corte",
+            technical: Some("code=preview_failed empty_output=true"),
+        });
         return Err(failed());
     }
+    let done_tech = format!("bytes={size} status=ok");
+    emit_console(ConsoleDraft {
+        job: &job_str,
+        project: project_id,
+        origin: "ffmpeg",
+        level: ConsoleLevel::Info,
+        kind: ConsoleKind::Milestone,
+        simple: "Preview do Corte concluído",
+        technical: Some(&done_tech),
+    });
     Ok(())
 }
 
@@ -649,5 +761,102 @@ mod tests {
             assert!(line.contains(needle), "{needle}");
         }
         assert!(args.iter().position(|a| a == "-ss") < args.iter().position(|a| a == "-i"));
+    }
+
+    #[test]
+    fn encode_emits_ffmpeg_progress_metrics_and_never_leaks_stderr_or_paths() {
+        let root = tempfile::tempdir().unwrap();
+        let data = root.path().join("data");
+        let _data_guard = crate::test_env::set_data_dir(&data);
+
+        let src = root.path().join("fake_ffmpeg_proxy.rs");
+        let exe = root
+            .path()
+            .join(if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" });
+        fs::write(
+            &src,
+            r#"
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let out = args.last().unwrap();
+    std::fs::write(out, b"fake-mp4-bytes").unwrap();
+    println!("frame=60");
+    println!("fps=30.0");
+    println!("bitrate=1200.0kbits/s");
+    println!("out_time_us=5000000");
+    println!("speed=2.0x");
+    println!("progress=continue");
+    println!("progress=end");
+    eprintln!("stderr C:\\Users\\Alice\\fonte_privada.mp4 sk-proj-secret123");
+}
+"#,
+        )
+        .unwrap();
+        let rustc = PathBuf::from(env!("CARGO")).with_file_name(if cfg!(windows) {
+            "rustc.exe"
+        } else {
+            "rustc"
+        });
+        assert!(std::process::Command::new(rustc)
+            .arg(&src)
+            .arg("-o")
+            .arg(&exe)
+            .status()
+            .unwrap()
+            .success());
+
+        let call = |name, args| crate::dispatch(name, args, &mut |_| {}).unwrap();
+        call(
+            "projects.create",
+            json!({"parent": root.path(), "name": "CanalProxy"}),
+        );
+        let job_id = projects::with_writer(|c| {
+            c.execute(
+                "INSERT INTO jobs(kind,safety,state) VALUES ('proxy','local','running')",
+                [],
+            )?;
+            Ok(c.last_insert_rowid())
+        })
+        .unwrap();
+
+        let stage = root.path().join("stage");
+        fs::create_dir_all(&stage).unwrap();
+        let capture = crate::console::TestConsoleCapture::new();
+        let stop = AtomicBool::new(false);
+        let secret_source = root.path().join("fonte_privada.mp4");
+        encode(
+            job_id,
+            Some("proj-p1"),
+            &exe,
+            &secret_source,
+            0,
+            0,
+            10_000_000,
+            &stage,
+            &stop,
+        )
+        .unwrap();
+
+        let events = capture.events_for_job(&job_id.to_string());
+        assert!(events.iter().any(|ev| {
+            ev.origin == "ffmpeg"
+                && ev.project.as_deref() == Some("proj-p1")
+                && ev.simple == "Gerando preview · 49% · 2.0x"
+                && ev.technical.as_deref()
+                    == Some("frame=60 fps=30.0 speed=2.0x bitrate=1200.0kbits/s encoder=libx264")
+        }));
+        assert!(events.iter().any(|ev| {
+            ev.origin == "ffmpeg"
+                && ev.simple == "Preview do Corte concluído"
+                && ev.technical.as_deref() == Some("bytes=14 status=ok")
+        }));
+        for ev in &events {
+            let joined = format!("{} {}", ev.simple, ev.technical.as_deref().unwrap_or(""));
+            assert!(!joined.contains("Alice"), "vazou usuario: {joined}");
+            assert!(!joined.contains("fonte_privada"), "vazou fonte: {joined}");
+            assert!(!joined.contains("sk-proj-secret123"), "vazou segredo: {joined}");
+        }
+
+        call("projects.close", json!({}));
     }
 }

@@ -1202,10 +1202,12 @@ pub(crate) fn run(
     let mut used: Option<encoder::Outcome> = None;
     let result = (|| {
         crate::jobs::preview::check(id, stop)?;
-        let request: String = projects::with_reader(|c| {
-            c.query_row("SELECT request FROM exports WHERE job_id=?1", [id], |r| {
+        let (request, project_id): (String, String) = projects::with_reader(|c| {
+            let pid = c.query_row("SELECT id FROM queue_project_identity", [], |r| r.get(0))?;
+            let req = c.query_row("SELECT request FROM exports WHERE job_id=?1", [id], |r| {
                 r.get(0)
-            })
+            })?;
+            Ok((req, pid))
         })?;
         let request: StartRequest = serde_json::from_str(&request).map_err(|_| failed())?;
         let style = style_for_clip(request.cut.clip_id)?;
@@ -1263,7 +1265,27 @@ pub(crate) fn run(
             crop,
         };
         // Etapa de encoder (#62): detecta na primeira vez, usa o do cache e cai para x264.
+        crate::console::emit_console(crate::console::ConsoleDraft {
+            job: &id.to_string(),
+            project: Some(&project_id),
+            origin: "ffmpeg",
+            level: crate::console::ConsoleLevel::Info,
+            kind: crate::console::ConsoleKind::Milestone,
+            simple: "Selecionando encoder de vídeo…",
+            technical: Some("stage=encoder-resolve"),
+        });
         let preferred = encoder::resolve(&ffmpeg, &cancel)?;
+        let selected_simple = format!("Encoder selecionado: {preferred}");
+        let selected_tech = format!("encoder={preferred}");
+        crate::console::emit_console(crate::console::ConsoleDraft {
+            job: &id.to_string(),
+            project: Some(&project_id),
+            origin: "ffmpeg",
+            level: crate::console::ConsoleLevel::Info,
+            kind: crate::console::ConsoleKind::Milestone,
+            simple: &selected_simple,
+            technical: Some(&selected_tech),
+        });
         let finished = AtomicBool::new(false);
         crate::jobs::progress(id, "export", 1, "Exportando Corte")?;
         batch::on_job_progress(id);
@@ -1278,7 +1300,7 @@ pub(crate) fn run(
                 }
             });
             let mut last = 0;
-            let result =
+            let result = render::with_console_context(id.to_string(), Some(project_id.clone()), || {
                 encoder::render_styled_spliced_crop_plan_narration_audio_with_fallback_overwrite(
                     &ffmpeg,
                     &input,
@@ -1298,12 +1320,76 @@ pub(crate) fn run(
                             last = percentage;
                         }
                     },
-                );
+                )
+            });
             finished.store(true, Ordering::SeqCst);
             result
         });
         if stop.load(Ordering::SeqCst) && result.as_ref().is_err_and(|e| e.code == "cancelled") {
+            crate::console::emit_console(crate::console::ConsoleDraft {
+                job: &id.to_string(),
+                project: Some(&project_id),
+                origin: "ffmpeg",
+                level: crate::console::ConsoleLevel::Warn,
+                kind: crate::console::ConsoleKind::Milestone,
+                simple: "Exportação do Corte interrompida",
+                technical: Some("code=interrupted"),
+            });
             return Err(error("interrupted", "O export foi interrompido."));
+        }
+        match &result {
+            Ok(outcome) => {
+                if let Some(fb) = &outcome.fallback {
+                    let fb_simple = format!(
+                        "Fallback de encoder: {} falhou; exportado com {}",
+                        fb.from, outcome.encoder
+                    );
+                    let fb_tech = format!(
+                        "fallback_from={} encoder={} reason={}",
+                        fb.from, outcome.encoder, fb.reason
+                    );
+                    crate::console::emit_console(crate::console::ConsoleDraft {
+                        job: &id.to_string(),
+                        project: Some(&project_id),
+                        origin: "ffmpeg",
+                        level: crate::console::ConsoleLevel::Warn,
+                        kind: crate::console::ConsoleKind::Milestone,
+                        simple: &fb_simple,
+                        technical: Some(&fb_tech),
+                    });
+                }
+                let ok_tech = format!("encoder={} status=ok", outcome.encoder);
+                crate::console::emit_console(crate::console::ConsoleDraft {
+                    job: &id.to_string(),
+                    project: Some(&project_id),
+                    origin: "ffmpeg",
+                    level: crate::console::ConsoleLevel::Info,
+                    kind: crate::console::ConsoleKind::Milestone,
+                    simple: "Exportação do Corte concluída",
+                    technical: Some(&ok_tech),
+                });
+            }
+            Err(err) => {
+                let is_cancel = matches!(err.code.as_str(), "cancelled" | "interrupted");
+                let err_tech = format!("code={}", err.code);
+                crate::console::emit_console(crate::console::ConsoleDraft {
+                    job: &id.to_string(),
+                    project: Some(&project_id),
+                    origin: "ffmpeg",
+                    level: if is_cancel {
+                        crate::console::ConsoleLevel::Warn
+                    } else {
+                        crate::console::ConsoleLevel::Error
+                    },
+                    kind: crate::console::ConsoleKind::Milestone,
+                    simple: if is_cancel {
+                        "Exportação do Corte cancelada"
+                    } else {
+                        "Falha ao exportar Corte"
+                    },
+                    technical: Some(&err_tech),
+                });
+            }
         }
         result.map(|outcome| used = Some(outcome))
     })();
@@ -1426,6 +1512,159 @@ mod tests {
         let direct_status = call("export.status", json!({"job": direct_job}));
         assert_eq!(direct_status["encoder"], "h264_nvenc");
         assert_eq!(direct_status["encoderFallback"], Value::Null);
+
+        call("projects.close", json!({}));
+    }
+
+    #[test]
+    fn export_run_emits_encoder_fallback_and_progress_without_leaking_stderr() {
+        struct EnvReset;
+        impl Drop for EnvReset {
+            fn drop(&mut self) {
+                for key in [
+                    "CLIPES_FAKE_ENCODERS",
+                    "CLIPES_FAKE_FAIL",
+                    "CLIPES_FAKE_LOG",
+                    "CLIPES_NVIDIA_SMI",
+                ] {
+                    std::env::remove_var(key);
+                }
+            }
+        }
+        let _env_reset = EnvReset;
+        let root = tempfile::Builder::new()
+            .prefix("clipes-t4-export-")
+            .tempdir()
+            .unwrap();
+        let data = root.path().join("data");
+        let _data_dir = crate::test_env::set_data_dir(&data);
+        let bin = root.path().join("bin");
+        fs::create_dir_all(&bin).unwrap();
+        let ext = if cfg!(windows) { ".exe" } else { "" };
+        let ffmpeg = bin.join(format!("ffmpeg{ext}"));
+        let ffprobe = bin.join(format!("ffprobe{ext}"));
+        let rustc = PathBuf::from(env!("CARGO")).with_file_name(if cfg!(windows) {
+            "rustc.exe"
+        } else {
+            "rustc"
+        });
+        assert!(std::process::Command::new(rustc)
+            .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fake_encoders.rs"))
+            .arg("-o")
+            .arg(&ffmpeg)
+            .status()
+            .unwrap()
+            .success());
+        fs::copy(&ffmpeg, &ffprobe).unwrap();
+
+        std::env::set_var("CLIPES_NVIDIA_SMI", root.path().join("sem-nvidia-smi"));
+        std::env::set_var("CLIPES_FAKE_ENCODERS", "h264_nvenc");
+        std::env::remove_var("CLIPES_FAKE_FAIL");
+
+        let call = |name, args| crate::dispatch(name, args, &mut |_| {}).unwrap();
+        call(
+            "components.settings.set",
+            json!({
+                "data_dir": data,
+                "cache_dir": data.join("cache"),
+                "cache_limit_bytes": 1_000_000,
+                "ffmpeg_path": null
+            }),
+        );
+        call("components.ffmpeg.system", json!({"path": ffmpeg}));
+        call("export.encoder.detect", json!({}));
+
+        let proj = call(
+            "projects.create",
+            json!({"parent": root.path(), "name": "CanalExportConsole"}),
+        );
+        let project_path = PathBuf::from(proj["path"].as_str().unwrap());
+        let media = root.path().join("original_privado.mp4");
+        fs::write(&media, b"original").unwrap();
+        let mut hasher = sha2::Sha256::new();
+        for _ in 0..3 {
+            hasher.update(b"original");
+        }
+        use sha2::Digest;
+        let partial_hash = format!("{:x}", hasher.finalize());
+
+        let source_id = projects::with_writer(|c| {
+            c.execute(
+                "INSERT INTO sources(path,size,duration_us,partial_hash,metadata,permission,audio_track) VALUES (?1,8,2000000,?2,'{}','{}',1)",
+                (media.to_str().unwrap(), &partial_hash),
+            )?;
+            let source = c.last_insert_rowid();
+            c.execute(
+                "INSERT INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,state,duration_us) VALUES (?1,1,'local','m','r','c','complete',2000000)",
+                [source],
+            )?;
+            let transcript = c.last_insert_rowid();
+            for (pos, text, start, end) in [
+                (0, " fala.", 100_000, 500_000),
+                (1, " fim.", 600_000, 1_200_000),
+            ] {
+                c.execute(
+                    "INSERT INTO transcript_words(transcript_id,position,kind,text,start_us,end_us,language) VALUES (?1,?2,'word',?3,?4,?5,'pt')",
+                    (transcript, pos, text, start, end),
+                )?;
+            }
+            Ok(source)
+        })
+        .unwrap();
+        call("transcription.segment", json!({"source_id": source_id}));
+
+        let output = root.path().join("corte_saida.mp4");
+        let enqueued = call(
+            "export.start",
+            json!({
+                "source_id": source_id,
+                "start_id": 1,
+                "end_id": 2,
+                "output": output
+            }),
+        );
+        let job_id = enqueued["job"].as_i64().unwrap();
+        projects::with_writer(|c| {
+            c.execute("UPDATE jobs SET state='running' WHERE id=?1", [job_id])?;
+            Ok(())
+        })
+        .unwrap();
+
+        std::env::set_var("CLIPES_FAKE_FAIL", "h264_nvenc");
+        let capture = crate::console::TestConsoleCapture::new();
+        let stop = AtomicBool::new(false);
+        run(job_id, source_id, &project_path, &stop).unwrap();
+
+        let status = call("export.status", json!({"job": job_id}));
+        assert_eq!(status["encoder"], "libx264");
+        assert_eq!(status["encoderFallback"]["from"], "h264_nvenc");
+
+        let events = capture.events_for_job(&job_id.to_string());
+        assert!(events
+            .iter()
+            .any(|e| e.technical.as_deref() == Some("encoder=h264_nvenc")));
+        assert!(events.iter().any(|e| {
+            e.origin == "ffmpeg"
+                && e.technical
+                    .as_deref()
+                    .is_some_and(|t| t.contains("out_time_us=100000"))
+        }));
+        assert!(events.iter().any(|e| {
+            e.level == crate::console::ConsoleLevel::Warn
+                && e.simple.contains("Fallback de encoder")
+                && e.technical.as_deref()
+                    == Some("fallback_from=h264_nvenc encoder=libx264 reason=encoder_failed")
+        }));
+        assert!(events.iter().any(|e| {
+            e.simple == "Exportação do Corte concluída"
+                && e.technical.as_deref() == Some("encoder=libx264 status=ok")
+        }));
+        for ev in &events {
+            let joined = format!("{} {}", ev.simple, ev.technical.as_deref().unwrap_or(""));
+            assert!(!joined.contains("segredo"), "vazou stderr: {joined}");
+            assert!(!joined.contains("original_privado"), "vazou caminho: {joined}");
+            assert!(!joined.contains("corte_saida"), "vazou destino: {joined}");
+        }
 
         call("projects.close", json!({}));
     }
