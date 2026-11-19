@@ -353,6 +353,7 @@ let sourceItems: SourceMockItem[] = [
   { id: 3, path: '/test/mismatch.mp4', status: 'changed', available: false, verified: true, audio_track: 1, origin_url: null, language: 'pt', permission: { status: 'none' }, metadata: makeSourceMetadata('1800.0') },
 ];
 let urlSettingsMock = {terms_accepted:false, download_dir:'/test/downloads'};
+let exportLastDirectoryMock: string | null = '/test/exports';
 type JobCostSummaryMock = {
   calls: number;
   inputTokens: number;
@@ -379,6 +380,8 @@ type JobItemMock = {
   batch: string | null;
   profile: string | null;
   budgetPause: string | null;
+  startedAtMs: number | null;
+  targetLabel: string | null;
   taskCost: JobCostSummaryMock | null;
   profileCost: JobCostSummaryMock | null;
   batchCost: JobCostSummaryMock | null;
@@ -447,6 +450,8 @@ function createInitialJobItems(): JobItemMock[] {
       batch: null,
       profile: null,
       budgetPause: null,
+      startedAtMs: 1_700_000_000_000,
+      targetLabel: 'changed.mp4',
       taskCost: null,
       profileCost: null,
       batchCost: null,
@@ -465,6 +470,8 @@ function createInitialJobItems(): JobItemMock[] {
       batch: null,
       profile: 'legacy',
       budgetPause: null,
+      startedAtMs: 1_700_000_100_000,
+      targetLabel: 'offline.mp4',
       taskCost: selectionCost,
       profileCost: selectionCost,
       batchCost: null,
@@ -483,6 +490,8 @@ function createInitialJobItems(): JobItemMock[] {
       batch: 'sources-3',
       profile: 'legacy',
       budgetPause: 'cost_unknown',
+      startedAtMs: null,
+      targetLabel: 'mismatch.mp4',
       taskCost: unknownBatchCost,
       profileCost: null,
       batchCost: unknownBatchCost,
@@ -501,6 +510,8 @@ function createInitialJobItems(): JobItemMock[] {
       batch: null,
       profile: 'codex',
       budgetPause: null,
+      startedAtMs: 1_700_000_200_000,
+      targetLabel: 'Melhor jogada da live',
       taskCost: scriptCost,
       profileCost: scriptCost,
       batchCost: null,
@@ -519,6 +530,8 @@ function createInitialJobItems(): JobItemMock[] {
       batch: null,
       profile: 'legacy',
       budgetPause: null,
+      startedAtMs: 1_700_000_300_000,
+      targetLabel: 'Momento épico do chat',
       taskCost: packagingCost,
       profileCost: packagingCost,
       batchCost: null,
@@ -537,6 +550,8 @@ function createInitialJobItems(): JobItemMock[] {
       batch: null,
       profile: null,
       budgetPause: null,
+      startedAtMs: 1_700_000_400_000,
+      targetLabel: 'offline.mp4',
       taskCost: null,
       profileCost: null,
       batchCost: null,
@@ -557,6 +572,8 @@ function createInitialJobItems(): JobItemMock[] {
             batch: null,
             profile: 'legacy',
             budgetPause: 'budget_cost',
+            startedAtMs: null,
+            targetLabel: 'changed.mp4',
             taskCost: selectionCost,
             profileCost: null,
             batchCost: null,
@@ -2471,6 +2488,31 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         items,
       } as T;
     }
+    if (name === 'export.settings') {
+      return { last_directory: exportLastDirectoryMock } as T;
+    }
+    if (name === 'export.settings.set') {
+      const raw = args as { last_directory?: unknown; lastDirectory?: unknown };
+      const parseArg = (val: unknown): string | null => {
+        if (val === undefined) return null;
+        if (typeof val !== 'string' || !val.trim()) {
+          throw { code: 'export_destination', message: 'Escolha uma pasta existente.' };
+        }
+        return val;
+      };
+      const snake = parseArg(raw.last_directory);
+      const camel = parseArg(raw.lastDirectory);
+      if (snake !== null && camel !== null && snake !== camel) {
+        throw { code: 'export_destination', message: 'Escolha uma pasta existente.' };
+      }
+      const next = snake ?? camel;
+      const isAbsolute = next !== null && (next.startsWith('/') || /^[A-Za-z]:[\\/]/.test(next));
+      if (!next || !isAbsolute || next.includes('invalida') || next.includes('missing')) {
+        throw { code: 'export_destination', message: 'Escolha uma pasta existente.' };
+      }
+      exportLastDirectoryMock = next;
+      return { last_directory: exportLastDirectoryMock } as T;
+    }
     if ((name.startsWith('export.') && name !== 'export.captions') || (name === 'jobs.cancel' && (args as {id: number}).id >= 5900)) return exportMock(name, args, (source, pos) => mockCorrected.has(`${source}:${pos}`), { project: getActiveProjectMock(), emitProgress: emitirProgressoMock }) as T;
     if (name === 'transcription.groq.info') {
       return {
@@ -3079,6 +3121,8 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         batch: found.batch,
         profile: route.profile.id,
         budgetPause: null,
+        startedAtMs: null,
+        targetLabel: found.targetLabel,
         taskCost: found.taskCost,
         profileCost: null,
         batchCost: found.batchCost,
@@ -3243,7 +3287,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
           }
         }
       }
-      jobItems = jobItems.map(item => item.id === id ? { ...item, state: name === 'jobs.retry' ? 'queued' : 'cancelled' } : item);
+      jobItems = jobItems.map(item => item.id === id ? { ...item, state: name === 'jobs.retry' ? 'queued' : 'cancelled', startedAtMs: name === 'jobs.retry' ? null : item.startedAtMs } : item);
       return null as T;
     }
     if (name === 'backups.list') {
