@@ -10,8 +10,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Política: PR roda só o que o diff toca, no SO mais barato (Ubuntu; o E2E Tauri
-# fica no Windows, que é o alvo distribuído). Push na master roda tudo em
-# Windows + Ubuntu. O job `ci-ok` agrega o resultado: skipped conta como ok.
+# roda no Windows quando o diff toca o app, e também no Ubuntu quando toca
+# src-tauri/, scripts/e2e-tauri.mjs, front-v2/src/core/ ou front-v2/src/main.tsx).
+# Push na master roda tudo em Windows + Ubuntu. O job `ci-ok` agrega o resultado:
+# skipped conta como ok.
 jobs:
   changes:
     runs-on: ubuntu-latest
@@ -21,6 +23,7 @@ jobs:
       front_v1: ${{ steps.f.outputs.front_v1 }}
       front_v2: ${{ steps.f.outputs.front_v2 }}
       tauri: ${{ steps.f.outputs.tauri }}
+      e2e_ubuntu: ${{ steps.f.outputs.e2e_ubuntu }}
       worker: ${{ steps.f.outputs.worker }}
     steps:
       - uses: actions/checkout@v4
@@ -43,10 +46,12 @@ jobs:
           # O próprio CI ou o fim de linha (.gitattributes) mudou: valida tudo.
           ci='^\.github/workflows/ci\.yml$|^\.gitattributes$'
           # catalog/: o núcleo embute catalog/models.json (include_str!) e o valida em teste.
-          echo "rust=$(match "$ci|^(core|src-tauri|benchmarks/transcricao|catalog)/|^(Cargo\.toml|Cargo\.lock|deny\.toml)$")" >> "$GITHUB_OUTPUT"
+          # worker/: o núcleo embute worker/** (include_bytes!) via core/src/components/worker.rs.
+          echo "rust=$(match "$ci|^(core|src-tauri|worker|benchmarks/transcricao|catalog)/|^(Cargo\.toml|Cargo\.lock|deny\.toml)$")" >> "$GITHUB_OUTPUT"
           echo "front_v1=$(match "$ci|^(src|design-system|scripts)/|^(package\.json|bun\.lock|index\.html|vite\.config\.ts|tsconfig\.json)$")" >> "$GITHUB_OUTPUT"
           echo "front_v2=$(match "$ci|^(front-v2|design-system-v2)/|^src/lib/|^src/features/(editor|captions|updates)/")" >> "$GITHUB_OUTPUT"
-          echo "tauri=$(match "$ci|^(core|src-tauri|src|front-v2|design-system-v2|scripts|catalog)/|^(Cargo\.toml|Cargo\.lock|package\.json|bun\.lock|vite\.config\.ts)$")" >> "$GITHUB_OUTPUT"
+          echo "tauri=$(match "$ci|^(core|src-tauri|src|front-v2|design-system-v2|scripts|catalog|worker)/|^(Cargo\.toml|Cargo\.lock|package\.json|bun\.lock|vite\.config\.ts)$")" >> "$GITHUB_OUTPUT"
+          echo "e2e_ubuntu=$(match "$ci|^src-tauri/|^scripts/e2e-tauri\.mjs$|^front-v2/src/core/|^front-v2/src/main\.tsx$")" >> "$GITHUB_OUTPUT"
           echo "worker=$(match "$ci|^worker/")" >> "$GITHUB_OUTPUT"
 
   # Núcleo Rust + métricas do benchmark.
@@ -149,8 +154,9 @@ jobs:
       - run: bun run test
       - run: bunx playwright test
 
-  # E2E do app Tauri real. Em PR: só se o diff toca o app e só no Windows
-  # (alvo distribuído). Na master: Windows + Ubuntu.
+  # E2E do app Tauri real. Em PR: roda no Windows quando o diff toca o app, e
+  # também no Ubuntu quando toca src-tauri/, scripts/e2e-tauri.mjs,
+  # front-v2/src/core/ ou front-v2/src/main.tsx (boot e persistência). Na master: Windows + Ubuntu.
   e2e:
     needs: changes
     if: needs.changes.outputs.tauri == 'true'
@@ -158,7 +164,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'pull_request' && '["windows-latest"]' || '["windows-latest","ubuntu-latest"]') }}
+        os: ${{ fromJSON((github.event_name != 'pull_request' || needs.changes.outputs.e2e_ubuntu == 'true') && '["windows-latest","ubuntu-latest"]' || '["windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

@@ -255,6 +255,7 @@ sudo apt install gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0
 - **Linux AppImage** depende do GStreamer do sistema para o preview.
 - **Provedores via CLI** (Codex, Claude Code, OpenCode) seguem experimentais.
 - **YouTube com restrição de idade:** o app detecta e orienta a baixar o vídeo e importar como arquivo local.
+- **Idioma da interface:** na v2.0.0, a interface está disponível apenas em PT-BR (`English` aparece como *Em preparação* em **Configurações → Aparência e teclado**); legenda e tradução de Cortes suportam PT-BR ↔ EN.
 - **Idioma por Fonte:** a Transcrição fica no idioma em que foi dita. A tradução vale para a legenda do Corte (PT-BR ↔ EN).
 
 ## Experimentar a interface sem instalar

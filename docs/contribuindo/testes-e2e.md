@@ -64,6 +64,17 @@ bun run test:e2e
    xvfb-run -a env WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 bun run test:e2e
    ```
 
+### Política de execução no CI (PR vs `master`)
+
+Para equilibrar cobertura contra regressões de WebKitGTK/Tauri e custo/fila de runners:
+
+- **Em `pull_request`:**
+  - `e2e (windows-latest)` roda sempre que o diff toca o app (`core/**`, `src-tauri/**`, `src/**`, `front-v2/**`, `design-system-v2/**`, `scripts/**`, `catalog/**`, `worker/**` ou manifestos/CI).
+  - `e2e (ubuntu-latest)` **não roda em todo PR**; é disparado apenas quando o PR toca código sensível a boot, IPC/WebView Linux, persistência ou harness E2E: `src-tauri/**`, `scripts/e2e-tauri.mjs`, `front-v2/src/core/**` ou `front-v2/src/main.tsx` (além de alterações no próprio `.github/workflows/ci.yml` ou `.gitattributes`).
+  - Em complemento, o workflow [`.github/workflows/linux-validation.yml`](../../.github/workflows/linux-validation.yml) valida `.deb` e `.AppImage` em `ubuntu-latest` quando o PR altera `front-v2/**`, `design-system-v2/**`, `src-tauri/**` ou `scripts/linux-validation.mjs`.
+- **Em `push` na `master`:** `e2e` roda integralmente em **Windows e Ubuntu**.
+- **Agregação (`ci-ok`):** jobs pulados pelo filtro de caminhos contam como sucesso; qualquer job com falha ou cancelamento reprova `ci-ok`.
+
 ## Como a suíte funciona
 
 ### 1. Build de depuração com `VITE_E2E=1`
