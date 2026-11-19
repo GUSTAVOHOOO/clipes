@@ -154,30 +154,16 @@ struct Context {
 
 fn context(candidate: i64) -> Result<Context, CoreError> {
     let cut = crate::selection::approved_cut(candidate)?;
-    let source: i64 = projects::with_reader(|c| {
-        c.query_row(
-            "SELECT source_id FROM transcripts WHERE id=?1",
-            [cut.transcript],
-            |r| r.get(0),
-        )
-    })
-    .map_err(|_| error("source_missing", "Fonte não encontrada"))?;
     let (Some(first), Some(last)) = (cut.sentences.first(), cut.sentences.last()) else {
         return Err(error("candidate_not_found", "Candidato não encontrado."));
     };
     let (start_us, end_us) = (first.start_us, last.end_us);
     Ok(Context {
+        source: cut.source_id,
         cut,
-        source,
         start_us,
         end_us,
     })
-}
-
-fn candidate_arg(v: &Value) -> Result<i64, CoreError> {
-    v["candidate"]
-        .as_i64()
-        .ok_or_else(|| error("candidate_not_found", "Candidato não encontrado."))
 }
 
 /// O instante de uma Frase: o meio dela, sempre dentro do Corte.
@@ -198,7 +184,7 @@ fn build_input(frases: &[Sentence]) -> TaskInput {
 
 /// `thumbnail.estimate {candidate}`: se o Provedor é pago e o custo estimado.
 fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let ctx = context(candidate_arg(&v)?)?;
+    let ctx = context(crate::selection::candidate_id_arg(&v, "candidate")?)?;
     let route = jobs::resolve_route(TASK_ID, None)?;
     let mut input = build_input(&ctx.cut.sentences);
     crate::angles::add_to_input(&mut input, &ctx.cut, false)?;
@@ -212,7 +198,7 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 /// `thumbnail.suggest {candidate, confirmed?}`: enfileira a Tarefa de IA. Provedor pago exige
 /// `confirmed`; o veto "somente local" é aplicado pelo pré-vôo de `jobs::ai`.
 fn cmd_suggest(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let ctx = context(candidate_arg(&v)?)?;
+    let ctx = context(crate::selection::candidate_id_arg(&v, "candidate")?)?;
     let mut input = build_input(&ctx.cut.sentences);
     crate::angles::add_to_input(&mut input, &ctx.cut, false)?;
     let (run, (start, end)) = (ctx.cut.run, ctx.cut.identity);
@@ -368,13 +354,13 @@ fn document(ctx: &Context) -> Result<Value, CoreError> {
 
 /// `thumbnail.get {candidate}`: a escolha atual, o último job, as sugestões e o histórico.
 fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    document(&context(candidate_arg(&v)?)?)
+    document(&context(crate::selection::candidate_id_arg(&v, "candidate")?)?)
 }
 
 /// `thumbnail.choose {candidate, instant_us}`: o usuário marca um instante do Corte (o do preview)
 /// como capa. Fora do Corte: `instant_out_of_cut`. Repetir o instante atual não grava nada.
 fn cmd_choose(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let ctx = context(candidate_arg(&v)?)?;
+    let ctx = context(crate::selection::candidate_id_arg(&v, "candidate")?)?;
     let instant = v["instant_us"]
         .as_i64()
         .filter(|t| (ctx.start_us..=ctx.end_us).contains(t))
@@ -536,7 +522,7 @@ fn extract(
 /// diálogo de salvar. Nunca sobrescreve um arquivo. Fonte offline: `source_offline`.
 fn cmd_export(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let _guard = projects::start_job()?;
-    let ctx = context(candidate_arg(&v)?)?;
+    let ctx = context(crate::selection::candidate_id_arg(&v, "candidate")?)?;
     let output = v["output"]
         .as_str()
         .map(PathBuf::from)

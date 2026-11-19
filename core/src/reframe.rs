@@ -63,21 +63,18 @@ fn protocol() -> CoreError {
 
 /// Reutiliza a revisão atual do #55, inclusive as bordas ajustadas por Frase.
 fn approved(candidate: i64) -> Result<(i64, i64, i64), CoreError> {
-    let row = projects::with_reader(|c| c.query_row(
-        "SELECT c.run_id,t.source_id FROM selection_candidates c JOIN selection_runs r ON r.id=c.run_id JOIN transcripts t ON t.id=r.transcript_id WHERE c.id=?1",
-        [candidate], |r| Ok((r.get::<_,i64>(0)?, r.get::<_,i64>(1)?))).optional())?
-        .ok_or_else(not_chosen)?;
-    let review = crate::dispatch("selection.review", json!({"run":row.0}), &mut |_| {})?;
-    let item = review["items"]
-        .as_array()
-        .and_then(|items| items.iter().find(|i| i["candidate"] == candidate))
-        .filter(|i| i["status"] == "approved")
-        .ok_or_else(not_chosen)?;
-    Ok((
-        row.1,
-        item["startUs"].as_i64().ok_or_else(invalid)?,
-        item["endUs"].as_i64().ok_or_else(invalid)?,
-    ))
+    let cut = match crate::selection::approved_cut(candidate) {
+        Ok(cut) => cut,
+        Err(e) if matches!(e.code.as_str(), "candidate_not_found" | "not_approved") => {
+            return Err(not_chosen());
+        }
+        Err(e) if e.code == "adjust_out_of_transcript" => return Err(invalid()),
+        Err(e) => return Err(e),
+    };
+    let (Some(first), Some(last)) = (cut.sentences.first(), cut.sentences.last()) else {
+        return Err(invalid());
+    };
+    Ok((cut.source_id, first.start_us, last.end_us))
 }
 
 fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {

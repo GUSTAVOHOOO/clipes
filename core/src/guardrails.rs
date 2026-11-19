@@ -78,16 +78,9 @@ fn resolve_candidate_clip_id(candidate_id: i64, explicit_clip_id: Option<i64>) -
     if explicit_clip_id.is_some() {
         return explicit_clip_id;
     }
-    projects::with_reader(|c| {
-        c.query_row(
-            "SELECT id FROM clip_edits WHERE identity=?1",
-            [format!("candidate:{candidate_id}")],
-            |r| r.get(0),
-        )
-        .optional()
-    })
-    .ok()
-    .flatten()
+    crate::editor::edits::clip_id_for_candidate(candidate_id)
+        .ok()
+        .flatten()
 }
 
 fn narration_freeze_tail_us(clip_id: Option<i64>, candidate_id: i64) -> i64 {
@@ -147,16 +140,9 @@ fn resolve_single_clip_id(
         return resolve_candidate_clip_id(cid, None);
     }
     let (s, e) = (start_id?, end_id?);
-    projects::with_reader(|c| {
-        c.query_row(
-            "SELECT id FROM clip_edits WHERE identity=?1",
-            [format!("source:{source_id}:{s}:{e}")],
-            |r| r.get(0),
-        )
-        .optional()
-    })
-    .ok()
-    .flatten()
+    crate::editor::edits::clip_id_for_source_range(source_id, s, e)
+        .ok()
+        .flatten()
 }
 
 fn clip_audio_summary(clip_id: Option<i64>) -> crate::audio::GuardrailAudioSummary {

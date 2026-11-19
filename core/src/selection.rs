@@ -23,7 +23,9 @@ pub mod cut;
 pub mod deterministic_benchmark;
 mod review;
 pub mod routing_benchmark;
-pub(crate) use review::{approved_cut, ApprovedCut};
+pub(crate) use review::{
+    approved_borders_for_run, approved_cut, approved_transformed_cut, candidate_id_arg, ApprovedCut,
+};
 
 pub const TASK_ID: &str = "selection";
 /// Tarefa de IA do Vídeo transformado (#67): prompt e schema próprios, com o 6º eixo. Roteia
@@ -841,6 +843,7 @@ fn read_windows(run: i64) -> Result<Vec<WindowRow>, CoreError> {
 
 struct RunRow {
     transcript: i64,
+    source_id: i64,
     state: String,
     min_us: i64,
     max_us: i64,
@@ -855,24 +858,28 @@ struct RunRow {
 fn read_run(run: i64) -> Result<RunRow, CoreError> {
     projects::with_reader(|c| {
         c.query_row(
-            "SELECT transcript_id,state,min_us,max_us,windows_completed,windows_failed,energy_marks,chat_marks,video_kind,revision FROM selection_runs WHERE id=?1",
+            "SELECT r.transcript_id,t.source_id,r.state,r.min_us,r.max_us,r.windows_completed,r.windows_failed,r.energy_marks,r.chat_marks,r.video_kind,r.revision
+             FROM selection_runs r
+             JOIN transcripts t ON t.id=r.transcript_id
+             WHERE r.id=?1",
             [run],
             |r| {
                 Ok(RunRow {
                     transcript: r.get(0)?,
-                    state: r.get(1)?,
-                    min_us: r.get(2)?,
-                    max_us: r.get(3)?,
-                    completed: r.get(4)?,
-                    failed: r.get(5)?,
-                    energy_marks: r.get(6)?,
-                    chat_marks: r.get(7)?,
+                    source_id: r.get(1)?,
+                    state: r.get(2)?,
+                    min_us: r.get(3)?,
+                    max_us: r.get(4)?,
+                    completed: r.get(5)?,
+                    failed: r.get(6)?,
+                    energy_marks: r.get(7)?,
+                    chat_marks: r.get(8)?,
                     kind: r
-                        .get::<_, String>(8)
+                        .get::<_, String>(9)
                         .ok()
                         .and_then(|k| VideoKind::parse(&k))
                         .unwrap_or_default(),
-                    revision: r.get(9)?,
+                    revision: r.get(10)?,
                 })
             },
         )

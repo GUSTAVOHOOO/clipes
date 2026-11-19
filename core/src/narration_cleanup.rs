@@ -893,12 +893,6 @@ pub(crate) fn media_clean_audio_path(narration_id: i64) -> Option<PathBuf> {
         .and_then(|rel| resolve_rel_path(&project, rel))
 }
 
-fn candidate_arg(v: &Value) -> Result<i64, CoreError> {
-    v["candidate"]
-        .as_i64()
-        .ok_or_else(|| error("candidate_not_found", "Candidato não encontrado."))
-}
-
 fn block_arg(v: &Value) -> Result<i64, CoreError> {
     v["block"]
         .as_i64()
@@ -944,7 +938,7 @@ fn resolve_current_narration_block(
 
 /// `narration.cleanup.set { candidate, block, enabled }`: liga ou desliga a limpeza de voz do bloco.
 fn cmd_cleanup_set(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let candidate_id = candidate_arg(&v)?;
+    let candidate_id = crate::selection::candidate_id_arg(&v, "candidate")?;
     let block_id = block_arg(&v)?;
     let enabled = v["enabled"].as_bool().ok_or_else(|| {
         error(
@@ -988,7 +982,7 @@ fn cmd_cleanup_set(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 /// `narration.cleanup.prepare { candidate, block }`: gera a versão limpa derivada para prévia antes/depois.
 fn cmd_cleanup_prepare(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let _guard = projects::start_job()?;
-    let candidate_id = candidate_arg(&v)?;
+    let candidate_id = crate::selection::candidate_id_arg(&v, "candidate")?;
     let block_id = block_arg(&v)?;
     let project = project_root_dir()?;
     let (narration_id, engine_id, _) = resolve_current_narration_block(candidate_id, block_id)?;

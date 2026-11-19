@@ -333,16 +333,10 @@ struct Cut {
 
 /// O Corte aprovado do candidato, só se for do Vídeo transformado.
 fn context(candidate: i64) -> Result<Cut, CoreError> {
-    let cut = crate::selection::approved_cut(candidate)?;
-    let is_transformed =
-        projects::with_reader(|c| crate::selection::effective_video_kind(c, candidate))?
-            == Some(crate::selection::cut::VideoKind::Transformed);
-    if !is_transformed {
-        return Err(error(
-            "script_requires_transformed",
-            "O Roteiro só existe para Cortes do Vídeo transformado.",
-        ));
-    }
+    let cut = crate::selection::approved_transformed_cut(
+        candidate,
+        "O Roteiro só existe para Cortes do Vídeo transformado.",
+    )?;
     Ok(Cut { cut })
 }
 
@@ -353,12 +347,6 @@ fn profile_arg(v: &Value) -> Option<String> {
         .as_str()
         .filter(|id| !id.is_empty() && id.len() <= 64)
         .map(str::to_owned)
-}
-
-fn candidate_arg(v: &Value) -> Result<i64, CoreError> {
-    v["candidate"]
-        .as_i64()
-        .ok_or_else(|| error("candidate_not_found", "Candidato não encontrado."))
 }
 
 #[derive(Clone)]
@@ -741,7 +729,7 @@ const CONFIRMATION_MESSAGE: &str =
 /// `script.estimate {candidate, language?, block?}`: idioma e custo estimado. Com `block`, o de
 /// regenerar esse bloco; sem ele, o da cadeia inteira (esboço e textos).
 fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let cut = context(candidate_arg(&v)?)?;
+    let cut = context(crate::selection::candidate_id_arg(&v, "candidate")?)?;
     crate::angles::required(&cut.cut)?;
     let lang = pick_language(&cut, &v)?;
     let chosen = profile_arg(&v);
@@ -783,7 +771,7 @@ fn batch_of(cut: &Cut) -> String {
 /// blocos entram na fila quando o esboço termina (veja [`advance`]). Provedor pago exige
 /// `confirmed`, que vale para a cadeia inteira.
 fn cmd_generate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let cut = context(candidate_arg(&v)?)?;
+    let cut = context(crate::selection::candidate_id_arg(&v, "candidate")?)?;
     let (_, angle) = crate::angles::required(&cut.cut)?;
     let lang = pick_language(&cut, &v)?;
     let route = jobs::resolve_route(TASK_ID, None)?;
@@ -1081,7 +1069,7 @@ fn document(cut: &Cut) -> Result<Value, CoreError> {
 /// `script.get {candidate}`: o documento do Roteiro do Corte (esboço, blocos, versões, estado de
 /// aprovação, último job e se a Narração está liberada).
 fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    document(&context(candidate_arg(&v)?)?)
+    document(&context(crate::selection::candidate_id_arg(&v, "candidate")?)?)
 }
 
 pub(crate) struct MontageScriptBlock {
@@ -1101,10 +1089,7 @@ pub(crate) struct MontageScript {
 /// jobs nem gravar no banco (seguro para prévias e leitura na timeline).
 pub(crate) fn montage_blocks_readonly(candidate: i64) -> Result<Option<MontageScript>, CoreError> {
     let cut = crate::selection::approved_cut(candidate)?;
-    let is_transformed =
-        projects::with_reader(|c| crate::selection::effective_video_kind(c, candidate))?
-            == Some(crate::selection::cut::VideoKind::Transformed);
-    if !is_transformed {
+    if cut.video_kind != crate::selection::cut::VideoKind::Transformed {
         return Ok(None);
     }
     let gens = read_generations(cut.run, cut.identity)?;
@@ -1210,7 +1195,7 @@ pub(crate) fn guardrail_status(candidate: i64) -> Result<Option<GuardrailScriptS
 
 /// `script.narration_allowed {candidate}`: `{allowed: true}` ou o erro `script_not_approved`.
 fn cmd_narration_allowed(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    narration_allowed(candidate_arg(&v)?)?;
+    narration_allowed(crate::selection::candidate_id_arg(&v, "candidate")?)?;
     Ok(json!({"allowed": true}))
 }
 
@@ -1334,7 +1319,7 @@ fn others_chars(gen: &Generation, block: &Block) -> usize {
 /// `script.edit {candidate, block, title?, narration?, refs?}`: grava uma versão nova do bloco,
 /// validada com os mesmos limites. O bloco volta a `pendente`.
 fn cmd_edit(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let cut = context(candidate_arg(&v)?)?;
+    let cut = context(crate::selection::candidate_id_arg(&v, "candidate")?)?;
     let gens = refresh(&cut)?;
     let (gen, block) = shown_block(&gens, block_arg(&v)?)?;
     let Some(current) = block.current() else {
@@ -1382,7 +1367,7 @@ fn cmd_edit(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 
 /// `script.approve {candidate, block}`: aprova a versão atual do bloco, um de cada vez.
 fn cmd_approve(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let cut = context(candidate_arg(&v)?)?;
+    let cut = context(crate::selection::candidate_id_arg(&v, "candidate")?)?;
     let gens = refresh(&cut)?;
     let (_, block) = shown_block(&gens, block_arg(&v)?)?;
     let current = block.current().ok_or_else(|| {
@@ -1407,7 +1392,7 @@ fn cmd_approve(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 /// seguinte; o resultado vira uma versão nova e o bloco volta a `pendente`. Provedor pago exige
 /// `confirmed`.
 fn cmd_regenerate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let cut = context(candidate_arg(&v)?)?;
+    let cut = context(crate::selection::candidate_id_arg(&v, "candidate")?)?;
     let gens = refresh(&cut)?;
     let (gen, block) = shown_block(&gens, block_arg(&v)?)?;
     crate::angles::required(&cut.cut)?;

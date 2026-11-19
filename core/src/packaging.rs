@@ -484,19 +484,18 @@ struct Context {
 
 fn context(candidate: i64) -> Result<Context, CoreError> {
     let cut = crate::selection::approved_cut(candidate)?;
-    let (source, permission, origin_url): (i64, String, Option<String>) =
-        projects::with_reader(|c| {
-            c.query_row(
-                "SELECT s.id,s.permission,s.origin_url FROM transcripts t JOIN sources s ON s.id=t.source_id WHERE t.id=?1",
-                [cut.transcript],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
-            )
-        })
-        .map_err(|_| error("source_missing", "Fonte não encontrada"))?;
+    let (permission, origin_url): (String, Option<String>) = projects::with_reader(|c| {
+        c.query_row(
+            "SELECT permission,origin_url FROM sources WHERE id=?1",
+            [cut.source_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+    })
+    .map_err(|_| error("source_missing", "Fonte não encontrada"))?;
     Ok(Context {
         candidate,
+        source: cut.source_id,
         cut,
-        source,
         permission: serde_json::from_str(&permission).unwrap_or(Value::Null),
         origin_url,
     })
@@ -534,15 +533,9 @@ fn build_input(
     }
 }
 
-fn candidate_arg(v: &Value) -> Result<i64, CoreError> {
-    v["candidate"]
-        .as_i64()
-        .ok_or_else(|| error("candidate_not_found", "Candidato não encontrado."))
-}
-
 /// `packaging.estimate {candidate, language?}`: idioma, se é preciso escolher, e custo estimado.
 fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let ctx = context(candidate_arg(&v)?)?;
+    let ctx = context(crate::selection::candidate_id_arg(&v, "candidate")?)?;
     let route = jobs::resolve_route(TASK_ID, None)?;
     let lang = pick_language(&ctx, &v)?;
     let credit = credit_for_candidate(&ctx, lang);
@@ -565,7 +558,7 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 /// `packaging.generate {candidate, language?, confirmed?}`: enfileira a Tarefa de IA do Corte.
 /// Provedor pago exige `confirmed`.
 fn cmd_generate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let ctx = context(candidate_arg(&v)?)?;
+    let ctx = context(crate::selection::candidate_id_arg(&v, "candidate")?)?;
     let lang = pick_language(&ctx, &v)?;
     let credit = credit_for_candidate(&ctx, lang);
     let chapters_res = chapters::resolve(ctx.candidate, lang)?;
@@ -860,7 +853,7 @@ fn document(ctx: &Context) -> Result<Value, CoreError> {
 
 /// `packaging.get {candidate}`: o documento do Corte (gerações, edições, crédito e último job).
 fn cmd_get(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    document(&context(candidate_arg(&v)?)?)
+    document(&context(crate::selection::candidate_id_arg(&v, "candidate")?)?)
 }
 
 fn edit_field(v: &Value, key: &str) -> Result<Option<Vec<String>>, CoreError> {
@@ -879,7 +872,7 @@ fn edit_field(v: &Value, key: &str) -> Result<Option<Vec<String>>, CoreError> {
 /// `packaging.edit {candidate, title?, description?, tags?, hashtags?}`: grava uma edição sobre a
 /// geração atual, validada com os mesmos limites. O crédito não é editável: a edição não o vê.
 fn cmd_edit(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let ctx = context(candidate_arg(&v)?)?;
+    let ctx = context(crate::selection::candidate_id_arg(&v, "candidate")?)?;
     let (run, identity) = (ctx.cut.run, ctx.cut.identity);
     materialize(&ctx)?;
     let all = read_generations(run, identity)?;
@@ -932,7 +925,7 @@ fn cmd_edit(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 /// de capítulos na descrição atual, preservando todo o restante editado pelo usuário.
 /// Se os delimitadores tiverem sido apagados, avisa com `chapter_delimiters_missing` sem alterar nada.
 fn cmd_refresh_chapters(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let ctx = context(candidate_arg(&v)?)?;
+    let ctx = context(crate::selection::candidate_id_arg(&v, "candidate")?)?;
     let (run, identity) = (ctx.cut.run, ctx.cut.identity);
     materialize(&ctx)?;
     let all = read_generations(run, identity)?;

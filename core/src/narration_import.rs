@@ -267,9 +267,7 @@ pub(crate) fn read_import_job_json(
 }
 
 fn cmd_import(v: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let candidate_id = v["candidate"]
-        .as_i64()
-        .ok_or_else(|| error("candidate_not_found", "Candidato não encontrado."))?;
+    let candidate_id = crate::selection::candidate_id_arg(&v, "candidate")?;
     let block_id = v["block"]
         .as_i64()
         .or_else(|| v["blockId"].as_i64())

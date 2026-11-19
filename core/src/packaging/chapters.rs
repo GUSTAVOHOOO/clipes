@@ -9,9 +9,8 @@
 use crate::{
     montage::{self, MontagePlan},
     packaging::Lang,
-    projects, script, CoreError,
+    script, CoreError,
 };
-use rusqlite::OptionalExtension;
 use serde::Serialize;
 
 /// Mínimo de capítulos exigido pelo YouTube.
@@ -180,11 +179,8 @@ pub fn format_block(entries: &[ChapterEntry], lang: Lang) -> String {
 /// Resolve a elegibilidade e a sugestão de capítulos de um candidato aprovado.
 /// Retorna `applicable: false` para Corte direto (não gera capítulos).
 pub fn resolve(candidate_id: i64, lang: Lang) -> Result<ChapterResolution, CoreError> {
-    let _cut = crate::selection::approved_cut(candidate_id)?;
-    let is_transformed =
-        projects::with_reader(|c| crate::selection::effective_video_kind(c, candidate_id))?
-            == Some(crate::selection::cut::VideoKind::Transformed);
-    if !is_transformed {
+    let cut = crate::selection::approved_cut(candidate_id)?;
+    if cut.video_kind != crate::selection::cut::VideoKind::Transformed {
         return Ok(ChapterResolution {
             applicable: false,
             status: "not_transformed",
@@ -211,14 +207,7 @@ pub fn resolve(candidate_id: i64, lang: Lang) -> Result<ChapterResolution, CoreE
         });
     }
 
-    let clip_id: Option<i64> = projects::with_reader(|c| {
-        c.query_row(
-            "SELECT id FROM clip_edits WHERE identity=?1",
-            [format!("candidate:{candidate_id}")],
-            |r| r.get(0),
-        )
-        .optional()
-    })?;
+    let clip_id = crate::editor::edits::clip_id_for_candidate(cut.candidate)?;
 
     let Some(plan) = montage::plan_for_clip(clip_id, candidate_id, &[])? else {
         return Ok(ChapterResolution {
