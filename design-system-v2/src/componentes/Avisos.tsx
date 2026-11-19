@@ -1,7 +1,7 @@
 // <InstaladorJustInTime> (baixar um componente na hora em que ele faz falta) e
 // <ChecklistGuardaCorpos> (avisos antes de exportar; informa, nunca bloqueia).
 import { AlertTriangle, Check, ChevronRight, CircleDashed, Download } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/cn'
 import { tamanho as fmtTamanho } from '@/lib/formato'
 import { Botao } from '@/primitivas/Botao'
@@ -100,10 +100,16 @@ const palavraGuarda = { ok: 'Ok', atencao: 'Atenção', pendente: 'Pendente' }
 
 export function ChecklistGuardaCorpos({ itens, abertoPorPadrao, mostrarDivulgacaoIa, aoConfirmarDireto, confirmado }: ChecklistGuardaCorposProps) {
   const atencao = itens.filter((i) => i.estado !== 'ok').length
-  const [aberto, setAberto] = useState(abertoPorPadrao ?? atencao > 0)
+  const padrao = abertoPorPadrao ?? atencao > 0
+  const [aberto, setAberto] = useState(padrao)
+  const interagiu = useRef(false)
+  // Os avisos chegam de forma assíncrona: acompanha o padrão até a pessoa mexer no controle.
+  useEffect(() => {
+    if (!interagiu.current) setAberto(padrao)
+  }, [padrao])
   return (
     <section aria-label="Antes de exportar" className="flex flex-col gap-2">
-      <button type="button" aria-expanded={aberto} onClick={() => setAberto((v) => !v)} className="flex cursor-pointer items-center gap-1.5 self-start rounded-controle border-0 bg-transparent py-1 text-pequeno text-t2 hover:text-t1">
+      <button type="button" aria-expanded={aberto} onClick={() => { interagiu.current = true; setAberto((v) => !v) }} className="flex cursor-pointer items-center gap-1.5 self-start rounded-controle border-0 bg-transparent py-1 text-pequeno text-t2 hover:text-t1">
         <ChevronRight className={cn('size-[14px] stroke-[1.75] transition-transform duration-(--dur-base) ease-saida', aberto && 'rotate-90')} aria-hidden />
         Antes de exportar
         <span className="num text-t3">· {atencao ? `${atencao} ponto${atencao > 1 ? 's' : ''} para olhar` : 'tudo certo'}</span>
