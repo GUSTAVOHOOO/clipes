@@ -1160,6 +1160,39 @@ fn cmd_settings(_: Value, _: &mut EventSink<'_>) -> CommandResult {
     Ok(json!({"last_directory":directory}))
 }
 
+fn parse_directory_arg(v: &Value, key: &str) -> Result<Option<String>, CoreError> {
+    match v.get(key) {
+        None => Ok(None),
+        Some(Value::String(s)) => {
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                return Err(error("export_destination", "Escolha uma pasta existente."));
+            }
+            Ok(Some(s.clone()))
+        }
+        _ => Err(error("export_destination", "Escolha uma pasta existente.")),
+    }
+}
+
+fn cmd_settings_set(v: Value, _: &mut EventSink<'_>) -> CommandResult {
+    let snake = parse_directory_arg(&v, "last_directory")?;
+    let camel = parse_directory_arg(&v, "lastDirectory")?;
+    if let (Some(a), Some(b)) = (&snake, &camel) {
+        if a != b {
+            return Err(error("export_destination", "Escolha uma pasta existente."));
+        }
+    }
+    let raw = snake
+        .or(camel)
+        .ok_or_else(|| error("export_destination", "Escolha uma pasta existente."))?;
+    let path = Path::new(&raw);
+    if !path.is_absolute() || !path.is_dir() {
+        return Err(error("export_destination", "Escolha uma pasta existente."));
+    }
+    save_directory(path)?;
+    Ok(json!({"last_directory": path}))
+}
+
 pub(crate) fn run(
     id: i64,
     _source: i64,
@@ -1301,6 +1334,7 @@ inventory::submit! { CommandRegistration {name:"export.start",execute:cmd_start}
 inventory::submit! { CommandRegistration {name:"export.captions",execute:cmd_captions} }
 inventory::submit! { CommandRegistration {name:"export.status",execute:cmd_status} }
 inventory::submit! { CommandRegistration {name:"export.settings",execute:cmd_settings} }
+inventory::submit! { CommandRegistration {name:"export.settings.set",execute:cmd_settings_set} }
 
 pub(crate) fn error(code: &str, message: &str) -> crate::CoreError {
     crate::CoreError {
