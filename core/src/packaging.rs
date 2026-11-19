@@ -138,6 +138,14 @@ pub struct Fields {
 }
 
 impl Fields {
+    fn empty() -> Fields {
+        Fields {
+            title: String::new(),
+            description: String::new(),
+            tags: Vec::new(),
+            hashtags: Vec::new(),
+        }
+    }
     fn from_value(v: &Value) -> Option<Fields> {
         let strings = |key: &str| -> Option<Vec<String>> {
             v[key]
@@ -473,6 +481,45 @@ CREATE TABLE packaging_edits (
 );
 CREATE INDEX packaging_edits_generation ON packaging_edits(generation_id, id);
 " } }
+inventory::submit! { projects::Migration { id: "0299_001_packaging_manual", sql: "
+CREATE TEMP TABLE _packaging_edits_backup (
+  id INTEGER PRIMARY KEY,
+  generation_id INTEGER NOT NULL,
+  fields TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+INSERT INTO _packaging_edits_backup(id, generation_id, fields, created_at)
+  SELECT id, generation_id, fields, created_at FROM packaging_edits;
+DROP TABLE packaging_edits;
+CREATE TABLE packaging_generations_new (
+  id INTEGER PRIMARY KEY,
+  job_id INTEGER UNIQUE,
+  run_id INTEGER NOT NULL REFERENCES selection_runs(id) ON DELETE CASCADE,
+  cand_start_id INTEGER NOT NULL,
+  cand_end_id INTEGER NOT NULL,
+  language TEXT NOT NULL CHECK(language IN ('pt-BR','en')),
+  task_version INTEGER NOT NULL,
+  prompt_sha256 TEXT NOT NULL,
+  profile TEXT NOT NULL DEFAULT '',
+  generated TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+INSERT INTO packaging_generations_new(id,job_id,run_id,cand_start_id,cand_end_id,language,task_version,prompt_sha256,profile,generated,created_at)
+  SELECT id,job_id,run_id,cand_start_id,cand_end_id,language,task_version,prompt_sha256,profile,generated,created_at FROM packaging_generations;
+DROP TABLE packaging_generations;
+ALTER TABLE packaging_generations_new RENAME TO packaging_generations;
+CREATE INDEX packaging_generations_cut ON packaging_generations(run_id, cand_start_id, cand_end_id, id);
+CREATE TABLE packaging_edits (
+  id INTEGER PRIMARY KEY,
+  generation_id INTEGER NOT NULL REFERENCES packaging_generations(id) ON DELETE CASCADE,
+  fields TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+INSERT INTO packaging_edits(id, generation_id, fields, created_at)
+  SELECT id, generation_id, fields, created_at FROM _packaging_edits_backup;
+DROP TABLE _packaging_edits_backup;
+CREATE INDEX packaging_edits_generation ON packaging_edits(generation_id, id);
+" } }
 
 struct Context {
     candidate: i64,
@@ -607,7 +654,7 @@ fn cmd_generate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 
 struct Generation {
     id: i64,
-    job_id: i64,
+    job_id: Option<i64>,
     language: String,
     task_version: i64,
     prompt_sha256: String,
@@ -765,7 +812,7 @@ fn document(ctx: &Context) -> Result<Value, CoreError> {
     materialize(ctx)?;
     let all = read_generations(run, identity)?;
     let done: Vec<&Generation> = all.iter().filter(|g| g.generated.is_some()).collect();
-    let latest_job = all.last();
+    let latest_job = all.iter().rev().find(|g| g.job_id.is_some());
     let detected = detect_language(&ctx.cut.sentences);
     let lang = done
         .last()
@@ -869,19 +916,28 @@ fn edit_field(v: &Value, key: &str) -> Result<Option<Vec<String>>, CoreError> {
     }
 }
 
-/// `packaging.edit {candidate, title?, description?, tags?, hashtags?}`: grava uma edição sobre a
-/// geração atual, validada com os mesmos limites. O crédito não é editável: a edição não o vê.
+/// `packaging.edit {candidate, title?, description?, tags?, hashtags?, language?}`: grava uma
+/// edição sobre a geração atual (ou inicializa uma ficha manual vazia quando ainda não houve
+/// `packaging.generate`), validada com os mesmos limites. O crédito não é editável: a edição não o vê.
 fn cmd_edit(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let ctx = context(crate::selection::candidate_id_arg(&v, "candidate")?)?;
     let (run, identity) = (ctx.cut.run, ctx.cut.identity);
     materialize(&ctx)?;
     let all = read_generations(run, identity)?;
-    let g = all
-        .iter()
-        .rev()
-        .find(|g| g.generated.is_some())
-        .ok_or_else(|| error("nothing_to_edit", "Gere o empacotamento antes de editar."))?;
-    let mut f = current_of(g).cloned().expect("generated is present");
+    let existing = all.iter().rev().find(|g| g.generated.is_some());
+    let (gen_id, lang, mut f) = match existing {
+        Some(g) => (
+            Some(g.id),
+            Lang::parse(&g.language).unwrap_or(Lang::Pt),
+            current_of(g).cloned().expect("generated is present"),
+        ),
+        None => {
+            let lang = detect_language(&ctx.cut.sentences)
+                .or_else(|| v["language"].as_str().and_then(Lang::parse))
+                .unwrap_or(Lang::Pt);
+            (None, lang, Fields::empty())
+        }
+    };
     let before = f.clone();
     for (key, slot) in [("title", &mut f.title), ("description", &mut f.description)] {
         match &v[key] {
@@ -899,7 +955,6 @@ fn cmd_edit(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     f.title = f.title.trim().to_owned();
     f.tags = f.tags.iter().map(|t| t.trim().to_owned()).collect();
     f.hashtags = f.hashtags.iter().map(|t| t.trim().to_owned()).collect();
-    let lang = Lang::parse(&g.language).unwrap_or(Lang::Pt);
     let credit = credit_for_candidate(&ctx, lang);
     let violations = check_limits(&f, credit_bytes(credit.as_deref()));
     if !violations.is_empty() {
@@ -911,9 +966,19 @@ fn cmd_edit(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     }
     if f != before {
         projects::with_writer(|c| {
+            let gid = match gen_id {
+                Some(id) => id,
+                None => {
+                    c.execute(
+                        "INSERT INTO packaging_generations(job_id,run_id,cand_start_id,cand_end_id,language,task_version,prompt_sha256,profile,generated) VALUES (NULL,?1,?2,?3,?4,0,'','',?5)",
+                        (run, identity.0, identity.1, lang.code(), Fields::empty().to_value().to_string()),
+                    )?;
+                    c.last_insert_rowid()
+                }
+            };
             c.execute(
                 "INSERT INTO packaging_edits(generation_id,fields) VALUES (?1,?2)",
-                (g.id, f.to_value().to_string()),
+                (gid, f.to_value().to_string()),
             )?;
             Ok(())
         })?;

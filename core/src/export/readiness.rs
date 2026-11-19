@@ -542,7 +542,7 @@ fn read_packaging_json(
     )?;
     struct PkgGen {
         id: i64,
-        job_id: i64,
+        job_id: Option<i64>,
         language: String,
         fields: Option<Fields>,
         edited: bool,
@@ -590,7 +590,7 @@ fn read_packaging_json(
         }
     }
 
-    let latest_job = gens.last().map(|g| {
+    let latest_job = gens.iter().rev().find(|g| g.job_id.is_some()).map(|g| {
         json!({
             "id": g.job_id,
             "state": g.job_state,
