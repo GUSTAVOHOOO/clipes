@@ -1048,6 +1048,7 @@ fn download_model(
             |pct| {
                 events(ProgressEvent {
                     project: None,
+                    clip_id: None,
                     job: job_key.into(),
                     stage: "download".into(),
                     percentage: ((base + file.size * u64::from(pct) / 100) * 100 / total).min(99)
@@ -1074,6 +1075,7 @@ fn download_model(
             |pct| {
                 events(ProgressEvent {
                     project: None,
+                    clip_id: None,
                     job: job_key.into(),
                     stage: "download".into(),
                     percentage: ((base + emb.size * u64::from(pct) / 100) * 100 / total).min(99)
@@ -1140,6 +1142,7 @@ fn download_model(
 
     events(ProgressEvent {
         project: None,
+        clip_id: None,
         job: job_key.into(),
         stage: "complete".into(),
         percentage: 100,

@@ -638,8 +638,10 @@ Nenhum comando deste domínio entra na fila persistente de jobs do Projeto (`cor
 | `tts:<model_id>` | `download` | Durante o download de pesos (`"Baixando modelo TTS"`) e embeddings (`"Baixando voz TTS"`) em `tts.models.download` | `0`–`99` | `null` |
 | `tts:<model_id>` | `complete` | Após gravar `config.yaml` e `model.state.json` em `tts.models.download` | `100` | `null` |
 | `app.version` | `complete` | Ao responder `app.version` | `100` | `null` |
+| `backup` | `backup_complete` | Ao concluir o backup automático rotativo em segundo plano (`emit_background`, com `project: <queue_project_identity>`) | `100` | `null` |
+| `backup` | `backup_failed` | Quando o backup automático em segundo plano falha (`emit_background`, mensagem fixa sem vazar caminhos) | `0` | `Some(CoreError)` |
 
-> **Nota:** erros nunca chegam via `ProgressEvent.error` neste domínio; em caso de falha ou cancelamento, o próprio comando retorna `Err(CoreError)`.
+> **Nota:** para os comandos síncronos deste domínio, erros chegam como `Err(CoreError)` na resposta do comando; já o backup automático em segundo plano envia `ProgressEvent.error` pelo emissor global (`core/src/projects/backups.rs`).
 
 ### Estados dos objetos do domínio
 

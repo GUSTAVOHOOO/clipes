@@ -897,6 +897,7 @@ fn emit(run: i64, step: &str, percentage: u8, message: &str, error: Option<CoreE
     crate::emit_background(crate::ProgressEvent {
         job: format!("selection-{run}"),
         project,
+        clip_id: None,
         stage: format!("selection:{step}"),
         percentage,
         message: message.into(),

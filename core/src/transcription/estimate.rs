@@ -37,6 +37,7 @@ pub(crate) fn estimate_seconds(load_s: f64, rate: f64, duration_s: f64) -> f64 {
 fn progress(events: &mut EventSink<'_>, percentage: u8, message: &str) {
     events(crate::ProgressEvent {
         project: None,
+        clip_id: None,
         job: ESTIMATE_JOB.into(),
         stage: "estimate".into(),
         percentage,

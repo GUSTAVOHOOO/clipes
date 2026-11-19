@@ -5,18 +5,32 @@ use clipes_core::{
     dispatch, jobs,
     projects::{with_reader, with_writer},
     provider::{cost::Target, CancelToken, Provider, StructuredRequest},
-    CoreError,
+    CoreError, ProgressEvent,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
     fs,
     path::Path,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
     time::{Duration, Instant},
 };
 
 static TEST_LOCK: Mutex<()> = Mutex::new(());
+
+fn captured_events() -> &'static Mutex<Vec<ProgressEvent>> {
+    static EVENTS: OnceLock<Mutex<Vec<ProgressEvent>>> = OnceLock::new();
+    EVENTS.get_or_init(|| {
+        let _ = clipes_core::set_event_emitter(Arc::new(|ev| {
+            if let Some(buf) = EVENTS.get() {
+                if let Ok(mut guard) = buf.lock() {
+                    guard.push(ev);
+                }
+            }
+        }));
+        Mutex::new(Vec::new())
+    })
+}
 
 fn call(name: &str, args: Value) -> Value {
     dispatch(name, args, &mut |_| {}).unwrap()
@@ -677,6 +691,134 @@ fn translation_flow_track_switch_interpolation_edits_glyphs_batches_and_vetoes()
     );
     let est_small = call("translation.estimate", json!({"clip_id": clip_en}));
     assert!(est_small["batches"].as_u64().unwrap() > 2);
+
+    jobs::set_ai_provider(None);
+    jobs::set_ai_route(None);
+    call("projects.close", json!({}));
+}
+
+#[test]
+fn translation_progress_events_include_clip_id_without_breaking_existing_shape() {
+    let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let events_buf = captured_events();
+    events_buf.lock().unwrap().clear();
+
+    let root = tempfile::tempdir().unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", root.path().join("data"));
+    let project = call(
+        "projects.create",
+        json!({"parent": root.path(), "name": "TraduEventos"}),
+    );
+    let project_id = project["id"].as_str().unwrap().to_owned();
+
+    let fake = Arc::new(EchoTranslator::default());
+    jobs::set_ai_provider(Some(fake.clone()));
+    call(
+        "provider.configure",
+        json!({"endpoint": "http://127.0.0.1:9/v1", "kind": "openai", "model": "fake-model", "context": 32768}),
+    );
+    jobs::set_ai_route(Some((
+        Target::Api {
+            provider: "openai".into(),
+            model: "fake-model".into(),
+            local: true,
+        },
+        "legacy".into(),
+    )));
+
+    let (source, _) = seed_with_permission(
+        None,
+        json!({"status": "granted", "who": "Criador", "where": "Email", "scope": "translation"}),
+        &[
+            ("Primeira frase para evento.", "pt"),
+            ("Segunda frase para evento.", "pt"),
+            ("Terceira frase para evento.", "pt"),
+        ],
+        11_000_000,
+    );
+    call("transcription.segment", json!({"source_id": source}));
+    let clip_a = open_clip(source, 1, 2);
+    let clip_b = open_clip(source, 2, 3);
+    assert_ne!(clip_a, clip_b);
+
+    events_buf.lock().unwrap().clear();
+    let started_a = call("translation.start", json!({"clip_id": clip_a}));
+    let run_a = started_a["run"].as_i64().unwrap();
+    let job_a = started_a["jobs"][0].as_i64().unwrap().to_string();
+    assert_eq!(wait_run(clip_a, run_a)["run"]["state"], "completed");
+
+    let started_b = call("translation.start", json!({"clip_id": clip_b}));
+    let run_b = started_b["run"].as_i64().unwrap();
+    let job_b = started_b["jobs"][0].as_i64().unwrap().to_string();
+    assert_eq!(wait_run(clip_b, run_b)["run"]["state"], "completed");
+
+    // Non-translation AI job must NOT emit clip_id in serialized JSON.
+    let non_tr_job = jobs::enqueue_ai(
+        "angles",
+        &TaskInput {
+            transcript: "1 Olá".into(),
+            context: json!({}),
+            ..Default::default()
+        },
+        jobs::Safety::Local,
+    )
+    .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let done = events_buf
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|e| e.job == non_tr_job.to_string() && e.stage == "ai:angles:done");
+        if done {
+            break;
+        }
+        assert!(Instant::now() < deadline, "angles job did not finish");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+
+    let captured = events_buf.lock().unwrap().clone();
+    let check_clip_events = |job_id: &str, expected_clip_id: i64| {
+        let mine: Vec<_> = captured.iter().filter(|e| e.job == job_id).collect();
+        let stages: Vec<_> = mine.iter().map(|e| e.stage.as_str()).collect();
+        assert_eq!(
+            stages,
+            [
+                "ai:translation:prepare",
+                "ai:translation:call",
+                "ai:translation:verify",
+                "ai:translation:done"
+            ]
+        );
+        for ev in mine {
+            assert_eq!(ev.project.as_deref(), Some(project_id.as_str()));
+            let serialized = serde_json::to_value(ev).unwrap();
+            assert!(serialized["job"].is_string());
+            assert!(serialized["stage"].is_string());
+            assert!(serialized["percentage"].is_u64());
+            assert!(serialized["message"].is_string());
+            assert_eq!(
+                serialized.get("clip_id"),
+                Some(&json!(expected_clip_id)),
+                "evento {serialized} deve carregar clip_id={expected_clip_id}"
+            );
+        }
+    };
+    check_clip_events(&job_a, clip_a);
+    check_clip_events(&job_b, clip_b);
+
+    let angles_events: Vec<_> = captured
+        .iter()
+        .filter(|e| e.job == non_tr_job.to_string())
+        .collect();
+    assert!(!angles_events.is_empty());
+    for ev in angles_events {
+        let serialized = serde_json::to_value(ev).unwrap();
+        assert!(
+            serialized.get("clip_id").is_none(),
+            "evento não-translation não deve vazar clip_id: {serialized}"
+        );
+    }
 
     jobs::set_ai_provider(None);
     jobs::set_ai_route(None);

@@ -197,6 +197,7 @@ where
         Err(error) => target.emit_save_failed(clipes_core::ProgressEvent {
             job: "editor".into(),
             project: None,
+            clip_id: None,
             stage: "editor_save_failed".into(),
             percentage: 0,
             message: "Não foi possível salvar o Corte.".into(),

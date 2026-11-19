@@ -130,6 +130,7 @@ fn progress_event(
     crate::emit_background(crate::ProgressEvent {
         job: id.to_string(),
         project: Some(project),
+        clip_id: None,
         stage: if err.is_some() { "failed" } else { "complete" }.into(),
         percentage: if err.is_some() { 0 } else { 100 },
         message: match (kind, err.is_some()) {

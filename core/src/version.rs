@@ -4,6 +4,7 @@ use serde_json::{json, Value};
 fn version(_: Value, events: &mut EventSink<'_>) -> CommandResult {
     events(ProgressEvent {
         project: None,
+        clip_id: None,
         job: "app.version".into(),
         stage: "complete".into(),
         percentage: 100,

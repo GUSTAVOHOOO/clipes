@@ -911,6 +911,7 @@ fn cmd_check(_: Value, events: &mut EventSink<'_>) -> CommandResult {
     )?;
     events(crate::ProgressEvent {
         project: None,
+        clip_id: None,
         job: "catalog".into(),
         stage: "complete".into(),
         percentage: 100,

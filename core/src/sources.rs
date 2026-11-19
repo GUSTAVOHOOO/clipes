@@ -166,6 +166,7 @@ fn full(
         if pct != last {
             events(ProgressEvent {
                 project: None,
+                clip_id: None,
                 job: job.into(),
                 stage: "hash".into(),
                 percentage: pct,

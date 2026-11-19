@@ -416,6 +416,7 @@ fn download_model(
             |percentage| {
                 events(ProgressEvent {
                     project: None,
+                    clip_id: None,
                     job: spec.id.clone(),
                     stage: "download".into(),
                     percentage: ((base + file.size * u64::from(percentage) / 100) * 100 / total)
@@ -466,6 +467,7 @@ fn download_model(
 
     events(ProgressEvent {
         project: None,
+        clip_id: None,
         job: spec.id.clone(),
         stage: "complete".into(),
         percentage: 100,

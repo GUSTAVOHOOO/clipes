@@ -500,6 +500,7 @@ fn emit_batch_event(batch_id: i64, stage: &str, percentage: u8, message: &str) {
     crate::emit_background(crate::ProgressEvent {
         job: format!("export-batch-{batch_id}"),
         project,
+        clip_id: None,
         stage: stage.into(),
         percentage: percentage.min(100),
         message: message.into(),

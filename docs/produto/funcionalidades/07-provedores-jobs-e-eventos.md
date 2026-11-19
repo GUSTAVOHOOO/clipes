@@ -553,7 +553,7 @@ Ao mesmo tempo, as operações demoradas do Clipes — transcrição, análise d
 
 ## Catálogo completo de eventos
 
-No Tauri, todo progresso do núcleo chega à WebView pelo único nome de evento **`core-progress`** (`src-tauri/src/main.rs:32, 96, 120`), carregando `ProgressEvent { job: String, project?: String, stage: String, percentage: u8, message: String, error?: CoreError }` (`core/src/lib.rs:13-21`).
+No Tauri, todo progresso do núcleo chega à WebView pelo único nome de evento **`core-progress`** (`src-tauri/src/main.rs:32, 96, 120`), carregando `ProgressEvent { job: String, project?: String, clip_id?: i64, stage: String, percentage: u8, message: String, error?: CoreError }` (`core/src/lib.rs:13-23`). `clip_id` é opcional (omitido quando `None`) e é preenchido nos eventos dos jobs `ai:translation:*`.
 
 Existem dois canais de emissão no núcleo e um terceiro direto no adaptador Tauri:
 1. **`EventSink` da chamada (`events(...)`)**: entregue apenas enquanto o comando síncrono `core_dispatch` está rodando (`src-tauri/src/main.rs:31-33`).
@@ -566,13 +566,14 @@ Existem dois canais de emissão no núcleo e um terceiro direto no adaptador Tau
 |---|---|---|---|---|---|
 | `core/src/jobs.rs:116` (`jobs::progress`) | `<job_id>` (ou `"0"` em `narration_record.rs:859`) | `Some(project_id)` | `"chat"` (`chat.rs`), `"timeline"` (`editor/assets.rs`), `"export"` (`export.rs`), `"energy"` (`energy.rs`), `"aligning"` (`narration_align.rs`), `"narration_import"` (`narration_import.rs`), `"narration_record"` (`narration_record.rs:859`), `"proxy"` (`proxy.rs`), `"reframe_proxy"` / `"reframe_scenes"` / `"reframe_faces"` (`reframe.rs`), `"transcribing"` (`transcription.rs`), `"narration"` (`tts/narration.rs`), `"waveform"` / `"thumbnails"` (`jobs/preview.rs`) | `0..100` (clamp `100`) | `None` |
 | `core/src/jobs/preview.rs:130` (`progress_event`, fim de jobs não-`ai:*`) | `<job_id>` | `Some(project_id)` | `"complete"`, `"failed"` | `100` / `0` | `None` / `Some(CoreError)` |
-| `core/src/jobs/ai.rs:404` (`ai::emit`, jobs `ai:<task>`) | `<job_id>` | `Option<project_id>` | `"ai:<task>:prepare"`, `"ai:<task>:call"`, `"ai:<task>:verify"`, `"ai:<task>:paused"`, `"ai:<task>:done"` | `0`, `10`, `80`, `100` | `Option<CoreError>` |
+| `core/src/jobs/ai.rs` (`ai::emit`, jobs `ai:<task>`) | `<job_id>` | `Option<project_id>` | `"ai:<task>:prepare"`, `"ai:<task>:call"`, `"ai:<task>:verify"`, `"ai:<task>:paused"`, `"ai:<task>:done"` (com `clip_id: Some(<clip_id>)` em `ai:translation`) | `0`, `10`, `80`, `100` | `Option<CoreError>` |
 | `core/src/transcription.rs:391` (`auto_probe_before_transcription`) | `<job_id>` | `Some(project_id)` | `"probe"`, `"gpu_probe_fallback"` | `0..99` | `None` |
 | `core/src/selection.rs:905` (`selection::emit`, `selection.start` / `selection.redo`) | `"selection-<run_id>"` | `Option<project_id>` | `"selection:window"`, `"selection:done"` | `0..100` | `None` / `Option<CoreError>` |
 | `core/src/source_batches.rs:140` (`source_batches::emit`, `batches.*`) | `"batch-<batch_id>"` | `Option<project_id>` | `"batch:created"`, `"batch:item"`, `"batch:item-paused"`, `"batch:paused"`, `"batch:resumed"`, `"batch:cancelled"`, `"batch:completed"` | `0` | `None` / `Some(CoreError)` |
 | `core/src/export/batch.rs:504` (`emit_batch_event`, `export.batch.*`) | `"export-batch-<batch_id>"` | `Option<project_id>` | `"export_batch"`, `"export_batch_complete"`, `"export_batch_cancelled"` | `0..100` | `None` |
 | `core/src/editor/edits.rs:428` (`save`, `editor.adjust` / `editor.flush` / autosave) | `"editor:<clip_id>"` | `Some(project_id)` | `"editor_saved"` | `100` | `None` |
 | `core/src/editor/edits.rs:446` (`start_autosave`, thread em segundo plano) | `"editor"` | `None` | `"editor_save_failed"` | `0` | `Some(CoreError)` |
+| `core/src/projects/backups.rs` (`run_auto_backup`, backup automático em segundo plano) | `"backup"` | `Option<project_id>` | `"backup_complete"`, `"backup_failed"` | `100` / `0` | `None` / `Some(CoreError)` |
 
 ### 2. Eventos via `EventSink` da chamada (`events(...)`)
 
