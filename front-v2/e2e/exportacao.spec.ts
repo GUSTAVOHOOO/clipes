@@ -47,6 +47,22 @@ test.describe('Tela Exportação — Mesa de Prontidão e Histórico de Lotes (#
     const btnDisparo = page.getByRole('button', { name: /Exportar \d+ aprovados em lote/i })
     await expect(btnDisparo).toBeEnabled()
 
+    // Atualizar prontidão em lote habilitado + filtro por Fonte via export.readiness
+    const btnAtualizar = page.getByRole('button', { name: /Atualizar prontidão em lote/i })
+    await expect(btnAtualizar).toBeEnabled()
+    await btnAtualizar.click()
+    await expect(cards.first()).toBeVisible()
+
+    await page.getByRole('combobox', { name: /Filtrar por Fonte/i }).click()
+    await page.getByRole('option', { name: 'offline.mp4' }).click()
+    await expect(page.getByRole('article')).toHaveCount(1)
+    await expect(page.getByRole('button', { name: /Exportar 1 da Fonte em lote/i })).toBeVisible()
+
+    await page.getByRole('combobox', { name: /Filtrar por Fonte/i }).click()
+    await page.getByRole('option', { name: 'Todas as Fontes' }).click()
+    await expect(page.getByRole('article').first()).toBeVisible()
+    expect(await page.getByRole('article').count()).toBeGreaterThanOrEqual(3)
+
     await verificarSemRolagemExterna(page)
     await page.screenshot({ path: 'test-results/exportacao-prontidao-1366.png' })
 

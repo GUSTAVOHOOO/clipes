@@ -3,11 +3,6 @@ import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { useFila, type Fila, type Job } from '~/core/progresso'
 import type { LoteExportacao } from '~/stores/filaGlobal'
 import type { FonteProjeto } from '~/stores/fontesProjeto'
-import type {
-  DetalheExecucaoSelecao,
-  ResumoRunSelecao,
-  RevisaoExecucaoSelecao,
-} from '~/stores/selecaoProjeto'
 
 export const TAMANHO_PAGINA = 12
 
@@ -54,6 +49,7 @@ export type RespostaGuardrails = {
     approved?: boolean
     pendingBlocks?: number
     totalBlocks?: number
+    busy?: boolean
     transformedCount?: number
     approvedCount?: number
     unapprovedCount?: number
@@ -62,6 +58,8 @@ export type RespostaGuardrails = {
     applicable: boolean
     hasTts?: boolean
     generatedBlocks?: number
+    readyBlocks?: number
+    ready?: boolean
     totalBlocks?: number
     ttsCutCount?: number
     transformedCount?: number
@@ -71,6 +69,7 @@ export type RespostaGuardrails = {
     freezeTailCount?: number
     longFreezeTailCount?: number
     maxFreezeTailUs?: number
+    busy?: boolean
   }
   audio?: {
     hasAudio: boolean
@@ -82,7 +81,11 @@ export type RespostaGuardrails = {
 }
 
 export type ResumoEmpacotamentoCorte = {
+  ready?: boolean
   current: {
+    generation?: number
+    language?: string
+    edited?: boolean
     title?: string
     description?: string
     fullDescription?: string
@@ -96,53 +99,98 @@ export type ResumoEmpacotamentoCorte = {
   chapters?: {
     applicable?: boolean
     status?: string
+    canGenerate?: boolean
   }
+  job?: { id: number; state: string | null } | null
 }
 
 export type ResumoCapaCorte = {
+  ready?: boolean
   current: {
     id: number
     instantUs: number
     origin: 'provider' | 'user' | string
+    suggestionId?: number | null
     why?: string | null
   } | null
+  job?: { id: number; state: string | null } | null
 }
 
-export type DetalhesCorteProntidao = {
-  candidateId: number
-  packaging: ResumoEmpacotamentoCorte | null
-  thumbnail: ResumoCapaCorte | null
-  guardrails: RespostaGuardrails | null
+export type FonteResumoProntidao = {
+  id: number
+  name: string
+  path: string
+  status: FonteProjeto['status']
+  available: boolean
+  online: boolean
+  permission: FonteProjeto['permission']
+}
+
+export type ResumoRoteiroProntidao = {
+  applicable: boolean
+  exists?: boolean
+  approved?: boolean
+  pendingBlocks?: number
+  totalBlocks?: number
+  busy?: boolean
+}
+
+export type ResumoNarracaoProntidao = {
+  applicable: boolean
+  hasTts?: boolean
+  generatedBlocks?: number
+  readyBlocks?: number
+  ready?: boolean
+  totalBlocks?: number
+  voices?: string[]
+  freezeTailUs?: number
+  longFreezeTail?: boolean
+  busy?: boolean
 }
 
 export type CorteAprovadoProntidao = {
   candidateId: number
   runId: number
   sourceId: number
-  sourceName: string
-  sourceStatus: FonteProjeto['status']
-  permission: FonteProjeto['permission']
+  clipId?: number | null
   videoKind: 'direct' | 'transformed'
+  candidateTitle: string
+  scoreTotal: number
+  adjusted: boolean
   startId: number
   endId: number
   startUs: number
   endUs: number
   durationUs: number
-  adjusted: boolean
-  scoreTotal: number
-  candidateTitle: string
+  source: FonteResumoProntidao
+  packaging: ResumoEmpacotamentoCorte
+  thumbnail: ResumoCapaCorte
+  script: ResumoRoteiroProntidao
+  narration: ResumoNarracaoProntidao
+  guardrails: RespostaGuardrails
+}
+
+export type RespostaReadinessExportacao = {
+  total: number
+  offset: number
+  limit: number | null
+  hasMore: boolean
+  items: CorteAprovadoProntidao[]
 }
 
 export type EstadoExportacaoProjeto = {
   projetoPath: string | null
   carregando: boolean
   carregandoMais: boolean
+  atualizandoProntidao: boolean
   erro: ErroCore | null
+  erroProntidao: ErroCore | null
   fontes: FonteProjeto[]
   aprovados: CorteAprovadoProntidao[]
-  paginaAtual: number
+  totalAprovados: number
+  totalProjeto: number
+  filtroFonteId: number | null
   temMais: boolean
-  detalhesPorCandidato: Record<number, DetalhesCorteProntidao>
   guardrailsProjeto: RespostaGuardrails | null
   guardrailsPorFonte: Record<number, RespostaGuardrails>
   settings: ConfiguracoesExportacao | null
@@ -157,7 +205,9 @@ export type StoreExportacaoProjeto = {
   recarregar: () => Promise<void>
   recarregarLotes: () => Promise<LoteExportacao[]>
   carregarMais: () => Promise<void>
-  garantirDetalhesParaIds: (ids: readonly number[]) => Promise<void>
+  filtrarPorFonte: (sourceId: number | null) => Promise<void>
+  atualizarProntidao: () => Promise<void>
+  tentarNovamenteProntidao: () => Promise<void>
   carregarGuardrailsEscopo: (sourceId?: number | null) => Promise<RespostaGuardrails | null>
   sincronizarJobs: (jobs: readonly Job[]) => void
 }
@@ -167,12 +217,15 @@ function estadoInicial(projetoPath: string | null): EstadoExportacaoProjeto {
     projetoPath,
     carregando: Boolean(projetoPath),
     carregandoMais: false,
+    atualizandoProntidao: false,
     erro: null,
+    erroProntidao: null,
     fontes: [],
     aprovados: [],
-    paginaAtual: 1,
+    totalAprovados: 0,
+    totalProjeto: 0,
+    filtroFonteId: null,
     temMais: false,
-    detalhesPorCandidato: {},
     guardrailsProjeto: null,
     guardrailsPorFonte: {},
     settings: null,
@@ -181,12 +234,23 @@ function estadoInicial(projetoPath: string | null): EstadoExportacaoProjeto {
   }
 }
 
-function nomeArquivoDaFonte(path: string): string {
-  return path.split(/[\\/]/).pop() || path
+function mesclarSemDuplicar(
+  atuais: readonly CorteAprovadoProntidao[],
+  novos: readonly CorteAprovadoProntidao[],
+): CorteAprovadoProntidao[] {
+  const vistos = new Set(atuais.map((c) => c.candidateId))
+  const resultado = [...atuais]
+  for (const item of novos) {
+    if (!vistos.has(item.candidateId)) {
+      vistos.add(item.candidateId)
+      resultado.push(item)
+    }
+  }
+  return resultado
 }
 
 /**
- * Store paginado com cache em memória (#298) para a Mesa de Prontidão e Histórico de Lotes,
+ * Store paginado via `export.readiness` para a Mesa de Prontidão e Histórico de Lotes,
  * reagindo a `useFila()` e zerado integralmente ao fechar ou trocar o Projeto.
  */
 export function criarStoreExportacaoProjeto(opcoes?: {
@@ -195,6 +259,9 @@ export function criarStoreExportacaoProjeto(opcoes?: {
   const tamanhoPagina = opcoes?.tamanhoPagina ?? TAMANHO_PAGINA
   let atual = estadoInicial(null)
   let seqProjeto = 0
+  let seqReadiness = 0
+  let ultimaFalhaProntidao: 'atualizar' | 'mais' | 'guardrails' | null = null
+  let ultimaFonteGuardrailsFalhou: number | null = null
   const ouvintes = new Set<() => void>()
   const assinaturasVistas = new Map<string, string>()
 
@@ -209,142 +276,75 @@ export function criarStoreExportacaoProjeto(opcoes?: {
     publicar({ ...atual, ...patch })
   }
 
-  async function carregarDetalhesFaltantes(
-    candidatosAlvo: readonly CorteAprovadoProntidao[],
-    seq: number,
-    caminho: string,
-  ): Promise<void> {
-    const faltantes = candidatosAlvo.filter((c) => !(c.candidateId in atual.detalhesPorCandidato))
-    if (faltantes.length === 0) return
-
-    const entradas = await Promise.all(
-      faltantes.map(async (c): Promise<[number, DetalhesCorteProntidao]> => {
-        const [pkg, thumb, gr] = await Promise.all([
-          chamar<ResumoEmpacotamentoCorte>('packaging.get', { candidate: c.candidateId }).catch(() => null),
-          chamar<ResumoCapaCorte>('thumbnail.get', { candidate: c.candidateId }).catch(() => null),
-          chamar<RespostaGuardrails>('guardrails.check', {
-            scope: 'single',
-            source_id: c.sourceId,
-            candidate_id: c.candidateId,
-            start_id: c.startId,
-            end_id: c.endId,
-          }).catch(() => null),
-        ])
-        return [
-          c.candidateId,
-          {
-            candidateId: c.candidateId,
-            packaging: pkg,
-            thumbnail: thumb,
-            guardrails: gr,
-          },
-        ]
-      }),
-    )
-
-    if (seq !== seqProjeto || atual.projetoPath !== caminho) return
-    const proximoMapa = { ...atual.detalhesPorCandidato }
-    for (const [id, det] of entradas) {
-      proximoMapa[id] = det
+  async function buscarReadiness(params: {
+    sourceId: number | null
+    offset: number
+    limit: number
+  }): Promise<RespostaReadinessExportacao> {
+    const args: Record<string, unknown> = {
+      offset: params.offset,
+      limit: params.limit,
     }
-    atualizar({ detalhesPorCandidato: proximoMapa })
-  }
-
-  async function descobrirAprovados(
-    fontes: readonly FonteProjeto[],
-  ): Promise<CorteAprovadoProntidao[]> {
-    const aprovados: CorteAprovadoProntidao[] = []
-
-    for (const fonte of fontes) {
-      let runs: ResumoRunSelecao[] = []
-      try {
-        const res = await chamar<ResumoRunSelecao[]>('selection.list', { source_id: fonte.id })
-        runs = Array.isArray(res) ? res : []
-      } catch (err) {
-        const coreErr = paraErroCore(err)
-        if (coreErr.code === 'transcript_missing') continue
-        throw coreErr
-      }
-
-      for (const run of runs) {
-        const [detalhe, revisao] = await Promise.all([
-          chamar<DetalheExecucaoSelecao>('selection.get', {
-            run: run.id,
-            revision: run.revision,
-          }).catch(() => null),
-          chamar<RevisaoExecucaoSelecao>('selection.review', { run: run.id }).catch(() => null),
-        ])
-        if (!revisao) continue
-
-        const candPorId = new Map((detalhe?.candidates ?? []).map((c) => [c.id, c]))
-        for (const item of revisao.items) {
-          if (item.status !== 'approved') continue
-          const cand = candPorId.get(item.candidate)
-          const videoKind =
-            detalhe?.run?.videoKind === 'transformed' || run.videoKind === 'transformed'
-              ? 'transformed'
-              : 'direct'
-          aprovados.push({
-            candidateId: item.candidate,
-            runId: run.id,
-            sourceId: fonte.id,
-            sourceName: nomeArquivoDaFonte(fonte.path),
-            sourceStatus: fonte.status,
-            permission: fonte.permission,
-            videoKind,
-            startId: item.startId,
-            endId: item.endId,
-            startUs: item.startUs,
-            endUs: item.endUs,
-            durationUs: Math.max(1, item.endUs - item.startUs),
-            adjusted: item.adjusted,
-            scoreTotal: cand?.total ?? 0,
-            candidateTitle: cand?.title ?? '',
-          })
-        }
-      }
+    if (params.sourceId !== null) {
+      args.source_id = params.sourceId
     }
-
-    return aprovados
+    const res = await chamar<RespostaReadinessExportacao>('export.readiness', args)
+    return {
+      total: typeof res?.total === 'number' ? res.total : 0,
+      offset: typeof res?.offset === 'number' ? res.offset : params.offset,
+      limit: typeof res?.limit === 'number' ? res.limit : params.limit,
+      hasMore: Boolean(res?.hasMore),
+      items: Array.isArray(res?.items) ? res.items : [],
+    }
   }
 
   async function recarregar(): Promise<void> {
     const caminho = atual.projetoPath
     if (!caminho) return
     const seq = seqProjeto
-    atualizar({ carregando: true, erro: null })
+    seqReadiness += 1
+    const rSeq = seqReadiness
+    const fonteFiltro = atual.filtroFonteId
+    ultimaFalhaProntidao = null
+    ultimaFonteGuardrailsFalhou = null
+    atualizar({ carregando: true, erro: null, erroProntidao: null })
 
     try {
-      const [fontesRes, settingsRes, encoderRes, lotesRes, guardrailsRes] = await Promise.all([
-        chamar<FonteProjeto[]>('sources.list', { project: caminho }),
-        chamar<ConfiguracoesExportacao>('export.settings', {}).catch(() => null),
-        chamar<StatusEncoderExportacao>('export.encoder.status', {}).catch(() => null),
-        chamar<LoteExportacao[]>('export.batch.list', {}).catch(() => []),
-        chamar<RespostaGuardrails>('guardrails.check', { scope: 'project' }).catch(() => null),
-      ])
-      if (seq !== seqProjeto || atual.projetoPath !== caminho) return
+      const [fontesRes, readinessRes, settingsRes, encoderRes, lotesRes, guardrailsRes] =
+        await Promise.all([
+          chamar<FonteProjeto[]>('sources.list', { project: caminho }),
+          buscarReadiness({
+            sourceId: fonteFiltro,
+            offset: 0,
+            limit: tamanhoPagina,
+          }),
+          chamar<ConfiguracoesExportacao>('export.settings', {}).catch(() => null),
+          chamar<StatusEncoderExportacao>('export.encoder.status', {}).catch(() => null),
+          chamar<LoteExportacao[]>('export.batch.list', {}).catch(() => []),
+          chamar<RespostaGuardrails>('guardrails.check', { scope: 'project' }).catch(() => null),
+        ])
+      if (seq !== seqProjeto || rSeq !== seqReadiness || atual.projetoPath !== caminho) return
 
       const fontes = Array.isArray(fontesRes) ? fontesRes : []
-      const aprovados = await descobrirAprovados(fontes)
-      if (seq !== seqProjeto || atual.projetoPath !== caminho) return
-
-      const limite = atual.paginaAtual * tamanhoPagina
-      const loteInicial = aprovados.slice(0, limite)
+      const totalProjeto =
+        fonteFiltro === null
+          ? readinessRes.total
+          : (guardrailsRes?.totalCuts ?? atual.totalProjeto)
 
       atualizar({
+        carregando: false,
+        erro: null,
+        erroProntidao: null,
         fontes,
-        aprovados,
-        temMais: aprovados.length > limite,
+        aprovados: readinessRes.items,
+        totalAprovados: readinessRes.total,
+        totalProjeto,
+        temMais: readinessRes.hasMore,
         settings: settingsRes,
         encoder: encoderRes,
         lotes: Array.isArray(lotesRes) ? lotesRes : [],
         guardrailsProjeto: guardrailsRes,
-        detalhesPorCandidato: {},
       })
-
-      await carregarDetalhesFaltantes(loteInicial, seq, caminho)
-      if (seq !== seqProjeto || atual.projetoPath !== caminho) return
-      atualizar({ carregando: false, erro: null })
     } catch (err) {
       if (seq !== seqProjeto || atual.projetoPath !== caminho) return
       atualizar({ carregando: false, erro: paraErroCore(err) })
@@ -370,31 +370,87 @@ export function criarStoreExportacaoProjeto(opcoes?: {
     const caminho = atual.projetoPath
     if (!caminho || atual.carregandoMais || !atual.temMais) return
     const seq = seqProjeto
-    const proximaPagina = atual.paginaAtual + 1
-    const limite = proximaPagina * tamanhoPagina
-    const fatia = atual.aprovados.slice(0, limite)
+    const rSeq = seqReadiness
+    const fonteAlvo = atual.filtroFonteId
+    const offset = atual.aprovados.length
+
+    atualizar({ carregandoMais: true, erroProntidao: null })
+
+    try {
+      const res = await buscarReadiness({
+        sourceId: fonteAlvo,
+        offset,
+        limit: tamanhoPagina,
+      })
+      if (seq !== seqProjeto || rSeq !== seqReadiness || atual.projetoPath !== caminho) return
+      ultimaFalhaProntidao = null
+      atualizar({
+        carregandoMais: false,
+        erroProntidao: null,
+        aprovados: mesclarSemDuplicar(atual.aprovados, res.items),
+        totalAprovados: res.total,
+        totalProjeto: fonteAlvo === null ? res.total : atual.totalProjeto,
+        temMais: res.hasMore,
+      })
+    } catch (err) {
+      if (seq !== seqProjeto || rSeq !== seqReadiness || atual.projetoPath !== caminho) return
+      ultimaFalhaProntidao = 'mais'
+      atualizar({ carregandoMais: false, erroProntidao: paraErroCore(err) })
+    }
+  }
+
+  async function executarReadinessInicial(params: {
+    sourceId: number | null
+    limit: number
+  }): Promise<void> {
+    const caminho = atual.projetoPath
+    if (!caminho) return
+    const seq = seqProjeto
+    seqReadiness += 1
+    const rSeq = seqReadiness
 
     atualizar({
-      carregandoMais: true,
-      paginaAtual: proximaPagina,
-      temMais: atual.aprovados.length > limite,
+      filtroFonteId: params.sourceId,
+      atualizandoProntidao: true,
+      carregandoMais: false,
+      erroProntidao: null,
     })
 
-    await carregarDetalhesFaltantes(fatia, seq, caminho)
-    if (seq !== seqProjeto || atual.projetoPath !== caminho) return
-    atualizar({ carregandoMais: false })
+    try {
+      const res = await buscarReadiness({
+        sourceId: params.sourceId,
+        offset: 0,
+        limit: params.limit,
+      })
+      if (seq !== seqProjeto || rSeq !== seqReadiness || atual.projetoPath !== caminho) return
+      ultimaFalhaProntidao = null
+      atualizar({
+        atualizandoProntidao: false,
+        erroProntidao: null,
+        aprovados: res.items,
+        totalAprovados: res.total,
+        totalProjeto: params.sourceId === null ? res.total : atual.totalProjeto,
+        temMais: res.hasMore,
+      })
+    } catch (err) {
+      if (seq !== seqProjeto || rSeq !== seqReadiness || atual.projetoPath !== caminho) return
+      ultimaFalhaProntidao = 'atualizar'
+      atualizar({ atualizandoProntidao: false, erroProntidao: paraErroCore(err) })
+    }
   }
 
-  async function garantirDetalhesParaIds(ids: readonly number[]): Promise<void> {
-    const caminho = atual.projetoPath
-    if (!caminho || ids.length === 0) return
-    const seq = seqProjeto
-    const conjunto = new Set(ids)
-    const alvos = atual.aprovados.filter((c) => conjunto.has(c.candidateId))
-    await carregarDetalhesFaltantes(alvos, seq, caminho)
+  async function filtrarPorFonte(sourceId: number | null): Promise<void> {
+    await executarReadinessInicial({ sourceId, limit: tamanhoPagina })
   }
 
-  async function carregarGuardrailsEscopo(sourceId?: number | null): Promise<RespostaGuardrails | null> {
+  async function atualizarProntidao(): Promise<void> {
+    const limit = Math.max(tamanhoPagina, atual.aprovados.length)
+    await executarReadinessInicial({ sourceId: atual.filtroFonteId, limit })
+  }
+
+  async function carregarGuardrailsEscopo(
+    sourceId?: number | null,
+  ): Promise<RespostaGuardrails | null> {
     const caminho = atual.projetoPath
     if (!caminho) return null
     const seq = seqProjeto
@@ -402,24 +458,49 @@ export function criarStoreExportacaoProjeto(opcoes?: {
       typeof sourceId === 'number'
         ? { scope: 'source', source_id: sourceId }
         : { scope: 'project' }
-    const res = await chamar<RespostaGuardrails>('guardrails.check', args)
-    if (seq !== seqProjeto || atual.projetoPath !== caminho) return null
-    if (typeof sourceId === 'number') {
-      atualizar({
-        guardrailsPorFonte: {
-          ...atual.guardrailsPorFonte,
-          [sourceId]: res,
-        },
-      })
-    } else {
-      atualizar({ guardrailsProjeto: res })
+    try {
+      const res = await chamar<RespostaGuardrails>('guardrails.check', args)
+      if (seq !== seqProjeto || atual.projetoPath !== caminho) return null
+      if (typeof sourceId === 'number') {
+        atualizar({
+          guardrailsPorFonte: {
+            ...atual.guardrailsPorFonte,
+            [sourceId]: res,
+          },
+        })
+      } else {
+        atualizar({ guardrailsProjeto: res })
+      }
+      return res
+    } catch (err) {
+      if (seq !== seqProjeto || atual.projetoPath !== caminho) return null
+      ultimaFalhaProntidao = 'guardrails'
+      ultimaFonteGuardrailsFalhou = typeof sourceId === 'number' ? sourceId : null
+      atualizar({ erroProntidao: paraErroCore(err) })
+      return null
     }
-    return res
+  }
+
+  async function tentarNovamenteProntidao(): Promise<void> {
+    if (ultimaFalhaProntidao === 'mais') {
+      await carregarMais()
+      return
+    }
+    if (ultimaFalhaProntidao === 'guardrails') {
+      atualizar({ erroProntidao: null })
+      ultimaFalhaProntidao = null
+      await carregarGuardrailsEscopo(ultimaFonteGuardrailsFalhou)
+      return
+    }
+    await atualizarProntidao()
   }
 
   async function definirProjeto(projetoPath: string | null): Promise<void> {
     if (projetoPath === atual.projetoPath) return
     seqProjeto += 1
+    seqReadiness += 1
+    ultimaFalhaProntidao = null
+    ultimaFonteGuardrailsFalhou = null
     assinaturasVistas.clear()
     publicar(estadoInicial(projetoPath))
     if (!projetoPath) return
@@ -511,7 +592,9 @@ export function criarStoreExportacaoProjeto(opcoes?: {
     recarregar,
     recarregarLotes,
     carregarMais,
-    garantirDetalhesParaIds,
+    filtrarPorFonte,
+    atualizarProntidao,
+    tentarNovamenteProntidao,
     carregarGuardrailsEscopo,
     sincronizarJobs,
   }
@@ -523,11 +606,13 @@ export type ResultadoUseExportacaoProjeto = EstadoExportacaoProjeto & {
   recarregar: () => Promise<void>
   recarregarLotes: () => Promise<LoteExportacao[]>
   carregarMais: () => Promise<void>
-  garantirDetalhesParaIds: (ids: readonly number[]) => Promise<void>
+  filtrarPorFonte: (sourceId: number | null) => Promise<void>
+  atualizarProntidao: () => Promise<void>
+  tentarNovamenteProntidao: () => Promise<void>
   carregarGuardrailsEscopo: (sourceId?: number | null) => Promise<RespostaGuardrails | null>
 }
 
-/** Hook reativo da Mesa de Prontidão e Lotes de Exportação com cache paginado (#298). */
+/** Hook reativo da Mesa de Prontidão e Lotes de Exportação via `export.readiness`. */
 export function useExportacaoProjeto(
   projetoPath: string | null,
   opcoes?: { store?: StoreExportacaoProjeto; fila?: Fila },
@@ -554,7 +639,9 @@ export function useExportacaoProjeto(
       recarregar: store.recarregar,
       recarregarLotes: store.recarregarLotes,
       carregarMais: store.carregarMais,
-      garantirDetalhesParaIds: store.garantirDetalhesParaIds,
+      filtrarPorFonte: store.filtrarPorFonte,
+      atualizarProntidao: store.atualizarProntidao,
+      tentarNovamenteProntidao: store.tentarNovamenteProntidao,
       carregarGuardrailsEscopo: store.carregarGuardrailsEscopo,
     }),
     [estado, store],

@@ -26,7 +26,6 @@ import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import type {
   CorteAprovadoProntidao,
-  DetalhesCorteProntidao,
   RespostaGuardrails,
   ResultadoUseExportacaoProjeto,
 } from '~/stores/exportacaoProjeto'
@@ -83,26 +82,31 @@ function traduzirEncoder(effective: string, gpu: string): string {
   }
 }
 
-function avaliarProntidaoCorte(
-  corte: CorteAprovadoProntidao,
-  detalhes?: DetalhesCorteProntidao,
-): ProntidaoCalculada {
-  const pkgTitle = detalhes?.packaging?.current?.title?.trim()
-  const semEmpacotamento = !detalhes?.packaging?.current
+export function avaliarProntidaoCorte(corte: CorteAprovadoProntidao): ProntidaoCalculada {
+  const pkgTitle = corte.packaging?.current?.title?.trim()
+  const semEmpacotamento = !corte.packaging?.current
   const tituloExibido = pkgTitle || corte.candidateTitle.trim() || `Corte #${corte.candidateId}`
-  const temCapa = Boolean(detalhes?.thumbnail?.current)
-  const semPermissao = corte.permission.status !== 'granted'
-  const fonteIndisponivel = corte.sourceStatus === 'offline' || corte.sourceStatus === 'changed'
+  const temCapa = Boolean(corte.thumbnail?.current)
+  const semPermissao = corte.source.permission.status !== 'granted'
+  const fonteIndisponivel = corte.source.status === 'offline' || corte.source.status === 'changed'
 
-  const gr = detalhes?.guardrails
+  const script = corte.script ?? corte.guardrails?.script
+  const narration = corte.narration ?? corte.guardrails?.narration
+  const gr = corte.guardrails
   const transformado = corte.videoKind === 'transformed'
-  const blocosPendentes = gr?.script?.pendingBlocks ?? 0
-  const roteiroPendente = transformado && Boolean(gr?.script?.applicable && !gr.script.approved)
-  const narrTotal = gr?.narration?.totalBlocks ?? 0
-  const narrGerados = gr?.narration?.generatedBlocks ?? 0
+  const blocosPendentes = script?.pendingBlocks ?? 0
+  const roteiroPendente = transformado && Boolean(script?.applicable && !script.approved)
+  const narrTotal = narration?.totalBlocks ?? 0
+  const narrProntos = narration?.readyBlocks ?? narration?.generatedBlocks ?? 0
   const narracaoPendente =
-    transformado && Boolean(gr?.narration?.applicable && (narrTotal === 0 || narrGerados < narrTotal))
-  const sobraLonga = transformado && Boolean(gr?.narration?.longFreezeTail)
+    transformado &&
+    Boolean(
+      narration?.applicable &&
+        (typeof narration.ready === 'boolean'
+          ? !narration.ready
+          : narrTotal === 0 || narrProntos < narrTotal),
+    )
+  const sobraLonga = transformado && Boolean(narration?.longFreezeTail)
   const audioSemLicenca = (gr?.audio?.unverifiedCount ?? 0) > 0
   const acima60s = corte.durationUs > 60_000_000 || Boolean(gr?.over60s)
 
@@ -254,19 +258,17 @@ function construirItensChecklist(
 type CartaoProntidaoProps = {
   projetoId: string
   corte: CorteAprovadoProntidao
-  detalhes?: DetalhesCorteProntidao
   onExportarIndividual: (corte: CorteAprovadoProntidao, titulo: string) => void
 }
 
 function CartaoProntidao({
   projetoId,
   corte,
-  detalhes,
   onExportarIndividual,
 }: CartaoProntidaoProps) {
   const tituloId = useId()
   const [imgFalhou, setImgFalhou] = useState(false)
-  const p = useMemo(() => avaliarProntidaoCorte(corte, detalhes), [corte, detalhes])
+  const p = useMemo(() => avaliarProntidaoCorte(corte), [corte])
   const encProjeto = encodeURIComponent(projetoId)
   const hashEditar = `#/projeto/${encProjeto}/corte/${corte.candidateId}/editar?run=${corte.runId}`
   const hashTransformar = `#/projeto/${encProjeto}/corte/${corte.candidateId}/transformar?run=${corte.runId}`
@@ -297,7 +299,7 @@ function CartaoProntidao({
     p.temCapa,
   ])
 
-  const instantCapaUs = detalhes?.thumbnail?.current?.instantUs
+  const instantCapaUs = corte.thumbnail?.current?.instantUs
   const podeExibirImgTauri = isTauri() && p.temCapa && !p.fonteIndisponivel && !imgFalhou
 
   return (
@@ -338,16 +340,16 @@ function CartaoProntidao({
           )}
 
           <p className="truncate text-pequeno text-t3">
-            <span>{corte.sourceName}</span>
+            <span>{corte.source.name}</span>
             <span aria-hidden> · </span>
             {p.fonteIndisponivel ? (
               <span className="text-t2">
-                {corte.sourceStatus === 'offline' ? 'Fonte offline' : 'Fonte alterada'}
+                {corte.source.status === 'offline' ? 'Fonte offline' : 'Fonte alterada'}
               </span>
-            ) : corte.permission.status === 'granted' ? (
+            ) : corte.source.permission.status === 'granted' ? (
               <span>
                 Permissão registrada
-                {corte.permission.who ? ` (${corte.permission.who})` : ''}
+                {corte.source.permission.who ? ` (${corte.source.permission.who})` : ''}
               </span>
             ) : (
               <span>Sem Permissão</span>
@@ -477,12 +479,16 @@ export function MesaProntidao({
   const toast = useToast()
   const inputPastaRef = useRef<HTMLInputElement>(null)
 
-  const [filtroFonte, setFiltroFonte] = useState<string>('todas')
+  const [filtroFonte, setFiltroFonte] = useState<string>(() =>
+    exportacao.filtroFonteId !== null ? String(exportacao.filtroFonteId) : 'todas',
+  )
   const [filtroProntidao, setFiltroProntidao] = useState<FiltroProntidao>('todos')
   const [buscaTitulo, setBuscaTitulo] = useState('')
   const [ordenacao, setOrdenacao] = useState<OrdenacaoProntidao>('pendencias')
 
-  const [escopo, setEscopo] = useState<'projeto' | 'fonte'>('projeto')
+  const [escopo, setEscopo] = useState<'projeto' | 'fonte'>(() =>
+    exportacao.filtroFonteId !== null ? 'fonte' : 'projeto',
+  )
   const [pastaSaida, setPastaSaida] = useState('')
   const pastaEditadaRef = useRef(false)
 
@@ -502,25 +508,29 @@ export function MesaProntidao({
     }
   }, [exportacao.settings?.last_directory])
 
-  // Quando usuário filtra por uma Fonte específica, atualiza o escopo sugerido e busca guardrails dessa Fonte
   const fonteFiltroNum = filtroFonte === 'todas' ? null : Number(filtroFonte)
-  useEffect(() => {
-    if (fonteFiltroNum !== null && Number.isFinite(fonteFiltroNum)) {
-      setEscopo('fonte')
-      void exportacao.carregarGuardrailsEscopo(fonteFiltroNum).catch(() => {})
-    } else {
-      setEscopo('projeto')
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fonteFiltroNum])
+
+  const aoMudarFiltroFonte = useCallback(
+    (valor: string) => {
+      setFiltroFonte(valor)
+      const sid = valor === 'todas' ? null : Number(valor)
+      const fonteId = sid !== null && Number.isFinite(sid) ? sid : null
+      setEscopo(fonteId !== null ? 'fonte' : 'projeto')
+      void exportacao.filtrarPorFonte(fonteId)
+      if (fonteId !== null) {
+        void exportacao.carregarGuardrailsEscopo(fonteId)
+      }
+    },
+    [exportacao],
+  )
 
   const prontidaoPorId = useMemo(() => {
     const mapa = new Map<number, ProntidaoCalculada>()
     for (const c of exportacao.aprovados) {
-      mapa.set(c.candidateId, avaliarProntidaoCorte(c, exportacao.detalhesPorCandidato[c.candidateId]))
+      mapa.set(c.candidateId, avaliarProntidaoCorte(c))
     }
     return mapa
-  }, [exportacao.aprovados, exportacao.detalhesPorCandidato])
+  }, [exportacao.aprovados])
 
   const contagemComPendencias = useMemo(
     () => exportacao.aprovados.filter((c) => (prontidaoPorId.get(c.candidateId)?.pendenciasTotal ?? 0) > 0).length,
@@ -539,7 +549,7 @@ export function MesaProntidao({
       if (filtroProntidao === 'transformado' && c.videoKind !== 'transformed') return false
       if (termo) {
         const titulo = (p?.tituloExibido ?? c.candidateTitle).toLowerCase()
-        if (!titulo.includes(termo) && !c.sourceName.toLowerCase().includes(termo)) return false
+        if (!titulo.includes(termo) && !c.source.name.toLowerCase().includes(termo)) return false
       }
       return true
     })
@@ -547,7 +557,7 @@ export function MesaProntidao({
     lista.sort((a, b) => {
       if (ordenacao === 'nota') return b.scoreTotal - a.scoreTotal
       if (ordenacao === 'fonte') {
-        const cmp = a.sourceName.localeCompare(b.sourceName, 'pt-BR')
+        const cmp = a.source.name.localeCompare(b.source.name, 'pt-BR')
         return cmp !== 0 ? cmp : a.startUs - b.startUs
       }
       const pendA = prontidaoPorId.get(a.candidateId)?.pendenciasTotal ?? 0
@@ -565,27 +575,21 @@ export function MesaProntidao({
     prontidaoPorId,
   ])
 
-  const limiteVisivel = exportacao.paginaAtual * 12
-  const cortesaExibir = cortefiltradosOrdenados.slice(0, limiteVisivel)
-  const temMaisFiltrados =
-    exportacao.temMais || cortefiltradosOrdenados.length > cortesaExibir.length
-
-  useEffect(() => {
-    const idsSemDetalhe = cortesaExibir
-      .map((c) => c.candidateId)
-      .filter((id) => !(id in exportacao.detalhesPorCandidato))
-    if (idsSemDetalhe.length > 0) {
-      void exportacao.garantirDetalhesParaIds(idsSemDetalhe)
-    }
-  }, [cortesaExibir, exportacao])
+  const cortesaExibir = cortefiltradosOrdenados
+  const temMaisFiltrados = exportacao.temMais
 
   const limparFiltros = useCallback(() => {
+    const tinhaFiltroFonte = filtroFonte !== 'todas' || exportacao.filtroFonteId !== null
     setFiltroFonte('todas')
     setFiltroProntidao('todos')
     setBuscaTitulo('')
     setOrdenacao('pendencias')
+    setEscopo('projeto')
+    if (tinhaFiltroFonte) {
+      void exportacao.filtrarPorFonte(null)
+    }
     aoLimparFiltros?.()
-  }, [aoLimparFiltros])
+  }, [aoLimparFiltros, exportacao, filtroFonte])
 
   const opcoesFonte = useMemo<OpcaoSelect<string>[]>(
     () => [
@@ -631,7 +635,7 @@ export function MesaProntidao({
   const qtdOfflineNoEscopo = useMemo(
     () =>
       aprovadosNoEscopo.filter(
-        (c) => c.sourceStatus === 'offline' || c.sourceStatus === 'changed',
+        (c) => c.source.status === 'offline' || c.source.status === 'changed',
       ).length,
     [aprovadosNoEscopo],
   )
@@ -771,8 +775,14 @@ export function MesaProntidao({
   }, [erroDisparo, projetoId])
 
   const encProjeto = encodeURIComponent(projetoId)
+  const qtdNoEscopoFonte =
+    fonteFiltroNum !== null && exportacao.filtroFonteId === fonteFiltroNum
+      ? exportacao.totalAprovados
+      : aprovadosNoEscopo.length
+  const qtdEscopoDisparo = escopo === 'fonte' ? qtdNoEscopoFonte : exportacao.totalProjeto
+  const erroBannerProntidao = exportacao.erroProntidao ?? exportacao.erro
   const podeExportarLote =
-    ffmpegOk && aprovadosNoEscopo.length > 0 && pastaSaida.trim().length > 0 && !disparando
+    ffmpegOk && qtdEscopoDisparo > 0 && pastaSaida.trim().length > 0 && !disparando
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -782,7 +792,7 @@ export function MesaProntidao({
           <Select
             rotulo="Filtrar por Fonte"
             valor={filtroFonte}
-            aoMudar={setFiltroFonte}
+            aoMudar={aoMudarFiltroFonte}
             opcoes={opcoesFonte}
           />
         </div>
@@ -811,15 +821,36 @@ export function MesaProntidao({
           />
         </div>
 
-        {/* Pendência no núcleo (#298): comando agregado export.readiness */}
-        <Dica texto="A atualização em lote em uma única consulta ainda não está disponível nesta versão; o carregamento paginado segue ativo.">
-          <span tabIndex={0} className="ml-auto inline-flex shrink-0 rounded-controle">
-            <Botao tamanho="p" variante="fantasma" icone={<RefreshCw />} disabled>
-              Atualizar prontidão em lote
-            </Botao>
-          </span>
-        </Dica>
+        <Botao
+          tamanho="p"
+          variante="fantasma"
+          icone={<RefreshCw />}
+          carregando={exportacao.atualizandoProntidao}
+          onClick={() => void exportacao.atualizarProntidao()}
+          className="ml-auto shrink-0"
+        >
+          Atualizar prontidão em lote
+        </Botao>
       </div>
+
+      {erroBannerProntidao && (
+        <BannerErroCore
+          erro={{
+            code: erroBannerProntidao.code,
+            message: erroBannerProntidao.detalhe || erroBannerProntidao.message,
+          }}
+          traduzir={(code) =>
+            mensagemDeErro(
+              new ErroCore(code, erroBannerProntidao.detalhe || erroBannerProntidao.message),
+            )
+          }
+          acaoRecuperacao={{
+            rotulo: 'Tentar de novo',
+            aoAcionar: () => void exportacao.tentarNovamenteProntidao(),
+          }}
+          permitirRelato
+        />
+      )}
 
       {/* Zonas A (Grade) + B (Configuração e Disparo) */}
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden lg:flex-row">
@@ -849,7 +880,6 @@ export function MesaProntidao({
                       key={corte.candidateId}
                       projetoId={projetoId}
                       corte={corte}
-                      detalhes={exportacao.detalhesPorCandidato[corte.candidateId]}
                       onExportarIndividual={abrirExportarIndividual}
                     />
                   ))}
@@ -900,7 +930,7 @@ export function MesaProntidao({
                     aria-pressed={escopo === 'projeto'}
                     onClick={() => setEscopo('projeto')}
                   >
-                    Todo o Projeto ({exportacao.aprovados.length})
+                    Todo o Projeto ({exportacao.totalProjeto})
                   </Botao>
                   <Botao
                     tamanho="p"
@@ -910,7 +940,7 @@ export function MesaProntidao({
                     onClick={() => setEscopo('fonte')}
                   >
                     {fonteEscopoObj
-                      ? `Fonte: ${nomeArquivo(fonteEscopoObj.path)} (${aprovadosNoEscopo.length})`
+                      ? `Fonte: ${nomeArquivo(fonteEscopoObj.path)} (${qtdNoEscopoFonte})`
                       : 'Só Fonte filtrada'}
                   </Botao>
                 </div>
@@ -1049,11 +1079,11 @@ export function MesaProntidao({
               className="w-full justify-center"
             >
               {escopo === 'fonte'
-                ? `Exportar ${aprovadosNoEscopo.length} da Fonte em lote`
-                : `Exportar ${aprovadosNoEscopo.length} aprovados em lote`}
+                ? `Exportar ${qtdEscopoDisparo} da Fonte em lote`
+                : `Exportar ${qtdEscopoDisparo} aprovados em lote`}
             </Botao>
 
-            {aprovadosNoEscopo.length === 0 && (
+            {qtdEscopoDisparo === 0 && (
               <Botao
                 tamanho="p"
                 variante="fantasma"
@@ -1125,7 +1155,7 @@ export function MesaProntidao({
             )}
           </div>
         }
-        rotuloConfirmar={`Sobrescrever e exportar (${aprovadosNoEscopo.length})`}
+        rotuloConfirmar={`Sobrescrever e exportar (${qtdEscopoDisparo})`}
         rotuloCancelar="Cancelar"
         focoInicial="cancelar"
         ocupado={disparando}
