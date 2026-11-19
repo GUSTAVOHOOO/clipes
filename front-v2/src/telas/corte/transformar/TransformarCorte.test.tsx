@@ -790,7 +790,7 @@ describe('Tela TransformarCorte (#/projeto/:id/corte/:corteId/transformar)', () 
     // Continua totalmente utilizável via SQLite (Passo 2 editável)
     const stepper301 = screen.getByRole('navigation', { name: 'Etapas da Transformação' })
     await user.click(within(stepper301).getByRole('button', { name: /2\.?\s*Roteiro/i }))
-    expect(await screen.findByDisplayValue('Introdução V1')).toBeEnabled()
+    expect(await screen.findByDisplayValue('Abertura')).toBeEnabled()
   })
 
   it('Stepper respeita travas: selected === null impede Passo 2; Passo 3 exibe explicação ADR-0001 quando narrationAllowed === false', async () => {
@@ -1021,11 +1021,13 @@ describe('Tela TransformarCorte (#/projeto/:id/corte/:corteId/transformar)', () 
     // Clicar em uma Frase na Transcrição alterna sua referência no bloco em foco
     const btnFrase11 = within(painelEsq).getByRole('button', { name: /#11/i })
     await user.click(btnFrase11)
-    expect(screen.getByText('#11')).toBeInTheDocument()
+    const areaTransf = document.querySelector('[data-regiao="transformar-principal"]')!
+    expect(within(areaTransf as HTMLElement).getByRole('button', { name: '#11' })).toBeInTheDocument()
 
     // Ciclo F6: Topo -> Transcrição -> Área da Transformação -> Barra de Status -> Topo
+    ;(document.activeElement as HTMLElement | null)?.blur?.()
+    document.body.focus()
     const topo = document.querySelector('[data-regiao="topo"]')!
-    const areaTransf = document.querySelector('[data-regiao="transformar-principal"]')!
     const rodape = document.querySelector('[data-regiao="rodape"]')!
 
     fireEvent.keyDown(window, { key: 'F6' })
@@ -1058,7 +1060,9 @@ describe('Tela TransformarCorte (#/projeto/:id/corte/:corteId/transformar)', () 
       'aria-current',
       'page',
     )
-    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    await waitFor(() => {
+      expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    })
     const main = document.querySelector('main')!
     expect(main.className).toContain('overflow-hidden')
     expect(main.className).not.toContain('p-4')

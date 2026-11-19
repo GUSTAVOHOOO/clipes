@@ -737,6 +737,22 @@ export function TransformarCorte({
     }
   }, [caminhoRelocalizar, corteResolvido?.sourceId, fonteAtual?.id, recarregarFontes, relocalizando])
 
+  const aoMudarRefEmFocoEstavel = useCallback((proximo: AlvoRefsEmFoco | null) => {
+    setAlvoRefsEmFoco((atual) => {
+      if (atual === null && proximo === null) return atual
+      if (
+        atual &&
+        proximo &&
+        atual.chave === proximo.chave &&
+        atual.refs.length === proximo.refs.length &&
+        atual.refs.every((v, i) => v === proximo.refs[i])
+      ) {
+        return atual
+      }
+      return proximo
+    })
+  }, [])
+
   const aoClicarChipFrase = useCallback((fraseId: number) => {
     setFraseDestacadaId(fraseId)
     setPainelTranscricaoAberto(true)
@@ -812,7 +828,10 @@ export function TransformarCorte({
   const carregandoTela =
     forcado === 'carregando' ||
     (forcado !== 'vazio' &&
-      (resolvendoEntrada || storeTransformar.carregando || !storeTransformar.angulos))
+      (resolvendoEntrada ||
+        storeTransformar.carregando ||
+        storeTransformar.candidateId !== candidateIdAtivo ||
+        !storeTransformar.angulos))
 
   if (carregandoTela) {
     return (
@@ -1058,7 +1077,7 @@ export function TransformarCorte({
                   store={storeParaPassos}
                   fila={fila}
                   aoClicarChipFrase={aoClicarChipFrase}
-                  aoMudarRefEmFoco={setAlvoRefsEmFoco}
+                  aoMudarRefEmFoco={aoMudarRefEmFocoEstavel}
                   aoAvancarPasso={() => setPassoAtivo(2)}
                 />
               )}
@@ -1069,7 +1088,7 @@ export function TransformarCorte({
                   store={storeParaPassos}
                   fila={fila}
                   aoClicarChipFrase={aoClicarChipFrase}
-                  aoMudarRefEmFoco={setAlvoRefsEmFoco}
+                  aoMudarRefEmFoco={aoMudarRefEmFocoEstavel}
                   aoAvancarNarracao={() => setPassoAtivo(3)}
                   blocoFocadoInicial={blocoFocadoInicial}
                 />
