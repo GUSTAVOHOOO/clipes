@@ -251,10 +251,10 @@ jobs:
         shell: bash
         run: |
           node --test scripts/license-policy.test.mjs scripts/linux-validation.test.mjs scripts/smoke-package.test.mjs
-          bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start . --excludePackages 'clipes@1.0.0' --json | node scripts/check-licenses.mjs
+          bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start . --excludePackages 'clipes@2.0.0' --json | node scripts/check-licenses.mjs
           bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start design-system --excludePackages '@clipes/design-system@0.1.0' --json | node scripts/check-licenses.mjs
-          bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start front-v2 --excludePackages '@clipes/front-v2@0.1.0' --json | node scripts/check-licenses.mjs
-          bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start design-system-v2 --excludePackages '@clipes/design-system-v2@0.1.0' --json | node scripts/check-licenses.mjs
+          bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start front-v2 --excludePackages '@clipes/front-v2@2.0.0' --json | node scripts/check-licenses.mjs
+          bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start design-system-v2 --excludePackages '@clipes/design-system-v2@2.0.0' --json | node scripts/check-licenses.mjs
 
   # Check único para olhar (ou exigir na proteção de branch): verde se nada
   # falhou nem foi cancelado; jobs pulados pelo filtro de caminho contam como ok.

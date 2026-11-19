@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { getUpdaterBehavior, shouldMockUpdater } from '@/lib/desktop';
 import { useText } from '@/lib/i18n';
 import { textos } from './texts';
+import { version as packageVersion } from '../../../package.json';
 import {
   errorReason,
   formatUpdateError,
@@ -29,7 +30,7 @@ async function verificar(auto: boolean): Promise<{ update: Update | null; curren
   if (auto && typeof navigator !== 'undefined' && navigator.onLine === false) {
     return { update: null, currentVersion: '' };
   }
-  const currentVersion = isTauri() ? await getVersion() : '1.0.0';
+  const currentVersion = isTauri() ? await getVersion() : packageVersion;
   if (behavior === 'mock-available') {
     const scenario = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('updater-test') : null;
     if (scenario === 'offline') {
