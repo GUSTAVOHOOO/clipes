@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 mod explorer;
 #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
 mod media_server;
