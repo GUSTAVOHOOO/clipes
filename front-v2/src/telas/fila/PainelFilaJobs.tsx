@@ -1037,7 +1037,7 @@ export function PainelFilaJobs({
                                   [lote.id]: !expandido,
                                 }))
                               }
-                              className="foco flex w-fit cursor-pointer items-center gap-1 rounded-controle border-0 bg-transparent px-1 py-0.5 text-pequeno text-t2 hover:text-t1"
+                              className="foco flex w-fit cursor-pointer items-center gap-1 rounded-controle border-0 bg-transparent min-h-6 px-1 py-0.5 text-pequeno text-t2 hover:text-t1"
                             >
                               {expandido ? (
                                 <ChevronDown className="size-[14px]" aria-hidden />

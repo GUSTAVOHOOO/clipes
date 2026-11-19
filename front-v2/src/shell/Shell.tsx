@@ -416,6 +416,8 @@ export function Shell({
         type: n.tipo === 'falha' ? 'erro' : n.tipo === 'orcamento' ? 'aviso' : undefined,
         title: n.titulo,
         description: n.corpo,
+        // Falha não é persistente: o aviso fixo fica no topo; o toast some na duração do DS.
+        timeout: 4000,
         actionProps: {
           children: 'Abrir Fila',
           onClick: abrirFilaDoAlerta,
@@ -661,12 +663,27 @@ export function Shell({
       (statusSalvamento ?? (salvamento.estado === 'salvo' ? <Status tom="sucesso">Salvo</Status> : null))
     )
 
+  const contagemFalhas = estadoFilaGlobal.jobs.filter((j) => j.state === 'failed').length
+
   const alertasTopo =
     direita ||
+    contagemFalhas > 0 ||
     estadoFilaGlobal.pausasOrcamento.length > 0 ||
     estadoFilaGlobal.contagemIncertos > 0 ? (
       <>
         {direita}
+        {contagemFalhas > 0 && (
+          <Botao
+            tamanho="p"
+            variante="suave"
+            onClick={abrirFilaDoAlerta}
+            aria-label={`Tarefa falhou: abrir Fila de Jobs (${contagemFalhas})`}
+          >
+            <Status tom="perigo">
+              {contagemFalhas === 1 ? '1 tarefa falhou' : `${contagemFalhas} tarefas falharam`}
+            </Status>
+          </Botao>
+        )}
         {estadoFilaGlobal.pausasOrcamento.length > 0 && (
           <Botao
             tamanho="p"

@@ -496,6 +496,48 @@ describe('PainelFilaJobs', () => {
     await waitFor(() => expect(aoFechar).toHaveBeenCalledTimes(1))
   })
 
+  it('Ver estimativa e repetir abre o dialogo com foco em Cancelar (UI-82)', async () => {
+    const user = userEvent.setup()
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'jobs.list') {
+        return [
+          {
+            id: 21,
+            kind: 'ai:selection',
+            safety: 'paid',
+            state: 'uncertain',
+            attempts: 1,
+            checkpoint: null,
+            progress: 0,
+            project: 'demo',
+            outcome: 'uncertain',
+            cost: 'unknown',
+            batch: null,
+            profile: 'legacy',
+            budgetPause: null,
+          },
+        ]
+      }
+      if (cmd === 'jobs.estimate') {
+        return { safety: 'paid', estimate: { kind: 'usd', minMicroUsd: 40_000, maxMicroUsd: 70_000, inputTokens: 18_400 } }
+      }
+      if (cmd === 'jobs.budget.get') return { budgets: [] }
+      return []
+    })
+    const fila = criarFila(() => 'demo')
+    const store = criarStoreFilaGlobal({ fila, debounceMs: 0 })
+    render(
+      envolver(
+        <PainelFilaJobs aberto aoFechar={vi.fn()} projetoAberto={PROJETO_DEMO} store={store} fila={fila} />,
+      ),
+    )
+    await user.click(await screen.findByRole('button', { name: /Ver estimativa e repetir/i }))
+    const dialogo = await screen.findByRole('alertdialog')
+    await waitFor(() => {
+      expect(within(dialogo).getByRole('button', { name: 'Cancelar' })).toHaveFocus()
+    })
+  })
+
   it('cobre filtros por aba, estado partial de lote de exportação e ETA determinístico observado desde 0%', async () => {
     const user = userEvent.setup()
     let agora = 0

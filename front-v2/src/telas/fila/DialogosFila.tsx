@@ -565,7 +565,7 @@ export function DialogoRefazerJob({ aberto, job, aoFechar, aoConcluir }: Dialogo
               <button
                 type="button"
                 aria-label="Aviso sobre Revisão da execução"
-                className="foco mt-0.5 inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-controle border-0 bg-transparent text-t3 hover:text-t1"
+                className="foco mt-0.5 inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-controle border-0 bg-transparent text-t3 hover:text-t1"
               >
                 <Info className="size-[14px] stroke-[1.75]" aria-hidden />
               </button>

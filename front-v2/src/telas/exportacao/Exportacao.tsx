@@ -194,7 +194,7 @@ export function Exportacao({
               <button
                 type="button"
                 onClick={() => aoAbrirLote(loteAtivoPrincipal.id)}
-                className="foco cursor-pointer rounded-controle border-0 bg-transparent px-1.5 py-0.5 text-pequeno text-t1 underline hover:bg-hover"
+                className="foco cursor-pointer rounded-controle border-0 bg-transparent min-h-6 px-1.5 py-0.5 text-pequeno text-t1 underline hover:bg-hover"
               >
                 Ver em Histórico
               </button>
