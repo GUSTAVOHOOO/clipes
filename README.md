@@ -12,144 +12,174 @@ Transcrição local, IA que você escolhe, legenda karaokê e 9:16. Sem nuvem ob
 [![Release](https://img.shields.io/github/v/release/GUSTAVOHOOO/clipes?label=release&color=ff5a1f&labelColor=1a1b1f)](https://github.com/GUSTAVOHOOO/clipes/releases/latest)
 [![CI](https://github.com/GUSTAVOHOOO/clipes/actions/workflows/ci.yml/badge.svg)](https://github.com/GUSTAVOHOOO/clipes/actions/workflows/ci.yml)
 [![Licença](https://img.shields.io/badge/licen%C3%A7a-Apache--2.0-ececee?labelColor=1a1b1f)](LICENSE)
-[![Plataformas](https://img.shields.io/badge/Windows%20%C2%B7%20Linux-ececee?label=plataformas&labelColor=1a1b1f)](#instalação)
+[![Plataformas](https://img.shields.io/badge/Windows%20%C2%B7%20Linux-ececee?label=plataformas&labelColor=1a1b1f)](#instalação-e-requisitos)
 [![DCO](https://img.shields.io/badge/commits-DCO-ececee?labelColor=1a1b1f)](CONTRIBUTING.md)
 
-[**Baixar**](https://github.com/GUSTAVOHOOO/clipes/releases/latest) ·
-[Como funciona](#como-funciona) ·
-[Recursos](#recursos) ·
+[**Baixar a v2.0.0**](https://github.com/GUSTAVOHOOO/clipes/releases/latest) ·
+[Primeiro Corte](#do-primeiro-projeto-à-primeira-exportação) ·
+[Local e Provedores](#processamento-local-e-provedores-opcionais) ·
+[Ajuda](#ajuda) ·
 [Arquitetura](#arquitetura) ·
 [Contribuir](#contribuir) ·
-[Roadmap](#roadmap) ·
 [English](#in-english)
 
 </div>
 
 ---
 
+## Uma live de quatro horas, uma fila de Cortes prontos
+
+Você entrega uma live longa. O Clipes transcreve o áudio no seu computador, aponta os momentos que valem um corte, explica a Nota de cada um e deixa você revisar tudo antes de exportar. O resultado são arquivos MP4 verticais (1080×1920) com legenda palavra por palavra, sem marca d'água.
+
+<!-- TODO-VIDEO: inserir demonstração -->
+
+> **Demonstração:** em breve, com uma live real do início ao fim.
+
+**[Baixar o Clipes v2.0.0 →](https://github.com/GUSTAVOHOOO/clipes/releases/latest)** Instaladores para Windows e Linux. Dá para começar sem pagar nenhuma IA: veja [Processamento local](#processamento-local-e-provedores-opcionais).
+
+> **A v2 troca a interface, não o núcleo.** A tela foi refeita do zero para ser mais enxuta e rápida de operar, e o núcleo em Rust, o formato do Projeto e os Provedores continuam os mesmos da [v1.0.0](docs/releases/v1.0.0.md) (veja também as [notas da v2.0.0](docs/releases/v2.0.0.md)). **Projetos criados na v1 abrem na v2**: basta abrir a pasta `.clipes` em **Início**.
+
 ## O que é
 
-O Clipes é um aplicativo de desktop gratuito e open source para quem vive de cortes. Você entrega uma live de quatro horas. Ele transcreve o áudio na sua máquina, aponta os momentos que valem um corte e explica por que cada um ganhou aquela nota. Depois ajusta as bordas para não cortar ninguém no meio da frase, gera a legenda palavra por palavra, enquadra em 9:16 e exporta.
+O Clipes é um aplicativo de desktop gratuito e open source para quem vive de cortes. Ele transcreve a live na sua máquina, sugere os melhores trechos com uma Nota explicada por eixos, ajusta as bordas para não cortar ninguém no meio da frase, gera a legenda, enquadra em 9:16 e exporta.
 
-Você revisa tudo antes de sair. Nenhuma etapa é caixa-preta, e nenhuma chamada paga acontece sem você ver o custo estimado antes.
-
-> **v1.0.0 lançada.** Instaladores para Windows e Linux na [página de releases](https://github.com/GUSTAVOHOOO/clipes/releases/latest). A v2, com a interface refeita do zero sobre o mesmo núcleo, está em construção na issue [#288](https://github.com/GUSTAVOHOOO/clipes/issues/288).
-
-## Por que o Clipes existe
-
-As ferramentas de corte na nuvem resolvem o problema cobrando por minuto de vídeo, pedindo o upload da live inteira, dando uma nota que ninguém sabe de onde veio e carimbando marca d'água no plano grátis. Numa live longa, o custo e a espera crescem rápido, e quem tem um computador comum fica sem saída.
-
-O Clipes parte de outras premissas:
+Nenhuma etapa é caixa-preta. Você revisa antes de sair, e nenhuma chamada paga acontece sem você ver a estimativa de custo antes.
 
 | | Ferramentas típicas na nuvem | Clipes |
 |---|---|---|
 | **Onde o vídeo fica** | Sobe inteiro para o servidor | Fica no seu PC. Só o texto da transcrição vai para a IA, e só se você usar uma IA remota |
-| **Quem faz a IA** | O modelo do serviço | O provedor que você escolher, inclusive um modelo local |
+| **Quem faz a IA** | O modelo do serviço | O Provedor que você escolher, inclusive um modelo local |
 | **Custo** | Assinatura ou créditos por minuto | Grátis com modelo local. Com API paga, estimativa antes, valor real depois e teto por tarefa e por lote |
 | **Nota do corte** | Um número sem explicação | Nota por eixos nomeados, com o motivo escrito |
 | **Marca d'água** | Comum no plano grátis | Nunca |
 | **Telemetria** | Normalmente ligada | Não existe. Relatos de problema só saem se você revisar e enviar |
 | **Código** | Fechado | Apache-2.0 |
 
-## Como funciona
+## Do primeiro Projeto à primeira exportação
+
+Este guia segue as telas da v2 na ordem em que você as usa. Os nomes (Projeto, Fonte, Corte, Nota, Provedor e outros) são os do [glossário](GLOSSARY.md). A barra superior mostra as três etapas do Projeto: **Fontes e Transcrição**, **Cortes** e **Exportação**. Você pode trocar de etapa a qualquer momento, e um trabalho longo continua rodando em segundo plano.
 
 ```mermaid
 flowchart LR
-    A["Fonte<br/>arquivo ou link"] --> B["Transcrição local<br/>faster-whisper"]
-    B --> C["Seleção<br/>sinais do áudio e do chat<br/>+ IA que você escolheu"]
-    C --> D["Revisão<br/>Nota explicada<br/>por eixo"]
-    D --> E["Editor<br/>bordas, silêncios,<br/>legenda karaokê, 9:16"]
-    E --> F["Empacotar<br/>título, descrição,<br/>tags, capítulos"]
-    F --> G["Exportar<br/>FFmpeg + libass"]
-    D -. Vídeo transformado .-> H["Roteiro<br/>revisado por você"]
-    H --> I["Narração<br/>TTS local, gravada<br/>ou importada"]
-    I --> E
+    A["Início<br/>criar ou abrir Projeto"] --> B["Fontes e Transcrição<br/>importar e transcrever"]
+    B --> C["Seleção de Cortes<br/>escolher o Provedor"]
+    C --> D["Bancada de Revisão<br/>aprovar, rejeitar, ajustar"]
+    D --> E["Editor do Corte<br/>bordas, legenda, 9:16"]
+    E -. Vídeo transformado .-> F["Transformar<br/>Ângulo, Roteiro, Narração"]
+    E --> G["Empacotar<br/>capa, título, descrição"]
+    F --> G
+    G --> H["Exportação<br/>Mesa de Prontidão e Fila"]
 ```
 
-1. **Crie um Projeto** (um por canal) e importe uma **Fonte**: um arquivo do disco ou o link de um VOD. O Projeto é uma pasta portátil com um banco SQLite, e você pode levá-la para outro computador.
-2. **Transcreva no seu PC.** O app detecta GPU NVIDIA ou CPU e escolhe o modelo. Numa RTX 3050, a transcrição ficou mais rápida que o tempo real. Se preferir, o Groq transcreve remotamente: só o áudio sai da máquina, com estimativa de custo e confirmação.
-3. **Deixe a IA apontar os momentos.** A live é dividida em Janelas do tamanho certo para o contexto do modelo. Energia do áudio e replay do chat do YouTube entram como sinais. Cada candidato volta com uma Nota explicada.
-4. **Revise e edite.** Preview, timeline, transcrição clicável, bordas que encaixam em Frase, remoção de silêncios, legenda karaokê com estilo próprio e reenquadramento 9:16 com sugestão automática, cinco Layouts e crop manual.
-5. **Empacote e exporte**, um Corte por vez ou em lote: título, descrição com crédito da Fonte, tags, ideia de capa e capítulos, em PT-BR ou EN.
+### 1. Início: crie ou abra um Projeto
 
-### Dois tipos de vídeo
+Na primeira abertura, o **Assistente de primeiro uso** aparece sozinho em dois passos: (1) instala o FFmpeg e o Motor de transcrição local indicado para a sua placa de vídeo, memória e disco; (2) configura o Provedor de IA, se você quiser um. Dá para pular o segundo passo e voltar depois em **Configurações**. Os componentes de recursos específicos (`yt-dlp` para links, YuNet para o reenquadramento, Pocket TTS para a Narração) são baixados na hora em que você usa o recurso, com tamanho e licença à vista antes de confirmar.
 
-| | **Corte direto** | **Vídeo transformado** |
+Em **Início**, escolha:
+
+- **Novo Projeto**: dê um nome e escolha a pasta onde salvar. Um Projeto é uma pasta `.clipes` portátil, com um banco SQLite. Use um por canal.
+- **Abrir pasta `.clipes`**: abre um Projeto existente, **inclusive os criados na v1**. Os Projetos recentes ficam listados, e os que sumiram do disco aparecem como "Indisponível no disco" até você localizar a pasta.
+
+> Quer só olhar a interface antes de instalar? Veja [Experimentar a interface sem instalar](#experimentar-a-interface-sem-instalar).
+
+### 2. Fontes e Transcrição
+
+Em **Fontes**, importe um arquivo do disco ou cole o link de um VOD. Para links, o app oferece baixar `yt-dlp` e `deno` na primeira vez. Cada Fonte guarda a **Permissão** do criador (quem autorizou, onde e para quê), que entra no crédito da descrição e nos avisos antes de exportar.
+
+Abra a Fonte para transcrever. Você escolhe o **Motor de transcrição**:
+
+- **Local** (padrão): `faster-whisper` na GPU NVIDIA ou na CPU, a US$ 0,00. A transcrição é feita em blocos com checkpoint, então fechar o app não perde o trabalho.
+- **Groq** (opcional): transcrição remota. Só o áudio sai da máquina, com estimativa de custo e confirmação antes.
+
+Depois da transcrição, o texto aparece frase por frase. Clique numa palavra (ou use **Ouvir aqui**) para tocar o trecho, `F2` corrige a grafia (sem mexer nos tempos) e `Ctrl+Z` desfaz. A busca (`Ctrl+F`) varre a Transcrição inteira. Para várias Fontes de uma vez, use a visão **Lotes**, com teto de custo opcional: uma Fonte com erro pausa sozinha e as outras seguem.
+
+### 3. Seleção de Cortes: configure e dispare
+
+Em **Cortes**, escolha a Fonte transcrita e configure a seleção: tipo de vídeo (**Corte direto** ou **Vídeo transformado**), faixa de duração e os sinais locais de energia do áudio e de replay do chat do YouTube. Antes de qualquer chamada ao Provedor, o app mostra um cartão com o Perfil de Provedor usado, se o texto sai da máquina e o custo estimado. A seleção roda por Janelas do tamanho certo para o contexto do modelo, e você acompanha o progresso por Janela.
+
+### 4. Bancada de Revisão: aprove os candidatos
+
+A **Bancada de Revisão** mostra a lista de candidatos à esquerda e, à direita, o preview 9:16 com a Nota e o motivo de cada eixo. Dá para decidir sem tirar a mão do teclado:
+
+| Tecla | Ação |
+|---|---|
+| `A` / `R` | Aprovar / rejeitar o candidato |
+| `I` / `O` | Recuar a borda inicial / avançar a borda final em uma Frase |
+| `Ctrl+Z` | Desfazer a última decisão ou ajuste |
+| `Enter` | Abrir o Corte no editor |
+
+**Refazer com outro Perfil de Provedor** gera uma nova Revisão da execução sem perder as anteriores nem as decisões já tomadas.
+
+### 5. Editor do Corte
+
+Cada Corte aprovado abre na tela do Corte, com a barra de contexto no topo (`Alt+PageUp` e `Alt+PageDown` pulam entre os aprovados). O layout tem a **Transcrição do Corte** à esquerda (recolhível com `Ctrl+[`), o palco 9:16 no centro com o transporte e a timeline compacta embaixo.
+
+A barra de cinco ações abre popovers sob demanda (`Ctrl+]` abre e fecha o último):
+
+- **Enquadrar**: sugestão automática de rosto (YuNet, baixado quando você usa), cinco Layouts e crop manual com keyframes.
+- **Legenda**: karaokê com texto e estilo editáveis por Corte e tradução PT-BR ↔ EN.
+- **Silêncios**: remoção de silêncios, reversível.
+- **Áudio**: trilha sonora, efeitos e a mixagem da Narração.
+- **Histórico**: desfazer e instantâneos da edição.
+
+As bordas sempre encaixam em Frase. Segurar `Alt` libera o ajuste por quadro, como exceção. O autosave grava a cada segundo, e o app confere o salvamento antes de você sair da tela ou fechar a janela. A Fonte original não é alterada.
+
+### 6. Transformar (só para Vídeo transformado)
+
+Se o Corte for um **Vídeo transformado**, a aba **Transformar** conduz três passos, com trava humana antes da Narração (veja o [ADR-0001](docs/adr/0001-dois-tipos-de-video-e-regras-de-transformacao.md)):
+
+1. **Ângulo**: escolha a perspectiva do comentário.
+2. **Roteiro em blocos**: o Provedor sugere, você revisa e aprova. Só um Roteiro aprovado libera a Narração.
+3. **Narração**: voz sintetizada localmente (Pocket TTS, baixado na primeira vez), gravação com teleprompter ou áudio importado, com limpeza de voz e revisão do alinhamento por palavra.
+
+O **Corte direto** não passa por aqui: ele vai do editor direto para o Empacotamento (e você pode converter um Corte direto aprovado em Vídeo transformado quando precisar).
+
+### 7. Empacotar
+
+A aba **Empacotar** prepara o que acompanha o vídeo na publicação: capa (escolha um quadro do preview e exporte em PNG), título, descrição com o crédito da Fonte (protegido contra edição), tags, hashtags e capítulos do YouTube. Validadores de tamanho avisam antes de você estourar um limite. Você pode preencher tudo manualmente ou pedir sugestão ao **Provedor** — tudo fica editável.
+
+### 8. Exportação e Fila de Jobs
+
+Há dois caminhos para exportar:
+
+- **Um Corte**: `Ctrl+E` na tela do Corte. Um painel de conferência mostra Permissão, avisos de monetização e de glifos antes de renderizar.
+- **Vários Cortes**: a **Mesa de Prontidão** (etapa **Exportação**) mostra todos os aprovados numa grade com título, capa e avisos. Dali você dispara um **lote** MP4 ou usa **Exportar só este** num cartão.
+
+A exportação usa FFmpeg e libass, com paridade entre o preview e o arquivo final, loudness normalizado em duas passagens (-14 LUFS) e o encoder de hardware detectado (NVENC, QSV, AMF ou x264). Se o encoder de hardware cair para x264, o app avisa. O histórico de lotes fica na mesma tela.
+
+A **Fila de Jobs** (`Ctrl+J`, de qualquer tela) reúne transcrições, seleções, downloads e exportações. Dali você cancela jobs, acompanha o progresso, pausa e retoma lotes e decide o que fazer com uma chamada paga que ficou incerta (ela nunca é repetida sozinha).
+
+### 9. Relatos e Sobre
+
+- **Relatos** (`#/relatos`): monta um relato de problema, ideia ou proposta de Provedor com um diagnóstico filtrado que você lê antes de enviar. Nada sai sozinho ([ADR-0006](docs/adr/0006-relato-de-problemas-sem-telemetria.md)).
+- **Sobre** (`#/sobre`): versão instalada, busca e instalação de atualizações assinadas, e as licenças.
+
+### Atalhos que valem decorar
+
+| Atalho | O que faz |
+|---|---|
+| `Ctrl+K` | Paleta de comandos |
+| `Ctrl+J` | Fila de Jobs |
+| `Ctrl+,` | Configurações |
+| `F6` | Pula entre as regiões da janela |
+| `?` ou `Ctrl+/` | Folha de atalhos |
+| `Ctrl+E` | Exportar o Corte atual |
+
+No macOS, que ainda não tem instalador, `Ctrl` vira `Cmd`. Em **Configurações → Aparência e teclado** você remapeia os atalhos e desliga as teclas de uma letra só (`A`, `R`, `I`, `O`...), se elas atrapalharem a digitação.
+
+## Processamento local e Provedores opcionais
+
+O Clipes funciona sem nenhuma conta e sem enviar o seu vídeo para lugar nenhum. Um **Provedor** (um modelo de linguagem) só entra nas Tarefas de IA, e você decide qual.
+
+| Etapa | Onde roda | O que sai da máquina |
 |---|---|---|
-| **Para quem** | Canais de cortes | Canais dark |
-| **O que é** | O melhor momento da live, recortado e legendado | Um Corte com Roteiro próprio e Narração por cima |
-| **Automação** | Rápido e quase automático | Nunca 100% automático: o Roteiro passa por você, para não virar conteúdo em massa |
+| Transcrição (padrão) | Local, `faster-whisper` na GPU ou CPU | Nada |
+| Transcrição remota (Groq, opcional) | Servidor do Groq | Só o áudio, com estimativa e confirmação |
+| Energia do áudio, detecção de rosto, VAD, Narração (Pocket TTS) | Local | Nada |
+| Seleção de Cortes, Roteiro, Empacotamento, tradução de legenda | No Provedor que você escolher | Só o texto das Frases. Nunca o vídeo nem o áudio |
+| Revisão, edição e exportação | Local, com FFmpeg e libass | Nada |
 
-## Recursos
-
-<table>
-<tr>
-<td width="50%" valign="top">
-
-**Transcrição**
-- `faster-whisper` local, com GPU NVIDIA ou CPU detectada sozinha
-- Blocos com checkpoint: fechar o app não perde o trabalho
-- Frases navegáveis, busca, correção manual e desfazer
-- Motor remoto opcional (Groq), que envia só o áudio
-- Medida num conjunto de VODs reais em português e inglês
-
-</td>
-<td width="50%" valign="top">
-
-**Seleção de Cortes**
-- Janelas planejadas para o contexto de cada modelo
-- Sinais de energia do áudio e replay do chat do YouTube
-- Nota por eixos nomeados, com o motivo
-- Revisão de candidatos e "refazer com o forte" sem perder as revisões anteriores
-- Processamento em lote de Fontes, com teto de custo
-
-</td>
-</tr>
-<tr>
-<td valign="top">
-
-**Editor**
-- Preview por proxy, timeline e alças de borda com encaixe em Frase
-- Remoção de silêncios
-- Legenda karaokê com texto e estilo editáveis por Corte
-- Reenquadramento 9:16: análise de rosto local (YuNet), cinco Layouts e keyframes de crop
-
-</td>
-<td valign="top">
-
-**Exportação**
-- FFmpeg + libass, com paridade entre o preview e o arquivo final
-- Encoder detectado: NVENC, QSV, AMF, VideoToolbox ou x264
-- Loudness normalizado em duas passagens
-- Exportação em lote com progresso
-
-</td>
-</tr>
-<tr>
-<td valign="top">
-
-**Vídeo transformado**
-- Escolha de ângulo e Roteiro em blocos, travado antes da Narração
-- Narração por TTS local (Pocket TTS), gravação com teleprompter ou áudio importado
-- Limpeza de voz, alinhamento por palavra e ducking automático da Fonte
-- Trilha sonora e efeitos
-
-</td>
-<td valign="top">
-
-**Empacotamento e cuidado com o canal**
-- Título, descrição com crédito da Fonte, tags, hashtags e ideia de capa
-- Capítulos do YouTube gerados a partir do Roteiro
-- Tradução de legenda PT-BR ↔ EN
-- Perfil de canal e avisos de monetização e de Permissão antes de exportar
-
-</td>
-</tr>
-</table>
-
-## Sua IA, suas regras
-
-O Clipes não depende de nenhum provedor. Cada Tarefa de IA (seleção, roteiro, empacotamento, tradução) aponta para um Perfil de Provedor que você configura, e cada uma pode usar um diferente.
+Tipos de Provedor:
 
 | Tipo | Exemplos | Quanto custa | O que sai da máquina |
 |---|---|---|---|
@@ -157,39 +187,41 @@ O Clipes não depende de nenhum provedor. Cada Tarefa de IA (seleção, roteiro,
 | **API** | OpenAI, Anthropic, Gemini ou qualquer endpoint compatível com OpenAI | Por token. Estimativa antes, valor real depois | Só o texto das Frases |
 | **CLI com a sua assinatura** *(experimental)* | Codex, Claude Code, OpenCode | Já incluído no plano que você paga | Só o texto das Frases |
 
-Você também ganha:
+Como o app protege você:
 
-- **Somente local**, por Tarefa ou pelo Projeto inteiro. Com ele ligado, nenhuma chamada remota é feita, nem para "refazer com o forte".
-- **Orçamento** por chamada, por tarefa e por lote. O app para quando chega no teto.
-- **Trilha de auditoria** de cada chamada: modelo, tokens, custo e versão do prompt.
-- **Nada de repetição às cegas.** Uma chamada paga com resultado incerto nunca é refeita sozinha.
+- **Aviso antes de qualquer ação externa.** Toda chamada a um Provedor remoto ou ao Groq mostra antes o Perfil usado, o destino, a estimativa em dólar ou o consumo de cota, e o teto restante. Você confirma, ou cancela.
+- **Somente local.** Pode ser ligado por Tarefa ou para o Projeto inteiro. Ligado, nenhuma chamada remota acontece, nem para "refazer com outro Perfil". Um selo na barra superior mostra quando está ativo.
+- **Orçamento.** Teto por chamada, por tarefa e por lote. Ao chegar nele, o app pausa e pergunta se você quer continuar.
+- **Sem repetição às cegas.** Uma chamada paga com resultado incerto nunca é refeita sozinha: você decide, depois de ver a estimativa.
+- **Trilha de auditoria** de cada chamada: modelo, tokens, custo e versão do prompt, sem o texto enviado (em **Configurações → Custos**).
 - **Chaves no cofre do sistema** (Windows Credential Manager ou Secret Service no Linux), nunca em texto puro no Projeto.
+- **Sem telemetria.** O app não envia nada sobre o seu uso.
 
-## Instalação
+Para trabalhar 100% local, aponte as Tarefas para um modelo local (Ollama ou LM Studio) e ligue **Somente local** em **Configurações → Projeto atual**. Veja o [ADR-0009](docs/adr/0009-custo-orcamento-e-auditoria-de-chamadas-de-ia.md) e o [ADR-0010](docs/adr/0010-perfis-multiplos-de-provedor-tarefa-para-perfil-e-somente-local.md).
 
-| Sistema | Pacote | Observação |
+## Instalação e requisitos
+
+| Sistema | Pacote | Requisitos |
 |---|---|---|
-| **Windows 10 e 11** (x64) | Instalador `.exe` (NSIS) | Instala para o usuário atual, sem pedir administrador |
-| **Linux** (x64) | `.AppImage` ou `.deb` | O `.deb` já declara as dependências de mídia |
+| **Windows 10 e 11** (x64) | Instalador `.exe` (NSIS), instala para o usuário atual sem pedir administrador | WebView2 (já vem no Windows 11). GPU NVIDIA é opcional |
+| **Linux** (x64) | `.AppImage` ou `.deb` | GStreamer do sistema para o preview. O `.deb` já declara as dependências. GPU NVIDIA é opcional |
 | **macOS** | Ainda não | Acompanhe em [#301](https://github.com/GUSTAVOHOOO/clipes/issues/301) |
 
-**[Baixar a última versão →](https://github.com/GUSTAVOHOOO/clipes/releases/latest)**
+Reserve espaço em disco para os Componentes, que são baixados na primeira vez em **Configurações → Componentes** (você vê tamanho e licença antes de confirmar, e cada arquivo é conferido por SHA-256). O modelo de transcrição tem cerca de 0,5 GB na CPU e 1,6 GB na GPU. Sem GPU NVIDIA, a transcrição roda na CPU com um modelo menor.
 
-Os instaladores são enxutos de propósito. FFmpeg, yt-dlp, o worker Python e os modelos são baixados na primeira vez, pela tela de **Componentes**, onde você vê o tamanho e a licença de cada um antes de confirmar. Cada download é conferido por SHA-256. O modelo de transcrição tem cerca de 0,5 GB na CPU e 1,6 GB na GPU.
-
-O app se atualiza sozinho com pacotes assinados.
+O app se atualiza sozinho, com pacotes assinados.
 
 <details>
 <summary><b>Windows: aviso do SmartScreen</b></summary>
 
 <br>
 
-O instalador ainda não tem assinatura de código. A assinatura gratuita para projetos open source pela SignPath Foundation está planejada em [#24](https://github.com/GUSTAVOHOOO/clipes/issues/24). Até lá, o SmartScreen pode dizer que o aplicativo é desconhecido.
+O instalador `.exe` do Windows ainda não possui certificado de assinatura de código — a assinatura gratuita pela SignPath Foundation foi planejada em [#24](https://github.com/GUSTAVOHOOO/clipes/issues/24), mas ainda não está configurada no fluxo de release (apenas os pacotes do updater recebem assinatura Ed25519 do Tauri). Por isso, o SmartScreen pode dizer que o aplicativo é desconhecido.
 
 Antes de executar, confira o arquivo com o `SHA256SUMS.txt` publicado na mesma release:
 
 ```powershell
-Get-FileHash .\Clipes_1.0.0_x64-setup.exe -Algorithm SHA256
+Get-FileHash .\Clipes_2.0.0_x64-setup.exe -Algorithm SHA256
 ```
 
 Se o hash bater, clique em **Mais informações** e depois em **Executar assim mesmo**.
@@ -209,12 +241,40 @@ sudo apt install gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0
 
 </details>
 
+## Ajuda
+
+- **Dúvida de uso:** [Discussions](https://github.com/GUSTAVOHOOO/clipes/discussions).
+- **Bug ou ideia:** [abra uma issue](https://github.com/GUSTAVOHOOO/clipes/issues/new/choose), ou use **Relatos** dentro do app, que monta um diagnóstico filtrado para você revisar e anexar.
+- **Vulnerabilidade:** siga o [SECURITY.md](SECURITY.md). Não abra issue pública.
+- **Vocabulário e decisões:** [GLOSSARY.md](GLOSSARY.md) e os [ADRs](docs/adr/).
+
+### Limitações conhecidas
+
+- **Windows sem assinatura de código:** o instalador NSIS ainda não possui certificado de assinatura de código (apenas os pacotes do updater são assinados), então o SmartScreen pode avisar. Veja [acima](#instalação-e-requisitos).
+- **macOS** ainda não tem instalador ([#301](https://github.com/GUSTAVOHOOO/clipes/issues/301)).
+- **Linux AppImage** depende do GStreamer do sistema para o preview.
+- **Provedores via CLI** (Codex, Claude Code, OpenCode) seguem experimentais.
+- **YouTube com restrição de idade:** o app detecta e orienta a baixar o vídeo e importar como arquivo local.
+- **Idioma por Fonte:** a Transcrição fica no idioma em que foi dita. A tradução vale para a legenda do Corte (PT-BR ↔ EN).
+
+## Experimentar a interface sem instalar
+
+Dá para abrir a interface da v2 no navegador, com um núcleo simulado e dados de exemplo. Serve para conhecer as telas, não para processar vídeo de verdade:
+
+```sh
+cd front-v2
+bun install
+bun run dev   # http://127.0.0.1:1430 (sobe com VITE_CORE_MOCK=1)
+```
+
+Para carregar o Projeto de demonstração, abra `http://127.0.0.1:1430/?source-test=1#/projeto/test-project/cortes`. Detalhes em [`front-v2/README.md`](front-v2/README.md).
+
 ## Arquitetura
 
 ```mermaid
 flowchart TB
     subgraph app["App desktop (Tauri 2)"]
-        UI["Interface<br/>React + TypeScript"]
+        UI["Interface v2<br/>React 19 + TypeScript<br/>front-v2/ e design-system-v2/"]
         CORE["Núcleo em Rust<br/>Projetos · fila · provedores<br/>seleção · render"]
         UI <-->|"protocolo único de comandos"| CORE
     end
@@ -225,19 +285,20 @@ flowchart TB
     CORE <-->|"HTTP ou CLI"| AI["Provedor de IA<br/>local, API ou assinatura"]
 ```
 
-- **Núcleo em Rust**: toda a regra de negócio mora aqui. A interface só chama comandos. Por isso a v2 pode refazer a interface inteira sem tocar no que o app faz.
+- **Núcleo em Rust**: toda a regra de negócio mora aqui. A interface só chama comandos, e por isso a v2 refez a interface inteira sem mudar o que o app faz.
 - **Fila persistida**: transcrição, seleção e exportação são jobs no SQLite. O app fecha, abre de novo e continua de onde parou.
 - **Worker Python isolado**: os modelos de ML rodam num processo separado, num ambiente do `uv` que o app instala sozinho. Ele não usa o Python do sistema.
-- **Tarefas de IA como workflows fixos**: cada Tarefa tem prompt versionado e travado por hash, saída estruturada validada por schema e verificadores próprios. Trocar de provedor não muda o resultado esperado.
+- **Tarefas de IA como workflows fixos**: cada Tarefa tem prompt versionado e travado por hash, saída estruturada validada por schema e verificadores próprios. Trocar de Provedor não muda o resultado esperado.
+- **Interface v2 em estados explícitos**: toda tela trata carregando, vazio, erro, parcial e em andamento, e mostra erros do núcleo como mensagens com ação, nunca como código cru.
 
 | Camada | Tecnologia |
 |---|---|
 | Desktop | [Tauri 2](https://tauri.app/), que usa o WebView do sistema e gera instaladores pequenos |
-| Interface | React 19, TypeScript, Vite, Bun, Base UI, Tailwind 4 e cores em OKLCH |
+| Interface | React 19, TypeScript, Vite, Bun, Base UI, Tailwind 4 e cores em OKLCH, sobre o [`design-system-v2/`](design-system-v2/) |
 | Núcleo | Rust e SQLite (rusqlite), com chaves no cofre do sistema (keyring) |
 | ML | Python via `uv`: faster-whisper, YuNet, Silero VAD e Pocket TTS |
 | Mídia | FFmpeg e libass, baixados sob demanda |
-| Qualidade | GitHub Actions em Ubuntu e Windows, `cargo-deny` (licenças e vulnerabilidades), E2E com tauri-driver e WebdriverIO, DCO |
+| Qualidade | GitHub Actions em Ubuntu e Windows, `cargo-deny`, testes de componente (Vitest) e de fluxo (Playwright) na interface, E2E com tauri-driver e WebdriverIO, DCO |
 
 Cada decisão importante tem um registro com o contexto e o motivo:
 
@@ -250,7 +311,7 @@ Cada decisão importante tem um registro com o contexto e o motivo:
 | [0005](docs/adr/0005-projeto-portatil-com-sqlite.md) | Projeto portátil com SQLite |
 | [0006](docs/adr/0006-relato-de-problemas-sem-telemetria.md) | Relato de problemas sem telemetria |
 | [0007](docs/adr/0007-tarefas-de-ia-como-workflows-fixos-no-nucleo.md) | Tarefas de IA como workflows fixos no núcleo |
-| [0008](docs/adr/0008-contrato-de-saida-estruturada-agnostico-de-provedor.md) | Saída estruturada independente de provedor |
+| [0008](docs/adr/0008-contrato-de-saida-estruturada-agnostico-de-provedor.md) | Saída estruturada independente de Provedor |
 | [0009](docs/adr/0009-custo-orcamento-e-auditoria-de-chamadas-de-ia.md) | Custo, orçamento e auditoria das chamadas de IA |
 | [0010](docs/adr/0010-perfis-multiplos-de-provedor-tarefa-para-perfil-e-somente-local.md) | Vários Perfis de Provedor e "Somente local" |
 
@@ -261,13 +322,14 @@ Cada decisão importante tem um registro com o contexto e o motivo:
 
 | Pasta | Conteúdo |
 |---|---|
-| [`core/`](core/) | Núcleo em Rust: comandos, Projetos, fila, provedores, seleção, render |
-| [`src/`](src/) | Interface React da v1 |
+| [`core/`](core/) | Núcleo em Rust: comandos, Projetos, fila, Provedores, seleção, render |
+| [`front-v2/`](front-v2/) | Interface v2 (telas, rotas, Fila de Jobs, atalhos) |
+| [`design-system-v2/`](design-system-v2/) | Componentes e tokens visuais da v2 |
+| [`src/`](src/) e [`design-system/`](design-system/) | Interface da v1, mantida no repositório até depois da v2.0.0 como caminho de reversão e módulos compartilhados |
 | [`src-tauri/`](src-tauri/) | Casca Tauri: janela, updater e empacotamento |
 | [`worker/`](worker/) | Worker Python de ML |
 | [`catalog/`](catalog/) | Catálogo assinado de modelos |
 | [`benchmarks/`](benchmarks/) | Dataset de VODs e benchmarks de transcrição e seleção |
-| [`design-system/`](design-system/) | Demo do design system da v1, que roda no navegador |
 | [`docs/adr/`](docs/adr/) | Registros de decisão |
 | [`docs/research/`](docs/research/) | Pesquisas e experimentos, com os números |
 | [`docs/produto/`](docs/produto/) | Catálogo de funcionalidades do núcleo e a especificação da v2 |
@@ -277,53 +339,51 @@ Cada decisão importante tem um registro com o contexto e o motivo:
 
 ## Feito com medição
 
-As decisões de modelo e de pipeline vêm de benchmarks reproduzíveis, não de palpite. Os relatórios ficam em [`docs/research/`](docs/research/) e o código em [`benchmarks/`](benchmarks/) e em `core/src/selection/`.
+As decisões de modelo e de pipeline vêm de benchmarks reproduzíveis. Os relatórios ficam em [`docs/research/`](docs/research/) e o código em [`benchmarks/`](benchmarks/) e em `core/src/selection/`.
 
 - **Transcrição**: modelos e precisões comparados em VODs reais em PT-BR e EN, inclusive bordas de palavra medidas contra alinhamento forçado (MFA).
-- **Seleção de Cortes**: um harness compara a seleção com cortes feitos por humanos em lives reais. Ele já decidiu o tamanho das Janelas (15 min com 3 min de sobreposição), descartou cascatas de modelo que não compensavam e mostrou que sinais sem IA (áudio, chat e texto) encontram uma parte relevante dos bons momentos. Isso abre caminho para uma seleção mais barata na v2.
+- **Seleção de Cortes**: um harness compara a seleção com cortes feitos por humanos em lives reais. Ele decidiu o tamanho das Janelas (15 min com 3 min de sobreposição), descartou cascatas de modelo que não compensavam e mostrou que sinais sem IA (áudio, chat e texto) encontram uma parte relevante dos bons momentos.
 
 ## Roadmap
 
 - [x] **v1.0**: núcleo completo, Corte direto e Vídeo transformado, instaladores para Windows e Linux
-- [ ] **v2**: interface refeita do zero, minimalista e mais rápida de operar, sobre o mesmo núcleo ([#288](https://github.com/GUSTAVOHOOO/clipes/issues/288)). Pesquisa de UX, arquitetura de informação, wireframes e direção visual já estão em [`docs/produto/front-v2/`](docs/produto/front-v2/)
-- [ ] Seleção de Cortes guiada por sinais, com a IA só refinando os candidatos ([#319](https://github.com/GUSTAVOHOOO/clipes/issues/319))
-- [ ] macOS ([#301](https://github.com/GUSTAVOHOOO/clipes/issues/301)) e assinatura de código no Windows ([#24](https://github.com/GUSTAVOHOOO/clipes/issues/24))
+- [x] **v2.0**: interface refeita do zero, mais enxuta e rápida de operar, sobre o mesmo núcleo (sai com o release `v2.0.0`, [#288](https://github.com/GUSTAVOHOOO/clipes/issues/288))
+- [ ] Seleção de Cortes guiada por sinais, com o Provedor só refinando os candidatos ([#319](https://github.com/GUSTAVOHOOO/clipes/issues/319))
+- [ ] macOS ([#301](https://github.com/GUSTAVOHOOO/clipes/issues/301))
 - [ ] Mais adiante: servidor MCP para agentes ([#192](https://github.com/GUSTAVOHOOO/clipes/issues/192)), clonagem de voz ([#214](https://github.com/GUSTAVOHOOO/clipes/issues/214)) e o resto de [melhorias futuras](docs/futuro.md)
 
 ## Contribuir
 
-Contribuições são bem-vindas, de correção de texto a provedor novo.
+Contribuições são bem-vindas, de correção de texto a Provedor novo.
 
 ```sh
 git clone https://github.com/GUSTAVOHOOO/clipes.git
 cd clipes
 bun install
+bun install --cwd design-system-v2
+bun install --cwd front-v2
 bun run tauri dev
 ```
 
-Você precisa de Rust estável, [Bun](https://bun.sh/) e dos [pré-requisitos do Tauri](https://v2.tauri.app/start/prerequisites/) para o seu sistema.
+Você precisa de Rust estável, [Bun](https://bun.sh/) e dos [pré-requisitos do Tauri](https://v2.tauri.app/start/prerequisites/) para o seu sistema. `bun run tauri dev` já sobe a interface `front-v2/` na porta `1430`.
 
 | Comando | O que faz |
 |---|---|
-| `bun run tauri dev` | Abre o app em modo de desenvolvimento |
-| `VITE_CORE_MOCK=1 bun run dev` | Só a interface no navegador, com o núcleo simulado |
+| `bun run tauri dev` | Abre o app em modo de desenvolvimento (`front-v2/`) |
+| `cd front-v2 && bun run dev` | Só a interface v2 no navegador (`http://127.0.0.1:1430`), com o núcleo simulado |
+| `cd front-v2 && bun run test` | Testes de unidade e de componente da interface (Vitest) |
+| `cd front-v2 && bun run typecheck` | Checagem de tipos da interface |
+| `cd front-v2 && bun run e2e` | Fluxos de ponta a ponta contra o mock, em 1366×768 e 1440×900 (Playwright) |
 | `cargo test -p clipes-core` | Testes do núcleo |
-| `bun run typecheck` · `bun run test:ui` | Tipos e testes da interface |
 | `bun run test:e2e` | Testes de ponta a ponta no app real ([guia](docs/contribuindo/testes-e2e.md)) |
 
 Antes do primeiro PR:
 
 1. Leia o [guia de contribuição](CONTRIBUTING.md). Todo commit leva `Signed-off-by` (`git commit -s`, [DCO](https://developercertificate.org/)).
 2. Use o vocabulário do [glossário](GLOSSARY.md). Fonte, Corte, Janela e Nota têm significado preciso aqui.
-3. Para estender o app, há guias de [Provedor](docs/contribuindo/provedor.md), [Motor de transcrição](docs/contribuindo/motor-de-transcricao.md), [Tarefa de IA](docs/contribuindo/tarefa-de-ia.md) e [OpenCode](docs/contribuindo/opencode.md).
-4. Discorda de um ADR? Ótimo. Abra uma issue com a evidência. Os ADRs valem até um fato novo mostrar o contrário.
-
-## Comunidade e suporte
-
-- **Bug ou ideia:** [abra uma issue](https://github.com/GUSTAVOHOOO/clipes/issues/new/choose)
-- **Dúvida de uso:** [Discussions](https://github.com/GUSTAVOHOOO/clipes/discussions)
-- **Vulnerabilidade:** siga o [SECURITY.md](SECURITY.md). Não abra issue pública
-- **Problema no app:** use **Relatos**, dentro do próprio Clipes. Ele monta um diagnóstico filtrado que você revisa antes de enviar
+3. Para a interface, siga o [`DESIGN.md`](DESIGN.md) e a [arquitetura da v2](docs/produto/front-v2/01-arquitetura.md).
+4. Para estender o app, há guias de [Provedor](docs/contribuindo/provedor.md), [Motor de transcrição](docs/contribuindo/motor-de-transcricao.md), [Tarefa de IA](docs/contribuindo/tarefa-de-ia.md) e [OpenCode](docs/contribuindo/opencode.md).
+5. Discorda de um ADR? Ótimo. Abra uma issue com a evidência. Os ADRs valem até um fato novo mostrar o contrário.
 
 ## Perguntas frequentes
 
@@ -333,6 +393,15 @@ Antes do primeiro PR:
 <br>
 
 Não. Sem GPU NVIDIA, o Clipes transcreve na CPU com um modelo menor, e por padrão agrupa os trechos de fala para ganhar velocidade. Com GPU NVIDIA, usa um modelo maior e mais preciso.
+
+</details>
+
+<details>
+<summary><b>Meus Projetos da v1 funcionam na v2?</b></summary>
+
+<br>
+
+Sim. A v2 troca só a interface. O núcleo e o formato do Projeto (pasta `.clipes` com SQLite) são os mesmos, então os Projetos, Fontes, Transcrições, Cortes, edições e exportações da v1 abrem em **Início → Abrir pasta `.clipes`**. Se quiser uma garantia a mais, copie a pasta antes de abrir. O app também faz backup automático rotativo.
 
 </details>
 
@@ -379,8 +448,8 @@ Não. Um Projeto é uma pasta com um banco SQLite e as mídias. Copie a pasta pa
 
 <br>
 
-1. Suba a versão em `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` e `core/Cargo.toml`, e atualize o [CHANGELOG](CHANGELOG.md).
-2. Crie a tag no commit a publicar, por exemplo `git tag v1.0.0` e `git push origin v1.0.0`.
+1. Suba a versão em `package.json`, `front-v2/package.json`, `design-system-v2/package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` e `core/Cargo.toml` (além do `Cargo.lock`, das exclusões em `.github/workflows/ci.yml` e do [CHANGELOG](CHANGELOG.md)).
+2. Crie a tag no commit a publicar, por exemplo `git tag v2.0.0` e `git push origin v2.0.0`.
 3. O fluxo **Instaladores e release** gera o `.exe`, o `.AppImage` e o `.deb`, assina os pacotes do updater, publica o `SHA256SUMS.txt` e o `latest.json`.
 
 Tags `catalog-N` publicam o catálogo de modelos assinado (Ed25519) por outro fluxo. A configuração das chaves do updater está no [guia de contribuição](CONTRIBUTING.md#chave-do-updater).
@@ -397,7 +466,7 @@ Este projeto se apoia em trabalho aberto de muita gente: [Tauri](https://tauri.a
 
 ## In English
 
-**Clipes** is a free, open source desktop app that turns long livestreams and videos into vertical, captioned short clips. It runs on your own machine.
+**Clipes** is a free, open source desktop app that turns long livestreams and videos into vertical, captioned short clips. It runs on your own machine. Version 2 ships a new interface built from scratch on the same Rust core, and projects created with v1 open in v2.
 
 - **Local first.** Transcription runs on your PC with faster-whisper, on an NVIDIA GPU or on the CPU. Your video never leaves the machine.
 - **Bring your own AI.** Use a local model (Ollama, LM Studio), an API (OpenAI, Anthropic, Gemini, any OpenAI-compatible endpoint), or a CLI subscription you already pay for (Codex, Claude Code, OpenCode). A "local only" switch blocks remote calls per task or per project.
