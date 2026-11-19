@@ -48,6 +48,11 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Causa:** um teste ou componente entra em loop infinito (por exemplo, um `useEffect` que atualiza o estado de que depende, ou um array/objeto recriado a cada render nas deps), e o Vitest nunca termina. O agente espera o comando e não reporta. Em 19/11 o #366 ficou 2 h assim.
 - **Ação:** o coordenador lê o terminal com `orca terminal read --screen` e acha o processo com `Get-CimInstance Win32_Process` filtrando pelo caminho do worktree na linha de comando. Encerra só os processos desse worktree e manda `send` ao worker com a causa provável. O worker roda o arquivo isolado com `--maxWorkers=1 --testTimeout=20000`, corrige a causa no componente e commita com frequência.
 
+### Worker Antigravity para com 503 "No capacity available" do modelo
+- **Sintoma:** vários workers chegam ao mesmo tempo como "Worker stopped without reporting" (`stopReason: finished`). O terminal mostra `UNAVAILABLE (code 503): No capacity available for model gemini-4-hydrogen-high on the server` e o worker fica `activity=idle`.
+- **Causa:** falta de capacidade momentânea do provedor do modelo, sem relação com a tarefa. Workers no meio de um comando local seguem; os que estavam pedindo ao modelo param.
+- **Ação:** confira o terminal de cada um (`orca terminal read --screen`) para separar o 503 de uma falha real. Espere 1 a 2 min e retome cada worker com `orca orchestration send` em intervalos de ~30 s, dizendo que foi 503 e que ele deve continuar de onde parou. Em 19/11 os três workers afetados voltaram na primeira tentativa. Se o 503 persistir, aumente o intervalo e despache menos workers ao mesmo tempo.
+
 ### Decisão que não está no ticket nem nos ADRs
 - **Ação:** o worker pergunta via `ask`; o coordenador leva ao dev e não decide sozinho. A resposta vira registro no PR (ADR curto ou seção de doc).
 - **Já decidido:** o seam do núcleo usa um crate Rust sem Tauri, registro de comandos por módulo com `inventory`, despacho único (nome + JSON) para UI e harness, `ProgressEvent` tipado e `core::process::spawn` sem shell (PR #86). O identificador do app é `io.github.gustavohooo.clipes`.
