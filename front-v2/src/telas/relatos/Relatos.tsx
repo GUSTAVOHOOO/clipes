@@ -252,10 +252,10 @@ export function Relatos({ tipoInicial }: RelatosProps) {
     [tipo],
   )
 
-  const mencaoSegredo = useMemo(() => {
-    const combinado = emRevisao ? `${titulo} ${descricao} ${diagnosticoTexto}` : `${titulo} ${descricao}`
-    return REGEX_SEGREDO.test(combinado)
-  }, [descricao, diagnosticoTexto, emRevisao, titulo])
+  const mencaoSegredo = useMemo(
+    () => REGEX_SEGREDO.test(`${titulo} ${descricao}`),
+    [descricao, titulo],
+  )
 
   const textoCompleto = useMemo(() => {
     const partes = [descricao.trim()]
@@ -845,10 +845,10 @@ export function Relatos({ tipoInicial }: RelatosProps) {
             ref={asideHardwareRef}
             tabIndex={-1}
             aria-label="Sonda de hardware e allowlist"
-            className="foco-interno hidden flex-col gap-3 rounded-area bg-area p-4 min-[1440px]:flex"
+            className="foco-interno hidden flex-col gap-4 rounded-area bg-area p-4 min-[1440px]:flex"
           >
             <h2 className="text-base font-medio text-t1">Sonda de hardware e Allowlist</h2>
-            <div className="flex flex-col gap-1.5 rounded-area bg-elevado p-3 text-pequeno">
+            <div className="flex flex-col gap-1.5 text-pequeno">
               <strong className="font-medio text-t1">O que entra e o que nunca entra (ADR-0006)</strong>
               <p className="text-t2">
                 <strong className="font-medio text-t1">Entra:</strong> versão do Clipes, SO, GPU/encoder, Motor, Provedor, versão da Tarefa/hash do prompt, contexto efetivo e últimas ~200 linhas limpas de erro.
@@ -857,7 +857,7 @@ export function Relatos({ tipoInicial }: RelatosProps) {
                 <strong className="font-medio text-t1">Nunca entra:</strong> chaves de API, caminhos pessoais do disco, nomes de Fontes, textos de Transcrição ou Roteiros.
               </p>
             </div>
-            <div className="flex flex-col gap-2 rounded-area bg-elevado p-3">
+            <div className="flex flex-col gap-2 border-t border-linha pt-3">
               <strong className="text-pequeno font-medio text-t1">Resumo técnico da sonda de hardware</strong>
               {renderBlocoSonda(false)}
             </div>
