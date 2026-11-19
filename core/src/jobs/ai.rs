@@ -641,7 +641,7 @@ fn settle(id: i64, state: &str, result: &Value) {
 fn requeue(id: i64) {
     let _ = projects::with_writer(|c| {
         c.execute(
-            "UPDATE jobs SET state='queued',result=NULL WHERE id=?1 AND state='running'",
+            "UPDATE jobs SET state='queued',result=NULL,started_at_ms=NULL WHERE id=?1 AND state='running'",
             [id],
         )?;
         Ok(())
@@ -872,7 +872,7 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
             budget::pause(scope, &key, code);
             let _ = projects::with_writer(|c| {
                 c.execute(
-                    "UPDATE jobs SET state='queued',attempts=attempts-1,result=NULL WHERE id=?1 AND state='running'",
+                    "UPDATE jobs SET state='queued',attempts=attempts-1,result=NULL,started_at_ms=NULL WHERE id=?1 AND state='running'",
                     [id],
                 )?;
                 Ok(())

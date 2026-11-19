@@ -98,7 +98,7 @@ pub(super) fn run_queue(project: PathBuf, stop: Arc<AtomicBool>) {
                 {
                     let _ = projects::with_writer(|c| {
                         c.execute(
-                            "UPDATE jobs SET state='queued' WHERE id=?1 AND state='running'",
+                            "UPDATE jobs SET state='queued',started_at_ms=NULL WHERE id=?1 AND state='running'",
                             [id],
                         )?;
                         Ok(())
