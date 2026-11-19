@@ -474,8 +474,9 @@ describe('MesaProntidao', () => {
 
     // Dica da ação indisponível "Converter em Vídeo transformado" (#292) sem expor número de ticket (UI-12)
     const btnConverter = within(card102).getByRole('button', { name: /Converter em Vídeo transformado/i })
-    expect(btnConverter).toBeDisabled()
-    await user.hover(btnConverter.parentElement!)
+    expect(btnConverter).toHaveAttribute('aria-disabled', 'true')
+    expect(btnConverter.parentElement?.getAttribute('tabindex')).toBeNull()
+    await user.hover(btnConverter)
     const dicaConverter = await screen.findByText(
       /conversão individual para Vídeo transformado ainda não está disponível nesta versão/i,
     )
@@ -484,8 +485,12 @@ describe('MesaProntidao', () => {
 
     // Dica da ação indisponível "Salvar pasta padrão" (#303) sem expor ticket nem comando interno (UI-12)
     const btnSalvarPasta = screen.getByRole('button', { name: /Salvar pasta padrão/i })
-    expect(btnSalvarPasta).toBeDisabled()
-    await user.hover(btnSalvarPasta.parentElement!)
+    expect(btnSalvarPasta).toHaveAttribute('aria-disabled', 'true')
+    expect(document.querySelectorAll('span[tabindex="0"]')).toHaveLength(0)
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Cortes aprovados' }),
+    ).toBeInTheDocument()
+    await user.hover(btnSalvarPasta)
     const dicaPasta = await screen.findByText(
       /salvar a pasta padrão sem exportar ainda não está disponível nesta versão/i,
     )
