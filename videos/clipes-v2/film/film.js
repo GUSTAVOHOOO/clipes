@@ -84,7 +84,7 @@
   // escala de um elemento da captura em torno do seu centro (destaques "snappy")
   const scaleAbout = (cx, cy, s) => ({ s, x: cx * (1 - s), y: cy * (1 - s) });
   const whipBlur = (k) => (k > 0.01 && k < 0.99 ? `blur(${(14 * Math.sin(Math.PI * k)).toFixed(2)}px)` : 'none');
-  const bump = (t, b, amp = 1) => amp * (spHit(t, b, 'snappy', 1 / 60) - sp(t, b + 0.45, 'default'));
+  const bump = (t, b, amp = 1) => amp * (spHit(t, b, 'snappy') - sp(t, b + 0.45, 'default'));
 
   // ---------------------------------------------------------------- tipografia: '*' marca a palavra de acento
   // ênfase: as palavras com '*' ficam em --t1 e o resto do bloco em --t2 (o laranja fica para a UI e a tesoura)
@@ -111,14 +111,14 @@
     return reg(c, { o: 0 });
   }
   // o ponteiro anda em coordenadas da captura e é desenhado no palco: segue a câmera
-  function moveCursor(t, c, f, keys, pressAt) {
+  function moveCursor(t, c, f, keys, pressAt, inWin = false) {
     const b = C.beatAt(t);
     if (b < keys[0][0]) { put(c, { o: 0 }); return 0; }
     const X = trk(t, keys.map((k) => [k[0], k[1], 'default'])), Y = trk(t, keys.map((k) => [k[0], k[2], 'default']));
     const [x, y] = toStage(f, X, Y);
     const press = pressAt == null ? 0 : spHit(t, pressAt, 'snappy') - sp(t, beatOf(pressAt) + 0.3, 'snappy');
     const g = sp(t, keys[0][0], 'snappy');
-    put(c, { o: g > 0.02 ? 1 : 0, x: x - 4, y: y - 3, s: (0.85 + 0.15 * g) * (1 - 0.14 * press) });
+    put(c, { o: g > 0.02 && (!inWin || (x > f.r.x && x < f.r.x + f.r.w && y > f.r.y && y < f.r.y + f.r.h)) ? 1 : 0, x: x - 4, y: y - 3, s: (0.85 + 0.15 * g) * (1 - 0.14 * press) });
     return press;
   }
 
@@ -260,8 +260,11 @@
   scene({
     name: 'legenda', from: 's5', to: 's6',
     build(root, S) {
-      S.scr = screen(root, 'corte-editar');
-      S.fr13 = copy(S.scr, 'corte-editar', R.frase13);
+      // dois cartões da MESMA captura real (sem canal morto entre a Transcrição e a Prévia): A = coluna da Transcrição,
+      // B = Prévia 9:16 + botões + painel Legenda. Cada um tem a sua câmera.
+      S.A = screen(root, 'corte-editar');
+      S.scr = screen(root, 'corte-editar');   // B
+      S.fr13 = copy(S.A, 'corte-editar', R.frase13);
       S.btn = copy(S.scr, 'corte-editar', R.legendaBtn);
       S.pan = copy(S.scr, 'corte-editar-painel', null, { o: 0 }); // painel real Legenda, capturado depois do clique
       S.F = foot(S.scr.cam, 68, 120, rectCss(R.prevEd, 'border-radius:6px'));
@@ -273,19 +276,25 @@
     },
     run(t, b, S) {
       drawFoot(S.F, t);
+      // cartão A (Transcrição, com a Frase 13) e cartão B (Prévia, botões, painel): a câmera de cada um é própria
+      const rA = P({ x: 60, y: 64, w: 720, h: 740 }, { x: 48, y: 790, w: 984, h: 262 });
+      const rB = P({ x: 820, y: 64, w: 1040, h: 740 }, { x: 48, y: 1068, w: 984, h: 618 });
+      const aY = P(trk(t, [[28, 380], [32, 440, 'default']]), 438);
+      frame(S.A, rA, P(225, 246), aY, P(1.6, 2.0) * (1 + 0.03 * seg(t, 28, 40)), 0, 1);
       const [cx, cy, z] = camTrk(t, P(
-        [[28, 700, 380, 1.3], [29.3, 700, 470, 1.6], [32.4, 720, 400, 1.25], [36.1, 990, 400, 1.95]],
-        [[28, 300, 380, 1.8], [29.3, 943, 470, 2.6], [32.4, 556, 420, 0.89], [36.1, 1180, 390, 1.9]]));
-      const f = frame(S.scr, P({ x: 60, y: 64, w: 1800, h: 740 }, VP), cx, cy, z * (1 + 0.025 * seg(t, 36, 40)), P(0, -2), 1);
+        [[28, 1115, 400, 1.6], [29.3, 943, 470, 2.4], [32.4, 1000, 480, 1.6], [36.1, 1130, 520, 1.7]],
+        [[28, 1115, 400, 1.5], [29.3, 943, 500, 2.6], [32.4, 1000, 500, 1.5], [36.1, 1128, 520, 1.6]]));
+      const f = frame(S.scr, rB, cx, cy, z * (1 + 0.01 * seg(t, 36, 40)), 0, 1);
       // a legenda real se revela palavra a palavra (mesma ordem do destaque do app)
       const edge = trk(t, [[28, R.leg[0] - 4], [beatOf('s5_w1') - 0.3 * LEADB, R.leg[1] + 2, 'snappy'], [beatOf('s5_w2') - 0.3 * LEADB, R.leg[2] + 2, 'snappy'], [beatOf('s5_w3') - 0.3 * LEADB, R.leg[3] + 8, 'snappy']]);
       put(S.leg, { clip: `inset(0px ${(R.prevEd.x + R.prevEd.w - edge).toFixed(1)}px 0px 0px)` });
       // rack focus: tudo fora de foco menos a Frase 13 ("O chat simplesmente explodiu nessa hora.") e a Prévia
       const fo = spHit(t, 's5_rack', 'default', 0.13) - sp(t, 35.6, 'default');
       put(S.scr.img, { filter: `blur(${(3.5 * fo).toFixed(2)}px)` });
+      put(S.A.img, { filter: `blur(${(3.5 * fo).toFixed(2)}px)` });
       put(S.btn, { filter: `blur(${(3.5 * fo).toFixed(2)}px)` });
       put(S.fr13, { filter: `brightness(${(1 + 0.3 * fo).toFixed(3)})` });
-      const press = moveCursor(t, S.cur, f, [[34.6, 1060, 560], [35.8, ...ctr(R.legendaBtn)]], 's5_leg');
+      const press = moveCursor(t, S.cur, f, [[34.6, 1060, 560], [35.8, ...ctr(R.legendaBtn)]], 's5_leg', true);
       if (b < 35.86) put(S.btn, { filter: `blur(${(3.5 * fo).toFixed(2)}px) brightness(${(1 - 0.2 * press).toFixed(3)})` });
       put(S.pan, { o: b >= 35.86 ? 1 : 0 });
       // whip de entrada e de saída
@@ -336,7 +345,7 @@
   // ================================================================= 7 · Cartão final (48 → 60)
   const SCISSORS = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--sinal)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">'
     + '<g class="bl1"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M14.8 14.8 20 20"/></g><g class="bl2"><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/></g></svg>';
-  const XOUT = 58.7;   // beat em que o texto do cartão final começa a sair
+  const XOUT = 58.55;   // beat em que o texto do cartão final começa a sair
   scene({
     name: 'final', from: 'logo', to: 'done', pre: 0.34, cut: true,   // entra quando a luz do botão completa: no máximo 1 quadro laranja chapado
     build(root, S) {
@@ -381,16 +390,16 @@
       const LS = P(80, 76), lk = C.sp(t, 47.74, { response: 0.32, damping: 0.55 });   // cai de cima, pousa no beat 48 e assenta com overshoot visível
       put(S.lock, { y: -LS * 1.1 * (1 - lk) });   // começa acima da própria máscara: a borda da wipe nunca corta glifo
       const pl = spHit(t, 48.6, 'snappy');
-      const pO = sp(t, beatOf(XOUT) - 0.14, 'default');   // saída do pílula junto com as linhas (emenda do loop)
-      put(S.pill, { y: 80 * (1 - pl) - 80 * pO, hide: pl < 0.01 || pO > 0.6 });
+      const pq = clamp((b - (XOUT - 0.12)) / 0.5), pO = pq * (0.55 + 0.45 * pq);   // a pílula sobe primeiro, na mesma curva das linhas
+      put(S.pill, { y: 80 * (1 - pl) - 80 * pO, hide: pl < 0.01 || pO > 0.5 });
       const sn = spHit(t, 'snip', 'snappy') - sp(t, beatOf('snip') + 0.35, 'default');
       S.bl.forEach((g, i) => put(g, { css: { transformOrigin: '12px 12px', transformBox: 'view-box', transform: `rotate(${((i ? -1 : 1) * 28 * sn).toFixed(3)}deg)` } }));
       // últimos 0,4 s: as linhas saem por máscara (de cima para baixo na ordem de leitura) e sobram marca + telas, perto do f0 (emenda do loop)
-      riseRows(t, S.tag, 'tag', XOUT, { exitStagger: 0, exitPreset: 'default' });
-      riseRows(t, [S.cta[0]], beatOf('cta') - 0.6, XOUT, { exitStagger: 0, exitPreset: 'default' });   // a linha de ênfase (Windows e Linux.) é a que cai no cue
-      riseRows(t, [S.cta[1]], 'cta', XOUT, { stagger: 0.03, exitStagger: 0, exitPreset: 'default' });
-      riseRows(t, S.url, 'url', XOUT, { stagger: 0.02, exitStagger: 0, exitPreset: 'default' });
-      riseRows(t, S.lic, 'lic', XOUT, { preset: 'snappy', stagger: 0.02, rowGap: 0.05, exitStagger: 0, exitPreset: 'default' });
+      riseRows(t, S.tag, 'tag', XOUT, { exitLin: 0.5 });
+      riseRows(t, [S.cta[0]], beatOf('cta') - 0.6, XOUT, { exitLin: 0.5 });   // a linha de ênfase (Windows e Linux.) é a que cai no cue
+      riseRows(t, [S.cta[1]], 'cta', XOUT, { stagger: 0.03, exitLin: 0.5 });
+      riseRows(t, S.url, 'url', XOUT, { stagger: 0.02, exitLin: 0.5 });
+      riseRows(t, S.lic, 'lic', XOUT, { preset: 'snappy', stagger: 0.02, rowGap: 0.05, exitLin: 0.5 });
       // parallax: as telas sobem/andam mais devagar que a tipografia e nunca param
       const e = sp(t, 48.3, CAMSP), d = seg(t, 48, 60);
       const stp = ['tag', 'cta', 'url', 'lic', 'snip'].reduce((a, m) => a + sp(t, beatOf(m) - 0.1, 'default'), 0);
