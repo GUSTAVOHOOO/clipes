@@ -264,7 +264,9 @@ function createUi(browser) {
                     .join(' '),
                 );
               }
-              return norm(el.innerText || el.textContent || '');
+              const clone = el.cloneNode(true);
+              clone.querySelectorAll('kbd,svg').forEach(n => n.remove());
+              return norm(clone.textContent || '');
             };
             const scope = s.scopeSelector ? document.querySelector(s.scopeSelector) : document;
             if (!scope) return false;
@@ -276,10 +278,13 @@ function createUi(browser) {
 
             let candidates = [];
             if (s.kind === 'button') {
-              candidates = Array.from(scope.querySelectorAll('button,[role="button"]')).filter(
+              const clickable =
+                'button,[role="button"],[role="tab"],[role="radio"],[role="menuitem"],summary,a[href]';
+              candidates = Array.from(scope.querySelectorAll(clickable)).filter(
                 el =>
                   isVisible(el) &&
                   !el.disabled &&
+                  el.getAttribute('aria-disabled') !== 'true' &&
                   matchRow(el) &&
                   matchText(nameOf(el), s.name, s.exact !== false),
               );
@@ -288,9 +293,9 @@ function createUi(browser) {
                 el => isVisible(el) && matchText(norm(el.textContent), s.name, false),
               );
             } else if (s.kind === 'field') {
-              const controls = Array.from(scope.querySelectorAll('input,textarea,select')).filter(
-                el => isVisible(el) && !el.disabled && matchRow(el),
-              );
+              const controls = Array.from(
+                scope.querySelectorAll('input:not([type="checkbox"]),textarea,select,[role="combobox"]'),
+              ).filter(el => isVisible(el) && !el.disabled && matchRow(el));
               candidates = controls.filter(ctrl => {
                 const aria = ctrl.getAttribute('aria-label');
                 if (aria && matchText(norm(aria), s.label, s.exact !== false)) return true;
@@ -298,24 +303,40 @@ function createUi(browser) {
                   const explicit = document.querySelector(`label[for="${CSS.escape(ctrl.id)}"]`);
                   if (explicit && matchText(norm(explicit.textContent), s.label, s.exact !== false)) return true;
                 }
+                const labelledBy = ctrl.getAttribute('aria-labelledby');
+                if (labelledBy) {
+                  const text = norm(
+                    labelledBy
+                      .split(/\s+/)
+                      .map(id => document.getElementById(id)?.textContent || '')
+                      .join(' '),
+                  );
+                  if (matchText(text, s.label, s.exact !== false)) return true;
+                }
                 const wrapping = ctrl.closest('label');
                 if (wrapping) {
                   const clone = wrapping.cloneNode(true);
-                  clone.querySelectorAll('input,textarea,select').forEach(n => n.remove());
+                  clone.querySelectorAll('input,textarea,select,[role="combobox"]').forEach(n => n.remove());
                   if (matchText(norm(clone.textContent), s.label, s.exact !== false)) return true;
                 }
                 return false;
               });
             } else if (s.kind === 'switch') {
-              candidates = Array.from(scope.querySelectorAll('input[role="switch"],input[type="checkbox"]')).filter(
-                el => {
-                  if (!isVisible(el) || el.disabled) return false;
-                  const aria = el.getAttribute('aria-label');
-                  if (aria && matchText(norm(aria), s.label, false)) return true;
-                  const wrapping = el.closest('label');
-                  return wrapping ? matchText(norm(wrapping.textContent), s.label, false) : false;
-                },
-              );
+              candidates = Array.from(
+                scope.querySelectorAll('[role="switch"],[role="checkbox"],input[type="checkbox"]'),
+              ).filter(el => {
+                if (!isVisible(el) || el.disabled || el.getAttribute('aria-disabled') === 'true') return false;
+                if (el.tagName === 'INPUT' && el.closest('label')?.querySelector('[role="switch"],[role="checkbox"]')) {
+                  return false;
+                }
+                const aria = el.getAttribute('aria-label');
+                if (aria && matchText(norm(aria), s.label, false)) return true;
+                const wrapping = el.closest('label');
+                if (!wrapping) return false;
+                const clone = wrapping.cloneNode(true);
+                clone.querySelectorAll('input,[role="switch"],[role="checkbox"]').forEach(n => n.remove());
+                return matchText(norm(clone.textContent), s.label, false);
+              });
             }
 
             const chosen = candidates[s.index ?? 0];
@@ -379,7 +400,8 @@ function createUi(browser) {
     }
   }
 
-  async function selectField(label, optionValue, options = {}) {
+  // Aceita <select> nativo (valor) ou gatilho Base UI role="combobox" (texto da opção).
+  async function selectField(label, optionTextOrValue, options = {}) {
     const el = await tagElement({
       kind: 'field',
       label,
@@ -387,7 +409,65 @@ function createUi(browser) {
       scopeSelector: options.scopeSelector ?? null,
       rowContains: options.rowContains ?? null,
     });
-    await el.selectByAttribute('value', optionValue);
+    const tagName = await el.getTagName();
+    if (tagName.toLowerCase() === 'select') {
+      await el.selectByAttribute('value', optionTextOrValue);
+      return;
+    }
+    await el.click();
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          wanted => {
+            const norm = t => (t || '').replace(/s+/g, ' ').trim();
+            const visible = e => {
+              const r = e.getBoundingClientRect();
+              return r.width > 0 && r.height > 0;
+            };
+            const items = Array.from(document.querySelectorAll('[role="listbox"] [role="option"]')).filter(visible);
+            const hit =
+              items.find(i => norm(i.textContent) === wanted) ||
+              items.find(i => norm(i.textContent).includes(wanted));
+            if (!hit) return false;
+            hit.setAttribute('data-e2e-option', 'pick');
+            return true;
+          },
+          optionTextOrValue,
+        ),
+      { timeout: 10_000, interval: 100, timeoutMsg: `Opção não encontrada em "${label}": ${optionTextOrValue}` },
+    );
+    await browser.$('[data-e2e-option="pick"]').click();
+    await browser.execute(() =>
+      document.querySelectorAll('[data-e2e-option]').forEach(n => n.removeAttribute('data-e2e-option')),
+    );
+    await browser.waitUntil(async () => !(await browser.$('[role="listbox"]').isExisting()), { timeout: 5_000 });
+  }
+
+  async function clickTab(name, options = {}) {
+    await clickButton(name, { ...options, exact: options.exact ?? true });
+  }
+
+  async function currentHash() {
+    return browser.execute(() => window.location.hash);
+  }
+
+  async function waitForHash(expected, timeout = 15_000) {
+    let last = '';
+    await browser.waitUntil(
+      async () => {
+        last = await currentHash();
+        return expected instanceof RegExp ? expected.test(last) : last.startsWith(expected);
+      },
+      { timeout, interval: 100, timeoutMsg: `Hash esperado ${expected}, atual: ${last}` },
+    );
+    return last;
+  }
+
+  async function navigateHash(hash) {
+    await browser.execute(h => {
+      window.location.hash = h;
+    }, hash);
+    await waitForHash(hash.split('?')[0]);
   }
 
   async function fieldValue(label, options = {}) {
@@ -400,18 +480,35 @@ function createUi(browser) {
     return el.getValue();
   }
 
+  const readChecked = target =>
+    browser.execute(el => {
+      const aria = el.getAttribute('aria-checked');
+      return aria !== null ? aria === 'true' : Boolean(el.checked);
+    }, target);
+
   async function setChecked(label, desired, options = {}) {
     const el = await tagElement({
       kind: 'switch',
       label,
       scopeSelector: options.scopeSelector ?? null,
+      index: options.index ?? 0,
     });
-    const current = await browser.execute(target => Boolean(target.checked), el);
-    if (current !== desired) {
+    if ((await readChecked(el)) !== desired) {
       await el.click();
+      // O elemento pode ser recriado pelo React após a troca: procura de novo a cada tentativa.
       await browser.waitUntil(
-        async () => (await browser.execute(target => Boolean(target.checked), el)) === desired,
-        { timeout: 5_000, interval: 50, timeoutMsg: `Checkbox "${label}" não mudou para ${desired}` },
+        async () => {
+          try {
+            return (await isChecked(label, options)) === desired;
+          } catch {
+            return false;
+          }
+        },
+        {
+          timeout: 8_000,
+          interval: 100,
+          timeoutMsg: `Checkbox "${label}" não mudou para ${desired}`,
+        },
       );
     }
   }
@@ -421,8 +518,9 @@ function createUi(browser) {
       kind: 'switch',
       label,
       scopeSelector: options.scopeSelector ?? null,
+      index: options.index ?? 0,
     });
-    return browser.execute(target => Boolean(target.checked), el);
+    return readChecked(el);
   }
 
   async function waitForDialog(title, role = 'any', timeout = 15_000) {
@@ -557,6 +655,10 @@ function createUi(browser) {
     clickPaletteOption,
     fillField,
     selectField,
+    clickTab,
+    currentHash,
+    waitForHash,
+    navigateHash,
     fieldValue,
     setChecked,
     isChecked,
@@ -622,7 +724,7 @@ async function withTauriSession(config, callback) {
       },
     });
     try {
-      await browser.setWindowRect(null, null, 1366, 840);
+      await browser.setWindowRect(null, null, 1366, 768);
     } catch {
       // gerenciador de janelas sem redimensionamento livre
     }
@@ -640,6 +742,20 @@ async function withTauriSession(config, callback) {
     const pageErrors = await browser.execute(() => window.__e2eErrors ?? []);
     assert.deepEqual(pageErrors, [], `Erros inesperados na WebView: ${JSON.stringify(pageErrors)}`);
   } catch (error) {
+    if (browser) {
+      try {
+        await mkdir(SHOTS_DIR, { recursive: true });
+        await browser.saveScreenshot(path.join(SHOTS_DIR, 'falha-ultima.png'));
+        const visible = await browser.execute(() => ({
+          hash: window.location.hash,
+          texto: (document.body.innerText || '').replace(/\s+/g, ' ').slice(0, 1500),
+        }));
+        console.error(`[e2e] Estado na falha: hash=${visible.hash}
+[e2e] Texto visível: ${visible.texto}`);
+      } catch {
+        // WebView indisponível
+      }
+    }
     if (driverLogs.length > 0) {
       console.error('[e2e] Logs recentes do tauri-driver:\n' + driverLogs.slice(-20).join(''));
     }
@@ -657,312 +773,291 @@ async function withTauriSession(config, callback) {
   }
 }
 
+async function readAppVersion() {
+  const conf = JSON.parse(await readFile(path.join(REPO_ROOT, 'src-tauri', 'tauri.conf.json'), 'utf8'));
+  return conf.version;
+}
+
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 async function runSession1(ui, ctx) {
-  logStep('Sessão 1: Assistente de 1ª execução…');
-  await ui.waitForDialog('Escolha como o Clipes vai usar IA', 'dialog');
-  await ui.waitForText('Codex CLI', '[aria-labelledby="assistant-detected"]');
-  await ui.waitForText('Claude Code CLI', '[aria-labelledby="assistant-detected"]');
-  await ui.waitForText('OpenCode CLI', '[aria-labelledby="assistant-detected"]');
-  await ui.waitForText('Nenhum Provedor escolhido ainda.', '[role="dialog"]');
+  const version = await readAppVersion();
+  const versionRe = new RegExp(escapeRegExp(version));
+
+  logStep('Sessão 1: Assistente de 1ª execução (#/assistente, 2 passos)…');
+  await ui.waitForHash('#/assistente');
+  await ui.waitForText('Passo 1: Essencial para transcrever e cortar', 'main');
+  await ui.clickButton('Já tenho FFmpeg instalado no computador');
+  await ui.clickButton('Validar caminho');
+  await ui.waitForText('Pronto', 'section[aria-label="FFmpeg e FFprobe"]', 30_000);
   await ui.shot('01-assistant.png');
+  await ui.clickButton('Próximo: Provedor de IA');
+  await ui.waitForHash('#/assistente?passo=2');
+  await ui.waitForText('Passo 2: Quem escolhe os Cortes e sugere títulos', 'main');
+  const radios = await ui.waitForText('Codex CLI', '[role="radiogroup"][aria-label="Escolha de Provedor"]');
+  assert.match(radios, /Claude Code CLI/);
+  assert.match(radios, /OpenCode CLI/);
+  await ui.clickButton('Codex CLI', { exact: false, scopeSelector: '[role="radiogroup"]' });
+  await ui.setChecked('Concordo em enviar apenas texto de transcrições pela Codex CLI', true);
+  await ui.clickButton('Concluir configuração');
+  await ui.waitForHash('#/inicio');
+  await ui.waitForText('Projetos', 'main');
 
-  await ui.clickButton('Usar Codex CLI', { scopeSelector: '[role="dialog"]' });
-  const cliWarn = await ui.waitForDialog('Enviar texto ao Provedor?', 'alertdialog');
-  assert.match(cliWarn, /pode rodar comandos de leitura/);
-  await ui.clickButton('Cancelar', { scopeSelector: '[role="alertdialog"]' });
-  await ui.waitForDialogClosed('Enviar texto ao Provedor?');
-
-  await ui.clickButton('Usar Codex CLI', { scopeSelector: '[role="dialog"]' });
-  await ui.waitForDialog('Enviar texto ao Provedor?', 'alertdialog');
-  await ui.clickButton('Ativar e permitir envio', { scopeSelector: '[role="alertdialog"]' });
-  await ui.waitForDialogClosed('Enviar texto ao Provedor?');
-  await ui.waitForText('Provedor padrão escolhido: Codex CLI', '[role="dialog"]');
-  await ui.clickButton('Concluir', { scopeSelector: '[role="dialog"]' });
-  await ui.waitForDialogClosed('Escolha como o Clipes vai usar IA');
-
-  logStep('Sessão 1: Casca (UpdateNotice mockado via hook E2E, Paleta Ctrl+K, Gavetas [ / ], Sobre)…');
+  logStep('Sessão 1: Casca (Paleta Ctrl+K, Sobre, atualização mockada, Fila Ctrl+J, F6)…');
   await ui.browser.execute(() => {
     sessionStorage.setItem('clipes.e2e.updaterMode', 'available');
     location.reload();
   });
-  const updateText = await ui.waitForDialog('Atualização disponível', 'dialog');
-  assert.match(updateText, /1\.0\.0/);
-  assert.match(updateText, /0\.2\.0/);
-  await ui.clickButton('Atualizar agora', { scopeSelector: '[role="dialog"]' });
-  await ui.waitForText('Atualização instalada', '[role="dialog"]');
-  await ui.browser.execute(() => sessionStorage.setItem('clipes.e2e.updaterMode', 'off'));
-  await ui.clickButton('Fechar', { scopeSelector: '[role="dialog"]' });
-  await ui.waitForDialogClosed('Atualização instalada');
-
+  await ui.waitForText('Projetos', 'main');
   await ui.browser.keys(['Control', 'k']);
   await ui.waitForDialog('Paleta de comandos', 'dialog');
+  await ui.browser.keys('Sobre');
   await ui.shot('02-palette.png');
-  await ui.clickPaletteOption('Sobre');
+  await ui.clickPaletteOption('Sobre e atualizações');
   await ui.waitForDialogClosed('Paleta de comandos');
-  const aboutText = await ui.waitForText('1.0.0', 'main');
+  await ui.waitForHash('#/sobre');
+  const aboutText = await ui.waitForText(versionRe, 'main');
   assert.match(aboutText, /Apache-2\.0/);
+  await ui.clickButton('Verificar atualizações');
+  const updateText = await ui.waitForText('Nova versão disponível', 'main');
+  assert.match(updateText, new RegExp(`${escapeRegExp(version)} → 0\\.2\\.0`));
+  await ui.clickButton('Baixar e instalar', { exact: false });
+  await ui.waitForText('Atualização instalada. Reinicie para aplicar.', 'main');
+  await ui.browser.execute(() => sessionStorage.setItem('clipes.e2e.updaterMode', 'off'));
   await ui.shot('03-about.png');
 
-  await ui.browser.keys(['[']);
-  await ui.waitForDialog('Gaveta esquerda', 'dialog');
-  await ui.browser.keys(['Tab']);
-  const insideLeftDrawer = await ui.browser.execute(() =>
-    Boolean(document.querySelector('aside[aria-label="Gaveta esquerda"]')?.contains(document.activeElement)),
+  await ui.browser.keys(['Control', 'j']);
+  await ui.browser.waitUntil(
+    async () =>
+      ui.browser.execute(() => {
+        const el = document.querySelector('aside[aria-label="Fila de Jobs"]');
+        return Boolean(el && el.getBoundingClientRect().width > 0);
+      }),
+    { timeout: 10_000, timeoutMsg: 'Fila de Jobs (Ctrl+J) não abriu' },
   );
-  assert.equal(insideLeftDrawer, true);
   await ui.browser.keys(['Escape']);
-  await ui.waitForDialogClosed('Gaveta esquerda');
+  await ui.browser.waitUntil(
+    async () =>
+      ui.browser.execute(() => {
+        const el = document.querySelector('aside[aria-label="Fila de Jobs"]');
+        return !el || el.getBoundingClientRect().width === 0;
+      }),
+    { timeout: 10_000, timeoutMsg: 'Fila de Jobs não fechou com Esc' },
+  );
 
-  await ui.browser.keys([']']);
-  await ui.waitForDialog('Gaveta direita', 'dialog');
-  await ui.browser.keys(['Escape']);
-  await ui.waitForDialogClosed('Gaveta direita');
+  const regionBefore = await ui.browser.execute(
+    () => document.activeElement?.closest('[data-regiao]')?.getAttribute('data-regiao') ?? null,
+  );
+  await ui.browser.keys(['F6']);
+  const regionAfter = await ui.browser.execute(
+    () => document.activeElement?.closest('[data-regiao]')?.getAttribute('data-regiao') ?? null,
+  );
+  assert.ok(regionAfter, 'F6 deve focar uma região macro');
+  assert.notEqual(regionAfter, regionBefore, 'F6 deve mudar de região macro');
 
-  logStep('Sessão 1: Componentes (manifesto real, FFmpeg do sistema, yt-dlp, Worker de ML, Modelos)…');
-  await ui.clickButton('Componentes');
-  const compText = await ui.waitForText('GPL-3.0-or-later', 'main');
-  assert.match(compText, /Unlicense/);
-  await ui.waitForText('2027.01.01.000000', 'main');
-  await ui.browser.waitUntil(async () => (await ui.fieldValue('Limite do cache (GB)')) === '10', {
-    timeout: 10_000,
-  });
+  logStep('Sessão 1: Componentes (diálogos de licença, yt-dlp, Worker de ML, Modelos, cache)…');
+  await ui.navigateHash('#/config/componentes');
+  await ui.waitForText('Hardware de Transcrição', 'main');
+  await ui.clickTab('Componentes e Modelos');
+  const ffmpegScope = 'section[aria-label="FFmpeg e FFprobe"]';
+  await ui.waitForText('Pronto', ffmpegScope);
+  await ui.clickButton('Reinstalar FFmpeg');
+  const ffmpegDialog = await ui.waitForDialog('Baixar FFmpeg e FFprobe?', 'alertdialog');
+  assert.match(ffmpegDialog, /GPL-3\.0-or-later/);
+  await ui.clickButton('Cancelar', { scopeSelector: '[role="alertdialog"]' });
+  await ui.waitForDialogClosed('Baixar FFmpeg e FFprobe?');
 
-  await ui.queueConfirm(false);
-  await ui.clickButton('Baixar', { index: 0 });
-  const afterCancelDownload = await ui.readE2EState();
-  assert.equal(afterCancelDownload.confirmCalls.length, 1);
-
+  await ui.waitForText('2027.01.01.000000', 'section[aria-label="yt-dlp"]');
   await ui.clickButton('Atualizar yt-dlp');
   const ytdlpDialog = await ui.waitForDialog('Atualizar yt-dlp?', 'alertdialog');
-  assert.match(ytdlpDialog, /2027\.01\.01\.000000/);
+  assert.match(ytdlpDialog, /Unlicense/);
   await ui.clickButton('Cancelar', { scopeSelector: '[role="alertdialog"]' });
   await ui.waitForDialogClosed('Atualizar yt-dlp?');
 
-  await ui.clickButton('Validar e usar');
-  await ui.waitForText(/ffmpeg version/i, 'main');
-  await ui.fillField('Limite do cache (GB)', '12');
-  await ui.clickButton('Salvar', { exact: true });
-  await ui.waitForText('Configurações salvas.', 'main');
+  const workerScope = 'section[aria-label="Worker Python e Catálogo"]';
+  await ui.clickButton('Instalar Worker');
+  const workerDialog = await ui.waitForDialog('Instalar ambiente Python isolado (Worker)?', 'alertdialog');
+  assert.match(workerDialog, /Apache-2\.0/);
+  await ui.clickButton('Baixar agora', { scopeSelector: '[role="alertdialog"]' });
+  await ui.waitForDialogClosed('Instalar ambiente Python isolado (Worker)?');
+  await ui.waitForText('Pronto', workerScope, 60_000);
+  await ui.clickButton('Detalhes técnicos', { scopeSelector: workerScope });
+  await ui.waitForText(/protocol 1/, workerScope);
 
-  await ui.waitForText('Instale o worker de ML antes de baixar um modelo.', '[aria-labelledby="models-title"]');
-  await ui.clickButton('Instalar worker', { scopeSelector: '[aria-labelledby="worker-title"]' });
-  const workerDialog = await ui.waitForDialog('Instalar o worker de ML?', 'alertdialog');
-  assert.match(workerDialog, /uv: MIT OR Apache-2\.0/);
-  assert.match(workerDialog, /Python gerenciado: PSF-2\.0/);
-  await ui.clickButton('Instalar', { scopeSelector: '[role="alertdialog"]' });
-  await ui.waitForDialogClosed('Instalar o worker de ML?');
-  await ui.waitForText('Worker instalado.', '[aria-labelledby="worker-title"]');
-  const workerStatus = await ui.waitForText('Protocolo 1', '[aria-labelledby="worker-title"]');
-  assert.match(workerStatus, /faster-whisper fake/);
-
-  await ui.clickButton('Componentes');
-  await ui.clickButton('Sobre');
-  await ui.clickButton('Componentes');
-  await ui.waitForText('Whisper small (CPU)', '[aria-labelledby="models-title"]');
-  await ui.clickButton('Baixar modelo', { scopeSelector: '[aria-labelledby="models-title"]', index: 0 });
-  const modelDialog = await ui.waitForDialog('Baixar o modelo?', 'alertdialog');
-  assert.match(modelDialog, /Licença: MIT/);
-  assert.match(modelDialog, /SHA-256/);
+  const modelsScope = 'section[aria-label="Modelos de Transcrição e Enquadramento"]';
+  await ui.waitForText('Whisper small', modelsScope);
+  await ui.clickButton('Baixar', { scopeSelector: modelsScope, index: 0 });
+  const modelDialog = await ui.waitForText(/Licença\s*MIT/, '[role="alertdialog"]');
+  assert.match(modelDialog, /Tamanho/);
   await ui.clickButton('Cancelar', { scopeSelector: '[role="alertdialog"]' });
-  await ui.waitForDialogClosed('Baixar o modelo?');
   await ui.shot('04-components.png');
 
-  logStep('Sessão 1: Relatos e diagnóstico (exportação real em disco + abertura/cópia GitHub)…');
-  await ui.clickButton('Relatos');
+  await ui.clickTab('Pastas e Armazenamento');
+  await ui.browser.waitUntil(async () => (await ui.fieldValue('Limite do cache (GB)')) === '10', {
+    timeout: 10_000,
+  });
+  await ui.fillField('Limite do cache (GB)', '12');
+  await ui.clickButton('Salvar pastas e limite');
+  await ui.navigateHash('#/config/provedores');
+  await ui.navigateHash('#/config/componentes');
+  await ui.clickTab('Pastas e Armazenamento');
+  await ui.browser.waitUntil(async () => (await ui.fieldValue('Limite do cache (GB)')) === '12', {
+    timeout: 10_000,
+    timeoutMsg: 'Limite do cache (GB) não persistiu em 12',
+  });
+
+  logStep('Sessão 1: Relatos e diagnóstico (2 passos, exportação real em disco + abertura/cópia GitHub)…');
+  await ui.navigateHash('#/relatos');
   await ui.waitForText('Relatos e diagnóstico', 'main');
-  assert.equal(await ui.isChecked('Incluir diagnóstico'), true);
+  const forbiddenInStep1 = await ui.browser.execute(() => {
+    const names = ['Copiar texto', 'Exportar diagnóstico (.txt)', 'Abrir no GitHub'];
+    return Array.from(document.querySelectorAll('button')).filter(b =>
+      names.some(n => (b.textContent || '').includes(n)),
+    ).length;
+  });
+  assert.equal(forbiddenInStep1, 0, 'Ações de envio não podem existir no Passo 1 (ADR-0006)');
+  assert.equal(await ui.isChecked('Incluir diagnóstico técnico local'), true);
   await ui.clickButton('Sugerir ideia');
-  assert.equal(await ui.isChecked('Incluir diagnóstico'), false);
+  assert.equal(await ui.isChecked('Incluir diagnóstico técnico local'), false);
   await ui.clickButton('Relatar problema');
-  assert.equal(await ui.isChecked('Incluir diagnóstico'), true);
+  assert.equal(await ui.isChecked('Incluir diagnóstico técnico local'), true);
 
   await ui.fillField('Título', 'Problema com chave');
-  await ui.fillField('Relato', 'Descrição detalhada do problema', { exact: true });
-  await ui.waitForText(/menciona token ou chave/i, 'main');
-  await ui.clickButton('Revisar relato');
+  await ui.fillField('Descrição', 'Descrição detalhada do problema', { exact: true });
+  await ui.waitForText(/menciona "token", "chave" ou "key"/i, 'main');
+  await ui.clickButton('Revisar relato antes de enviar');
+  await ui.waitForText('Passo 2 de 2', 'main');
 
   await ui.browser.waitUntil(
-    async () => /Clipes: 1\.0\.0/.test(await ui.fieldValue('Diagnóstico', { exact: true })),
-    { timeout: 10_000 },
+    async () => versionRe.test(await ui.fieldValue('Diagnóstico técnico editável')),
+    { timeout: 10_000, timeoutMsg: 'Diagnóstico real sem a versão do app' },
   );
-  const diagReal = await ui.fieldValue('Diagnóstico', { exact: true });
+  const diagReal = await ui.fieldValue('Diagnóstico técnico editável');
   assert.match(diagReal, /FFmpeg do sistema/);
 
   const exportedDiagPath = path.join(ctx.tempRoot, 'diagnostico-clipes.txt');
   await ui.queueDialog(exportedDiagPath);
-  await ui.clickButton('Exportar diagnóstico');
-  await ui.waitForText('Diagnóstico exportado.', 'main');
+  await ui.clickButton('Exportar diagnóstico (.txt)');
+  await ui.waitForText('Diagnóstico exportado em .txt.', 'main');
   const exportedContent = await readFile(exportedDiagPath, 'utf8');
   assert.equal(exportedContent, diagReal);
   await ui.shot('05-report.png');
 
   await ui.clickButton('Abrir no GitHub');
-  await ui.waitForText('Abrindo no navegador.', 'main');
+  await ui.waitForText('Abrindo issue pré-preenchida no GitHub.', 'main');
   let e2eState = await ui.readE2EState();
   assert.equal(e2eState.openedUrls.length, 1);
   const firstUrl = new URL(e2eState.openedUrls[0]);
   assert.equal(firstUrl.searchParams.get('template'), 'bug.yml');
-  assert.match(firstUrl.searchParams.get('body') ?? '', /Clipes: 1\.0\.0/);
+  assert.match(firstUrl.searchParams.get('body') ?? '', versionRe);
 
   const hugeDiag = 'x'.repeat(9000);
-  await ui.fillField('Diagnóstico', hugeDiag, { exact: true, bulk: true });
+  await ui.fillField('Diagnóstico técnico editável', hugeDiag, { bulk: true });
   await ui.clickButton('Abrir no GitHub');
-  await ui.waitForText('Diagnóstico copiado. Cole-o no relato do GitHub.', 'main');
+  await ui.waitForText(/Diagnóstico copiado para a área de transferência/, 'main');
   e2eState = await ui.readE2EState();
   assert.equal(e2eState.openedUrls.length, 2);
   assert.equal(e2eState.copiedText?.length, 9000);
   assert.ok(e2eState.openedUrls[1].length < 8000);
 
-  logStep('Sessão 1: Preferências (Groq cofre isolado, Tema/Idioma, Provedores HTTP/CLI, Perfis, Tarefas, Custos)…');
-  await ui.clickButton('Preferências');
-  await ui.waitForText('Chave não configurada.', '#transcription-settings');
-  await ui.fillField('Chave Groq', 'gsk-e2e-isolated-9876', { scopeSelector: '#transcription-settings' });
-  await ui.clickButton('Salvar chave', { scopeSelector: '#transcription-settings' });
-  await ui.waitForText('Chave configurada.', '#transcription-settings');
-  assert.equal(await ui.fieldValue('Chave Groq', { scopeSelector: '#transcription-settings' }), '');
+  logStep('Sessão 1: Provedores (Groq no cofre isolado, Perfis HTTP, rotas por Tarefa, Somente local)…');
+  await ui.navigateHash('#/config/provedores');
+  const groqScope = 'section[aria-label="Transcrição remota (Groq)"]';
+  await ui.waitForText('Chave não configurada', groqScope);
+  await ui.fillField('Nova chave da API Groq', 'gsk-e2e-isolated-9876', { scopeSelector: groqScope });
+  await ui.clickButton('Salvar chave', { scopeSelector: groqScope });
+  await ui.waitForText('Chave no cofre: configurada', groqScope);
+  assert.equal(await ui.fieldValue('Nova chave da API Groq', { scopeSelector: groqScope }), '');
   const vaultAfterGroq = JSON.parse(await readFile(ctx.vaultFile, 'utf8'));
   assert.equal(vaultAfterGroq['io.github.gustavohooo.clipes.transcription:groq'], 'gsk-e2e-isolated-9876');
-  await ui.clickButton('Remover chave', { scopeSelector: '#transcription-settings' });
-  await ui.waitForText('Chave não configurada.', '#transcription-settings');
-  await ui.fillField('Chave Groq', 'gsk-e2e-ready-4321', { scopeSelector: '#transcription-settings' });
-  await ui.clickButton('Salvar chave', { scopeSelector: '#transcription-settings' });
-  await ui.waitForText('Chave configurada.', '#transcription-settings');
+  await ui.clickButton('Remover chave Groq', { scopeSelector: groqScope });
+  await ui.waitForDialog('Remover chave Groq?', 'alertdialog');
+  await ui.clickButton('Remover chave', { scopeSelector: '[role="alertdialog"]' });
+  await ui.waitForDialogClosed('Remover chave Groq?');
+  await ui.waitForText('Chave não configurada', groqScope);
+  await ui.fillField('Nova chave da API Groq', 'gsk-e2e-ready-4321', { scopeSelector: groqScope });
+  await ui.clickButton('Salvar chave', { scopeSelector: groqScope });
+  await ui.waitForText('Chave no cofre: configurada', groqScope);
 
-  await ui.selectField('Tema', 'claro');
-  await ui.selectField('Idioma', 'en');
-  await ui.waitForText('Preferences', 'main');
-  const currentTheme = await ui.browser.execute(() => document.documentElement.getAttribute('data-theme'));
-  assert.equal(currentTheme, 'light');
-
-  const assistantSettingsScope = 'section[aria-labelledby="assistant-settings-title"]';
-  assert.equal(await ui.fieldValue('Default for all tasks', { scopeSelector: assistantSettingsScope }), 'codex');
-  await ui.selectField('Default for all tasks', '', { scopeSelector: assistantSettingsScope });
-  await ui.waitForText('Choice saved.', assistantSettingsScope);
-
-  const providerScope = 'section[aria-labelledby="provider-title"]';
-  await ui.fillField('API endpoint', REMOTE_TEST_ENDPOINT, { scopeSelector: providerScope });
-  await ui.fillField('Model', 'gpt-5.4', { exact: true, scopeSelector: providerScope });
-  await ui.clickButton('Save provider', { scopeSelector: providerScope });
-  await ui.waitForText('Settings saved.', providerScope);
-  await ui.fillField('API key', 'sk-remote-test-5678', { exact: true, scopeSelector: providerScope });
-  await ui.clickButton('Save key', { scopeSelector: providerScope });
-  await ui.waitForText('Key saved, ending in 5678', providerScope);
-
-  await ui.clickButton('Test connection', { scopeSelector: providerScope });
-  const remoteConsent = await ui.waitForDialog('Send text to provider?', 'alertdialog');
-  assert.match(remoteConsent, /192\.0\.2\.10/);
-  await ui.browser.keys(['Tab']);
-  const trappedInAlert = await ui.browser.execute(() =>
-    Boolean(document.querySelector('[role="alertdialog"]')?.contains(document.activeElement)),
-  );
-  assert.equal(trappedInAlert, true);
-  await ui.browser.keys(['Escape']);
-  await ui.waitForDialogClosed('Send text to provider?');
-
-  await ui.clickButton('Test connection', { scopeSelector: providerScope });
-  await ui.waitForDialog('Send text to provider?', 'alertdialog');
-  await ui.clickButton('Send text', { scopeSelector: '[role="alertdialog"]' });
-  await ui.waitForDialogClosed('Send text to provider?');
-  await ui.waitForText('Use an HTTPS address to send a key to a remote provider.', providerScope);
-
-  const costsScope = 'section[aria-labelledby="costs-title"]';
-  await ui.waitForText('Built-in table updated on 2026-11-15.', costsScope);
-  await ui.fillField('Sample text (Transcript)', 'a'.repeat(80), { scopeSelector: costsScope });
-  await ui.fillField('Output token ceiling (optional)', '100', { scopeSelector: costsScope });
-  await ui.clickButton('Estimate cost', { scopeSelector: costsScope });
-  await ui.waitForText(/Estimate \(ceiling, not the final amount\)/, costsScope);
-  await ui.fillField('Sample text (Transcript)', 'a'.repeat(900_000), { scopeSelector: costsScope, bulk: true });
-  await ui.clickButton('Estimate cost', { scopeSelector: costsScope });
-  await ui.waitForText(/Higher tier above 272000 input tokens/, costsScope);
-
-  await ui.fillField('Model to override', 'gpt-5.4', { scopeSelector: costsScope });
-  await ui.fillField('Input (US$ per million)', '3', { scopeSelector: costsScope });
-  await ui.fillField('Output (US$ per million)', '9', { scopeSelector: costsScope });
-  await ui.clickButton('Save price', { scopeSelector: costsScope });
-  await ui.waitForText('Your price', costsScope);
-  await ui.clickButton('Remove price for gpt-5.4', { scopeSelector: costsScope });
-  await ui.waitForTextGone('Your price', costsScope);
-
-  await ui.fillField('API endpoint', ctx.providerServer.endpoint, { scopeSelector: providerScope });
-  await ui.fillField('Model', 'local-e2e-model', { exact: true, scopeSelector: providerScope });
-  await ui.clickButton('Save provider', { scopeSelector: providerScope });
-  await ui.waitForText('Settings saved.', providerScope);
-  await ui.fillField('API key', 'sk-local-server-1234', { exact: true, scopeSelector: providerScope });
-  await ui.clickButton('Save key', { scopeSelector: providerScope });
-  await ui.waitForText('Key saved, ending in 1234', providerScope);
-  await ui.clickButton('Test connection', { scopeSelector: providerScope });
-  await ui.waitForText('Connection tested successfully.', providerScope);
-  assert.ok(ctx.providerServer.requests.length >= 1);
-  assert.equal(ctx.providerServer.requests.at(-1)?.authorization, 'Bearer sk-local-server-1234');
-
-  const cliScope = 'section[aria-labelledby="cli-provider-title"]';
-  await ui.fillField('OpenCode model (provider/model)', 'opencode/big-pickle', { scopeSelector: cliScope });
-  await ui.clickButton('Use OpenCode CLI', { scopeSelector: cliScope });
-  const ocConsent = await ui.waitForDialog('Send text to provider?', 'alertdialog');
-  assert.match(ocConsent, /opencode\/big-pickle/);
-  await ui.clickButton('Enable and allow sending', { scopeSelector: '[role="alertdialog"]' });
-  await ui.waitForDialogClosed('Send text to provider?');
-  await ui.waitForText('Selected provider: OpenCode CLI', cliScope);
-
-  await ui.clickButton('Test CLI', { scopeSelector: cliScope });
-  await ui.waitForText('Connection tested successfully.', cliScope);
-
-  const opencodeModeFile = path.join(ctx.cliBinDir, 'mode');
-  await writeFile(opencodeModeFile, 'free-limit', 'utf8');
-  await ui.clickButton('Test CLI', { scopeSelector: cliScope });
-  await ui.waitForText('OpenCode free quota exhausted. Retry after 79181 seconds; no automatic retry.', cliScope);
-  await rm(opencodeModeFile, { force: true });
-  await ui.clickButton('Disable CLI', { scopeSelector: cliScope });
-  await ui.waitForText('CLI disabled.', cliScope);
-
-  await ui.shot('06-preferences-light.png');
-
-  await ui.selectField('Language', 'pt-BR');
-  await ui.selectField('Tema', 'escuro');
-  await ui.waitForText('Preferências', 'main');
-
-  const profilesScope = 'section[aria-labelledby="profiles-title"]';
-  await ui.clickButton('Adicionar perfil', { scopeSelector: profilesScope });
-  await ui.fillField('Nome do perfil', 'Local rápido', { scopeSelector: profilesScope });
-  await ui.fillField('Endereço da API', ctx.providerServer.endpoint, { scopeSelector: profilesScope });
-  await ui.fillField('Modelo', 'qwen-local', { exact: true, scopeSelector: profilesScope });
-  await ui.setChecked('Usar uma chave própria para este perfil', true, { scopeSelector: profilesScope });
-  await ui.clickButton('Salvar perfil', { scopeSelector: profilesScope });
-  await ui.waitForText('Local rápido', profilesScope);
-
-  await ui.fillField('Chave de API (Local rápido)', 'sk-own-9999', { exact: true, scopeSelector: profilesScope });
-  await ui.clickButton('Salvar chave do perfil', { scopeSelector: 'article[aria-label="Local rápido"]' });
-  await ui.waitForText('…9999', 'article[aria-label="Local rápido"]');
+  await ui.clickButton('Novo Perfil');
+  await ui.waitForDialog('Novo Perfil de Provedor', 'dialog');
+  const profileDialog = '[role="dialog"]';
+  await ui.fillField('Nome do Perfil', 'Local rápido', { scopeSelector: profileDialog });
+  await ui.fillField('Endpoint', ctx.providerServer.endpoint, { scopeSelector: profileDialog });
+  await ui.fillField('Modelo', 'qwen-local', { exact: true, scopeSelector: profileDialog });
+  await ui.fillField('Chave de API no cofre', 'sk-own-9999', { scopeSelector: profileDialog });
+  await ui.setChecked('Chave própria por perfil', true, { scopeSelector: profileDialog });
+  await ui.clickButton('Salvar Perfil', { scopeSelector: profileDialog });
+  await ui.waitForDialogClosed('Novo Perfil de Provedor');
+  const localCard = 'section[aria-label="Perfil Local rápido"]';
+  await ui.waitForText('••••9999', localCard);
   const pageHtml = await ui.browser.execute(() => document.documentElement.innerHTML);
   assert.equal(pageHtml.includes('sk-own-9999'), false);
 
-  await ui.clickButton('Adicionar perfil', { scopeSelector: profilesScope });
-  await ui.fillField('Nome do perfil', 'Nuvem remota', { scopeSelector: profilesScope });
-  await ui.fillField('Endereço da API', 'https://192.0.2.10/v1', { scopeSelector: profilesScope });
-  await ui.fillField('Modelo', 'gpt-5', { exact: true, scopeSelector: profilesScope });
-  await ui.clickButton('Salvar perfil', { scopeSelector: profilesScope });
-  await ui.waitForText('Nuvem remota', profilesScope);
+  const requestsBefore = ctx.providerServer.requests.length;
+  await ui.clickButton('Testar', { scopeSelector: localCard });
+  await ui.browser.waitUntil(() => ctx.providerServer.requests.length > requestsBefore, {
+    timeout: 20_000,
+    timeoutMsg: 'O servidor HTTP local não recebeu a chamada de teste do Perfil',
+  });
+  assert.equal(ctx.providerServer.requests.at(-1)?.authorization, 'Bearer sk-own-9999');
 
-  const taskTableScope = '[aria-labelledby="task-table-title"]';
-  await ui.selectField('Roteiro', 'profile:local-rapido', { exact: true, scopeSelector: taskTableScope });
-  await ui.waitForText('Grátis (modelo local)', taskTableScope);
-  await ui.selectField('Empacotamento', 'profile:nuvem-remota', { exact: true, scopeSelector: taskTableScope });
-  await ui.setChecked('Somente local (Empacotamento)', true, { scopeSelector: taskTableScope });
-  await ui.waitForText(/Empacotamento: Bloqueada: o perfil escolhido não é local/, taskTableScope);
-  await ui.setChecked('Somente local (Empacotamento)', false, { scopeSelector: taskTableScope });
-  await ui.waitForTextGone(/Bloqueada:/, taskTableScope);
+  await ui.clickButton('Novo Perfil');
+  await ui.waitForDialog('Novo Perfil de Provedor', 'dialog');
+  await ui.fillField('Nome do Perfil', 'Nuvem remota', { scopeSelector: profileDialog });
+  await ui.fillField('Endpoint', 'https://192.0.2.10/v1', { scopeSelector: profileDialog });
+  await ui.fillField('Modelo', 'gpt-5', { exact: true, scopeSelector: profileDialog });
+  await ui.clickButton('Salvar Perfil', { scopeSelector: profileDialog });
+  await ui.waitForDialogClosed('Novo Perfil de Provedor');
+  await ui.waitForText('Remoto', 'section[aria-label="Perfil Nuvem remota"]');
+
+  const taskTable = 'section[aria-label="Roteamento por Tarefa de IA"]';
+  await ui.selectField('Perfil para Roteiro', 'Local rápido', { exact: true, scopeSelector: taskTable });
+  await ui.waitForText('Local (loopback) · US$ 0,00', taskTable);
+  await ui.selectField('Perfil para Empacotamento', 'Nuvem remota', { exact: true, scopeSelector: taskTable });
+  await ui.setChecked('Somente local (Empacotamento)', true, { scopeSelector: taskTable });
+  await ui.waitForText('Bloqueado pelo modo Somente local', taskTable);
+  await ui.setChecked('Somente local (Empacotamento)', false, { scopeSelector: taskTable });
+  await ui.waitForTextGone('Bloqueado pelo modo Somente local', taskTable);
   await ui.shot('07-tasks-costs.png');
 
-  await ui.clickButton('Remover', { scopeSelector: 'article[aria-label="Local rápido"]' });
-  await ui.waitForDialog('Remover este perfil?', 'alertdialog');
-  await ui.clickButton('Remover', { scopeSelector: '[role="alertdialog"]' });
-  await ui.waitForDialogClosed('Remover este perfil?');
-  await ui.waitForText(/O perfil removido “local-rapido” não existe mais/, taskTableScope);
+  await ui.clickButton('Remover', { scopeSelector: localCard });
+  await ui.waitForDialog('Remover perfil "Local rápido"?', 'alertdialog');
+  await ui.clickButton('Remover perfil', { scopeSelector: '[role="alertdialog"]' });
+  await ui.waitForDialogClosed('Remover perfil "Local rápido"?');
+  await ui.waitForText('Perfil anterior removido', taskTable);
 
-  await ui.clickButton('Reabrir assistente');
-  await ui.waitForDialog('Escolha como o Clipes vai usar IA', 'dialog');
-  await ui.clickButton('Pular por enquanto', { scopeSelector: '[role="dialog"]' });
-  await ui.waitForDialogClosed('Escolha como o Clipes vai usar IA');
+  logStep('Sessão 1: Aparência (Tema, Contraste, Idioma) e reabertura do Assistente…');
+  await ui.navigateHash('#/config/aparencia');
+  await ui.waitForText('Aparência e Teclado', 'main');
+  const themeGroup = '[role="radiogroup"][aria-label="Tema"]';
+  const rootAttr = name => ui.browser.execute(n => document.documentElement.getAttribute(n), name);
+  await ui.clickButton('Claro', { scopeSelector: themeGroup });
+  await ui.browser.waitUntil(async () => (await rootAttr('data-tema')) === 'claro', {
+    timeout: 5_000,
+    timeoutMsg: 'data-tema não virou "claro"',
+  });
+  await ui.shot('06-preferences-light.png');
+  await ui.setChecked('Modo Alto Contraste', true);
+  await ui.browser.waitUntil(async () => (await rootAttr('data-contrast')) === 'high', {
+    timeout: 5_000,
+    timeoutMsg: 'data-contrast não virou "high"',
+  });
+  await ui.setChecked('Modo Alto Contraste', false);
+  await ui.browser.waitUntil(async () => (await rootAttr('data-contrast')) === null, { timeout: 5_000 });
+  await ui.clickButton('Escuro', { scopeSelector: themeGroup });
+  await ui.browser.waitUntil(async () => (await rootAttr('data-tema')) === 'escuro', {
+    timeout: 5_000,
+    timeoutMsg: 'data-tema não virou "escuro"',
+  });
+
+  await ui.navigateHash('#/config/provedores');
+  await ui.clickButton('Reabrir assistente inicial');
+  await ui.waitForHash('#/assistente');
+  await ui.clickButton('Pular por enquanto');
+  await ui.waitForHash('#/config/provedores');
 }
 
 async function stageModelsInstalled(dataDir) {
@@ -1155,11 +1250,16 @@ async function main() {
       ...fixtures,
     };
 
-    await withTauriSession({ ...sharedConfig, workerMode: '' }, ui => runSession1(ui, ctx));
+    const sessions = (process.env.CLIPES_E2E_SESSIONS ?? '1,2,3').split(',').map(n => n.trim());
+    if (sessions.includes('1')) {
+      await withTauriSession({ ...sharedConfig, workerMode: '' }, ui => runSession1(ui, ctx));
+    }
     await stageModelsInstalled(dataDir);
-    await withTauriSession({ ...sharedConfig, workerMode: 'transcribe' }, ui => runSession2(ui, ctx));
+    if (sessions.includes('2')) {
+      await withTauriSession({ ...sharedConfig, workerMode: 'transcribe' }, ui => runSession2(ui, ctx));
+    }
 
-    logStep('Suíte E2E Tauri (Sessões 1 e 2) concluída com sucesso: OK');
+    logStep(`Suíte E2E Tauri (Sessões ${sessions.join(', ')}) concluída com sucesso: OK`);
   } finally {
     await providerServer?.close().catch(() => {});
     await rm(tempRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 250 }).catch(() => {});
