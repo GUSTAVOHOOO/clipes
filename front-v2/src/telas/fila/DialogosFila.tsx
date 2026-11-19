@@ -561,17 +561,17 @@ export function DialogoRefazerJob({ aberto, job, aoFechar, aoConcluir }: Dialogo
 
         {ehSelecao && (
           <div className="flex items-start gap-2 rounded-area bg-area px-3 py-2 text-pequeno text-t2">
-            <Dica texto="Refazer pela Fila não cria nova Revisão na Bancada (#304); para nova Revisão, use Cortes → Revisão.">
+            <Dica texto="Refazer pela Fila reexecuta apenas esta etapa e não cria nova Revisão na Bancada; para nova Revisão, use Cortes → Revisão.">
               <button
                 type="button"
-                aria-label="Aviso sobre Revisão da execução (#304)"
+                aria-label="Aviso sobre Revisão da execução"
                 className="foco mt-0.5 inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-controle border-0 bg-transparent text-t3 hover:text-t1"
               >
                 <Info className="size-[14px] stroke-[1.75]" aria-hidden />
               </button>
             </Dica>
             <span>
-              Refazer pela Fila não cria nova Revisão na Bancada (#304); para nova Revisão, use Cortes → Revisão.
+              Refazer pela Fila não cria nova Revisão na Bancada; para nova Revisão, use Cortes → Revisão.
             </span>
           </div>
         )}
@@ -952,7 +952,7 @@ export function DialogoOrcamento({
         </div>
 
         <Checkbox marcado={resetUsage} aoMudar={setResetUsage} desabilitado={enviando} className="text-pequeno">
-          Zerar contador de consumo desta etapa (resetUsage)
+          Zerar contador de consumo desta etapa
         </Checkbox>
 
         {exigeCienciaDesconhecido && (
@@ -962,7 +962,7 @@ export function DialogoOrcamento({
             desabilitado={enviando}
             className="text-pequeno"
           >
-            Confirmo continuar mesmo sem preço conhecido para este Provedor (cost_unknown)
+            Confirmo continuar mesmo sem preço conhecido para este Provedor
           </Checkbox>
         )}
       </div>

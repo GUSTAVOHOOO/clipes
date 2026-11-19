@@ -61,7 +61,10 @@ test.describe('Shell do front v2', () => {
     await expect(dialogoAtalhos).toBeHidden()
 
     await page.keyboard.press('Control+j')
-    await expect(page.getByText('Fila de jobs', { exact: true })).toBeVisible()
+    const painelFila = page.getByRole('complementary', { name: 'Fila de Jobs' })
+    await expect(painelFila).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(painelFila).toBeHidden()
 
     // UI-04: F6 / Shift+F6 ciclam entre Barra Superior -> conteúdo -> Barra de Status com foco visível
     await page.goto('/#/inicio')

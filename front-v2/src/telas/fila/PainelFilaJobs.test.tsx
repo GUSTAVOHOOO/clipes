@@ -252,16 +252,17 @@ describe('PainelFilaJobs', () => {
     expect(screen.getByText(/Teto de custo atingido/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Ajustar orçamento e continuar/i })).toBeInTheDocument()
 
-    // Job #10 veio só do reload (sem evento desde 0%) -> NÃO deve inventar ETA e deve citar #303
+    // Job #10 veio só do reload (sem evento desde 0%) -> NÃO deve inventar ETA e não expõe #303 (UI-12)
     const card10 = screen.getByTestId('fila-job-10')
     expect(screen.queryByText(/min restantes/i)).not.toBeInTheDocument()
-    expect(within(card10).getByText(/#303/)).toBeInTheDocument()
+    expect(within(card10).getByText(/ETA indisponível/i)).toBeInTheDocument()
+    expect(within(card10).queryByText(/#303/)).not.toBeInTheDocument()
 
     // Cancelar job running paid (#11) pede ConfirmDialog; cancelar running local (#10) chama direto
     const card11 = screen.getByTestId('fila-job-11')
     await user.click(within(card11).getByRole('button', { name: 'Cancelar' }))
     const dialogConfirm = await screen.findByRole('alertdialog')
-    expect(dialogConfirm).toHaveTextContent(/uncertain|incerto/i)
+    expect(dialogConfirm).toHaveTextContent(/Resultado incerto/i)
     await user.click(within(dialogConfirm).getByRole('button', { name: /Cancelar tarefa/i }))
     await waitFor(() => {
       expect(chamarMock).toHaveBeenCalledWith('jobs.cancel', { id: 11 })
@@ -383,8 +384,9 @@ describe('PainelFilaJobs', () => {
       ),
     )
 
-    // Nota #307 sobre operações globais em memória
-    expect(await screen.findByText(/#307/)).toBeInTheDocument()
+    // Nota sobre operações globais em memória sem expor #307 (UI-12)
+    expect(await screen.findByText(/Em memória nesta sessão/i)).toBeInTheDocument()
+    expect(screen.queryByText(/#307/)).not.toBeInTheDocument()
 
     // Cancelamento global roteado por prefixo
     const cardTts = screen.getByTestId('fila-global-tts:kokoro')

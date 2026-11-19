@@ -254,8 +254,11 @@ describe('DialogosFila', () => {
       ),
     )
 
-    // Nota #304 + Dica visíveis para ai:selection
-    expect(await screen.findByText(/#304/)).toBeInTheDocument()
+    // Nota sobre Revisão em ai:selection sem expor número de ticket (UI-12)
+    expect(
+      await screen.findByText(/Refazer pela Fila não cria nova Revisão na Bancada/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/#304/)).not.toBeInTheDocument()
 
     // Com Somente local ativo e perfil remoto selecionado primeiro, exibe role="alert" e bloqueia confirmação
     const alerta = await screen.findByRole('alert')

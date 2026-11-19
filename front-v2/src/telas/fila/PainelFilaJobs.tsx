@@ -86,9 +86,10 @@ function traduzirEstagioAoVivo(etapa: string): string {
   if (etapa === 'gpu_probe_fallback') return 'Fallback para CPU'
   if (etapa === 'transcribing') return 'Transcrevendo'
   if (etapa === 'export' || etapa === 'export_batch') return 'Exportando'
-  if (etapa === 'waveform' || etapa === 'thumbnails') return 'Gerando prévia'
+  if (etapa === 'waveform' || etapa === 'thumbnails' || etapa === 'preview') return 'Gerando prévia'
   if (etapa === 'download') return 'Baixando'
-  return etapa
+  const humano = nomeHumanoKind(etapa)
+  return humano !== etapa ? humano : 'Em andamento'
 }
 
 function formatarEtaMs(etaMs: number): string {
@@ -658,7 +659,7 @@ export function PainelFilaJobs({
                   role="alert"
                   className="flex flex-col gap-2 rounded-area bg-elevado p-3"
                 >
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-base font-medio text-t1">
                       Orçamento pausou: {rotuloEscopoOrcamento(orc)}
                     </span>
@@ -888,10 +889,10 @@ export function PainelFilaJobs({
                             />
                             {!podeEta && (
                               <div className="flex items-center gap-1 text-micro text-t3">
-                                <Dica texto="Tempo restante (ETA) indisponível após recarregar a janela ou em etapas de IA (#303).">
+                                <Dica texto="Tempo restante (ETA) indisponível após recarregar a janela ou em etapas de IA.">
                                   <span className="inline-flex items-center gap-1">
                                     <Info className="size-3 stroke-[1.75]" aria-hidden />
-                                    <span>ETA indisponível (#303)</span>
+                                    <span>ETA indisponível</span>
                                   </span>
                                 </Dica>
                               </div>
@@ -1200,17 +1201,17 @@ export function PainelFilaJobs({
                 </section>
               )}
 
-              {/* Trilha 4: Operações Globais em memória (#307) */}
+              {/* Trilha 4: Operações Globais em memória */}
               {!carregandoInicial && !erroPrincipal && globaisFiltradas.length > 0 && (
                 <section aria-label="Operações globais" className="flex flex-col gap-2">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="text-micro font-medio tracking-wide text-t3 uppercase">
                       Operações globais
                     </h3>
-                    <Dica texto="Operações globais ficam apenas na memória desta sessão e não são reidratadas após recarregar a janela (#307).">
+                    <Dica texto="Operações globais ficam apenas na memória desta sessão e não são restauradas após recarregar a janela.">
                       <span className="inline-flex items-center gap-1 text-micro text-t3">
                         <Info className="size-3 stroke-[1.75]" aria-hidden />
-                        <span>Em memória (#307)</span>
+                        <span>Em memória nesta sessão</span>
                       </span>
                     </Dica>
                   </div>
@@ -1304,7 +1305,7 @@ export function PainelFilaJobs({
           if (!prox && !ocupadoKey) setJobCancelarPago(null)
         }}
         titulo={`Cancelar tarefa #${jobCancelarPago?.id ?? ''}?`}
-        descricao="Esta chamada paga já está em andamento. Se o pedido já tiver sido enviado ao Provedor, o job ficará marcado como Resultado incerto (uncertain) para sua decisão."
+        descricao="Esta chamada paga já está em andamento. Se o pedido já tiver sido enviado ao Provedor, a tarefa ficará marcada como Resultado incerto para sua decisão."
         rotuloCancelar="Voltar"
         rotuloConfirmar="Cancelar tarefa"
         variante="perigo"
