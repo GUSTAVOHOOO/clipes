@@ -7,7 +7,7 @@
 
 use crate::{
     components::worker,
-    jobs, process, projects, script,
+    process, projects, script,
     tts::catalog::normalize_language,
     tts::narration::{parse_wav_info, project_root_dir, read_latest_script_in},
     CommandRegistration, CommandResult, CoreError, EventSink,
@@ -850,7 +850,6 @@ fn cmd_record_block(v: Value, events: &mut EventSink<'_>) -> CommandResult {
         message: "Gravação salva".into(),
         error: None,
     });
-    let _ = jobs::progress(0, "narration_record", 100, "Gravação salva");
 
     Ok(json!({
         "candidate": candidate_id,
