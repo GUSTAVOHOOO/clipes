@@ -181,7 +181,7 @@
       const ax = 107, ay = lerp(sy0, 60, u);
       put(S.F.cv, { css: { left: r.w / 2 - ax * c + 'px', top: r.h / 2 - ay * c + 'px', width: 214 * c + 'px', height: 120 * c + 'px' } });
       // cabeçalho real da Fonte sobe por baixo do vídeo
-      const v = spHit(t, 's2_head', 'default');   // lê NO pop de 4,5 s (rodada 10: chegava 3 quadros depois)
+      const v = sp(t, beatOf('s2_head') - 0.05, 'default');   // lê NO pop de 4,5 s (rodada 10: chegava 3 quadros depois)
       const rH = P({ x: 780, y: 760, w: 1080, h: 124 }, { x: 48, y: 1372, w: 984, h: 118 });
       frame(S.hdr, { ...rH, y: rH.y + 70 * (1 - v) }, P(330, 318), 70, P(1.62, 1.9) * (1 + 0.02 * seg(t, 9, 12)));
       put(S.hdr.vp, { o: v > 0.02 ? 1 : 0 });
@@ -283,7 +283,7 @@
       frame(S.A, rA, P(225, 246), aY, P(1.6, 2.0) * (1 + 0.03 * seg(t, 28, 40)), 0, 1);
       const [cx, cy, z] = camTrk(t, P(
         [[28, 1115, 400, 1.6], [29.3, 943, 470, 2.4], [32.4, 943, 480, 2.0], [34.0, 1010, 566, 1.95], [36.1, 1130, 520, 1.7]],
-        [[28, 1115, 460, 1.6], [29.3, 943, 528, 2.5], [32.4, 943, 528, 2.2], [34.0, 1000, 630, 1.8], [36.1, 1128, 631, 1.6]]));
+        [[28, 1000, 480, 2.2], [29.3, 943, 528, 2.5], [32.4, 943, 528, 2.2], [34.0, 1000, 630, 1.8], [36.1, 1128, 631, 1.6]]));
       const f = frame(S.scr, rB, cx, cy, z * (1 + 0.01 * seg(t, 36, 40)), 0, 1);
       // a legenda real se revela palavra a palavra (mesma ordem do destaque do app)
       const edge = trk(t, [[28, R.leg[0] - 4], [beatOf('s5_w1') - 0.2 * LEADB - 0.1, R.leg[1] + 2, 'snappy'], [beatOf('s5_w2') - 0.2 * LEADB - 0.1, R.leg[2] + 2, 'snappy'], [beatOf('s5_w3') - 0.2 * LEADB - 0.1, R.leg[3] + 8, 'snappy']]);
@@ -337,8 +337,8 @@
       put(S.lbl, { x: (r.w - 351 * sl) / 2, y: (r.h - 36 * sl) / 2, s: sl });
       const wIn = 1 - ease.expoOut(seg(t, 40, 40.45));
       put(S.root, { x: P(700, 420) * wIn, filter: wIn > 0.01 ? whipBlur(1 - 0.5 * wIn) : 'none' });
-      riseRows(t, S.h, P(41.9, 40.4), 46.6);
-      riseRows(t, S.e, 's6_sub', 46.6, { preset: 'snappy', stagger: 0.05, dt: 0.1 });
+      riseRows(t, S.h, P(41.9, 40.4), P(46.6, 47.3));
+      riseRows(t, S.e, 's6_sub', P(46.6, 47.3), { preset: 'snappy', stagger: 0.05, dt: 0.1 });
     },
   });
 
@@ -374,7 +374,7 @@
       S.pmask = el('div', { class: 'abs', style: `left:${PAD}px;top:${P(290, 420)}px;width:200px;height:60px;overflow:hidden` }, S.push);
       S.pill = reg(el('div', { class: 'pill', style: 'left:0;top:0' }, S.pmask, 'v2.0.0'), { y: 80 });
       // o bloco de texto sai inteiro por UMA borda reta (abaixo da marca e da pílula): clipper fixo + bloco que sobe
-      S.clip = el('div', { class: 'abs', style: `width:${W}px;height:${H}px;clip-path:inset(${P(362, 500)}px 0 0 0)` }, S.push);
+      S.clip = el('div', { class: 'abs', style: `width:${W}px;height:${H}px` }, S.push);
       S.txt = reg(el('div', { class: 'abs', style: `width:${W}px;height:${H}px` }, S.clip));
       const Y = P(380, 520);
       S.tag = head(S.txt, ['Interface nova. Mesmo núcleo.'], { y: Y, size: P(60, 54) });
@@ -407,9 +407,9 @@
       riseRows(t, [S.cta[1]], 'cta', null, { stagger: 0.03, dt: 0.1 });
       riseRows(t, S.url, 'url', null, { stagger: 0.02 });
       riseRows(t, S.lic, 'lic', null, { preset: 'snappy', stagger: 0.02, rowGap: 0.05 });
-      // saída: o bloco inteiro sobe por trás da borda reta em 4 quadros (29,333 → 29,467 s), ease-in; a pílula sai antes
+      // saída: o bloco inteiro foge para a esquerda (whip) em 4 quadros (29,333 → 29,467 s), ease-in; a pílula sai antes
       const xp = clamp((t * 30 - 880) / 4);
-      put(S.txt, { y: -P(820, 900) * xp * xp, hide: xp >= 1 });
+      put(S.txt, { x: -(W + 160) * xp * xp, hide: xp >= 1, filter: xp > 0 && xp < 1 ? 'blur(' + (10 * Math.sin(Math.PI * xp)).toFixed(1) + 'px)' : 'none' });
       // parallax: as telas sobem/andam mais devagar que a tipografia e nunca param
       const e = sp(t, 48.3, CAMSP), d = seg(t, 48, 60);
       const stp = ['tag', 'cta', 'url', 'lic', 'snip'].reduce((a, m) => a + sp(t, beatOf(m) - 0.1, 'default'), 0);
