@@ -15,7 +15,10 @@
 //!   Fontes usam essa chave, e o áudio pago do Groq entra na mesma soma (`totals_since`).
 //! * Nada é repetido às cegas (ADR-0005): `tick` nunca confirma a repetição de chamada paga
 //!   incerta. Retomar uma Fonte que parou por incerteza pede confirmação com o custo.
-use crate::{jobs, projects, CommandRegistration, CommandResult, CoreError, EventSink};
+use crate::{
+    console::{emit_console, ConsoleDraft, ConsoleKind, ConsoleLevel},
+    jobs, projects, CommandRegistration, CommandResult, CoreError, EventSink,
+};
 use rusqlite::OptionalExtension;
 use serde_json::{json, Value};
 
@@ -130,13 +133,37 @@ fn pause_reason(key: &str) -> Result<Option<String>, CoreError> {
     })
 }
 
-fn emit(batch: i64, step: &str, message: &str, error: Option<CoreError>) {
-    let project = projects::with_reader(|c| {
+fn current_project_id() -> Option<String> {
+    projects::with_reader(|c| {
         c.query_row("SELECT id FROM queue_project_identity", [], |r| {
             r.get::<_, String>(0)
         })
     })
-    .ok();
+    .ok()
+}
+
+fn emit_batch_console(
+    batch: i64,
+    origin: &str,
+    level: ConsoleLevel,
+    simple: &str,
+    technical: &str,
+) {
+    let job = format!("batch-{batch}");
+    let project = current_project_id();
+    emit_console(ConsoleDraft {
+        job: &job,
+        project: project.as_deref(),
+        origin,
+        level,
+        kind: ConsoleKind::Milestone,
+        simple,
+        technical: Some(technical),
+    });
+}
+
+fn emit(batch: i64, step: &str, message: &str, error: Option<CoreError>) {
+    let project = current_project_id();
     crate::emit_background(crate::ProgressEvent {
         job: format!("batch-{batch}"),
         project,
@@ -374,8 +401,14 @@ fn set_item(
 
 /// Começa uma Fonte `pending` ou retomada. `user_confirmed` só vem de um comando do usuário
 /// (nunca do `tick`) e libera a repetição de uma chamada de Transcrição incerta.
-fn start_item(batch: &Batch, item: &Item, user_confirmed: bool) -> Result<(), CoreError> {
+fn start_item(
+    batch: &Batch,
+    item: &Item,
+    total: usize,
+    user_confirmed: bool,
+) -> Result<(), CoreError> {
     let from = item.state.as_str();
+    let pos = item.position + 1;
     if transcript_complete(item.source_id) {
         // Uma Transcrição completa não passa por `transcription.start`: a Fonte pode até estar
         // offline, e a seleção só lê as Frases do Projeto.
@@ -410,6 +443,16 @@ fn start_item(batch: &Batch, item: &Item, user_confirmed: bool) -> Result<(), Co
             None,
             Some(run),
         );
+        emit_batch_console(
+            batch.id,
+            "ai",
+            ConsoleLevel::Info,
+            &format!("Lote de Fontes: iniciando Seleção de Cortes da Fonte {pos} de {total}"),
+            &format!(
+                "batch={} item={pos}/{total} stage=selecting source_id={} selection_run={run}",
+                batch.id, item.source_id
+            ),
+        );
         return Ok(());
     }
     let current = crate::dispatch("projects.current", json!({}), &mut |_| {})?;
@@ -441,19 +484,43 @@ fn start_item(batch: &Batch, item: &Item, user_confirmed: bool) -> Result<(), Co
         job,
         None,
     );
+    emit_batch_console(
+        batch.id,
+        "job",
+        ConsoleLevel::Info,
+        &format!(
+            "Lote de Fontes: iniciando Transcrição da Fonte {pos} de {total} (motor {engine})"
+        ),
+        &format!(
+            "batch={} item={pos}/{total} stage=transcribing source_id={} engine={engine}",
+            batch.id, item.source_id
+        ),
+    );
     Ok(())
 }
 
 /// Códigos que pedem uma confirmação do usuário: a Fonte espera por ele, nunca é repetida às cegas.
-fn pause_with(batch: &Batch, item: &Item, e: &CoreError) {
+fn pause_with(batch: &Batch, item: &Item, total: usize, e: &CoreError) {
+    let code = fixed_code(Some(&e.code), "failed");
+    let pos = item.position + 1;
     set_item(
         batch.id,
         item.position,
         &item.state,
         "paused",
-        Some(&fixed_code(Some(&e.code), "failed")),
+        Some(&code),
         None,
         None,
+    );
+    emit_batch_console(
+        batch.id,
+        "job",
+        ConsoleLevel::Warn,
+        &format!("Lote de Fontes: Fonte {pos} de {total} pausada ({code})"),
+        &format!(
+            "batch={} item={pos}/{total} state=paused code={code}",
+            batch.id
+        ),
     );
     emit(
         batch.id,
@@ -486,6 +553,7 @@ pub(crate) fn tick() {
 fn step(id: i64) -> Result<(), CoreError> {
     let batch = read_batch(id)?;
     let mut items = read_items(id)?;
+    let total = items.len();
     for item in &mut items {
         let derived = derive(item);
         match derived {
@@ -502,6 +570,25 @@ fn step(id: i64) -> Result<(), CoreError> {
                         None,
                     )
                 {
+                    let pos = item.position + 1;
+                    if state == "completed" {
+                        emit_batch_console(
+                            id,
+                            "job",
+                            ConsoleLevel::Info,
+                            &format!("Lote de Fontes: Fonte {pos} de {total} concluída"),
+                            &format!("batch={id} item={pos}/{total} state=completed"),
+                        );
+                    } else if state == "paused" {
+                        let reason = code.as_deref().unwrap_or("failed");
+                        emit_batch_console(
+                            id,
+                            "job",
+                            ConsoleLevel::Warn,
+                            &format!("Lote de Fontes: Fonte {pos} de {total} pausada ({reason})"),
+                            &format!("batch={id} item={pos}/{total} state=paused code={reason}"),
+                        );
+                    }
                     emit(id, "item", "Fonte do lote atualizada", None);
                     item.state = state.into();
                     item.error = code;
@@ -521,14 +608,23 @@ fn step(id: i64) -> Result<(), CoreError> {
         .iter()
         .all(|i| matches!(i.state.as_str(), "completed" | "cancelled"))
     {
-        projects::with_writer(|c| {
-            c.execute("UPDATE source_batches SET state='completed' WHERE id=?1 AND state IN ('running','paused')", [id])?;
+        let transitioned = projects::with_writer(|c| {
+            let changed = c.execute("UPDATE source_batches SET state='completed' WHERE id=?1 AND state IN ('running','paused')", [id])?;
             c.execute(
                 "DELETE FROM ai_pauses WHERE scope='batch' AND key=?1 AND reason='user'",
                 [&batch.key],
             )?;
-            Ok(())
+            Ok(changed == 1)
         })?;
+        if transitioned {
+            emit_batch_console(
+                id,
+                "job",
+                ConsoleLevel::Info,
+                &format!("Lote de Fontes concluído ({total} Fonte(s))"),
+                &format!("batch={id} state=completed total={total}"),
+            );
+        }
         emit(id, "completed", "Lote de Fontes concluído", None);
         return Ok(());
     }
@@ -543,8 +639,8 @@ fn step(id: i64) -> Result<(), CoreError> {
     }
     // Só uma Fonte por vez: a primeira que ainda não começou.
     if let Some(item) = items.iter().find(|i| i.state == "pending") {
-        if let Err(e) = start_item(&batch, item, false) {
-            pause_with(&batch, item, &e);
+        if let Err(e) = start_item(&batch, item, total, false) {
+            pause_with(&batch, item, total, &e);
         }
     }
     Ok(())
@@ -793,6 +889,23 @@ fn cmd_create(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         tx.commit()?;
         Ok(id)
     })?;
+    emit_batch_console(
+        id,
+        "job",
+        ConsoleLevel::Info,
+        &format!(
+            "Lote de Fontes criado: {} Fonte(s), motor {engine}, perfil {}",
+            unique.len(),
+            route.profile.label
+        ),
+        &format!(
+            "batch={id} key={} sources={} engine={engine} video_kind={} profile={}",
+            batch_key(id),
+            unique.len(),
+            kind.as_str(),
+            route.profile.id
+        ),
+    );
     emit(id, "created", "Lote de Fontes criado", None);
     view(id)
 }
@@ -832,6 +945,13 @@ fn cmd_pause(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         )?;
         Ok(())
     })?;
+    emit_batch_console(
+        batch.id,
+        "job",
+        ConsoleLevel::Warn,
+        "Lote de Fontes pausado pelo usuário",
+        &format!("batch={} state=paused reason=user", batch.id),
+    );
     emit(batch.id, "paused", "Lote pausado", None);
     view(batch.id)
 }
@@ -854,6 +974,13 @@ fn cmd_resume(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         )?;
         Ok(())
     })?;
+    emit_batch_console(
+        batch.id,
+        "job",
+        ConsoleLevel::Info,
+        "Lote de Fontes retomado",
+        &format!("batch={} state=running", batch.id),
+    );
     emit(batch.id, "resumed", "Lote retomado", None);
     view(batch.id)
 }
@@ -890,6 +1017,13 @@ fn cmd_cancel(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         )?;
         Ok(())
     })?;
+    emit_batch_console(
+        batch.id,
+        "job",
+        ConsoleLevel::Warn,
+        "Lote de Fontes cancelado",
+        &format!("batch={} state=cancelled", batch.id),
+    );
     emit(batch.id, "cancelled", "Lote cancelado", None);
     view(batch.id)
 }
@@ -907,7 +1041,9 @@ fn cmd_item_resume(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let source = v["sourceId"]
         .as_i64()
         .ok_or_else(|| error("source_missing", "Fonte não encontrada"))?;
-    let item = read_items(batch.id)?
+    let items = read_items(batch.id)?;
+    let total = items.len();
+    let item = items
         .into_iter()
         .find(|i| i.source_id == source)
         .ok_or_else(|| error("source_missing", "Fonte não encontrada"))?;
@@ -917,6 +1053,7 @@ fn cmd_item_resume(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             "A Fonte do lote não está pausada.",
         ));
     }
+    let pos = item.position + 1;
     let confirmed = v["confirmed"] == true;
     if let Some(run) = item.run {
         let uncertain_jobs = crate::selection::batch_resume_prepare(run, confirmed)?;
@@ -947,6 +1084,13 @@ fn cmd_item_resume(v: Value, _: &mut EventSink<'_>) -> CommandResult {
             None,
             None,
         );
+        emit_batch_console(
+            batch.id,
+            "ai",
+            ConsoleLevel::Info,
+            &format!("Lote de Fontes: retomando Seleção de Cortes da Fonte {pos} de {total}"),
+            &format!("batch={} item={pos}/{total} action=resume stage=selecting", batch.id),
+        );
     } else {
         if let Some(job) = item.job {
             if job_row(job).is_some_and(|(state, _)| state == "uncertain") {
@@ -956,7 +1100,7 @@ fn cmd_item_resume(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                 ));
             }
         }
-        if let Err(e) = start_item(&batch, &item, confirmed) {
+        if let Err(e) = start_item(&batch, &item, total, confirmed) {
             let confirmation = matches!(
                 e.code.as_str(),
                 "transcription_retry_confirmation" | "confirmation_required"
@@ -985,3 +1129,107 @@ inventory::submit! { CommandRegistration { name: "batches.pause", execute: cmd_p
 inventory::submit! { CommandRegistration { name: "batches.resume", execute: cmd_resume } }
 inventory::submit! { CommandRegistration { name: "batches.cancel", execute: cmd_cancel } }
 inventory::submit! { CommandRegistration { name: "batches.item.resume", execute: cmd_item_resume } }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn source_batch_console_emits_lifecycle_without_leaking_source_paths() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let data_dir = root.path().join("data");
+        let _guard = crate::test_env::set_data_dir(&data_dir);
+
+        crate::dispatch(
+            "projects.create",
+            json!({"parent": root.path(), "name": "BatchConsole"}),
+            &mut |_| {},
+        )
+        .expect("projects.create");
+        crate::dispatch(
+            "provider.configure",
+            json!({
+                "endpoint": "http://127.0.0.1:9/v1",
+                "kind": "openai",
+                "model": "qwen-batch-local",
+                "context": 32768
+            }),
+            &mut |_| {},
+        )
+        .expect("provider.configure");
+
+        let (s1, s2) = projects::with_writer(|c| {
+            c.execute(
+                "INSERT INTO sources(path,size,duration_us,partial_hash,metadata,permission,audio_track) VALUES (?1,100,60000000,'h1','{}','{}',0)",
+                [r"C:\Users\JoaoSecreto\Videos\gravacao_confidencial_1.mkv"],
+            )?;
+            let s1 = c.last_insert_rowid();
+            c.execute(
+                "INSERT INTO sources(path,size,duration_us,partial_hash,metadata,permission,audio_track) VALUES (?1,100,60000000,'h2','{}','{}',0)",
+                [r"C:\Users\JoaoSecreto\Videos\gravacao_confidencial_2.mkv"],
+            )?;
+            let s2 = c.last_insert_rowid();
+            Ok((s1, s2))
+        })
+        .expect("seed sources");
+
+        let seq_before = crate::dispatch("console.history", json!({}), &mut |_| {})
+            .unwrap()["items"]
+            .as_array()
+            .and_then(|a| a.last())
+            .and_then(|e| e["seq"].as_u64())
+            .unwrap_or(0);
+
+        let created = crate::dispatch(
+            "batches.create",
+            json!({"sourceIds": [s1, s2]}),
+            &mut |_| {},
+        )
+        .expect("batches.create");
+        let batch_id = created["id"].as_i64().expect("batch id");
+
+        crate::dispatch("batches.pause", json!({"id": batch_id}), &mut |_| {})
+            .expect("batches.pause");
+        crate::dispatch("batches.resume", json!({"id": batch_id}), &mut |_| {})
+            .expect("batches.resume");
+
+        // Simula pausa de item por erro do Provedor sem disparar rede.
+        let batch = read_batch(batch_id).expect("read_batch");
+        let items = read_items(batch_id).expect("read_items");
+        pause_with(
+            &batch,
+            &items[0],
+            items.len(),
+            &error("provider_http", "Erro simulado"),
+        );
+
+        crate::dispatch("batches.cancel", json!({"id": batch_id}), &mut |_| {})
+            .expect("batches.cancel");
+
+        let items_ev: Vec<Value> = crate::dispatch("console.history", json!({}), &mut |_| {})
+            .unwrap()["items"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|e| {
+                e["seq"].as_u64().unwrap_or(0) > seq_before
+                    && e["job"] == format!("batch-{batch_id}")
+            })
+            .collect();
+
+        let joined = serde_json::to_string(&items_ev).unwrap();
+        assert!(joined.contains("Lote de Fontes criado: 2 Fonte(s)"), "{joined}");
+        assert!(joined.contains("Lote de Fontes pausado pelo usuário"), "{joined}");
+        assert!(joined.contains("Lote de Fontes retomado"), "{joined}");
+        assert!(joined.contains("Fonte 1 de 2 pausada (provider_http)"), "{joined}");
+        assert!(joined.contains("Lote de Fontes cancelado"), "{joined}");
+        assert!(!joined.contains("JoaoSecreto"), "leaked personal path!");
+        assert!(
+            !joined.contains("gravacao_confidencial"),
+            "leaked source filename!"
+        );
+
+        let _ = crate::dispatch("projects.close", json!({}), &mut |_| {});
+    }
+}

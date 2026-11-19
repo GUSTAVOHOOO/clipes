@@ -16,6 +16,13 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const SHOTS_DIR = path.join(REPO_ROOT, 'shots-e2e');
 const REMOTE_TEST_ENDPOINT = 'http://192.0.2.10/v1';
 
+// Asserções de `core-console` que dependem de instrumentações paralelas ainda não integradas ao master:
+// - WORKER_INSTALL_CONSOLE_READY: Ticket 3 (instalação do worker/`uv` em `core/src/components/worker.rs`)
+// - MEDIA_CONSOLE_READY: Ticket 4 (transcrição/exportação em `core/src/transcription.rs`, `worker.rs`, `export*.rs`)
+// Quando os respectivos tickets entrarem no master, basta trocar a flag correspondente para `true`.
+const WORKER_INSTALL_CONSOLE_READY = false; // pendente: Ticket 3
+const MEDIA_CONSOLE_READY = false; // pendente: Ticket 4
+
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function logStep(message) {
@@ -211,8 +218,11 @@ async function startFakeProviderServer() {
       authorization: req.headers.authorization ?? null,
       body,
     });
+    const content = body.includes('"candidates"')
+      ? '{"schemaVersion":1,"candidates":[]}'
+      : '{"schemaVersion":1}';
     const payload = JSON.stringify({
-      choices: [{ message: { content: '{"schemaVersion":1}' } }],
+      choices: [{ message: { content } }],
       usage: { prompt_tokens: 14, completion_tokens: 5 },
     });
     res.writeHead(200, {
@@ -767,31 +777,55 @@ async function withTauriSession(config, callback) {
     }
     const sessionErrors = [];
     const sessionCspViolations = [];
+    const sessionConsoleEvents = [];
 
     async function installPageMonitors() {
       await browser.execute(() => {
-        if (window.__e2eMonitorsInstalled) return;
-        window.__e2eMonitorsInstalled = true;
-        window.__e2eErrors = window.__e2eErrors ?? [];
-        window.__e2eCspViolations = window.__e2eCspViolations ?? [];
-        window.addEventListener('error', event => window.__e2eErrors.push(String(event.message)));
-        window.addEventListener('unhandledrejection', event =>
-          window.__e2eErrors.push(String(event.reason?.message ?? event.reason)),
-        );
-        document.addEventListener(
-          'securitypolicyviolation',
-          event => {
-            window.__e2eCspViolations.push({
-              effectiveDirective: event.effectiveDirective,
-              violatedDirective: event.violatedDirective,
-              blockedURI: event.blockedURI,
-              sourceFile: event.sourceFile,
-              lineNumber: event.lineNumber,
-              disposition: event.disposition,
-            });
-          },
-          true,
-        );
+        if (!window.__e2eMonitorsInstalled) {
+          window.__e2eMonitorsInstalled = true;
+          window.__e2eErrors = window.__e2eErrors ?? [];
+          window.__e2eCspViolations = window.__e2eCspViolations ?? [];
+          window.addEventListener('error', event => window.__e2eErrors.push(String(event.message)));
+          window.addEventListener('unhandledrejection', event =>
+            window.__e2eErrors.push(String(event.reason?.message ?? event.reason)),
+          );
+          document.addEventListener(
+            'securitypolicyviolation',
+            event => {
+              window.__e2eCspViolations.push({
+                effectiveDirective: event.effectiveDirective,
+                violatedDirective: event.violatedDirective,
+                blockedURI: event.blockedURI,
+                sourceFile: event.sourceFile,
+                lineNumber: event.lineNumber,
+                disposition: event.disposition,
+              });
+            },
+            true,
+          );
+        }
+        window.__e2eConsoleEvents = window.__e2eConsoleEvents ?? [];
+        const tauri = window.__TAURI_INTERNALS__;
+        if (
+          tauri &&
+          typeof tauri.invoke === 'function' &&
+          typeof tauri.transformCallback === 'function' &&
+          !window.__e2eConsoleListenerRegistered
+        ) {
+          window.__e2eConsoleListenerRegistered = true;
+          const handler = tauri.transformCallback(event => {
+            if (event && event.payload) {
+              window.__e2eConsoleEvents.push(event.payload);
+            }
+          });
+          tauri
+            .invoke('plugin:event|listen', {
+              event: 'core-console',
+              target: { kind: 'Any' },
+              handler,
+            })
+            .catch(() => {});
+        }
       });
     }
 
@@ -802,21 +836,102 @@ async function withTauriSession(config, callback) {
           const csp = Array.isArray(window.__e2eCspViolations)
             ? window.__e2eCspViolations.splice(0)
             : [];
-          return { errors, csp };
+          const consoleEvents = Array.isArray(window.__e2eConsoleEvents)
+            ? window.__e2eConsoleEvents.splice(0)
+            : [];
+          return { errors, csp, consoleEvents };
         });
         sessionErrors.push(...(drained?.errors ?? []));
         sessionCspViolations.push(...(drained?.csp ?? []));
+        sessionConsoleEvents.push(...(drained?.consoleEvents ?? []));
       } catch {
         // WebView já encerrada (ex.: window.close() no fim da Sessão 3)
       }
     }
 
+    async function readConsoleEvents() {
+      await collectPageMonitors();
+      const bySeq = new Map();
+      for (const ev of sessionConsoleEvents) {
+        bySeq.set(ev.seq ?? bySeq.size + 1, ev);
+      }
+      await browser.execute(() => {
+        const state = { done: false, items: [], error: null };
+        window.__e2eConsoleHistoryProbe = state;
+        const invoke = window.__TAURI_INTERNALS__?.invoke;
+        if (typeof invoke !== 'function') {
+          state.done = true;
+          return;
+        }
+        invoke('core_dispatch', { name: 'console.history', arguments: {} })
+          .then(res => {
+            state.items = Array.isArray(res?.items) ? res.items : [];
+            state.done = true;
+          })
+          .catch(err => {
+            state.error = String(err?.message ?? err);
+            state.done = true;
+          });
+      });
+      await browser.waitUntil(
+        () => browser.execute(() => Boolean(window.__e2eConsoleHistoryProbe?.done)),
+        { timeout: 10_000, interval: 100, timeoutMsg: 'console.history não respondeu na WebView' },
+      );
+      const historyProbe = await browser.execute(() => window.__e2eConsoleHistoryProbe);
+      assert.equal(historyProbe.error, null, `console.history falhou: ${historyProbe.error}`);
+      return {
+        live: [...bySeq.values()],
+        history: historyProbe.items ?? [],
+      };
+    }
+
+    async function assertConsolePrivacy(ctx, snapshot) {
+      const data = snapshot ?? (await readConsoleEvents());
+      const all = [...data.live, ...data.history];
+      const forbiddenTokens = [
+        ctx.vaultFile,
+        ctx.dataDir,
+        'gsk-e2e-isolated-9876',
+        'gsk-e2e-ready-4321',
+        'sk-own-9999',
+        'sk-e2e-console-secret-7777',
+      ];
+      if (existsSync(ctx.vaultFile)) {
+        try {
+          const rawVault = JSON.parse(await readFile(ctx.vaultFile, 'utf8'));
+          for (const val of Object.values(rawVault)) {
+            if (typeof val === 'string' && val.length >= 6) {
+              forbiddenTokens.push(val);
+            }
+          }
+        } catch {
+          // arquivo do cofre ainda não estruturado
+        }
+      }
+      for (const ev of all) {
+        const serialized = JSON.stringify(ev);
+        for (const token of forbiddenTokens) {
+          if (!token) continue;
+          assert.equal(
+            serialized.includes(token),
+            false,
+            `Evento core-console vazou dado proibido (${token}): ${serialized}`,
+          );
+        }
+      }
+      return data;
+    }
+
     await installPageMonitors();
 
-    const ui = createUi(browser, {
-      beforeReload: collectPageMonitors,
-      afterReload: installPageMonitors,
-    });
+    const ui = {
+      ...createUi(browser, {
+        beforeReload: collectPageMonitors,
+        afterReload: installPageMonitors,
+      }),
+      readConsoleEvents,
+      assertConsolePrivacy,
+    };
     await callback(ui);
 
     await collectPageMonitors();
@@ -972,6 +1087,19 @@ async function runSession1(ui, ctx) {
   await ui.waitForText('Pronto', workerScope, 60_000);
   await ui.clickButton('Detalhes técnicos', { scopeSelector: workerScope });
   await ui.waitForText(/protocol 1/, workerScope);
+
+  const workerConsole = await ui.readConsoleEvents();
+  await ui.assertConsolePrivacy(ctx, workerConsole);
+  if (WORKER_INSTALL_CONSOLE_READY) {
+    // Pendente (Ticket 3): instrumentação da instalação do worker/uv em core/src/components/worker.rs
+    const installEvents = workerConsole.live.filter(
+      ev => ev.origin === 'uv' || ev.origin === 'component' || ev.job === 'worker',
+    );
+    assert.ok(
+      installEvents.length > 0,
+      `WebView não recebeu core-console ao instalar o worker: ${JSON.stringify(workerConsole)}`,
+    );
+  }
 
   const modelsScope = 'section[aria-label="Modelos de Transcrição e Enquadramento"]';
   await ui.waitForText('Whisper small', modelsScope);
@@ -1316,6 +1444,64 @@ async function runSession2(ui, ctx) {
   assert.match(timelineText, /[Ss]ilêncio/);
   await ui.shot('09-transcription-timeline.png');
 
+  const transcribeConsole = await ui.readConsoleEvents();
+  await ui.assertConsolePrivacy(ctx, transcribeConsole);
+  if (MEDIA_CONSOLE_READY) {
+    // Pendente (Ticket 4): instrumentação da transcrição em core/src/transcription.rs e core/src/worker.rs
+    const transcribeEvents = transcribeConsole.live.filter(
+      ev => ev.origin === 'worker' || /transcri/i.test(ev.simple ?? ''),
+    );
+    assert.ok(
+      transcribeEvents.length > 0,
+      `WebView não recebeu core-console ao transcrever mídia sintética: ${JSON.stringify(transcribeConsole)}`,
+    );
+  }
+
+  logStep('Sessão 2: Seleção de Cortes (IA) e verificação de core-console + privacidade na WebView…');
+  await ui.navigateHash('#/config/provedores');
+  await ui.clickButton('Novo Perfil');
+  await ui.waitForDialog('Novo Perfil de Provedor', 'dialog');
+  const e2eProfileDialog = '[role="dialog"]';
+  await ui.fillField('Nome do Perfil', 'Local E2E', { scopeSelector: e2eProfileDialog });
+  await ui.fillField('Endpoint', ctx.providerServer.endpoint, { scopeSelector: e2eProfileDialog });
+  await ui.fillField('Modelo', 'qwen-local', { exact: true, scopeSelector: e2eProfileDialog });
+  await ui.fillField('Chave de API no cofre', 'sk-e2e-console-secret-7777', { scopeSelector: e2eProfileDialog });
+  await ui.setChecked('Chave própria por perfil', true, { scopeSelector: e2eProfileDialog });
+  await ui.clickButton('Salvar Perfil', { scopeSelector: e2eProfileDialog });
+  await ui.waitForDialogClosed('Novo Perfil de Provedor');
+
+  const e2eTaskTable = 'section[aria-label="Roteamento por Tarefa de IA"]';
+  await ui.selectField('Perfil para Seleção de Cortes', 'Local E2E', { exact: true, scopeSelector: e2eTaskTable });
+  await ui.waitForText('Local (loopback) · US$ 0,00', e2eTaskTable);
+
+  await ui.navigateHash(`#/projeto/${encodeURIComponent(ctx.canalId)}/cortes`);
+  await ui.clickButton('Selecionar Cortes');
+
+  let aiConsoleData;
+  await ui.browser.waitUntil(
+    async () => {
+      aiConsoleData = await ui.readConsoleEvents();
+      const aiLive = aiConsoleData.live.filter(ev => ev.origin === 'ai');
+      const hasStart = aiLive.some(ev => /Seleção de Cortes/.test(ev.simple) && /qwen-local/.test(ev.simple));
+      const hasDone = aiLive.some(
+        ev => /Seleção de Cortes/.test(ev.simple) && /concluída/.test(ev.simple) && /tokens/.test(ev.simple),
+      );
+      return hasStart && hasDone;
+    },
+    {
+      timeout: 30_000,
+      interval: 250,
+      timeoutMsg: `WebView não recebeu eventos core-console completos da Seleção de Cortes (IA): ${JSON.stringify(aiConsoleData)}`,
+    },
+  );
+  await ui.assertConsolePrivacy(ctx, aiConsoleData);
+  const aiHistoryJoined = JSON.stringify(aiConsoleData.history.filter(ev => ev.origin === 'ai'));
+  assert.match(aiHistoryJoined, /Seleção de Cortes/);
+  assert.match(aiHistoryJoined, /Janela 1 de 1/);
+  assert.match(aiHistoryJoined, /qwen-local/);
+  assert.match(aiHistoryJoined, /duration_ms=/);
+  assert.doesNotMatch(aiHistoryJoined, /Silêncio|palavra/, 'core-console de IA não pode vazar texto da Transcrição');
+
   logStep('Sessão 2: Backups (configuração, criação manual, alteração de estado e restauração real)…');
   // O fake yt-dlp não emite 100% e o app mantém o job de URL como "rodando" até recarregar a WebView;
   // com jobs ativos a restauração de backup fica (corretamente) bloqueada.
@@ -1527,6 +1713,19 @@ async function runSession3(ui, ctx) {
   await ui.waitForText('Corte exportado com sucesso', '[role="dialog"]', 240_000);
   await ui.shot('s3-05-exportado.png');
   await ui.clickButton('Fechar', { scopeSelector: '[role="dialog"]' });
+
+  const exportConsole = await ui.readConsoleEvents();
+  await ui.assertConsolePrivacy(ctx, exportConsole);
+  if (MEDIA_CONSOLE_READY) {
+    // Pendente (Ticket 4): instrumentação do FFmpeg em core/src/export/render.rs e core/src/export.rs
+    const exportEvents = exportConsole.live.filter(
+      ev => ev.origin === 'ffmpeg' || /export/i.test(ev.simple ?? ''),
+    );
+    assert.ok(
+      exportEvents.length > 0,
+      `WebView não recebeu core-console ao exportar mídia sintética: ${JSON.stringify(exportConsole)}`,
+    );
+  }
 
   const info = ffprobeJson(outputPath);
   const video = info.streams.find(s => s.codec_type === 'video');
