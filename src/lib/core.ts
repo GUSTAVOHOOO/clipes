@@ -430,17 +430,19 @@ function createInitialJobItems(): JobItemMock[] {
     costLabel: null,
   };
 
+  const isCleanSourceTest = hasSearchFlag('source-test');
+
   return [
     {
       id: 1,
       kind: 'preview',
       safety: 'local',
-      state: 'running',
+      state: isCleanSourceTest ? 'completed' : 'running',
       attempts: 1,
       checkpoint: null,
-      progress: 42,
+      progress: isCleanSourceTest ? 100 : 42,
       project: 'demo',
-      outcome: null,
+      outcome: isCleanSourceTest ? 'ok' : null,
       cost: null,
       batch: null,
       profile: null,

@@ -284,6 +284,7 @@ describe('mock TS da Onda 6 (jobs.*, export.batch.*, diagnostic.*, transcription
       }>
     >('jobs.list', {})
 
+    expect(jobs.some((j) => j.state === 'running')).toBe(false)
     expect(jobs.some((j) => j.state === 'queued' && j.budgetPause === 'budget_cost')).toBe(true)
     expect(jobs.some((j) => j.state === 'queued' && j.budgetPause === 'cost_unknown')).toBe(true)
     expect(
