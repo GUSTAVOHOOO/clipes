@@ -60,7 +60,38 @@ impl DiagnosticEvent {
             Self::GpuProbeFallback => "gpu_probe_fallback",
         }
     }
+
+    fn from_code(code: &str) -> Option<Self> {
+        match code {
+            "component_failure" => Some(Self::ComponentFailure),
+            "invalid_estimate_hint" => Some(Self::InvalidEstimateHint),
+            "catalog_verification_failed" => Some(Self::CatalogVerificationFailed),
+            "gpu_probe_fallback" => Some(Self::GpuProbeFallback),
+            _ => None,
+        }
+    }
+
+    fn message(self) -> &'static str {
+        match self {
+            Self::ComponentFailure => "Erro: falha em componente",
+            Self::InvalidEstimateHint => "Metadados de estimativa inválidos",
+            Self::CatalogVerificationFailed => {
+                "Aviso: falha na verificação do catálogo remoto de modelos"
+            }
+            Self::GpuProbeFallback => "Aviso: sonda da GPU falhou; transcrição em CPU",
+        }
+    }
+
+    fn stage(self) -> &'static str {
+        match self {
+            Self::ComponentFailure => "componente",
+            Self::InvalidEstimateHint => "estimativa de provedor",
+            Self::CatalogVerificationFailed => "verificação de catálogo",
+            Self::GpuProbeFallback => "sonda de GPU",
+        }
+    }
 }
+const YTDLP_STAGE: &str = "importação por URL (yt-dlp)";
 fn log_dir() -> Option<PathBuf> {
     crate::paths::data_dir().ok()
 }
@@ -77,29 +108,54 @@ pub fn record(event: DiagnosticEvent) {
         }
     }
 }
-fn log_lines(path: &Path) -> Vec<&'static str> {
-    let mut lines = std::collections::VecDeque::new();
+fn log_events(path: &Path) -> Vec<DiagnosticEvent> {
+    let mut events = std::collections::VecDeque::new();
     if let Ok(file) = fs::File::open(path) {
         for line in BufReader::new(file).lines().map_while(Result::ok) {
-            // Reconstruct messages from an allowlist on export, even if the file is edited.
-            let message = match line.as_str() {
-                "component_failure" => Some("Erro: falha em componente"),
-                "invalid_estimate_hint" => Some("Metadados de estimativa inválidos"),
-                "catalog_verification_failed" => {
-                    Some("Aviso: falha na verificação do catálogo remoto de modelos")
+            // Reconstruct events from an allowlist on export, even if the file is edited.
+            if let Some(event) = DiagnosticEvent::from_code(line.as_str()) {
+                if events.len() == 200 {
+                    events.pop_front();
                 }
-                "gpu_probe_fallback" => Some("Aviso: sonda da GPU falhou; transcrição em CPU"),
-                _ => None,
-            };
-            if let Some(message) = message {
-                if lines.len() == 200 {
-                    lines.pop_front();
-                }
-                lines.push_back(message);
+                events.push_back(event);
             }
         }
     }
-    lines.into_iter().collect()
+    events.into_iter().collect()
+}
+#[cfg(test)]
+fn log_lines(path: &Path) -> Vec<&'static str> {
+    log_events(path)
+        .into_iter()
+        .map(DiagnosticEvent::message)
+        .collect()
+}
+fn file_modified(path: &Path) -> Option<std::time::SystemTime> {
+    fs::metadata(path).and_then(|m| m.modified()).ok()
+}
+fn infer_stage(
+    log_path: Option<&Path>,
+    events: &[DiagnosticEvent],
+    ytdlp_path: Option<&Path>,
+    has_ytdlp: bool,
+) -> &'static str {
+    let Some(last_event) = events.last().copied() else {
+        return if has_ytdlp {
+            YTDLP_STAGE
+        } else {
+            "indisponível"
+        };
+    };
+    if !has_ytdlp {
+        return last_event.stage();
+    }
+    match (
+        log_path.and_then(file_modified),
+        ytdlp_path.and_then(file_modified),
+    ) {
+        (Some(log_mtime), Some(ytdlp_mtime)) if ytdlp_mtime > log_mtime => YTDLP_STAGE,
+        _ => last_event.stage(),
+    }
 }
 // The file and its export are both restricted to a closed vocabulary.
 fn valid_ytdlp_code(code: &str) -> bool {
@@ -183,20 +239,26 @@ fn ytdlp_diagnostic() -> Option<String> {
     ))
 }
 fn get(_: Value, _: &mut EventSink<'_>) -> CommandResult {
-    let logs = log_dir()
-        .map(|p| log_lines(&p.join("diagnostic.log")))
-        .unwrap_or_default();
+    let dir = log_dir();
+    let log_path = dir.as_deref().map(|p| p.join("diagnostic.log"));
+    let ytdlp_path = dir.as_deref().map(|p| p.join("ytdlp-diagnostic.json"));
+    let events = log_path.as_deref().map(log_events).unwrap_or_default();
+    let ytdlp = ytdlp_diagnostic();
+    let stage = infer_stage(
+        log_path.as_deref(),
+        &events,
+        ytdlp_path.as_deref(),
+        ytdlp.is_some(),
+    );
+    let logs: Vec<&'static str> = events
+        .iter()
+        .copied()
+        .map(DiagnosticEvent::message)
+        .collect();
     let mut lines = vec![
         format!("Clipes: {}", env!("CARGO_PKG_VERSION")),
         format!("Sistema operacional: {}", std::env::consts::OS),
-        format!(
-            "Etapa da falha: {}",
-            if logs.is_empty() {
-                "indisponível"
-            } else {
-                "componente"
-            }
-        ),
+        format!("Etapa da falha: {stage}"),
         format!(
             "Avisos e erros: {}",
             if logs.is_empty() {
@@ -206,7 +268,7 @@ fn get(_: Value, _: &mut EventSink<'_>) -> CommandResult {
             }
         ),
     ];
-    if let Some(detail) = ytdlp_diagnostic() {
+    if let Some(detail) = ytdlp {
         lines.push(detail);
     }
     for kind in [
@@ -264,6 +326,14 @@ inventory::submit! { CommandRegistration { name: "diagnostic.export", execute: e
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{Duration, SystemTime};
+
+    fn stage_line(text: &str) -> &str {
+        text.lines()
+            .find(|line| line.starts_with("Etapa da falha: "))
+            .expect("missing Etapa da falha line")
+    }
+
     #[test]
     fn log_export_ignores_unknown_and_sensitive_lines_and_limits_history() {
         let path =
@@ -282,5 +352,134 @@ mod tests {
             .iter()
             .all(|line| *line == "Erro: falha em componente"));
         fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn diagnostic_get_infers_failure_stage_from_recent_entries_without_leaking() {
+        let root = tempfile::tempdir().unwrap();
+        let _guard = crate::test_env::set_data_dir(root.path());
+
+        let get_text = || {
+            crate::dispatch("diagnostic.get", json!({}), &mut |_| {}).unwrap()["text"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        };
+
+        // Empty log and no ytdlp-diagnostic.json -> no stage.
+        let empty = get_text();
+        assert_eq!(stage_line(&empty), "Etapa da falha: indisponível");
+        assert!(empty.contains("Avisos e erros: indisponível"));
+
+        // Unknown / sensitive lines only -> still no stage and never leaked.
+        fs::write(
+            root.path().join("diagnostic.log"),
+            "C:/Users/Alice/secret\nunknown_stage\n",
+        )
+        .unwrap();
+        let ignored = get_text();
+        assert_eq!(stage_line(&ignored), "Etapa da falha: indisponível");
+        assert!(!ignored.contains("Alice"));
+        assert!(!ignored.contains("secret"));
+        assert!(!ignored.contains("unknown_stage"));
+
+        // Different origins in diagnostic.log infer their corresponding stage from the latest valid entry.
+        record(DiagnosticEvent::GpuProbeFallback);
+        assert_eq!(stage_line(&get_text()), "Etapa da falha: sonda de GPU");
+
+        record(DiagnosticEvent::CatalogVerificationFailed);
+        assert_eq!(
+            stage_line(&get_text()),
+            "Etapa da falha: verificação de catálogo"
+        );
+
+        record(DiagnosticEvent::InvalidEstimateHint);
+        assert_eq!(
+            stage_line(&get_text()),
+            "Etapa da falha: estimativa de provedor"
+        );
+
+        record(DiagnosticEvent::ComponentFailure);
+        assert_eq!(stage_line(&get_text()), "Etapa da falha: componente");
+
+        // Sensitive line after a valid event is ignored; stage still comes from latest valid entry.
+        fs::write(
+            root.path().join("diagnostic.log"),
+            "component_failure\ncatalog_verification_failed\nC:/Users/Alice/secret\n",
+        )
+        .unwrap();
+        let after_injected = get_text();
+        assert_eq!(
+            stage_line(&after_injected),
+            "Etapa da falha: verificação de catálogo"
+        );
+        assert!(!after_injected.contains("Alice"));
+        assert!(!after_injected.contains("secret"));
+
+        // ytdlp-diagnostic.json alone infers the URL import / yt-dlp stage.
+        fs::remove_file(root.path().join("diagnostic.log")).unwrap();
+        record_ytdlp(
+            "download_failed",
+            &["yt_dlp.http_403"],
+            Some(1),
+            "2027.01.01.000000",
+        );
+        let ytdlp_only = get_text();
+        assert_eq!(
+            stage_line(&ytdlp_only),
+            "Etapa da falha: importação por URL (yt-dlp)"
+        );
+        assert!(ytdlp_only.contains("yt-dlp: download_failed"));
+
+        // When both files exist, the most recently modified source wins.
+        let now = SystemTime::now();
+        let older = now - Duration::from_secs(60);
+        fs::write(root.path().join("diagnostic.log"), "gpu_probe_fallback\n").unwrap();
+        fs::File::options()
+            .write(true)
+            .open(root.path().join("diagnostic.log"))
+            .unwrap()
+            .set_modified(older)
+            .unwrap();
+        fs::File::options()
+            .write(true)
+            .open(root.path().join("ytdlp-diagnostic.json"))
+            .unwrap()
+            .set_modified(now)
+            .unwrap();
+        assert_eq!(
+            stage_line(&get_text()),
+            "Etapa da falha: importação por URL (yt-dlp)"
+        );
+
+        let newer = now + Duration::from_secs(60);
+        fs::File::options()
+            .write(true)
+            .open(root.path().join("diagnostic.log"))
+            .unwrap()
+            .set_modified(newer)
+            .unwrap();
+        assert_eq!(stage_line(&get_text()), "Etapa da falha: sonda de GPU");
+
+        // History limit (>200 entries) still uses the most recent valid entry.
+        fs::remove_file(root.path().join("ytdlp-diagnostic.json")).unwrap();
+        fs::write(
+            root.path().join("diagnostic.log"),
+            format!("{}gpu_probe_fallback\n", "component_failure\n".repeat(250)),
+        )
+        .unwrap();
+        assert_eq!(stage_line(&get_text()), "Etapa da falha: sonda de GPU");
+
+        // Tampered ytdlp-diagnostic.json with unknown code is ignored and never leaks.
+        fs::remove_file(root.path().join("diagnostic.log")).unwrap();
+        fs::write(
+            root.path().join("ytdlp-diagnostic.json"),
+            r#"{"code":"C:/Users/Alice/secret","patterns":[],"exit":1,"version":"1.0"}"#,
+        )
+        .unwrap();
+        let tampered = get_text();
+        assert_eq!(stage_line(&tampered), "Etapa da falha: indisponível");
+        assert!(!tampered.contains("Alice"));
+        assert!(!tampered.contains("secret"));
     }
 }

@@ -141,7 +141,7 @@ Conforme `core/src/components/catalog.rs`:
 ### O relato de problemas sem telemetria (ADR-0006)
 
 - **Zero telemetria:** nenhum comando envia dados automaticamente. O registro local (`<paths::data_dir>/diagnostic.log` e `ytdlp-diagnostic.json`) aceita exclusivamente códigos fechados de evento (`DiagnosticEvent`) e códigos/padrões fechados do `yt-dlp`, nunca mensagens arbitrárias de erro, nomes de Fontes ou caminhos pessoais.
-- **Allowlist rigorosa (`diagnostic.get`):** constrói um resumo textual apenas com versão do app, SO, etapa de falha (se houver log), últimas 200 linhas reconstruídas a partir dos códigos do log, último diagnóstico estruturado do `yt-dlp` (se existir) e os 10 campos registrados via `DiagnosticField` (Componentes, GPU/VRAM, Encoder, Motor de transcrição, Provedor, Calibração de tokens, Versão da Tarefa de IA, Hash do prompt SHA-256, Contexto efetivo em tokens e Origem do contexto efetivo). Mesmo que `diagnostic.log` seja editado no disco, linhas desconhecidas são ignoradas na leitura.
+- **Allowlist rigorosa (`diagnostic.get`):** constrói um resumo textual apenas com versão do app, SO, etapa da falha inferida da entrada válida mais recente entre `diagnostic.log` e `ytdlp-diagnostic.json` (ou `"indisponível"` sem registros), últimas 200 linhas reconstruídas a partir dos códigos do log, último diagnóstico estruturado do `yt-dlp` (se existir) e os 10 campos registrados via `DiagnosticField` (Componentes, GPU/VRAM, Encoder, Motor de transcrição, Provedor, Calibração de tokens, Versão da Tarefa de IA, Hash do prompt SHA-256, Contexto efetivo em tokens e Origem do contexto efetivo). Mesmo que `diagnostic.log` seja editado no disco, linhas desconhecidas são ignoradas na leitura.
 - **Revisão humana obrigatória:** a UI (`src/features/report/Report.tsx`) exibe o diagnóstico em um campo editável (ligado por padrão em relato de bug e desligado em sugestão de ideia), alerta se o usuário digitar "token", "chave" ou "key", oferece exportação local (`diagnostic.export`) e abre uma URL `issues/new` do GitHub no navegador (copiando o diagnóstico para a área de transferência se a URL passar de ~8 KB).
 
 ---
@@ -483,7 +483,7 @@ Conforme `core/src/components/catalog.rs`:
 - **Código:** [core/src/tts/catalog.rs:1155](../../../core/src/tts/catalog.rs#L1155).
 
 ### `diagnostic.get`
-- **O que faz:** monta o texto de diagnóstico exclusivamente com os campos da allowlist (versão do Clipes, SO, etapa e até 200 linhas reconstruídas de `diagnostic.log`, último código estruturado do `yt-dlp` se houver, e os 10 campos registrados via `DiagnosticField`).
+- **O que faz:** monta o texto de diagnóstico exclusivamente com os campos da allowlist (versão do Clipes, SO, etapa da falha inferida a partir da entrada válida mais recente entre `diagnostic.log` e `ytdlp-diagnostic.json`, até 200 linhas reconstruídas de `diagnostic.log`, último código estruturado do `yt-dlp` se houver, e os 10 campos registrados via `DiagnosticField`). Valores da etapa por origem: `"componente"` (`component_failure`), `"estimativa de provedor"` (`invalid_estimate_hint`), `"verificação de catálogo"` (`catalog_verification_failed`), `"sonda de GPU"` (`gpu_probe_fallback`), `"importação por URL (yt-dlp)"` (`ytdlp-diagnostic.json`) ou `"indisponível"` sem registros válidos.
 - **Entrada:** nenhuma (`{}`).
 - **Saída:** `{ text: string }`.
 - **Erros:** nenhum (campos indisponíveis saem como `"indisponível"`).
@@ -492,7 +492,7 @@ Conforme `core/src/components/catalog.rs`:
 - **Tela hoje:** [src/features/report/Report.tsx](../../../src/features/report/Report.tsx#L24).
 - **Mock TS:** sim (texto mínimo estático), em [src/lib/core.ts](../../../src/lib/core.ts#L319).
 - **US (#26):** US-111, US-112, US-113, US-122.
-- **Código:** [core/src/diagnostic.rs:262](../../../core/src/diagnostic.rs#L262).
+- **Código:** [core/src/diagnostic.rs](../../../core/src/diagnostic.rs).
 
 ### `diagnostic.export`
 - **O que faz:** grava em um arquivo `.txt` o texto de diagnóstico (já revisado/editado pelo usuário na UI).
@@ -709,5 +709,4 @@ Nenhum comando deste domínio entra na fila persistente de jobs do Projeto (`cor
 5. **Peculiaridades de eventos e estado na UI atual:**
    - Em [Components.tsx:42](../../../src/features/components/Components.tsx#L42) e [ModelsCard.tsx:36](../../../src/features/components/ModelsCard.tsx#L36), o listener de `core-progress` não filtra por `e.payload.job` (diferente de `DenoCard`, `PocketTtsCard`, `WorkerCard` e `TtsCatalogCard`). No front novo, filtrar sempre por `job` para evitar mistura de barras caso algo rode em paralelo.
    - `backups.list` e `backups.settings.get` não têm evento de push quando o backup automático em segundo plano roda; por isso [Backups.tsx:17](../../../src/features/projects/Backups.tsx#L17) faz polling a cada 10 segundos. Além disso, `Backups.tsx` exige mínimo de 60 segundos (1 minuto) no input, enquanto o núcleo aceita qualquer inteiro `> 0`.
-   - `diagnostic.get` ([core/src/diagnostic.rs:193-199](../../../core/src/diagnostic.rs#L193-L199)) preenche `"Etapa da falha: componente"` sempre que `diagnostic.log` não está vazio, mesmo quando o log contém apenas `gpu_probe_fallback` ou `catalog_verification_failed`.
    - `components.models.manifest` usa `snake_case` (`source_url`, `installed_revision`, `update_available`, `worker_installed`, `catalog_version`, `catalog_source`), enquanto `tts.catalog` e `components.catalog.*` usam `camelCase` (`sourceUrl`, `installedRevision`, `updateAvailable`, `catalogVersion`, `embeddedVersion`).
