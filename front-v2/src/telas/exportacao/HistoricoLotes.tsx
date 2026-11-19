@@ -59,6 +59,21 @@ function ehErroDeFonte(code?: string): boolean {
  * Histórico (Zona C) e Detalhe por Item (Zona D) dos lotes de exportação
  * (`#/projeto/:id/exportacao?sub=lotes`).
  */
+const ROTULOS_ENCODER: Record<string, string> = {
+  h264_nvenc: 'placa de vídeo NVIDIA',
+  h264_qsv: 'placa de vídeo Intel',
+  h264_amf: 'placa de vídeo AMD',
+  libx264: 'processador',
+}
+
+function rotuloEncoder(codigo: string): string {
+  return ROTULOS_ENCODER[codigo] ?? 'codificador de vídeo'
+}
+
+function motivoEncoder(codigo: string): string {
+  return codigo === 'encoder_failed' ? 'a codificação falhou' : 'a codificação não pôde seguir'
+}
+
 export function HistoricoLotes({
   projetoId,
   lotes,
@@ -254,13 +269,13 @@ export function HistoricoLotes({
                   Caiu para x264
                 </Status>
                 <span className="text-micro text-t3">
-                  de {item.encoderFallback.from}: {item.encoderFallback.reason}
+                  de {rotuloEncoder(item.encoderFallback.from)}: {motivoEncoder(item.encoderFallback.reason)}
                 </span>
               </div>
             )
           }
           if (item.encoder) {
-            return <span className="font-mono text-pequeno text-t2">{item.encoder}</span>
+            return <span className="text-pequeno text-t2">{rotuloEncoder(item.encoder)}</span>
           }
           return <span className="text-t3">—</span>
         },
@@ -388,6 +403,7 @@ export function HistoricoLotes({
             {lotesOrdenados.map((lote) => {
               const sel = lote.id === loteDetalhe.id
               const st = rotuloStatusLote(lote.status)
+              const dados = sel ? loteDetalhe : lote
               return (
                 <button
                   key={lote.id}
@@ -419,11 +435,11 @@ export function HistoricoLotes({
                         : 'Todo o Projeto'}
                       {' · '}
                       <span className="num">
-                        {lote.counts.completed}/{lote.counts.total}
+                        {dados.counts.completed}/{dados.counts.total}
                       </span>{' '}
-                      concluídos
+                      {dados.counts.completed === 1 ? 'concluído' : 'concluídos'}
                     </span>
-                    <span className="num">{Math.round(lote.progress)}%</span>
+                    <span className="num">{Math.round(dados.progress)}%</span>
                   </div>
                 </button>
               )
@@ -497,7 +513,8 @@ export function HistoricoLotes({
             rotulo="Progresso total ponderado"
             detalhe={
               <span>
-                {Math.round(loteDetalhe.progress)}% ({loteDetalhe.counts.completed} concluídos ·{' '}
+                {Math.round(loteDetalhe.progress)}% ({loteDetalhe.counts.completed}{' '}
+                {loteDetalhe.counts.completed === 1 ? 'concluído' : 'concluídos'} ·{' '}
                 {loteDetalhe.counts.running} exportando · {loteDetalhe.counts.failed} com falha ·{' '}
                 {loteDetalhe.counts.queued} na fila
                 {loteDetalhe.counts.cancelled > 0

@@ -441,11 +441,9 @@ function CartaoProntidao({
         {corte.videoKind === 'direct' && (
           /* Pendência no núcleo (#292): conversão individual para Vídeo transformado. */
           <Dica texto="A conversão individual para Vídeo transformado ainda não está disponível nesta versão.">
-            <span tabIndex={0} className="inline-flex shrink-0 rounded-controle">
-              <Botao tamanho="p" variante="fantasma" icone={<Sparkles />} disabled>
-                Converter em Vídeo transformado
-              </Botao>
-            </span>
+            <Botao tamanho="p" variante="fantasma" icone={<Sparkles />} aria-disabled="true">
+              Converter em Vídeo transformado
+            </Botao>
           </Dica>
         )}
 
@@ -499,6 +497,8 @@ export function MesaProntidao({
 
   const [dialogoDiretoAberto, setDialogoDiretoAberto] = useState(false)
   const [conflitosSobrescrita, setConflitosSobrescrita] = useState<string[] | null>(null)
+  const algumDialogoAberto =
+    corteExportarIndividual !== null || dialogoDiretoAberto || conflitosSobrescrita !== null
   const [disparando, setDisparando] = useState(false)
   const [erroDisparo, setErroDisparo] = useState<ErroCore | null>(null)
 
@@ -874,6 +874,7 @@ export function MesaProntidao({
               </div>
             ) : (
               <div className="flex flex-col gap-3 pr-1 pb-2">
+                <h2 className="sr-only">Cortes aprovados</h2>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-[repeat(auto-fill,minmax(315px,1fr))]">
                   {cortesaExibir.map((corte) => (
                     <CartaoProntidao
@@ -977,11 +978,9 @@ export function MesaProntidao({
                 {/* Pendência no núcleo (#303): export.settings.set */}
                 <div className="flex justify-end">
                   <Dica texto="Salvar a pasta padrão sem exportar ainda não está disponível nesta versão.">
-                    <span tabIndex={0} className="inline-flex shrink-0 rounded-controle">
-                      <Botao tamanho="p" variante="fantasma" disabled>
-                        Salvar pasta padrão
-                      </Botao>
-                    </span>
+                    <Botao tamanho="p" variante="fantasma" aria-disabled="true">
+                      Salvar pasta padrão
+                    </Botao>
                   </Dica>
                 </div>
               </div>
@@ -1071,7 +1070,7 @@ export function MesaProntidao({
 
             {/* Único botão primário (bg-sinal) da tela */}
             <Botao
-              variante="primario"
+              variante={algumDialogoAberto ? 'secundario' : 'primario'}
               tamanho="g"
               carregando={disparando}
               disabled={!podeExportarLote}

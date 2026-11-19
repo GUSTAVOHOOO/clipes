@@ -91,6 +91,8 @@ describe('PainelFilaJobs', () => {
 
     expect(await screen.findByText('Nenhum Projeto aberto')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Ir para Início' })).toBeInTheDocument()
+    // Regra da Luz Única: a gaveta não acende um segundo botão primário (UI-84)
+    expect(screen.getByRole('button', { name: 'Ir para Início' })).not.toHaveClass('bg-sinal')
 
     // Empty com Projeto aberto e zero jobs/lotes
     chamarMock.mockImplementation(async (cmd: string) => {
@@ -256,6 +258,8 @@ describe('PainelFilaJobs', () => {
     const card10 = screen.getByTestId('fila-job-10')
     expect(screen.queryByText(/min restantes/i)).not.toBeInTheDocument()
     expect(within(card10).getByText(/ETA indisponível/i)).toBeInTheDocument()
+    // UI-87: a dica informativa é alcançável por teclado
+    expect(within(card10).getByText(/ETA indisponível/i).closest('button')).not.toBeNull()
     expect(within(card10).queryByText(/#303/)).not.toBeInTheDocument()
 
     // Cancelar job running paid (#11) pede ConfirmDialog; cancelar running local (#10) chama direto
@@ -466,6 +470,101 @@ describe('PainelFilaJobs', () => {
 
     expect(aoFechar).toHaveBeenCalledTimes(1)
     expect(gatilhoRef.current).toHaveFocus()
+  })
+
+  it('Esc fecha a gaveta mesmo com a dica do botao Fechar aberta apos Tab (UI-80)', async () => {
+    chamarMock.mockResolvedValue([])
+    const user = userEvent.setup()
+    const aoFechar = vi.fn()
+    const fila = criarFila(() => null)
+    const store = criarStoreFilaGlobal({ fila, debounceMs: 0 })
+
+    render(
+      envolver(
+        <PainelFilaJobs
+          aberto
+          aoFechar={aoFechar}
+          projetoAberto={null}
+          refRetornoFoco={createRef<HTMLElement>()}
+          store={store}
+          fila={fila}
+        />,
+      ),
+    )
+
+    const aside = screen.getByRole('complementary', { name: 'Fila de Jobs' })
+    const btnFechar = within(aside).getByRole('button', { name: /Fechar Fila/i })
+    await user.tab()
+    await waitFor(() => expect(btnFechar).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(aoFechar).toHaveBeenCalledTimes(1))
+  })
+
+  it('Ver estimativa e repetir abre o dialogo com foco em Cancelar (UI-82)', async () => {
+    const user = userEvent.setup()
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'jobs.list') {
+        return [
+          {
+            id: 21,
+            kind: 'ai:selection',
+            safety: 'paid',
+            state: 'uncertain',
+            attempts: 1,
+            checkpoint: null,
+            progress: 0,
+            project: 'demo',
+            outcome: 'uncertain',
+            cost: 'unknown',
+            batch: null,
+            profile: 'legacy',
+            budgetPause: null,
+          },
+        ]
+      }
+      if (cmd === 'jobs.estimate') {
+        return { safety: 'paid', estimate: { kind: 'usd', minMicroUsd: 40_000, maxMicroUsd: 70_000, inputTokens: 18_400 } }
+      }
+      if (cmd === 'jobs.budget.get') return { budgets: [] }
+      return []
+    })
+    const fila = criarFila(() => 'demo')
+    const store = criarStoreFilaGlobal({ fila, debounceMs: 0 })
+    render(
+      envolver(
+        <PainelFilaJobs aberto aoFechar={vi.fn()} projetoAberto={PROJETO_DEMO} store={store} fila={fila} />,
+      ),
+    )
+    await user.click(await screen.findByRole('button', { name: /Ver estimativa e repetir/i }))
+    const dialogo = await screen.findByRole('alertdialog')
+    await waitFor(() => {
+      expect(within(dialogo).getByRole('button', { name: 'Cancelar' })).toHaveFocus()
+    })
+  })
+
+  it('mostra perfil e lote em texto humano, sem codigos crus (UI-86)', async () => {
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'jobs.list') {
+        return [
+          {
+            id: 31, kind: 'ai:selection', safety: 'local', state: 'uncertain', attempts: 1,
+            checkpoint: null, progress: 0, project: 'demo', outcome: 'uncertain', cost: 'unknown',
+            batch: null, profile: 'codex', budgetPause: null,
+          },
+        ]
+      }
+      if (cmd === 'jobs.budget.get') return { budgets: [] }
+      return []
+    })
+    const fila = criarFila(() => 'demo')
+    const store = criarStoreFilaGlobal({ fila, debounceMs: 0 })
+    render(
+      envolver(
+        <PainelFilaJobs aberto aoFechar={vi.fn()} projetoAberto={PROJETO_DEMO} store={store} fila={fila} />,
+      ),
+    )
+    expect(await screen.findByText(/· Codex/)).toBeInTheDocument()
+    expect(screen.queryByText(/· codex/)).not.toBeInTheDocument()
   })
 
   it('cobre filtros por aba, estado partial de lote de exportação e ETA determinístico observado desde 0%', async () => {

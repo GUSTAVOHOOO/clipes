@@ -349,7 +349,7 @@ describe('Exportacao (#/projeto/:id/exportacao)', () => {
     ).toBeInTheDocument()
   })
 
-  it('alterna abas com setas ←/→ + Enter e cicla 5 regiões com F6/Shift+F6', async () => {
+  it('alterna abas com setas ←/→ + Enter', async () => {
     const user = userEvent.setup()
     renderizar('prontidao')
 
@@ -364,35 +364,12 @@ describe('Exportacao (#/projeto/:id/exportacao)', () => {
 
     await user.keyboard('{ArrowLeft}')
     expect(tabProntidao).toHaveFocus()
+  })
 
-    // Ciclo F6: Topo -> Sub-barra -> Zona esquerda -> Zona direita -> Rodapé -> Topo
-    const topo = document.querySelector('[data-regiao="topo"]')!
-    const rodape = document.querySelector('[data-regiao="rodape"]')!
-    const subbarra = screen.getByRole('navigation', { name: 'Visões de Exportação' })
-    const zonaEsq = screen.getByRole('region', { name: 'Grade de Prontidão dos Cortes' })
-    const zonaDir = screen.getByRole('complementary', { name: 'Configuração da exportação em lote' })
-
-    const fireF6 = (shiftKey = false) => {
-      fireEvent(window, new KeyboardEvent('keydown', { key: 'F6', shiftKey, cancelable: true }))
-    }
-
-    ;(document.activeElement as HTMLElement | null)?.blur()
-    fireF6()
-    expect(topo.contains(document.activeElement)).toBe(true)
-
-    fireF6()
-    expect(subbarra.contains(document.activeElement)).toBe(true)
-
-    fireF6()
-    expect(zonaEsq.contains(document.activeElement)).toBe(true)
-
-    fireF6()
-    expect(zonaDir.contains(document.activeElement)).toBe(true)
-
-    fireF6()
-    expect(rodape.contains(document.activeElement)).toBe(true)
-
-    fireF6(true)
-    expect(zonaDir.contains(document.activeElement)).toBe(true)
+  it('nao intercepta F6: o ciclo de regioes (inclusive a Fila) fica com o Shell (UI-80)', () => {
+    renderizar('prontidao')
+    const evento = new KeyboardEvent('keydown', { key: 'F6', cancelable: true, bubbles: true })
+    window.dispatchEvent(evento)
+    expect(evento.defaultPrevented).toBe(false)
   })
 })

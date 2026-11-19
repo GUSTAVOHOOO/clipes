@@ -9,7 +9,7 @@ import {
   useToast,
   type Aba,
 } from '@ds'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useAtalhos, type Atalho } from '~/comandos/atalhos'
 import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
@@ -29,21 +29,6 @@ export type ExportacaoProps = {
   sub: 'prontidao' | 'lotes'
   store?: StoreExportacaoProjeto
   fila?: Fila
-}
-
-const SELETOR_FOCAVEL =
-  'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
-
-function focarRegiao(alvo: HTMLElement): void {
-  const candidatos = alvo.querySelectorAll<HTMLElement>(SELETOR_FOCAVEL)
-  for (const el of candidatos) {
-    if (el.closest('[hidden], [aria-hidden="true"]')) continue
-    const estilo = window.getComputedStyle(el)
-    if (estilo.display === 'none' || estilo.visibility === 'hidden') continue
-    el.focus()
-    return
-  }
-  alvo.focus()
 }
 
 /**
@@ -68,7 +53,6 @@ export function Exportacao({
   const subbarraRef = useRef<HTMLElement>(null)
   const zonaEsquerdaRef = useRef<HTMLDivElement>(null)
   const zonaDireitaRef = useRef<HTMLElement>(null)
-  const regiaoFocoRef = useRef<{ prev: number; curr: number }>({ prev: -1, curr: -1 })
 
   const encProjeto = encodeURIComponent(projetoId)
 
@@ -112,70 +96,6 @@ export function Exportacao({
   )
   useAtalhos(atalhos)
 
-  // Ciclo F6 / Shift+F6 entre as 5 regiões da tela (Topo -> Sub-barra -> Zona esq. -> Zona dir. -> Rodapé)
-  useEffect(() => {
-    const obterRegioes = (): HTMLElement[] => {
-      const topo = document.querySelector<HTMLElement>('[data-regiao="topo"]')
-      const rodape = document.querySelector<HTMLElement>('[data-regiao="rodape"]')
-      return [
-        topo,
-        subbarraRef.current,
-        zonaEsquerdaRef.current,
-        zonaDireitaRef.current,
-        rodape,
-      ].filter((el): el is HTMLElement => el !== null)
-    }
-
-    const indiceDoElemento = (el: EventTarget | null, regioes: HTMLElement[]): number => {
-      if (!(el instanceof Node)) return -1
-      return regioes.findIndex((r) => r === el || r.contains(el))
-    }
-
-    const aoFocusIn = (e: FocusEvent) => {
-      const regioes = obterRegioes()
-      const idx = indiceDoElemento(e.target, regioes)
-      if (idx >= 0) {
-        regiaoFocoRef.current = { prev: regiaoFocoRef.current.curr, curr: idx }
-      }
-    }
-
-    const aoTeclar = (e: KeyboardEvent) => {
-      if (e.key !== 'F6' || e.ctrlKey || e.metaKey || e.altKey) return
-      const temDialogoModal = Array.from(
-        document.querySelectorAll('[role="dialog"], [role="alertdialog"]'),
-      ).some((el) => !el.closest('[aria-label="Notifications"]'))
-      if (temDialogoModal) return
-
-      const regioes = obterRegioes()
-      if (regioes.length === 0) return
-
-      const idxAtual = e.defaultPrevented
-        ? regiaoFocoRef.current.prev
-        : indiceDoElemento(document.activeElement, regioes)
-
-      e.preventDefault()
-      e.stopPropagation()
-      e.stopImmediatePropagation()
-
-      const dir = e.shiftKey ? -1 : 1
-      const proximoIdx =
-        idxAtual < 0
-          ? dir > 0
-            ? 0
-            : regioes.length - 1
-          : (idxAtual + dir + regioes.length) % regioes.length
-
-      focarRegiao(regioes[proximoIdx])
-      regiaoFocoRef.current = { prev: proximoIdx, curr: proximoIdx }
-    }
-
-    document.addEventListener('focusin', aoFocusIn, true)
-    window.addEventListener('keydown', aoTeclar, { capture: true })
-    return () => {
-      document.removeEventListener('focusin', aoFocusIn, true)
-      window.removeEventListener('keydown', aoTeclar, { capture: true })
-    }
-  }, [])
 
   const estadoTela = useMemo<'carregando' | 'erro' | 'vazio' | 'pronto'>(() => {
     if (forcado === 'carregando') return 'carregando'
@@ -274,7 +194,7 @@ export function Exportacao({
               <button
                 type="button"
                 onClick={() => aoAbrirLote(loteAtivoPrincipal.id)}
-                className="foco cursor-pointer rounded-controle border-0 bg-transparent px-1.5 py-0.5 text-pequeno text-t1 underline hover:bg-hover"
+                className="foco cursor-pointer rounded-controle border-0 bg-transparent min-h-6 px-1.5 py-0.5 text-pequeno text-t1 underline hover:bg-hover"
               >
                 Ver em Histórico
               </button>

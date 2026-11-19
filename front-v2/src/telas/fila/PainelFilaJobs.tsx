@@ -60,6 +60,8 @@ import {
   DialogoRefazerJob,
   DialogoResultadoJob,
   DialogoTentarDeNovo,
+  rotuloLoteFontes,
+  rotuloPerfilVisivel,
   nomeHumanoKind,
   rotuloEscopoOrcamento,
   traduzirMotivoPausa,
@@ -353,7 +355,10 @@ export function PainelFilaJobs({
 
   const aoTeclarNoPainel = useCallback(
     (e: KeyboardEvent<HTMLElement>) => {
-      if (e.key !== 'Escape' || e.defaultPrevented) return
+      if (e.key !== 'Escape') return
+      // A dica de um botão (tooltip) já trata o Esc e marca defaultPrevented; isso não
+      // pode impedir de fechar a Fila. Só cede quando há popover/menu aberto dentro dela.
+      if (e.currentTarget.querySelector('[aria-haspopup][aria-expanded="true"]')) return
       const temModal = Array.from(
         document.querySelectorAll('[role="dialog"], [role="alertdialog"]'),
       ).some((el) => !el.closest('[aria-label="Notifications"]'))
@@ -589,7 +594,7 @@ export function PainelFilaJobs({
         aria-label="Fila de Jobs"
         data-regiao="fila"
         tabIndex={-1}
-        onKeyDown={aoTeclarNoPainel}
+        onKeyDownCapture={aoTeclarNoPainel}
         className="foco-interno flex h-full w-[470px] max-w-[calc(100vw-32px)] shrink-0 flex-col border-l border-linha bg-area min-[1440px]:w-[560px]"
       >
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-linha px-4 py-2.5">
@@ -623,6 +628,7 @@ export function PainelFilaJobs({
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 py-3">
           {/* Zona 1 — Alertas Prioritários */}
+          <div className="flex max-h-[40%] shrink-0 flex-col gap-3 overflow-y-auto">
           {projetoAberto && jobsIncertos.length > 0 && (
             <div role="alert" className="flex flex-col gap-2 rounded-area bg-elevado p-3">
               <div className="flex items-start justify-between gap-2">
@@ -682,6 +688,7 @@ export function PainelFilaJobs({
                 </div>
               )
             })}
+</div>
 
           {erroAcao && (
             <BannerErroCore
@@ -768,10 +775,11 @@ export function PainelFilaJobs({
                   tipo="vazio"
                   titulo="Nenhum Projeto aberto"
                   descricao="Nenhuma tarefa global em andamento. Abra um Projeto para acompanhar transcrições, seleções e exportações."
-                  acaoPrimaria={{
-                    rotulo: 'Ir para Início',
-                    aoAcionar: () => navegar('#/inicio'),
-                  }}
+                  acaoSecundaria={
+                    window.location.hash.startsWith('#/inicio')
+                      ? undefined
+                      : { rotulo: 'Ir para Início', aoAcionar: () => navegar('#/inicio') }
+                  }
                 />
               )}
 
@@ -791,7 +799,7 @@ export function PainelFilaJobs({
                   tipo="vazio"
                   titulo="Nenhuma tarefa registrada"
                   descricao="Nenhuma tarefa registrada neste Projeto ainda. Importe uma Fonte ou dispare uma seleção para acompanhar aqui."
-                  acaoPrimaria={{
+                  acaoSecundaria={{
                     rotulo: 'Ir para Fontes',
                     aoAcionar: () => navegar(`#/projeto/${encProjeto}/fontes`),
                   }}
@@ -861,10 +869,12 @@ export function PainelFilaJobs({
                               </strong>
                               <span className="num text-pequeno text-t3">#{job.id}</span>
                               {job.profile && (
-                                <span className="text-pequeno text-t3">· {job.profile}</span>
+                                <span className="text-pequeno text-t3">
+                                  · {rotuloPerfilVisivel(job.profile, job.profile)}
+                                </span>
                               )}
                               {job.batch && (
-                                <span className="text-pequeno text-t3">· {job.batch}</span>
+                                <span className="text-pequeno text-t3">· {rotuloLoteFontes(job.batch)}</span>
                               )}
                               {job.attempts > 1 && (
                                 <span className="num text-pequeno text-t3">
@@ -890,10 +900,10 @@ export function PainelFilaJobs({
                             {!podeEta && (
                               <div className="flex items-center gap-1 text-micro text-t3">
                                 <Dica texto="Tempo restante (ETA) indisponível após recarregar a janela ou em etapas de IA.">
-                                  <span className="inline-flex items-center gap-1">
+                                  <button type="button" className="foco inline-flex min-h-6 cursor-help items-center gap-1 rounded-controle border-0 bg-transparent p-0 text-inherit">
                                     <Info className="size-3 stroke-[1.75]" aria-hidden />
                                     <span>ETA indisponível</span>
-                                  </span>
+                                  </button>
                                 </Dica>
                               </div>
                             )}
@@ -1034,7 +1044,7 @@ export function PainelFilaJobs({
                                   [lote.id]: !expandido,
                                 }))
                               }
-                              className="foco flex w-fit cursor-pointer items-center gap-1 rounded-controle border-0 bg-transparent px-1 py-0.5 text-pequeno text-t2 hover:text-t1"
+                              className="foco flex w-fit cursor-pointer items-center gap-1 rounded-controle border-0 bg-transparent min-h-6 px-1 py-0.5 text-pequeno text-t2 hover:text-t1"
                             >
                               {expandido ? (
                                 <ChevronDown className="size-[14px]" aria-hidden />
@@ -1209,10 +1219,10 @@ export function PainelFilaJobs({
                       Operações globais
                     </h3>
                     <Dica texto="Operações globais ficam apenas na memória desta sessão e não são restauradas após recarregar a janela.">
-                      <span className="inline-flex items-center gap-1 text-micro text-t3">
+                      <button type="button" className="foco inline-flex min-h-6 cursor-help items-center gap-1 rounded-controle border-0 bg-transparent p-0 text-micro text-t3">
                         <Info className="size-3 stroke-[1.75]" aria-hidden />
                         <span>Em memória nesta sessão</span>
-                      </span>
+                      </button>
                     </Dica>
                   </div>
                   {globaisFiltradas.map((op) => (

@@ -546,6 +546,34 @@ describe('Shell', () => {
     expect(footer.contains(document.activeElement)).toBe(true)
   })
 
+  it('mantem a falha de tarefa visivel no topo depois que o toast some (UI-81)', async () => {
+    mockIsTauri.mockReturnValue(false)
+    window.location.hash = '#/projeto/demo/cortes'
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'projects.current') return { id: 'demo', name: 'Demo', path: '/projetos/Demo.clipes' }
+      if (cmd === 'projects.local_only.get') return { open: true, enabled: false }
+      if (cmd === 'projects.recent') return []
+      if (cmd === 'jobs.list') {
+        return [
+          {
+            id: 7, kind: 'ai:selection', safety: 'local', state: 'failed', attempts: 1,
+            checkpoint: null, progress: 0, project: 'demo', outcome: 'failed', cost: null,
+            batch: null, profile: null, budgetPause: null,
+          },
+        ]
+      }
+      if (cmd === 'batches.list' || cmd === 'export.batch.list') return []
+      if (cmd === 'jobs.budget.get') return { budgets: [] }
+      return null
+    })
+    const fila = criarFila(() => 'demo')
+    render(envolver(<Shell fila={fila}><div>Conteúdo</div></Shell>))
+    const header = document.querySelector('header')!
+    expect(
+      await within(header).findByRole('button', { name: /Tarefa falhou: abrir Fila de Jobs/i }),
+    ).toBeInTheDocument()
+  })
+
   it('exibe alertas prioritários de uncertain e ai_pauses no topo/BarraStatus e alimenta FechamentoJanela (#291) sem duplicar app-close-requested', async () => {
     const user = userEvent.setup()
     mockIsTauri.mockReturnValue(true)

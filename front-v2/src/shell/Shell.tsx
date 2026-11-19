@@ -416,6 +416,8 @@ export function Shell({
         type: n.tipo === 'falha' ? 'erro' : n.tipo === 'orcamento' ? 'aviso' : undefined,
         title: n.titulo,
         description: n.corpo,
+        // Falha não é persistente: o aviso fixo fica no topo; o toast some na duração do DS.
+        timeout: 4000,
         actionProps: {
           children: 'Abrir Fila',
           onClick: abrirFilaDoAlerta,
@@ -661,12 +663,27 @@ export function Shell({
       (statusSalvamento ?? (salvamento.estado === 'salvo' ? <Status tom="sucesso">Salvo</Status> : null))
     )
 
+  const contagemFalhas = estadoFilaGlobal.jobs.filter((j) => j.state === 'failed').length
+
   const alertasTopo =
     direita ||
+    contagemFalhas > 0 ||
     estadoFilaGlobal.pausasOrcamento.length > 0 ||
     estadoFilaGlobal.contagemIncertos > 0 ? (
       <>
         {direita}
+        {contagemFalhas > 0 && (
+          <Botao
+            tamanho="p"
+            variante="suave"
+            onClick={abrirFilaDoAlerta}
+            aria-label={`Tarefa falhou: abrir Fila de Jobs (${contagemFalhas})`}
+          >
+            <Status tom="perigo">
+              {contagemFalhas === 1 ? '1 tarefa falhou' : `${contagemFalhas} tarefas falharam`}
+            </Status>
+          </Botao>
+        )}
         {estadoFilaGlobal.pausasOrcamento.length > 0 && (
           <Botao
             tamanho="p"
@@ -770,7 +787,7 @@ export function Shell({
                     <button
                       type="button"
                       onClick={abrirFilaDoAlerta}
-                      className="foco flex min-w-0 cursor-pointer items-center gap-1.5 rounded-controle border-0 bg-transparent px-1 py-0.5 text-pequeno text-t2 hover:bg-area hover:text-t1"
+                      className="foco flex min-w-0 cursor-pointer items-center gap-1.5 rounded-controle border-0 bg-transparent min-h-6 px-1 py-0.5 text-pequeno text-t2 hover:bg-area hover:text-t1"
                     >
                       <Status tom="rodando">
                         <span className="truncate">{rotuloPrimeiroAtivo}</span>
@@ -783,7 +800,7 @@ export function Shell({
                     <button
                       type="button"
                       onClick={abrirFilaDoAlerta}
-                      className="foco flex cursor-pointer items-center gap-1 rounded-controle border-0 bg-transparent px-1 py-0.5 text-pequeno text-t2 hover:bg-area hover:text-t1"
+                      className="foco flex cursor-pointer items-center gap-1 rounded-controle border-0 bg-transparent min-h-6 px-1 py-0.5 text-pequeno text-t2 hover:bg-area hover:text-t1"
                     >
                       <Status tom="aviso">
                         {estadoFilaGlobal.contagemIncertos === 1

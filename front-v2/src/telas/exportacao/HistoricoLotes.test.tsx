@@ -211,7 +211,8 @@ describe('HistoricoLotes', () => {
     // Grid com fallback x264 e erro traduzido
     const grade = screen.getByRole('grid', { name: /Itens do lote #6399/i })
     expect(within(grade).getByText('Caiu para x264')).toBeInTheDocument()
-    expect(within(grade).getByText(/de h264_nvenc: encoder_failed/i)).toBeInTheDocument()
+    expect(within(grade).getByText(/de placa de vídeo NVIDIA: a codificação falhou/i)).toBeInTheDocument()
+    expect(screen.queryByText(/h264_nvenc|encoder_failed/)).not.toBeInTheDocument()
     expect(
       within(grade).getByText(/O arquivo da Fonte foi movido, apagado ou alterado no disco\./i),
     ).toBeInTheDocument()

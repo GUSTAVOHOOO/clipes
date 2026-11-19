@@ -467,19 +467,19 @@ export function Relatos({ tipoInicial }: RelatosProps) {
             {sondaExibida.key.gpu ?? 'CPU (sem GPU compatível)'}
             {sondaExibida.key.driver ? ` · Driver ${sondaExibida.key.driver}` : ''}
           </dd>
-          <dt className="text-t3">CT2 / Modelo</dt>
+          <dt className="text-t3">Motor / Modelo</dt>
           <dd className="num m-0 text-t2">
             {sondaExibida.key.ct2_version ?? '—'} · {sondaExibida.key.model}
           </dd>
           <dt className="text-t3">Escolha verificada</dt>
           <dd className="num m-0 text-t1">
-            {sondaExibida.chosen.device} / {sondaExibida.chosen.compute_type}{' '}
+            {sondaExibida.chosen.device === 'cuda' ? 'Placa de vídeo' : 'Processador'} · precisão {sondaExibida.chosen.compute_type}{' '}
             ({sondaExibida.verified ? 'verificado' : 'não verificado'})
           </dd>
           <dt className="text-t3">Lote / VRAM livre</dt>
           <dd className="num m-0 text-t2">
             {sondaExibida.batch
-              ? `lote seguro: ${sondaExibida.batch.max_safe ?? 'nenhum'} (${sondaExibida.batch.origin})`
+              ? `lote seguro: ${sondaExibida.batch.max_safe ?? 'nenhum'} (${sondaExibida.batch.origin === 'probe' ? 'medido' : 'padrão'})`
               : 'lote não medido'}
             {' · '}
             {sondaExibida.vram_free_mib != null ? `${sondaExibida.vram_free_mib} MiB` : 'VRAM n/d'}

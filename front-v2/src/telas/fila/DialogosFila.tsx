@@ -112,12 +112,34 @@ function converterEstimativaParaDs(estimate: EstimativaBruta) {
   return estimate
 }
 
-function rotuloPerfilVisivel(label: string | null | undefined, id?: string | null): string {
+const ROTULOS_PERFIL_CLI: Record<string, string> = {
+  codex: 'Codex',
+  claude: 'Claude',
+  opencode: 'OpenCode',
+}
+
+export function rotuloLoteFontes(chave: string): string {
+  const m = /^sources-(\d+)$/.exec(chave.trim())
+  return m ? `Lote de Fontes ${m[1]}` : 'Lote de Fontes'
+}
+
+export function rotuloPerfilVisivel(label: string | null | undefined, id?: string | null): string {
   const texto = (label ?? '').trim()
-  if (texto && texto.toLowerCase() !== 'legacy') return texto
+  if (texto && texto.toLowerCase() !== 'legacy') return ROTULOS_PERFIL_CLI[texto.toLowerCase()] ?? texto
   if (id && id.trim().toLowerCase() === 'legacy') return 'Perfil configurado'
   const idLimpo = (id ?? '').trim()
+  if (ROTULOS_PERFIL_CLI[idLimpo.toLowerCase()]) return ROTULOS_PERFIL_CLI[idLimpo.toLowerCase()]
   return idLimpo && idLimpo.toLowerCase() !== 'legacy' ? idLimpo : 'Perfil configurado'
+}
+
+function rotuloDesfecho(outcome: string): string {
+  const rotulos: Record<string, string> = {
+    ok: 'Concluído com sucesso',
+    failed: 'Falhou',
+    uncertain: 'Resultado incerto',
+    cancelled: 'Cancelado',
+  }
+  return rotulos[outcome] ?? 'Concluído com ressalvas'
 }
 
 function taskKeyDeKind(kind: string): string {
@@ -565,7 +587,7 @@ export function DialogoRefazerJob({ aberto, job, aoFechar, aoConcluir }: Dialogo
               <button
                 type="button"
                 aria-label="Aviso sobre Revisão da execução"
-                className="foco mt-0.5 inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-controle border-0 bg-transparent text-t3 hover:text-t1"
+                className="foco mt-0.5 inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-controle border-0 bg-transparent text-t3 hover:text-t1"
               >
                 <Info className="size-[14px] stroke-[1.75]" aria-hidden />
               </button>
@@ -684,9 +706,7 @@ export function DialogoResultadoJob({ aberto, job, aoFechar }: DialogoResultadoJ
             <dl className="m-0 grid grid-cols-[120px_1fr] gap-x-3 gap-y-1.5 rounded-area bg-area p-3 text-pequeno">
               <dt className="text-t3">Desfecho</dt>
               <dd className="m-0 font-medio text-t1">
-                {resultado.outcome === 'ok'
-                  ? 'Sucesso (ok)'
-                  : `${resultado.outcome}${resultado.code && resultado.code !== resultado.outcome ? ` (${resultado.code})` : ''}`}
+                {rotuloDesfecho(resultado.outcome)}
               </dd>
 
               {job.profile && (
