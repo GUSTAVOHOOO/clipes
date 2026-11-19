@@ -1,7 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { isTauri } from '@tauri-apps/api/core'
+import { emit, listen } from '@tauri-apps/api/event'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { ProvedorDicas, ProvedorToast } from '@ds'
 import { ProvedorAtalhos } from '~/comandos/atalhos'
 import { ErroCore } from '~/core/cliente'
@@ -18,6 +21,32 @@ vi.mock('~/core/cliente', async () => {
     chamar: (...args: unknown[]) => chamarMock(...args),
   }
 })
+
+vi.mock('@tauri-apps/api/core', async () => {
+  const atual = await vi.importActual<typeof import('@tauri-apps/api/core')>('@tauri-apps/api/core')
+  return {
+    ...atual,
+    isTauri: vi.fn(() => false),
+  }
+})
+
+vi.mock('@tauri-apps/api/event', async () => {
+  const atual = await vi.importActual<typeof import('@tauri-apps/api/event')>('@tauri-apps/api/event')
+  return {
+    ...atual,
+    emit: vi.fn(async () => {}),
+    listen: vi.fn(async () => () => {}),
+  }
+})
+
+vi.mock('@tauri-apps/api/window', () => ({
+  getCurrentWindow: vi.fn(() => ({ destroy: vi.fn(async () => {}) })),
+}))
+
+const mockIsTauri = vi.mocked(isTauri)
+const mockListen = vi.mocked(listen)
+const mockEmit = vi.mocked(emit)
+const mockGetCurrentWindow = vi.mocked(getCurrentWindow)
 
 beforeAll(() => {
   if (typeof globalThis.ResizeObserver === 'undefined') {
@@ -109,6 +138,10 @@ describe('ComEstado', () => {
 describe('Shell', () => {
   beforeEach(() => {
     chamarMock.mockReset()
+    mockIsTauri.mockReturnValue(false)
+    mockListen.mockClear()
+    mockEmit.mockClear()
+    mockGetCurrentWindow.mockClear()
     window.location.hash = '#/inicio'
   })
 
@@ -450,5 +483,159 @@ describe('Shell', () => {
       expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
       expect(footer.querySelector('[role="alert"]')).toBeNull()
     })
+  })
+
+  it('Ctrl+J e GatilhoFila abrem PainelFilaJobs sem sair da rota, Esc devolve foco ao gatilho e F6 inclui a gaveta', async () => {
+    const user = userEvent.setup()
+    window.location.hash = '#/projeto/demo/cortes'
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'projects.current') return { id: 'demo', name: 'Demo', path: '/projetos/Demo.clipes' }
+      if (cmd === 'projects.local_only.get') return { open: true, enabled: false }
+      if (cmd === 'projects.recent') return []
+      if (cmd === 'jobs.list') return []
+      if (cmd === 'batches.list') return []
+      if (cmd === 'export.batch.list') return []
+      if (cmd === 'jobs.budget.get') return { budgets: [] }
+      return null
+    })
+
+    render(
+      envolver(
+        <Shell>
+          <button type="button">Botão da rota</button>
+        </Shell>,
+      ),
+    )
+
+    const gatilho = await screen.findByRole('button', { name: /Fila de jobs:/i })
+    await user.click(gatilho)
+
+    const aside = await screen.findByRole('complementary', { name: 'Fila de Jobs' })
+    expect(aside).toBeInTheDocument()
+    expect(window.location.hash).toBe('#/projeto/demo/cortes')
+
+    // Esc fecha e devolve foco ao gatilho da Fila
+    fireEvent.keyDown(aside, { key: 'Escape' })
+    await waitFor(() => {
+      expect(screen.queryByRole('complementary', { name: 'Fila de Jobs' })).not.toBeInTheDocument()
+    })
+    await waitFor(() => {
+      expect(gatilho).toHaveFocus()
+    })
+
+    // Ctrl+J abre novamente sem mudar a rota, e F6 inclui o aside no ciclo
+    fireEvent.keyDown(window, { key: 'j', ctrlKey: true })
+    const asideReaberto = await screen.findByRole('complementary', { name: 'Fila de Jobs' })
+    expect(window.location.hash).toBe('#/projeto/demo/cortes')
+
+    const header = document.querySelector('header')!
+    const main = document.querySelector('main')!
+    const footer = document.querySelector('footer')!
+
+    const btnTopo = within(header).getByRole('button', { name: /Demo/i })
+    btnTopo.focus()
+    fireEvent.keyDown(window, { key: 'F6' })
+    expect(main.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(window, { key: 'F6' })
+    expect(asideReaberto.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(window, { key: 'F6' })
+    expect(footer.contains(document.activeElement)).toBe(true)
+  })
+
+  it('exibe alertas prioritários de uncertain e ai_pauses no topo/BarraStatus e alimenta FechamentoJanela (#291) sem duplicar app-close-requested', async () => {
+    const user = userEvent.setup()
+    mockIsTauri.mockReturnValue(true)
+    let closeHandler: ((ev: { event: string; id: number; payload: unknown }) => void) | undefined
+    mockListen.mockImplementation(async (eventName, cb) => {
+      if (eventName === 'app-close-requested') {
+        closeHandler = cb as typeof closeHandler
+      }
+      return () => {}
+    })
+
+    window.location.hash = '#/projeto/demo/cortes'
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'projects.current') return { id: 'demo', name: 'Demo', path: '/projetos/Demo.clipes' }
+      if (cmd === 'projects.local_only.get') return { open: true, enabled: false }
+      if (cmd === 'projects.recent') return []
+      if (cmd === 'jobs.list') {
+        return [
+          {
+            id: 2,
+            kind: 'ai:selection',
+            safety: 'paid',
+            state: 'uncertain',
+            attempts: 1,
+            checkpoint: null,
+            progress: 0,
+            project: 'demo',
+            outcome: 'uncertain',
+            cost: 'unknown',
+            batch: null,
+            profile: 'legacy',
+            budgetPause: null,
+          },
+          {
+            id: 9,
+            kind: 'export',
+            safety: 'local',
+            state: 'running',
+            attempts: 1,
+            checkpoint: null,
+            progress: 40,
+            project: 'demo',
+            outcome: null,
+            cost: null,
+            batch: null,
+            profile: null,
+            budgetPause: null,
+          },
+        ]
+      }
+      if (cmd === 'batches.list') return []
+      if (cmd === 'export.batch.list') return []
+      if (cmd === 'jobs.budget.get') {
+        return {
+          budgets: [
+            {
+              scope: 'task',
+              key: 'selection',
+              maxCalls: 10,
+              maxTokens: null,
+              maxWallMs: null,
+              maxCostMicroUsd: 1_000_000,
+              unknownConfirmed: false,
+              since: 1,
+              usage: { calls: 10, inputTokens: 0, outputTokens: 0, microUsd: 1_050_000, unknownCostCalls: 0, planQuotaCalls: 0, durationMs: 0, costLabel: null },
+              paused: 'budget_cost',
+            },
+          ],
+        }
+      }
+      return null
+    })
+
+    const fila = criarFila(() => 'demo')
+    render(envolver(<Shell fila={fila}><div>Conteúdo</div></Shell>))
+
+    // Alerta prioritário no topo para uncertain e pausa de orçamento
+    expect(await screen.findByText(/1 incerto/i)).toBeInTheDocument()
+    expect(screen.getByText(/Orçamento pausado/i)).toBeInTheDocument()
+
+    // BarraStatus exibe resumo clicável do job ativo e abre a gaveta ao clicar
+    const footer = document.querySelector('footer')!
+    const btnResumoStatus = await within(footer).findByRole('button', { name: /Exportação de Corte|40%/i })
+    await user.click(btnResumoStatus)
+    expect(await screen.findByRole('complementary', { name: 'Fila de Jobs' })).toBeInTheDocument()
+
+    // Apenas um listener app-close-requested registrado (sem duplicação)
+    const closeListeners = mockListen.mock.calls.filter((c) => c[0] === 'app-close-requested')
+    expect(closeListeners).toHaveLength(1)
+
+    // Ao disparar app-close-requested, FechamentoJanela enxerga a exportação hidratada de jobs.list
+    closeHandler?.({ event: 'app-close-requested', id: 1, payload: null })
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent(/Fechar o Clipes com operações em andamento/i)
   })
 })

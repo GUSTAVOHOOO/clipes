@@ -278,8 +278,11 @@ test.describe('Linha de base UI — Ondas 0+1 (Impeccable)', () => {
     expect(regiaoDepoisF6).not.toBeNull()
     expect(regiaoDepoisF6).not.toBe(regiaoAntesF6)
     await page.keyboard.press('Control+j')
-    await expect(page.getByText('Fila de jobs', { exact: true })).toBeVisible()
+    const painelFila = page.getByRole('complementary', { name: 'Fila de Jobs' })
+    await expect(painelFila).toBeVisible()
     const urlAposCtrlJ = page.url()
+    await page.keyboard.press('Escape')
+    await expect(painelFila).toBeHidden()
 
     // Paleta Ctrl+K + rodapé (UI-14) + Esc restaura foco
     const gatilhoPaleta = page.getByRole('button', { name: /Abrir comandos/i })

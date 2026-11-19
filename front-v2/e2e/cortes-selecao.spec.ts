@@ -61,7 +61,7 @@ test.describe('Tela Configurador e Acompanhamento de Seleção (#/projeto/:id/co
     await page.keyboard.press('F6')
     await expect(page.locator('section[aria-label="Acompanhamento de Seleção"] :focus')).toHaveCount(1)
     await page.keyboard.press('F6')
-    await expect(page.locator('[data-regiao="rodape"]')).toBeFocused()
+    await expect(page.locator('[data-regiao="rodape"]:focus, [data-regiao="rodape"] :focus')).toHaveCount(1)
     await page.keyboard.press('Shift+F6')
     await expect(page.locator('section[aria-label="Acompanhamento de Seleção"] :focus')).toHaveCount(1)
 

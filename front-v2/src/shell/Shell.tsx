@@ -1,4 +1,5 @@
 import {
+  Botao,
   BotaoIcone,
   cn,
   ConfirmDialog,
@@ -25,10 +26,22 @@ import { flushSync } from 'react-dom'
 import { useAtalhos, usePaleta, type Atalho } from '~/comandos/atalhos'
 import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
-import { useFila, useSalvamentoEditor, type Fila } from '~/core/progresso'
+import {
+  filaPadraoExportada,
+  useFila,
+  useSalvamentoEditor,
+  type Fila,
+} from '~/core/progresso'
 import { resolver, type Rota } from '~/rotas/rotas'
 import { FechamentoJanela } from '~/shell/FechamentoJanela'
 import { FolhaAtalhos } from '~/shell/FolhaAtalhos'
+import {
+  criarStoreFilaGlobal,
+  storeFilaGlobal,
+  useFilaGlobal,
+} from '~/stores/filaGlobal'
+import { nomeHumanoKind } from '~/telas/fila/DialogosFila'
+import { PainelFilaJobs } from '~/telas/fila/PainelFilaJobs'
 
 export type ProjetoAtual = {
   id?: string | null
@@ -253,15 +266,55 @@ export function Shell({
 
   const jobs = useFila(filaStore)
   const salvamento = useSalvamentoEditor(filaStore)
+  const storeFila = useMemo(
+    () =>
+      filaStore && filaStore !== filaPadraoExportada
+        ? criarStoreFilaGlobal({ fila: filaStore })
+        : storeFilaGlobal,
+    [filaStore],
+  )
+  useEffect(() => {
+    return () => {
+      if (storeFila !== storeFilaGlobal) {
+        storeFila.descartar()
+      }
+    }
+  }, [storeFila])
+
+  const modoMinimo = rotaAtiva.tela === 'assistente'
+  const projetoPathFila =
+    !modoMinimo && projeto ? (projeto.path ?? projeto.id ?? projeto.name) : null
+  const estadoFilaGlobal = useFilaGlobal(projetoPathFila, {
+    store: storeFila,
+    fila: filaStore,
+  })
+
   const jobsAtivos = jobs.filter((j) => j.estado === 'rodando')
-  const primeiroAtivo = jobsAtivos[0]
+  const primeiroAtivo = jobsAtivos[jobsAtivos.length - 1]
+  const ativosEmMemoriaExtras = jobsAtivos.filter(
+    (j) =>
+      !estadoFilaGlobal.operacoesGlobais.some((o) => o.id === j.id) &&
+      !estadoFilaGlobal.jobs.some((p) => String(p.id) === j.id) &&
+      (!j.id.startsWith('export-batch-') ||
+        !estadoFilaGlobal.lotesExportacao.some((l) => `export-batch-${l.id}` === j.id)),
+  ).length
+  const totalAtivosFila = estadoFilaGlobal.contagemAtivos + ativosEmMemoriaExtras
+  const rotuloPrimeiroAtivo = primeiroAtivo
+    ? primeiroAtivo.mensagem && primeiroAtivo.mensagem !== primeiroAtivo.etapa
+      ? primeiroAtivo.mensagem
+      : nomeHumanoKind(primeiroAtivo.etapa)
+    : undefined
   const resumoFila = primeiroAtivo
-    ? `${primeiroAtivo.mensagem || primeiroAtivo.etapa} · ${Math.round(primeiroAtivo.percentual)}%`
+    ? `${rotuloPrimeiroAtivo} · ${Math.round(primeiroAtivo.percentual)}%`
     : undefined
 
   const { aberta: paletaAberta, abrir: abrirPaleta } = usePaleta()
   const toast = useToast()
+  const toastRef = useRef(toast)
+  toastRef.current = toast
   const mainRef = useRef<HTMLElement>(null)
+  const refGatilhoFila = useRef<HTMLElement | null>(null)
+  const [filaAberta, setFilaAberta] = useState(false)
   const [ajudaAtalhosAberta, setAjudaAtalhosAberta] = useState(false)
   const [recentesDisponiveis, setRecentesDisponiveis] = useState<ProjetoRecente[]>([])
   const [dialogoErroSalvarAberto, setDialogoErroSalvarAberto] = useState(false)
@@ -295,7 +348,6 @@ export function Shell({
     }
   }, [salvamento])
 
-  const modoMinimo = rotaAtiva.tela === 'assistente'
   const etapa = etapaDaRota(rotaAtiva)
 
   const chaveProjeto = projeto ? `${projeto.id ?? ''}|${projeto.name}|${projeto.path ?? ''}` : null
@@ -330,19 +382,47 @@ export function Shell({
     [recentesDisponiveis],
   )
 
+  const atualizarRefGatilhoFila = useCallback(() => {
+    const raiz = mainRef.current?.closest('[data-tela]') ?? document
+    const gatilho = raiz.querySelector<HTMLElement>(
+      '[data-regiao="topo"] [aria-label^="Fila de jobs:"]',
+    )
+    if (gatilho) {
+      refGatilhoFila.current = gatilho
+    }
+  }, [])
+
   const abrirFilaPadrao = useCallback(() => {
     if (aoAbrirFila) {
       aoAbrirFila()
       return
     }
-    toast.add({
-      title: 'Fila de jobs',
-      description:
-        jobsAtivos.length > 0
-          ? `${jobsAtivos.length} tarefa(s) em andamento.`
-          : 'Nenhuma tarefa em andamento no momento.',
+    atualizarRefGatilhoFila()
+    setFilaAberta((v) => !v)
+  }, [aoAbrirFila, atualizarRefGatilhoFila])
+
+  const abrirFilaDoAlerta = useCallback(() => {
+    if (aoAbrirFila) {
+      aoAbrirFila()
+      return
+    }
+    atualizarRefGatilhoFila()
+    setFilaAberta(true)
+  }, [aoAbrirFila, atualizarRefGatilhoFila])
+
+  useEffect(() => {
+    return storeFila.registrarNotificacao((n) => {
+      toastRef.current.add({
+        type: n.tipo === 'falha' ? 'erro' : n.tipo === 'orcamento' ? 'aviso' : undefined,
+        title: n.titulo,
+        description: n.corpo,
+        actionProps: {
+          children: 'Abrir Fila',
+          onClick: abrirFilaDoAlerta,
+        },
+      })
     })
-  }, [aoAbrirFila, jobsAtivos.length, toast])
+  }, [abrirFilaDoAlerta, storeFila])
 
   const notificarErroProjeto = useCallback(
     (erro: unknown) => {
@@ -405,8 +485,11 @@ export function Shell({
     const raiz = mainRef.current?.closest('[data-tela]') ?? document
     const topo = raiz.querySelector<HTMLElement>('[data-regiao="topo"]')
     const conteudo = mainRef.current ?? raiz.querySelector<HTMLElement>('[data-regiao="conteudo"]')
+    const filaRegiao = raiz.querySelector<HTMLElement>('[data-regiao="fila"]')
     const rodape = raiz.querySelector<HTMLElement>('[data-regiao="rodape"]')
-    const regioes = [topo, conteudo, rodape].filter((el): el is HTMLElement => el !== null)
+    const regioes = [topo, conteudo, filaRegiao, rodape].filter(
+      (el): el is HTMLElement => el !== null,
+    )
     if (regioes.length === 0) return
 
     const ativo = document.activeElement
@@ -573,11 +656,44 @@ export function Shell({
       (statusSalvamento ?? (salvamento.estado === 'salvo' ? <Status tom="sucesso">Salvo</Status> : null))
     )
 
+  const alertasTopo =
+    direita ||
+    estadoFilaGlobal.pausasOrcamento.length > 0 ||
+    estadoFilaGlobal.contagemIncertos > 0 ? (
+      <>
+        {direita}
+        {estadoFilaGlobal.pausasOrcamento.length > 0 && (
+          <Botao
+            tamanho="p"
+            variante="suave"
+            onClick={abrirFilaDoAlerta}
+            aria-label="Orçamento pausado: abrir Fila de Jobs"
+          >
+            <Status tom="pausado">Orçamento pausado</Status>
+          </Botao>
+        )}
+        {estadoFilaGlobal.contagemIncertos > 0 && (
+          <Botao
+            tamanho="p"
+            variante="suave"
+            onClick={abrirFilaDoAlerta}
+            aria-label={`Alerta da Fila: ${estadoFilaGlobal.contagemIncertos} ${estadoFilaGlobal.contagemIncertos === 1 ? 'chamada incerta' : 'chamadas incertas'}`}
+          >
+            <Status tom="aviso">
+              {estadoFilaGlobal.contagemIncertos === 1
+                ? '1 incerto'
+                : `${estadoFilaGlobal.contagemIncertos} incertos`}
+            </Status>
+          </Botao>
+        )}
+      </>
+    ) : undefined
+
   return (
     <Tela
       titulo={titulo ?? tituloDaRota(rotaAtiva)}
       meio={meio}
-      direita={direita}
+      direita={alertasTopo}
       aposPaleta={
         <>
           <BotaoIcone
@@ -633,7 +749,7 @@ export function Shell({
       aoFecharProjeto={aoFecharProjeto}
       etapa={etapa}
       aoIrEtapa={aoIrEtapa}
-      fila={{ ativos: jobsAtivos.length, resumo: resumoFila }}
+      fila={{ ativos: totalAtivosFila, resumo: resumoFila }}
       aoAbrirFila={abrirFilaPadrao}
       aoAbrirPaleta={abrirPaleta}
       somenteLocal={somenteLocal}
@@ -646,10 +762,30 @@ export function Shell({
                 <>
                   {indicadorSalvamento}
                   {primeiroAtivo ? (
-                    <Status tom="rodando">
-                      <span className="truncate">{primeiroAtivo.mensagem || primeiroAtivo.etapa}</span>
-                      <span className="num text-t3">{Math.round(primeiroAtivo.percentual)}%</span>
-                    </Status>
+                    <button
+                      type="button"
+                      onClick={abrirFilaDoAlerta}
+                      className="foco flex min-w-0 cursor-pointer items-center gap-1.5 rounded-controle border-0 bg-transparent px-1 py-0.5 text-pequeno text-t2 hover:bg-area hover:text-t1"
+                    >
+                      <Status tom="rodando">
+                        <span className="truncate">{rotuloPrimeiroAtivo}</span>
+                        <span className="num text-t3">
+                          {Math.round(primeiroAtivo.percentual)}%
+                        </span>
+                      </Status>
+                    </button>
+                  ) : estadoFilaGlobal.contagemIncertos > 0 ? (
+                    <button
+                      type="button"
+                      onClick={abrirFilaDoAlerta}
+                      className="foco flex cursor-pointer items-center gap-1 rounded-controle border-0 bg-transparent px-1 py-0.5 text-pequeno text-t2 hover:bg-area hover:text-t1"
+                    >
+                      <Status tom="aviso">
+                        {estadoFilaGlobal.contagemIncertos === 1
+                          ? '1 chamada incerta na Fila'
+                          : `${estadoFilaGlobal.contagemIncertos} chamadas incertas na Fila`}
+                      </Status>
+                    </button>
                   ) : (
                     <span>Sem jobs ativos</span>
                   )}
@@ -666,17 +802,30 @@ export function Shell({
             }
       }
     >
-      <main
-        ref={mainRef}
-        data-regiao="conteudo"
-        tabIndex={-1}
-        className={cn(
-          'foco-interno flex min-h-0 flex-1 flex-col',
-          semPaddingConteudo ? 'overflow-hidden' : 'overflow-auto p-4',
+      <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
+        <main
+          ref={mainRef}
+          data-regiao="conteudo"
+          tabIndex={-1}
+          className={cn(
+            'foco-interno flex min-h-0 min-w-0 flex-1 flex-col',
+            semPaddingConteudo ? 'overflow-hidden' : 'overflow-auto p-4',
+          )}
+        >
+          {children}
+        </main>
+        {!modoMinimo && (
+          <PainelFilaJobs
+            aberto={filaAberta}
+            aoFechar={() => setFilaAberta(false)}
+            projetoAberto={projeto}
+            refRetornoFoco={refGatilhoFila}
+            estadoFila={estadoFilaGlobal}
+            store={storeFila}
+            fila={filaStore}
+          />
         )}
-      >
-        {children}
-      </main>
+      </div>
       <FechamentoJanela jobs={jobs} />
       <ConfirmDialog
         aberto={salvamento.estado === 'erro' && dialogoErroSalvarAberto}
