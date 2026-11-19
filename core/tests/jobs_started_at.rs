@@ -381,3 +381,76 @@ INSERT INTO jobs(id,kind,safety,state,attempts,progress,source_id)
     let updated = call("jobs.list", json!({}));
     assert!(find_job(&updated, new_id)["startedAtMs"].as_i64().is_some());
 }
+
+#[test]
+fn reframe_requeue_clears_started_at_ms_in_db_and_jobs_list() {
+    let guard = SessionGuard::new();
+    guard.create_project("ReframeRequeue");
+
+    let (source_id, job_id) = with_writer(|c| {
+        c.execute(
+            "INSERT INTO sources(path,size,duration_us,partial_hash,metadata,permission,audio_track)
+             VALUES ('C:/videos/reframe.mp4',100,60000000,'h1','{}','{}',0)",
+            [],
+        )?;
+        let source_id = c.last_insert_rowid();
+        // safety='paid' evita disputa com o worker em background após reframe.start reenfileirar o job.
+        c.execute(
+            "INSERT INTO jobs(kind,safety,state,source_id) VALUES ('reframe','paid','queued',?1)",
+            [source_id],
+        )?;
+        let job_id = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO reframe_suggestions(job_id,source_id,candidate_id,start_us,end_us,layout,split_ratio)
+             VALUES (?1,?2,NULL,0,10000000,'face',NULL)",
+            (job_id, source_id),
+        )?;
+        Ok((source_id, job_id))
+    })
+    .unwrap();
+
+    assert!(jobs::begin(job_id).unwrap());
+    let running_list = call("jobs.list", json!({}));
+    let running_job = find_job(&running_list, job_id);
+    assert_eq!(running_job["state"], "running");
+    assert!(running_job["startedAtMs"].as_i64().is_some());
+
+    jobs::finish(
+        job_id,
+        Err(clipes_core::CoreError {
+            code: "reframe_failed".into(),
+            message: "falha simulada".into(),
+            usage: None,
+        }),
+    )
+    .unwrap();
+
+    let status = call(
+        "reframe.start",
+        json!({
+            "requested": true,
+            "source": source_id,
+            "startUs": 0,
+            "endUs": 10_000_000
+        }),
+    );
+    assert_eq!(status["state"], "queued");
+
+    let requeued_list = call("jobs.list", json!({}));
+    let requeued_job = find_job(&requeued_list, job_id);
+    assert_eq!(requeued_job["state"], "queued");
+    assert_eq!(requeued_job["startedAtMs"], Value::Null);
+
+    let db_started_at: Option<i64> = with_reader(|c| {
+        c.query_row(
+            "SELECT started_at_ms FROM jobs WHERE id=?1",
+            [job_id],
+            |r| r.get(0),
+        )
+    })
+    .unwrap();
+    assert_eq!(
+        db_started_at, None,
+        "reframe.rs deve limpar started_at_ms no banco ao retornar o job para queued"
+    );
+}

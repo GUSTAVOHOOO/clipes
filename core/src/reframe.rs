@@ -139,7 +139,7 @@ fn start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
                 || prev_ratio.zip(split_ratio).is_some_and(|(a, b)| (a - b).abs() > 1e-6)
                 || (prev_ratio.is_some() != split_ratio.is_some());
             if matches!(state.as_str(), "failed"|"cancelled") || ((force || layout_changed) && state == "completed") {
-                tx.execute("UPDATE jobs SET state='queued',cancel_requested=0,progress=0,checkpoint=NULL WHERE id=?1", [job])?;
+                tx.execute("UPDATE jobs SET state='queued',cancel_requested=0,progress=0,checkpoint=NULL,started_at_ms=NULL WHERE id=?1", [job])?;
                 tx.execute("UPDATE reframe_suggestions SET layout=?2,split_ratio=?3,timeline=NULL,secondary_timeline=NULL,error_code=NULL WHERE id=?1", (id, layout, split_ratio))?;
             }
             tx.commit()?;
