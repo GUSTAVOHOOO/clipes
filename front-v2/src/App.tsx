@@ -1,6 +1,7 @@
 import { Esqueleto, EstadoTela, ProvedorDicas, ProvedorToast, useToast } from '@ds'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { ProvedorAtalhos } from '~/comandos/atalhos'
+import { definirProjetoConsole, iniciarConsole } from '~/core/console'
 import { definirProjetoDaFila, iniciarProgresso } from '~/core/progresso'
 import { aplicarPreferencias } from '~/preferencias/aplicarPreferencias'
 import { usePreferencias } from '~/preferencias/preferencias'
@@ -573,8 +574,10 @@ function AppInterno() {
 
   useEffect(() => {
     definirProjetoDaFila(projetoId)
+    definirProjetoConsole(projetoId)
     return () => {
       definirProjetoDaFila(null)
+      definirProjetoConsole(null)
     }
   }, [projetoId])
 
@@ -589,6 +592,7 @@ function AppInterno() {
 
   useEffect(() => {
     let parar = () => {}
+    let pararConsole = () => {}
     let cancelado = false
     iniciarProgresso()
       .then((fn) => {
@@ -596,9 +600,16 @@ function AppInterno() {
         else parar = fn
       })
       .catch(() => {})
+    iniciarConsole()
+      .then((fn) => {
+        if (cancelado) fn()
+        else pararConsole = fn
+      })
+      .catch(() => {})
     return () => {
       cancelado = true
       parar()
+      pararConsole()
     }
   }, [])
 
