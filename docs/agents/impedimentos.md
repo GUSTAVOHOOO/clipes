@@ -43,6 +43,11 @@ Formato: **sintoma → causa → ação**. Acrescente uma entrada quando resolve
 - **Causa:** `front-v2/vite.config.ts` usa `port: 1430` com `strictPort`, e `front-v2/playwright.config.ts` reaproveita o servidor existente fora do CI. Dois worktrees não rodam o Playwright local ao mesmo tempo.
 - **Ação:** nunca encerre o Vite de outro worktree. Faça o push e use os jobs `e2e` do CI como critério; rode o Playwright local quando `Get-NetTCPConnection -LocalPort 1430` voltar vazio.
 
+### Worker parado horas em "Aguardando..." com Vitest travado
+- **Sintoma:** o worker aparece com liveness `unverifiable` e some da lista `liveness=live`. O terminal mostra um `bunx vitest run ...` com horário de início antigo, e o worktree tem horas de trabalho sem commit. O processo `node ... vitest.mjs` desse worktree continua vivo, com centenas de MB.
+- **Causa:** um teste ou componente entra em loop infinito (por exemplo, um `useEffect` que atualiza o estado de que depende, ou um array/objeto recriado a cada render nas deps), e o Vitest nunca termina. O agente espera o comando e não reporta. Em 19/11 o #366 ficou 2 h assim.
+- **Ação:** o coordenador lê o terminal com `orca terminal read --screen` e acha o processo com `Get-CimInstance Win32_Process` filtrando pelo caminho do worktree na linha de comando. Encerra só os processos desse worktree e manda `send` ao worker com a causa provável. O worker roda o arquivo isolado com `--maxWorkers=1 --testTimeout=20000`, corrige a causa no componente e commita com frequência.
+
 ### Decisão que não está no ticket nem nos ADRs
 - **Ação:** o worker pergunta via `ask`; o coordenador leva ao dev e não decide sozinho. A resposta vira registro no PR (ADR curto ou seção de doc).
 - **Já decidido:** o seam do núcleo usa um crate Rust sem Tauri, registro de comandos por módulo com `inventory`, despacho único (nome + JSON) para UI e harness, `ProgressEvent` tipado e `core::process::spawn` sem shell (PR #86). O identificador do app é `io.github.gustavohooo.clipes`.
