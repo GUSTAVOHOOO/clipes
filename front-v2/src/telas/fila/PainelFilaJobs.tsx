@@ -353,7 +353,10 @@ export function PainelFilaJobs({
 
   const aoTeclarNoPainel = useCallback(
     (e: KeyboardEvent<HTMLElement>) => {
-      if (e.key !== 'Escape' || e.defaultPrevented) return
+      if (e.key !== 'Escape') return
+      // A dica de um botão (tooltip) já trata o Esc e marca defaultPrevented; isso não
+      // pode impedir de fechar a Fila. Só cede quando há popover/menu aberto dentro dela.
+      if (e.currentTarget.querySelector('[aria-haspopup][aria-expanded="true"]')) return
       const temModal = Array.from(
         document.querySelectorAll('[role="dialog"], [role="alertdialog"]'),
       ).some((el) => !el.closest('[aria-label="Notifications"]'))
@@ -589,7 +592,7 @@ export function PainelFilaJobs({
         aria-label="Fila de Jobs"
         data-regiao="fila"
         tabIndex={-1}
-        onKeyDown={aoTeclarNoPainel}
+        onKeyDownCapture={aoTeclarNoPainel}
         className="foco-interno flex h-full w-[470px] max-w-[calc(100vw-32px)] shrink-0 flex-col border-l border-linha bg-area min-[1440px]:w-[560px]"
       >
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-linha px-4 py-2.5">

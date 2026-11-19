@@ -468,6 +468,34 @@ describe('PainelFilaJobs', () => {
     expect(gatilhoRef.current).toHaveFocus()
   })
 
+  it('Esc fecha a gaveta mesmo com a dica do botao Fechar aberta apos Tab (UI-80)', async () => {
+    chamarMock.mockResolvedValue([])
+    const user = userEvent.setup()
+    const aoFechar = vi.fn()
+    const fila = criarFila(() => null)
+    const store = criarStoreFilaGlobal({ fila, debounceMs: 0 })
+
+    render(
+      envolver(
+        <PainelFilaJobs
+          aberto
+          aoFechar={aoFechar}
+          projetoAberto={null}
+          refRetornoFoco={createRef<HTMLElement>()}
+          store={store}
+          fila={fila}
+        />,
+      ),
+    )
+
+    const aside = screen.getByRole('complementary', { name: 'Fila de Jobs' })
+    const btnFechar = within(aside).getByRole('button', { name: /Fechar Fila/i })
+    await user.tab()
+    await waitFor(() => expect(btnFechar).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(aoFechar).toHaveBeenCalledTimes(1))
+  })
+
   it('cobre filtros por aba, estado partial de lote de exportação e ETA determinístico observado desde 0%', async () => {
     const user = userEvent.setup()
     let agora = 0
