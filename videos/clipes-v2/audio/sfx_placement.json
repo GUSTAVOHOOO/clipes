@@ -373,6 +373,18 @@
    "gain_db": -14.87,
    "start_s": 27.9389,
    "what": "'Open source · Apache-2.0'"
+  },
+  {
+   "t": 29.0002,
+   "mark": "snip",
+   "role": "click",
+   "sound": "fit/click/floss_lid",
+   "take": "click_2.wav",
+   "pan": -0.45,
+   "bed_lufs": -24.4,
+   "gain_db": -5.76,
+   "start_s": 28.985,
+   "what": "a tesoura da marca dá um corte"
   }
  ]
 }

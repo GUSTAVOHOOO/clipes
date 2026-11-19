@@ -92,7 +92,8 @@
     "cta": 52,
     "url": 54,
     "lic": 56,
-    "done": 60
+    "done": 60,
+    "snip": 58
   },
   "sfx": [
     {
@@ -442,6 +443,19 @@
         0.79,
         0.62,
         0.85
+      ]
+    },
+    {
+      "at": "snip",
+      "type": "click",
+      "kit": "click",
+      "gain": 0.6,
+      "what": "a tesoura da marca dá um corte",
+      "roi16": [
+        0.05,
+        0.08,
+        0.2,
+        0.3
       ]
     }
   ],

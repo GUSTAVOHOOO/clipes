@@ -5,22 +5,22 @@ Mundo da marca (`design-system-v2/src/tokens/tokens.css`): "Linear/Raycast (graf
 ## Paleta (medida no código, tema escuro, o padrão do app)
 | Token | Hex | Fonte | Uso no filme |
 |---|---|---|---|
-| `--chao` | #0f1012 | tokens.css:13 | fundo do filme, primeiro e último quadro |
-| `--area` | #141518 | tokens.css:14 | planos de fundo das capturas, faixas |
+| `--chao` | #0f1012 | tokens.css:13 | fundo das janelas (o próprio app) e sombra do gancho 9:16 |
+| `--area` | #141518 | tokens.css:14 | fundo do palco e do cartão final (primeiro e último quadro) |
 | `--elevado` | #1a1b1f | tokens.css:15 | pílulas (v2.0.0, plataformas) |
 | `--linha` | #24252a | tokens.css:17 | divisória rara, 1 px |
 | `--t1` | #ececee | tokens.css:23 | tipografia principal |
 | `--t2` | #a1a1a8 | tokens.css:24 | eyebrows, sublinhas |
 | `--t3` | #8a8a92 | tokens.css:25 | metadados |
-| `--sinal` | #ff5a1f | tokens.css:28 | **a única cor**: palavra-chave, logo, cobertura do plano 6 |
-| `--sinal-texto` | #ff6a33 | tokens.css:29 | sinal usado como texto (palavra de acento) |
+| `--sinal` | #ff5a1f | tokens.css:28 | **a única cor**: só nos botões primários reais do app, na luz do botão que cobre o quadro no plano 6 e no ícone da marca |
+| `--sinal-texto` | #ff6a33 | tokens.css:29 | não usado (a rodada 1 mostrou que acento laranja no texto + botão laranja na UI quebra a Luz Única) |
 | `--sombra-flutuante` | 0 12px 32px rgb(0 0 0/.45) | tokens.css:38 | base da sombra de contato das telas inclinadas |
 
-**Regra da Luz Única.** Um único elemento laranja por quadro "ligado" (`.bg-sinal`). Quando o botão real laranja está em quadro (Aprovar, Exportar Corte, Exportar em lote), a tipografia do plano não usa acento laranja. Nos planos 4 e 6 o acento muda para peso 600 em `--t1`. A mídia de demonstração é cinza-azulada (#121317 / #262a33 / #c9ccd3) para não competir com o sinal.
+**Regra da Luz Única.** Um único elemento laranja "ligado" por quadro. A UI real já tem o seu (o botão primário de cada tela), então a tipografia do filme não usa laranja: a ênfase é `--t1` (branco) sobre o resto do bloco em `--t2` (cinza). No cartão final a única luz é o ícone Scissors; a faixa de telas ao fundo fica em cinza (saturate 0). O fundo do palco é `--area` (#141518), um degrau acima do `--chao` das capturas, para a sombra de contato das janelas aparecer. A mídia de demonstração é cinza (#111215 / #1f232b / #8f949e) para não competir com o sinal.
 
 ## Tipografia
 - Uma família, a da marca: **Inter Variable** (`@fontsource-variable/inter` 5.3.0, OFL-1.1, arquivos em `assets/fonts/`), `--fonte` em tokens.css:102. Display: peso 600, tracking −0.02em (o app usa −0.01em no título; ampliado, o display aperta um pouco). Eyebrow: peso 500, `--t2`.
-- Tamanhos a 1080p: display 92 px (16:9) / 84 px (9:16); eyebrow 34 px / 36 px; nada lido abaixo de 28 px.
+- Tamanhos a 1080p: display 92 px (16:9) / 116 px (9:16); eyebrow 42 px / 50 px; CTA 104 px / 96 px (a linha mais legível do filme); URL 52 / 46 px; nada lido abaixo de 38 px.
 - Caixa de frase, pontuação do app (ponto final nas frases, "·" como separador, "×" e "−" tipográficos).
 - A legenda do Corte é a **legenda real** do renderizador do app (fonte "Clipes Noto Sans", contorno 6, capturada), não tipografia do filme.
 

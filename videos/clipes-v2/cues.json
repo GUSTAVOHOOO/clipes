@@ -374,6 +374,18 @@
    "snapped_to_hit": true,
    "snap_ms": 0,
    "what": "'Open source · Apache-2.0'"
+  },
+  {
+   "t": 29.00015,
+   "type": "click",
+   "gain": 0.6,
+   "pitch": 1.021,
+   "pan": 0.234,
+   "beat": 58,
+   "mark": "snip",
+   "snapped_to_hit": true,
+   "snap_ms": 0,
+   "what": "a tesoura da marca dá um corte"
   }
  ]
 }
