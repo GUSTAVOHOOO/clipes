@@ -96,6 +96,13 @@ function montarUrlIssue(template: string, title: string, body: string): string {
   return `${URL_BASE_ISSUES}?${params.toString()}`
 }
 
+function rotuloPrecisao(computeType: string): string {
+  if (computeType === 'int8_float16') return 'precisão equilibrada'
+  if (computeType === 'float16') return 'precisão máxima'
+  if (computeType === 'int8') return 'modo econômico'
+  return computeType
+}
+
 function formatarResumoSonda(sonda: SondaHardwareRegistro): string {
   const gpu = sonda.key.gpu ?? 'CPU (sem GPU compatível)'
   const driver = sonda.key.driver ? `driver ${sonda.key.driver}` : 'sem driver'
@@ -473,7 +480,7 @@ export function Relatos({ tipoInicial }: RelatosProps) {
           </dd>
           <dt className="text-t3">Escolha verificada</dt>
           <dd className="num m-0 text-t1">
-            {sondaExibida.chosen.device === 'cuda' ? 'Placa de vídeo' : 'Processador'} · precisão {sondaExibida.chosen.compute_type}{' '}
+            {sondaExibida.chosen.device === 'cuda' ? 'Placa de vídeo' : 'Processador'} · {rotuloPrecisao(sondaExibida.chosen.compute_type)}{' '}
             ({sondaExibida.verified ? 'verificado' : 'não verificado'})
           </dd>
           <dt className="text-t3">Lote / VRAM livre</dt>

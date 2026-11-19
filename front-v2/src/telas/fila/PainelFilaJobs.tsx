@@ -35,7 +35,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent,
   type RefObject,
 } from 'react'
 import { formatarTecla } from '~/comandos/atalhos'
@@ -60,6 +59,7 @@ import {
   DialogoRefazerJob,
   DialogoResultadoJob,
   DialogoTentarDeNovo,
+  definirDialogoFilaAberto,
   rotuloLoteFontes,
   rotuloPerfilVisivel,
   nomeHumanoKind,
@@ -353,22 +353,45 @@ export function PainelFilaJobs({
     [jobsIncertos],
   )
 
-  const aoTeclarNoPainel = useCallback(
-    (e: KeyboardEvent<HTMLElement>) => {
+  const temDialogoAberto =
+    aberto &&
+    (jobRetry !== null ||
+      jobDiscard !== null ||
+      jobRedo !== null ||
+      jobResultado !== null ||
+      orcamentoDialogo !== null ||
+      jobCancelarPago !== null ||
+      loteCancelarFontes !== null ||
+      loteCancelarExport !== null ||
+      confirmacaoItem !== null)
+
+  useEffect(() => {
+    definirDialogoFilaAberto(temDialogoAberto)
+    return () => {
+      definirDialogoFilaAberto(false)
+    }
+  }, [temDialogoAberto])
+
+  useEffect(() => {
+    if (!aberto) return
+    const aoTeclar = (e: globalThis.KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      // A dica de um botão (tooltip) já trata o Esc e marca defaultPrevented; isso não
-      // pode impedir de fechar a Fila. Só cede quando há popover/menu aberto dentro dela.
-      if (e.currentTarget.querySelector('[aria-haspopup][aria-expanded="true"]')) return
       const temModal = Array.from(
         document.querySelectorAll('[role="dialog"], [role="alertdialog"]'),
-      ).some((el) => !el.closest('[aria-label="Notifications"]'))
+      ).some((el) => !el.closest('[aria-label="Notifications"], [data-nao-modal]'))
       if (temModal) return
+      // A dica de um botão (tooltip) já trata o Esc e marca defaultPrevented; isso não
+      // pode impedir de fechar a Fila. Só cede quando há modal/popover/menu aberto.
+      if (document.querySelector('[aria-haspopup][aria-expanded="true"]')) {
+        return
+      }
       e.preventDefault()
       e.stopPropagation()
       fecharDevolvendoFoco()
-    },
-    [fecharDevolvendoFoco],
-  )
+    }
+    window.addEventListener('keydown', aoTeclar, { capture: true })
+    return () => window.removeEventListener('keydown', aoTeclar, { capture: true })
+  }, [aberto, fecharDevolvendoFoco])
 
   const cancelarJobPersistido = useCallback(
     async (job: JobPersistido) => {
@@ -609,7 +632,6 @@ export function PainelFilaJobs({
         aria-label="Fila de Jobs"
         data-regiao="fila"
         tabIndex={-1}
-        onKeyDownCapture={aoTeclarNoPainel}
         className="foco-interno flex h-full w-[470px] max-w-[calc(100vw-32px)] shrink-0 flex-col border-l border-linha bg-area min-[1440px]:w-[560px]"
       >
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-linha px-4 py-2.5">

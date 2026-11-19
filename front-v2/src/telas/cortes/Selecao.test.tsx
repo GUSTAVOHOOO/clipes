@@ -6,12 +6,14 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { ProvedorAtalhos } from '~/comandos/atalhos'
 import { ErroCore } from '~/core/cliente'
 import { criarFila, type Fila } from '~/core/progresso'
+import { criarStoreFilaGlobal } from '~/stores/filaGlobal'
 import {
   criarStoreFontesProjeto,
   type FonteProjeto,
   type StoreFontesProjeto,
 } from '~/stores/fontesProjeto'
 import { Selecao } from '~/telas/cortes/Selecao'
+import { PainelFilaJobs } from '~/telas/fila/PainelFilaJobs'
 
 const chamarMock = vi.fn()
 let filaTeste: Fila = criarFila(() => 'demo')
@@ -979,5 +981,132 @@ describe('Tela Configurador e Acompanhamento de Seleção (#/projeto/:id/cortes)
     const btnTranscricao = screen.getByRole('button', { name: 'Ver Transcrição' })
     expect(btnTranscricao.textContent?.trim()).toBe('Ver Transcrição')
     expect(btnTranscricao.querySelector('svg')).not.toBeNull()
+  })
+
+  it('UI-90: F6 e Shift+F6 incluem [data-regiao="fila"] entre Acompanhamento e Rodapé quando a Fila está aberta', async () => {
+    mockSelecaoBase()
+    render(
+      envolver(
+        <div>
+          <header data-regiao="topo">
+            <button type="button">Botão Topo</button>
+          </header>
+          <main data-regiao="conteudo">
+            <Selecao
+              projetoId="demo"
+              projetoPath="/projetos/Demo.clipes"
+              storeFontes={storeFontes}
+              fila={filaTeste}
+            />
+          </main>
+          <aside data-regiao="fila" tabIndex={-1}>
+            <button type="button">Atualizar fila</button>
+          </aside>
+          <footer data-regiao="rodape">
+            <button type="button">Botão Rodapé</button>
+          </footer>
+        </div>,
+      ),
+    )
+
+    const configurador = await screen.findByRole('complementary', { name: 'Configurador de Seleção' })
+    const acompanhamento = screen.getByRole('region', { name: 'Acompanhamento de Seleção' })
+    const topo = document.querySelector('[data-regiao="topo"]')!
+    const fila = document.querySelector('[data-regiao="fila"]')!
+    const rodape = document.querySelector('[data-regiao="rodape"]')!
+
+    await screen.findByRole('radio', { name: /Corte direto/i })
+
+    const fireF6 = (shiftKey = false) => {
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F6', shiftKey, cancelable: true }))
+      })
+    }
+
+    fireF6()
+    expect(topo.contains(document.activeElement)).toBe(true)
+
+    fireF6()
+    expect(configurador.contains(document.activeElement)).toBe(true)
+
+    fireF6()
+    expect(acompanhamento.contains(document.activeElement)).toBe(true)
+
+    fireF6()
+    expect(fila.contains(document.activeElement)).toBe(true)
+
+    fireF6()
+    expect(rodape.contains(document.activeElement)).toBe(true)
+
+    fireF6(true)
+    expect(fila.contains(document.activeElement)).toBe(true)
+  })
+
+  it('UI-84: com diálogo da Fila aberto sobre Cortes, "Selecionar Cortes" perde bg-sinal mantendo apenas 1 .bg-sinal visível', async () => {
+    const user = userEvent.setup()
+    mockSelecaoBase({
+      'jobs.list': () => [
+        {
+          id: 2,
+          kind: 'ai:selection',
+          safety: 'paid',
+          state: 'uncertain',
+          attempts: 1,
+          checkpoint: null,
+          progress: 0,
+          project: 'demo',
+          outcome: 'uncertain',
+          cost: 'unknown',
+          batch: null,
+          profile: 'legacy',
+          budgetPause: null,
+        },
+      ],
+      'jobs.estimate': () => ({
+        safety: 'paid',
+        estimate: { kind: 'usd', minMicroUsd: 20_000, maxMicroUsd: 40_000, inputTokens: 2000 },
+      }),
+      'batches.list': () => [],
+      'export.batch.list': () => [],
+      'jobs.budget.get': () => ({ budgets: [] }),
+    })
+
+    const storeFila = criarStoreFilaGlobal({ fila: filaTeste, debounceMs: 0 })
+
+    render(
+      envolver(
+        <div className="flex">
+          <Selecao
+            projetoId="demo"
+            projetoPath="/projetos/Demo.clipes"
+            storeFontes={storeFontes}
+            fila={filaTeste}
+          />
+          <PainelFilaJobs
+            aberto
+            aoFechar={vi.fn()}
+            projetoAberto={{ id: 'demo', name: 'Demo', path: '/projetos/Demo.clipes' }}
+            store={storeFila}
+            fila={filaTeste}
+          />
+        </div>,
+      ),
+    )
+
+    const btnDisparar = await screen.findByRole('button', { name: 'Selecionar Cortes' })
+    expect(btnDisparar.className).toContain('bg-sinal')
+
+    await user.click(await screen.findByRole('button', { name: /Ver estimativa e repetir/i }))
+    const dlg = await screen.findByRole('alertdialog')
+    await waitFor(() => {
+      expect(btnDisparar.className).not.toContain('bg-sinal')
+    })
+    expect(document.querySelectorAll('button.bg-sinal')).toHaveLength(1)
+
+    await user.click(within(dlg).getByRole('button', { name: 'Cancelar' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+      expect(btnDisparar.className).toContain('bg-sinal')
+    })
   })
 })

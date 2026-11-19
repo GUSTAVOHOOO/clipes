@@ -57,7 +57,7 @@ em `fontsdir`. Não há CDN nem seleção de fontes do sistema.
 
 Tears of Steel, © Blender Foundation, 2012. Filme original: [mango.blender.org](https://mango.blender.org/). Licença [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/). Os arquivos em `design-system/src/data/img/` são quadros reduzidos e recortados do filme, usados apenas na demonstração do editor; o áudio e as falas derivam do mesmo filme.
 
-## Clipe da sonda de hardware
+## Corte da sonda de hardware
 
 Os arquivos `worker/src/clipes_worker/data/probe-pt.wav` e `probe-en.wav` (9 s cada, WAV 16 kHz mono) são recortes usados pela sonda de hardware da Transcrição:
 

@@ -735,4 +735,38 @@ describe('PainelFilaJobs', () => {
     expect(within(card21).getByText(/live_sabado\.mp4/)).toBeInTheDocument()
     expect(within(card21).queryByText(/decorrido/i)).not.toBeInTheDocument()
   })
+
+  it('UI-90: Esc fecha a Fila mesmo quando o foco saiu da gaveta por F6', async () => {
+    chamarMock.mockResolvedValue([])
+    const aoFechar = vi.fn()
+    const fila = criarFila(() => null)
+    const store = criarStoreFilaGlobal({ fila, debounceMs: 0 })
+
+    render(
+      envolver(
+        <>
+          <PainelFilaJobs
+            aberto
+            aoFechar={aoFechar}
+            projetoAberto={null}
+            refRetornoFoco={createRef<HTMLElement>()}
+            store={store}
+            fila={fila}
+          />
+          <footer data-regiao="rodape">
+            <button type="button">Botão Rodapé</button>
+          </footer>
+        </>,
+      ),
+    )
+
+    const btnRodape = screen.getByRole('button', { name: 'Botão Rodapé' })
+    btnRodape.focus()
+    expect(btnRodape).toHaveFocus()
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await waitFor(() => {
+      expect(aoFechar).toHaveBeenCalledTimes(1)
+    })
+  })
 })

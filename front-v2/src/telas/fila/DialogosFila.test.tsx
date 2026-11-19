@@ -1,7 +1,7 @@
 import { ProvedorDicas, ProvedorToast } from '@ds'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ErroCore } from '~/core/cliente'
 import type { JobPersistido, OrcamentoItem } from '~/stores/filaGlobal'
@@ -479,5 +479,75 @@ describe('rotulos humanos da Fila (UI-86)', () => {
     expect(rotuloLoteFontes('sources-3')).toBe('Lote de Fontes 3')
     expect(rotuloPerfilVisivel('codex', 'codex')).toBe('Codex')
     expect(rotuloPerfilVisivel('legacy', 'legacy')).toBe('Perfil configurado')
+  })
+
+  it('UI-86: rotuloEscopoOrcamento traduz batch sources-3 sem expor "sources-3"', async () => {
+    const { rotuloEscopoOrcamento } = await import('~/telas/fila/DialogosFila')
+    expect(rotuloEscopoOrcamento({ scope: 'batch', key: 'sources-3' })).toBe('Lote de Fontes 3')
+    expect(rotuloEscopoOrcamento({ scope: 'task', key: 'selection' })).toBe('Tarefa: Seleção de Cortes')
+  })
+
+  it('UI-82: DialogoTentarDeNovo mantem ConfirmDialog montado antes de receber job e foca Cancelar na transicao', async () => {
+    const user = userEvent.setup()
+    chamarMock.mockResolvedValue({
+      safety: 'paid',
+      estimate: { kind: 'usd', minMicroUsd: 10_000, maxMicroUsd: 20_000, inputTokens: 1000 },
+    })
+
+    function Cena() {
+      const [job, setJob] = useState<JobPersistido | null>(null)
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => setJob(criarJobBase({ id: 44, safety: 'paid', state: 'uncertain' }))}
+          >
+            Ver estimativa e repetir
+          </button>
+          <DialogoTentarDeNovo
+            aberto={job !== null}
+            job={job}
+            aoFechar={() => setJob(null)}
+          />
+        </>
+      )
+    }
+
+    render(envolver(<Cena />))
+    const gatilho = screen.getByRole('button', { name: 'Ver estimativa e repetir' })
+    expect(document.querySelector('[aria-hidden]') !== null || screen.queryByRole('alertdialog') === null).toBe(true)
+
+    await user.click(gatilho)
+    const dlg = await screen.findByRole('alertdialog')
+    await waitFor(() => {
+      expect(within(dlg).getByRole('button', { name: 'Cancelar' })).toHaveFocus()
+    })
+  })
+
+  it('UI-91: botão Fechar de DialogoResultadoJob não usa variante primaria (.bg-sinal)', async () => {
+    chamarMock.mockResolvedValue({
+      outcome: 'ok',
+      code: 'ok',
+      cost: 'consome a cota do plano',
+      calls: 1,
+      usage: { inputTokens: 100, outputTokens: 20, calls: 1, costKind: 'plan_quota' },
+      data: { blocks: [] },
+      violations: [],
+    })
+
+    render(
+      envolver(
+        <DialogoResultadoJob
+          aberto
+          job={criarJobBase({ id: 55, kind: 'ai:script', state: 'completed', profile: 'codex' })}
+          aoFechar={vi.fn()}
+        />,
+      ),
+    )
+
+    const dlg = await screen.findByRole('dialog', { name: /Resultado do job #55/i })
+    const btnFecharRodape = within(dlg).getAllByRole('button', { name: 'Fechar' }).at(-1)!
+    expect(btnFecharRodape.className).not.toContain('bg-sinal')
+    expect(btnFecharRodape.className).toContain('bg-elevado')
   })
 })
