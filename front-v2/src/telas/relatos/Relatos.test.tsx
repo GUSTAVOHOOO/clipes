@@ -298,7 +298,7 @@ describe('Relatos (#/relatos)', () => {
 
     renderRelatos()
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      /Não foi possível ler o histórico local de sonda de hardware/i,
+      /Não foi possível ler ou salvar as configurações locais/i,
     )
 
     await user.click(screen.getByRole('button', { name: /Revisar relato antes de enviar/i }))

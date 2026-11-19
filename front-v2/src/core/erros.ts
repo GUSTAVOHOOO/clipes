@@ -625,8 +625,338 @@ export const TABELA_ERROS: Record<string, MensagemErro> = {
     recuperacao: { rotulo: 'Recarregar diagnóstico padrão', acao: 'recarregar' },
   },
   settings: {
-    titulo: 'Não foi possível ler o histórico local de sonda de hardware.',
+    titulo: 'Não foi possível ler ou salvar as configurações locais.',
     recuperacao: { rotulo: 'Tentar novamente', acao: 'recarregar' },
+  },
+  // Worker Python, Componentes, Catálogo, Hardware e Atualizações
+  worker_start: {
+    titulo: 'Não foi possível iniciar o ambiente Python isolado (worker); reinstale-o em Componentes.',
+    recuperacao: { rotulo: 'Instalar componente', rota: '#/config/componentes', acao: 'instalar-componente' },
+  },
+  worker_crashed: {
+    titulo: 'O ambiente Python isolado (worker) encerrou inesperadamente durante o processamento.',
+    recuperacao: { rotulo: 'Abrir Componentes', rota: '#/config/componentes' },
+  },
+  worker_timeout: {
+    titulo: 'O ambiente Python isolado (worker) demorou demais para responder ao iniciar.',
+    recuperacao: { rotulo: 'Abrir Componentes', rota: '#/config/componentes' },
+  },
+  worker_internal: {
+    titulo: 'Ocorreu um erro interno no ambiente Python isolado (worker).',
+  },
+  worker_error: {
+    titulo: 'O ambiente Python isolado (worker) respondeu com uma falha inesperada.',
+  },
+  worker_protocol: {
+    titulo: 'O ambiente Python isolado (worker) enviou uma resposta fora do formato esperado.',
+    recuperacao: { rotulo: 'Instalar componente', rota: '#/config/componentes', acao: 'instalar-componente' },
+  },
+  protocol_mismatch: {
+    titulo: 'O ambiente Python isolado (worker) usa outra versão de protocolo; reinstale-o em Componentes.',
+    recuperacao: { rotulo: 'Instalar componente', rota: '#/config/componentes', acao: 'instalar-componente' },
+  },
+  already_downloading: {
+    titulo: 'Já existe um download ou instalação deste Componente em andamento.',
+  },
+  already_running: {
+    titulo: 'A medição de hardware já está em andamento.',
+  },
+  unknown_component: {
+    titulo: 'Este Componente não está disponível para instalação automática neste sistema.',
+    recuperacao: { rotulo: 'Abrir Componentes', rota: '#/config/componentes' },
+  },
+  download: {
+    titulo: 'Falha ao baixar o arquivo do Componente ou modelo. Você pode retomar de onde parou.',
+    recuperacao: { rotulo: 'Abrir Componentes', rota: '#/config/componentes' },
+  },
+  hash_mismatch: {
+    titulo: 'A verificação de integridade (SHA-256) do arquivo falhou; o download foi descartado.',
+    recuperacao: { rotulo: 'Abrir Componentes', rota: '#/config/componentes' },
+  },
+  install: {
+    titulo: 'Não foi possível concluir a instalação do Componente ou modelo no disco.',
+    recuperacao: { rotulo: 'Abrir Componentes', rota: '#/config/componentes' },
+  },
+  invalid_ffmpeg: {
+    titulo: 'FFmpeg ou FFprobe inválido ou não encontrado no caminho informado.',
+    recuperacao: { rotulo: 'Abrir Componentes', rota: '#/config/componentes' },
+  },
+  component_integrity: {
+    titulo: 'A verificação de integridade do Componente falhou. Reinstale-o para continuar.',
+    recuperacao: { rotulo: 'Instalar componente', rota: '#/config/componentes', acao: 'instalar-componente' },
+  },
+  catalog_invalid: {
+    titulo: 'O catálogo remoto de modelos é inválido; mantendo o catálogo embutido.',
+  },
+  catalog_io: {
+    titulo: 'Não foi possível salvar no disco o catálogo de modelos.',
+    recuperacao: { rotulo: 'Abrir Armazenamento', rota: '#/config/componentes' },
+  },
+  catalog_network: {
+    titulo: 'Não foi possível consultar o catálogo remoto de modelos.',
+  },
+  catalog_rollback: {
+    titulo: 'A versão do catálogo remoto é menor que a conhecida; atualização recusada por segurança.',
+  },
+  catalog_signature_invalid: {
+    titulo: 'A assinatura do catálogo remoto não pôde ser verificada; mantendo o catálogo embutido.',
+  },
+  update_checksum: {
+    titulo: 'A lista de hashes da atualização do Componente é inválida.',
+    recuperacao: { rotulo: 'Abrir Componentes', rota: '#/config/componentes' },
+  },
+  update_failed: {
+    titulo: 'Não foi possível instalar a atualização do Componente.',
+    recuperacao: { rotulo: 'Abrir Componentes', rota: '#/config/componentes' },
+  },
+  update_io: {
+    titulo: 'Não foi possível verificar ou preparar os arquivos de atualização do Componente no disco.',
+    recuperacao: { rotulo: 'Abrir Componentes', rota: '#/config/componentes' },
+  },
+  update_key: {
+    titulo: 'A chave de verificação da assinatura da atualização do Componente é inválida.',
+    recuperacao: { rotulo: 'Abrir Componentes', rota: '#/config/componentes' },
+  },
+  update_network: {
+    titulo: 'Não foi possível consultar ou baixar a atualização do Componente.',
+    recuperacao: { rotulo: 'Abrir Componentes', rota: '#/config/componentes' },
+  },
+  update_restore: {
+    titulo: 'A atualização falhou e não foi possível restaurar a versão anterior do yt-dlp.',
+    recuperacao: { rotulo: 'Abrir Componentes', rota: '#/config/componentes' },
+  },
+  update_signature: {
+    titulo: 'A assinatura digital da atualização do Componente é inválida.',
+    recuperacao: { rotulo: 'Abrir Componentes', rota: '#/config/componentes' },
+  },
+  gpu_unavailable: {
+    titulo: 'Placa NVIDIA ou aceleração CUDA não está disponível para o Motor de transcrição local.',
+    recuperacao: { rotulo: 'Ajustar hardware', rota: '#/config/componentes' },
+  },
+  ram_insufficient: {
+    titulo: 'Memória RAM insuficiente para executar este modelo na CPU.',
+    recuperacao: { rotulo: 'Ajustar hardware', rota: '#/config/componentes' },
+  },
+  hardware_store: {
+    titulo: 'Não foi possível gravar as configurações de hardware para transcrição.',
+  },
+  probe_timeout: {
+    titulo: 'A sonda de hardware ultrapassou o tempo limite.',
+  },
+  // Provedores, CLI, Custos e Orçamento
+  cli: {
+    titulo: 'Falha ao executar o Provedor via CLI. Verifique a instalação e o modelo configurado.',
+    recuperacao: { rotulo: 'Configurar Provedores', rota: '#/config/provedores' },
+  },
+  cli_unavailable: {
+    titulo: 'Não foi possível iniciar o CLI do Provedor. Verifique se ele está instalado no sistema.',
+    recuperacao: { rotulo: 'Configurar Provedores', rota: '#/config/provedores' },
+  },
+  cli_model_unavailable: {
+    titulo: 'O modelo escolhido no OpenCode CLI não está disponível no modo isolado.',
+    recuperacao: { rotulo: 'Configurar Provedores', rota: '#/config/provedores' },
+  },
+  cli_free_limit: {
+    titulo: 'A cota gratuita do Provedor via CLI foi atingida. Tente mais tarde ou escolha outro Perfil.',
+    recuperacao: { rotulo: 'Refazer com outro Perfil', acao: 'refazer-outro-perfil' },
+  },
+  unsupported_cli: {
+    titulo: 'A versão instalada do CLI do Provedor não oferece suporte ao modo isolado exigido pelo Clipes.',
+    recuperacao: { rotulo: 'Configurar Provedores', rota: '#/config/provedores' },
+  },
+  not_local: {
+    titulo: 'Esta Tarefa de IA exige um Provedor local e não pode usar um Provedor externo.',
+    recuperacao: { rotulo: 'Escolher Perfil local', rota: '#/config/provedores' },
+  },
+  provider_http: {
+    titulo: 'O Provedor rejeitou a requisição (erro HTTP).',
+    recuperacao: { rotulo: 'Refazer com outro Perfil', acao: 'refazer-outro-perfil' },
+  },
+  request_too_large: {
+    titulo: 'A requisição ultrapassou o limite de tamanho aceito pelo Provedor.',
+    recuperacao: { rotulo: 'Refazer com outro Perfil', acao: 'refazer-outro-perfil' },
+  },
+  invalid_response: {
+    titulo: 'O Provedor ou serviço retornou uma resposta inválida ou sem conteúdo.',
+    recuperacao: { rotulo: 'Refazer com outro Perfil', acao: 'refazer-outro-perfil' },
+  },
+  output_invalid: {
+    titulo: 'A saída do modelo não seguiu o formato estruturado esperado pela Tarefa de IA.',
+    recuperacao: { rotulo: 'Refazer com outro Perfil', acao: 'refazer-outro-perfil' },
+  },
+  probe_not_local: {
+    titulo: 'A medição automática da Janela de contexto funciona apenas para modelos locais em loopback.',
+    recuperacao: { rotulo: 'Configurar Provedores', rota: '#/config/provedores' },
+  },
+  probe_unavailable: {
+    titulo: 'A Janela de contexto configurada é grande demais para a medição automática.',
+  },
+  invalid_price: {
+    titulo: 'Verifique os valores por milhão de tokens e garanta faixas de preço válidas em ordem crescente.',
+  },
+  invalid_key: {
+    titulo: 'Chave de acesso ou identificador inválido. Informe uma chave válida.',
+  },
+  budget_time: entradaOrcamento,
+  budget_input_tokens: {
+    titulo: 'A entrada ultrapassa o limite de tokens permitido para esta Tarefa de IA.',
+  },
+  cost_unknown: {
+    titulo: 'O custo deste Perfil de Provedor é desconhecido; confirme para continuar.',
+    recuperacao: { rotulo: 'Ajustar orçamento e continuar', acao: 'ajustar-orcamento' },
+  },
+  // Projetos, Backups e Perfil de canal
+  project_create: {
+    titulo: 'Não foi possível criar a pasta do Projeto. Verifique permissões e espaço em disco.',
+  },
+  project_open: {
+    titulo: 'Não foi possível abrir a pasta do Projeto. Verifique se ela existe e está acessível.',
+    recuperacao: { rotulo: 'Ir para Início', rota: '#/inicio' },
+  },
+  project_read: {
+    titulo: 'Não foi possível ler os dados do Projeto no disco.',
+  },
+  invalid_project: {
+    titulo: 'Nome de Projeto inválido ou nenhum Projeto aberto no momento.',
+    recuperacao: { rotulo: 'Ir para Início', rota: '#/inicio' },
+  },
+  library: {
+    titulo: 'Não foi possível ler ou gravar a lista de Projetos recentes.',
+  },
+  migration: {
+    titulo: 'Não foi possível atualizar o banco de dados do Projeto.',
+  },
+  backup: {
+    titulo: 'Não foi possível criar a cópia de segurança do Projeto antes da abertura.',
+  },
+  backup_failed: {
+    titulo: 'Não foi possível criar ou ler o backup do Projeto.',
+  },
+  backup_invalid: {
+    titulo: 'Este arquivo de backup está corrompido ou é de uma versão incompatível.',
+  },
+  backup_settings: {
+    titulo: 'Informe intervalo e número de cópias inteiros maiores que zero para os backups.',
+  },
+  restore_failed: {
+    titulo: 'Não foi possível restaurar o backup selecionado.',
+  },
+  channel_profile_invalid: {
+    titulo: 'Verifique os campos do Perfil de canal antes de salvar.',
+  },
+  newer_document: {
+    titulo: 'Este documento do Corte foi salvo por uma versão mais nova do Clipes.',
+    recuperacao: { rotulo: 'Verificar atualizações', rota: '#/sobre' },
+  },
+  // Fontes, Transcrição, Energia, Chat e Lotes
+  download_directory: {
+    titulo: 'A pasta configurada para downloads de Fontes não está acessível.',
+    recuperacao: { rotulo: 'Abrir Armazenamento', rota: '#/config/componentes' },
+  },
+  job_running: {
+    titulo: 'Já existe uma verificação ou download desta Fonte em andamento.',
+  },
+  source_read: {
+    titulo: 'Não foi possível ler o arquivo da Fonte no disco.',
+    recuperacao: { rotulo: 'Relocalizar Fonte', acao: 'relocalizar-fonte' },
+  },
+  source_not_found: {
+    titulo: 'A Fonte associada a este Corte não foi encontrada no Projeto.',
+  },
+  copy_failed: {
+    titulo: 'Não foi possível copiar o arquivo para a pasta do Projeto. Verifique permissões e espaço em disco.',
+    recuperacao: { rotulo: 'Abrir Armazenamento', rota: '#/config/componentes' },
+  },
+  transcribe_audio: {
+    titulo: 'Não foi possível extrair o áudio da Fonte para iniciar a Transcrição.',
+  },
+  invalid_engine: {
+    titulo: 'Motor de transcrição inválido. Escolha Motor Local ou Groq.',
+  },
+  engine_change_confirmation: {
+    titulo: 'Trocar o Motor de transcrição ou o modelo apaga a Transcrição parcial existente.',
+    recuperacao: { rotulo: 'Confirmar e continuar', acao: 'confirmar' },
+  },
+  transcription_retry_confirmation: {
+    titulo: 'O resultado da chamada paga anterior ficou incerto; repetir pode gerar nova cobrança.',
+    recuperacao: { rotulo: 'Confirmar e continuar', acao: 'confirmar' },
+  },
+  energy_failed: {
+    titulo: 'Não foi possível medir a energia do áudio desta Fonte.',
+  },
+  chat_failed: {
+    titulo: 'Não foi possível buscar o chat desta live.',
+  },
+  chat_needs_url: {
+    titulo: 'A busca de chat está disponível apenas para Fontes importadas por URL.',
+  },
+  chat_storage: {
+    titulo: 'Não foi possível acessar ou gravar o arquivo de chat na pasta da Fonte.',
+  },
+  selection_failed: {
+    titulo: 'Não foi possível iniciar a seleção de Cortes para esta Fonte.',
+  },
+  // Seleção, Editor, Reenquadramento, Legendas, Áudio, Narração, Roteiro e Exportação
+  not_approved: {
+    titulo: 'Aprove o candidato selecionado antes de continuar.',
+  },
+  word_not_found: {
+    titulo: 'A palavra escolhida não está ativa dentro dos limites deste Corte.',
+  },
+  caption_style_invalid: {
+    titulo: 'O estilo da legenda informado possui valores inválidos.',
+  },
+  reframe_not_chosen: {
+    titulo: 'Escolha o Corte antes de analisar o Reenquadramento.',
+  },
+  reframe_failed: {
+    titulo: 'A análise de Reenquadramento automático foi interrompida ou falhou.',
+  },
+  invalid_reframe: {
+    titulo: 'O intervalo informado para o Reenquadramento é inválido.',
+  },
+  preview_failed: entradaPreviaFalhou,
+  preview_unavailable: {
+    titulo: 'A prévia deste trecho ainda não está disponível.',
+    recuperacao: { rotulo: 'Tentar gerar prévia novamente', acao: 'recarregar' },
+  },
+  timeline_failed: {
+    titulo: 'Não foi possível gerar a timeline visual deste Corte.',
+  },
+  timeline_missing: {
+    titulo: 'A timeline visual deste Corte ainda não está pronta.',
+  },
+  translation_in_progress: {
+    titulo: 'Já existe uma tradução de legenda em andamento para este Corte.',
+    recuperacao: { rotulo: 'Abrir Fila de Jobs', acao: 'abrir-fila' },
+  },
+  translation_too_long: {
+    titulo: 'O texto da legenda traduzida ultrapassa o limite máximo de caracteres.',
+  },
+  invalid_translation_edit: {
+    titulo: 'O texto da legenda traduzida não pode ficar vazio nem conter caracteres inválidos.',
+  },
+  invalid_audio_mix: {
+    titulo: 'Parâmetros inválidos na mixagem de áudio (volume, momento ou âncora).',
+  },
+  invalid_audio_path: {
+    titulo: 'Selecione um arquivo de áudio válido para importar na Narração.',
+  },
+  invalid_license: {
+    titulo: 'Origem ou licença do arquivo de áudio inválida.',
+  },
+  internal_error: {
+    titulo: 'Não foi possível continuar a geração do Roteiro.',
+  },
+  export_timestamps: {
+    titulo: 'Os tempos da legenda são inválidos para exportação.',
+  },
+  encoder_invalid: {
+    titulo: 'Este encoder de vídeo não está disponível ou ainda não passou no teste neste computador.',
+    recuperacao: { rotulo: 'Configurar Exportação', rota: '#/config/exportacao' },
+  },
+  interrupted: {
+    titulo: 'A operação foi interrompida antes de concluir.',
   },
 }
 

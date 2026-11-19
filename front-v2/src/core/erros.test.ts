@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { BannerErroCore } from '@ds'
 import { ErroCore } from '~/core/cliente'
 import { mensagemDeErro, TABELA_ERROS, type Recuperacao } from '~/core/erros'
+import { extrairCodigosRustDeMapa } from '~/core/scannerCodigosRust'
 
 type LinhaTabelaSpec = {
   codigos: string[]
@@ -614,10 +615,97 @@ describe('mapeador de erros (erros.ts)', () => {
     expect(invalidText.titulo).toMatch(/vazio/i)
 
     const settingsErr = mensagemDeErro(new ErroCore('settings', ''))
-    expect(settingsErr.titulo).toMatch(/sonda de hardware/i)
+    expect(settingsErr.titulo).toBe('Não foi possível ler ou salvar as configurações locais.')
     expect(settingsErr.recuperacao?.acao).toBe('recarregar')
 
     const exportDest = mensagemDeErro(new ErroCore('export_destination', ''))
     expect(exportDest.recuperacao?.acao).toBe('escolher-pasta')
+  })
+
+  it('cobre todos os códigos CoreError emitidos pelo núcleo Rust (ou lista exceção interna justificada)', () => {
+    const fontesRust = import.meta.glob<string>(
+      ['../../../core/src/**/*.rs', '../../../src-tauri/src/**/*.rs'],
+      { query: '?raw', import: 'default', eager: true },
+    )
+    const mapaRust = extrairCodigosRustDeMapa(fontesRust)
+    expect(mapaRust.size).toBeGreaterThan(200)
+
+    // Códigos estritamente internos (contrato IPC, build/assinatura embutida ou tabela interna)
+    // que nunca são causados por entrada normal do usuário e permanecem no fallback genérico.
+    const CODIGOS_INTERNOS_JUSTIFICADOS: Record<string, string> = {
+      catalog_key_invalid: 'Chave pública Ed25519 embutida no binário para validar catálogo remoto (invariante de build).',
+      dispatch_failed: 'Falha interna do spawn_blocking no bridge Tauri (src-tauri/src/main.rs).',
+      invalid_choice: 'Parâmetro fora dos candidatos retornados pelo núcleo na chamada IPC transcription.hardware.choose.',
+      invalid_decision: 'Valor fora de approved/rejected na chamada IPC selection.decide.',
+      invalid_delta: 'Deslocamento zero ou fora de MAX_STEP na chamada IPC selection.adjust.',
+      invalid_document: 'Metadado interno (revision/schemaVersion/tipo) inválido ao migrar/abrir documento JSON.',
+      invalid_edge: 'Valor fora de start/end na chamada IPC selection.adjust.',
+      invalid_grouping: 'Parâmetro inválido na chamada IPC transcription.hardware.grouping.',
+      invalid_guardrails_scope: 'Escopo inválido na chamada IPC guardrails.check.',
+      invalid_input: 'Parâmetros internos de paginação/consulta inválidos em export.readiness ou jobs.preview.',
+      invalid_job_payload: 'Payload JSON inválido gravado na tabela interna jobs do SQLite.',
+      invalid_message: 'Mensagem JSON malformada enviada pelo núcleo ao worker Python.',
+      invalid_request: 'Payload estruturado inválido em chamada IPC de Provedor, custo ou privacidade.',
+      invalid_schema: 'Schema JSON interno inválido ao montar chamada estruturada ao Provedor.',
+      invalid_silence_status: 'Estado inválido na chamada IPC de revisão de silêncios do editor.',
+      invalid_task: 'Definição, hash de prompt ou schema embutido da Tarefa de IA inválido (invariante de build).',
+      unknown_command: 'Comando IPC não registrado no núcleo (incompatibilidade interna front/core).',
+      unknown_task: 'Identificador de Tarefa de IA ou tarefa do worker não registrado internamente.',
+    }
+
+    const semCobertura: string[] = []
+    for (const [codigo, arquivos] of mapaRust.entries()) {
+      const temTabela = Object.hasOwn(TABELA_ERROS, codigo)
+      const temJustificativa = Object.hasOwn(CODIGOS_INTERNOS_JUSTIFICADOS, codigo)
+      if (!temTabela && !temJustificativa) {
+        semCobertura.push(`${codigo} (${arquivos.join(', ')})`)
+      }
+      if (temTabela) {
+        const trad = mensagemDeErro(new ErroCore(codigo, 'detalhe'))
+        expect(trad.titulo, `mensagem vazia/genérica para ${codigo}`).not.toBe('Algo deu errado nesta operação.')
+        expect(trad.titulo.length).toBeGreaterThan(5)
+      }
+    }
+
+    expect(
+      semCobertura,
+      `Códigos do núcleo sem entrada em TABELA_ERROS nem justificativa interna:\n${semCobertura.join('\n')}`,
+    ).toEqual([])
+
+    for (const [codigo, razao] of Object.entries(CODIGOS_INTERNOS_JUSTIFICADOS)) {
+      expect(razao.trim().length, `justificativa vazia para ${codigo}`).toBeGreaterThan(10)
+      expect(mapaRust.has(codigo), `exceção interna obsoleta (não emitida pelo núcleo): ${codigo}`).toBe(true)
+      expect(Object.hasOwn(TABELA_ERROS, codigo), `código interno ${codigo} não deve estar duplicado na lista de exceções`).toBe(false)
+    }
+  })
+
+  it('mapeia códigos críticos do #514 com vocabulário do produto e ações de recuperação válidas', () => {
+    const workerStart = mensagemDeErro(new ErroCore('worker_start', ''))
+    expect(workerStart.titulo).toMatch(/Componentes/i)
+    expect(workerStart.recuperacao).toEqual({
+      rotulo: 'Instalar componente',
+      rota: '#/config/componentes',
+      acao: 'instalar-componente',
+    })
+
+    const cliFreeLimit = mensagemDeErro(new ErroCore('cli_free_limit', ''))
+    expect(cliFreeLimit.titulo).toMatch(/Provedor/)
+    expect(cliFreeLimit.recuperacao?.acao).toBe('refazer-outro-perfil')
+
+    const gpu = mensagemDeErro(new ErroCore('gpu_unavailable', ''))
+    expect(gpu.titulo).toMatch(/Motor/)
+    expect(gpu.recuperacao?.rota).toBe('#/config/componentes')
+
+    const reframe = mensagemDeErro(new ErroCore('reframe_not_chosen', ''))
+    expect(reframe.titulo).toMatch(/Corte/)
+    expect(reframe.titulo).toMatch(/Reenquadramento/)
+
+    const translationProg = mensagemDeErro(new ErroCore('translation_in_progress', ''))
+    expect(translationProg.titulo).toMatch(/Corte/)
+    expect(translationProg.recuperacao?.acao).toBe('abrir-fila')
+
+    const projOpen = mensagemDeErro(new ErroCore('project_open', ''))
+    expect(projOpen.titulo).toMatch(/Projeto/)
+    expect(projOpen.recuperacao?.rota).toBe('#/inicio')
   })
 })
