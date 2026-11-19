@@ -34,6 +34,7 @@ import type { LoteExportacao } from '~/stores/filaGlobal'
 import type { FonteProjeto } from '~/stores/fontesProjeto'
 import { DialogoExportarCorte, type CorteParaExportar } from '~/telas/corte/DialogoExportarCorte'
 import { useDialogoFilaAberto } from '~/telas/fila/DialogosFila'
+import '~/telas/exportacao/mesa-toast.css'
 import { mediaUrl } from '../../../../src/lib/media'
 
 export type FiltroProntidao = 'todos' | 'pendencias' | 'prontos' | 'direto' | 'transformado'
@@ -184,12 +185,15 @@ function construirItensChecklist(
       titulo: `Roteiros: ${aprovados} de ${transformados} aprovados`,
       detalhe:
         pendentes > 0
-          ? `${pendentes} Corte(s) ainda aguardam revisão e aprovação do Roteiro.`
+          ? pendentes === 1
+            ? '1 Corte ainda aguarda revisão e aprovação do Roteiro.'
+            : `${pendentes} Cortes ainda aguardam revisão e aprovação do Roteiro.`
           : undefined,
     })
   }
 
   if (guardrails.narration?.applicable && (guardrails.narration.longFreezeTailCount ?? 0) > 0) {
+    const qtdSobra = guardrails.narration.longFreezeTailCount ?? 0
     const segMax = ((guardrails.narration.maxFreezeTailUs ?? 0) / 1_000_000).toLocaleString(
       'pt-BR',
       { minimumFractionDigits: 1, maximumFractionDigits: 1 },
@@ -197,7 +201,10 @@ function construirItensChecklist(
     itens.push({
       id: 'sobra',
       estado: 'atencao',
-      titulo: `${guardrails.narration.longFreezeTailCount} Corte(s) com sobra final > 5 s`,
+      titulo:
+        qtdSobra === 1
+          ? '1 Corte com sobra final > 5 s'
+          : `${qtdSobra} Cortes com sobra final > 5 s`,
       detalhe: `Maior sobra congelada no fim do vídeo: ${segMax} s.`,
     })
   }
@@ -219,10 +226,12 @@ function construirItensChecklist(
   }
 
   if ((guardrails.over60sCount ?? 0) > 0) {
+    const qtdAcima60 = guardrails.over60sCount ?? 0
     itens.push({
       id: 'duracao',
       estado: 'atencao',
-      titulo: `${guardrails.over60sCount} Corte(s) acima de 60 s`,
+      titulo:
+        qtdAcima60 === 1 ? '1 Corte acima de 60 s' : `${qtdAcima60} Cortes acima de 60 s`,
       detalhe: 'Shorts com mais de 1 minuto e música protegida ficam inelegíveis para monetização.',
     })
   }
@@ -231,7 +240,10 @@ function construirItensChecklist(
     itens.push({
       id: 'offline',
       estado: 'atencao',
-      titulo: `${qtdOffline} Corte(s) com Fonte offline ou alterada`,
+      titulo:
+        qtdOffline === 1
+          ? '1 Corte com Fonte offline ou alterada'
+          : `${qtdOffline} Cortes com Fonte offline ou alterada`,
       detalhe: 'Esses itens falharão no lote até que a Fonte seja relocalizada.',
     })
   }
@@ -511,6 +523,14 @@ export function MesaProntidao({
     dialogoFilaAberto
   const [disparando, setDisparando] = useState(false)
   const [erroDisparo, setErroDisparo] = useState<ErroCore | null>(null)
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    document.documentElement.setAttribute('data-mesa-prontidao', 'true')
+    return () => {
+      document.documentElement.removeAttribute('data-mesa-prontidao')
+    }
+  }, [])
 
   useEffect(() => {
     if (!pastaEditadaRef.current && exportacao.settings?.last_directory) {
@@ -992,8 +1012,9 @@ export function MesaProntidao({
                   >
                     <AlertTriangle className="mt-0.5 size-[14px] shrink-0 text-t2" aria-hidden />
                     <span>
-                      {qtdOfflineNoEscopo} Corte(s) estão com a Fonte offline ou alterada e falharão
-                      até serem relocalizados.
+                      {qtdOfflineNoEscopo === 1
+                        ? '1 Corte está com a Fonte offline ou alterada e falhará até ser relocalizado.'
+                        : `${qtdOfflineNoEscopo} Cortes estão com a Fonte offline ou alterada e falharão até serem relocalizados.`}
                     </span>
                   </div>
                 )}

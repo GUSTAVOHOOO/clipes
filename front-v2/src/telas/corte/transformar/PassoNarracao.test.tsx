@@ -1194,4 +1194,57 @@ describe('<PassoNarracao>', () => {
     expect(container.querySelectorAll('audio').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: /Reproduzir áudio do Bloco 1/i })).toBeInTheDocument()
   })
+
+  it('UI-112: posiciona ArrowRight à direita de "Avançar para Empacotar" e alinha arredondamento da duração no player com o cabeçalho', () => {
+    const store = criarStoreMock({
+      narracao: {
+        ...NARRACAO_SEM_AUDIO,
+        blocks: [
+          {
+            ...NARRACAO_SEM_AUDIO.blocks[0],
+            blockId: 2,
+            position: 2,
+            narrationText: 'Bloco dois',
+            audio: {
+              id: 202,
+              versionId: 1,
+              engineId: 'pocket-tts',
+              voiceId: '13063',
+              modelId: 'portuguese_24l',
+              relPath: 'narrations/c201/b202-v1.wav',
+              durationUs: 2_800_000,
+              sampleRate: 24000,
+              channels: 1,
+              bytes: 128000,
+              stale: false,
+              trimmed: true,
+              cleanup: null,
+            },
+            alignment: null,
+          },
+        ],
+        totalDurationUs: 2_800_000,
+      },
+    })
+
+    render(
+      envolver(
+        <PassoNarracao
+          candidateId={201}
+          store={store}
+          aoVoltarBlocoPendente={vi.fn()}
+          aoIrParaEmpacotar={vi.fn()}
+          aoIrParaEditar={vi.fn()}
+        />,
+      ),
+    )
+
+    const btnAvancar = screen.getByRole('button', { name: /Avançar para Empacotar/i })
+    expect(btnAvancar.firstChild?.nodeType).toBe(Node.TEXT_NODE)
+    expect(btnAvancar.lastChild?.nodeName.toLowerCase()).toBe('svg')
+
+    // Cabeçalho do bloco usa duracao(2_800_000) -> "3 s"; player deve exibir "0:00 / 0:03" (não "0:02")
+    expect(screen.getAllByText('3 s').length).toBeGreaterThan(0)
+    expect(screen.getByText('0:00 / 0:03')).toBeInTheDocument()
+  })
 })

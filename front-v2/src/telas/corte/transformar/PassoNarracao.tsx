@@ -94,7 +94,7 @@ function infoOrigemAudio(
 }
 
 function formatarMinSeg(segundos: number): string {
-  const seguro = Number.isFinite(segundos) && segundos > 0 ? Math.floor(segundos) : 0
+  const seguro = Number.isFinite(segundos) && segundos > 0 ? Math.round(segundos) : 0
   const m = Math.floor(seguro / 60)
   const s = seguro % 60
   return `${m}:${String(s).padStart(2, '0')}`
@@ -727,10 +727,9 @@ export function PassoNarracao({
             <Botao
               variante={modalAberto ? 'secundario' : 'primario'}
               tamanho="p"
-              icone={<ArrowRight />}
               onClick={aoIrParaEmpacotar}
             >
-              Avançar para Empacotar
+              Avançar para Empacotar <ArrowRight aria-hidden />
             </Botao>
           </div>
         </div>

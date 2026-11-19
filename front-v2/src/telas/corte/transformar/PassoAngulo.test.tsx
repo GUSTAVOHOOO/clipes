@@ -370,4 +370,46 @@ describe('<PassoAngulo>', () => {
     expect(screen.getAllByText('Custo da escolha')).toHaveLength(1)
     expect(screen.getByText('Aprender com o erro')).toBeInTheDocument()
   })
+
+  it('UI-111: omite o rótulo "Orçamento" no <ResumoCustoPrivacidade> quando os valores de teto são nulos', async () => {
+    const user = userEvent.setup()
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'angles.estimate') {
+        return {
+          paid: true,
+          profile: 'openai-gpt4o',
+          language: 'pt-BR',
+          estimate: { kind: 'usd', minMicroUsd: 10_000, maxMicroUsd: 30_000, inputTokens: 1500 },
+        }
+      }
+      return null
+    })
+
+    const store = criarStoreFake({
+      orcamento: {
+        limitMicroUsd: null,
+        spentMicroUsd: 0,
+        remainingMicroUsd: null,
+        callsRemaining: null,
+        paused: false,
+      },
+    })
+
+    render(
+      envolver(
+        <PassoAngulo
+          candidateId={201}
+          store={store}
+          fila={criarFila(() => 'demo')}
+          aoClicarChipFrase={vi.fn()}
+          aoAvancarPasso={vi.fn()}
+        />,
+      ),
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Sugerir ângulos' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByLabelText(/Resumo de custo e privacidade/i)).toBeInTheDocument()
+    expect(within(dialog).queryByText('Orçamento')).not.toBeInTheDocument()
+  })
 })

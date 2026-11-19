@@ -366,7 +366,11 @@ export function EmpacotarCorte({
     )
   }, [aoMudarStatusSalvamento, store.sujo])
 
-  const abrirExportacao = useCallback(() => setExportacaoAberta(true), [])
+  const desabilitarContextoRef = useRef(false)
+  const abrirExportacao = useCallback(() => {
+    if (desabilitarContextoRef.current) return
+    setExportacaoAberta(true)
+  }, [])
 
   useEffect(() => {
     if (!acoesExternasRef) return
@@ -464,27 +468,41 @@ export function EmpacotarCorte({
       }
     : null
 
-  const empacotamentoVazio = forcado === 'vazio' || storeParaTela.empacotamento?.current === null
-  const ocultarPrimarioContexto =
-    empacotamentoVazio || exportacaoAberta || modalCapaAberto || modalFichaAberto
-
-  useEffect(() => {
-    window.dispatchEvent(
-      new CustomEvent(EVENTO_CORTE_PRIMARIO_OCULTO, {
-        detail: { ocultar: ocultarPrimarioContexto },
-      }),
-    )
-    return () => {
-      window.dispatchEvent(
-        new CustomEvent(EVENTO_CORTE_PRIMARIO_OCULTO, { detail: { ocultar: false } }),
-      )
-    }
-  }, [ocultarPrimarioContexto])
-
   const erroTela =
     forcado === 'erro'
       ? new ErroCore('project_write', 'Erro simulado via ?estado=erro.')
       : (erroResolucao ?? (forcado === 'vazio' ? null : store.erro))
+
+  const carregandoTela =
+    forcado === 'carregando' ||
+    (forcado !== 'vazio' &&
+      (resolvendoEntrada ||
+        store.carregando ||
+        store.candidateId !== candidateIdAtivo ||
+        !store.empacotamento)) ||
+    (forcado === 'vazio' && (resolvendoEntrada || !corteResolvido))
+
+  const empacotamentoVazio = forcado === 'vazio' || storeParaTela.empacotamento?.current === null
+  const desabilitarContexto =
+    empacotamentoVazio || Boolean(erroTela) || carregandoTela || !fonteDisponivel
+  desabilitarContextoRef.current = desabilitarContexto
+  const ocultarPrimarioContexto =
+    desabilitarContexto || exportacaoAberta || modalCapaAberto || modalFichaAberto
+
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent(EVENTO_CORTE_PRIMARIO_OCULTO, {
+        detail: { ocultar: ocultarPrimarioContexto, desabilitar: desabilitarContexto },
+      }),
+    )
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent(EVENTO_CORTE_PRIMARIO_OCULTO, {
+          detail: { ocultar: false, desabilitar: false },
+        }),
+      )
+    }
+  }, [desabilitarContexto, ocultarPrimarioContexto])
 
   if (erroTela) {
     return (
@@ -507,15 +525,6 @@ export function EmpacotarCorte({
       </div>
     )
   }
-
-  const carregandoTela =
-    forcado === 'carregando' ||
-    (forcado !== 'vazio' &&
-      (resolvendoEntrada ||
-        store.carregando ||
-        store.candidateId !== candidateIdAtivo ||
-        !store.empacotamento)) ||
-    (forcado === 'vazio' && (resolvendoEntrada || !corteResolvido))
 
   if (carregandoTela) {
     return (

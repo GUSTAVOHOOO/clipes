@@ -43,6 +43,17 @@ function filtrarAtribuicoes(texto: string, termo: string): string | null {
   return correspondentes.join('\n\n')
 }
 
+function formatarDataAtualizacao(bruta: string): string {
+  const texto = bruta.trim()
+  const data = new Date(texto)
+  if (Number.isNaN(data.getTime())) return bruta
+  const meiaNoiteUtc = /T00:00:00(?:\.0+)?Z$/i.test(texto) || /^\d{4}-\d{2}-\d{2}$/.test(texto)
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    ...(meiaNoiteUtc ? { timeZone: 'UTC' } : {}),
+  }).format(data)
+}
+
 /**
  * Sobre e Atualizações (`#/sobre`): versão instalada (`app.version`),
  * verificador/instalador explícito de atualizações assinadas (US-16/17/121, #291)
@@ -205,7 +216,9 @@ export function Sobre({ store = storeAtualizador, fila }: SobreProps) {
                 </span>
               </p>
               {atualizador.atualizacao.date && (
-                <span className="num text-pequeno text-t3">{atualizador.atualizacao.date}</span>
+                <span className="num text-pequeno text-t3">
+                  {formatarDataAtualizacao(atualizador.atualizacao.date)}
+                </span>
               )}
             </div>
             {atualizador.atualizacao.body && (

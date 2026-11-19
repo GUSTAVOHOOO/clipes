@@ -652,4 +652,97 @@ describe('MesaProntidao', () => {
     await act(async () => {})
     expect(aoAbrirLote).toHaveBeenCalledWith(6410)
   })
+
+  it('UI-120 e UI-121: sinaliza data-mesa-prontidao para posicionamento do toast e usa pluralização natural (1 Corte está / N Cortes estão)', () => {
+    const expUmOffline = criarExportacaoMock({
+      aprovados: [
+        APROVADOS_BASE[0],
+        {
+          ...APROVADOS_BASE[1],
+          candidateId: 103,
+          source: {
+            ...APROVADOS_BASE[1].source,
+            id: 2,
+            status: 'offline',
+          },
+        },
+      ],
+      totalProjeto: 2,
+      guardrailsProjeto: {
+        ...GUARDRAILS_PROJETO_BASE,
+        script: { applicable: true, transformedCount: 2, approvedCount: 1, unapprovedCount: 1 },
+        narration: { ...GUARDRAILS_PROJETO_BASE.narration!, applicable: true, longFreezeTailCount: 1, maxFreezeTailUs: 6_200_000 },
+        over60sCount: 1,
+      },
+    })
+
+    const { rerender, unmount } = renderizar(expUmOffline)
+
+    // UI-120: marca o root enquanto MesaProntidao está montada
+    expect(document.documentElement.getAttribute('data-mesa-prontidao')).toBe('true')
+
+    // UI-121: singular natural para quantidade 1 (sem "Corte(s)")
+    expect(document.body.textContent ?? '').not.toMatch(/Corte\(s\)/)
+    expect(
+      screen.getByText(
+        /1 Corte está com a Fonte offline ou alterada e falhará até ser relocalizado\./i,
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByText('1 Corte com Fonte offline ou alterada')).toBeInTheDocument()
+    expect(
+      screen.getByText('1 Corte ainda aguarda revisão e aprovação do Roteiro.'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('1 Corte com sobra final > 5 s')).toBeInTheDocument()
+    expect(screen.getByText('1 Corte acima de 60 s')).toBeInTheDocument()
+
+    // Plural natural para quantidade >= 2
+    const expDoisOffline = criarExportacaoMock({
+      aprovados: [
+        {
+          ...APROVADOS_BASE[0],
+          source: { ...APROVADOS_BASE[0].source, status: 'offline' },
+        },
+        {
+          ...APROVADOS_BASE[1],
+          candidateId: 103,
+          source: { ...APROVADOS_BASE[1].source, id: 2, status: 'changed' },
+        },
+      ],
+      totalProjeto: 2,
+      guardrailsProjeto: {
+        ...GUARDRAILS_PROJETO_BASE,
+        script: { applicable: true, transformedCount: 2, approvedCount: 0, unapprovedCount: 2 },
+        narration: { ...GUARDRAILS_PROJETO_BASE.narration!, applicable: true, longFreezeTailCount: 2, maxFreezeTailUs: 6_200_000 },
+        over60sCount: 2,
+      },
+    })
+
+    rerender(
+      <ProvedorDicas>
+        <ProvedorToast>
+          <MesaProntidao
+            projetoId="demo"
+            projetoPath="/projetos/Demo.clipes"
+            exportacao={expDoisOffline}
+            aoAbrirLote={vi.fn()}
+          />
+        </ProvedorToast>
+      </ProvedorDicas>,
+    )
+
+    expect(
+      screen.getByText(
+        /2 Cortes estão com a Fonte offline ou alterada e falharão até serem relocalizados\./i,
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByText('2 Cortes com Fonte offline ou alterada')).toBeInTheDocument()
+    expect(
+      screen.getByText('2 Cortes ainda aguardam revisão e aprovação do Roteiro.'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('2 Cortes com sobra final > 5 s')).toBeInTheDocument()
+    expect(screen.getByText('2 Cortes acima de 60 s')).toBeInTheDocument()
+
+    unmount()
+    expect(document.documentElement.getAttribute('data-mesa-prontidao')).toBeNull()
+  })
 })

@@ -19,6 +19,7 @@ import { mensagemDeErro } from '~/core/erros'
 import { useFila } from '~/core/progresso'
 import { type CaptionStyle } from '~/stores/editorCorte'
 import {
+  orcamentoParaResumo,
   resolverDestinoSelecao,
   type PerfilProvedorLista,
   type RespostaTarefasAssistente,
@@ -644,7 +645,7 @@ export function PopoverLegenda({
                   estimativa={estimativaDs}
                   orcamento={
                     orcamento
-                      ? {
+                      ? orcamentoParaResumo({
                           restanteMicroUsd:
                             orcamento.maxCostMicroUsd != null
                               ? Math.max(0, orcamento.maxCostMicroUsd - orcamento.usage.microUsd)
@@ -654,7 +655,7 @@ export function PopoverLegenda({
                               ? Math.max(0, orcamento.maxCalls - orcamento.usage.calls)
                               : null,
                           pausado: Boolean(orcamento.paused),
-                        }
+                        })
                       : null
                   }
                   bloqueadoSomenteLocal={destinoTraducao.bloqueadoSomenteLocal}

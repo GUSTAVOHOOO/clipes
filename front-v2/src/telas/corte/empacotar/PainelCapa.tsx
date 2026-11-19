@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent }
 import { useAtalhos, type Atalho } from '~/comandos/atalhos'
 import { SeletorCaminho } from '~/componentes/SeletorCaminho'
 import { chamar, paraErroCore, type ErroCore } from '~/core/cliente'
+import { orcamentoParaResumo } from '~/stores/selecaoProjeto'
 import type {
   CapaDoc,
   FonteEmpacotar,
@@ -758,15 +759,7 @@ export function PainelCapa({
             saiDaMaquina={destinoConfirmacao.saiDaMaquina}
             host={destinoConfirmacao.host}
             estimativa={converterEstimativa(confirmacao.estimate)}
-            orcamento={
-              store.orcamento
-                ? {
-                    restanteMicroUsd: store.orcamento.remainingMicroUsd ?? null,
-                    callsRestantes: store.orcamento.callsRemaining ?? null,
-                    pausado: Boolean(store.orcamento.paused),
-                  }
-                : null
-            }
+            orcamento={orcamentoParaResumo(store.orcamento)}
             bloqueadoSomenteLocal={destinoConfirmacao.bloqueadoSomenteLocal}
           />
         )}

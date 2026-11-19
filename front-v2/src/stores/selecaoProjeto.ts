@@ -568,3 +568,27 @@ export function useSelecaoProjeto(projetoPath: string | null, fila?: Fila) {
     [estado, carregarRuns, carregarExecucao, carregarRevisao],
   )
 }
+
+/**
+ * Converte um objeto de orçamento para `<ResumoCustoPrivacidade>`, retornando `null`
+ * quando não há teto nem pausa ativa para evitar linha "Orçamento" com valor em branco.
+ */
+export function orcamentoParaResumo(
+  orcamento?: {
+    remainingMicroUsd?: number | null
+    callsRemaining?: number | null
+    paused?: boolean | null
+    restanteMicroUsd?: number | null
+    callsRestantes?: number | null
+    pausado?: boolean | null
+  } | null,
+): { restanteMicroUsd: number | null; callsRestantes: number | null; pausado: boolean } | null {
+  if (!orcamento) return null
+  const restanteMicroUsd = orcamento.restanteMicroUsd ?? orcamento.remainingMicroUsd ?? null
+  const callsRestantes = orcamento.callsRestantes ?? orcamento.callsRemaining ?? null
+  const pausado = Boolean(orcamento.pausado ?? orcamento.paused)
+  if (!pausado && restanteMicroUsd == null && callsRestantes == null) {
+    return null
+  }
+  return { restanteMicroUsd, callsRestantes, pausado }
+}
