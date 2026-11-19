@@ -1091,6 +1091,20 @@ async function runSession1(ui, ctx) {
   await ui.waitForHash('#/assistente');
   await ui.clickButton('Pular por enquanto');
   await ui.waitForHash('#/config/provedores');
+  await aguardarFlushDoWebStorage(ui);
+}
+
+/**
+ * O WebKitGTK grava o localStorage em disco de forma assíncrona (o WebKit agrupa as
+ * alterações e só confirma ~1 s depois da última escrita). O tauri-driver encerra o app
+ * ao fechar a sessão, então uma preferência alterada logo antes do fim da sessão se perde
+ * (#505: o tema "escuro" voltava ao "claro" gravado antes). A sessão só termina depois de a
+ * última escrita ter tempo de chegar ao disco; a asserção da Sessão 2 segue exigindo o tema
+ * escuro restaurado.
+ */
+const WEBSTORAGE_FLUSH_MS = 2_500;
+async function aguardarFlushDoWebStorage(ui) {
+  await ui.browser.pause(WEBSTORAGE_FLUSH_MS);
 }
 
 async function stageModelsInstalled(dataDir) {
@@ -1133,11 +1147,24 @@ async function runSession2(ui, ctx) {
     () => document.querySelectorAll('[role="dialog"],[role="alertdialog"]').length,
   );
   assert.equal(openDialogsOnBoot, 0, 'O Assistente não deve abrir novamente na segunda execução');
-  await ui.browser.waitUntil(
-    async () =>
-      (await ui.browser.execute(() => document.documentElement.getAttribute('data-tema'))) === 'escuro',
-    { timeout: 10_000, timeoutMsg: 'Tema escuro não foi restaurado após o reinício' },
-  );
+  const lerTema = () =>
+    ui.browser.execute(() => ({
+      tema: document.documentElement.getAttribute('data-tema'),
+      armazenado: window.localStorage.getItem('clipes.preferencias.v1'),
+    }));
+  let ultimoTema = await lerTema();
+  try {
+    await ui.browser.waitUntil(
+      async () => {
+        ultimoTema = await lerTema();
+        return ultimoTema.tema === 'escuro';
+      },
+      { timeout: 10_000, interval: 250, timeoutMsg: 'Tema escuro não foi restaurado após o reinício' },
+    );
+  } catch (error) {
+    error.message += ` (data-tema=${ultimoTema.tema}; localStorage=${ultimoTema.armazenado})`;
+    throw error;
+  }
 
   logStep('Sessão 2: Criação e alternância de Projetos reais (SQLite)…');
   await createProject(ui, ctx, 'Canal', true);
