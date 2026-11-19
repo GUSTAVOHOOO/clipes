@@ -482,6 +482,15 @@ CREATE TABLE packaging_edits (
 CREATE INDEX packaging_edits_generation ON packaging_edits(generation_id, id);
 " } }
 inventory::submit! { projects::Migration { id: "0299_001_packaging_manual", sql: "
+CREATE TEMP TABLE _packaging_edits_backup (
+  id INTEGER PRIMARY KEY,
+  generation_id INTEGER NOT NULL,
+  fields TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+INSERT INTO _packaging_edits_backup(id, generation_id, fields, created_at)
+  SELECT id, generation_id, fields, created_at FROM packaging_edits;
+DROP TABLE packaging_edits;
 CREATE TABLE packaging_generations_new (
   id INTEGER PRIMARY KEY,
   job_id INTEGER UNIQUE,
@@ -500,6 +509,16 @@ INSERT INTO packaging_generations_new(id,job_id,run_id,cand_start_id,cand_end_id
 DROP TABLE packaging_generations;
 ALTER TABLE packaging_generations_new RENAME TO packaging_generations;
 CREATE INDEX packaging_generations_cut ON packaging_generations(run_id, cand_start_id, cand_end_id, id);
+CREATE TABLE packaging_edits (
+  id INTEGER PRIMARY KEY,
+  generation_id INTEGER NOT NULL REFERENCES packaging_generations(id) ON DELETE CASCADE,
+  fields TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+INSERT INTO packaging_edits(id, generation_id, fields, created_at)
+  SELECT id, generation_id, fields, created_at FROM _packaging_edits_backup;
+DROP TABLE _packaging_edits_backup;
+CREATE INDEX packaging_edits_generation ON packaging_edits(generation_id, id);
 " } }
 
 struct Context {

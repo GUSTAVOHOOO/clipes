@@ -3,10 +3,11 @@
 use clipes_core::{
     ai_task::{self, TaskInput},
     dispatch, jobs,
-    projects::with_writer,
+    projects::{self, with_reader, with_writer, Migration},
     provider::{cost::Target, CancelToken, Provider, StructuredRequest},
     CoreError,
 };
+use rusqlite::Connection;
 use serde_json::{json, Value};
 use std::{
     sync::{Arc, Mutex},
@@ -586,4 +587,106 @@ fn packaging_edit_initializes_manual_without_prior_generation() {
         "Título manual v2"
     );
     assert!(readiness["items"][0]["packaging"]["job"].is_null());
+}
+
+#[test]
+fn migration_0299_preserves_packaging_generations_and_edits_with_same_ids() {
+    let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let root = tempfile::tempdir().unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", root.path().join("data"));
+    let path = root.path().join("legado-packaging.clipes");
+    std::fs::create_dir(&path).unwrap();
+
+    let conn = Connection::open(path.join("project.sqlite")).unwrap();
+    conn.execute_batch("CREATE TABLE schema_migrations(id TEXT PRIMARY KEY NOT NULL)")
+        .unwrap();
+    let mut migrations: Vec<_> = inventory::iter::<Migration>
+        .into_iter()
+        .filter(|m| m.id != "0299_001_packaging_manual")
+        .collect();
+    migrations.sort_by_key(|m| m.id);
+    for migration in migrations {
+        conn.execute_batch(migration.sql).unwrap();
+        conn.execute("INSERT INTO schema_migrations VALUES (?1)", [migration.id])
+            .unwrap();
+    }
+    conn.execute_batch(
+        r##"
+INSERT INTO project(name) VALUES ('Legado');
+INSERT INTO sources(id,path,size,duration_us,partial_hash,metadata,permission,audio_track)
+ VALUES (1,'fixture.mp4',1,30000000,'h','{}','{"status":"granted","who":"Canal Legado"}',0);
+INSERT INTO transcripts(id,source_id,audio_track,engine,model,revision,compute_type,state,resume_us,duration_us)
+ VALUES (1,1,0,'local','m','r','c','complete',30000000,30000000);
+INSERT INTO sentences(transcript_id,id,first_position,last_position,start_us,end_us,language,text)
+ VALUES (1,1,0,0,0,30000000,'pt','Uma fala preservada.');
+INSERT INTO selection_runs(id,transcript_id,task_version,prompt_sha256,state,min_us,max_us,weights,plan_state,windows_total,video_kind)
+ VALUES (1,1,1,'','completed',15000000,60000000,'{}','full',1,'direct');
+INSERT INTO selection_candidates(id,run_id,rank,start_id,end_id,start_us,end_us,axes,total_centi,windows)
+ VALUES (1,1,1,1,1,0,30000000,'{}',900,'[]');
+INSERT INTO selection_decisions(run_id,cand_start_id,cand_end_id,decision,before_start_id,before_end_id,after_start_id,after_end_id)
+ VALUES (1,1,1,'approved',1,1,1,1);
+INSERT INTO jobs(id,kind,safety,state,progress)
+ VALUES (99, 'ai:packaging', 'local', 'completed', 100);
+INSERT INTO packaging_generations(id,job_id,run_id,cand_start_id,cand_end_id,language,task_version,prompt_sha256,profile,generated,created_at)
+ VALUES (42,99,1,1,1,'pt-BR',2,'hash64','legacy','{"title":"Original","description":"Desc","tags":["t"],"hashtags":["#t"]}','2026-01-01T00:00:00.000Z');
+INSERT INTO packaging_edits(id,generation_id,fields,created_at)
+ VALUES (7,42,'{"title":"Edição 1","description":"Desc 1","tags":["a"],"hashtags":["#a"]}','2026-01-01T00:01:00.000Z');
+INSERT INTO packaging_edits(id,generation_id,fields,created_at)
+ VALUES (8,42,'{"title":"Edição 2","description":"Desc 2","tags":["b"],"hashtags":["#b"]}','2026-01-01T00:02:00.000Z');
+"##,
+    )
+    .unwrap();
+    drop(conn);
+
+    // Abertura executa a migração 0299 dentro de transação com foreign_keys ativo por padrão.
+    call("projects.open", json!({"path": path}));
+
+    let (gen_ids, edit_rows, has_index) = with_reader(|c| {
+        let mut gq = c.prepare("SELECT id, job_id FROM packaging_generations ORDER BY id")?;
+        let gen_ids = gq
+            .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Option<i64>>(1)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let mut eq = c.prepare(
+            "SELECT id, generation_id, json_extract(fields, '$.title') FROM packaging_edits ORDER BY id",
+        )?;
+        let edit_rows = eq
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, String>(2)?,
+                ))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let has_index: bool = c.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='index' AND name='packaging_edits_generation')",
+            [],
+            |r| r.get(0),
+        )?;
+        Ok((gen_ids, edit_rows, has_index))
+    })
+    .unwrap();
+
+    assert_eq!(gen_ids, vec![(42, Some(99))]);
+    assert_eq!(
+        edit_rows,
+        vec![
+            (7, 42, "Edição 1".to_owned()),
+            (8, 42, "Edição 2".to_owned()),
+        ]
+    );
+    assert!(has_index, "índice packaging_edits_generation deve existir");
+
+    let doc = call("packaging.get", json!({"candidate": 1}));
+    assert_eq!(doc["current"]["title"], "Edição 2");
+    assert_eq!(doc["generations"][0]["edits"].as_array().unwrap().len(), 2);
+    assert_eq!(doc["revision"], 3);
+
+    // Conferir também que a FK ON DELETE CASCADE segue ativa após a migração.
+    let remaining_edits: i64 = projects::with_writer(|c| {
+        c.execute("DELETE FROM packaging_generations WHERE id=42", [])?;
+        c.query_row("SELECT COUNT(*) FROM packaging_edits", [], |r| r.get(0))
+    })
+    .unwrap();
+    assert_eq!(remaining_edits, 0);
 }
