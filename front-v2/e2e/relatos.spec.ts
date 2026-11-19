@@ -74,7 +74,7 @@ test.describe('Tela Relatos e Diagnóstico (#/relatos)', () => {
     await page.getByRole('button', { name: /Revisar relato antes de enviar/i }).click()
     await expect(page.getByRole('heading', { level: 2, name: /Revisar e editar relato antes de enviar/i })).toBeVisible()
     await expect(page.locator('button.bg-sinal')).toHaveCount(1)
-    await expect(page.getByText(/#300/)).toBeVisible()
+    await expect(page.getByText(/quando há registros locais.*Etapa da falha: componente/i)).toBeVisible()
 
     await verificarSemRolagemExterna(page)
     await page.screenshot({ path: 'test-results/relatos-passo2-1366.png' })

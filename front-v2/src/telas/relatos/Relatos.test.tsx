@@ -221,7 +221,7 @@ describe('Relatos (#/relatos)', () => {
     expect((diagEditavel as HTMLTextAreaElement).value).toContain('cuda/int8_float16')
   })
 
-  it('Passo 2: exibe nota #300, envia exatamente o texto editado para diagnostic.export e copia texto', async () => {
+  it('Passo 2: exibe nota sobre etapa padrão sem expor número de ticket (UI-12), envia exatamente o texto editado para diagnostic.export e copia texto', async () => {
     const user = userEvent.setup()
     renderRelatos()
 
@@ -231,7 +231,10 @@ describe('Relatos (#/relatos)', () => {
 
     await user.click(screen.getByRole('button', { name: /Revisar relato antes de enviar/i }))
 
-    expect(screen.getByText(/#300/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/quando há registros locais.*Etapa da falha: componente/i),
+    ).toBeInTheDocument()
+    expect(document.body.textContent ?? '').not.toMatch(/#\d+/)
     const diagEditavel = screen.getByRole('textbox', { name: /Diagnóstico técnico editável/i })
     await user.clear(diagEditavel)
     await user.type(diagEditavel, 'Etapa da falha: exportacao\nLinha editada pelo usuario')

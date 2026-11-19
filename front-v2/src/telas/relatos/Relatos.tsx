@@ -707,6 +707,7 @@ export function Relatos({ tipoInicial }: RelatosProps) {
               </div>
             )}
 
+            {/* Pendência no núcleo (#300): diagnostic.get fixa "Etapa da falha: componente" quando há registros locais */}
             {incluirDiagnostico ? (
               <Campo
                 rotulo="Diagnóstico técnico editável"
@@ -715,7 +716,7 @@ export function Relatos({ tipoInicial }: RelatosProps) {
                     URL estimada: {bytesUrlEstimada} / {LIMITE_BYTES_URL} bytes UTF-8
                   </span>
                 }
-                ajuda="Nota (#300): quando há registros locais, o diagnóstico pode trazer &quot;Etapa da falha: componente&quot; por padrão — corrija ou apague qualquer linha antes de enviar."
+                ajuda='Nota: quando há registros locais, o diagnóstico pode trazer "Etapa da falha: componente" por padrão — corrija ou apague qualquer linha antes de enviar.'
               >
                 {(props) => (
                   <AreaTexto
