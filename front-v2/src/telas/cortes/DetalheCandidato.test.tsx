@@ -251,7 +251,7 @@ describe('DetalheCandidato (Coluna direita C.2)', () => {
     expect(chamarMock).toHaveBeenCalledWith('jobs.cancel', { id: 7 })
   })
 
-  it('transiciona para <PlayerProxy> 9:16 com mediaUrl("proxy/" + key) quando core-progress conclui o proxy', async () => {
+  it('transiciona para <PlayerProxy> 9:16 (vídeo) com mediaUrl("proxy/" + key) quando core-progress conclui o proxy', async () => {
     filaTeste = criarFila(() => 'demo')
     chamarMock.mockImplementation(async (cmd: string) => {
       if (cmd === 'proxy.request') {
@@ -301,7 +301,7 @@ describe('DetalheCandidato (Coluna direita C.2)', () => {
     await waitFor(() => {
       expect(chamarMock).toHaveBeenCalledWith('proxy.status', { key: '0004cdcd' })
     })
-    const img = await screen.findByRole('img', { name: /Quadro do Corte/i })
+    const img = await screen.findByLabelText(/Quadro do Corte/i)
     expect(img).toHaveAttribute('src', '/__clipes-media__/proxy/0004cdcd')
   })
 
@@ -931,7 +931,7 @@ describe('DetalheCandidato (Coluna direita C.2)', () => {
       })
     })
 
-    const img = await screen.findByRole('img', { name: /Quadro do Corte/i })
+    const img = await screen.findByLabelText(/Quadro do Corte/i)
     expect(img).toHaveAttribute('src', '/__clipes-media__/proxy/0004second')
   })
 
@@ -965,7 +965,7 @@ describe('DetalheCandidato (Coluna direita C.2)', () => {
       ),
     )
 
-    await screen.findByRole('img', { name: /Quadro do Corte/i })
+    await screen.findByLabelText(/Quadro do Corte/i)
 
     // <Kbd> de A, R, I, O refletem Alt+tecla em modo 'alt'
     const kbds = Array.from(container.querySelectorAll('kbd')).map((k) => k.textContent?.trim())
@@ -1011,7 +1011,7 @@ describe('DetalheCandidato (Coluna direita C.2)', () => {
     expect(kbdsDesligados).toEqual(['Enter'])
   })
 
-  it('UI-34c: substitui <img> quebrada no <PlayerProxy> por placeholder limpo quando o poster falha ao carregar', async () => {
+  it('UI-34c: substitui vídeo quebrado no <PlayerProxy> por placeholder limpo quando o vídeo falha ao carregar', async () => {
     filaTeste = criarFila(() => 'demo')
     chamarMock.mockResolvedValue({
       state: 'ready',
@@ -1037,10 +1037,10 @@ describe('DetalheCandidato (Coluna direita C.2)', () => {
       ),
     )
 
-    const img = await screen.findByRole('img', { name: /Quadro do Corte/i })
+    const img = await screen.findByLabelText(/Quadro do Corte/i)
     fireEvent.error(img)
 
-    expect(container.querySelector('img')).toBeNull()
+    expect(container.querySelector('video')).toBeNull()
     expect(screen.getByRole('img', { name: /Quadro do Corte/i })).toBeInTheDocument()
   })
 
