@@ -277,11 +277,16 @@ async function bootAndVerifyInstalledApp({ binaryPath, expectedVersion, dataDir,
       { timeout: timeoutMs, interval: 250, timeoutMsg: 'front-v2 não carregou na WebView do pacote instalado.' },
     );
 
-    const versionRes = await browser.executeAsync(done => {
-      window.__TAURI_INTERNALS__
-        .invoke('core_dispatch', { name: 'app.version', arguments: {} })
-        .then(res => done({ ok: true, version: res?.version ?? null }))
-        .catch(err => done({ ok: false, error: String(err) }));
+    const versionRes = await browser.execute(async () => {
+      try {
+        const res = await window.__TAURI_INTERNALS__.invoke('core_dispatch', {
+          name: 'app.version',
+          arguments: {},
+        });
+        return { ok: true, version: res?.version ?? null };
+      } catch (err) {
+        return { ok: false, error: String(err) };
+      }
     });
     assert.equal(versionRes?.ok, true, `app.version falhou: ${JSON.stringify(versionRes)}`);
 

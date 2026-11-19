@@ -398,20 +398,41 @@ async function main() {
       for (const [pos, text, s, e] of words) stmt.run(transcriptId, pos, text, s, e);
       db.close();
     }
-    await wd.execAsync(
+    const reopenedProject = await wd.execAsync(
       async (projectPath, sourceId) => {
         const invoke = (name, args = {}) => window.__TAURI_INTERNALS__.invoke('core_dispatch', { name, arguments: args });
-        await invoke('projects.open', { path: projectPath });
+        const opened = await invoke('projects.open', { path: projectPath });
         await invoke('transcription.segment', { source_id: sourceId });
+        return opened;
       },
       [setupRes.project.path, setupRes.source.id],
     );
 
     // 4. Testar o PalcoEditor v2 (#/projeto/:id/corte/avulso-<sourceId>-1-2/editar) + reprodução no WebKitGTK
-    const editorHash = buildEditorAvulsoHash(setupRes.project, setupRes.source.id, 1, 2);
+    const activeProject = reopenedProject?.id ? reopenedProject : setupRes.project;
+    const editorHash = buildEditorAvulsoHash(activeProject, setupRes.source.id, 1, 2);
+    await wd.exec(() => {
+      location.reload();
+    });
+    {
+      const bootDeadline = Date.now() + 20_000;
+      let shellReady = false;
+      while (Date.now() < bootDeadline) {
+        shellReady = await wd.exec(projectName => {
+          const header = document.querySelector('header');
+          return Boolean(
+            window.__TAURI_INTERNALS__?.invoke &&
+            header &&
+            (document.body.innerText || '').includes(projectName),
+          );
+        }, [activeProject.name || 'ValidacaoLinux']);
+        if (shellReady) break;
+        await delay(250);
+      }
+      assert.ok(shellReady, 'Shell v2 não carregou o Projeto aberto após reload.');
+    }
     await wd.exec(targetHash => {
       window.location.hash = targetHash;
-      location.reload();
     }, [editorHash]);
     {
       const deadline = Date.now() + 30_000;

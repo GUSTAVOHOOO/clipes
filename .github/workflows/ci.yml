@@ -171,7 +171,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          if apt-cache show webkitgtk-webdriver >/dev/null 2>&1; then
+          if apt-cache policy webkitgtk-webdriver 2>/dev/null | grep -Eq 'Candidate:\s*[^ (]'; then
             DRIVER_PKG=webkitgtk-webdriver
           else
             DRIVER_PKG=webkit2gtk-driver

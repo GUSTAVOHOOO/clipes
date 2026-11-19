@@ -140,3 +140,10 @@ test('verifyUserDataPreserved confirma que CLIPES_DATA_DIR e arquivo sentinela s
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('smoke-package.mjs usa browser.execute (não browser.executeAsync removido no WebdriverIO v10)', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(path.join(REPO_ROOT, 'scripts', 'smoke-package.mjs'), 'utf8');
+  assert.equal(src.includes('browser.executeAsync'), false);
+  assert.equal(src.includes('browser.execute(async'), true);
+});
