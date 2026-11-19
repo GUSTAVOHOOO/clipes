@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { copyFile, mkdir, mkdtemp, readdir, readFile, rename, rm, utimes, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { remote } from 'webdriverio';
 import { cargoBinDir, ensureWebDriver, exeName, findExecutable } from './setup-webdriver.mjs';
@@ -1252,6 +1253,214 @@ async function runSession2(ui, ctx) {
   );
 }
 
+async function prepareV1ProjectFixture({ tempRoot, ffmpeg }) {
+  const mediaDir = path.join(tempRoot, 'media');
+  const projectDir = path.join(tempRoot, 'projects', 'ProjetoV1.clipes');
+  await mkdir(projectDir, { recursive: true });
+  await mkdir(mediaDir, { recursive: true });
+  const sourcePath = path.join(mediaDir, 'v1-source.mp4');
+  execFileSync(
+    ffmpeg,
+    [
+      '-v', 'error',
+      '-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=30:duration=30',
+      '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=30',
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac', '-ar', '48000', '-y', sourcePath,
+    ],
+    { stdio: 'inherit' },
+  );
+  const probe = ffprobeJson(sourcePath);
+  const audioIndex = probe.streams.find(s => s.codec_type === 'audio').index;
+  const durationUs = Math.round(Number(probe.format.duration) * 1_000_000);
+
+  // Hash parcial idêntico ao de core/src/sources.rs::partial (3 blocos de até 4 MiB).
+  const bytes = await readFile(sourcePath);
+  const block = 4 * 1024 * 1024;
+  const tail = Math.max(bytes.length - block, 0);
+  const hash = createHash('sha256');
+  for (const offset of [0, Math.floor(tail / 2), tail]) {
+    hash.update(bytes.subarray(offset, Math.min(offset + block, bytes.length)));
+  }
+  const modified = statSync(sourcePath, { bigint: true }).mtimeNs.toString();
+
+  const dbPath = path.join(projectDir, 'project.sqlite');
+  await copyFile(path.join(REPO_ROOT, 'core', 'tests', 'fixtures', 'project-pre-0104.sqlite'), dbPath);
+  const db = new DatabaseSync(dbPath);
+  try {
+    db.exec('DELETE FROM sources; DELETE FROM project;');
+    db.prepare('INSERT INTO project(name) VALUES (?)').run('ProjetoV1');
+    db.prepare(
+      `INSERT INTO sources(id,path,size,duration_us,partial_hash,metadata,permission,audio_track,modified)
+       VALUES (1,?,?,?,?,?,?,?,?)`,
+    ).run(
+      sourcePath,
+      bytes.length,
+      durationUs,
+      hash.digest('hex'),
+      JSON.stringify(probe),
+      JSON.stringify({ status: 'granted', who: 'Canal V1', where: 'Acordo interno', scope: 'Cortes verticais' }),
+      audioIndex,
+      modified,
+    );
+  } finally {
+    db.close();
+  }
+  return { v1ProjectDir: projectDir, v1SourcePath: sourcePath };
+}
+
+/**
+ * As tabelas de Transcrição e de seleção vêm de migrações Rust posteriores ao banco V1; só existem
+ * depois que o app abre o Projeto (e grava `project.pre-migration.sqlite`). Por isso este seed roda
+ * logo após a abertura: 4 Frases de 7,5 s e uma execução de seleção V1 com 2 candidatos pendentes.
+ */
+function seedV1Selection(projectDir) {
+  const db = new DatabaseSync(path.join(projectDir, 'project.sqlite'));
+  try {
+    db.exec('PRAGMA busy_timeout = 10000;');
+    const sentenceUs = 7_500_000;
+    const texts = [
+      ['Bem-vindos ao canal', 'hoje vamos falar de cortes.'],
+      ['O primeiro assunto', 'é como revisar cada trecho.'],
+      ['Depois ajustamos', 'as bordas por Frase inteira.'],
+      ['No final exportamos', 'o vídeo vertical pronto.'],
+    ];
+    db.exec('BEGIN IMMEDIATE');
+    db.prepare(
+      `INSERT INTO transcripts(id,source_id,audio_track,engine,model,revision,compute_type,state,resume_us,duration_us)
+       VALUES (1,1,1,'local','whisper-small','r','int8','complete',?1,?1)`,
+    ).run(sentenceUs * 4);
+    const word = db.prepare(
+      `INSERT INTO transcript_words(transcript_id,position,kind,text,start_us,end_us,language)
+       VALUES (1,?,'word',?,?,?,'pt')`,
+    );
+    const sentence = db.prepare(
+      `INSERT INTO sentences(transcript_id,id,first_position,last_position,start_us,end_us,language,text)
+       VALUES (1,?,?,?,?,?,'pt',?)`,
+    );
+    texts.forEach(([a, b], i) => {
+      const start = i * sentenceUs;
+      word.run(i * 2, ` ${a}`, start, start + 3_600_000);
+      word.run(i * 2 + 1, ` ${b}`, start + 3_800_000, start + sentenceUs);
+      sentence.run(i + 1, i * 2, i * 2 + 1, start, start + sentenceUs, `${a} ${b}`);
+    });
+    db.prepare(
+      `INSERT INTO selection_runs(id,transcript_id,task_version,prompt_sha256,profile,state,batch,min_us,max_us,weights,plan_state,windows_total,windows_completed,candidates_kept,video_kind,revision)
+       VALUES (1,1,1,'h','Local rápido','completed','',20000000,180000000,'[]','full',1,1,2,'direct',1)`,
+    ).run();
+    db.prepare(
+      `INSERT INTO selection_windows(run_id,idx,first_id,last_id,start_us,end_us,profile)
+       VALUES (1,0,1,4,0,?,'Local rápido')`,
+    ).run(sentenceUs * 4);
+    const cand = db.prepare(
+      `INSERT INTO selection_candidates(run_id,rank,start_id,end_id,start_us,end_us,axes,total_centi,title,windows,adjust,revision,profile)
+       VALUES (1,?,?,?,?,?,'{}',?,?,'[0]',NULL,1,'Local rápido')`,
+    );
+    cand.run(1, 1, 3, 0, sentenceUs * 3, 825, 'Revisar cada trecho');
+    cand.run(2, 2, 4, sentenceUs, sentenceUs * 4, 780, 'Ajustar e exportar');
+    db.exec('COMMIT');
+  } finally {
+    db.close();
+  }
+}
+
+function ffprobeJson(file) {
+  return JSON.parse(
+    execFileSync(findExecutable('ffprobe'), ['-v', 'error', '-show_format', '-show_streams', '-of', 'json', file], {
+      encoding: 'utf8',
+    }),
+  );
+}
+
+async function runSession3(ui, ctx) {
+  logStep('Sessão 3: Projeto V1 → abrir → revisar → editar → exportar (MP4 real)…');
+  const initialHash = await ui.waitForHash(/^#\/(inicio|assistente)/);
+  if (initialHash.startsWith('#/assistente')) {
+    // Rodando só a Sessão 3 (CLIPES_E2E_SESSIONS=3): o Assistente ainda não foi concluído.
+    await ui.clickButton('Pular por enquanto');
+    await ui.waitForHash('#/config/provedores');
+    await ui.navigateHash('#/inicio');
+  }
+  await ui.waitForText('Projetos', 'main');
+
+  await ui.queueDialog(ctx.v1ProjectDir);
+  await ui.clickButton('Abrir pasta .clipes');
+  const hash = await ui.waitForHash(/^#\/projeto\/[^/]+\/fontes/);
+  const projectId = hash.split('/')[2];
+  assert.equal(
+    existsSync(path.join(ctx.v1ProjectDir, 'project.pre-migration.sqlite')),
+    true,
+    'Migração do Projeto V1 deve gravar project.pre-migration.sqlite',
+  );
+  await ui.waitForText('v1-source.mp4', 'main');
+  await ui.shot('s3-01-projeto-v1-fontes.png');
+
+  seedV1Selection(ctx.v1ProjectDir);
+  await ui.reloadApp(`#/projeto/${projectId}/cortes`, 'Abrir bancada de revisão');
+  await ui.shot('s3-02-cortes-v1.png');
+
+  logStep('Sessão 3: revisão na Bancada…');
+  await ui.clickButton('Abrir bancada de revisão');
+  await ui.waitForHash(/\/cortes\/revisao\/1/);
+  await ui.waitForText('Revisão de Cortes', 'main');
+  await ui.waitForText('Revisar cada trecho', 'main');
+  await ui.waitForText('Converter em Vídeo transformado', 'main');
+  assert.equal(
+    await ui.browser.execute(() => {
+      const b = Array.from(document.querySelectorAll('button')).find(x =>
+        (x.textContent || '').includes('Converter em Vídeo transformado'),
+      );
+      return b?.getAttribute('aria-disabled');
+    }),
+    'true',
+    'A conversão individual (#292) deve continuar desabilitada em Corte direto',
+  );
+  await ui.clickButton('Recuar fim 1 Frase');
+  await ui.waitForText('Duração atual:', 'main');
+  await ui.clickButton('Avançar fim 1 Frase');
+  await ui.clickButton('Aprovar');
+  await ui.waitForText('Aprovado', 'main');
+  await ui.shot('s3-03-revisao-aprovada.png');
+  await ui.clickButton('Abrir no editor');
+  await ui.waitForHash(/\/corte\/[^/]+\/editar/);
+
+  logStep('Sessão 3: editor e salvar…');
+  await ui.waitForText('Exportar Corte', 'body');
+  await ui.browser.keys(['Control', 's']);
+  await ui.waitForText('Salvo', 'body');
+  await ui.shot('s3-04-editor.png');
+
+  logStep('Sessão 3: exportar Corte em MP4…');
+  const outputPath = path.join(ctx.tempRoot, 'corte-v1-exportado.mp4');
+  await ui.clickButton('Exportar Corte');
+  await ui.waitForDialog('Exportar Corte em MP4 (1080×1920)', 'dialog');
+  await ui.queueDialog(outputPath);
+  await ui.clickButton('Escolher arquivo', { scopeSelector: '[role="dialog"]' });
+  await ui.clickButton('Iniciar exportação', { scopeSelector: '[role="dialog"]' });
+  await ui.waitForText('Corte exportado com sucesso', '[role="dialog"]', 240_000);
+  await ui.shot('s3-05-exportado.png');
+  await ui.clickButton('Fechar', { scopeSelector: '[role="dialog"]' });
+
+  const info = ffprobeJson(outputPath);
+  const video = info.streams.find(s => s.codec_type === 'video');
+  const audio = info.streams.find(s => s.codec_type === 'audio');
+  assert.equal(video?.codec_name, 'h264');
+  assert.equal(video?.width, 1080);
+  assert.equal(video?.height, 1920);
+  assert.equal(audio?.codec_name, 'aac');
+  assert.equal(audio?.sample_rate, '48000');
+  logStep(
+    `Sessão 3: ffprobe do MP4: ${video.codec_name} ${video.width}x${video.height}, ${audio.codec_name} ${audio.sample_rate} Hz`,
+  );
+
+  await ui.navigateHash(`#/projeto/${projectId}/exportacao`);
+  await ui.waitForText('Revisar cada trecho', 'main');
+  await ui.shot('s3-06-exportacao.png');
+
+  logStep('Sessão 3: fechamento coordenado (#291) sem jobs ativos…');
+  await ui.browser.execute(() => window.close());
+}
+
 async function main() {
   const skipBuild = process.argv.includes('--skip-build') || process.env.CLIPES_E2E_SKIP_BUILD === '1';
   const { tauriDriverPath, nativeDriverPath } = await ensureWebDriver();
@@ -1296,6 +1505,10 @@ async function main() {
     await stageModelsInstalled(dataDir);
     if (sessions.includes('2')) {
       await withTauriSession({ ...sharedConfig, workerMode: 'transcribe' }, ui => runSession2(ui, ctx));
+    }
+    if (sessions.includes('3')) {
+      const v1 = await prepareV1ProjectFixture({ tempRoot, ffmpeg });
+      await withTauriSession({ ...sharedConfig, workerMode: '' }, ui => runSession3(ui, { ...ctx, ...v1 }));
     }
 
     logStep(`Suíte E2E Tauri (Sessões ${sessions.join(', ')}) concluída com sucesso: OK`);
