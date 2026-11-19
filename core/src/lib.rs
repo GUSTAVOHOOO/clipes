@@ -66,6 +66,8 @@ mod audit;
 pub mod caption_style;
 pub mod channel_profile;
 pub mod chat;
+pub mod console;
+pub use console::{set_console_emitter, ConsoleEvent, ConsoleLevel};
 mod components;
 mod context_notice;
 pub mod corrections;
