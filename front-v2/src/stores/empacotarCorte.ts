@@ -376,7 +376,7 @@ export function criarStoreEmpacotarCorte(): StoreEmpacotarCorte {
         await Promise.all([
           chamar<CapaDoc>('thumbnail.get', { candidate: candidateId }),
           chamar<EmpacotamentoDoc>('packaging.get', { candidate: candidateId }),
-          chamar<GuardrailsDoc>('guardrails.check', { candidate: candidateId, scope: 'single' }),
+          chamar<GuardrailsDoc>('guardrails.check', { candidate_id: candidateId, scope: 'single' }),
           chamar<{ profiles: PerfilProvedorLista[] }>('provider.profiles.list', {}),
           chamar<RespostaTarefasAssistente>('assistant.tasks', {}),
           chamar<OrcamentoJobs>('jobs.budget.get', {}),
@@ -427,7 +427,7 @@ export function criarStoreEmpacotarCorte(): StoreEmpacotarCorte {
     try {
       const [capa, guardrails] = await Promise.all([
         chamar<CapaDoc>('thumbnail.get', { candidate: candidateId }),
-        chamar<GuardrailsDoc>('guardrails.check', { candidate: candidateId, scope: 'single' }),
+        chamar<GuardrailsDoc>('guardrails.check', { candidate_id: candidateId, scope: 'single' }),
       ])
       if (reqVersao !== versao || estado.candidateId !== candidateId) return
       estado = { ...estado, capa, guardrails }
@@ -445,7 +445,7 @@ export function criarStoreEmpacotarCorte(): StoreEmpacotarCorte {
     try {
       const [empacotamento, guardrails] = await Promise.all([
         chamar<EmpacotamentoDoc>('packaging.get', { candidate: candidateId }),
-        chamar<GuardrailsDoc>('guardrails.check', { candidate: candidateId, scope: 'single' }),
+        chamar<GuardrailsDoc>('guardrails.check', { candidate_id: candidateId, scope: 'single' }),
       ])
       if (reqVersao !== versao || estado.candidateId !== candidateId) return
       estado = { ...estado, guardrails }
@@ -462,7 +462,7 @@ export function criarStoreEmpacotarCorte(): StoreEmpacotarCorte {
     const reqVersao = versao
     try {
       const guardrails = await chamar<GuardrailsDoc>('guardrails.check', {
-        candidate: candidateId,
+        candidate_id: candidateId,
         scope: 'single',
       })
       if (reqVersao !== versao || estado.candidateId !== candidateId) return
