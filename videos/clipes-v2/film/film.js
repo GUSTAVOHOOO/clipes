@@ -181,7 +181,7 @@
       const ax = 107, ay = lerp(sy0, 60, u);
       put(S.F.cv, { css: { left: r.w / 2 - ax * c + 'px', top: r.h / 2 - ay * c + 'px', width: 214 * c + 'px', height: 120 * c + 'px' } });
       // cabeçalho real da Fonte sobe por baixo do vídeo
-      const v = sp(t, beatOf('s2_head') + 0.12, 'default');
+      const v = spHit(t, 's2_head', 'default');   // lê NO pop de 4,5 s (rodada 10: chegava 3 quadros depois)
       const rH = P({ x: 780, y: 760, w: 1080, h: 124 }, { x: 48, y: 1372, w: 984, h: 118 });
       frame(S.hdr, { ...rH, y: rH.y + 70 * (1 - v) }, P(330, 318), 70, P(1.62, 1.9) * (1 + 0.02 * seg(t, 9, 12)));
       put(S.hdr.vp, { o: v > 0.02 ? 1 : 0 });
@@ -209,8 +209,8 @@
         [[12, 236, 205, 2.4], [16, 790, 470, 2.0]]));
       const f = frame(S.scr, P({ ...VP, x: 60 }, VP), cx + 40 * seg(t, 16, 20), cy, z * (1 + 0.03 * seg(t, 12, 16)), P(lerp(14, 3, q), lerp(-14, -3, q)), lerp(6, 1.5, q));
       // falas transcritas: uma por meia batida (s3_l1..l4), depois o resto da coluna
-      const edge = trk(t, [[12, R.falas[0] + 40], [16.5 - 0.2 * LEADB, R.falas[1], 'snappy'], [17 - 0.2 * LEADB, R.falas[2], 'snappy'],
-        [17.5 - 0.2 * LEADB, R.falas[3], 'snappy'], [18 - 0.2 * LEADB, R.falas[4], 'snappy'], [18.6, 832, 'default']]);
+      const edge = trk(t, [[12, 236], [16.9 - 0.2 * LEADB, R.falas[0] + 40, 'snappy'], [17.4 - 0.2 * LEADB, R.falas[1], 'snappy'],
+        [17.9 - 0.2 * LEADB, R.falas[2], 'snappy'], [18.4 - 0.2 * LEADB, R.falas[3], 'snappy'], [19.1, 832, 'default']]);   // 4 falas, uma por pluck (8,5 / 8,75 / 9,0 / 9,25 s)
       put(S.rows, { clip: `inset(236px 8px ${(900 - edge).toFixed(1)}px 470px)` });
       // rack focus: do Motor ("Local — US$ 0,00 · não sai da máquina") para as falas
       const fo = sp(t, 's3_rack', 'default');
@@ -289,7 +289,7 @@
       const edge = trk(t, [[28, R.leg[0] - 4], [beatOf('s5_w1') - 0.2 * LEADB - 0.1, R.leg[1] + 2, 'snappy'], [beatOf('s5_w2') - 0.2 * LEADB - 0.1, R.leg[2] + 2, 'snappy'], [beatOf('s5_w3') - 0.2 * LEADB - 0.1, R.leg[3] + 8, 'snappy']]);
       put(S.leg, { clip: `inset(0px ${(R.prevEd.x + R.prevEd.w - edge).toFixed(1)}px 0px 0px)` });
       // rack focus: tudo fora de foco menos a Frase 13 ("O chat simplesmente explodiu nessa hora.") e a Prévia
-      const fo = spHit(t, 's5_rack', 'default', 0.1) - sp(t, 35.6, 'default');
+      const fo = sp(t, 33.4, { response: 0.5, damping: 1 }) - sp(t, 35.6, 'default');
       put(S.scr.img, { filter: `blur(${(3.5 * fo).toFixed(2)}px)` });
       put(S.A.img, { filter: `blur(${(3.5 * fo).toFixed(2)}px)` });
       put(S.btn, { filter: `blur(${(3.5 * fo).toFixed(2)}px)` });
@@ -347,11 +347,6 @@
     + '<g class="bl1"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M14.8 14.8 20 20"/></g><g class="bl2"><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/></g></svg>';
   // fase de uma saída em quadros da grade de 30 fps: ant = deriva de 2 quadros até o quadro k; snap = saída em 1 quadro (k → k+1)
   const snapPhase = (t, k) => ({ ant: Math.pow(clamp((t * 30 - (k - 2)) / 2 + 1e-6), 2), snap: clamp(t * 30 - k + 1e-6) });
-  function snapExit(t, rows, k) {
-    const { ant, snap } = snapPhase(t, k);
-    if (t * 30 < k - 2) return;   // antes da antecipação a entrada (rise) manda; depois ela já assentou
-    rows.forEach((L) => L.words.forEach((w) => put(w, { y: -L.size * (0.14 * ant + 1.7 * snap), hide: snap > 0.99 })));
-  }
   const XOUT = 58.5;   // beat em que o texto do cartão final começa a sair
   scene({
     name: 'final', from: 'logo', to: 'done', pre: 0.34, cut: true,   // entra quando a luz do botão completa: no máximo 1 quadro laranja chapado
@@ -378,11 +373,14 @@
       S.bl = [...S.lock.querySelectorAll('.bl1, .bl2')].map((g) => reg(g));
       S.pmask = el('div', { class: 'abs', style: `left:${PAD}px;top:${P(290, 420)}px;width:200px;height:60px;overflow:hidden` }, S.push);
       S.pill = reg(el('div', { class: 'pill', style: 'left:0;top:0' }, S.pmask, 'v2.0.0'), { y: 80 });
+      // o bloco de texto sai inteiro por UMA borda reta (abaixo da marca e da pílula): clipper fixo + bloco que sobe
+      S.clip = el('div', { class: 'abs', style: `width:${W}px;height:${H}px;clip-path:inset(${P(362, 500)}px 0 0 0)` }, S.push);
+      S.txt = reg(el('div', { class: 'abs', style: `width:${W}px;height:${H}px` }, S.clip));
       const Y = P(380, 520);
-      S.tag = head(S.push, ['Interface nova. Mesmo núcleo.'], { y: Y, size: P(60, 54) });
-      S.cta = head(S.push, ['Baixe grátis para', 'Windows e Linux.'], { y: Y + P(100, 100), size: P(104, 96) });
-      S.url = head(S.push, ['github.com/GUSTAVOHOOO/clipes'], { y: Y + P(360, 345), size: P(54, 50) });
-      S.lic = head(S.push, P(['GitHub Releases · Open source · Apache-2.0'], ['GitHub Releases', 'Open source · Apache-2.0']), { y: Y + P(440, 415), cls: 'eyebrow', size: P(46, 46), lh: 1.3 });
+      S.tag = head(S.txt, ['Interface nova. Mesmo núcleo.'], { y: Y, size: P(60, 54) });
+      S.cta = head(S.txt, ['Baixe grátis para', 'Windows e Linux.'], { y: Y + P(100, 100), size: P(104, 96) });
+      S.url = head(S.txt, ['github.com/GUSTAVOHOOO/clipes'], { y: Y + P(360, 345), size: P(54, 50) });
+      S.lic = head(S.txt, P(['GitHub Releases · Open source · Apache-2.0'], ['GitHub Releases', 'Open source · Apache-2.0']), { y: Y + P(440, 415), cls: 'eyebrow', size: P(46, 46), lh: 1.3 });
       S.cover = reg(el('div', { class: 'abs', style: `width:${W}px;height:${H}px;background:var(--sinal);overflow:hidden` }, root));
       // o mesmo rótulo, no mesmo lugar e tamanho do fim do plano 6, sai junto com o wipe
       el('div', { class: 'abs', style: `width:351px;height:36px;display:flex;align-items:center;justify-content:center;font:500 13px/1 UI;color:var(--no-sinal);white-space:nowrap;transform:translate(${(W - 351 * LBLMAX) / 2}px, ${(H - 36 * LBLMAX) / 2}px) scale(${LBLMAX})` }, S.cover, 'Exportar 4 aprovados em lote');
@@ -396,7 +394,7 @@
       const fin = ease.inOut(seg(t, 58.5, 60));
       put(S.push, { s: 1 + 0.08 * seg(t, 48, 60) });   // linear: nunca para, nem no último quadro
       const LS = P(80, 76), lk = C.sp(t, 47.81, { response: 0.32, damping: 0.55 });   // cai de cima, pousa no beat 48 e assenta com overshoot visível
-      if (TALL) put(S.mask, { y: 390 * fin });   // 9:16: sem o texto, a marca desce para o miolo e a faixa sobe: nada de meio quadro vazio nos últimos 0,8 s
+      if (TALL) put(S.mask, { y: 300 * fin });   // 9:16: sem o texto, a marca desce para o miolo e a faixa sobe: nada de meio quadro vazio nos últimos 0,8 s
       put(S.lock, { y: -LS * 1.1 * (1 - lk) });   // começa acima da própria máscara: a borda da wipe nunca corta glifo
       const pl = spHit(t, 48.6, 'snappy');
       const px = snapPhase(t, 879);   // a pílula sai primeiro (quadro 879 da grade de 30 fps)
@@ -409,17 +407,16 @@
       riseRows(t, [S.cta[1]], 'cta', null, { stagger: 0.03, dt: 0.1 });
       riseRows(t, S.url, 'url', null, { stagger: 0.02 });
       riseRows(t, S.lic, 'lic', null, { preset: 'snappy', stagger: 0.02, rowGap: 0.05 });
-      // saída: cada linha deriva 2 quadros (antecipação de 0,14 em) e SAI inteira em 1 quadro; nenhum quadro da grade de 30 fps
-      // fica com a linha entre ~15 e 85 % visível (sem bases de glifo na máscara). Ordem: tag, 1ª e 2ª do CTA, URL, licença.
-      snapExit(t, S.tag, 880); snapExit(t, [S.cta[0]], 880); snapExit(t, [S.cta[1]], 881); snapExit(t, S.url, 881);
-      S.lic.forEach((L, i) => snapExit(t, [L], 882 + 0 * i));
+      // saída: o bloco inteiro sobe por trás da borda reta em 4 quadros (29,333 → 29,467 s), ease-in; a pílula sai antes
+      const xp = clamp((t * 30 - 880) / 4);
+      put(S.txt, { y: -P(820, 900) * xp * xp, hide: xp >= 1 });
       // parallax: as telas sobem/andam mais devagar que a tipografia e nunca param
       const e = sp(t, 48.3, CAMSP), d = seg(t, 48, 60);
       const stp = ['tag', 'cta', 'url', 'lic', 'snip'].reduce((a, m) => a + sp(t, beatOf(m) - 0.1, 'default'), 0);
       S.shots.forEach((s, i) => {
-        const sc = P(0.4, 0.62 + 0.16 * fin);
+        const sc = P(0.4, 0.62 + 0.2 * fin);
         const x = P(1170 + i * 60, 40 + i * (1440 * 0.62 + 36)) - P(0, 380) * d - P(0, 150) * stp;
-        const y = P(-120 + i * (900 * 0.4 + 36), 1215 + i * 30 - 415 * fin - 300 * (1 - ease.inOut(seg(t, 50, 55)))) - P(80, 0) * d - P(14, 0) * stp + 160 * (1 - e);
+        const y = P(-120 + i * (900 * 0.4 + 36), 1215 + i * 30 - 560 * fin - 340 * (1 - ease.inOut(seg(t, 50, 55)))) - P(80, 0) * d - P(14, 0) * stp + 160 * (1 - e);
         put(s, { x, y, s: sc, css: { transform: `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) perspective(2400px) rotateY(${P(-16, -10)}deg) rotateX(4deg) scale(${sc})`, filter: 'brightness(1.55) saturate(.25)' } });
       });
     },
