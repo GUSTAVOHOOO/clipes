@@ -27,7 +27,7 @@ import { mensagemDeErro } from '~/core/erros'
 import { useFila } from '~/core/progresso'
 import { usePreferencias } from '~/preferencias/preferencias'
 import type { FonteProjeto } from '~/stores/fontesProjeto'
-import type { ResumoRunSelecao } from '~/stores/selecaoProjeto'
+import type { PerfilProvedorLista, ResumoRunSelecao } from '~/stores/selecaoProjeto'
 import type { CandidatoLista, ChatPicoCandidato } from '~/telas/cortes/ListaCandidatos'
 import { mediaUrl } from '../../../../src/lib/media'
 
@@ -215,9 +215,22 @@ function formatarPicoChat(pico: ChatPicoCandidato): string {
   return `chat ${razao}× acima do normal${reacao ? ` · ${reacao}` : ''} · ${tcLongo(pico.atUs)}`
 }
 
-function formatarPerfilCandidato(profile: string): string {
+const ROTULO_PERFIL_FALLBACK: Record<string, string> = {
+  legacy: 'Perfil configurado',
+  forte: 'Forte remoto',
+  leve: 'Leve local',
+}
+
+function formatarPerfilCandidato(
+  profile: string,
+  perfis: readonly PerfilProvedorLista[],
+): string {
   const limpo = profile.trim()
-  if (!limpo || limpo === 'legacy') return 'Perfil configurado'
+  if (!limpo) return 'Perfil configurado'
+  const encontrado = perfis.find((p) => p.id === limpo || p.label === limpo)
+  if (encontrado?.label) return encontrado.label
+  const fallback = ROTULO_PERFIL_FALLBACK[limpo.toLowerCase()]
+  if (fallback) return fallback
   return limpo
 }
 
@@ -291,6 +304,7 @@ export function DetalheCandidato({
   const [erroAngulos, setErroAngulos] = useState<ErroCore | null>(null)
   const [guardrailsTentativa, setGuardrailsTentativa] = useState(0)
   const [ackEmCurso, setAckEmCurso] = useState(false)
+  const [perfis, setPerfis] = useState<PerfilProvedorLista[]>([])
 
   const ultimoCandidatoSolicitadoRef = useRef<number | null>(null)
   const jobsFilaRef = useRef(jobsFila)
@@ -413,6 +427,20 @@ export function DetalheCandidato({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candidato?.id, candidato?.startUs, candidato?.endUs, fonte?.id, fonte?.status, proxyTentativa])
+
+  useEffect(() => {
+    let cancelado = false
+    void chamar<{ profiles: PerfilProvedorLista[] }>('provider.profiles.list', {})
+      .then((res) => {
+        if (!cancelado) setPerfis(res?.profiles ?? [])
+      })
+      .catch(() => {
+        if (!cancelado) setPerfis([])
+      })
+    return () => {
+      cancelado = true
+    }
+  }, [projetoId])
 
   // Sincroniza progresso do proxy a partir do store global da Fila (core-progress)
   const jobProxyAtivo = useMemo(() => {
@@ -753,7 +781,7 @@ export function DetalheCandidato({
               className="w-full"
             />
           ) : (
-            <div className="relative flex aspect-[9/16] w-full flex-col items-center justify-center gap-3 overflow-hidden rounded-area bg-preto p-4 text-center">
+            <div className="relative flex aspect-[9/16] w-full flex-col items-center justify-center gap-3 overflow-hidden rounded-area bg-preto p-4 text-center shadow-[0_0_0_1px_var(--contorno-controle)]">
               {(proxyState.status === 'queued' || proxyState.status === 'running') && (
                 <>
                   <Progresso
@@ -834,6 +862,7 @@ export function DetalheCandidato({
 
           <Transporte
             compacto
+            desabilitado={!fonteDisponivel || proxyState.status !== 'ready'}
             tempoUs={tempoAtualUs}
             duracaoUs={duracaoCorteUs}
             reproduzindo={reproduzindo}
@@ -856,7 +885,7 @@ export function DetalheCandidato({
             <SeloTipoVideo tipo={run.videoKind} />
             <span aria-hidden>·</span>
             <span>
-              Gerado por {formatarPerfilCandidato(candidato.profile)} · revisão {candidato.revision}
+              Gerado por {formatarPerfilCandidato(candidato.profile, perfis)} · revisão {candidato.revision}
               {candidato.windows.length > 0 && (
                 <> · Janelas {candidato.windows.map((w) => w + 1).join(', ')}</>
               )}
@@ -869,7 +898,7 @@ export function DetalheCandidato({
                   icone={<Sparkles />}
                   aria-disabled="true"
                   aria-describedby={idDicaDireto}
-                  className="pointer-events-auto!"
+                  className="pointer-events-auto! cursor-not-allowed hover:bg-transparent hover:text-t2"
                 >
                   Converter em Vídeo transformado
                 </Botao>

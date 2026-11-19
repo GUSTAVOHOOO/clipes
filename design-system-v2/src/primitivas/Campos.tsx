@@ -9,7 +9,7 @@ import { camadaBase, itemBase } from './Flutuantes'
 
 export const caixaCampo =
   'w-full rounded-controle border-0 bg-elevado text-t1 shadow-[inset_0_0_0_1px_var(--contorno-campo)] outline-none transition-[background-color,box-shadow] duration-(--dur-base) ease-saida ' +
-  'in-[.bg-elevado]:bg-chao hover:bg-hover in-[.bg-elevado]:hover:bg-hover focus-visible:bg-elevado in-[.bg-elevado]:focus-visible:bg-chao focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-foco ' +
+  'in-[.bg-elevado]:bg-chao hover:bg-hover in-[.bg-elevado]:hover:bg-hover focus-visible:bg-elevado in-[.bg-elevado]:focus-visible:bg-chao focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-0 focus-visible:outline-foco ' +
   'disabled:pointer-events-none disabled:opacity-40 aria-invalid:shadow-[inset_0_0_0_1px_var(--erro)]'
 
 type CampoProps = {

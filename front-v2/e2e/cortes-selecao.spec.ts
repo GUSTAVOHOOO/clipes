@@ -36,6 +36,23 @@ test.describe('Tela Configurador e Acompanhamento de Seleção (#/projeto/:id/co
     }))
     expect(rolagem1366).toEqual({ altura: true, largura: true })
 
+    // UI-51: em 1366x768, ResumoCustoPrivacidade e botão "Selecionar Cortes" cabem acima da dobra sem rolar
+    const dobra1366 = await page.evaluate(() => {
+      const aside = document.querySelector('aside[aria-label="Configurador de Seleção"]')!
+      const resumo = aside.querySelector('section[aria-label^="Resumo de custo e privacidade"]')!
+      const btn = Array.from(aside.querySelectorAll('button')).find((b) =>
+        b.textContent?.includes('Selecionar Cortes'),
+      )!
+      const ar = aside.getBoundingClientRect()
+      const rr = resumo.getBoundingClientRect()
+      const br = btn.getBoundingClientRect()
+      return {
+        resumoVisivel: rr.top >= ar.top - 1 && rr.bottom <= br.top + 1,
+        botaoVisivel: br.top >= ar.top - 1 && br.bottom <= ar.bottom + 1,
+      }
+    })
+    expect(dobra1366).toEqual({ resumoVisivel: true, botaoVisivel: true })
+
     // UI-36: F6 / Shift+F6 ciclam Topo -> Configurador -> Acompanhamento -> Rodapé
     await page.keyboard.press('F6')
     await expect(page.locator('[data-regiao="topo"] :focus')).toHaveCount(1)
@@ -47,6 +64,29 @@ test.describe('Tela Configurador e Acompanhamento de Seleção (#/projeto/:id/co
     await expect(page.locator('[data-regiao="rodape"]')).toBeFocused()
     await page.keyboard.press('Shift+F6')
     await expect(page.locator('section[aria-label="Acompanhamento de Seleção"] :focus')).toHaveCount(1)
+
+    // UI-50: foco visível com outline-solid em Select e Entrada
+    const selectFonte = page.getByRole('combobox', { name: /Fonte transcrita/i })
+    await selectFonte.focus()
+    await page.keyboard.press('Shift+Tab')
+    await page.keyboard.press('Tab')
+    await expect(selectFonte).toBeFocused()
+    const outlineSelect = await selectFonte.evaluate((el) => {
+      const st = getComputedStyle(el)
+      return { style: st.outlineStyle, width: st.outlineWidth }
+    })
+    expect(outlineSelect).toEqual({ style: 'solid', width: '2px' })
+
+    const inputMin = page.getByLabel(/Duração mínima/i)
+    await inputMin.focus()
+    await page.keyboard.press('Shift+Tab')
+    await page.keyboard.press('Tab')
+    await expect(inputMin).toBeFocused()
+    const outlineEntrada = await inputMin.evaluate((el) => {
+      const st = getComputedStyle(el)
+      return { style: st.outlineStyle, width: st.outlineWidth }
+    })
+    expect(outlineEntrada).toEqual({ style: 'solid', width: '2px' })
 
     // UI-35: não expõe identificador "legacy" no Acompanhamento
     await expect(page.locator('section[aria-label="Acompanhamento de Seleção"]')).not.toContainText(/\blegacy\b/i)
@@ -140,7 +180,8 @@ test.describe('Tela Configurador e Acompanhamento de Seleção (#/projeto/:id/co
     expect(rolagem1440).toEqual({ altura: true, largura: true })
     await page.screenshot({ path: 'test-results/cortes-selecao-1440.png' })
 
-    // 7. UI-30: ?selection-blocked=1 no modo legado exibe context_too_small (não engole com EstadoTela de perfil)
+    // 7. UI-30 / UI-51 / UI-52: ?selection-blocked=1 em 1366x768 exibe context_too_small sem selo CLI e sem cortar detalhe técnico
+    await page.setViewportSize({ width: 1366, height: 768 })
     await page.goto('/?selection-blocked=1#/inicio')
     await page.getByRole('button', { name: /Abrir Projeto Demo/i }).click()
     await page.evaluate(() => {
@@ -148,6 +189,24 @@ test.describe('Tela Configurador e Acompanhamento de Seleção (#/projeto/:id/co
     })
     await expect(page.getByRole('button', { name: 'Reduzir duração máxima' })).toBeVisible()
     await expect(page.getByText(/Configure um Perfil de Provedor para selecionar Cortes/i)).toHaveCount(0)
+    await expect(page.getByText('Contexto gerenciado pelo CLI')).toHaveCount(0)
+    await expect(page.getByText('Janela de contexto: Bloqueada')).toBeVisible()
+
+    const dobraErro1366 = await page.evaluate(() => {
+      const aside = document.querySelector('aside[aria-label="Configurador de Seleção"]')!
+      const summary = aside.querySelector('summary')!
+      const btn = Array.from(aside.querySelectorAll('button')).find((b) =>
+        b.textContent?.includes('Selecionar Cortes'),
+      )!
+      const ar = aside.getBoundingClientRect()
+      const sr = summary.getBoundingClientRect()
+      const br = btn.getBoundingClientRect()
+      return {
+        detalheTecnicoVisivel: sr.bottom <= ar.bottom + 1,
+        botaoVisivel: br.bottom <= ar.bottom + 1,
+      }
+    })
+    expect(dobraErro1366).toEqual({ detalheTecnicoVisivel: true, botaoVisivel: true })
 
     expect(erros).toEqual([])
   })

@@ -682,6 +682,8 @@ export function ConfiguradorSelecao({
   }
 
   const erroAtivo = erroDisparo ?? (semPerfilConfigurado ? null : erroEstimativa)
+  const contextoBloqueadoPorErro =
+    erroAtivo?.code === 'context_too_small' || erroAtivo?.code === 'max_cut_too_long'
   const configuracaoBloqueada =
     execucaoEmAndamento ||
     !rangeValido ||
@@ -689,8 +691,7 @@ export function ConfiguradorSelecao({
     selectionState?.state === 'blocked' ||
     estimativa?.plan?.state === 'blocked' ||
     Boolean(destino?.bloqueadoSomenteLocal) ||
-    erroAtivo?.code === 'context_too_small' ||
-    erroAtivo?.code === 'max_cut_too_long' ||
+    contextoBloqueadoPorErro ||
     erroAtivo?.code === 'local_only_violation'
 
   const renderBannerErro = (erro: ErroCore) => {
@@ -772,7 +773,7 @@ export function ConfiguradorSelecao({
   }
 
   return (
-    <div className="flex max-w-[68ch] flex-col gap-3">
+    <div className="flex max-w-[68ch] flex-col gap-1 min-[1440px]:gap-3">
       {execucaoEmAndamento && (
         <div role="status" className="flex items-center justify-between gap-2 rounded-area bg-area px-3 py-2">
           <Status tom="rodando" forte>
@@ -783,7 +784,7 @@ export function ConfiguradorSelecao({
       )}
 
       {/* 1. Tipo de vídeo desta seleção */}
-      <section aria-labelledby={tituloTipoId} className="flex flex-col gap-2.5 rounded-area bg-area p-3">
+      <section aria-labelledby={tituloTipoId} className="flex flex-col gap-1.5 rounded-area bg-area p-2 min-[1440px]:gap-2.5 min-[1440px]:p-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 id={tituloTipoId} className="text-base font-forte text-t1">
             1. Tipo de vídeo desta seleção
@@ -806,7 +807,7 @@ export function ConfiguradorSelecao({
             tabIndex={videoKind === 'direct' ? 0 : -1}
             onClick={() => setVideoKind('direct')}
             className={cn(
-              'foco flex min-h-9 cursor-pointer items-center gap-2 rounded-controle border-0 px-3 py-2 text-left text-pequeno transition-colors duration-(--dur-rapida) ease-saida',
+              'foco flex min-h-9 cursor-pointer items-center gap-2 rounded-controle border-0 px-3 py-1.5 text-left text-pequeno transition-colors duration-(--dur-rapida) ease-saida min-[1440px]:py-2',
               videoKind === 'direct'
                 ? 'marcado bg-elevado font-medio text-t1'
                 : 'bg-chao text-t2 hover:bg-hover hover:text-t1',
@@ -826,7 +827,7 @@ export function ConfiguradorSelecao({
             tabIndex={videoKind === 'transformed' ? 0 : -1}
             onClick={() => setVideoKind('transformed')}
             className={cn(
-              'foco flex min-h-9 cursor-pointer items-center gap-2 rounded-controle border-0 px-3 py-2 text-left text-pequeno transition-colors duration-(--dur-rapida) ease-saida',
+              'foco flex min-h-9 cursor-pointer items-center gap-2 rounded-controle border-0 px-3 py-1.5 text-left text-pequeno transition-colors duration-(--dur-rapida) ease-saida min-[1440px]:py-2',
               videoKind === 'transformed'
                 ? 'marcado bg-elevado font-medio text-t1'
                 : 'bg-chao text-t2 hover:bg-hover hover:text-t1',
@@ -840,13 +841,13 @@ export function ConfiguradorSelecao({
           </button>
         </div>
 
-        <p className="text-pequeno text-t2">
+        <p className="text-micro leading-snug text-t2 min-[1440px]:text-pequeno">
           {videoKind === 'transformed'
             ? 'Vídeo transformado exige Ângulo → Roteiro aprovado → Narração antes de exportar.'
             : 'Corte direto vai direto ao Editor e Empacotamento, sem Roteiro nem Narração.'}
         </p>
 
-        <p className="num text-pequeno text-t3">
+        <p className="num text-micro leading-snug tracking-[-0.01em] text-t3 min-[1440px]:text-pequeno min-[1440px]:tracking-normal">
           Pesos da Nota:{' '}
           {pesosExibidos.map((p, idx) => {
             const pct = Math.round(p.weight * 100)
@@ -882,7 +883,7 @@ export function ConfiguradorSelecao({
       </section>
 
       {/* 2. Faixa de duração do Corte */}
-      <section aria-label="2. Faixa de duração do Corte" className="flex flex-col gap-2.5 rounded-area bg-area p-3">
+      <section aria-label="2. Faixa de duração do Corte" className="flex flex-col gap-1.5 rounded-area bg-area p-2 min-[1440px]:gap-2.5 min-[1440px]:p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-forte text-t1">2. Faixa de duração do Corte</h2>
           <Botao
@@ -946,7 +947,7 @@ export function ConfiguradorSelecao({
       </section>
 
       {/* 3. Sinais locais da Fonte */}
-      <section aria-label="3. Sinais locais da Fonte" className="flex flex-col gap-2.5 rounded-area bg-area p-3">
+      <section aria-label="3. Sinais locais da Fonte" className="flex flex-col gap-1 rounded-area bg-area p-2 min-[1440px]:gap-2.5 min-[1440px]:p-3">
         <h2 className="text-base font-forte text-t1">3. Sinais locais da Fonte</h2>
 
         {erroSinais && (
@@ -958,7 +959,7 @@ export function ConfiguradorSelecao({
         )}
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <div className="flex flex-col justify-between gap-2 rounded-controle bg-elevado px-2.5 py-2">
+          <div className="flex flex-col justify-between gap-1 rounded-controle bg-elevado px-2.5 py-1.5 min-[1440px]:gap-2 min-[1440px]:py-2">
             <span className="text-pequeno text-t3">Energia do áudio</span>
             {energia?.measured ? (
               <p className="num flex items-center gap-1.5 text-pequeno text-t1">
@@ -994,7 +995,7 @@ export function ConfiguradorSelecao({
             )}
           </div>
 
-          <div className="flex flex-col justify-between gap-2 rounded-controle bg-elevado px-2.5 py-2">
+          <div className="flex flex-col justify-between gap-1 rounded-controle bg-elevado px-2.5 py-1.5 min-[1440px]:gap-2 min-[1440px]:py-2">
             <span className="text-pequeno text-t3">Chat da live</span>
             {chat?.state === 'available' ? (
               <p className="num flex items-center gap-1.5 text-pequeno text-t1">
@@ -1037,19 +1038,11 @@ export function ConfiguradorSelecao({
       </section>
 
       {/* 4. Contexto, Custo e Disparo */}
-      <section aria-label="4. Contexto, Custo e Disparo" className="flex flex-col gap-2.5">
+      <section aria-label="4. Contexto, Custo e Disparo" className="flex flex-col gap-1 min-[1440px]:gap-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-forte text-t1">4. Contexto, Custo e Disparo</h2>
-          {!semPerfilConfigurado && estadoContextoEfetivo && (
-            estadoContextoEfetivo.applicable === false ? (
-              <Status tom="info">Contexto gerenciado pelo CLI</Status>
-            ) : estadoContextoEfetivo.state === 'full' ? (
-              <Status tom="sucesso">Janela de contexto: Completa (15 min)</Status>
-            ) : estadoContextoEfetivo.state === 'reduced' ? (
-              <Status tom="aviso">
-                Janela de contexto: Reduzida ({estadoContextoEfetivo.reference?.firstWindowMinutes ?? 12} min)
-              </Status>
-            ) : (
+          {!semPerfilConfigurado && (
+            contextoBloqueadoPorErro ? (
               <div className="flex items-center gap-2">
                 <Status tom="perigo">Janela de contexto: Bloqueada</Status>
                 <Botao
@@ -1062,7 +1055,32 @@ export function ConfiguradorSelecao({
                   Configurar Provedores
                 </Botao>
               </div>
-            )
+            ) : estadoContextoEfetivo ? (
+              estadoContextoEfetivo.applicable === false ? (
+                destino?.localidade === 'cli' ? (
+                  <Status tom="info">Contexto gerenciado pelo CLI</Status>
+                ) : null
+              ) : estadoContextoEfetivo.state === 'full' ? (
+                <Status tom="sucesso">Janela de contexto: Completa (15 min)</Status>
+              ) : estadoContextoEfetivo.state === 'reduced' ? (
+                <Status tom="aviso">
+                  Janela de contexto: Reduzida ({estadoContextoEfetivo.reference?.firstWindowMinutes ?? 12} min)
+                </Status>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Status tom="perigo">Janela de contexto: Bloqueada</Status>
+                  <Botao
+                    tamanho="p"
+                    variante="secundario"
+                    onClick={() => {
+                      window.location.hash = '#/config/provedores'
+                    }}
+                  >
+                    Configurar Provedores
+                  </Botao>
+                </div>
+              )
+            ) : null
           )}
         </div>
 
@@ -1085,6 +1103,7 @@ export function ConfiguradorSelecao({
 
             {estimativa && destino && (
               <ResumoCustoPrivacidade
+                compacto
                 tarefa="Seleção de Cortes"
                 perfil={destino.perfil}
                 localidade={destino.localidade}
@@ -1118,17 +1137,19 @@ export function ConfiguradorSelecao({
           </>
         )}
 
-        <Botao
-          ref={atribuirRefDisparar}
-          variante="primario"
-          tamanho="g"
-          disabled={configuracaoBloqueada}
-          carregando={disparando}
-          onClick={aoClicarSelecionarCortes}
-          className="w-full justify-center"
-        >
-          {execucaoEmAndamento ? 'Seleção em andamento…' : 'Selecionar Cortes'}
-        </Botao>
+        <div className="sticky bottom-0 bg-chao pt-0.5 min-[1440px]:pt-1">
+          <Botao
+            ref={atribuirRefDisparar}
+            variante="primario"
+            tamanho="g"
+            disabled={configuracaoBloqueada}
+            carregando={disparando}
+            onClick={aoClicarSelecionarCortes}
+            className="h-8 w-full justify-center min-[1440px]:h-9"
+          >
+            {execucaoEmAndamento ? 'Seleção em andamento…' : 'Selecionar Cortes'}
+          </Botao>
+        </div>
       </section>
 
       <ConfirmDialog

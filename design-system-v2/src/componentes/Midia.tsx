@@ -43,7 +43,7 @@ export function PlayerProxy({ fonteDisponivel, poster, modo, enquadramento = 'pr
   }, [poster])
 
   return (
-    <div ref={refQuadro} className={cn('relative overflow-hidden rounded-area bg-preto', proporcao, className)}>
+    <div ref={refQuadro} className={cn('relative overflow-hidden rounded-area bg-preto shadow-[0_0_0_1px_var(--contorno-controle)]', proporcao, className)}>
       {fonteDisponivel && poster ? (
         imagemFalhou ? (
           <div role="img" aria-label="Quadro do Corte" className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center">
@@ -106,6 +106,7 @@ type TransporteProps = {
   reproduzindo: boolean
   mudo?: boolean
   compacto?: boolean
+  desabilitado?: boolean
   atalhoReproduzir?: string | null
   atalhoEntrada?: string | null
   atalhoSaida?: string | null
@@ -124,6 +125,7 @@ export function Transporte({
   reproduzindo,
   mudo,
   compacto = false,
+  desabilitado = false,
   atalhoReproduzir,
   atalhoEntrada,
   atalhoSaida,
@@ -144,6 +146,7 @@ export function Transporte({
     <div
       role="toolbar"
       aria-label="Controles de reprodução"
+      aria-disabled={desabilitado || undefined}
       onKeyDown={rovingSetas}
       className={cn(
         'flex h-(--altura-barra) items-center rounded-area bg-area',
@@ -151,33 +154,33 @@ export function Transporte({
         className,
       )}
     >
-      <BotaoIcone tamanho={tam} rotulo="Ir para Entrada" onClick={aoInicio}>
+      <BotaoIcone tamanho={tam} rotulo="Ir para Entrada" disabled={desabilitado} onClick={aoInicio}>
         <SkipBack />
       </BotaoIcone>
-      <BotaoIcone tamanho={tam} rotulo={reproduzindo ? 'Pausar' : 'Reproduzir'} atalho={kbdReproduzir} onClick={aoAlternar} tabIndex={-1}>
+      <BotaoIcone tamanho={tam} rotulo={reproduzindo ? 'Pausar' : 'Reproduzir'} atalho={kbdReproduzir} disabled={desabilitado} onClick={aoAlternar} tabIndex={-1}>
         {reproduzindo ? <Pause /> : <Play />}
       </BotaoIcone>
-      <BotaoIcone tamanho={tam} rotulo="Ir para Saída" onClick={aoFim} tabIndex={-1}>
+      <BotaoIcone tamanho={tam} rotulo="Ir para Saída" disabled={desabilitado} onClick={aoFim} tabIndex={-1}>
         <SkipForward />
       </BotaoIcone>
       <span
-        className={cn('num shrink-0 whitespace-nowrap text-pequeno text-t2', compacto ? 'px-1' : 'px-2')}
+        className={cn('num shrink-0 whitespace-nowrap text-pequeno text-t2', compacto ? 'px-1' : 'px-2', desabilitado && 'opacity-40')}
         aria-label={`Posição ${tc(tempoUs)} de ${tc(duracaoUs)}`}
       >
         {tc(tempoUs)} <span className="text-t3">/ {tc(duracaoUs)}</span>
       </span>
       <span aria-hidden className="mx-0.5 h-3.5 w-px shrink-0 bg-linha" />
       {aoMarcarEntrada && (
-        <BotaoIcone tamanho={tam} rotulo="Definir Entrada" atalho={kbdEntrada} onClick={aoMarcarEntrada} tabIndex={-1}>
+        <BotaoIcone tamanho={tam} rotulo="Definir Entrada" atalho={kbdEntrada} disabled={desabilitado} onClick={aoMarcarEntrada} tabIndex={-1}>
           <span className="num text-base">I</span>
         </BotaoIcone>
       )}
       {aoMarcarSaida && (
-        <BotaoIcone tamanho={tam} rotulo="Definir Saída" atalho={kbdSaida} onClick={aoMarcarSaida} tabIndex={-1}>
+        <BotaoIcone tamanho={tam} rotulo="Definir Saída" atalho={kbdSaida} disabled={desabilitado} onClick={aoMarcarSaida} tabIndex={-1}>
           <span className="num text-base">O</span>
         </BotaoIcone>
       )}
-      <BotaoIcone tamanho={tam} rotulo={mudo ? 'Ligar áudio' : 'Silenciar'} onClick={aoAlternarMudo} tabIndex={-1} aria-pressed={!!mudo}>
+      <BotaoIcone tamanho={tam} rotulo={mudo ? 'Ligar áudio' : 'Silenciar'} disabled={desabilitado} onClick={aoAlternarMudo} tabIndex={-1} aria-pressed={!!mudo}>
         {mudo ? <VolumeX /> : <Volume2 />}
       </BotaoIcone>
     </div>

@@ -939,4 +939,45 @@ describe('Tela Configurador e Acompanhamento de Seleção (#/projeto/:id/cortes)
     fireF6(true)
     expect(configurador.contains(document.activeElement)).toBe(true)
   })
+
+  it('UI-55/UI-56: pluraliza contadores no singular, resolve "forte"/"Legacy" e usa ícone ArrowRight em Ver Transcrição', async () => {
+    const janelas = criarJanelasPadrao().map((w) =>
+      w.index === 0 ? { ...w, profile: 'forte' } : { ...w, profile: 'Legacy' },
+    )
+    mockSelecaoBase({
+      'provider.profiles.list': () => ({ profiles: [] }),
+      'selection.list': () => [
+        criarRunBase({
+          counts: { windows: 3, completed: 3, failed: 0, kept: 1, discarded: 1, merged: 1 },
+        }),
+      ],
+      'selection.get': () => ({
+        run: criarRunBase({
+          counts: { windows: 3, completed: 3, failed: 0, kept: 1, discarded: 1, merged: 1 },
+        }),
+        windows: janelas,
+        candidates: criarCandidatosPadrao(1).slice(0, 1),
+      }),
+    })
+
+    render(
+      envolver(
+        <Selecao
+          projetoId="demo"
+          projetoPath="/projetos/Demo.clipes"
+          storeFontes={storeFontes}
+          fila={filaTeste}
+        />,
+      ),
+    )
+
+    expect(await screen.findByText(/1 candidato · 1 juntado · 1 descartado/i)).toBeInTheDocument()
+    expect(screen.getByText('Perfil: Forte remoto')).toBeInTheDocument()
+    expect(screen.getAllByText('Perfil: Perfil configurado').length).toBeGreaterThanOrEqual(1)
+    expect(document.body.textContent ?? '').not.toMatch(/\blegacy\b/i)
+
+    const btnTranscricao = screen.getByRole('button', { name: 'Ver Transcrição' })
+    expect(btnTranscricao.textContent?.trim()).toBe('Ver Transcrição')
+    expect(btnTranscricao.querySelector('svg')).not.toBeNull()
+  })
 })

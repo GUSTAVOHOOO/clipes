@@ -687,4 +687,122 @@ describe('<ConfiguradorSelecao>', () => {
     expect(await screen.findByRole('button', { name: 'Selecionar Cortes' })).toBeEnabled()
     void user
   })
+
+  it('UI-51: usa resumo compacto no Configurador para manter seção 4 e CTA visíveis em 1366x768', async () => {
+    mockBase()
+    render(envolver(<ConfiguradorSelecao fonte={FONTE_DEMO} execucaoEmAndamento={false} />))
+
+    const resumo = await screen.findByRole('region', {
+      name: /Resumo de custo e privacidade: Seleção de Cortes/i,
+    })
+    expect(resumo.className).toContain('p-2.5')
+    expect(within(resumo).queryByText(/tokens de entrada/i)).not.toBeInTheDocument()
+  })
+
+  it('UI-52: não exibe "Contexto gerenciado pelo CLI" fora de perfil CLI (em context_too_small nem ao trocar Fonte)', async () => {
+    let rejeitarSegunda!: (e: unknown) => void
+    let chamadas = 0
+    mockBase({
+      'provider.selection_state': () => ({ applicable: false }),
+      'assistant.tasks': () => ({
+        projectLocalOnly: false,
+        tasks: [
+          {
+            task: 'selection',
+            choice: '',
+            source: 'none',
+            profile: null,
+            localOnly: false,
+            blocked: false,
+            missing: null,
+          },
+        ],
+      }),
+      'selection.estimate': () => {
+        chamadas += 1
+        if (chamadas === 1) {
+          throw new ErroCore('context_too_small', 'Janela de contexto insuficiente.')
+        }
+        return new Promise((_resolve, reject) => {
+          rejeitarSegunda = reject
+        })
+      },
+    })
+
+    const { rerender } = render(
+      envolver(<ConfiguradorSelecao fonte={FONTE_DEMO} execucaoEmAndamento={false} />),
+    )
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Janela de contexto/i)
+    expect(screen.getByText('Janela de contexto: Bloqueada')).toBeInTheDocument()
+    expect(screen.queryByText('Contexto gerenciado pelo CLI')).not.toBeInTheDocument()
+
+    // Troca para outra Fonte: enquanto estimativa está pendente, não pisca selo CLI
+    rerender(
+      envolver(
+        <ConfiguradorSelecao
+          fonte={{ ...FONTE_DEMO, id: 2, path: '/videos/offline.mp4', status: 'offline', available: false }}
+          execucaoEmAndamento={false}
+        />,
+      ),
+    )
+    await waitFor(() => {
+      expect(chamarMock).toHaveBeenCalledWith(
+        'selection.estimate',
+        expect.objectContaining({ source_id: 2 }),
+      )
+    })
+    expect(screen.queryByText('Contexto gerenciado pelo CLI')).not.toBeInTheDocument()
+
+    await act(async () => {
+      rejeitarSegunda(new ErroCore('context_too_small', 'Janela de contexto insuficiente.'))
+    })
+    expect(screen.queryByText('Contexto gerenciado pelo CLI')).not.toBeInTheDocument()
+  })
+
+  it('UI-52: exibe "Contexto gerenciado pelo CLI" quando o perfil efetivo é CLI e não há erro de contexto', async () => {
+    mockBase({
+      'provider.selection_state': () => ({ applicable: false }),
+      'provider.profiles.list': () => ({
+        profiles: [
+          {
+            id: 'codex',
+            label: 'Codex CLI',
+            kind: 'codex',
+            endpoint: null,
+            model: null,
+            local: false,
+            cli: true,
+          },
+        ],
+      }),
+      'assistant.tasks': () => ({
+        projectLocalOnly: false,
+        tasks: [
+          {
+            task: 'selection',
+            choice: 'codex',
+            source: 'task',
+            profile: { id: 'codex', label: 'Codex CLI', kind: 'codex', local: false, cli: true },
+            localOnly: false,
+            blocked: false,
+            missing: null,
+          },
+        ],
+      }),
+      'selection.estimate': () => ({
+        paid: false,
+        profile: 'codex',
+        minUs: 20_000_000,
+        maxUs: 60_000_000,
+        videoKind: 'direct',
+        plan: { state: 'full', windows: [{ index: 0 }], contextTokens: 32768 },
+        weights: PESOS_DIRETO,
+        estimate: { kind: 'plan_quota' },
+      }),
+    })
+
+    render(envolver(<ConfiguradorSelecao fonte={FONTE_DEMO} execucaoEmAndamento={false} />))
+    expect(await screen.findByText('Contexto gerenciado pelo CLI')).toBeInTheDocument()
+  })
 })

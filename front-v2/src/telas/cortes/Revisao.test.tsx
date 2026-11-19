@@ -674,7 +674,7 @@ describe('Bancada de Revisão de Cortes (#/projeto/:id/cortes/revisao/:runId)', 
     )
 
     expect(await screen.findByRole('heading', { level: 2, name: 'A virada do jogo' })).toBeInTheDocument()
-    expect(screen.getByText(/1 aprovados · 1 rejeitados · 1 pendentes/i)).toBeInTheDocument()
+    expect(screen.getByText(/1 aprovado · 1 rejeitado · 1 pendente/i)).toBeInTheDocument()
 
     // Desfazer já inicia habilitado quando canUndo: true da V1
     const btnDesfazer = screen.getByRole('button', { name: /Desfazer/i })
@@ -682,14 +682,14 @@ describe('Bancada de Revisão de Cortes (#/projeto/:id/cortes/revisao/:runId)', 
 
     // Aprovação otimista atualiza contador antes da Promise rejeitar
     await user.click(screen.getByRole('button', { name: /Aprovar/i }))
-    expect(screen.getByText(/2 aprovados · 1 rejeitados · 0 pendentes/i)).toBeInTheDocument()
+    expect(screen.getByText(/2 aprovados · 1 rejeitado · 0 pendentes/i)).toBeInTheDocument()
 
     // Rollback ao rejeitar
     act(() => {
       resolvePendente(new ErroCore('project_busy', 'Projeto ocupado.'))
     })
     expect(await screen.findByRole('alert')).toHaveTextContent(/tarefa ativa bloqueando/i)
-    expect(screen.getByText(/1 aprovados · 1 rejeitados · 1 pendentes/i)).toBeInTheDocument()
+    expect(screen.getByText(/1 aprovado · 1 rejeitado · 1 pendente/i)).toBeInTheDocument()
 
     // Undo entre sessões reverte item 102 e seleciona-o na Bancada
     rejeitarDecide = false
@@ -698,7 +698,7 @@ describe('Bancada de Revisão de Cortes (#/projeto/:id/cortes/revisao/:runId)', 
       expect(chamarMock).toHaveBeenCalledWith('selection.undo', { run: 1 })
     })
     expect(await screen.findByRole('heading', { level: 2, name: 'Sem título' })).toBeInTheDocument()
-    expect(screen.getByText(/0 aprovados · 1 rejeitados · 2 pendentes/i)).toBeInTheDocument()
+    expect(screen.getByText(/0 aprovados · 1 rejeitado · 2 pendentes/i)).toBeInTheDocument()
     expect(btnDesfazer).toHaveAttribute('aria-disabled', 'true')
   })
 
@@ -1041,5 +1041,94 @@ describe('Bancada de Revisão de Cortes (#/projeto/:id/cortes/revisao/:runId)', 
     const nav = await screen.findByRole('navigation', { name: /Controles da revisão/i })
     expect(nav.className).toContain('min-[1280px]:flex-nowrap')
     expect(within(nav).queryByText('Revisão:')).not.toBeInTheDocument()
+  })
+
+  it('UI-53: com filtro zerado, limpa o detalhe, bloqueia A/R, mantém 1 bg-sinal e restaura ao limpar filtros', async () => {
+    const user = userEvent.setup()
+    mockRevisaoBase()
+
+    render(
+      envolver(
+        <Revisao
+          projetoId="demo"
+          projetoPath="/projetos/Demo.clipes"
+          runParam="1"
+          storeFontes={storeFontes}
+          fila={filaTeste}
+        />,
+      ),
+    )
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'A virada do jogo' })).toBeInTheDocument()
+    const sliderNota = screen.getByRole('slider', { name: /Nota mínima/i })
+    fireEvent.change(sliderNota, { target: { value: '10' } })
+
+    expect(await screen.findByText('Nenhum candidato corresponde aos filtros atuais')).toBeInTheDocument()
+    expect(screen.getByText('Nenhum candidato selecionado')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 2, name: 'A virada do jogo' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Aprovar/i })).not.toBeInTheDocument()
+
+    // A e R não devem disparar selection.decide quando a lista filtrada está vazia
+    chamarMock.mockClear()
+    fireEvent.keyDown(window, { key: 'a' })
+    fireEvent.keyDown(window, { key: 'r' })
+    expect(chamarMock).not.toHaveBeenCalledWith('selection.decide', expect.anything())
+
+    const botoesSinal = Array.from(document.querySelectorAll('button.bg-sinal'))
+    expect(botoesSinal).toHaveLength(1)
+    expect(botoesSinal[0]).toHaveTextContent('Limpar filtros')
+
+    await user.click(screen.getByRole('button', { name: 'Limpar filtros' }))
+    expect(await screen.findByRole('heading', { level: 2, name: 'A virada do jogo' })).toBeInTheDocument()
+  })
+
+  it('UI-54/UI-55/UI-56: sub-cabeçalho amplia truncamento da Fonte, pluraliza contadores, aplica cursor-not-allowed e tabIndex=-1 nas regiões F6', async () => {
+    mockRevisaoBase({
+      'selection.get': () => ({
+        run: criarRunBase({ state: 'partial' }),
+        windows: criarJanelasPadrao(true),
+        candidates: criarCandidatosPadrao(2),
+      }),
+      'selection.review': () => ({
+        run: 1,
+        items: criarItensRevisaoPadrao(2),
+        canUndo: false,
+      }),
+    })
+
+    render(
+      envolver(
+        <Revisao
+          projetoId="demo"
+          projetoPath="/projetos/Demo.clipes"
+          runParam="1"
+          storeFontes={storeFontes}
+          fila={filaTeste}
+        />,
+      ),
+    )
+
+    const nav = await screen.findByRole('navigation', { name: /Controles da revisão/i })
+    const nomeFonte = within(nav).getByText('Live_12_11_final.mp4')
+    expect(nomeFonte.className).not.toContain('max-w-24')
+    expect(nomeFonte.className).toContain('max-w-44')
+    expect(nomeFonte.className).toContain('min-[1440px]:max-w-64')
+
+    expect(within(nav).getByRole('status')).toHaveTextContent(
+      '1 aprovado · 1 rejeitado · 1 pendente',
+    )
+
+    const btnDesfazer = screen.getByRole('button', { name: /Desfazer/i })
+    const btnRefazer = screen.getByRole('button', { name: /Refazer com outro Perfil/i })
+    expect(btnDesfazer.className).toContain('cursor-not-allowed')
+    expect(btnDesfazer.className).toContain('hover:bg-elevado')
+    expect(btnRefazer.className).toContain('cursor-not-allowed')
+    expect(btnRefazer.className).toContain('hover:bg-elevado')
+
+    expect(nav).toHaveAttribute('tabindex', '-1')
+    const listaRegiao = screen.getByRole('region', { name: /Lista de candidatos/i }).parentElement!
+    const detalheRegiao = screen.getByRole('region', { name: /Detalhe do Corte/i }).parentElement!
+    expect(listaRegiao).toHaveAttribute('tabindex', '-1')
+    expect(detalheRegiao).toHaveAttribute('tabindex', '-1')
   })
 })

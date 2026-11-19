@@ -263,7 +263,7 @@ describe('ListaCandidatos (Coluna esquerda C.2)', () => {
     )
   })
 
-  it('UI-34b: não usa botão primário bg-sinal em "Limpar filtros" quando há candidato selecionado no detalhe', () => {
+  it('UI-34b/UI-53: "Limpar filtros" usa variante secundario (bg-elevado, sem bg-sinal) quando há candidato selecionado no detalhe', () => {
     render(envolver(<ListaControlada />))
 
     const slider = screen.getByRole('slider', { name: /Nota mínima/i })
@@ -271,6 +271,7 @@ describe('ListaCandidatos (Coluna esquerda C.2)', () => {
 
     const btnLimpar = screen.getByRole('button', { name: 'Limpar filtros' })
     expect(btnLimpar.className).not.toContain('bg-sinal')
+    expect(btnLimpar.className).toContain('bg-elevado')
   })
 
   it('UI-33b: mantém "Nota mínima" sem quebra de linha e reserva largura ao Slider ao lado do Select', () => {

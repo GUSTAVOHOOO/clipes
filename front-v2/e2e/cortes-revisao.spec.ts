@@ -109,6 +109,37 @@ test.describe('Tela Bancada de Revisão de Cortes (#/projeto/:id/cortes/revisao/
     expect(layout1366.aprovarBottom).toBeLessThanOrEqual(768)
     expect(layout1366.imagensQuebradas).toBe(0)
     expect(layout1366.spansFocaveis).toBe(0)
+
+    // UI-54: nome da Fonte no sub-cabeçalho não trunca em 1366x768
+    const fonteTruncada = await page.evaluate(() => {
+      const nav = document.querySelector('nav[aria-label="Controles da revisão"]')!
+      const fonteEl = Array.from(nav.querySelectorAll('span')).find((s) =>
+        s.textContent?.includes('Live_12_11_final.mp4'),
+      )!
+      return fonteEl.scrollWidth > fonteEl.clientWidth + 1
+    })
+    expect(fonteTruncada).toBe(false)
+
+    // UI-50: Slider "Nota mínima" e Select "Ordenar candidatos" exibem outline-solid ao focar por teclado
+    const sliderFoco = page.getByRole('slider', { name: /Nota mínima/i })
+    const selectOrdemFoco = page.getByRole('combobox', { name: /Ordenar candidatos/i })
+    await sliderFoco.focus()
+    await page.keyboard.press('Tab')
+    await expect(selectOrdemFoco).toBeFocused()
+    const outlineOrdem = await selectOrdemFoco.evaluate((el) => {
+      const st = getComputedStyle(el)
+      return { style: st.outlineStyle, width: st.outlineWidth }
+    })
+    expect(outlineOrdem).toEqual({ style: 'solid', width: '2px' })
+
+    await page.keyboard.press('Shift+Tab')
+    await expect(sliderFoco).toBeFocused()
+    const outlineSlider = await sliderFoco.evaluate((el) => {
+      const st = getComputedStyle(el.parentElement!)
+      return { style: st.outlineStyle, width: st.outlineWidth }
+    })
+    expect(outlineSlider).toEqual({ style: 'solid', width: '2px' })
+
     await page.screenshot({ path: 'test-results/cortes-revisao-1366.png' })
 
     // Critério 1: Tab foca role="listbox" (sem tabIndex=-1), ↓/↑ movem seleção, aria-activedescendant e ?corte=
@@ -145,7 +176,11 @@ test.describe('Tela Bancada de Revisão de Cortes (#/projeto/:id/cortes/revisao/
     await page.keyboard.press('ArrowLeft')
     await expect(sliderNota).toHaveAttribute('aria-valuetext', 'Nota mínima 8,5 de 10')
     await expect(page.getByText('Nenhum candidato corresponde aos filtros atuais')).toBeVisible()
-    // Regra da Luz Única: mesmo com filtro zerado, segue exatamente 1 botão primário (bg-sinal)
+    // UI-53: detalhe esvazia quando o filtro zera a lista e mantém exatamente 1 bg-sinal
+    await expect(
+      page.getByRole('region', { name: /Detalhe do Corte/i }).getByText('Nenhum candidato selecionado'),
+    ).toBeVisible()
+    await expect(page.getByRole('heading', { level: 2, name: 'A virada do jogo' })).toHaveCount(0)
     await expect(page.locator('button.bg-sinal')).toHaveCount(1)
 
     await page.getByRole('button', { name: 'Limpar filtros' }).click()

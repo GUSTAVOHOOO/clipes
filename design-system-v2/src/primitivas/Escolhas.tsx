@@ -91,7 +91,7 @@ export function Slider({ valor, aoMudar, min = 0, max = 100, passo = 1, rotulo, 
           <Sl.Thumb
             aria-label={rotulo}
             getAriaValueText={textoValor ? (_f: string, v: number) => textoValor(v) : undefined}
-            className="size-3 rounded-full bg-t1 outline-none has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-foco"
+            className="size-3 rounded-full bg-t1 outline-none has-focus-visible:outline-2 has-focus-visible:outline-solid has-focus-visible:outline-offset-2 has-focus-visible:outline-foco"
           />
         </Sl.Track>
       </Sl.Control>

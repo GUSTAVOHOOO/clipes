@@ -61,7 +61,7 @@ export function EixosNota({ eixos, abertoPorPadrao = false }: { eixos: EixoNota[
           {eixos.map((e) => (
             <div key={e.nome} className="grid grid-cols-[minmax(120px,148px)_34px_1fr] items-baseline gap-2.5">
               <dt className="flex justify-between gap-1.5 text-t2">
-                {e.nome} <span className="num text-t3">×{e.peso}</span>
+                {e.nome} <span className="num text-t3">×{e.peso.toLocaleString('pt-BR')}</span>
               </dt>
               <dd className="num m-0 text-right font-forte text-t1">{fmtNota(e.valor)}</dd>
               <dd className="m-0 text-t3">{e.porque}</dd>

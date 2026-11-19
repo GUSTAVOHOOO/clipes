@@ -1075,4 +1075,116 @@ describe('DetalheCandidato (Coluna direita C.2)', () => {
     expect(await screen.findByText(/Gerado por Perfil configurado/i)).toBeInTheDocument()
     expect(document.body.textContent).not.toMatch(/\blegacy\b/i)
   })
+
+  it('UI-55: resolve label do perfil via provider.profiles.list, trata "forte" e "Legacy" sem sensibilidade a caixa', async () => {
+    filaTeste = criarFila(() => 'demo')
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'provider.profiles.list') {
+        return {
+          profiles: [
+            {
+              id: 'remoto-rapido',
+              label: 'Perfil Rápido',
+              kind: 'openai',
+              endpoint: 'https://api.openai.com/v1',
+              model: 'gpt-4o-mini',
+              local: false,
+              cli: false,
+            },
+          ],
+        }
+      }
+      if (cmd === 'proxy.request') {
+        return {
+          state: 'ready',
+          key: '0004abab',
+          job: null,
+          progress: 100,
+          error: null,
+          windowStartUs: 0,
+          windowEndUs: 260_000_000,
+        }
+      }
+      return {}
+    })
+
+    const { rerender } = render(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_DIRETO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={{ ...CANDIDATO_BASE, profile: 'remoto-rapido' }}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+
+    expect(await screen.findByText(/Gerado por Perfil Rápido/i)).toBeInTheDocument()
+
+    rerender(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_DIRETO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={{ ...CANDIDATO_BASE, id: 102, profile: 'forte' }}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+    expect(await screen.findByText(/Gerado por Forte remoto/i)).toBeInTheDocument()
+
+    rerender(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_DIRETO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={{ ...CANDIDATO_BASE, id: 103, profile: 'Legacy' }}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+    expect(await screen.findByText(/Gerado por Perfil configurado/i)).toBeInTheDocument()
+  })
+
+  it('UI-56: desabilita <Transporte> sem preview pronto/fonte offline e aplica cursor-not-allowed em aria-disabled', async () => {
+    filaTeste = criarFila(() => 'demo')
+    chamarMock.mockResolvedValue({
+      state: 'error',
+      key: null,
+      job: null,
+      progress: 0,
+      error: { code: 'source_offline', message: 'Arquivo offline' },
+    })
+
+    render(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_DIRETO}
+          fonte={{ ...FONTE_DISPONIVEL, status: 'offline', available: false }}
+          candidato={CANDIDATO_BASE}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+        />,
+      ),
+    )
+
+    const toolbar = await screen.findByRole('toolbar', { name: /Controles de reprodução/i })
+    for (const btn of toolbar.querySelectorAll('button')) {
+      expect(btn).toBeDisabled()
+    }
+
+    const btnConverter = screen.getByRole('button', { name: /Converter em Vídeo transformado/i })
+    expect(btnConverter.className).toContain('cursor-not-allowed')
+  })
 })
