@@ -412,6 +412,10 @@ async function main() {
     const activeProject = reopenedProject?.id ? reopenedProject : setupRes.project;
     const editorHash = buildEditorAvulsoHash(activeProject, setupRes.source.id, 1, 2);
     await wd.exec(() => {
+      window.location.hash = '#/inicio';
+    });
+    await delay(100);
+    await wd.exec(() => {
       location.reload();
     });
     {
@@ -429,7 +433,14 @@ async function main() {
         if (shellReady) break;
         await delay(250);
       }
-      assert.ok(shellReady, 'Shell v2 não carregou o Projeto aberto após reload.');
+      if (!shellReady) {
+        const diag = await wd.exec(() => ({
+          hash: window.location.hash,
+          href: window.location.href,
+          text: (document.body.innerText || '').replace(/\s+/g, ' ').slice(0, 500),
+        })).catch(() => ({}));
+        throw new Error(`Shell v2 não carregou o Projeto aberto após reload: ${JSON.stringify(diag)}`);
+      }
     }
     await wd.exec(targetHash => {
       window.location.hash = targetHash;

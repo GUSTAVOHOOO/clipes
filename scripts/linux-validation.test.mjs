@@ -94,5 +94,6 @@ test('linux-validation.mjs não usa clipes-preview-open nem seletores V1 e usa P
   assert.equal(source.includes('Preview do Corte'), false);
   assert.equal(source.includes('Transcrição pronta'), false);
   assert.equal(source.includes('Palco de prévia'), true);
+  assert.equal(source.includes("window.location.hash = '#/inicio'"), true);
   assert.equal(source.includes('window.location.hash = targetHash;\n      location.reload();'), false);
 });
