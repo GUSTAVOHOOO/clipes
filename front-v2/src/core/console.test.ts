@@ -2,13 +2,17 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { emitirConsoleMock, limparConsoleMock } from '@core'
+import { assinarConsoleMock, coreDispatch, emitirConsoleMock, limparConsoleMock, type EventoConsoleMock } from '@core'
 import {
+  consoleInlineMontado,
   criarStoreConsole,
   definirProjetoConsole,
+  focarConsoleInline,
   iniciarConsole,
+  registrarConsoleInline,
   sanitizarLinhaDefensiva,
   useConsole,
+  useConsoleInlineMontado,
   type EventoConsole,
 } from '~/core/console'
 
@@ -196,5 +200,83 @@ describe('Store do Console ao vivo (console.ts)', () => {
     pararTauri()
     expect(unlistenFn).toHaveBeenCalled()
     expect(invoke).toHaveBeenCalledWith('core_dispatch', { name: 'console.history', arguments: {} })
+  })
+
+  it('controla registro reativo de console inline montado e callback aoFocar sem vazar estado após cleanup', () => {
+    const store = criarStoreConsole({ projetoAtual: () => null })
+    const { result } = renderHook(() => useConsoleInlineMontado(store))
+    expect(result.current).toBe(false)
+    expect(consoleInlineMontado(store)).toBe(false)
+    expect(focarConsoleInline(store)).toBe(false)
+
+    const aoFocar1 = vi.fn()
+    const aoFocar2 = vi.fn()
+    let limpar1!: () => void
+    let limpar2!: () => void
+
+    act(() => {
+      limpar1 = registrarConsoleInline({ aoFocar: aoFocar1 }, store)
+    })
+    expect(result.current).toBe(true)
+    expect(consoleInlineMontado(store)).toBe(true)
+
+    act(() => {
+      limpar2 = registrarConsoleInline({ aoFocar: aoFocar2 }, store)
+    })
+    expect(focarConsoleInline(store)).toBe(true)
+    expect(aoFocar2).toHaveBeenCalledTimes(1)
+    expect(aoFocar1).not.toHaveBeenCalled()
+
+    // Cleanup idempotente de 1 mantém o 2 ativo
+    act(() => {
+      limpar1()
+      limpar1()
+    })
+    expect(result.current).toBe(true)
+
+    act(() => {
+      limpar2()
+    })
+    expect(result.current).toBe(false)
+    expect(consoleInlineMontado(store)).toBe(false)
+  })
+
+  it('emite eventos de console no mock para importação por URL, transcrição e exportação', async () => {
+    vi.stubEnv('VITE_CORE_MOCK', '1')
+    const recebidos: EventoConsoleMock[] = []
+    const unsub = assinarConsoleMock((e) => recebidos.push(e))
+
+    try {
+      const proj = await coreDispatch<{ path: string }>('projects.create', {
+        name: 'Teste Console',
+        parent: '/tmp',
+      })
+      await coreDispatch('components.download', { id: 'yt-dlp', confirmed: true })
+      await coreDispatch('sources.url.settings.set', { terms_accepted: true })
+      await coreDispatch('sources.url.download', {
+        project: proj.path,
+        url: 'https://example.com/video?token=segredo123',
+        job: 'url-teste',
+      })
+      await coreDispatch('transcription.start', {
+        project: proj.path,
+        source_id: 1,
+        engine: 'local',
+      })
+      await coreDispatch('export.start', {
+        project: proj.path,
+        source_id: 1,
+        start_id: 1,
+        end_id: 2,
+        output: '/test/exports/corte.mp4',
+      })
+
+      expect(recebidos.some((e) => e.origin === 'yt-dlp' && e.job === 'url-teste')).toBe(true)
+      expect(recebidos.every((e) => !(e.technical ?? '').includes('segredo123'))).toBe(true)
+      expect(recebidos.some((e) => e.origin === 'worker' && e.job === '99')).toBe(true)
+      expect(recebidos.some((e) => e.origin === 'ffmpeg' && e.simple.includes('Exportando Corte'))).toBe(true)
+    } finally {
+      unsub()
+    }
   })
 })
