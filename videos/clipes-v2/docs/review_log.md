@@ -533,3 +533,19 @@ O que entrou das correções da rodada 13, conferido nos quadros (sheets, contac
 Nenhuma nota ficou abaixo de 8, então nenhum plano inteiro precisa ser refeito.
 
 **Verdict:** SHIP (as 8 notas em 8 na rodada 14; os resíduos acima são polimento opcional e não bloqueiam)
+
+---
+
+## Render final e entrega (19/11/2026)
+
+Sem rodada de correção: o veredito SHIP da rodada 14 vale. Nada em `film.js` nem em `timeline.json` mudou depois dele.
+
+- **Render:** `render.mjs --fmt 16x9` e `--fmt 9x16`, 60 fps, 1800 quadros, blur adaptativo de 180°, H.264 High yuv420p CRF 16, AAC 48 kHz estéreo, `audio/mix.wav` embutido. Um render por vez (16:9 em 2199 s, 9:16 em 2886 s, máquina compartilhada). Um primeiro render do 16:9, iniciado antes, morreu no meio e deixou um MP4 truncado de ~1 MB; foi apagado e refeito do zero.
+- **Mix:** `mix.py` sem WARNING: −14,1 LUFS integrado, true peak −1,5 dBTP no WAV.
+- **MP4 de 60 fps medido** (`ebur128=peak=true` no áudio do próprio MP4): 16:9 e 9:16, ambos −14,1 LUFS e true peak −1,7 dBTP (limite −1). Pedido desde a rodada 14 e agora feito.
+- **Verificação:** `ffprobe` 16:9 = h264 High 1920×1080 60 fps + aac, 30,000 s; 9:16 = h264 High 1080×1920 60 fps + aac, 30,000 s; `ffmpeg -f null` sem erro nos dois.
+- **`review.py final`** (fonte `renders/16x9.mp4`): `near_blank_frames` = [], `loop_seam_jump` = 10,3, `longest_static` = 0,98 s (a partir de 18,8 s), `max_gap_between_visual_events` = 2,18 s. `metrics.sync` = 10/19 dentro de ±45 ms, média 51,8 ms, 8 cues não medíveis: o mesmo artefato do review.py das rodadas 9 a 14 (a prova de sincronia segue pelos stills da rodada 14).
+- **Olhados:** `contact.jpg`, `phone_16x9.jpg`, `phone_9x16.jpg`, `safe_9x16.jpg`. Manchetes, eyebrows, logo, CTA e URL na área segura do 9:16; CTA e URL leem no tamanho de celular; o laranja chapado a 23,5 s é o wipe do botão. Nenhum defeito bloqueante.
+- **Entrega:** `C:\Users\Windows 11\orca\handoffs\clipes\madrugada\video\` (`clipes-v2-16x9.mp4`, `clipes-v2-9x16.mp4`, folha de contato, phone_* e safe_9x16).
+
+Imperfeições conhecidas (as da rodada 14, nenhuma bloqueante): painel Legenda a 18,000 s e "Aprovado" a 13,0 s trocam em 1 quadro; cartão da Transcrição escuro e borrado a 8,2–8,7 s no 9:16 e vazio de ~26–30 % entre marca e faixa a 29,6 s; eyebrow de 21,0 s a +2 quadros; sem `roi` por elemento nos cues; os ~0,57 s finais são só marca + faixa; a licença do cartão final tem ~6 px no 16:9.
