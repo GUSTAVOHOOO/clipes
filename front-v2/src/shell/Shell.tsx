@@ -787,7 +787,7 @@ export function Shell({
                     <button
                       type="button"
                       onClick={abrirFilaDoAlerta}
-                      className="foco flex min-w-0 cursor-pointer items-center gap-1.5 rounded-controle border-0 bg-transparent px-1 py-0.5 text-pequeno text-t2 hover:bg-area hover:text-t1"
+                      className="foco flex min-w-0 cursor-pointer items-center gap-1.5 rounded-controle border-0 bg-transparent min-h-6 px-1 py-0.5 text-pequeno text-t2 hover:bg-area hover:text-t1"
                     >
                       <Status tom="rodando">
                         <span className="truncate">{rotuloPrimeiroAtivo}</span>
@@ -800,7 +800,7 @@ export function Shell({
                     <button
                       type="button"
                       onClick={abrirFilaDoAlerta}
-                      className="foco flex cursor-pointer items-center gap-1 rounded-controle border-0 bg-transparent px-1 py-0.5 text-pequeno text-t2 hover:bg-area hover:text-t1"
+                      className="foco flex cursor-pointer items-center gap-1 rounded-controle border-0 bg-transparent min-h-6 px-1 py-0.5 text-pequeno text-t2 hover:bg-area hover:text-t1"
                     >
                       <Status tom="aviso">
                         {estadoFilaGlobal.contagemIncertos === 1

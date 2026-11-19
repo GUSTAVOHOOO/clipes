@@ -47,7 +47,7 @@ test.describe('Tela Relatos e Diagnóstico (#/relatos)', () => {
     const summarySonda = page.getByText('Diagnóstico da sonda de hardware (Transcrição)')
     await summarySonda.click()
     await expect(page.getByText(/NVIDIA GeForce RTX 3050 Laptop GPU/i)).toBeVisible()
-    await expect(page.getByText(/cuda \/ int8_float16/i)).toBeVisible()
+    await expect(page.getByText(/Placa de vídeo · precisão int8_float16/i)).toBeVisible()
     await expect(page.getByText(/3962 MiB/i)).toBeVisible()
 
     // 4. Digitar "minha chave da openai" exibe role="alert" mantendo o foco no textarea

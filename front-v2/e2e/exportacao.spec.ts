@@ -153,6 +153,44 @@ test.describe('Tela Exportação — Mesa de Prontidão e Histórico de Lotes (#
     expect(erros).toEqual([])
   })
 
+  test('F6 alcança a Fila aberta, Esc a fecha depois de Tab e alvos têm >= 24 px (UI-80, UI-82)', async ({
+    page,
+  }) => {
+    for (const tamanho of [
+      { width: 1366, height: 768 },
+      { width: 1440, height: 900 },
+    ]) {
+      await page.setViewportSize(tamanho)
+      await abrirProjetoDemo(page)
+      await page.keyboard.press('Control+j')
+      const fila = page.getByRole('complementary', { name: 'Fila de Jobs' })
+      await expect(fila).toBeVisible()
+
+      const regioes = new Set<string | null>()
+      for (let i = 0; i < 6; i++) {
+        await page.keyboard.press('F6')
+        regioes.add(
+          await page.evaluate(
+            () => document.activeElement?.closest('[data-regiao]')?.getAttribute('data-regiao') ?? null,
+          ),
+        )
+      }
+      expect(regioes.has('fila')).toBe(true)
+
+      await fila.getByRole('button', { name: /Fechar Fila/i }).focus()
+      await page.keyboard.press('Escape')
+      await expect(fila).toBeHidden()
+
+      const alturas = await page.evaluate(() =>
+        Array.from(document.querySelectorAll<HTMLElement>('footer button, main button'))
+          .filter((b) => b.offsetParent !== null && !b.hasAttribute('disabled'))
+          .map((b) => ({ n: b.textContent?.trim() ?? '', h: b.getBoundingClientRect().height }))
+          .filter((b) => b.h < 24),
+      )
+      expect(alturas).toEqual([])
+    }
+  })
+
   test('cobre progresso core-progress em tempo real e cancelamento de lote via ConfirmDialog', async ({
     page,
   }) => {

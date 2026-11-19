@@ -77,7 +77,7 @@ test.describe('Painel Global da Fila de Jobs (Ctrl+J)', () => {
     await cardScript.getByRole('button', { name: 'Ver resultado' }).click()
     const dlgResultado = page.getByRole('dialog', { name: /Resultado do job #4/i })
     await expect(dlgResultado).toBeVisible()
-    await expect(dlgResultado.getByText(/Sucesso \(ok\)/i)).toBeVisible()
+    await expect(dlgResultado.getByText(/Concluído com sucesso/i)).toBeVisible()
     await expect(dlgResultado.getByText('Consome a cota do plano', { exact: true })).toBeVisible()
     const summaryJson = dlgResultado.getByText('Expandir JSON completo')
     await expect(summaryJson).toBeVisible()
