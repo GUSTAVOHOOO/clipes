@@ -96,6 +96,7 @@ test('linux-validation.mjs não usa clipes-preview-open nem seletores V1 e usa P
   assert.equal(source.includes('Palco de prévia'), true);
   assert.equal(source.includes("window.location.hash = '#/inicio'"), true);
   assert.equal(source.includes('window.location.hash = targetHash;\n      location.reload();'), false);
+  assert.equal(source.includes('button[aria-label="Reproduzir"]'), true);
 });
 
 test('linux-validation.mjs usa trecho >= 20s (MIN_CLIP_US) para abrir avulso-1-1-2 em editor.open', () => {

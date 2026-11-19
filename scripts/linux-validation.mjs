@@ -513,13 +513,38 @@ async function main() {
       }
       let playOk = false;
       let playError = null;
+      const seekDeadline = performance.now() + 5_000;
+      while (video.seeking && performance.now() < seekDeadline) {
+        await new Promise(r => setTimeout(r, 50));
+      }
       const beforeTime = video.currentTime;
       try {
         video.muted = true;
-        await video.play();
-        await new Promise(r => setTimeout(r, 350));
-        video.pause();
-        playOk = video.currentTime > beforeTime;
+        const muteBtn = section.querySelector('button[aria-label="Silenciar"]');
+        if (muteBtn instanceof HTMLElement && muteBtn.getAttribute('aria-pressed') !== 'true') {
+          muteBtn.click();
+        }
+        const playBtn = section.querySelector('button[aria-label="Reproduzir"]');
+        if (playBtn instanceof HTMLElement) {
+          playBtn.click();
+        } else {
+          await video.play();
+        }
+        const playDeadline = performance.now() + 3_000;
+        while (performance.now() < playDeadline) {
+          if (video.currentTime > beforeTime + 0.05) {
+            playOk = true;
+            break;
+          }
+          await new Promise(r => setTimeout(r, 100));
+        }
+        const pauseBtn = section.querySelector('button[aria-label="Pausar"]');
+        if (pauseBtn instanceof HTMLElement) {
+          pauseBtn.click();
+        } else {
+          video.pause();
+        }
+        playOk = playOk || video.currentTime > beforeTime;
       } catch (e) {
         playError = e instanceof Error ? e.message : String(e);
       }
