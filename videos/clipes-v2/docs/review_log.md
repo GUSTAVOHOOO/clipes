@@ -264,3 +264,16 @@ O que entrou das três correções da rodada 7, conferido nos quadros (strip_fas
 3. Sincronia: atrasar 2 quadros (+67 ms) a imagem dos 7 cues em −67 ms (4,5 s cabeçalho da Fonte; 8,5 s fala 1; 15,0 e 15,5 s legenda; 17,0 s rack focus; 21,0 s eyebrow de Exportação; 24,0 s o drop do logo, para a queda pousar em f720 sobre o thump), ou adiantar o áudio dos pops em 67 ms no `sfx_placement.json` (nunca os dois). Não mexer nos cues já em 0/±33 ms. Verificar: `metrics.sync.hits_within_45ms` ≥ 16/19 com média ≤ 30 ms e nenhum |x| > 67 ms; stills a 15,000 / 15,500 s mostrando a palavra do cue chegando no quadro do pop (e não 2 quadros antes); true peak do MP4 ≤ −1,0 dBTP e I = −14 ± 0,5 LUFS mantidos.
 
 **Veredito:** ANOTHER ROUND
+
+---
+
+## Rodada 9: correções feitas, SEM crítica ainda (handoff, 19/11/2026)
+
+Drafts 30 fps 16:9 e 9:16 e `review/r9/` renderizados no worktree a partir do commit desta rodada. A crítica da rodada 9 (subagente novo, reference/CRITIQUE.md) NÃO foi rodada. Correções da rodada 8 aplicadas, conferidas em stills (`render.mjs --at`):
+- Plano 5 no 9:16: manchete em 2 linhas (começa a y=290), eyebrow a 541, cartão A (Transcrição) y 716–996 e cartão B (Prévia, botões, painel) y 1012–1770 (~55 % da altura); Prévia a ~68 % da largura do cartão em 14–17,5 s; câmera final com o botão "Legenda" a ~78 % da altura; 16:9 com a câmera a 2,0× na Prévia a 16,2–17,5 s (menos grafite à direita).
+- Saída do texto final: linear acelerada, início 29,25 s, 0,45 batida, pílula primeiro, sem fragmento em 29,300–29,400 s (resta um pingo de descendente em 29,367 s, a verificar).
+- Gancho no 9:16: a manchete "Sua live virou Corte." sai só a 3,85 s (era 3,45 s), reduzindo o vazio de 3,5–3,97 s.
+- Sincronia: tentei adiantar o áudio de 8 cues em 67 ms e a métrica piorou (artefato de janela do review.py); revertido. Estado: `hits_within_45ms` 11/19, média 42,1 ms. Os cues a 4,5 / 8,5 / 15,0 / 15,5 / 17,0 / 21,0 / 24,0 s seguem em −67 ms e NÃO responderam a deslocamentos de 1–3 quadros no film.js; a causa provável é o ROI global do review.py, e a correção certa é dar `roi16` por elemento a cada um desses cues em `timeline.json` (como foi feito para as três Notas, que agora medem 0 / +33 / 0 ms).
+- True peak medido no draft MP4: −1,7 dBTP (mix.py: −14,1 LUFS, −1,5 dBTP). Ainda falta medir no MP4 final de 60 fps.
+
+Próximo diretor: rodar a crítica da rodada 9, corrigir, e seguir para os passos 9 e 10 do /motion-reel (render final, mix, todos os formatos, `review.py final`, entrega em `C:\Users\Windows 11\orca\handoffs\clipes\madrugada\video\`, PR `Refs #288` sem merge).

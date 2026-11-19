@@ -33,7 +33,7 @@
       let y = below * (1 - C.spHit(t, bin, preset));
       if (outAt != null && o.exitLin) {   // saída linear acelerada: o=duração em batidas, mesma curva em todas as palavras (4–5 quadros visíveis a 30 fps)
         const p = Math.min(1, Math.max(0, (C.beatAt(t) - C.beatOf(outAt)) / o.exitLin));
-        const e = p * (0.55 + 0.45 * p); y += above * e; if (e > 0.5) { C.put(w, { y, hide: true }); return; }
+        const e = p * (0.55 + 0.45 * p); y += above * e; if (e > 0.55) { C.put(w, { y, hide: true }); return; }
       } else if (outAt != null) y += above * C.sp(t, C.beatOf(outAt) + i * (o.exitStagger ?? stagger) * 0.5 - exit * 0.5, o.exitPreset || 'snappy');
       C.put(w, { y, hide: y >= below * 0.999 || y <= above * 0.62 });
     });
