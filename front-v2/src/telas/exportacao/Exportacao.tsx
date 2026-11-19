@@ -11,7 +11,7 @@ import {
 } from '@ds'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAtalhos, type Atalho } from '~/comandos/atalhos'
-import { chamar, ErroCore } from '~/core/cliente'
+import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import type { Fila } from '~/core/progresso'
 import { useEstadoForcado } from '~/shell/EstadoForcado'
@@ -183,10 +183,26 @@ export function Exportacao({
     if (forcado === 'vazio') return 'vazio'
     if (exportacao.carregando) return 'carregando'
     if (exportacao.erro) return 'erro'
-    if (sub === 'prontidao' && exportacao.aprovados.length === 0) return 'vazio'
+    if (
+      sub === 'prontidao' &&
+      exportacao.filtroFonteId === null &&
+      exportacao.totalProjeto === 0 &&
+      exportacao.aprovados.length === 0
+    ) {
+      return 'vazio'
+    }
     if (sub === 'lotes' && exportacao.lotes.length === 0) return 'vazio'
     return 'pronto'
-  }, [exportacao.aprovados.length, exportacao.carregando, exportacao.erro, exportacao.lotes.length, forcado, sub])
+  }, [
+    exportacao.aprovados.length,
+    exportacao.carregando,
+    exportacao.erro,
+    exportacao.filtroFonteId,
+    exportacao.lotes.length,
+    exportacao.totalProjeto,
+    forcado,
+    sub,
+  ])
 
   const erroExibido = useMemo(() => {
     if (exportacao.erro) return exportacao.erro
@@ -200,7 +216,7 @@ export function Exportacao({
 
   const abasSub = useMemo<Aba<'prontidao' | 'lotes'>[]>(
     () => [
-      { valor: 'prontidao', rotulo: `Prontidão e Lote (${exportacao.aprovados.length})` },
+      { valor: 'prontidao', rotulo: `Prontidão e Lote (${exportacao.totalProjeto})` },
       {
         valor: 'lotes',
         rotulo:
@@ -209,7 +225,7 @@ export function Exportacao({
             : `Histórico de lotes (${exportacao.lotes.length})`,
       },
     ],
-    [exportacao.aprovados.length, exportacao.lotes.length, lotesAtivos.length],
+    [exportacao.lotes.length, exportacao.totalProjeto, lotesAtivos.length],
   )
 
   const cancelarLoteDaFaixa = useCallback(async () => {
@@ -222,7 +238,7 @@ export function Exportacao({
       await exportacao.recarregarLotes()
     } catch (err) {
       setLoteParaCancelarFaixa(null)
-      const e = err instanceof ErroCore ? err : new ErroCore('export_failed', '')
+      const e = paraErroCore(err)
       toast.add({ type: 'erro', title: mensagemDeErro(e).titulo })
     } finally {
       setCancelandoFaixa(false)

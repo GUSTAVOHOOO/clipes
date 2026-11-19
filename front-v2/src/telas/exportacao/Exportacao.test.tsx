@@ -1,5 +1,5 @@
 import { ProvedorDicas, ProvedorToast } from '@ds'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProvedorAtalhos } from '~/comandos/atalhos'
@@ -39,11 +39,14 @@ beforeAll(() => {
 function criarEstado(
   overrides: Partial<ResultadoUseExportacaoProjeto> = {},
 ): ResultadoUseExportacaoProjeto {
+  const perm = { status: 'granted', who: 'Criador', where: 'Discord', scope: 'cortes' } as const
   return {
     projetoPath: '/projetos/Demo.clipes',
     carregando: false,
     carregandoMais: false,
+    atualizandoProntidao: false,
     erro: null,
+    erroProntidao: null,
     fontes: [
       {
         id: 4,
@@ -54,7 +57,7 @@ function criarEstado(
         audio_track: 1,
         origin_url: null,
         language: 'pt',
-        permission: { status: 'granted', who: 'Criador', where: 'Discord', scope: 'cortes' },
+        permission: perm,
       },
     ],
     aprovados: [
@@ -62,27 +65,29 @@ function criarEstado(
         candidateId: 102,
         runId: 1,
         sourceId: 4,
-        sourceName: 'Live.mp4',
-        sourceStatus: 'available',
-        permission: { status: 'granted', who: 'Criador', where: 'Discord', scope: 'cortes' },
+        clipId: null,
         videoKind: 'direct',
+        candidateTitle: 'Corte V1 pronto',
+        scoreTotal: 8.4,
+        adjusted: false,
         startId: 40,
         endId: 41,
         startUs: 390_000_000,
         endUs: 410_000_000,
         durationUs: 20_000_000,
-        adjusted: false,
-        scoreTotal: 8.4,
-        candidateTitle: 'Corte V1 pronto',
-      },
-    ],
-    paginaAtual: 1,
-    temMais: false,
-    detalhesPorCandidato: {
-      102: {
-        candidateId: 102,
+        source: {
+          id: 4,
+          name: 'Live.mp4',
+          path: '/videos/Live.mp4',
+          status: 'available',
+          available: true,
+          online: true,
+          permission: perm,
+        },
         packaging: { current: null },
         thumbnail: { current: null },
+        script: { applicable: false },
+        narration: { applicable: false },
         guardrails: {
           scope: 'single',
           needsDirectNotice: false,
@@ -95,7 +100,11 @@ function criarEstado(
           audio: { hasAudio: false, assetCount: 0, unverifiedCount: 0 },
         },
       },
-    },
+    ],
+    totalAprovados: 1,
+    totalProjeto: 1,
+    filtroFonteId: null,
+    temMais: false,
     guardrailsProjeto: {
       scope: 'project',
       directMonetizationAck: true,
@@ -127,7 +136,9 @@ function criarEstado(
     recarregar: vi.fn().mockResolvedValue(undefined),
     recarregarLotes: vi.fn().mockResolvedValue([]),
     carregarMais: vi.fn().mockResolvedValue(undefined),
-    garantirDetalhesParaIds: vi.fn().mockResolvedValue(undefined),
+    filtrarPorFonte: vi.fn().mockResolvedValue(undefined),
+    atualizarProntidao: vi.fn().mockResolvedValue(undefined),
+    tentarNovamenteProntidao: vi.fn().mockResolvedValue(undefined),
     carregarGuardrailsEscopo: vi.fn().mockResolvedValue(null),
     ...overrides,
   }
@@ -172,7 +183,7 @@ describe('Exportacao (#/projeto/:id/exportacao)', () => {
   })
 
   it('estado loading exibe Skeletons e NUNCA mostra "Nenhum Corte aprovado"', () => {
-    estadoMockUseExportacao = criarEstado({ carregando: true, aprovados: [] })
+    estadoMockUseExportacao = criarEstado({ carregando: true, aprovados: [], totalAprovados: 0, totalProjeto: 0 })
     renderizar('prontidao')
 
     expect(screen.getByRole('heading', { level: 1, name: 'Exportação' })).toBeInTheDocument()
@@ -183,7 +194,7 @@ describe('Exportacao (#/projeto/:id/exportacao)', () => {
 
   it('estado empty em prontidao e lotes exibe mensagem e CTA exatos', async () => {
     const user = userEvent.setup()
-    estadoMockUseExportacao = criarEstado({ aprovados: [], lotes: [] })
+    estadoMockUseExportacao = criarEstado({ aprovados: [], totalAprovados: 0, totalProjeto: 0, lotes: [] })
     const { rerender } = renderizar('prontidao')
 
     expect(screen.getByText('Nenhum Corte aprovado para exportar')).toBeInTheDocument()
@@ -210,6 +221,24 @@ describe('Exportacao (#/projeto/:id/exportacao)', () => {
     expect(window.location.hash).toBe('#/projeto/demo/exportacao?sub=prontidao')
   })
 
+  it('mantém MesaProntidao montada quando filtro por Fonte retorna 0 itens (com totalProjeto > 0) e permite limpar filtros', async () => {
+    const user = userEvent.setup()
+    const filtrarPorFonte = vi.fn().mockResolvedValue(undefined)
+    estadoMockUseExportacao = criarEstado({
+      aprovados: [],
+      totalAprovados: 0,
+      totalProjeto: 3,
+      filtroFonteId: 4,
+      filtrarPorFonte,
+    })
+    renderizar('prontidao')
+
+    expect(screen.queryByText('Nenhum Corte aprovado para exportar')).not.toBeInTheDocument()
+    expect(screen.getByText('Nenhum Corte aprovado corresponde aos filtros selecionados.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Limpar filtros' }))
+    expect(filtrarPorFonte).toHaveBeenCalledWith(null)
+  })
+
   it.each([
     ['project_not_open', /Nenhum Projeto está aberto no momento\./i],
     ['export_batch_empty', /Não há Cortes aprovados neste escopo para exportar\./i],
@@ -234,6 +263,20 @@ describe('Exportacao (#/projeto/:id/exportacao)', () => {
     const alerta = screen.getByRole('alert')
     expect(alerta).toHaveTextContent(textoEsperado)
     expect(alerta).toHaveTextContent('Ver detalhe técnico')
+  })
+
+  it('estado error sem rota de recuperação exibe botão "Tentar novamente" que chama recarregar', async () => {
+    const user = userEvent.setup()
+    const recarregar = vi.fn().mockResolvedValue(undefined)
+    estadoMockUseExportacao = criarEstado({
+      erro: new ErroCore('project_read', 'Erro de leitura'),
+      recarregar,
+    })
+    renderizar('prontidao')
+
+    const alerta = screen.getByRole('alert')
+    await user.click(within(alerta).getByRole('button', { name: 'Tentar novamente' }))
+    expect(recarregar).toHaveBeenCalledTimes(1)
   })
 
   it('estados job_running e partial mantêm a Mesa interativa e exibem progresso/falha parcial', async () => {

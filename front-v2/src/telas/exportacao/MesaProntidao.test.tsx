@@ -1,13 +1,15 @@
 import { ProvedorDicas, ProvedorToast } from '@ds'
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, renderHook, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ErroCore } from '~/core/cliente'
-import type {
-  CorteAprovadoProntidao,
-  DetalhesCorteProntidao,
-  RespostaGuardrails,
-  ResultadoUseExportacaoProjeto,
+import { criarFila } from '~/core/progresso'
+import {
+  criarStoreExportacaoProjeto,
+  useExportacaoProjeto,
+  type CorteAprovadoProntidao,
+  type RespostaGuardrails,
+  type ResultadoUseExportacaoProjeto,
 } from '~/stores/exportacaoProjeto'
 import type { FonteProjeto } from '~/stores/fontesProjeto'
 import { MesaProntidao } from '~/telas/exportacao/MesaProntidao'
@@ -68,61 +70,29 @@ const APROVADOS_BASE: CorteAprovadoProntidao[] = [
     candidateId: 102,
     runId: 1,
     sourceId: 4,
-    sourceName: 'Live_12_11_final.mp4',
-    sourceStatus: 'available',
-    permission: FONTES_MOCK[0].permission,
+    clipId: null,
     videoKind: 'direct',
+    candidateTitle: 'Corte V1 sem empacotamento',
+    scoreTotal: 8.4,
+    adjusted: false,
     startId: 40,
     endId: 41,
     startUs: 390_000_000,
     endUs: 410_000_000,
     durationUs: 20_000_000,
-    adjusted: false,
-    scoreTotal: 8.4,
-    candidateTitle: 'Corte V1 sem empacotamento',
-  },
-  {
-    candidateId: 202,
-    runId: 2,
-    sourceId: 4,
-    sourceName: 'Live_12_11_final.mp4',
-    sourceStatus: 'available',
-    permission: FONTES_MOCK[0].permission,
-    videoKind: 'transformed',
-    startId: 10,
-    endId: 14,
-    startUs: 90_000_000,
-    endUs: 162_000_000,
-    durationUs: 72_000_000,
-    adjusted: false,
-    scoreTotal: 8.9,
-    candidateTitle: 'A virada que mudou o jogo',
-  },
-  {
-    candidateId: 301,
-    runId: 3,
-    sourceId: 2,
-    sourceName: 'offline.mp4',
-    sourceStatus: 'offline',
-    permission: FONTES_MOCK[1].permission,
-    videoKind: 'transformed',
-    startId: 10,
-    endId: 14,
-    startUs: 90_000_000,
-    endUs: 140_000_000,
-    durationUs: 50_000_000,
-    adjusted: false,
-    scoreTotal: 7.8,
-    candidateTitle: 'Corte legado offline',
-  },
-]
-
-const DETALHES_BASE: Record<number, DetalhesCorteProntidao> = {
-  // 102: V1 sem packaging nem thumbnail
-  102: {
-    candidateId: 102,
+    source: {
+      id: 4,
+      name: 'Live_12_11_final.mp4',
+      path: '/videos/Live_12_11_final.mp4',
+      status: 'available',
+      available: true,
+      online: true,
+      permission: FONTES_MOCK[0].permission,
+    },
     packaging: { current: null },
     thumbnail: { current: null },
+    script: { applicable: false },
+    narration: { applicable: false },
     guardrails: {
       scope: 'single',
       needsDirectNotice: true,
@@ -135,11 +105,42 @@ const DETALHES_BASE: Record<number, DetalhesCorteProntidao> = {
       audio: { hasAudio: true, assetCount: 1, unverifiedCount: 1 },
     },
   },
-  // 202: Transformado, > 60s, roteiro pendente e sobra > 5s
-  202: {
+  {
     candidateId: 202,
+    runId: 2,
+    sourceId: 4,
+    clipId: null,
+    videoKind: 'transformed',
+    candidateTitle: 'A virada que mudou o jogo',
+    scoreTotal: 8.9,
+    adjusted: false,
+    startId: 10,
+    endId: 14,
+    startUs: 90_000_000,
+    endUs: 162_000_000,
+    durationUs: 72_000_000,
+    source: {
+      id: 4,
+      name: 'Live_12_11_final.mp4',
+      path: '/videos/Live_12_11_final.mp4',
+      status: 'available',
+      available: true,
+      online: true,
+      permission: FONTES_MOCK[0].permission,
+    },
     packaging: { current: { title: 'Empacotado: A virada do jogo' } },
     thumbnail: { current: { id: 1, instantUs: 110_000_000, origin: 'provider' } },
+    script: { applicable: true, exists: true, approved: false, pendingBlocks: 2, totalBlocks: 3 },
+    narration: {
+      applicable: true,
+      hasTts: true,
+      generatedBlocks: 1,
+      readyBlocks: 1,
+      ready: false,
+      totalBlocks: 3,
+      freezeTailUs: 6_500_000,
+      longFreezeTail: true,
+    },
     guardrails: {
       scope: 'single',
       needsDirectNotice: false,
@@ -152,6 +153,8 @@ const DETALHES_BASE: Record<number, DetalhesCorteProntidao> = {
         applicable: true,
         hasTts: true,
         generatedBlocks: 1,
+        readyBlocks: 1,
+        ready: false,
         totalBlocks: 3,
         freezeTailUs: 6_500_000,
         longFreezeTail: true,
@@ -159,11 +162,42 @@ const DETALHES_BASE: Record<number, DetalhesCorteProntidao> = {
       audio: { hasAudio: false, assetCount: 0, unverifiedCount: 0 },
     },
   },
-  // 301: Fonte offline, sem permissão
-  301: {
+  {
     candidateId: 301,
+    runId: 3,
+    sourceId: 2,
+    clipId: null,
+    videoKind: 'transformed',
+    candidateTitle: 'Corte legado offline',
+    scoreTotal: 7.8,
+    adjusted: false,
+    startId: 10,
+    endId: 14,
+    startUs: 90_000_000,
+    endUs: 140_000_000,
+    durationUs: 50_000_000,
+    source: {
+      id: 2,
+      name: 'offline.mp4',
+      path: '/videos/offline.mp4',
+      status: 'offline',
+      available: false,
+      online: false,
+      permission: FONTES_MOCK[1].permission,
+    },
     packaging: { current: { title: 'Corte legado da live antiga' } },
     thumbnail: { current: { id: 2, instantUs: 95_000_000, origin: 'user' } },
+    script: { applicable: true, exists: true, approved: true, pendingBlocks: 0, totalBlocks: 3 },
+    narration: {
+      applicable: true,
+      hasTts: true,
+      generatedBlocks: 1,
+      readyBlocks: 3,
+      ready: true,
+      totalBlocks: 3,
+      freezeTailUs: 0,
+      longFreezeTail: false,
+    },
     guardrails: {
       scope: 'single',
       needsDirectNotice: false,
@@ -175,7 +209,9 @@ const DETALHES_BASE: Record<number, DetalhesCorteProntidao> = {
       narration: {
         applicable: true,
         hasTts: true,
-        generatedBlocks: 3,
+        generatedBlocks: 1,
+        readyBlocks: 3,
+        ready: true,
         totalBlocks: 3,
         freezeTailUs: 0,
         longFreezeTail: false,
@@ -183,7 +219,7 @@ const DETALHES_BASE: Record<number, DetalhesCorteProntidao> = {
       audio: { hasAudio: false, assetCount: 0, unverifiedCount: 0 },
     },
   },
-}
+]
 
 const GUARDRAILS_PROJETO_BASE: RespostaGuardrails = {
   scope: 'project',
@@ -215,12 +251,15 @@ function criarExportacaoMock(
     projetoPath: '/projetos/Demo.clipes',
     carregando: false,
     carregandoMais: false,
+    atualizandoProntidao: false,
     erro: null,
+    erroProntidao: null,
     fontes: FONTES_MOCK,
     aprovados: APROVADOS_BASE,
-    paginaAtual: 1,
+    totalAprovados: APROVADOS_BASE.length,
+    totalProjeto: APROVADOS_BASE.length,
+    filtroFonteId: null,
     temMais: false,
-    detalhesPorCandidato: DETALHES_BASE,
     guardrailsProjeto: GUARDRAILS_PROJETO_BASE,
     guardrailsPorFonte: {},
     settings: { last_directory: '/test/exports' },
@@ -239,7 +278,9 @@ function criarExportacaoMock(
     recarregar: vi.fn().mockResolvedValue(undefined),
     recarregarLotes: vi.fn().mockResolvedValue([]),
     carregarMais: vi.fn().mockResolvedValue(undefined),
-    garantirDetalhesParaIds: vi.fn().mockResolvedValue(undefined),
+    filtrarPorFonte: vi.fn().mockResolvedValue(undefined),
+    atualizarProntidao: vi.fn().mockResolvedValue(undefined),
+    tentarNovamenteProntidao: vi.fn().mockResolvedValue(undefined),
     carregarGuardrailsEscopo: vi.fn().mockResolvedValue(GUARDRAILS_PROJETO_BASE),
     ...overrides,
   }
@@ -268,7 +309,7 @@ describe('MesaProntidao', () => {
     chamarMock.mockReset()
     window.location.hash = '#/projeto/demo/exportacao'
     chamarMock.mockImplementation(async (cmd: string) => {
-      if (cmd === 'guardrails.check') return DETALHES_BASE[102].guardrails
+      if (cmd === 'guardrails.check') return APROVADOS_BASE[0].guardrails
       if (cmd === 'export.captions') return { missingGlyphs: [], emojiRemoved: 0 }
       if (cmd === 'export.settings') return { last_directory: '/test/exports' }
       return null
@@ -279,10 +320,11 @@ describe('MesaProntidao', () => {
     vi.clearAllMocks()
   })
 
-  it('renderiza cards V1 sem Empacotamento, SeloTipoVideo, glifos com ícone+texto, paginação (#298) e filtros', async () => {
+  it('renderiza cards a partir do resumo de export.readiness, paginação e "Atualizar prontidão em lote" habilitado', async () => {
     const user = userEvent.setup()
     const carregarMais = vi.fn().mockResolvedValue(undefined)
-    const exp = criarExportacaoMock({ temMais: true, carregarMais })
+    const atualizarProntidao = vi.fn().mockResolvedValue(undefined)
+    const exp = criarExportacaoMock({ temMais: true, carregarMais, atualizarProntidao })
     renderizar(exp)
 
     // Card V1 sem Empacotamento exibe candidateTitle + etiqueta explícita e "Sem capa"
@@ -303,25 +345,22 @@ describe('MesaProntidao', () => {
     expect(within(card202).getByText(/Sobra final > 5 s/i)).toBeInTheDocument()
     expect(within(card202).getByText(/Acima de 60 s/i)).toBeInTheDocument()
 
-    // Card 301 (Fonte offline) exibe Fonte indisponível e Sem Permissão
+    // Card 301 (Fonte offline, mas com narration.ready === true mesmo com generatedBlocks < totalBlocks)
     const card301 = screen.getByRole('article', { name: /Corte legado da live antiga/i })
     expect(within(card301).getByText('Fonte indisponível')).toBeInTheDocument()
     expect(within(card301).getByText('Sem Permissão')).toBeInTheDocument()
+    expect(within(card301).getByText('Narração pronta')).toBeInTheDocument()
 
-    // Paginação incremental (#298)
+    // Paginação incremental
     const btnCarregarMais = screen.getByRole('button', { name: /Carregar mais/i })
     await user.click(btnCarregarMais)
     expect(carregarMais).toHaveBeenCalledTimes(1)
 
-    // Dica da ação indisponível de atualização agregada (#298) sem expor número de ticket nem comando interno (UI-12)
+    // Botão "Atualizar prontidão em lote" habilitado e aciona atualizarProntidao()
     const btnReadiness = screen.getByRole('button', { name: /Atualizar prontidão em lote/i })
-    expect(btnReadiness).toBeDisabled()
-    await user.hover(btnReadiness.parentElement!)
-    const dicaReadiness = await screen.findByText(
-      /atualização em lote em uma única consulta ainda não está disponível nesta versão/i,
-    )
-    expect(dicaReadiness).toBeInTheDocument()
-    expect(dicaReadiness.textContent).not.toMatch(/#\d+|export\.readiness/)
+    expect(btnReadiness).toBeEnabled()
+    await user.click(btnReadiness)
+    expect(atualizarProntidao).toHaveBeenCalledTimes(1)
 
     // Busca por título filtrando para 0 itens e "Limpar filtros"
     const busca = screen.getByRole('searchbox', { name: /Buscar título do Corte/i })
@@ -329,6 +368,88 @@ describe('MesaProntidao', () => {
     expect(screen.getByText(/Nenhum Corte aprovado corresponde aos filtros/i)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Limpar filtros' }))
     expect(screen.getByRole('article', { name: /Empacotado: A virada do jogo/i })).toBeInTheDocument()
+  })
+
+  it('filtra por Fonte acionando filtrarPorFonte(sourceId) e exibe BannerErroCore com recuperação ao falhar', async () => {
+    const user = userEvent.setup()
+    const filtrarPorFonte = vi.fn().mockResolvedValue(undefined)
+    const tentarNovamenteProntidao = vi.fn().mockResolvedValue(undefined)
+    const exp = criarExportacaoMock({
+      filtrarPorFonte,
+      tentarNovamenteProntidao,
+      erroProntidao: new ErroCore('project_read', 'Falha ao ler prontidão.'),
+    })
+    renderizar(exp)
+
+    // BannerErroCore visível com ação "Tentar de novo"
+    const alerta = screen.getByRole('alert')
+    expect(alerta).toHaveTextContent('Ver detalhe técnico')
+    await user.click(within(alerta).getByRole('button', { name: 'Tentar de novo' }))
+    expect(tentarNovamenteProntidao).toHaveBeenCalledTimes(1)
+
+    // Seleciona uma Fonte no Select "Filtrar por Fonte"
+    const selectFonte = screen.getByRole('combobox', { name: /Filtrar por Fonte/i })
+    await user.click(selectFonte)
+    const opcaoLive = await screen.findByRole('option', { name: 'Live_12_11_final.mp4' })
+    await user.click(opcaoLive)
+    expect(filtrarPorFonte).toHaveBeenCalledWith(4)
+  })
+
+  it('integração MesaProntidao + store: 1 chamada export.readiness por página, filtro source_id e atualização em lote', async () => {
+    const user = userEvent.setup()
+    const chamadasReadiness: Record<string, unknown>[] = []
+    chamarMock.mockImplementation(async (cmd: string, args: Record<string, unknown> = {}) => {
+      if (cmd === 'sources.list') return FONTES_MOCK
+      if (cmd === 'export.settings') return { last_directory: '/test/exports' }
+      if (cmd === 'export.encoder.status') {
+        return { ffmpeg: true, detected: true, stale: false, passed: ['h264_nvenc'], selected: 'h264_nvenc', manual: null, effective: 'h264_nvenc', gpu: 'RTX', detected_at: 100 }
+      }
+      if (cmd === 'export.batch.list') return []
+      if (cmd === 'guardrails.check') return GUARDRAILS_PROJETO_BASE
+      if (cmd === 'export.readiness') {
+        chamadasReadiness.push(args)
+        const sid = typeof args.source_id === 'number' ? args.source_id : null
+        const items = sid === null ? APROVADOS_BASE : APROVADOS_BASE.filter((c) => c.sourceId === sid)
+        return { total: items.length, offset: 0, limit: 12, hasMore: false, items }
+      }
+      return null
+    })
+
+    const store = criarStoreExportacaoProjeto()
+    const fila = criarFila(() => 'demo')
+    const { result } = renderHook(() => useExportacaoProjeto('/projetos/Demo.clipes', { store, fila }))
+    await waitFor(() => expect(result.current.carregando).toBe(false))
+    expect(chamadasReadiness).toEqual([{ offset: 0, limit: 12 }])
+
+    const Wrapper = () => {
+      const exp = useExportacaoProjeto('/projetos/Demo.clipes', { store, fila })
+      return (
+        <ProvedorDicas>
+          <ProvedorToast>
+            <MesaProntidao
+              projetoId="demo"
+              projetoPath="/projetos/Demo.clipes"
+              exportacao={exp}
+              aoAbrirLote={vi.fn()}
+            />
+          </ProvedorToast>
+        </ProvedorDicas>
+      )
+    }
+
+    render(<Wrapper />)
+    expect(screen.getAllByRole('article')).toHaveLength(3)
+    expect(chamadasReadiness).toHaveLength(1)
+
+    await user.click(screen.getByRole('button', { name: /Atualizar prontidão em lote/i }))
+    await waitFor(() => expect(chamadasReadiness).toHaveLength(2))
+    expect(chamadasReadiness[1]).toEqual({ offset: 0, limit: 12 })
+
+    await user.click(screen.getByRole('combobox', { name: /Filtrar por Fonte/i }))
+    await user.click(await screen.findByRole('option', { name: 'offline.mp4' }))
+    await waitFor(() => expect(chamadasReadiness).toHaveLength(3))
+    expect(chamadasReadiness[2]).toEqual({ offset: 0, limit: 12, source_id: 2 })
+    expect(screen.getAllByRole('article')).toHaveLength(1)
   })
 
   it('navega para Empacotar/Transformar/Relocalizar, abre DialogoExportarCorte em "Exportar só este" e exibe Dicas #292 e #303', async () => {
