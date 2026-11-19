@@ -162,6 +162,14 @@ export const TABELA_ERROS: Record<string, MensagemErro> = {
   ffprobe_missing: entradaComponenteFaltante,
   worker_missing: entradaComponenteFaltante,
   model_missing: entradaComponenteFaltante,
+  worker_install: {
+    titulo: 'Não foi possível instalar o ambiente Python isolado (worker).',
+    recuperacao: { rotulo: 'Instalar componente', rota: '#/config/componentes', acao: 'instalar-componente' },
+  },
+  worker_verify: {
+    titulo: 'O ambiente Python isolado (worker) foi instalado, mas não respondeu à verificação inicial.',
+    recuperacao: { rotulo: 'Instalar componente', rota: '#/config/componentes', acao: 'instalar-componente' },
+  },
   source_offline: entradaFonteAlterada,
   source_changed: entradaFonteAlterada,
   source_mismatch: entradaFonteAlterada,

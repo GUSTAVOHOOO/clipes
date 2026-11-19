@@ -27,6 +27,17 @@ export type ProjetoRecente = {
 
 type RespostaAssistente = {
   needsSetup?: boolean
+  completed?: boolean
+  skipped?: boolean
+}
+
+type StatusFfmpegInicio = {
+  installed?: boolean
+  incomplete?: boolean
+}
+
+type StatusWorkerInicio = {
+  installed?: boolean
 }
 
 type ErroTraduzido = {
@@ -80,6 +91,10 @@ export function Inicio() {
   const [recentes, setRecentes] = useState<ProjetoRecente[]>([])
   const [projetoAtual, setProjetoAtual] = useState<ProjetoAtual | null>(null)
   const [erroBanner, setErroBanner] = useState<ErroCore | null>(null)
+  const [componentesAusentes, setComponentesAusentes] = useState<{
+    ffmpeg: boolean
+    worker: boolean
+  }>({ ffmpeg: false, worker: false })
   const [filtro, setFiltro] = useState('')
 
   const [dialogoNovoAberto, setDialogoNovoAberto] = useState(false)
@@ -98,22 +113,43 @@ export function Inicio() {
     setCarregando(true)
     setErroBanner(null)
 
-    const [resRecentes, resAtual, resAssistente] = await Promise.allSettled([
+    const [resRecentes, resAtual, resAssistente, resFfmpeg, resWorker] = await Promise.allSettled([
       chamar<ProjetoRecente[]>('projects.recent', {}),
       chamar<ProjetoAtual | null>('projects.current', {}),
       chamar<RespostaAssistente>('assistant.status', {}),
+      chamar<StatusFfmpegInicio>('components.ffmpeg.status', {}),
+      chamar<StatusWorkerInicio>('components.worker.status', {}),
     ])
 
     if (seq !== versaoCargaRef.current) return
 
-    if (
-      resAssistente.status === 'fulfilled' &&
-      resAssistente.value?.needsSetup === true &&
-      !forcado
-    ) {
-      window.location.replace('#/assistente?passo=1')
-      return
+    const ffmpegAusente =
+      resFfmpeg.status === 'fulfilled' &&
+      resFfmpeg.value != null &&
+      (!resFfmpeg.value.installed || Boolean(resFfmpeg.value.incomplete))
+
+    const workerAusente =
+      resWorker.status === 'fulfilled' &&
+      resWorker.value != null &&
+      !resWorker.value.installed
+
+    if (resAssistente.status === 'fulfilled' && !forcado) {
+      if (resAssistente.value?.needsSetup === true) {
+        window.location.replace('#/assistente?passo=1')
+        return
+      }
+      // Dados migrados da v1 (assistant.json marca completed: true) com FFmpeg ausente no disco.
+      if (
+        resAssistente.value?.completed === true &&
+        resAssistente.value?.skipped !== true &&
+        ffmpegAusente
+      ) {
+        window.location.replace('#/assistente?passo=1')
+        return
+      }
     }
+
+    setComponentesAusentes({ ffmpeg: ffmpegAusente, worker: workerAusente })
 
     if (resAtual.status === 'fulfilled') {
       setProjetoAtual(resAtual.value ?? null)
@@ -329,6 +365,51 @@ export function Inicio() {
           permitirRelato
           aoDispensar={erroBanner ? () => setErroBanner(null) : undefined}
         />
+      )}
+
+      {(componentesAusentes.ffmpeg || componentesAusentes.worker) && (
+        <section
+          role="status"
+          aria-label="Componentes essenciais ausentes"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-area bg-area px-4 py-3"
+        >
+          <div className="flex min-w-0 flex-1 items-start gap-2.5">
+            <AlertTriangle className="mt-0.5 size-[15px] shrink-0 stroke-[1.75] text-t2" aria-hidden />
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <strong className="text-base font-medio text-t1">
+                Componentes essenciais ausentes
+              </strong>
+              <p className="text-pequeno text-t2">
+                {componentesAusentes.ffmpeg && componentesAusentes.worker
+                  ? 'Faltam o FFmpeg e o worker Python de transcrição local.'
+                  : componentesAusentes.ffmpeg
+                    ? 'Falta instalar ou validar o FFmpeg e o FFprobe.'
+                    : 'Falta instalar o worker Python de transcrição local.'}{' '}
+                Conclua a instalação no Assistente antes de transcrever ou exportar.
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Botao
+              variante="secundario"
+              tamanho="p"
+              onClick={() => {
+                window.location.hash = '#/assistente?passo=1'
+              }}
+            >
+              Abrir Assistente
+            </Botao>
+            <Botao
+              variante="fantasma"
+              tamanho="p"
+              onClick={() => {
+                window.location.hash = '#/config/componentes'
+              }}
+            >
+              Componentes
+            </Botao>
+          </div>
+        </section>
       )}
 
       {projetoAtual && (

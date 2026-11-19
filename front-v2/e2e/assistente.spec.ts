@@ -149,4 +149,57 @@ test.describe('Tela Assistente de Primeiro Uso (#/assistente)', () => {
 
     expect(erros).toEqual([])
   })
+
+  test('exige worker e modelo antes de testar hardware, instala em ordem e reabre Assistente quando dados migrados têm componentes ausentes', async ({
+    page,
+  }) => {
+    const erros: string[] = []
+    page.on('pageerror', (erro) => erros.push(erro.message))
+
+    await page.setViewportSize({ width: 1366, height: 768 })
+
+    // Simula dados migrados da v1: assistant.status com completed: true, mas FFmpeg/worker/modelos ausentes
+    await page.goto('/?components-missing#/inicio')
+    await expect(page).toHaveURL(/#\/assistente\?passo=1$/)
+    await expect(
+      page.getByRole('heading', { name: 'Passo 1: Essencial para transcrever e cortar' }),
+    ).toBeVisible()
+
+    // Regra da Luz Única: exatamente um botão primário (.bg-sinal) visível na tela
+    expect(await page.locator('.bg-sinal').count()).toBe(1)
+
+    // Sequência visível e travas iniciais
+    await expect(page.getByRole('heading', { name: /1\. FFmpeg e FFprobe/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /2\. Ambiente Python isolado/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /3\. Modelo de transcrição local/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /4\. Teste de hardware/i })).toBeVisible()
+
+    const btnBaixarModelo = page.getByRole('button', { name: /Baixar modelo/i })
+    const btnTestarHardware = page.getByRole('button', { name: /Testar meu hardware/i })
+    await expect(btnBaixarModelo).toBeDisabled()
+    await expect(btnTestarHardware).toBeDisabled()
+
+    // Ação única instala worker -> modelo e libera Testar meu hardware
+    await page.getByRole('button', { name: /Instalar motor e modelo recomendados/i }).click()
+    const dlgMotor = page.getByRole('alertdialog')
+    await expect(dlgMotor).toBeVisible()
+    await dlgMotor.getByRole('button', { name: /Confirmar instalação/i }).click()
+
+    await expect(page.getByRole('region', { name: 'Worker Python' }).getByText('Pronto')).toBeVisible()
+    await expect(
+      page.getByRole('region', { name: 'Modelo de transcrição local' }).getByText('Pronto'),
+    ).toBeVisible()
+    await expect(btnTestarHardware).toBeEnabled()
+
+    await btnTestarHardware.click()
+    await expect(page.getByRole('region', { name: 'Teste de hardware' }).getByText('Pronto')).toBeVisible()
+
+    const rolagem = await page.evaluate(() => ({
+      altura: document.documentElement.scrollHeight <= window.innerHeight,
+      largura: document.documentElement.scrollWidth <= window.innerWidth,
+    }))
+    expect(rolagem).toEqual({ altura: true, largura: true })
+
+    expect(erros).toEqual([])
+  })
 })

@@ -400,6 +400,235 @@ describe('Tela Assistente de Primeiro Uso (#/assistente)', () => {
     expect(dica).not.toHaveTextContent(/#[0-9]{3}/)
   })
 
+  it('Item 1: Testar hardware fica desabilitado com apoio explicando o que falta e libera sem FFmpeg quando worker e modelo estão prontos', async () => {
+    const user = userEvent.setup()
+    mockPasso1({ ffmpegInstalled: true, workerInstalled: false, turboInstalled: false })
+    const { rerender } = render(envolver(<Assistente passo={1} />))
+
+    const btnTestar = await screen.findByRole('button', { name: /Testar meu hardware/i })
+    expect(btnTestar).toBeDisabled()
+    expect(screen.getByText(/Faltam o worker Python e o modelo recomendado/i)).toBeInTheDocument()
+    await user.click(btnTestar)
+    expect(chamarMock).not.toHaveBeenCalledWith('transcription.hardware.probe', expect.anything())
+
+    // Worker pronto, modelo ainda ausente (GPU exige whisper-turbo): segue desabilitado com apoio claro
+    mockPasso1({ ffmpegInstalled: true, workerInstalled: true, turboInstalled: false })
+    rerender(envolver(<Assistente passo={2} />))
+    rerender(envolver(<Assistente passo={1} />))
+
+    const btnTestarSemModelo = await screen.findByRole('button', { name: /Testar meu hardware/i })
+    expect(btnTestarSemModelo).toBeDisabled()
+    expect(screen.getByText(/Falta baixar o modelo recomendado/i)).toBeInTheDocument()
+
+    // Worker + modelo prontos, mesmo sem FFmpeg (núcleo não exige FFmpeg na sonda): habilitado!
+    mockPasso1({ ffmpegInstalled: false, workerInstalled: true, turboInstalled: true })
+    rerender(envolver(<Assistente passo={2} />))
+    rerender(envolver(<Assistente passo={1} />))
+
+    const btnTestarPronto = await screen.findByRole('button', { name: /Testar meu hardware/i })
+    expect(btnTestarPronto).toBeEnabled()
+    await user.click(btnTestarPronto)
+    await waitFor(() => {
+      expect(chamarMock).toHaveBeenCalledWith('transcription.hardware.probe', {})
+    })
+  })
+
+  it('Item 2: Baixar modelo só habilita após worker instalado; Instalar motor executa worker->modelo e falha no worker interrompe antes do modelo', async () => {
+    const user = userEvent.setup()
+    mockPasso1({ ffmpegInstalled: true, workerInstalled: false, turboInstalled: false })
+    const { rerender } = render(envolver(<Assistente passo={1} />))
+
+    const btnBaixarModelo = await screen.findByRole('button', { name: /Baixar modelo/i })
+    expect(btnBaixarModelo).toBeDisabled()
+
+    // Worker instalado libera Baixar modelo e chama components.models.download diretamente
+    mockPasso1({ ffmpegInstalled: true, workerInstalled: true, turboInstalled: false })
+    rerender(envolver(<Assistente passo={2} />))
+    rerender(envolver(<Assistente passo={1} />))
+
+    const btnBaixarModeloLiberado = await screen.findByRole('button', { name: /Baixar modelo/i })
+    expect(btnBaixarModeloLiberado).toBeEnabled()
+    await user.click(btnBaixarModeloLiberado)
+    const dlgModelo = await screen.findByRole('alertdialog')
+    await user.click(within(dlgModelo).getByRole('button', { name: /Confirmar download/i }))
+    await waitFor(() => {
+      expect(chamarMock).toHaveBeenCalledWith('components.models.download', {
+        id: 'whisper-turbo',
+        confirmed: true,
+      })
+    })
+    expect(chamarMock).not.toHaveBeenCalledWith('components.worker.install', expect.anything())
+
+    // Ação única "Instalar motor e modelo recomendados" instala worker e depois modelo na ordem
+    const ordem: string[] = []
+    mockPasso1({ ffmpegInstalled: true, workerInstalled: false, turboInstalled: false })
+    const implPadrao = chamarMock.getMockImplementation()!
+    chamarMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === 'components.worker.install' || cmd === 'components.models.download') {
+        ordem.push(cmd)
+      }
+      return implPadrao(cmd, args)
+    })
+
+    rerender(envolver(<Assistente passo={2} />))
+    rerender(envolver(<Assistente passo={1} />))
+
+    await user.click(await screen.findByRole('button', { name: /Instalar motor e modelo recomendados/i }))
+    const dlgOrdem = await screen.findByRole('alertdialog')
+    await user.click(within(dlgOrdem).getByRole('button', { name: /Confirmar instalação/i }))
+    await waitFor(() => {
+      expect(ordem).toEqual(['components.worker.install', 'components.models.download'])
+    })
+
+    // Falha no worker interrompe antes do modelo e mostra mensagem clara em PT-BR
+    chamarMock.mockClear()
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'components.ffmpeg.status') return { installed: true, incomplete: false }
+      if (cmd === 'components.manifest') return MANIFESTO_PADRAO
+      if (cmd === 'components.settings.get') return { data_dir: '/dados', cache_dir: '/cache', cache_limit_bytes: 1e10 }
+      if (cmd === 'components.worker.status') return { installed: false, gpu: true }
+      if (cmd === 'components.models.manifest') return MODELOS_PADRAO
+      if (cmd === 'transcription.hardware.status') return HARDWARE_GPU
+      if (cmd === 'transcription.grouping') return { enabled: false, mode: 'auto', size: 1 }
+      if (cmd === 'components.worker.install') throw new ErroCore('worker_install', 'falha ao instalar venv')
+      return null
+    })
+
+    rerender(envolver(<Assistente passo={2} />))
+    rerender(envolver(<Assistente passo={1} />))
+
+    await user.click(await screen.findByRole('button', { name: /Instalar motor e modelo recomendados/i }))
+    const dlgFalha = await screen.findByRole('alertdialog')
+    await user.click(within(dlgFalha).getByRole('button', { name: /Confirmar instalação/i }))
+
+    const alerta = await screen.findByRole('alert')
+    expect(alerta).not.toHaveTextContent('Algo deu errado nesta operação.')
+    expect(alerta).toHaveTextContent(/worker|ambiente Python/i)
+    expect(chamarMock).not.toHaveBeenCalledWith('components.models.download', expect.anything())
+  })
+
+  it('Item 3: exibe sequência numerada FFmpeg -> Worker -> Modelo -> Teste de hardware com estados e apenas 1 .bg-sinal na tela', async () => {
+    mockPasso1({ ffmpegInstalled: true, workerInstalled: false, turboInstalled: false })
+    const { container } = render(envolver(<Assistente passo={1} />))
+
+    await screen.findByRole('heading', { name: /1\. FFmpeg e FFprobe/i })
+    expect(screen.getByText(/2\. Ambiente Python isolado \(worker\)/i)).toBeInTheDocument()
+    expect(screen.getByText(/3\. Modelo de transcrição local/i)).toBeInTheDocument()
+    expect(screen.getByText(/4\. Teste de hardware/i)).toBeInTheDocument()
+
+    expect(within(screen.getByRole('region', { name: /FFmpeg e FFprobe/i })).getByText('Pronto')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: /Worker Python/i })).getByText('Pendente')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('region', { name: /Modelo de transcrição local/i })).getByText(/Bloqueado por Worker Python/i),
+    ).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('region', { name: /Teste de hardware/i })).getByText(/Bloqueado por Worker Python/i),
+    ).toBeInTheDocument()
+
+    // Regra da Luz Única: exatamente um botão primário (.bg-sinal) na tela
+    const primarios = container.querySelectorAll('.bg-sinal')
+    expect(primarios).toHaveLength(1)
+    expect(primarios[0]).toHaveTextContent(/Próximo: Provedor de IA/i)
+  })
+
+  it('Item 4: erro worker_missing ou model_missing na sonda/download oferece "Instalar componente" que foca o item faltante sem sair do Assistente', async () => {
+    const user = userEvent.setup()
+    // Simula estado desatualizado em memória: UI acha que worker+modelo existem, mas núcleo devolve worker_missing na sonda
+    mockPasso1({ ffmpegInstalled: true, workerInstalled: true, turboInstalled: true })
+    const implPadrao = chamarMock.getMockImplementation()!
+    chamarMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === 'transcription.hardware.probe') {
+        throw new ErroCore('worker_missing', 'worker ausente no disco')
+      }
+      if (cmd === 'components.worker.status') {
+        return implPadrao(cmd, args)
+      }
+      return implPadrao(cmd, args)
+    })
+
+    render(envolver(<Assistente passo={1} />))
+    await user.click(await screen.findByRole('button', { name: /Testar meu hardware/i }))
+
+    const alerta = await screen.findByRole('alert')
+    expect(alerta).toHaveTextContent(/Falta instalar um componente ou modelo necessário para esta etapa\./i)
+    const btnInstalar = within(alerta).getByRole('button', { name: 'Instalar componente' })
+
+    // Após o erro, também simulamos que recarregar status ou foco vai para o item do worker sem sair do Assistente
+    chamarMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === 'components.worker.status') return { installed: false, gpu: true }
+      return implPadrao(cmd, args)
+    })
+
+    await user.click(btnInstalar)
+    expect(window.location.hash).toBe('#/assistente?passo=1')
+    const btnWorker = await screen.findByRole('button', { name: /Instalar worker Python/i })
+    await waitFor(() => {
+      expect(btnWorker).toHaveFocus()
+    })
+  })
+
+  it('Item 4 (sonda): erro model_missing na sonda oferece "Instalar componente" que foca Baixar modelo sem sair do Assistente', async () => {
+    const user = userEvent.setup()
+    mockPasso1({ ffmpegInstalled: true, workerInstalled: true, turboInstalled: true })
+    const implComWorker = chamarMock.getMockImplementation()!
+    chamarMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === 'transcription.hardware.probe') {
+        throw new ErroCore('model_missing', 'modelo ausente')
+      }
+      return implComWorker(cmd, args)
+    })
+
+    render(envolver(<Assistente passo={1} />))
+    await user.click(await screen.findByRole('button', { name: /Testar meu hardware/i }))
+
+    const alertaModelo = await screen.findByRole('alert')
+    expect(alertaModelo).toHaveTextContent(/modelo/i)
+
+    chamarMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === 'components.models.manifest') {
+        return MODELOS_PADRAO.map((m) => ({ ...m, installed: false, worker_installed: true }))
+      }
+      return implComWorker(cmd, args)
+    })
+    await user.click(within(alertaModelo).getByRole('button', { name: 'Instalar componente' }))
+    expect(window.location.hash).toBe('#/assistente?passo=1')
+    const btnModelo = await screen.findByRole('button', { name: /Baixar modelo/i })
+    await waitFor(() => {
+      expect(btnModelo).toHaveFocus()
+    })
+  })
+
+  it('Item 4 (download): erro worker_missing durante download do modelo foca Instalar worker Python sem sair do Assistente', async () => {
+    const user = userEvent.setup()
+    mockPasso1({ ffmpegInstalled: true, workerInstalled: true, turboInstalled: false })
+    const implPadrao = chamarMock.getMockImplementation()!
+    chamarMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === 'components.models.download') {
+        throw new ErroCore('worker_missing', 'worker ausente no disco')
+      }
+      return implPadrao(cmd, args)
+    })
+
+    render(envolver(<Assistente passo={1} />))
+    await user.click(await screen.findByRole('button', { name: /Baixar modelo/i }))
+    const dlg = await screen.findByRole('alertdialog')
+    await user.click(within(dlg).getByRole('button', { name: /Confirmar download/i }))
+
+    const alerta = await screen.findByRole('alert')
+    const btnInstalar = within(alerta).getByRole('button', { name: 'Instalar componente' })
+
+    chamarMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === 'components.worker.status') return { installed: false, gpu: true }
+      return implPadrao(cmd, args)
+    })
+    await user.click(btnInstalar)
+    expect(window.location.hash).toBe('#/assistente?passo=1')
+    const btnWorker = await screen.findByRole('button', { name: /Instalar worker Python/i })
+    await waitFor(() => {
+      expect(btnWorker).toHaveFocus()
+    })
+  })
+
   it('Passo 2 empty (nenhum servidor/CLI) destaca Configurar chave de API e exigência de consentimento remoto', async () => {
     const user = userEvent.setup()
     mockPasso2({
