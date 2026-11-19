@@ -739,4 +739,38 @@ describe('Shell', () => {
       expect(screen.queryByText(/Timeline pronta/i)).not.toBeInTheDocument()
     })
   })
+
+  it('UI-81: Shell desloca --toast-right para a esquerda da Fila quando a gaveta está aberta e limpa ao fechar', async () => {
+    const user = userEvent.setup()
+    window.location.hash = '#/projeto/demo/exportacao'
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'projects.current') return { id: 'demo', name: 'Demo', path: '/projetos/Demo.clipes' }
+      if (cmd === 'projects.local_only.get') return { open: true, enabled: false }
+      if (cmd === 'projects.recent') return []
+      if (cmd === 'jobs.list' || cmd === 'batches.list' || cmd === 'export.batch.list') return []
+      if (cmd === 'jobs.budget.get') return { budgets: [] }
+      return null
+    })
+
+    render(
+      envolver(
+        <Shell>
+          <div>Conteúdo</div>
+        </Shell>,
+      ),
+    )
+
+    const gatilho = await screen.findByRole('button', { name: /Fila de jobs:/i })
+    expect(document.documentElement.style.getPropertyValue('--toast-right')).toBe('')
+
+    await user.click(gatilho)
+    await screen.findByRole('complementary', { name: 'Fila de Jobs' })
+    expect(document.documentElement.style.getPropertyValue('--toast-right')).toMatch(/486px|576px/)
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await waitFor(() => {
+      expect(screen.queryByRole('complementary', { name: 'Fila de Jobs' })).not.toBeInTheDocument()
+    })
+    expect(document.documentElement.style.getPropertyValue('--toast-right')).toBe('')
+  })
 })

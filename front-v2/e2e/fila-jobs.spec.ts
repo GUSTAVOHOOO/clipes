@@ -52,7 +52,32 @@ test.describe('Painel Global da Fila de Jobs (Ctrl+J)', () => {
       aside.getByText(/O Clipes nunca as repete automaticamente para evitar cobrança dupla/i),
     ).toBeVisible()
     await expect(aside.getByText(/Provedor sem preço conhecido/i)).toBeVisible()
+    await expect(aside.getByText(/Lote de Fontes 3/).first()).toBeVisible()
+    await expect(aside).not.toContainText('sources-3')
     await expect(aside.getByText(/ETA indisponível/i)).toBeVisible()
+
+    // UI-90: F6 em Cortes inclui Fila e Esc fecha a Fila mesmo após foco sair para o rodapé
+    await page.locator('[data-regiao="topo"] a, [data-regiao="topo"] button').first().focus()
+    let alcancouFilaPorF6 = false
+    for (let i = 0; i < 6; i++) {
+      await page.keyboard.press('F6')
+      const naFila = await page.evaluate(() =>
+        Boolean(document.activeElement?.closest('[data-regiao="fila"]')),
+      )
+      if (naFila) {
+        alcancouFilaPorF6 = true
+        break
+      }
+    }
+    expect(alcancouFilaPorF6).toBe(true)
+    await page.keyboard.press('F6')
+    await expect.poll(() =>
+      page.evaluate(() => Boolean(document.activeElement?.closest('[data-regiao="rodape"]'))),
+    ).toBe(true)
+    await page.keyboard.press('Escape')
+    await expect(aside).toBeHidden()
+    await page.keyboard.press('Control+j')
+    await expect(aside).toBeVisible()
 
     // #484 / #303: PainelFilaJobs e BarraStatus exibem targetLabel e tempo decorrido de startedAtMs
     const cardRunning = aside.getByTestId('fila-job-1')
@@ -69,6 +94,9 @@ test.describe('Painel Global da Fila de Jobs (Ctrl+J)', () => {
     await aside.getByRole('button', { name: /Ajustar orçamento e continuar/i }).click()
     const dlgOrcamento = page.getByRole('dialog', { name: /Ajustar orçamento e continuar fila/i })
     await expect(dlgOrcamento).toBeVisible()
+    await expect(dlgOrcamento).toContainText('Lote de Fontes 3')
+    await expect(dlgOrcamento).not.toContainText('sources-3')
+    await expect(page.locator('button.bg-sinal:visible')).toHaveCount(1)
     const btnSalvarOrc = dlgOrcamento.getByRole('button', {
       name: /Salvar orçamento e retomar fila/i,
     })
@@ -91,7 +119,9 @@ test.describe('Painel Global da Fila de Jobs (Ctrl+J)', () => {
     const summaryJson = dlgResultado.getByText('Expandir JSON completo')
     await expect(summaryJson).toBeVisible()
     await expect(dlgResultado.locator('pre')).toBeHidden()
-    await dlgResultado.getByRole('button', { name: 'Fechar' }).last().click()
+    const btnFecharResultado = dlgResultado.getByRole('button', { name: 'Fechar' }).last()
+    await expect(btnFecharResultado).not.toHaveClass(/bg-sinal/)
+    await btnFecharResultado.click()
     await expect(dlgResultado).toBeHidden()
 
     // 5. Descartar job uncertain (#2 ai:selection) e depois Refazer com outro Perfil (#304)
@@ -127,6 +157,13 @@ test.describe('Painel Global da Fila de Jobs (Ctrl+J)', () => {
     await cardIncertoNovo.getByRole('button', { name: 'Ver estimativa e repetir' }).click()
     const dlgRetry = page.getByRole('alertdialog', { name: /Repetir tarefa #2/i })
     await expect(dlgRetry).toBeVisible()
+    await expect(dlgRetry.getByRole('button', { name: 'Cancelar' })).toBeFocused()
+    await dlgRetry.getByRole('button', { name: 'Cancelar' }).click()
+    await expect(dlgRetry).toBeHidden()
+
+    await cardIncertoNovo.getByRole('button', { name: 'Ver estimativa e repetir' }).click()
+    await expect(dlgRetry).toBeVisible()
+    await expect(dlgRetry.getByRole('button', { name: 'Cancelar' })).toBeFocused()
     await expect(
       dlgRetry.getByRole('region', { name: /Resumo de custo e privacidade/i }),
     ).toBeVisible()

@@ -249,4 +249,25 @@ describe('Design System v2 — Toast aviso e formatadores USD (UI-27a, UI-28)', 
     expect(btn.className).toContain('whitespace-nowrap')
     expect(btn.className).toContain('min-h-6.5')
   })
+
+  it('UI-81: ProvedorToast posiciona viewport acima dos controles inferiores por padrão e aceita posicao parametrizada', () => {
+    const { rerender } = render(
+      <ProvedorToast>
+        <div>Conteúdo</div>
+      </ProvedorToast>,
+    )
+    const viewport = document.querySelector('[aria-label="Notifications"]') as HTMLElement | null
+    expect(viewport).not.toBeNull()
+    expect(viewport!.style.bottom).toBe('var(--toast-bottom, 7rem)')
+    expect(viewport!.style.right).toBe('var(--toast-right, 1rem)')
+
+    rerender(
+      <ProvedorToast posicao="inferior-esquerda">
+        <div>Conteúdo</div>
+      </ProvedorToast>,
+    )
+    const viewportEsq = document.querySelector('[aria-label="Notifications"]') as HTMLElement | null
+    expect(viewportEsq!.className).toContain('left-4')
+    expect(viewportEsq!.className).toContain('bottom-10')
+  })
 })

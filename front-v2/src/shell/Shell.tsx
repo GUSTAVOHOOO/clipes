@@ -454,6 +454,26 @@ export function Shell({
     })
   }, [abrirFilaDoAlerta, storeFila])
 
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const raiz = document.documentElement
+    if (!filaAberta || modoMinimo) {
+      raiz.style.removeProperty('--toast-right')
+      return
+    }
+    const media =
+      typeof window.matchMedia === 'function' ? window.matchMedia('(min-width: 1440px)') : null
+    const atualizar = () => {
+      raiz.style.setProperty('--toast-right', media?.matches ? '576px' : '486px')
+    }
+    atualizar()
+    media?.addEventListener?.('change', atualizar)
+    return () => {
+      media?.removeEventListener?.('change', atualizar)
+      raiz.style.removeProperty('--toast-right')
+    }
+  }, [filaAberta, modoMinimo])
+
   const notificarErroProjeto = useCallback(
     (erro: unknown) => {
       const coreErr = paraErroCore(erro)

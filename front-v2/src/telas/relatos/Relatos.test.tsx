@@ -323,4 +323,11 @@ describe('Relatos (#/relatos)', () => {
     await user.click(screen.getByRole('button', { name: /Exportar diagnóstico/i }))
     expect((await screen.findByText(/não foi possível gravar/i)).closest('[role="alert"]')).toBeInTheDocument()
   })
+
+  it('UI-86: sonda de hardware traduz compute_type int8_float16 para texto humano sem expor termo cru na UI', async () => {
+    renderRelatos()
+    expect(await screen.findByText(/NVIDIA GeForce RTX 3050 Laptop GPU/i)).toBeInTheDocument()
+    expect(screen.getByText(/Placa de vídeo · precisão equilibrada \(verificado\)/i)).toBeInTheDocument()
+    expect(document.body.textContent ?? '').not.toContain('int8_float16')
+  })
 })

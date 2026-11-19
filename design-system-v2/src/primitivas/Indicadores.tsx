@@ -147,13 +147,43 @@ function ListaToasts() {
   ))
 }
 
-/** Toasts discretos no canto inferior direito, acima da barra de status. */
-export function ProvedorToast({ children }: { children: ReactNode }) {
+export type PosicaoToast =
+  | 'acima-acoes'
+  | 'inferior-direita'
+  | 'inferior-esquerda'
+  | 'inferior-centro'
+  | 'superior-centro'
+
+const classesPosicaoToast: Record<PosicaoToast, string> = {
+  'acima-acoes': 'fixed flex w-[min(340px,calc(100vw-32px))] flex-col gap-2 outline-none',
+  'inferior-direita': 'fixed right-4 bottom-10 flex w-[min(340px,calc(100vw-32px))] flex-col gap-2 outline-none',
+  'inferior-esquerda': 'fixed left-4 bottom-10 flex w-[min(340px,calc(100vw-32px))] flex-col gap-2 outline-none',
+  'inferior-centro': 'fixed bottom-10 left-1/2 flex w-[min(340px,calc(100vw-32px))] -translate-x-1/2 flex-col gap-2 outline-none',
+  'superior-centro': 'fixed top-12 left-1/2 flex w-[min(340px,calc(100vw-32px))] -translate-x-1/2 flex-col gap-2 outline-none',
+}
+
+/** Toasts discretos posicionados acima da faixa inferior de ações por padrão. */
+export function ProvedorToast({
+  children,
+  posicao = 'acima-acoes',
+}: {
+  children: ReactNode
+  posicao?: PosicaoToast
+}) {
+  const estiloViewport =
+    posicao === 'acima-acoes'
+      ? {
+          zIndex: 'var(--z-toast)',
+          right: 'var(--toast-right, 1rem)',
+          bottom: 'var(--toast-bottom, 7rem)',
+        }
+      : { zIndex: 'var(--z-toast)' }
+
   return (
     <To.Provider timeout={4000} limit={3}>
       {children}
       <To.Portal>
-        <To.Viewport className="fixed right-4 bottom-10 flex w-[min(340px,calc(100vw-32px))] flex-col gap-2 outline-none" style={{ zIndex: 'var(--z-toast)' }}>
+        <To.Viewport className={classesPosicaoToast[posicao]} style={estiloViewport}>
           <ListaToasts />
         </To.Viewport>
       </To.Portal>

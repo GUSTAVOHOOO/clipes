@@ -33,6 +33,7 @@ import type {
 import type { LoteExportacao } from '~/stores/filaGlobal'
 import type { FonteProjeto } from '~/stores/fontesProjeto'
 import { DialogoExportarCorte, type CorteParaExportar } from '~/telas/corte/DialogoExportarCorte'
+import { useDialogoFilaAberto } from '~/telas/fila/DialogosFila'
 import { mediaUrl } from '../../../../src/lib/media'
 
 export type FiltroProntidao = 'todos' | 'pendencias' | 'prontos' | 'direto' | 'transformado'
@@ -502,8 +503,12 @@ export function MesaProntidao({
 
   const [dialogoDiretoAberto, setDialogoDiretoAberto] = useState(false)
   const [conflitosSobrescrita, setConflitosSobrescrita] = useState<string[] | null>(null)
+  const dialogoFilaAberto = useDialogoFilaAberto()
   const algumDialogoAberto =
-    corteExportarIndividual !== null || dialogoDiretoAberto || conflitosSobrescrita !== null
+    corteExportarIndividual !== null ||
+    dialogoDiretoAberto ||
+    conflitosSobrescrita !== null ||
+    dialogoFilaAberto
   const [disparando, setDisparando] = useState(false)
   const [erroDisparo, setErroDisparo] = useState<ErroCore | null>(null)
 

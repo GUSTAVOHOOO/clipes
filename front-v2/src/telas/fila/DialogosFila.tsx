@@ -15,7 +15,7 @@ import {
   type OpcaoSelect,
 } from '@ds'
 import { AlertTriangle, Info, ShieldAlert } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import type { JobPersistido, OrcamentoItem } from '~/stores/filaGlobal'
@@ -75,12 +75,36 @@ const NOMES_TAREFA_ORCAMENTO: Record<string, string> = {
   translation: 'Tradução de legenda',
 }
 
+const ouvintesDialogoFila = new Set<() => void>()
+let dialogoFilaAbertoAtual = false
+
+/** Atualiza o estado global indicando se algum diálogo modal da Fila está aberto (UI-84). */
+export function definirDialogoFilaAberto(aberto: boolean): void {
+  if (dialogoFilaAbertoAtual === aberto) return
+  dialogoFilaAbertoAtual = aberto
+  for (const fn of ouvintesDialogoFila) fn()
+}
+
+/** Observa se há diálogo modal da Fila aberto para preservar a Regra da Luz Única na tela de fundo. */
+export function useDialogoFilaAberto(): boolean {
+  return useSyncExternalStore(
+    (fn) => {
+      ouvintesDialogoFila.add(fn)
+      return () => {
+        ouvintesDialogoFila.delete(fn)
+      }
+    },
+    () => dialogoFilaAbertoAtual,
+    () => false,
+  )
+}
+
 /** Traduz chave de escopo de orçamento (`task:selection`, `batch:sources-3`). */
 export function rotuloEscopoOrcamento(orc: Pick<OrcamentoItem, 'scope' | 'key'>): string {
   if (orc.scope === 'task') {
     return `Tarefa: ${NOMES_TAREFA_ORCAMENTO[orc.key] ?? orc.key}`
   }
-  return `Lote: ${orc.key}`
+  return rotuloLoteFontes(orc.key)
 }
 
 function traduzirBannerErro(erro: ErroCore) {
@@ -168,6 +192,9 @@ export function DialogoTentarDeNovo({ aberto, job, aoFechar, aoConcluir }: Dialo
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState<ErroCore | null>(null)
   const houveErroRef = useRef(false)
+  const ultimoJobRef = useRef<JobPersistido | null>(null)
+  if (job) ultimoJobRef.current = job
+  const jobExibido = job ?? ultimoJobRef.current
 
   useEffect(() => {
     if (!aberto || !job) {
@@ -196,13 +223,14 @@ export function DialogoTentarDeNovo({ aberto, job, aoFechar, aoConcluir }: Dialo
     }
   }, [aberto, job])
 
-  if (!job) return null
-
-  const ehPago = estimativa ? estimativa.safety === 'paid' : job.safety === 'paid'
-  const ehCli = job.profile === 'codex' || job.profile === 'claude' || job.profile === 'opencode'
+  const ehPago = estimativa ? estimativa.safety === 'paid' : jobExibido?.safety === 'paid'
+  const ehCli =
+    jobExibido?.profile === 'codex' ||
+    jobExibido?.profile === 'claude' ||
+    jobExibido?.profile === 'opencode'
 
   const confirmar = async () => {
-    if (enviando) return
+    if (!job || enviando) return
     setErro(null)
     setEnviando(true)
     houveErroRef.current = false
@@ -221,7 +249,7 @@ export function DialogoTentarDeNovo({ aberto, job, aoFechar, aoConcluir }: Dialo
 
   return (
     <ConfirmDialog
-      aberto={aberto}
+      aberto={aberto && Boolean(job)}
       aoMudarAberto={(proximo) => {
         if (proximo) return
         if (houveErroRef.current) {
@@ -230,7 +258,11 @@ export function DialogoTentarDeNovo({ aberto, job, aoFechar, aoConcluir }: Dialo
         }
         if (!enviando) aoFechar()
       }}
-      titulo={`Repetir tarefa #${job.id} — ${nomeHumanoKind(job.kind)}`}
+      titulo={
+        jobExibido
+          ? `Repetir tarefa #${jobExibido.id} — ${nomeHumanoKind(jobExibido.kind)}`
+          : 'Repetir tarefa'
+      }
       descricao="A tentativa anterior foi interrompida antes da confirmação. Confira a estimativa antes de reenviar."
       rotuloCancelar="Cancelar"
       rotuloConfirmar="Repetir tentativa"
@@ -251,13 +283,13 @@ export function DialogoTentarDeNovo({ aberto, job, aoFechar, aoConcluir }: Dialo
           />
         )}
 
-        {estimativa && !carregando && (
+        {jobExibido && estimativa && !carregando && (
           <ResumoCustoPrivacidade
-            tarefa={`Repetir ${nomeHumanoKind(job.kind)}`}
+            tarefa={`Repetir ${nomeHumanoKind(jobExibido.kind)}`}
             perfil={{
-              id: job.profile ?? (ehPago ? 'provedor' : 'local'),
+              id: jobExibido.profile ?? (ehPago ? 'provedor' : 'local'),
               label: ehPago
-                ? rotuloPerfilVisivel(job.profile, job.profile)
+                ? rotuloPerfilVisivel(jobExibido.profile, jobExibido.profile)
                 : 'Processamento local',
               kind: !ehPago ? 'local' : ehCli ? 'cli' : 'api',
               model: null,
@@ -301,10 +333,8 @@ export function DialogoDescartarJob({ aberto, job, aoFechar, aoConcluir }: Dialo
     }
   }, [aberto, job])
 
-  if (!job) return null
-
   const confirmar = async () => {
-    if (enviando) return
+    if (!job || enviando) return
     setErro(null)
     setEnviando(true)
     houveErroRef.current = false
@@ -322,7 +352,7 @@ export function DialogoDescartarJob({ aberto, job, aoFechar, aoConcluir }: Dialo
 
   return (
     <ConfirmDialog
-      aberto={aberto}
+      aberto={aberto && Boolean(job)}
       aoMudarAberto={(proximo) => {
         if (proximo) return
         if (houveErroRef.current) {
@@ -331,7 +361,7 @@ export function DialogoDescartarJob({ aberto, job, aoFechar, aoConcluir }: Dialo
         }
         if (!enviando) aoFechar()
       }}
-      titulo={`Descartar chamada incerta #${job.id}?`}
+      titulo={job ? `Descartar chamada incerta #${job.id}?` : 'Descartar chamada incerta?'}
       descricao="O job será marcado como cancelado e não será reenviado ao Provedor."
       rotuloCancelar="Cancelar"
       rotuloConfirmar="Descartar"
@@ -466,19 +496,17 @@ export function DialogoRefazerJob({ aberto, job, aoFechar, aoConcluir }: Dialogo
     return resolverDestinoSelecao(perfilSelecionado, perfis, tarefas)
   }, [perfilSelecionado, perfis, tarefas])
 
-  if (!job) return null
-
-  const taskKey = taskKeyDeKind(job.kind)
+  const taskKey = taskKeyDeKind(job?.kind ?? '')
   const tarefaLocalOnly = Boolean(tarefas?.tasks.find((t) => t.task === taskKey)?.localOnly)
   const bloqueadoPorSomenteLocal =
     erro?.code === 'local_only_violation' ||
     Boolean((vetoProjeto || tarefaLocalOnly) && (estimativa?.leavesMachine || destino?.saiDaMaquina))
 
   const bloqueado = bloqueadoPorSomenteLocal || Boolean(erro)
-  const ehSelecao = job.kind.startsWith('ai:selection')
+  const ehSelecao = Boolean(job?.kind.startsWith('ai:selection'))
 
   const confirmar = async () => {
-    if (!perfilSelecionado || enviando || bloqueado) return
+    if (!job || !perfilSelecionado || enviando || bloqueado) return
     setErro(null)
     setEnviando(true)
     houveErroRef.current = false
@@ -500,7 +528,7 @@ export function DialogoRefazerJob({ aberto, job, aoFechar, aoConcluir }: Dialogo
 
   return (
     <ConfirmDialog
-      aberto={aberto}
+      aberto={aberto && Boolean(job)}
       aoMudarAberto={(proximo) => {
         if (proximo) return
         if (houveErroRef.current) {
@@ -509,8 +537,12 @@ export function DialogoRefazerJob({ aberto, job, aoFechar, aoConcluir }: Dialogo
         }
         if (!enviando) aoFechar()
       }}
-      titulo={`Refazer job #${job.id} com outro Perfil`}
-      descricao={`Cria um novo job para "${nomeHumanoKind(job.kind)}" mantendo o histórico do anterior.`}
+      titulo={job ? `Refazer job #${job.id} com outro Perfil` : 'Refazer job com outro Perfil'}
+      descricao={
+        job
+          ? `Cria um novo job para "${nomeHumanoKind(job.kind)}" mantendo o histórico do anterior.`
+          : ''
+      }
       rotuloCancelar="Cancelar"
       rotuloConfirmar="Confirmar e enfileirar"
       confirmarDesabilitado={
@@ -565,7 +597,7 @@ export function DialogoRefazerJob({ aberto, job, aoFechar, aoConcluir }: Dialogo
           />
         )}
 
-        {estimativa && destino && !carregandoEstimativa && (
+        {job && estimativa && destino && !carregandoEstimativa && (
           <ResumoCustoPrivacidade
             tarefa={`Refazer ${nomeHumanoKind(job.kind)}`}
             perfil={{
@@ -680,7 +712,7 @@ export function DialogoResultadoJob({ aberto, job, aoFechar }: DialogoResultadoJ
       titulo={`Resultado do job #${job.id} — ${nomeHumanoKind(job.kind)}`}
       largura={540}
       rodape={
-        <Botao variante="primario" onClick={aoFechar}>
+        <Botao variante="secundario" onClick={aoFechar}>
           Fechar
         </Botao>
       }

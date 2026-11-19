@@ -391,7 +391,7 @@ test.describe('Avaliação UI independente — Onda 6 (Exportação, Fila, Relat
 
   test('percorre fluxos (q)-(t) em 1366x768 e 1440x900, tema padrão e alto contraste', async ({
     page,
-    context,
+    browser,
   }, testInfo) => {
     test.setTimeout(180_000)
 
@@ -549,8 +549,9 @@ test.describe('Avaliação UI independente — Onda 6 (Exportação, Fila, Relat
     relatorio.push(await auditarPagina(page, 'q-exportacao-lotes-hc', '1440x900', 'high'))
     await alternarAltoContraste(page, false)
 
-    // Progresso em tempo real e cancelamento de lote via clock sintético em 1366x768 (página isolada para não afetar timers)
-    const pageClock = await context.newPage()
+    // Progresso em tempo real e cancelamento de lote via clock sintético em 1366x768 (contexto isolado para não pausar timers da página principal)
+    const clockContext = await browser.newContext()
+    const pageClock = await clockContext.newPage()
     pageClock.on('pageerror', (e) => erros.push(e.message))
     await pageClock.setViewportSize({ width: 1366, height: 768 })
     await pageClock.goto('http://127.0.0.1:1430/#/inicio')
@@ -588,7 +589,7 @@ test.describe('Avaliação UI independente — Onda 6 (Exportação, Fila, Relat
     await expect(pageClock.getByRole('region', { name: 'Lista de lotes exportados' })).toContainText(
       'Cancelado',
     )
-    await pageClock.close()
+    await clockContext.close()
 
     checksExtras.exportacao = {
       qtdCardsTotal,
@@ -848,8 +849,9 @@ test.describe('Avaliação UI independente — Onda 6 (Exportação, Fila, Relat
     await salvarCaptura('20-sobre-atualizacao-atribuicoes-1440.png')
     relatorio.push(await auditarPagina(page, 's-sobre-atualizacao-1440', '1440x900', 'padrao'))
 
-    // Sobre em alto contraste + reinício com job crítico em voo (página isolada com clock)
-    const pageReinicio = await context.newPage()
+    // Sobre em alto contraste + reinício com job crítico em voo (contexto isolado com clock)
+    const reinicioContext = await browser.newContext()
+    const pageReinicio = await reinicioContext.newPage()
     pageReinicio.on('pageerror', (e) => erros.push(e.message))
     await pageReinicio.setViewportSize({ width: 1440, height: 900 })
     await pageReinicio.goto('http://127.0.0.1:1430/#/inicio')
@@ -892,7 +894,7 @@ test.describe('Avaliação UI independente — Onda 6 (Exportação, Fila, Relat
       animations: 'disabled',
     })
     relatorio.push(await auditarPagina(pageReinicio, 's-sobre-hc-reinicio', '1440x900', 'high'))
-    await pageReinicio.close()
+    await reinicioContext.close()
 
     checksExtras.relatosESobre = {
       botoesSaidaPasso1,

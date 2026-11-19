@@ -31,6 +31,7 @@ import {
   type PerfilProvedorLista,
   type RespostaTarefasAssistente,
 } from '~/stores/selecaoProjeto'
+import { useDialogoFilaAberto } from '~/telas/fila/DialogosFila'
 
 export type TipoVideoSelecao = 'direct' | 'transformed'
 
@@ -305,6 +306,7 @@ export function ConfiguradorSelecao({
   const [erroDisparo, setErroDisparo] = useState<ErroCore | null>(null)
   const [confirmacaoAberta, setConfirmacaoAberta] = useState(false)
   const [disparando, setDisparando] = useState(false)
+  const dialogoFilaAberto = useDialogoFilaAberto()
 
   const encProjeto = encodeURIComponent(projetoId)
   const estimativaIniciadaFonteRef = useRef<number | null>(null)
@@ -1140,7 +1142,7 @@ export function ConfiguradorSelecao({
         <div className="sticky bottom-0 bg-chao pt-0.5 min-[1440px]:pt-1">
           <Botao
             ref={atribuirRefDisparar}
-            variante="primario"
+            variante={confirmacaoAberta || dialogoFilaAberto ? 'secundario' : 'primario'}
             tamanho="g"
             disabled={configuracaoBloqueada}
             carregando={disparando}

@@ -127,16 +127,18 @@ export function Selecao({
   const acompanhamentoRef = useRef<HTMLElement | null>(null)
   const regiaoFocoRef = useRef<{ prev: number; curr: number }>({ prev: -1, curr: -1 })
 
-  // Registra F6 / Shift+F6 com 4 regiões (Topo -> Configurador -> Acompanhamento -> Rodapé)
+  // Registra F6 / Shift+F6 com regiões (Topo -> Configurador -> Acompanhamento -> Fila (se aberta) -> Rodapé)
   useEffect(() => {
     const obterRegioes = (): HTMLElement[] => {
       if (!configuradorRef.current && !acompanhamentoRef.current) return []
       const topo = document.querySelector<HTMLElement>('[data-regiao="topo"]')
+      const filaRegiao = document.querySelector<HTMLElement>('[data-regiao="fila"]')
       const rodape = document.querySelector<HTMLElement>('[data-regiao="rodape"]')
       return [
         topo,
         configuradorRef.current,
         acompanhamentoRef.current,
+        filaRegiao,
         rodape,
       ].filter((el): el is HTMLElement => el !== null)
     }

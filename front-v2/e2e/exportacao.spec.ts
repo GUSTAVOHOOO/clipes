@@ -262,4 +262,100 @@ test.describe('Tela Exportação — Mesa de Prontidão e Histórico de Lotes (#
 
     expect(erros).toEqual([])
   })
+
+  test('UI-81: toast visível não cobre controles primários da Mesa de Prontidão, Fila e Editor em 1366x768 e 1440x900', async ({
+    page,
+  }) => {
+    const semSobreposicao = (
+      a: { left: number; right: number; top: number; bottom: number },
+      b: { left: number; right: number; top: number; bottom: number },
+    ) => a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom
+
+    for (const tamanho of [
+      { width: 1366, height: 768 },
+      { width: 1440, height: 900 },
+    ]) {
+      await page.setViewportSize(tamanho)
+      await abrirProjetoDemo(page)
+
+      const btnExportarLote = page.getByRole('button', { name: /Exportar \d+ aprovados em lote/i })
+      await expect(btnExportarLote).toBeEnabled()
+
+      // Dispara toast na Mesa de Prontidão
+      await page.getByRole('button', { name: 'Salvar pasta padrão' }).click()
+      const toast = page.locator('[aria-label="Notifications"] [role="dialog"]').first()
+      await expect(toast).toBeVisible()
+
+      const rectsMesa = await page.evaluate(() => {
+        const t = document.querySelector('[aria-label="Notifications"] [role="dialog"]')
+        const b = Array.from(document.querySelectorAll('button.bg-sinal')).find((el) =>
+          /Exportar .* em lote/i.test(el.textContent ?? ''),
+        )
+        return {
+          toast: t?.getBoundingClientRect().toJSON() ?? null,
+          botao: b?.getBoundingClientRect().toJSON() ?? null,
+        }
+      })
+      expect(rectsMesa.toast).not.toBeNull()
+      expect(rectsMesa.botao).not.toBeNull()
+      expect(semSobreposicao(rectsMesa.toast!, rectsMesa.botao!)).toBe(true)
+
+      // Com Fila aberta: toast desloca para a esquerda e não cobre a Fila nem o botão primário
+      await page.keyboard.press('Control+j')
+      const fila = page.getByRole('complementary', { name: 'Fila de Jobs' })
+      await expect(fila).toBeVisible()
+
+      const rectsFila = await page.evaluate(() => {
+        const t = document.querySelector('[aria-label="Notifications"] [role="dialog"]')
+        const f = document.querySelector('[data-regiao="fila"]')
+        const b = Array.from(document.querySelectorAll('button.bg-sinal')).find((el) =>
+          /Exportar .* em lote/i.test(el.textContent ?? ''),
+        )
+        return {
+          toast: t?.getBoundingClientRect().toJSON() ?? null,
+          fila: f?.getBoundingClientRect().toJSON() ?? null,
+          botao: b?.getBoundingClientRect().toJSON() ?? null,
+        }
+      })
+      expect(rectsFila.toast).not.toBeNull()
+      expect(rectsFila.fila).not.toBeNull()
+      expect(semSobreposicao(rectsFila.toast!, rectsFila.fila!)).toBe(true)
+      if (rectsFila.botao) {
+        expect(semSobreposicao(rectsFila.toast!, rectsFila.botao)).toBe(true)
+      }
+
+      await page.keyboard.press('Escape')
+      await expect(fila).toBeHidden()
+
+      // No Editor: dispara toast antes de navegar e verifica que não cobre Exportar Corte nem barra de ferramentas
+      await page.getByRole('button', { name: 'Salvar pasta padrão' }).click()
+      await expect(toast).toBeVisible()
+      await page.evaluate(() => {
+        window.location.hash = '#/projeto/demo/corte/202/editar?run=2'
+      })
+      const btnExportarCorte = page.getByRole('button', { name: /Exportar Corte/i })
+      await expect(btnExportarCorte).toBeVisible()
+
+      const rectsEditor = await page.evaluate(() => {
+        const t = document.querySelector('[aria-label="Notifications"] [role="dialog"]')
+        const b = Array.from(document.querySelectorAll('button.bg-sinal')).find((el) =>
+          /Exportar Corte/i.test(el.textContent ?? ''),
+        )
+        const enquadrar = Array.from(document.querySelectorAll('button')).find((el) =>
+          /Enquadrar/i.test(el.textContent ?? ''),
+        )
+        return {
+          toast: t?.getBoundingClientRect().toJSON() ?? null,
+          botao: b?.getBoundingClientRect().toJSON() ?? null,
+          enquadrar: enquadrar?.getBoundingClientRect().toJSON() ?? null,
+        }
+      })
+      if (rectsEditor.toast && rectsEditor.botao) {
+        expect(semSobreposicao(rectsEditor.toast, rectsEditor.botao)).toBe(true)
+      }
+      if (rectsEditor.toast && rectsEditor.enquadrar) {
+        expect(semSobreposicao(rectsEditor.toast, rectsEditor.enquadrar)).toBe(true)
+      }
+    }
+  })
 })
