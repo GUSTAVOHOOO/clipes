@@ -311,8 +311,11 @@ export function Revisao({
   }, [corteParam, candidatosCombinados, candidatosOrdenados])
 
   const candidatoSelecionado = useMemo(
-    () => candidatosCombinados.find((c) => c.id === selecionadoId) ?? null,
-    [candidatosCombinados, selecionadoId],
+    () =>
+      candidatosOrdenados.find((c) => c.id === selecionadoId) ??
+      candidatosOrdenados[0] ??
+      null,
+    [candidatosOrdenados, selecionadoId],
   )
 
   // Reinicia relógio de preview ao trocar de candidato
@@ -904,8 +907,9 @@ export function Revisao({
       {/* Sub-cabeçalho enxuto */}
       <nav
         ref={subcabecalhoRef}
+        tabIndex={-1}
         aria-label="Controles da revisão"
-        className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-linha pb-2 min-[1280px]:flex-nowrap"
+        className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-linha pb-2 outline-none min-[1280px]:flex-nowrap"
       >
         <Botao
           tamanho="p"
@@ -923,11 +927,22 @@ export function Revisao({
         </h1>
 
         {fonteAtiva && (
-          <span className="max-w-24 truncate text-pequeno text-t3" title={nomeArquivo(fonteAtiva.path)}>
-            {nomeArquivo(fonteAtiva.path)}
-          </span>
+          <>
+            <span aria-hidden className="shrink-0 text-t3">
+              ·
+            </span>
+            <span
+              className="min-w-0 max-w-44 truncate text-pequeno text-t3 min-[1440px]:max-w-64"
+              title={nomeArquivo(fonteAtiva.path)}
+            >
+              {nomeArquivo(fonteAtiva.path)}
+            </span>
+          </>
         )}
 
+        <span aria-hidden className="shrink-0 text-t3">
+          ·
+        </span>
         <SeloTipoVideo tipo={runAtivo.videoKind} />
 
         {revisoes.length > 1 && (
@@ -942,8 +957,13 @@ export function Revisao({
           </div>
         )}
 
+        <span aria-hidden className="shrink-0 text-t3">
+          ·
+        </span>
         <span role="status" aria-live="polite" className="num shrink-0 text-pequeno text-t3">
-          {contadores.approved} aprovados · {contadores.rejected} rejeitados · {contadores.pending} pendentes
+          {contadores.approved} {contadores.approved === 1 ? 'aprovado' : 'aprovados'} ·{' '}
+          {contadores.rejected} {contadores.rejected === 1 ? 'rejeitado' : 'rejeitados'} ·{' '}
+          {contadores.pending} {contadores.pending === 1 ? 'pendente' : 'pendentes'}
         </span>
 
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
@@ -955,7 +975,11 @@ export function Revisao({
               atalho={rotuloAtalhoDesfazer}
               aria-disabled={!revisaoLocal?.canUndo && !desfazendo ? true : undefined}
               carregando={desfazendo}
-              className={!revisaoLocal?.canUndo ? 'pointer-events-auto!' : undefined}
+              className={
+                !revisaoLocal?.canUndo
+                  ? 'pointer-events-auto! cursor-not-allowed hover:bg-elevado'
+                  : undefined
+              }
               onClick={revisaoLocal?.canUndo && !desfazendo ? () => void aoDesfazer() : undefined}
             >
               Desfazer
@@ -975,7 +999,7 @@ export function Revisao({
                 variante="secundario"
                 icone={<RefreshCw />}
                 aria-disabled="true"
-                className="pointer-events-auto!"
+                className="pointer-events-auto! cursor-not-allowed hover:bg-elevado"
               >
                 Refazer com outro Perfil…
               </Botao>
@@ -1061,10 +1085,10 @@ export function Revisao({
 
       {/* Bancada 2 colunas: Lista à esquerda · Detalhe 9:16 à direita */}
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-hidden lg:grid-cols-[minmax(320px,37%)_1fr] min-[1440px]:grid-cols-[32%_1fr]">
-        <div ref={listaRef} className="flex min-h-0 flex-col overflow-hidden">
+        <div ref={listaRef} tabIndex={-1} className="flex min-h-0 flex-col overflow-hidden outline-none">
           <ListaCandidatos
             candidatos={candidatosCombinados}
-            selecionadoId={selecionadoId}
+            selecionadoId={candidatoSelecionado?.id ?? null}
             aoSelecionar={(c) => selecionarCandidato(c)}
             filtroEstado={filtroEstado}
             aoMudarFiltroEstado={setFiltroEstado}
@@ -1080,7 +1104,7 @@ export function Revisao({
           />
         </div>
 
-        <div ref={detalheRef} className="flex min-h-0 flex-col overflow-hidden">
+        <div ref={detalheRef} tabIndex={-1} className="flex min-h-0 flex-col overflow-hidden outline-none">
           <DetalheCandidato
             projetoId={projetoId}
             run={runAtivo}

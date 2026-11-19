@@ -151,6 +151,12 @@ function traduzirSubestagio(etapa?: string): string | null {
   return null
 }
 
+const ROTULO_PERFIL_FALLBACK: Record<string, string> = {
+  legacy: 'Perfil configurado',
+  forte: 'Forte remoto',
+  leve: 'Leve local',
+}
+
 function rotuloPerfilSelecao(
   profileId: string | null | undefined,
   perfis: readonly PerfilProvedorLista[],
@@ -159,7 +165,8 @@ function rotuloPerfilSelecao(
   if (!limpo) return null
   const encontrado = perfis.find((p) => p.id === limpo || p.label === limpo)
   if (encontrado?.label) return encontrado.label
-  if (limpo.toLowerCase() === 'legacy') return 'Perfil configurado'
+  const fallback = ROTULO_PERFIL_FALLBACK[limpo.toLowerCase()]
+  if (fallback) return fallback
   return limpo
 }
 
@@ -681,8 +688,12 @@ export function AcompanhamentoSelecao({
         </div>
 
         <p className="num text-pequeno text-t2">
-          {candidatos.length} candidatos · {runAtivo.counts?.merged ?? 0} juntados ·{' '}
-          {runAtivo.counts?.discarded ?? 0} descartados · Sinais congelados: {sinaisCongelados}
+          {candidatos.length} {candidatos.length === 1 ? 'candidato' : 'candidatos'} ·{' '}
+          {runAtivo.counts?.merged ?? 0}{' '}
+          {(runAtivo.counts?.merged ?? 0) === 1 ? 'juntado' : 'juntados'} ·{' '}
+          {runAtivo.counts?.discarded ?? 0}{' '}
+          {(runAtivo.counts?.discarded ?? 0) === 1 ? 'descartado' : 'descartados'} · Sinais
+          congelados: {sinaisCongelados}
         </p>
 
         {runAtivo.state === 'running' && (

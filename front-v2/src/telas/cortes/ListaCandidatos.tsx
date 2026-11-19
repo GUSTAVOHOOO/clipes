@@ -1,4 +1,5 @@
 import {
+  Botao,
   EstadoTela,
   ItemCorte,
   Kbd,
@@ -11,6 +12,7 @@ import {
   type DecisaoCorte,
   type OpcaoSelect,
 } from '@ds'
+import { CircleDashed } from 'lucide-react'
 import { useMemo } from 'react'
 
 export type FiltroEstadoCandidato = 'todos' | 'pending' | 'approved' | 'rejected'
@@ -211,15 +213,32 @@ export function ListaCandidatos({
 
       {filtroZerou ? (
         <div className="flex min-h-0 flex-1">
-          <EstadoTela
-            tipo="vazio"
-            compacto={false}
-            titulo="Nenhum candidato corresponde aos filtros atuais"
-            descricao="Altere o estado selecionado ou reduza a Nota mínima para voltar a ver os candidatos."
-            {...(selecionadoId !== null
-              ? { acaoSecundaria: { rotulo: 'Limpar filtros', aoAcionar: aoLimparFiltros } }
-              : { acaoPrimaria: { rotulo: 'Limpar filtros', aoAcionar: aoLimparFiltros } })}
-          />
+          {selecionadoId === null ? (
+            <EstadoTela
+              tipo="vazio"
+              compacto={false}
+              titulo="Nenhum candidato corresponde aos filtros atuais"
+              descricao="Altere o estado selecionado ou reduza a Nota mínima para voltar a ver os candidatos."
+              acaoPrimaria={{ rotulo: 'Limpar filtros', aoAcionar: aoLimparFiltros }}
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center p-8">
+              <div className="flex max-w-[44ch] flex-col items-start gap-3">
+                <CircleDashed className="size-5 stroke-[1.5] text-t3" aria-hidden />
+                <h2 className="text-titulo font-forte tracking-[-0.01em] text-balance text-t1">
+                  Nenhum candidato corresponde aos filtros atuais
+                </h2>
+                <p className="text-t2">
+                  Altere o estado selecionado ou reduza a Nota mínima para voltar a ver os candidatos.
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <Botao variante="secundario" onClick={aoLimparFiltros}>
+                    Limpar filtros
+                  </Botao>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <ListaVirtual<CandidatoLista>

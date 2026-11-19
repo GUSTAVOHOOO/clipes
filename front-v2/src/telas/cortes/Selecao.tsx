@@ -9,6 +9,7 @@ import {
   tcLongo,
   type OpcaoSelect,
 } from '@ds'
+import { ArrowRight } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAtalhos, type Atalho } from '~/comandos/atalhos'
 import { ErroCore } from '~/core/cliente'
@@ -431,13 +432,13 @@ export function Selecao({
   const fonteOfflineOuAlterada = fonteAtiva.status !== 'available'
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden min-[1440px]:gap-3">
       {/* Cabeçalho fixo da Fonte e contagem de execuções */}
-      <div className="flex flex-wrap items-center gap-3 border-b border-linha pb-2.5">
+      <div className="flex flex-wrap items-center gap-3 border-b border-linha pb-2 min-[1440px]:pb-2.5">
         <h1 className="text-titulo font-forte tracking-[-0.01em] text-t1">Seleção de Cortes</h1>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-pequeno text-t3">Fonte transcrita:</span>
+        <div className="flex items-center gap-2">
+          <span className="whitespace-nowrap text-pequeno text-t3">Fonte transcrita:</span>
           <Select
             rotulo="Fonte transcrita"
             valor={String(fonteAtiva.id)}
@@ -475,17 +476,18 @@ export function Selecao({
           <Botao
             variante="fantasma"
             tamanho="p"
+            icone={<ArrowRight />}
             onClick={() => {
               window.location.hash = `#/projeto/${encProjeto}/fontes/${fonteAtiva.id}`
             }}
           >
-            Ver Transcrição →
+            Ver Transcrição
           </Botao>
         </div>
       </div>
 
       {/* Duas colunas com rolagem independente */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[42%_1fr] min-[1440px]:grid-cols-[38%_1fr]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden lg:grid-cols-[42%_1fr] min-[1440px]:grid-cols-[38%_1fr] min-[1440px]:gap-4">
         <aside
           ref={configuradorRef}
           tabIndex={-1}
@@ -493,7 +495,7 @@ export function Selecao({
           className="flex min-h-0 flex-col overflow-hidden outline-none"
         >
           <AreaRolagem rotulo="Configurador de Seleção" className="h-full min-h-0">
-            <div className="pr-2 pb-2">
+            <div className="pr-2 min-[1440px]:pb-2">
               <ConfiguradorSelecao
                 projetoId={projetoId}
                 fonte={fonteAtiva}
