@@ -258,6 +258,8 @@ describe('PainelFilaJobs', () => {
     const card10 = screen.getByTestId('fila-job-10')
     expect(screen.queryByText(/min restantes/i)).not.toBeInTheDocument()
     expect(within(card10).getByText(/ETA indisponível/i)).toBeInTheDocument()
+    // UI-87: a dica informativa é alcançável por teclado
+    expect(within(card10).getByText(/ETA indisponível/i).closest('button')).not.toBeNull()
     expect(within(card10).queryByText(/#303/)).not.toBeInTheDocument()
 
     // Cancelar job running paid (#11) pede ConfirmDialog; cancelar running local (#10) chama direto

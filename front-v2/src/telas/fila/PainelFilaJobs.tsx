@@ -628,6 +628,7 @@ export function PainelFilaJobs({
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 py-3">
           {/* Zona 1 — Alertas Prioritários */}
+          <div className="flex max-h-[40%] shrink-0 flex-col gap-3 overflow-y-auto">
           {projetoAberto && jobsIncertos.length > 0 && (
             <div role="alert" className="flex flex-col gap-2 rounded-area bg-elevado p-3">
               <div className="flex items-start justify-between gap-2">
@@ -687,6 +688,7 @@ export function PainelFilaJobs({
                 </div>
               )
             })}
+</div>
 
           {erroAcao && (
             <BannerErroCore
@@ -898,10 +900,10 @@ export function PainelFilaJobs({
                             {!podeEta && (
                               <div className="flex items-center gap-1 text-micro text-t3">
                                 <Dica texto="Tempo restante (ETA) indisponível após recarregar a janela ou em etapas de IA.">
-                                  <span className="inline-flex items-center gap-1">
+                                  <button type="button" className="foco inline-flex min-h-6 cursor-help items-center gap-1 rounded-controle border-0 bg-transparent p-0 text-inherit">
                                     <Info className="size-3 stroke-[1.75]" aria-hidden />
                                     <span>ETA indisponível</span>
-                                  </span>
+                                  </button>
                                 </Dica>
                               </div>
                             )}
@@ -1217,10 +1219,10 @@ export function PainelFilaJobs({
                       Operações globais
                     </h3>
                     <Dica texto="Operações globais ficam apenas na memória desta sessão e não são restauradas após recarregar a janela.">
-                      <span className="inline-flex items-center gap-1 text-micro text-t3">
+                      <button type="button" className="foco inline-flex min-h-6 cursor-help items-center gap-1 rounded-controle border-0 bg-transparent p-0 text-micro text-t3">
                         <Info className="size-3 stroke-[1.75]" aria-hidden />
                         <span>Em memória nesta sessão</span>
-                      </span>
+                      </button>
                     </Dica>
                   </div>
                   {globaisFiltradas.map((op) => (
