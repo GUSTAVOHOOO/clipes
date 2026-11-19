@@ -1324,8 +1324,20 @@ async function runSession2(ui, ctx) {
   await ui.fillField('Intervalo (segundos)', '900');
   await ui.fillField('Cópias mantidas', '5');
   await ui.clickButton('Salvar configuração');
+  // O núcleo pode fazer um backup automático por conta própria (sessão alterada sem backup recente,
+  // verificado a cada 1 s em core/src/projects/backups.rs). Ele pode cair antes ou depois do clique
+  // manual (#395): conte depois de a lista assentar e aceite o manual com ou sem um automático tardio.
+  const contarBackups = async () => {
+    const texto = await ui.waitForText(/Backups salvos \(\d+\)/, 'main');
+    return Number(texto.match(/Backups salvos \((\d+)\)/)[1]);
+  };
+  await new Promise(resolve => setTimeout(resolve, 2_500));
+  const backupsAntes = await contarBackups();
   await ui.clickButton('Criar backup agora');
-  await ui.waitForText('Backups salvos (1)', 'main');
+  await ui.waitForText(
+    new RegExp(`Backups salvos \\((${backupsAntes + 1}|${backupsAntes + 2})\\)`),
+    'main',
+  );
   await ui.clickTab('Privacidade (Somente local)');
   await ui.setChecked(vetoLabel, true);
   await ui.clickTab('Backups do Projeto');
