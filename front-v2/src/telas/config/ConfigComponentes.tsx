@@ -19,9 +19,11 @@ import {
   type OpcaoSelect,
 } from '@ds'
 import { Download, FolderCog, RefreshCw } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ConsoleAoVivo } from '~/componentes/ConsoleAoVivo'
 import { SeletorCaminho } from '~/componentes/SeletorCaminho'
 import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
+import { registrarConsoleInline } from '~/core/console'
 import { mensagemDeErro } from '~/core/erros'
 import { useFila } from '~/core/progresso'
 import { useEstadoForcado } from '~/shell/EstadoForcado'
@@ -343,6 +345,29 @@ export function ConfigComponentes({ projetoAberto }: { projetoAberto: string | n
   const [cacheDir, setCacheDir] = useState('')
   const [limiteGb, setLimiteGb] = useState('10')
   const [salvandoPastas, setSalvandoPastas] = useState(false)
+  const [consoleAberto, setConsoleAberto] = useState(false)
+  const consoleWrapRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    return registrarConsoleInline({
+      aoFocar: () => {
+        setConsoleAberto(true)
+        const focar = () => {
+          const bloco = consoleWrapRef.current?.querySelector<HTMLElement>('[data-console-ao-vivo]')
+          if (!bloco) return false
+          const btn = bloco.querySelector<HTMLButtonElement>('button[aria-expanded]')
+          btn?.focus()
+          bloco.scrollIntoView?.({ block: 'nearest' })
+          return true
+        }
+        if (!focar()) {
+          requestAnimationFrame(() => {
+            focar()
+          })
+        }
+      },
+    })
+  }, [])
 
   const carregar = useCallback(async () => {
     setCarregando(true)
@@ -445,6 +470,7 @@ export function ConfigComponentes({ projetoAberto }: { projetoAberto: string | n
 
   async function executarJob(jobId: string, fn: () => Promise<void>) {
     setErro(null)
+    setConsoleAberto(true)
     setJobLocalAtivo(jobId)
     try {
       await fn()
@@ -507,6 +533,7 @@ export function ConfigComponentes({ projetoAberto }: { projetoAberto: string | n
   async function validarFfmpegSistema() {
     setValidandoFfmpeg(true)
     setErro(null)
+    setConsoleAberto(true)
     try {
       await chamar(
         'components.ffmpeg.system',
@@ -524,6 +551,7 @@ export function ConfigComponentes({ projetoAberto }: { projetoAberto: string | n
   async function verificarCatalogo() {
     setVerificandoCatalogo(true)
     setErro(null)
+    setConsoleAberto(true)
     try {
       const res = await chamar<StatusCatalogo & { updated?: boolean }>('components.catalog.check', {})
       setCatalogStatus(res)
@@ -1659,6 +1687,16 @@ export function ConfigComponentes({ projetoAberto }: { projetoAberto: string | n
               </div>
             </form>
           )}
+
+          <div ref={consoleWrapRef}>
+            <ConsoleAoVivo
+              recolhivel
+              redimensionavel
+              aberto={consoleAberto}
+              aoMudarAberto={setConsoleAberto}
+              titulo="Console de instalação e verificação"
+            />
+          </div>
         </div>
       )}
 

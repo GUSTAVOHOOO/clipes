@@ -403,6 +403,16 @@ fn uv(args: &[String]) {
     }
     if args.first().map(String::as_str) == Some("sync") {
         fs::write(worker_dir.join("sync-started"), b"1").unwrap();
+        if let Ok(lines) = std::env::var("CLIPES_FAKE_UV_STDOUT") {
+            for line in lines.split('|') {
+                println!("{line}");
+            }
+        }
+        if let Ok(lines) = std::env::var("CLIPES_FAKE_UV_STDERR") {
+            for line in lines.split('|') {
+                eprintln!("{line}");
+            }
+        }
         if worker_dir.join("fake-hang").exists() {
             std::thread::sleep(std::time::Duration::from_secs(120));
         }

@@ -9,7 +9,10 @@
 //! pré-computados vêm dos assets de release do Clipes com SHA-256 fixado (sem token HF).
 
 use crate::components::catalog::{embedded_catalog, load_active_catalog, ActiveCatalog};
-use crate::components::{fetch_with, jobs, load_settings, pocket_tts_executable, Settings};
+use crate::components::{
+    emit_download_console_progress, fetch_with_bytes, format_bytes_pt, jobs, load_settings,
+    pocket_tts_executable, url_host, Settings,
+};
 use crate::{CommandRegistration, CommandResult, CoreError, EventSink, ProgressEvent};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -1034,25 +1037,50 @@ fn download_model(
         .sum::<u64>()
         .max(1);
     let mut done = 0u64;
+    crate::console::emit_console(crate::console::ConsoleDraft {
+        job: job_key,
+        project: None,
+        origin: "tts",
+        level: crate::console::ConsoleLevel::Info,
+        kind: crate::console::ConsoleKind::Milestone,
+        simple: &format!(
+            "Baixando modelo de voz TTS {} ({})…",
+            spec.label,
+            format_bytes_pt(total)
+        ),
+        technical: Some(&format!(
+            "download tts_model={} repo={} bytes=0/{total}",
+            spec.id, spec.repo
+        )),
+    });
 
     for file in &spec.files {
         let base = done;
         let url = download_url(&file.url, &spec.id, &file.name);
-        fetch_with(
+        let host = url_host(&url);
+        fetch_with_bytes(
             &client,
             &url,
             &file.sha256,
             file.size,
             &stage.join(&file.name),
             cancel,
-            |pct| {
+            |offset, _file_total| {
+                let total_done = base + offset.min(file.size);
+                emit_download_console_progress(
+                    job_key,
+                    "tts",
+                    &spec.label,
+                    &host,
+                    total_done,
+                    total,
+                );
                 events(ProgressEvent {
                     project: None,
                     clip_id: None,
                     job: job_key.into(),
                     stage: "download".into(),
-                    percentage: ((base + file.size * u64::from(pct) / 100) * 100 / total).min(99)
-                        as u8,
+                    percentage: (total_done * 100 / total).min(99) as u8,
                     message: "Baixando modelo TTS".into(),
                     error: None,
                 });
@@ -1065,21 +1093,30 @@ fn download_model(
     for (_, emb) in &voices {
         let base = done;
         let url = download_url(&emb.url, &spec.id, &emb.filename);
-        fetch_with(
+        let host = url_host(&url);
+        fetch_with_bytes(
             &client,
             &url,
             &emb.sha256,
             emb.size,
             &voice_path_in(&stage, &emb.filename),
             cancel,
-            |pct| {
+            |offset, _file_total| {
+                let total_done = base + offset.min(emb.size);
+                emit_download_console_progress(
+                    job_key,
+                    "tts",
+                    &spec.label,
+                    &host,
+                    total_done,
+                    total,
+                );
                 events(ProgressEvent {
                     project: None,
                     clip_id: None,
                     job: job_key.into(),
                     stage: "download".into(),
-                    percentage: ((base + emb.size * u64::from(pct) / 100) * 100 / total).min(99)
-                        as u8,
+                    percentage: (total_done * 100 / total).min(99) as u8,
                     message: "Baixando voz TTS".into(),
                     error: None,
                 });
@@ -1140,6 +1177,15 @@ fn download_model(
         let _ = fs::remove_dir_all(&backup);
     }
 
+    crate::console::emit_console(crate::console::ConsoleDraft {
+        job: job_key,
+        project: None,
+        origin: "tts",
+        level: crate::console::ConsoleLevel::Info,
+        kind: crate::console::ConsoleKind::Milestone,
+        simple: &format!("Modelo de voz TTS {} instalado.", spec.label),
+        technical: Some(&format!("installed tts_model={}", spec.id)),
+    });
     events(ProgressEvent {
         project: None,
         clip_id: None,

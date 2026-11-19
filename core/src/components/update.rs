@@ -198,8 +198,19 @@ fn update_inner(flag: &AtomicBool, events: &mut EventSink<'_>) -> CommandResult 
         flag,
     )?;
     let hash = verified_checksum(&key.primary_key, &sums, &sig, asset)?;
-    let mut response = request(&client, &format!("{base}/{asset}"))?;
+    let url = format!("{base}/{asset}");
+    let host = super::url_host(&url);
+    let mut response = request(&client, &url)?;
     let size = response.content_length();
+    crate::console::emit_console(crate::console::ConsoleDraft {
+        job: "yt-dlp",
+        project: None,
+        origin: "component",
+        level: crate::console::ConsoleLevel::Info,
+        kind: crate::console::ConsoleKind::Milestone,
+        simple: &format!("Atualizando yt-dlp ({tag})…"),
+        technical: Some(&format!("update id=yt-dlp tag={tag} host={host}")),
+    });
     let temp = exe.with_file_name("yt-dlp.update.part");
     let result = (|| {
         let mut file = File::create(&temp)
@@ -219,6 +230,16 @@ fn update_inner(flag: &AtomicBool, events: &mut EventSink<'_>) -> CommandResult 
             file.write_all(&buf[..n])
                 .map_err(|_| error("update_io", "Não foi possível preparar a atualização"))?;
             count += n as u64;
+            if let Some(total) = size.filter(|s| *s > 0) {
+                super::emit_download_console_progress(
+                    "yt-dlp",
+                    "component",
+                    "yt-dlp",
+                    &host,
+                    count,
+                    total,
+                );
+            }
             events(ProgressEvent {
                 project: None,
                 clip_id: None,
@@ -234,7 +255,25 @@ fn update_inner(flag: &AtomicBool, events: &mut EventSink<'_>) -> CommandResult 
         file.flush()
             .map_err(|_| error("update_io", "Não foi possível preparar a atualização"))?;
         drop(file);
+        crate::console::emit_console(crate::console::ConsoleDraft {
+            job: "yt-dlp",
+            project: None,
+            origin: "component",
+            level: crate::console::ConsoleLevel::Info,
+            kind: crate::console::ConsoleKind::Milestone,
+            simple: "Assinatura PGP e SHA-256 do yt-dlp verificadas.",
+            technical: Some(&format!("pgp_sha256 ok tag={tag}")),
+        });
         install_update(&exe, &temp, tag, &hash, flag)?;
+        crate::console::emit_console(crate::console::ConsoleDraft {
+            job: "yt-dlp",
+            project: None,
+            origin: "component",
+            level: crate::console::ConsoleLevel::Info,
+            kind: crate::console::ConsoleKind::Milestone,
+            simple: &format!("yt-dlp atualizado para {tag}."),
+            technical: Some(&format!("updated id=yt-dlp version={tag}")),
+        });
         events(ProgressEvent {
             project: None,
             clip_id: None,

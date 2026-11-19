@@ -7,6 +7,7 @@ use super::*;
 use crate::worker::WorkerClient;
 use std::{
     ffi::OsString,
+    io::BufRead,
     process::{Command, Stdio},
     time::Duration,
 };
@@ -244,6 +245,126 @@ fn cancelled() -> CoreError {
     error("cancelled", "Instalação cancelada.")
 }
 
+fn translate_uv_line(line: &str, is_stderr: bool) -> (crate::console::ConsoleLevel, crate::console::ConsoleKind<'static>, &'static str) {
+    let lower = line.to_ascii_lowercase();
+    if lower.contains("error:") || lower.starts_with("error ") {
+        return (
+            crate::console::ConsoleLevel::Error,
+            crate::console::ConsoleKind::Milestone,
+            "Erro ao preparar ambiente Python.",
+        );
+    }
+    if lower.contains("retrying") {
+        return (
+            crate::console::ConsoleLevel::Warn,
+            crate::console::ConsoleKind::Milestone,
+            "A conexão oscilou; tentando novamente…",
+        );
+    }
+    if lower.contains("warning:") {
+        return (
+            crate::console::ConsoleLevel::Warn,
+            crate::console::ConsoleKind::Milestone,
+            "Aviso durante a preparação do ambiente Python.",
+        );
+    }
+    if lower.contains("installed python") {
+        return (
+            crate::console::ConsoleLevel::Info,
+            crate::console::ConsoleKind::Milestone,
+            "Python gerenciado instalado.",
+        );
+    }
+    if lower.contains("downloading cpython") || lower.contains("installing python") {
+        return (
+            crate::console::ConsoleLevel::Info,
+            crate::console::ConsoleKind::Milestone,
+            "Baixando o Python gerenciado…",
+        );
+    }
+    if lower.contains("resolved ") {
+        return (
+            crate::console::ConsoleLevel::Info,
+            crate::console::ConsoleKind::Milestone,
+            "Dependências do Worker resolvidas.",
+        );
+    }
+    if lower.contains("installed ") {
+        return (
+            crate::console::ConsoleLevel::Info,
+            crate::console::ConsoleKind::Milestone,
+            "Pacotes do Worker instalados.",
+        );
+    }
+    if lower.contains("audited ") {
+        return (
+            crate::console::ConsoleLevel::Info,
+            crate::console::ConsoleKind::Milestone,
+            "Ambiente Python verificado.",
+        );
+    }
+    if lower.contains("downloading ") || lower.contains("prepared ") {
+        return (
+            crate::console::ConsoleLevel::Info,
+            crate::console::ConsoleKind::Continuous("uv-pkg"),
+            "Baixando pacotes do motor de transcrição…",
+        );
+    }
+    (
+        if is_stderr {
+            crate::console::ConsoleLevel::Warn
+        } else {
+            crate::console::ConsoleLevel::Info
+        },
+        crate::console::ConsoleKind::Continuous("uv-line"),
+        "Preparando ambiente Python isolado…",
+    )
+}
+
+fn read_uv_stream(mut stream: Box<dyn Read + Send>, is_stderr: bool) {
+    let mut reader = io::BufReader::new(&mut stream);
+    let mut buf = Vec::with_capacity(512);
+    loop {
+        buf.clear();
+        let mut byte = [0u8; 1];
+        loop {
+            match reader.read(&mut byte) {
+                Ok(0) => break,
+                Ok(_) => {
+                    if byte[0] == b'\n' || byte[0] == b'\r' {
+                        break;
+                    }
+                    if buf.len() < 4096 {
+                        buf.push(byte[0]);
+                    }
+                }
+                Err(_) => return,
+            }
+        }
+        if buf.is_empty() {
+            if matches!(reader.fill_buf(), Ok([])) {
+                break;
+            }
+            continue;
+        }
+        let line = String::from_utf8_lossy(&buf);
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let (level, kind, simple) = translate_uv_line(trimmed, is_stderr);
+        crate::console::emit_console(crate::console::ConsoleDraft {
+            job: JOB,
+            project: None,
+            origin: "uv",
+            level,
+            kind,
+            simple,
+            technical: Some(trimmed),
+        });
+    }
+}
+
 /// Roda o `uv`, sem shell, consultando o cancelamento; ao cancelar, encerra o
 /// processo (e filhos) antes de voltar.
 fn run_uv(
@@ -266,15 +387,15 @@ fn run_uv(
         child
             .stdout
             .take()
-            .map(|s| Box::new(s) as Box<dyn Read + Send>),
+            .map(|s| (Box::new(s) as Box<dyn Read + Send>, false)),
         child
             .stderr
             .take()
-            .map(|s| Box::new(s) as Box<dyn Read + Send>),
+            .map(|s| (Box::new(s) as Box<dyn Read + Send>, true)),
     ]
     .into_iter()
     .flatten()
-    .map(|mut stream| std::thread::spawn(move || drop(io::copy(&mut stream, &mut io::sink()))))
+    .map(|(stream, is_stderr)| std::thread::spawn(move || read_uv_stream(stream, is_stderr)))
     .collect();
     let result = loop {
         if cancel.load(Ordering::SeqCst) {
@@ -517,8 +638,33 @@ fn install_inner(cancel: &AtomicBool, events: &mut EventSink<'_>) -> CommandResu
     }
     let project = write_project(&worker)?;
     let cuda = has_nvidia_gpu();
+    crate::console::emit_console(crate::console::ConsoleDraft {
+        job: JOB,
+        project: None,
+        origin: "uv",
+        level: crate::console::ConsoleLevel::Info,
+        kind: crate::console::ConsoleKind::Milestone,
+        simple: "Preparando o Python gerenciado do Clipes…",
+        technical: Some(&format!("uv python install {PYTHON}")),
+    });
     emit(events, 25, "Instalando o Python gerenciado");
     run_uv(&uv, &python_install_args(), &worker, cancel)?;
+    crate::console::emit_console(crate::console::ConsoleDraft {
+        job: JOB,
+        project: None,
+        origin: "uv",
+        level: crate::console::ConsoleLevel::Info,
+        kind: crate::console::ConsoleKind::Milestone,
+        simple: if cuda {
+            "Instalando dependências de GPU (CUDA). Esta etapa pode demorar alguns minutos…"
+        } else {
+            "Instalando dependências do motor (CPU)…"
+        },
+        technical: Some(&format!(
+            "uv sync --frozen --extra {}",
+            if cuda { "cuda" } else { "cpu" }
+        )),
+    });
     emit(
         events,
         45,
@@ -529,6 +675,15 @@ fn install_inner(cancel: &AtomicBool, events: &mut EventSink<'_>) -> CommandResu
         },
     );
     run_uv(&uv, &sync_args(&project, cuda), &worker, cancel)?;
+    crate::console::emit_console(crate::console::ConsoleDraft {
+        job: JOB,
+        project: None,
+        origin: "worker",
+        level: crate::console::ConsoleLevel::Info,
+        kind: crate::console::ConsoleKind::Milestone,
+        simple: "Verificando funcionamento do Worker Python…",
+        technical: Some("worker handshake check"),
+    });
     emit(events, 95, "Verificando o worker");
     if cancel.load(Ordering::SeqCst) {
         return Err(cancelled());
@@ -545,6 +700,15 @@ fn install_inner(cancel: &AtomicBool, events: &mut EventSink<'_>) -> CommandResu
     )
     .map_err(|_| install_failed())?;
     let client = start_worker().map_err(|_| {
+        crate::console::emit_console(crate::console::ConsoleDraft {
+            job: JOB,
+            project: None,
+            origin: "worker",
+            level: crate::console::ConsoleLevel::Error,
+            kind: crate::console::ConsoleKind::Milestone,
+            simple: "O Worker foi instalado, mas não respondeu à verificação.",
+            technical: Some("worker_verify failed"),
+        });
         error(
             "worker_verify",
             "O worker foi instalado, mas não respondeu à verificação.",
@@ -552,6 +716,18 @@ fn install_inner(cancel: &AtomicBool, events: &mut EventSink<'_>) -> CommandResu
     })?;
     let handshake = client.handshake().clone();
     client.shutdown();
+    crate::console::emit_console(crate::console::ConsoleDraft {
+        job: JOB,
+        project: None,
+        origin: "worker",
+        level: crate::console::ConsoleLevel::Info,
+        kind: crate::console::ConsoleKind::Milestone,
+        simple: "Worker pronto: respondeu à verificação com sucesso.",
+        technical: Some(&format!(
+            "handshake ok python={} worker={} cuda={cuda}",
+            handshake.python, handshake.worker
+        )),
+    });
     events(ProgressEvent {
         project: None,
         clip_id: None,

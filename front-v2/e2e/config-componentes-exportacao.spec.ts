@@ -143,4 +143,58 @@ test.describe('Configurações: Componentes e Exportação', () => {
 
     expect(erros).toEqual([])
   })
+
+  test('console ao vivo em Componentes expande ao baixar, alterna Técnico, copia, limpa e mantém moldura sem scroll', async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+    const erros: string[] = []
+    page.on('pageerror', (erro) => erros.push(erro.message))
+
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.goto('/#/config/componentes')
+
+    const toggleConsole = page.getByRole('button', {
+      name: /Console de instalação e verificação/i,
+    })
+    await expect(toggleConsole).toBeVisible()
+    await expect(toggleConsole).toHaveAttribute('aria-expanded', 'false')
+
+    await page.getByRole('tab', { name: 'Componentes e Modelos' }).click()
+    const cardDeno = page.getByRole('region', { name: /^deno$/i })
+    await cardDeno.getByRole('button', { name: /Baixar deno/i }).click()
+    const dialogoDeno = page.getByRole('alertdialog')
+    await dialogoDeno.getByRole('button', { name: /Baixar agora/i }).click()
+
+    await expect(toggleConsole).toHaveAttribute('aria-expanded', 'true')
+    const log = page.getByRole('log', { name: /Registro de atividade ao vivo/i })
+    await expect(log).toBeVisible()
+    await expect(log).toContainText(/Baixando deno/i)
+    await expect(log).toContainText(/deno instalado e pronto para uso/i)
+
+    const consoleSec = page.locator('[data-console-ao-vivo]')
+    await consoleSec.getByRole('button', { name: 'Técnico' }).click()
+    await expect(log).toContainText(/download id=deno/i)
+
+    await consoleSec.getByRole('button', { name: 'Copiar' }).click()
+    await expect(consoleSec.locator('span', { hasText: 'Console copiado.' })).toBeVisible()
+
+    const rolagem1366 = await page.evaluate(() => ({
+      altura: document.documentElement.scrollHeight <= window.innerHeight,
+      largura: document.documentElement.scrollWidth <= window.innerWidth,
+    }))
+    expect(rolagem1366).toEqual({ altura: true, largura: true })
+
+    await page.setViewportSize({ width: 1440, height: 900 })
+    const rolagem1440 = await page.evaluate(() => ({
+      altura: document.documentElement.scrollHeight <= window.innerHeight,
+      largura: document.documentElement.scrollWidth <= window.innerWidth,
+    }))
+    expect(rolagem1440).toEqual({ altura: true, largura: true })
+
+    await consoleSec.getByRole('button', { name: 'Limpar' }).click()
+    await expect(log).toContainText(/Nada rodando agora/i)
+    expect(erros).toEqual([])
+  })
 })

@@ -234,7 +234,18 @@ const activeUrlJobs = new Map<string, { cancel: () => void }>();
 
 function runCancellableSteps(
   jobId: string,
-  steps: Array<{ stage: string; percentage: number; message: string; delayMs?: number }>,
+  steps: Array<{
+    stage: string;
+    percentage: number;
+    message: string;
+    delayMs?: number;
+    console?: {
+      origin?: string;
+      level?: NivelConsoleMock;
+      simple?: string;
+      technical?: string;
+    };
+  }>,
   onComplete: () => void,
   registry: Map<string, { cancel: () => void }> = activeComponentJobs,
   projectId: string | null = null,
@@ -247,6 +258,14 @@ function runCancellableSteps(
       cancelled = true;
       if (timer !== null) clearTimeout(timer);
       registry.delete(jobId);
+      emitirConsoleMock({
+        job: jobId,
+        project: projectId,
+        origin: steps[0]?.console?.origin ?? 'component',
+        level: 'warn',
+        simple: 'Operação cancelada pelo usuário.',
+        technical: `cancelled job=${jobId}`,
+      });
       emitirProgressoMock({
         job: jobId,
         project: projectId,
@@ -268,6 +287,16 @@ function runCancellableSteps(
         return;
       }
       const step = steps[idx];
+      if (step.console) {
+        emitirConsoleMock({
+          job: jobId,
+          project: projectId,
+          origin: step.console.origin ?? 'component',
+          level: step.console.level ?? 'info',
+          simple: step.console.simple ?? step.message,
+          ...(step.console.technical !== undefined ? { technical: step.console.technical } : {}),
+        });
+      }
       emitirProgressoMock({
         job: jobId,
         project: projectId,
@@ -792,8 +821,39 @@ function hardwareMockDispatch(name: string, args: object): unknown {
     return runCancellableSteps(
       'hardware-probe',
       [
-        { stage: 'probe', percentage: 0, message: 'Sondando hardware de transcrição' },
-        { stage: 'probe', percentage: 100, message: 'Sonda concluída', delayMs: 5 },
+        {
+          stage: 'probe',
+          percentage: 0,
+          message: 'Sondando hardware de transcrição',
+          console: {
+            origin: 'worker',
+            simple: 'Iniciando sonda de hardware para transcrição…',
+            technical: 'probe start mode=info',
+          },
+        },
+        {
+          stage: 'probe',
+          percentage: 50,
+          message: `Testando ${auto.compute_type} em ${auto.device}`,
+          console: {
+            origin: 'worker',
+            simple: cpu
+              ? 'Testando transcrição no processador (CPU)…'
+              : `Testando ${auto.compute_type} na placa de vídeo (GPU)…`,
+            technical: `probe attempt device=${auto.device} compute=${auto.compute_type} batch=1`,
+          },
+        },
+        {
+          stage: 'probe',
+          percentage: 100,
+          message: 'Sonda concluída',
+          delayMs: 5,
+          console: {
+            origin: 'worker',
+            simple: `Hardware verificado: ${auto.model} em ${auto.device} (${auto.compute_type}).`,
+            technical: `probe done model=${auto.model} device=${auto.device} compute=${auto.compute_type} verified=true`,
+          },
+        },
       ],
       () => {
         hardwareMock.probed = true;
@@ -3749,9 +3809,37 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       await runCancellableSteps(
         id,
         [
-          { stage: 'download', percentage: 0, message: `Baixando ${id}` },
-          { stage: 'download', percentage: 50, message: `Baixando ${id}` },
-          { stage: 'complete', percentage: 100, message: 'Componente instalado', delayMs: 5 },
+          {
+            stage: 'download',
+            percentage: 0,
+            message: `Baixando ${id}`,
+            console: {
+              origin: 'component',
+              simple: `Baixando ${id}…`,
+              technical: `download id=${id} host=github.com bytes=0`,
+            },
+          },
+          {
+            stage: 'download',
+            percentage: 50,
+            message: `Baixando ${id}`,
+            console: {
+              origin: 'component',
+              simple: `Baixando ${id} · 50%`,
+              technical: `download id=${id} pct=50%`,
+            },
+          },
+          {
+            stage: 'complete',
+            percentage: 100,
+            message: 'Componente instalado',
+            delayMs: 5,
+            console: {
+              origin: 'component',
+              simple: `${id} instalado e pronto para uso.`,
+              technical: `installed id=${id} sha256=ok`,
+            },
+          },
         ],
         () => {
           if (id === 'deno') denoMock.installed = true;
@@ -3798,9 +3886,37 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       await runCancellableSteps(
         `tts:${a.id}`,
         [
-          { stage: 'download', percentage: 0, message: 'Baixando modelo TTS' },
-          { stage: 'download', percentage: 60, message: 'Baixando voz TTS' },
-          { stage: 'complete', percentage: 100, message: 'Modelo TTS instalado', delayMs: 5 },
+          {
+            stage: 'download',
+            percentage: 0,
+            message: 'Baixando modelo TTS',
+            console: {
+              origin: 'tts',
+              simple: `Baixando modelo de voz TTS (${a.id})…`,
+              technical: `download tts_model=${a.id} host=huggingface.co`,
+            },
+          },
+          {
+            stage: 'download',
+            percentage: 60,
+            message: 'Baixando voz TTS',
+            console: {
+              origin: 'tts',
+              simple: 'Baixando voz TTS · 60%',
+              technical: `download tts_model=${a.id} pct=60%`,
+            },
+          },
+          {
+            stage: 'complete',
+            percentage: 100,
+            message: 'Modelo TTS instalado',
+            delayMs: 5,
+            console: {
+              origin: 'tts',
+              simple: `Modelo de voz TTS ${a.id} instalado.`,
+              technical: `installed tts_model=${a.id}`,
+            },
+          },
         ],
         () => {
           ttsInstalledModels.add(a.id);
@@ -4064,10 +4180,47 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       await runCancellableSteps(
         'worker',
         [
-          { stage: 'worker', percentage: 25, message: 'Instalando o Python gerenciado' },
-          { stage: 'worker', percentage: 45, message: `Instalando as dependências do worker (${accel})` },
-          { stage: 'worker', percentage: 95, message: 'Verificando o worker' },
-          { stage: 'complete', percentage: 100, message: 'Worker instalado', delayMs: 5 },
+          {
+            stage: 'worker',
+            percentage: 25,
+            message: 'Instalando o Python gerenciado',
+            console: {
+              origin: 'uv',
+              simple: 'Preparando o Python gerenciado do Clipes…',
+              technical: 'uv python install 3.12',
+            },
+          },
+          {
+            stage: 'worker',
+            percentage: 45,
+            message: `Instalando as dependências do worker (${accel})`,
+            console: {
+              origin: 'uv',
+              simple: `Instalando dependências do motor (${accel})…`,
+              technical: `uv sync --frozen --extra ${accel.toLowerCase()}`,
+            },
+          },
+          {
+            stage: 'worker',
+            percentage: 95,
+            message: 'Verificando o worker',
+            console: {
+              origin: 'worker',
+              simple: 'Verificando funcionamento do Worker Python…',
+              technical: 'worker handshake check',
+            },
+          },
+          {
+            stage: 'complete',
+            percentage: 100,
+            message: 'Worker instalado',
+            delayMs: 5,
+            console: {
+              origin: 'worker',
+              simple: 'Worker pronto: respondeu à verificação com sucesso.',
+              technical: 'handshake ok python=3.12.16 faster-whisper=1.2.1',
+            },
+          },
         ],
         () => {
           workerInstalledMock = true;
@@ -4088,15 +4241,41 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     if (name === 'components.ffmpeg.system') {
       const a = args as { path?: string };
       const caminho = (a.path ?? 'ffmpeg').trim() || 'ffmpeg';
+      emitirConsoleMock({
+        job: 'ffmpeg',
+        origin: 'ffmpeg',
+        level: 'info',
+        simple: 'Validando FFmpeg e FFprobe do sistema…',
+        technical: `ffmpeg -version path=${caminho}`,
+      });
       if (caminho.toLowerCase().includes('invalido')) {
+        emitirConsoleMock({
+          job: 'ffmpeg',
+          origin: 'ffmpeg',
+          level: 'error',
+          simple: 'Não foi possível validar o FFmpeg informado.',
+        });
         throw { code: 'invalid_ffmpeg', message: 'Não encontramos o FFmpeg válido nesse caminho.' };
       }
       if (caminho.toLowerCase().includes('sem-ffprobe')) {
+        emitirConsoleMock({
+          job: 'ffmpeg',
+          origin: 'ffmpeg',
+          level: 'error',
+          simple: 'FFprobe não encontrado junto ao FFmpeg.',
+        });
         throw { code: 'ffprobe_missing', message: 'FFprobe não encontrado junto ao FFmpeg.' };
       }
       ffmpegMock.installed = true;
       ffmpegMock.incomplete = false;
       ffmpegMock.path = caminho;
+      emitirConsoleMock({
+        job: 'ffmpeg',
+        origin: 'ffmpeg',
+        level: 'info',
+        simple: 'FFmpeg do sistema validado e pronto para uso.',
+        technical: 'ffmpeg version 7.1-mock',
+      });
       return { version: 'ffmpeg version 7.1-mock', path: caminho } as T;
     }
     if (name === 'assistant.status') return assistantView() as T;
@@ -4354,10 +4533,31 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     ] as T;
     if (name === 'components.catalog.status') return { ...catalogMock } as T;
     if (name === 'components.catalog.check') {
+      emitirConsoleMock({
+        job: 'catalog',
+        origin: 'component',
+        level: 'info',
+        simple: 'Verificando catálogo remoto de modelos…',
+        technical: 'catalog check host=github.com',
+      });
       if (catalogScenario === 'invalid-signature') {
+        emitirConsoleMock({
+          job: 'catalog',
+          origin: 'component',
+          level: 'warn',
+          simple: 'Assinatura do catálogo remoto inválida; mantendo catálogo embutido.',
+          technical: 'catalog_signature_invalid',
+        });
         throw { code: 'catalog_signature_invalid', message: 'Assinatura do catálogo remoto inválida; usando o catálogo embutido.' };
       }
       if (catalogScenario === 'offline') {
+        emitirConsoleMock({
+          job: 'catalog',
+          origin: 'component',
+          level: 'error',
+          simple: 'Não foi possível consultar o catálogo remoto.',
+          technical: 'catalog_network',
+        });
         throw { code: 'catalog_network', message: 'Não foi possível consultar o catálogo remoto de modelos.' };
       }
       if (catalogScenario === 'update' && catalogMock.version === 1) {
@@ -4365,8 +4565,22 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         catalogMock.source = 'remote';
         catalogMock.warning = null;
         catalogMock.warningCode = null;
+        emitirConsoleMock({
+          job: 'catalog',
+          origin: 'component',
+          level: 'info',
+          simple: 'Catálogo de modelos atualizado para versão 2.',
+          technical: 'catalog ok version=2 updated=true',
+        });
         return { ...catalogMock, previousVersion: 1, updated: true, upToDate: false } as T;
       }
+      emitirConsoleMock({
+        job: 'catalog',
+        origin: 'component',
+        level: 'info',
+        simple: 'Catálogo de modelos já está na versão mais recente.',
+        technical: `catalog ok version=${catalogMock.version} updated=false`,
+      });
       return { ...catalogMock, previousVersion: catalogMock.version, updated: false, upToDate: true } as T;
     }
     if (name === 'components.models.manifest') {
@@ -4390,9 +4604,37 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       await runCancellableSteps(
         a.id,
         [
-          { stage: 'download', percentage: 0, message: 'Baixando modelo' },
-          { stage: 'download', percentage: 55, message: 'Baixando modelo' },
-          { stage: 'complete', percentage: 100, message: 'Modelo instalado', delayMs: 5 },
+          {
+            stage: 'download',
+            percentage: 0,
+            message: 'Baixando modelo',
+            console: {
+              origin: 'component',
+              simple: `Baixando modelo ${a.id}…`,
+              technical: `download model=${a.id} host=huggingface.co`,
+            },
+          },
+          {
+            stage: 'download',
+            percentage: 55,
+            message: 'Baixando modelo',
+            console: {
+              origin: 'component',
+              simple: `Baixando modelo ${a.id} · 55%`,
+              technical: `download model=${a.id} pct=55%`,
+            },
+          },
+          {
+            stage: 'complete',
+            percentage: 100,
+            message: 'Modelo instalado',
+            delayMs: 5,
+            console: {
+              origin: 'component',
+              simple: `Modelo ${a.id} pronto para uso.`,
+              technical: `model_registered id=${a.id}`,
+            },
+          },
         ],
         () => {
           modelInstalledRevs.set(a.id, rev);

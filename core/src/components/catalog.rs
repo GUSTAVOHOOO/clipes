@@ -903,12 +903,36 @@ fn cmd_check(_: Value, events: &mut EventSink<'_>) -> CommandResult {
         }
         None => (DEFAULT_RELEASES_URL.to_owned(), None),
     };
+    crate::console::emit_console(crate::console::ConsoleDraft {
+        job: "catalog",
+        project: None,
+        origin: "component",
+        level: crate::console::ConsoleLevel::Info,
+        kind: crate::console::ConsoleKind::Milestone,
+        simple: "Verificando catálogo remoto de modelos…",
+        technical: Some(&format!("catalog check host={}", super::url_host(&releases_url))),
+    });
     let result = check_for_update_with(
         &settings,
         &releases_url,
         &pubkey,
         loopback_override.as_ref(),
     )?;
+    let ver = result.get("version").and_then(Value::as_u64).unwrap_or(0);
+    let updated = result.get("updated").and_then(Value::as_bool).unwrap_or(false);
+    crate::console::emit_console(crate::console::ConsoleDraft {
+        job: "catalog",
+        project: None,
+        origin: "component",
+        level: crate::console::ConsoleLevel::Info,
+        kind: crate::console::ConsoleKind::Milestone,
+        simple: if updated {
+            "Catálogo de modelos atualizado."
+        } else {
+            "Catálogo de modelos já está na versão mais recente."
+        },
+        technical: Some(&format!("catalog ok version={ver} updated={updated}")),
+    });
     events(crate::ProgressEvent {
         project: None,
         clip_id: None,
