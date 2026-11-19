@@ -1399,19 +1399,29 @@ async function runSession3(ui, ctx) {
   await ui.waitForHash(/\/cortes\/revisao\/1/);
   await ui.waitForText('Revisar cada trecho', 'main');
   await ui.waitForText('Converter em Vídeo transformado', 'main');
-  await ui.browser.waitUntil(
-    () =>
-      ui.browser.execute(() => {
-        const b = Array.from(document.querySelectorAll('button')).find(x =>
-          (x.textContent || '').includes('Converter em Vídeo transformado'),
-        );
-        return b?.getAttribute('aria-disabled') === 'true';
-      }),
-    {
-      timeout: 15_000,
-      timeoutMsg: 'A conversão individual (#292) deve continuar desabilitada em Corte direto',
-    },
-  );
+  try {
+    await ui.browser.waitUntil(
+      () =>
+        ui.browser.execute(() => {
+          const b = Array.from(document.querySelectorAll('button')).find(x =>
+            (x.textContent || '').includes('Converter em Vídeo transformado'),
+          );
+          return b?.getAttribute('aria-disabled') === 'true';
+        }),
+      {
+        timeout: 15_000,
+        timeoutMsg: 'A conversão individual (#292) deve continuar desabilitada em Corte direto',
+      },
+    );
+  } catch (error) {
+    const html = await ui.browser.execute(() =>
+      Array.from(document.querySelectorAll('button'))
+        .filter(x => (x.textContent || '').includes('Converter'))
+        .map(x => x.outerHTML.slice(0, 400)),
+    );
+    console.log('[e2e] Botões Converter:', JSON.stringify(html));
+    throw error;
+  }
   await ui.clickButton('Avançar fim 1 Frase', { exact: false });
   await ui.waitForText('Duração atual: 30 s', 'main');
   await ui.clickButton('Recuar fim 1 Frase', { exact: false });
