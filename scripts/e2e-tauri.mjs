@@ -1133,7 +1133,11 @@ async function runSession2(ui, ctx) {
     () => document.querySelectorAll('[role="dialog"],[role="alertdialog"]').length,
   );
   assert.equal(openDialogsOnBoot, 0, 'O Assistente não deve abrir novamente na segunda execução');
-  assert.equal(await ui.browser.execute(() => document.documentElement.getAttribute('data-tema')), 'escuro');
+  await ui.browser.waitUntil(
+    async () =>
+      (await ui.browser.execute(() => document.documentElement.getAttribute('data-tema'))) === 'escuro',
+    { timeout: 10_000, timeoutMsg: 'Tema escuro não foi restaurado após o reinício' },
+  );
 
   logStep('Sessão 2: Criação e alternância de Projetos reais (SQLite)…');
   await createProject(ui, ctx, 'Canal', true);
