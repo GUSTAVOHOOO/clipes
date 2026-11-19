@@ -159,7 +159,7 @@ Nada foi desligado: os itens abaixo são cobertura do e2e V1 que o front v2 aind
 | --- | --- | --- |
 | `--install-tauri-driver` | `scripts/setup-webdriver.mjs` | Instala `tauri-driver` via `cargo install tauri-driver --locked` quando ausente (ex.: `bun run e2e:setup -- --install-tauri-driver`). |
 | `--skip-build` ou `CLIPES_E2E_SKIP_BUILD=1` | `scripts/e2e-tauri.mjs` | Pula a recompilação se `target/debug/clipes(.exe)` e `target/debug/fake-worker(.exe)` já existirem (ex.: `bun run test:e2e -- --skip-build`). |
-| `CLIPES_E2E_SESSIONS` | `scripts/e2e-tauri.mjs` | Sessões a rodar, separadas por vírgula (padrão `1,2,3`; ex.: `CLIPES_E2E_SESSIONS=3`). A Sessão 2 depende do estado da 1 (Assistente concluído); a 3 é independente. |
+| `CLIPES_E2E_SESSIONS` | `scripts/e2e-tauri.mjs` | Sessões a rodar, separadas por vírgula (padrão `1,2,3`; ex.: `CLIPES_E2E_SESSIONS=3`). As Sessões 2 e 3 dependem da 1 (Assistente concluído e FFmpeg do sistema registrado em Componentes); use `1,3` para rodar só o fluxo do mandato. |
 | `TAURI_DRIVER_BIN` | ambos | Caminho explícito para o executável `tauri-driver`. |
 | `MSEDGEDRIVER_BIN` | ambos (Windows) | Caminho explícito para `msedgedriver.exe`, pulando a leitura do registro do WebView2 e o download em `%TEMP%\clipes-webdriver`. |
 | `WEBKIT_WEBDRIVER_BIN` | ambos (Linux) | Caminho explícito para `WebKitWebDriver`. |

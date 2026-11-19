@@ -1374,13 +1374,7 @@ function ffprobeJson(file) {
 
 async function runSession3(ui, ctx) {
   logStep('Sessão 3: Projeto V1 → abrir → revisar → editar → exportar (MP4 real)…');
-  const initialHash = await ui.waitForHash(/^#\/(inicio|assistente)/);
-  if (initialHash.startsWith('#/assistente')) {
-    // Rodando só a Sessão 3 (CLIPES_E2E_SESSIONS=3): o Assistente ainda não foi concluído.
-    await ui.clickButton('Pular por enquanto');
-    await ui.waitForHash('#/config/provedores');
-    await ui.navigateHash('#/inicio');
-  }
+  await ui.waitForHash('#/inicio'); // exige a Sessão 1 antes (Assistente concluído e FFmpeg do sistema registrado)
   await ui.waitForText('Projetos', 'main');
 
   await ui.queueDialog(ctx.v1ProjectDir);
@@ -1396,13 +1390,12 @@ async function runSession3(ui, ctx) {
   await ui.shot('s3-01-projeto-v1-fontes.png');
 
   seedV1Selection(ctx.v1ProjectDir);
-  await ui.reloadApp(`#/projeto/${projectId}/cortes`, 'Abrir bancada de revisão');
+  await ui.reloadApp(`#/projeto/${projectId}/cortes?fonte=1&run=1`, 'Abrir bancada de revisão');
   await ui.shot('s3-02-cortes-v1.png');
 
   logStep('Sessão 3: revisão na Bancada…');
-  await ui.clickButton('Abrir bancada de revisão');
+  await ui.clickButton('Abrir bancada de revisão', { exact: false });
   await ui.waitForHash(/\/cortes\/revisao\/1/);
-  await ui.waitForText('Revisão de Cortes', 'main');
   await ui.waitForText('Revisar cada trecho', 'main');
   await ui.waitForText('Converter em Vídeo transformado', 'main');
   assert.equal(
@@ -1415,9 +1408,10 @@ async function runSession3(ui, ctx) {
     'true',
     'A conversão individual (#292) deve continuar desabilitada em Corte direto',
   );
-  await ui.clickButton('Recuar fim 1 Frase');
-  await ui.waitForText('Duração atual:', 'main');
-  await ui.clickButton('Avançar fim 1 Frase');
+  await ui.clickButton('Avançar fim 1 Frase', { exact: false });
+  await ui.waitForText('Duração atual: 30 s', 'main');
+  await ui.clickButton('Recuar fim 1 Frase', { exact: false });
+  await ui.waitForText('Duração atual: 23 s', 'main');
   await ui.clickButton('Aprovar');
   await ui.waitForText('Aprovado', 'main');
   await ui.shot('s3-03-revisao-aprovada.png');

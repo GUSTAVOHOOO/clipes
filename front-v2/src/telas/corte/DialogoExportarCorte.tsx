@@ -480,16 +480,24 @@ export function DialogoExportarCorte({
 
   // Consulta export.status assim que core-progress sinaliza término
   const statusConsultadoJobRef = useRef<number | null>(null)
+  // O término do job pode chegar com nova identidade de `jobFilaAtivo` antes de `export.status` responder;
+  // só descartamos a resposta se o diálogo desmontou (senão o sucesso nunca aparece).
+  const montadoRef = useRef(true)
+  useEffect(() => {
+    montadoRef.current = true
+    return () => {
+      montadoRef.current = false
+    }
+  }, [])
   useEffect(() => {
     if (jobAtivoId == null || !jobFilaAtivo) return
     if (jobFilaAtivo.estado !== 'concluido' && jobFilaAtivo.estado !== 'falhou') return
     if (statusConsultadoJobRef.current === jobAtivoId) return
     statusConsultadoJobRef.current = jobAtivoId
 
-    let cancelado = false
     void chamar<ExportStatusResposta>('export.status', { job: jobAtivoId })
       .then((res) => {
-        if (cancelado) return
+        if (!montadoRef.current) return
         setJobAtivoId(null)
         if (res.state === 'failed') {
           const erro = new ErroCore(
@@ -507,14 +515,11 @@ export function DialogoExportarCorte({
         toastRef.current.add({ title: 'Corte exportado com sucesso.' })
       })
       .catch((err) => {
-        if (cancelado) return
+        if (!montadoRef.current) return
         setJobAtivoId(null)
         setErroExportacao(paraErroCore(err))
       })
 
-    return () => {
-      cancelado = true
-    }
   }, [jobAtivoId, jobFilaAtivo])
 
   const confirmarDireto = useCallback(async () => {

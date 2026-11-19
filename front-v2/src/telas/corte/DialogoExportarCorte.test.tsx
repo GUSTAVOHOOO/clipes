@@ -629,4 +629,89 @@ describe('DialogoExportarCorte', () => {
 
     expect(await screen.findByText('Corte exportado com sucesso')).toBeInTheDocument()
   })
+
+  it('não descarta export.status em voo quando um novo evento core-progress do mesmo job renova `jobFilaAtivo` (#375)', async () => {
+    const user = userEvent.setup()
+    let resolverStatus!: (v: unknown) => void
+    let statusChamado = false
+
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'guardrails.check') {
+        return guardrailsBase({ needsDirectNotice: false, directMonetizationAck: true })
+      }
+      if (cmd === 'export.captions') return { missingGlyphs: [], emojiRemoved: 0, words: [] }
+      if (cmd === 'export.settings') return { last_directory: '/test/exports' }
+      if (cmd === 'export.start') return { job: 7701, state: 'queued' }
+      if (cmd === 'export.status') {
+        statusChamado = true
+        return new Promise((r) => {
+          resolverStatus = r
+        })
+      }
+      return null
+    })
+
+    render(
+      <Wrapper>
+        <DialogoExportarCorte
+          aberto
+          aoFechar={vi.fn()}
+          projetoId="demo"
+          corte={CORTE_PADRAO}
+          fonte={FONTE_ONLINE}
+          fila={filaTeste}
+        />
+      </Wrapper>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Iniciar exportação' })).toBeEnabled()
+    })
+    await user.click(screen.getByRole('button', { name: 'Iniciar exportação' }))
+
+    await waitFor(() => {
+      expect(chamarMock).toHaveBeenCalledWith('export.start', expect.anything())
+    })
+
+    act(() => {
+      filaTeste.aplicar({
+        job: '7701',
+        project: 'demo',
+        stage: 'export',
+        percentage: 100,
+        message: 'Concluído',
+        error: null,
+      })
+    })
+
+    await waitFor(() => {
+      expect(statusChamado).toBe(true)
+    })
+
+    // Novo evento do mesmo job enquanto export.status está pendente: o Job do store ganha nova identidade
+    act(() => {
+      filaTeste.aplicar({
+        job: '7701',
+        project: 'demo',
+        stage: 'export',
+        percentage: 100,
+        message: 'Finalizando',
+        error: null,
+      })
+    })
+
+    await act(async () => {
+      resolverStatus({
+        job: 7701,
+        state: 'completed',
+        progress: 100,
+        output: '/test/exports/A virada do jogo.mp4',
+        error: null,
+        encoder: 'libx264',
+        encoderFallback: null,
+      })
+    })
+
+    expect(await screen.findByText('Corte exportado com sucesso')).toBeInTheDocument()
+  })
 })
