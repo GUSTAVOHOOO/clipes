@@ -151,7 +151,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'pull_request' && '["windows-latest"]' || '["windows-latest","ubuntu-latest"]') }}
+        os: ${{ fromJSON('["windows-latest","ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
