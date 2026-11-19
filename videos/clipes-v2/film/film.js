@@ -181,9 +181,9 @@
       const ax = 107, ay = lerp(sy0, 60, u);
       put(S.F.cv, { css: { left: r.w / 2 - ax * c + 'px', top: r.h / 2 - ay * c + 'px', width: 214 * c + 'px', height: 120 * c + 'px' } });
       // cabeçalho real da Fonte sobe por baixo do vídeo
-      const v = sp(t, beatOf('s2_head') - 0.3, { response: 0.28, damping: 1 });   // lê NO pop de 4,5 s (rodada 10: chegava 3 quadros depois)
+      const v = sp(t, beatOf('s2_head') - 0.12, { response: 0.22, damping: 1 });   // lê NO pop de 4,5 s (rodada 10: chegava 3 quadros depois)
       const rH = P({ x: 780, y: 760, w: 1080, h: 124 }, { x: 48, y: 1372, w: 984, h: 118 });
-      frame(S.hdr, { ...rH, y: rH.y + 70 * (1 - v) }, P(330, 318), 70, P(1.62, 1.9) * (1 + 0.02 * seg(t, 9, 12)));
+      frame(S.hdr, { ...rH, y: rH.y + 150 * (1 - v) }, P(330, 318), 70, P(1.62, 1.9) * (1 + 0.02 * seg(t, 9, 12)));
       put(S.hdr.vp, { o: v > 0.02 ? 1 : 0 });
       riseRows(t, S.h, 8.1, 11.4);
       riseRows(t, S.e, 's2_head', 11.4, { preset: 'snappy', stagger: 0.02 });
@@ -240,9 +240,9 @@
       drawFoot(S.F, t);
       const [cx, cy, z] = camTrk(t, P(
         [[20, 520, 420, 1.4], [23, 600, 560, 1.62]],
-        [[20, 500, 380, 1.75], [23, 600, 640, 2.0]]));
+        [[20, 620, 380, 2.1], [23, 640, 620, 2.1]]));
       const land = 1 + 0.05 * (1 - sp(t, 's4', 'heavy'));
-      const f = frame(S.scr, VP, cx, cy, z * land * (1 + 0.02 * seg(t, 25, 28)), -2, 1);
+      const f = frame(S.scr, P(VP, { x: 48, y: 760, w: 984, h: 940 }), cx, cy, z * land * (1 + 0.02 * seg(t, 25, 28)), -2, 1);
       S.notas.forEach((n, i) => put(n, scaleAbout(476, R.notas[i], 1 + bump(t, 21 + 0.5 * i, 0.3))));
       const press = moveCursor(t, S.cur, f, [[22.6, 780, 860], [24.6, ...ctr(R.aprovar)]], 's4_click');
       put(S.btn, { filter: `brightness(${(1 - 0.2 * press).toFixed(3)})` });

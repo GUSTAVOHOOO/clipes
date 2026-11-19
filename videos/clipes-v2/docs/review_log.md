@@ -489,3 +489,11 @@ O que entrou das correções da rodada 12, conferido nos quadros (sheets, contac
 3. Instrumento de sincronia. Dar `roi16`/`roi9` por elemento em `timeline.json` ao 4,5 s e aos 8 cues não medíveis (6,5; 8,75; 9,0; 9,25; 12,5; 13,0; 16,0; 22,0), ou trocar o critério do `review.py` pelo onset do SFX de `kit.lock.json`; adiantar a eyebrow de 21,0 s em 1 quadro. Verificar: `metrics.sync.hits_within_45ms` ≥ 16/19, nenhum |x| > 67 ms, `sync_unmeasurable` vazio, o 4,5 s com sinal coerente com os stills; true peak do MP4 final ≤ −1,0 dBTP e I = −14 ± 0,5 LUFS.
 
 **Verdict:** ANOTHER ROUND (Sincronia 6; Movimento 7 e Composição 7; o resto em 8)
+
+---
+
+## Rodada 14: correções da crítica da rodada 13 (19/11/2026, antes da crítica)
+
+- Cabeçalho da Fonte: o deslocamento inicial passou de 70 para 150 px (a máscara do cabeçalho tem 118–124 px, então antes 70 px já estavam visíveis no primeiro quadro: era o pop de 1 quadro). Mola de resposta 0,22 s partindo 0,12 batida antes do cue: ausente até 4,467 s, sobe por baixo da borda do vídeo em 4,500–4,600 s (stills 16:9 a 4,333…4,600 s).
+- Plano 4 no 9:16 (10–13,5 s): cartão da Revisão de 760 a 1700 px (39–89 % da altura) e câmera 2,1× em Notas + Prévia (cx 620 → 640), sem a metade esquerda grafite; a eyebrow deixa ~40 px de folga (stills 9:16 a 10,5 / 12,0 / 12,6 / 13,2 s).
+- Não feito (pedido desde a rodada 11): `roi` por elemento nos cues; a sincronia segue pelos stills. 8,3 s no 9:16 (Transcrição borrada, < 0,5 s) ficou como estava.
