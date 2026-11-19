@@ -598,7 +598,37 @@ fn is_cancelled(id: i64) -> bool {
     .unwrap_or(false)
 }
 
-fn emit(id: i64, task: &str, step: &str, percentage: u8, message: &str, error: Option<CoreError>) {
+fn clip_id_for(id: i64, unit: &Unit) -> Option<i64> {
+    if unit.task.id != crate::translation::TASK_ID {
+        return None;
+    }
+    unit.input
+        .context
+        .get("clip_id")
+        .and_then(Value::as_i64)
+        .or_else(|| {
+            projects::with_reader(|c| {
+                c.query_row(
+                    "SELECT r.clip_id FROM translation_run_jobs rj JOIN translation_runs r ON r.id=rj.run_id WHERE rj.job_id=?1",
+                    [id],
+                    |r| r.get(0),
+                )
+                .optional()
+            })
+            .ok()
+            .flatten()
+        })
+}
+
+fn emit(
+    id: i64,
+    task: &str,
+    clip_id: Option<i64>,
+    step: &str,
+    percentage: u8,
+    message: &str,
+    error: Option<CoreError>,
+) {
     let project = projects::with_reader(|c| {
         c.query_row("SELECT id FROM queue_project_identity", [], |r| {
             r.get::<_, String>(0)
@@ -608,6 +638,7 @@ fn emit(id: i64, task: &str, step: &str, percentage: u8, message: &str, error: O
     crate::emit_background(crate::ProgressEvent {
         job: id.to_string(),
         project,
+        clip_id,
         stage: format!("ai:{task}:{step}"),
         percentage,
         message: message.into(),
@@ -615,7 +646,7 @@ fn emit(id: i64, task: &str, step: &str, percentage: u8, message: &str, error: O
     });
 }
 
-fn stage(id: i64, task: &str, step: &str, percentage: u8, message: &str) {
+fn stage(id: i64, task: &str, clip_id: Option<i64>, step: &str, percentage: u8, message: &str) {
     let _ = projects::with_writer(|c| {
         c.execute(
             "UPDATE jobs SET progress=?2 WHERE id=?1 AND state='running'",
@@ -623,7 +654,7 @@ fn stage(id: i64, task: &str, step: &str, percentage: u8, message: &str) {
         )?;
         Ok(())
     });
-    emit(id, task, step, percentage, message, None);
+    emit(id, task, clip_id, step, percentage, message, None);
 }
 
 /// Grava o estado final e o resultado numa só instrução: uma queda entre os dois não deixa um
@@ -648,13 +679,13 @@ fn requeue(id: i64) {
     });
 }
 
-fn fail_fixed(id: i64, task: &str, e: CoreError) {
+fn fail_fixed(id: i64, task: &str, clip_id: Option<i64>, e: CoreError) {
     settle(
         id,
         "failed",
         &json!({"outcome":"failed","code":e.code,"cost":"none"}),
     );
-    emit(id, task, "done", 0, "Tarefa de IA falhou", Some(e));
+    emit(id, task, clip_id, "done", 0, "Tarefa de IA falhou", Some(e));
 }
 
 /// O pedido que o executor envia (o mesmo de `ai_task::run`), para estimar antes de enviar.
@@ -829,14 +860,15 @@ fn record_calls(
 pub(super) fn execute(id: i64, stop: &AtomicBool) {
     let unit = match load(id) {
         Ok(unit) => unit,
-        Err(e) => return fail_fixed(id, "unknown", e),
+        Err(e) => return fail_fixed(id, "unknown", None, e),
     };
     let task = unit.task.id;
+    let clip_id = clip_id_for(id, &unit);
     let _ = projects::with_writer(|c| {
         c.execute("UPDATE jobs SET result=NULL WHERE id=?1", [id])?;
         Ok(())
     });
-    stage(id, task, "prepare", 0, "Preparando a Tarefa de IA");
+    stage(id, task, clip_id, "prepare", 0, "Preparando a Tarefa de IA");
     if stop.load(Ordering::SeqCst) {
         return requeue(id);
     }
@@ -846,18 +878,18 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
             "cancelled",
             &json!({"outcome":"cancelled","cost":"zero"}),
         );
-        return emit(id, task, "done", 0, "Tarefa de IA cancelada", None);
+        return emit(id, task, clip_id, "done", 0, "Tarefa de IA cancelada", None);
     }
     // Orçamento: a estimativa de antes de enviar é a do #40 (`cost::estimate`).
     let route = match route_of_profile(task, unit.paid, unit.profile.as_deref()) {
         Ok(route) => route,
-        Err(e) => return fail_fixed(id, task, e),
+        Err(e) => return fail_fixed(id, task, clip_id, e),
     };
     let estimate = request_of(&unit)
         .and_then(|request| cost::estimate_for(&route.0, &route.1, &request).ok())
         .unwrap_or_else(|| json!({"kind":"unknown"}));
     if let Some((code, message)) = job_limit(unit.task, &estimate) {
-        return fail_fixed(id, task, error(code, message));
+        return fail_fixed(id, task, clip_id, error(code, message));
     }
     let job_calls = unit.task.budget.max_calls as u64;
     let max_calls = match budget::gate(
@@ -881,13 +913,14 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
             return emit(
                 id,
                 task,
+                clip_id,
                 "paused",
                 0,
                 "Fila pausada pelo orçamento",
                 Some(e),
             );
         }
-        Err(e) => return fail_fixed(id, task, e),
+        Err(e) => return fail_fixed(id, task, clip_id, e),
     };
     let provider: SharedProvider = PROVIDER
         .lock()
@@ -908,7 +941,7 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
         match budget::remaining_wall(task, unit.batch.as_deref()) {
             Ok(Some(remaining)) => own.min(remaining),
             Ok(None) => own,
-            Err(e) => return fail_fixed(id, task, e),
+            Err(e) => return fail_fixed(id, task, clip_id, e),
         }
     };
     let sent = AtomicBool::new(false);
@@ -930,7 +963,7 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
     let finished = AtomicBool::new(false);
     let shutdown = AtomicBool::new(false);
     let timed_out = AtomicBool::new(false);
-    stage(id, task, "call", 10, "Chamando o Provedor");
+    stage(id, task, clip_id, "call", 10, "Chamando o Provedor");
     let run = std::thread::scope(|scope| {
         scope.spawn(|| {
             while !finished.load(Ordering::SeqCst) {
@@ -957,7 +990,7 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
         run
     });
     let elapsed_ms = started.elapsed().as_millis() as u64;
-    stage(id, task, "verify", 80, "Conferindo a resposta");
+    stage(id, task, clip_id, "verify", 80, "Conferindo a resposta");
     match run {
         Ok(out) => {
             let log = call_log.lock().map(|l| l.clone()).unwrap_or_default();
@@ -982,7 +1015,15 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
                     "cost": cost_of(unit.paid, out.usage.is_some(), false),
                 }),
             );
-            emit(id, task, "done", 100, "Tarefa de IA concluída", None);
+            emit(
+                id,
+                task,
+                clip_id,
+                "done",
+                100,
+                "Tarefa de IA concluída",
+                None,
+            );
         }
         Err(mut e) => {
             let sent = sent.load(Ordering::SeqCst);
@@ -1049,7 +1090,7 @@ pub(super) fn execute(id: i64, stop: &AtomicBool) {
                 Settle::Failed => ("failed", "Tarefa de IA falhou"),
             };
             settle(id, state, &result);
-            emit(id, task, "done", 0, message, Some(core));
+            emit(id, task, clip_id, "done", 0, message, Some(core));
         }
     }
 }

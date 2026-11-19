@@ -193,9 +193,43 @@ fn due(s: &Session) -> Result<bool, CoreError> {
         .map_err(|_| failure())?;
     Ok(modified.elapsed().unwrap_or_default() >= Duration::from_secs(secs))
 }
-fn try_backup(s: &mut Session) {
-    if let Err(e) = take(s) {
-        s.warning = Some(e);
+fn project_id(s: &Session) -> Option<String> {
+    s.conn.as_ref().and_then(|c| {
+        c.query_row("SELECT id FROM queue_project_identity", [], |r| {
+            r.get::<_, String>(0)
+        })
+        .ok()
+    })
+}
+fn run_auto_backup(s: &mut Session) {
+    let project = project_id(s);
+    let outcome = match due(s) {
+        Ok(true) => take(s),
+        Ok(false) => return,
+        Err(e) => Err(e),
+    };
+    match outcome {
+        Ok(()) => crate::emit_background(crate::ProgressEvent {
+            job: "backup".into(),
+            project,
+            clip_id: None,
+            stage: "backup_complete".into(),
+            percentage: 100,
+            message: "Backup automático concluído.".into(),
+            error: None,
+        }),
+        Err(e) => {
+            s.warning = Some(e.clone());
+            crate::emit_background(crate::ProgressEvent {
+                job: "backup".into(),
+                project,
+                clip_id: None,
+                stage: "backup_failed".into(),
+                percentage: 0,
+                message: e.message.clone(),
+                error: Some(e),
+            });
+        }
     }
 }
 pub(super) fn open_session(path: PathBuf) -> Result<String, CoreError> {
@@ -221,11 +255,7 @@ pub(super) fn open_session(path: PathBuf) -> Result<String, CoreError> {
         stop,
         jobs: 0,
     };
-    match due(&s) {
-        Ok(true) => try_backup(&mut s),
-        Ok(false) => (),
-        Err(e) => s.warning = Some(e),
-    }
+    run_auto_backup(&mut s);
     *g = Some(s);
     thread::spawn(move || loop {
         match rx.recv_timeout(Duration::from_secs(1)) {
@@ -236,11 +266,7 @@ pub(super) fn open_session(path: PathBuf) -> Result<String, CoreError> {
                 }
                 if let Some(s) = g.as_mut() {
                     if s.dirty {
-                        match due(s) {
-                            Ok(true) => try_backup(s),
-                            Ok(false) => (),
-                            Err(e) => s.warning = Some(e),
-                        }
+                        run_auto_backup(s);
                     }
                 }
             }
@@ -253,7 +279,7 @@ fn current(_: Value, _: &mut EventSink<'_>) -> CommandResult {
     let g = state().lock().map_err(|_| busy())?;
     Ok(match g.as_ref() {
         Some(s) => {
-            json!({"name":s.name,"path":s.path,"warning":s.warning,"id":s.conn.as_ref().and_then(|c| c.query_row("SELECT id FROM queue_project_identity", [], |r| r.get::<_, String>(0)).ok())})
+            json!({"name":s.name,"path":s.path,"warning":s.warning,"id":project_id(s)})
         }
         None => Value::Null,
     })

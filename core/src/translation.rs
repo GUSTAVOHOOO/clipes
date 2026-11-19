@@ -573,7 +573,12 @@ fn header_line(source_lang: Lang, target_lang: Lang) -> String {
     )
 }
 
-fn build_input(batch: &[Sentence], source_lang: Lang, target_lang: Lang) -> TaskInput {
+fn build_input(
+    batch: &[Sentence],
+    source_lang: Lang,
+    target_lang: Lang,
+    clip_id: i64,
+) -> TaskInput {
     let compact = sentences::compact_with_hint(batch);
     let context_sentences: Vec<Value> = batch
         .iter()
@@ -583,6 +588,7 @@ fn build_input(batch: &[Sentence], source_lang: Lang, target_lang: Lang) -> Task
         transcript: format!("{}{}", header_line(source_lang, target_lang), compact.text),
         estimate_hint: compact.hint,
         context: json!({
+            "clip_id": clip_id,
             "sourceLanguage": source_lang.code(),
             "targetLanguage": target_lang.code(),
             "sentences": context_sentences,
@@ -602,6 +608,7 @@ fn plan_batches(
     frases: &[Sentence],
     source_lang: Lang,
     target_lang: Lang,
+    clip_id: i64,
 ) -> Result<(Vec<PlannedBatch>, u64), CoreError> {
     let definition = task();
     let (wire, _) = ai_task::check_definition(definition).map_err(CoreError::from)?;
@@ -721,7 +728,7 @@ fn plan_batches(
             first_id: slice[0].id,
             last_id: slice[slice.len() - 1].id,
             sentence_ids: slice.iter().map(|s| s.id).collect(),
-            input: build_input(slice, source_lang, target_lang),
+            input: build_input(slice, source_lang, target_lang, clip_id),
         });
         start = end + 1;
     }
@@ -1173,7 +1180,8 @@ fn cmd_estimate(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     }
     let (source_lang, target_lang) = resolve_languages(&ctx.sentences, &v)?;
     let route = jobs::resolve_route(TASK_ID, None)?;
-    let (batches, context_tokens) = plan_batches(&ctx.sentences, source_lang, target_lang)?;
+    let (batches, context_tokens) =
+        plan_batches(&ctx.sentences, source_lang, target_lang, ctx.clip_id)?;
     let inputs: Vec<TaskInput> = batches.iter().map(|b| b.input.clone()).collect();
     let estimate = jobs::estimate_units(TASK_ID, &inputs, route.safety, None);
     Ok(json!({
@@ -1209,7 +1217,7 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         ));
     }
     let route = jobs::resolve_route(TASK_ID, None)?;
-    let (batches, _) = plan_batches(&ctx.sentences, source_lang, target_lang)?;
+    let (batches, _) = plan_batches(&ctx.sentences, source_lang, target_lang, ctx.clip_id)?;
     let inputs: Vec<TaskInput> = batches.iter().map(|b| b.input.clone()).collect();
     const CONFIRMATION_MESSAGE: &str =
         "Esta tradução usa um Provedor pago: confirme o custo estimado antes de começar.";

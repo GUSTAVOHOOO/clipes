@@ -670,6 +670,7 @@ impl Context {
 fn step(events: &mut EventSink<'_>, percentage: u8, message: &str) {
     events(ProgressEvent {
         project: None,
+        clip_id: None,
         job: PROBE_JOB.into(),
         stage: "probe".into(),
         percentage,

@@ -428,6 +428,7 @@ fn save(s: &mut State, due_only: bool) -> Result<(), CoreError> {
         crate::emit_background(crate::ProgressEvent {
             job: format!("editor:{id}"),
             project: Some(project.clone()),
+            clip_id: None,
             stage: "editor_saved".into(),
             percentage: 100,
             message: "Corte salvo.".into(),
@@ -446,6 +447,7 @@ fn start_autosave() {
                     crate::emit_background(crate::ProgressEvent {
                         job: "editor".into(),
                         project: None,
+                        clip_id: None,
                         stage: "editor_save_failed".into(),
                         percentage: 0,
                         message: "Não foi possível salvar o Corte.".into(),

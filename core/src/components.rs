@@ -491,6 +491,7 @@ fn download_item(
         |percentage| {
             events(ProgressEvent {
                 project: None,
+                clip_id: None,
                 job: id.into(),
                 stage: "download".into(),
                 percentage,
@@ -513,6 +514,7 @@ fn download_item(
     fs::remove_file(part).map_err(|e| error("install", e))?;
     events(ProgressEvent {
         project: None,
+        clip_id: None,
         job: id.into(),
         stage: "complete".into(),
         percentage: 100,

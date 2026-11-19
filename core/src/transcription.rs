@@ -391,6 +391,7 @@ pub(crate) fn run(
                 crate::emit_background(crate::ProgressEvent {
                     job: id.to_string(),
                     project: Some(project_id.clone()),
+                    clip_id: None,
                     stage: stage.into(),
                     percentage,
                     message: message.into(),

@@ -149,6 +149,7 @@ fn handle_line(line: &str, job: &str, events: &mut EventSink<'_>, filename: &mut
             if pct.is_finite() {
                 events(ProgressEvent {
                     project: None,
+                    clip_id: None,
                     job: job.into(),
                     stage: "download".into(),
                     percentage: pct.clamp(0.0, 100.0) as u8,

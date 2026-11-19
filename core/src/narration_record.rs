@@ -774,6 +774,7 @@ fn cmd_record_block(v: Value, events: &mut EventSink<'_>) -> CommandResult {
             events(crate::ProgressEvent {
                 job: "narration_record".into(),
                 project: None,
+                clip_id: None,
                 stage: "vad".into(),
                 percentage: 40,
                 message: "Aparando silêncios da gravação".into(),
@@ -845,6 +846,7 @@ fn cmd_record_block(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     events(crate::ProgressEvent {
         job: "narration_record".into(),
         project: None,
+        clip_id: None,
         stage: "done".into(),
         percentage: 100,
         message: "Gravação salva".into(),
@@ -932,6 +934,7 @@ fn cmd_trim_block(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     events(crate::ProgressEvent {
         job: "narration_record".into(),
         project: None,
+        clip_id: None,
         stage: "vad".into(),
         percentage: 50,
         message: "Aparando silêncios da gravação".into(),

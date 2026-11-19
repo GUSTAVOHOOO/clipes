@@ -297,6 +297,7 @@ fn run_uv(
 fn emit(events: &mut EventSink<'_>, percentage: u8, message: &str) {
     events(ProgressEvent {
         project: None,
+        clip_id: None,
         job: JOB.into(),
         stage: "worker".into(),
         percentage,
@@ -553,6 +554,7 @@ fn install_inner(cancel: &AtomicBool, events: &mut EventSink<'_>) -> CommandResu
     client.shutdown();
     events(ProgressEvent {
         project: None,
+        clip_id: None,
         job: JOB.into(),
         stage: "complete".into(),
         percentage: 100,

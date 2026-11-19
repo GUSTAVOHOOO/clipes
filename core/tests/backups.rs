@@ -1,12 +1,31 @@
-use clipes_core::{dispatch, projects};
+use clipes_core::{dispatch, projects, ProgressEvent};
 use serde_json::json;
 use std::{
     fs,
-    time::{SystemTime, UNIX_EPOCH},
+    sync::{Arc, Mutex, OnceLock},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+
+static TEST_LOCK: Mutex<()> = Mutex::new(());
+
+fn captured_events() -> &'static Mutex<Vec<ProgressEvent>> {
+    static EVENTS: OnceLock<Mutex<Vec<ProgressEvent>>> = OnceLock::new();
+    EVENTS.get_or_init(|| {
+        let _ = clipes_core::set_event_emitter(Arc::new(|ev| {
+            if let Some(buf) = EVENTS.get() {
+                if let Ok(mut guard) = buf.lock() {
+                    guard.push(ev);
+                }
+            }
+        }));
+        Mutex::new(Vec::new())
+    })
+}
 
 #[test]
 fn backup_restore_and_reject_corruption() {
+    let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _ = captured_events();
     let root = std::env::temp_dir().join(format!(
         "clipes-backup-{}-{}",
         std::process::id(),
@@ -198,4 +217,110 @@ fn backup_restore_and_reject_corruption() {
         .contains(path.to_str().unwrap()));
     run("projects.close", json!({})).unwrap();
     fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn auto_backup_emits_core_progress_on_complete_and_failure_without_leaking_paths() {
+    let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let events_buf = captured_events();
+    events_buf.lock().unwrap().clear();
+
+    let root = tempfile::tempdir().unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", root.path().join("data"));
+    let run = |name, value| dispatch(name, value, &mut |_| {});
+
+    let project = run(
+        "projects.create",
+        json!({"parent": root.path(), "name": "AutoBackupEventos"}),
+    )
+    .unwrap();
+    let path = std::path::PathBuf::from(project["path"].as_str().unwrap());
+    let project_id = project["id"].as_str().unwrap().to_owned();
+
+    run(
+        "backups.settings.set",
+        json!({"interval_seconds": 1, "copies": 2}),
+    )
+    .unwrap();
+    std::thread::sleep(Duration::from_millis(1200));
+
+    events_buf.lock().unwrap().clear();
+    projects::with_writer(|conn| {
+        conn.execute("UPDATE project SET name='AutoBackupOk'", [])?;
+        Ok(())
+    })
+    .unwrap();
+
+    let deadline = Instant::now() + Duration::from_secs(6);
+    let ok_event = loop {
+        let found = events_buf
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|e| e.job == "backup" && e.stage == "backup_complete")
+            .cloned();
+        if let Some(ev) = found {
+            break ev;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "backup automático concluído não emitiu core-progress; eventos={:?}",
+            *events_buf.lock().unwrap()
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    assert_eq!(ok_event.project.as_deref(), Some(project_id.as_str()));
+    assert_eq!(ok_event.percentage, 100);
+    assert!(ok_event.error.is_none());
+    let ok_json = serde_json::to_string(&ok_event).unwrap();
+    assert!(
+        !ok_json.contains(path.to_str().unwrap())
+            && !ok_json.contains(root.path().to_str().unwrap()),
+        "evento de backup concluído vazou caminho: {ok_json}"
+    );
+
+    // Agora provoca falha no backup automático em segundo plano substituindo a pasta backups por um arquivo.
+    fs::remove_dir_all(path.join("backups")).unwrap();
+    fs::write(path.join("backups"), b"not a directory").unwrap();
+    std::thread::sleep(Duration::from_millis(1200));
+
+    events_buf.lock().unwrap().clear();
+    projects::with_writer(|conn| {
+        conn.execute("UPDATE project SET name='AutoBackupFail'", [])?;
+        Ok(())
+    })
+    .unwrap();
+
+    let deadline = Instant::now() + Duration::from_secs(6);
+    let err_event = loop {
+        let found = events_buf
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|e| e.job == "backup" && e.stage == "backup_failed")
+            .cloned();
+        if let Some(ev) = found {
+            break ev;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "backup automático falho não emitiu core-progress; eventos={:?}",
+            *events_buf.lock().unwrap()
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    assert_eq!(err_event.project.as_deref(), Some(project_id.as_str()));
+    assert_eq!(err_event.percentage, 0);
+    assert_eq!(
+        err_event.error.as_ref().map(|e| e.code.as_str()),
+        Some("backup_failed")
+    );
+    let err_json = serde_json::to_string(&err_event).unwrap();
+    assert!(
+        !err_json.contains(path.to_str().unwrap())
+            && !err_json.contains(root.path().to_str().unwrap()),
+        "evento de backup falho vazou caminho: {err_json}"
+    );
+
+    run("projects.close", json!({})).unwrap();
 }

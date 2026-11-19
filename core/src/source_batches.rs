@@ -140,6 +140,7 @@ fn emit(batch: i64, step: &str, message: &str, error: Option<CoreError>) {
     crate::emit_background(crate::ProgressEvent {
         job: format!("batch-{batch}"),
         project,
+        clip_id: None,
         stage: format!("batch:{step}"),
         percentage: 0,
         message: message.into(),
