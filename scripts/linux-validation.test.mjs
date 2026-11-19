@@ -97,3 +97,16 @@ test('linux-validation.mjs não usa clipes-preview-open nem seletores V1 e usa P
   assert.equal(source.includes("window.location.hash = '#/inicio'"), true);
   assert.equal(source.includes('window.location.hash = targetHash;\n      location.reload();'), false);
 });
+
+test('linux-validation.mjs usa trecho >= 20s (MIN_CLIP_US) para abrir avulso-1-1-2 em editor.open', () => {
+  const source = readFileSync(path.join(THIS_DIR, 'linux-validation.mjs'), 'utf8');
+  const wordMatches = [...source.matchAll(/\[\d,\s*'[^']+',\s*([\d_]+),\s*([\d_]+)\]/g)];
+  assert.ok(wordMatches.length >= 2, 'Deve semear palavras da transcrição sintética');
+  const firstStart = Number(wordMatches[0][1].replaceAll('_', ''));
+  const lastEnd = Number(wordMatches[wordMatches.length - 1][2].replaceAll('_', ''));
+  assert.ok(
+    lastEnd - firstStart >= 20_000_000,
+    `Duração sintética (${(lastEnd - firstStart) / 1e6}s) deve ser >= 20s para editor.open`,
+  );
+  assert.equal(source.includes(`end_us: ${lastEnd.toLocaleString('en-US').replaceAll(',', '_')}`), true);
+});

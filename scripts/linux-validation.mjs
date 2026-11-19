@@ -333,7 +333,7 @@ async function main() {
         const proxy = await invoke('proxy.request', {
           source_id: source.id,
           start_us: 150_000_000,
-          end_us: 160_000_000,
+          end_us: 175_000_000,
         });
         for (;;) {
           const status = await invoke('proxy.status', { key: proxy.key });
@@ -386,11 +386,11 @@ async function main() {
       );
       const transcriptId = db.query('SELECT last_insert_rowid() AS id').get().id;
       const words = [
-        [0, ' Teste', 150_000_000, 151_500_000],
-        [1, ' Linux', 151_500_000, 153_000_000],
-        [2, ' legenda.', 153_000_000, 155_000_000],
-        [3, ' Corte', 155_500_000, 157_500_000],
-        [4, ' final.', 157_500_000, 160_000_000],
+        [0, ' Teste', 150_000_000, 155_000_000],
+        [1, ' Linux', 155_000_000, 160_000_000],
+        [2, ' legenda.', 160_000_000, 165_000_000],
+        [3, ' Corte', 165_500_000, 170_000_000],
+        [4, ' final.', 170_000_000, 175_000_000],
       ];
       const stmt = db.prepare(
         "INSERT INTO transcript_words(transcript_id, position, kind, text, start_us, end_us, language) VALUES (?, ?, 'word', ?, ?, ?, 'pt')",
