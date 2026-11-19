@@ -769,4 +769,111 @@ describe('PainelFilaJobs', () => {
       expect(aoFechar).toHaveBeenCalledTimes(1)
     })
   })
+
+  it('exibe ação discreta "Ver console" nos cards e dispara aoVerConsole com o ID do job/lote/global', async () => {
+    const user = userEvent.setup()
+    const aoVerConsole = vi.fn()
+
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'jobs.list') {
+        return [
+          {
+            id: 10,
+            kind: 'transcription',
+            safety: 'local',
+            state: 'running',
+            attempts: 1,
+            checkpoint: null,
+            progress: 40,
+            project: 'demo',
+            outcome: null,
+            cost: null,
+            batch: null,
+            profile: null,
+            budgetPause: null,
+            targetLabel: 'live.mp4',
+          },
+        ]
+      }
+      if (cmd === 'batches.list') return []
+      if (cmd === 'export.batch.list') {
+        return [
+          {
+            id: 6401,
+            scope: 'project',
+            sourceId: null,
+            outputDir: '/exports',
+            state: 'running',
+            status: 'running',
+            progress: 50,
+            counts: { total: 2, queued: 0, running: 1, completed: 1, failed: 0, cancelled: 0 },
+            items: [],
+          },
+        ]
+      }
+      if (cmd === 'jobs.budget.get') return { budgets: [] }
+      return null
+    })
+
+    const fila = criarFila(() => 'demo')
+    fila.aplicar({ job: 'ffmpeg', project: null, stage: 'download', percentage: 60, message: 'FFmpeg', error: null })
+    const store = criarStoreFilaGlobal({ fila, debounceMs: 0 })
+
+    render(
+      envolver(
+        <PainelFilaJobs
+          aberto
+          aoFechar={vi.fn()}
+          projetoAberto={PROJETO_DEMO}
+          store={store}
+          fila={fila}
+          aoVerConsole={aoVerConsole}
+        />,
+      ),
+    )
+
+    const cardJob = await screen.findByTestId('fila-job-10')
+    await user.click(within(cardJob).getByRole('button', { name: 'Ver console' }))
+    expect(aoVerConsole).toHaveBeenCalledWith('10')
+
+    const cardGlobal = screen.getByTestId('fila-global-ffmpeg')
+    await user.click(within(cardGlobal).getByRole('button', { name: 'Ver console' }))
+    expect(aoVerConsole).toHaveBeenCalledWith('ffmpeg')
+
+    const tituloLote = screen.getByText('Exportação em lote #6401').closest('div.rounded-area')!
+    await user.click(within(tituloLote as HTMLElement).getByRole('button', { name: 'Ver console' }))
+    expect(aoVerConsole).toHaveBeenCalledWith('export-batch-6401')
+  })
+
+  it('Esc não fecha a Fila quando o foco está dentro de [data-regiao="console"]', async () => {
+    chamarMock.mockResolvedValue([])
+    const aoFechar = vi.fn()
+    const fila = criarFila(() => null)
+    const store = criarStoreFilaGlobal({ fila, debounceMs: 0 })
+
+    render(
+      envolver(
+        <>
+          <PainelFilaJobs
+            aberto
+            aoFechar={aoFechar}
+            projetoAberto={null}
+            refRetornoFoco={createRef<HTMLElement>()}
+            store={store}
+            fila={fila}
+          />
+          <div data-regiao="console">
+            <button type="button">Controle do console</button>
+          </div>
+        </>,
+      ),
+    )
+
+    const btnConsole = screen.getByRole('button', { name: 'Controle do console' })
+    btnConsole.focus()
+    expect(btnConsole).toHaveFocus()
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(aoFechar).not.toHaveBeenCalled()
+  })
 })

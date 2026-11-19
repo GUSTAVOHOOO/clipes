@@ -155,13 +155,14 @@ export function ConsoleAoVivo({
     })
   }, [contagemPorOrigem, origem])
 
-  const opcoesJob: OpcaoSelect<string>[] = useMemo(
-    () => [
+  const opcoesJob: OpcaoSelect<string>[] = useMemo(() => {
+    const lista =
+      jobAtivo && !jobsDistintos.includes(jobAtivo) ? [...jobsDistintos, jobAtivo] : jobsDistintos
+    return [
       { valor: '__todos__', rotulo: 'Todas as tarefas' },
-      ...jobsDistintos.map((j) => ({ valor: j, rotulo: rotuloJobSeguro(j) })),
-    ],
-    [jobsDistintos],
-  )
+      ...lista.map((j) => ({ valor: j, rotulo: rotuloJobSeguro(j) })),
+    ]
+  }, [jobsDistintos, jobAtivo])
 
   const linhasVisiveis = useMemo(() => {
     return linhas.filter((l) => {

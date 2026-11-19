@@ -33,6 +33,10 @@ export type EventoConsole = {
   technical?: string | null
 }
 
+export type OpcoesConsoleInline = {
+  aoFocar?: () => void
+}
+
 export type StoreConsole = {
   aplicar(evento: EventoConsole): void
   aplicarLote(eventos: readonly EventoConsole[]): void
@@ -45,6 +49,11 @@ export type StoreConsole = {
     modo?: ModoConsole
   }): string
   assinar(fn: () => void): () => void
+  /** Registra que um console inline (ex.: tela de Componentes) está montado para evitar dock duplicado. */
+  registrarConsoleInline(opcoes?: OpcoesConsoleInline): () => void
+  consoleInlineMontado(): boolean
+  assinarConsoleInline(fn: () => void): () => void
+  focarConsoleInline(): boolean
 }
 
 const ROTULOS_ORIGEM: Record<OrigemConsole, string> = {
@@ -183,8 +192,19 @@ export function criarStoreConsole(opcoes?: {
   let maxSeqVisto = 0
   let limpadoAteSeq = 0
   const ouvintes = new Set<() => void>()
+  const inlineAtivos = new Set<OpcoesConsoleInline>()
+  const ouvintesInline = new Set<() => void>()
+  let inlineMontadoCache = false
   let ultimoEnvioMs = -Infinity
   let timerCoalesce: ReturnType<typeof setTimeout> | null = null
+
+  const notificarInline = () => {
+    const proximo = inlineAtivos.size > 0
+    if (proximo !== inlineMontadoCache) {
+      inlineMontadoCache = proximo
+      for (const fn of ouvintesInline) fn()
+    }
+  }
 
   const emitirParaOuvintes = () => {
     ultimoEnvioMs = Date.now()
@@ -301,6 +321,38 @@ export function criarStoreConsole(opcoes?: {
         ouvintes.delete(fn)
       }
     },
+    registrarConsoleInline(opcoesInline) {
+      const entrada: OpcoesConsoleInline = opcoesInline ? { ...opcoesInline } : {}
+      inlineAtivos.add(entrada)
+      notificarInline()
+      let liberado = false
+      return () => {
+        if (liberado) return
+        liberado = true
+        inlineAtivos.delete(entrada)
+        notificarInline()
+      }
+    },
+    consoleInlineMontado() {
+      return inlineMontadoCache
+    },
+    assinarConsoleInline(fn) {
+      ouvintesInline.add(fn)
+      return () => {
+        ouvintesInline.delete(fn)
+      }
+    },
+    focarConsoleInline() {
+      if (inlineAtivos.size === 0) return false
+      const lista = Array.from(inlineAtivos)
+      for (let i = lista.length - 1; i >= 0; i -= 1) {
+        if (lista[i].aoFocar) {
+          lista[i].aoFocar?.()
+          return true
+        }
+      }
+      return true
+    },
   }
 }
 
@@ -398,4 +450,27 @@ export function useConsole(store: StoreConsole = consolePadrao) {
     [store],
   )
   return { linhas, limpar, exportarTexto }
+}
+
+/**
+ * Contrato para telas com console inline (ex.: `ConfigComponentes`):
+ * registrar enquanto montado para ocultar o dock global do `Shell` e evitar duplicação.
+ */
+export function registrarConsoleInline(
+  opcoes?: OpcoesConsoleInline,
+  store: StoreConsole = consolePadrao,
+): () => void {
+  return store.registrarConsoleInline(opcoes)
+}
+
+export function consoleInlineMontado(store: StoreConsole = consolePadrao): boolean {
+  return store.consoleInlineMontado()
+}
+
+export function focarConsoleInline(store: StoreConsole = consolePadrao): boolean {
+  return store.focarConsoleInline()
+}
+
+export function useConsoleInlineMontado(store: StoreConsole = consolePadrao): boolean {
+  return useSyncExternalStore(store.assinarConsoleInline, store.consoleInlineMontado, () => false)
 }

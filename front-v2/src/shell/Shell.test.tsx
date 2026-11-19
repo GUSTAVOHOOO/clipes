@@ -8,6 +8,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { ProvedorDicas, ProvedorToast } from '@ds'
 import { ProvedorAtalhos } from '~/comandos/atalhos'
 import { ErroCore } from '~/core/cliente'
+import { consolePadrao, registrarConsoleInline } from '~/core/console'
 import { criarFila } from '~/core/progresso'
 import { ComEstado, estadoForcado } from '~/shell/EstadoForcado'
 import { Shell } from '~/shell/Shell'
@@ -772,5 +773,229 @@ describe('Shell', () => {
       expect(screen.queryByRole('complementary', { name: 'Fila de Jobs' })).not.toBeInTheDocument()
     })
     expect(document.documentElement.style.getPropertyValue('--toast-right')).toBe('')
+  })
+
+  it('dock do Console ao vivo começa recolhido, abre por BarraStatus e Paleta, entra no ciclo F6 e Esc devolve o foco', async () => {
+    const user = userEvent.setup()
+    window.location.hash = '#/inicio'
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'projects.current') return null
+      if (cmd === 'projects.local_only.get') return { open: false, enabled: false }
+      return null
+    })
+
+    consolePadrao.limpar()
+    consolePadrao.aplicar({
+      seq: 1,
+      timestampMs: Date.now(),
+      job: 'ffmpeg',
+      project: null,
+      origin: 'ffmpeg',
+      level: 'info',
+      simple: 'Exportando Corte…',
+      technical: 'ffmpeg: frame=120',
+    })
+
+    render(
+      envolver(
+        <Shell>
+          <button type="button">Ação principal</button>
+        </Shell>,
+      ),
+    )
+
+    const footer = document.querySelector('footer')!
+    const gatilhoConsole = await within(footer).findByRole('button', { name: /Console/i })
+    expect(gatilhoConsole).toHaveAttribute('aria-expanded', 'false')
+    expect(document.querySelector('[data-regiao="console"]')).toBeNull()
+
+    // Abre pelo botão discreto na BarraStatus
+    await user.click(gatilhoConsole)
+    const dock = document.querySelector<HTMLElement>('[data-regiao="console"]')!
+    expect(dock).toBeInTheDocument()
+    expect(gatilhoConsole).toHaveAttribute('aria-expanded', 'true')
+    const log = within(dock).getByRole('log')
+    expect(log).toBeInTheDocument()
+    expect(within(log).getByText('Exportando Corte…')).toBeInTheDocument()
+
+    // Ciclo F6 inclui [data-regiao="console"] antes do rodapé
+    const header = document.querySelector('header')!
+    const main = document.querySelector('main')!
+    within(header).getByRole('button', { name: /Abrir comandos/i }).focus()
+
+    fireEvent.keyDown(window, { key: 'F6' })
+    expect(main.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(window, { key: 'F6' })
+    expect(dock.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(window, { key: 'F6' })
+    expect(footer.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(window, { key: 'F6', shiftKey: true })
+    expect(dock.contains(document.activeElement)).toBe(true)
+
+    // Esc dentro do dock fecha e devolve o foco ao gatilho na BarraStatus
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await waitFor(() => {
+      expect(document.querySelector('[data-regiao="console"]')).toBeNull()
+    })
+    expect(gatilhoConsole).toHaveFocus()
+    expect(gatilhoConsole).toHaveAttribute('aria-expanded', 'false')
+
+    // Paleta Ctrl+K: comando "Alternar console ao vivo" abre e fecha o dock
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    const paleta = await screen.findByRole('dialog', { name: 'Paleta de comandos' })
+    await user.click(within(paleta).getByText('Alternar console ao vivo'))
+    await waitFor(() => {
+      expect(document.querySelector('[data-regiao="console"]')).not.toBeNull()
+    })
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    const paleta2 = await screen.findByRole('dialog', { name: 'Paleta de comandos' })
+    await user.click(within(paleta2).getByText('Alternar console ao vivo'))
+    await waitFor(() => {
+      expect(document.querySelector('[data-regiao="console"]')).toBeNull()
+    })
+
+    consolePadrao.limpar()
+  })
+
+  it('"Ver console" na PainelFilaJobs abre o dock filtrado pelo job sem fechar a Fila, e Esc no dock devolve foco sem fechar a Fila', async () => {
+    const user = userEvent.setup()
+    window.location.hash = '#/projeto/demo/cortes'
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'projects.current') return { id: 'demo', name: 'Demo', path: '/projetos/Demo.clipes' }
+      if (cmd === 'projects.local_only.get') return { open: true, enabled: false }
+      if (cmd === 'projects.recent') return []
+      if (cmd === 'jobs.list') {
+        return [
+          {
+            id: 10,
+            kind: 'transcription',
+            safety: 'local',
+            state: 'running',
+            attempts: 1,
+            checkpoint: null,
+            progress: 40,
+            project: 'demo',
+            outcome: null,
+            cost: null,
+            batch: null,
+            profile: null,
+            budgetPause: null,
+            targetLabel: 'aula.mp4',
+          },
+        ]
+      }
+      if (cmd === 'batches.list' || cmd === 'export.batch.list') return []
+      if (cmd === 'jobs.budget.get') return { budgets: [] }
+      return null
+    })
+
+    consolePadrao.limpar()
+    consolePadrao.aplicarLote([
+      {
+        seq: 101,
+        timestampMs: Date.now(),
+        job: '10',
+        project: null,
+        origin: 'worker',
+        level: 'info',
+        simple: 'Transcrevendo bloco 1…',
+        technical: 'worker: block=1',
+      },
+      {
+        seq: 102,
+        timestampMs: Date.now(),
+        job: '99',
+        project: null,
+        origin: 'ffmpeg',
+        level: 'info',
+        simple: 'Outro job rodando',
+        technical: 'ffmpeg: other',
+      },
+    ])
+
+    render(
+      envolver(
+        <Shell>
+          <div>Conteúdo</div>
+        </Shell>,
+      ),
+    )
+
+    const gatilhoFila = await screen.findByRole('button', { name: /Fila de jobs:/i })
+    await user.click(gatilhoFila)
+
+    const aside = await screen.findByRole('complementary', { name: 'Fila de Jobs' })
+    const card10 = await within(aside).findByTestId('fila-job-10')
+    const btnVerConsole = within(card10).getByRole('button', { name: 'Ver console' })
+    await user.click(btnVerConsole)
+
+    const dock = document.querySelector<HTMLElement>('[data-regiao="console"]')!
+    expect(dock).toBeInTheDocument()
+    expect(aside).toBeInTheDocument()
+    const log = within(dock).getByRole('log')
+    expect(within(log).getByText('Transcrevendo bloco 1…')).toBeInTheDocument()
+    expect(within(log).queryByText('Outro job rodando')).not.toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(dock.contains(document.activeElement)).toBe(true)
+    })
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await waitFor(() => {
+      expect(document.querySelector('[data-regiao="console"]')).toBeNull()
+    })
+    // A Fila continua aberta e o foco voltou para o botão "Ver console"
+    expect(screen.getByRole('complementary', { name: 'Fila de Jobs' })).toBeInTheDocument()
+    expect(btnVerConsole).toHaveFocus()
+
+    consolePadrao.limpar()
+  })
+
+  it('nunca exibe dock duplicado quando um console inline está montado e aciona foco no inline', async () => {
+    const user = userEvent.setup()
+    window.location.hash = '#/config/componentes'
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'projects.current') return null
+      if (cmd === 'projects.local_only.get') return { open: false, enabled: false }
+      return null
+    })
+
+    render(
+      envolver(
+        <Shell>
+          <div>Tela Componentes</div>
+        </Shell>,
+      ),
+    )
+
+    const footer = document.querySelector('footer')!
+    const gatilhoConsole = await within(footer).findByRole('button', { name: /Console/i })
+
+    // Abre o dock antes do registro inline
+    await user.click(gatilhoConsole)
+    expect(document.querySelector('[data-regiao="console"]')).not.toBeNull()
+
+    // Registra console inline (como Ticket 3 fará em ConfigComponentes)
+    const aoFocar = vi.fn()
+    let limparInline!: () => void
+    act(() => {
+      limparInline = registrarConsoleInline({ aoFocar })
+    })
+
+    // Dock desaparece imediatamente para não duplicar
+    expect(document.querySelector('[data-regiao="console"]')).toBeNull()
+
+    // Clicar no gatilho da BarraStatus redireciona para o inline em vez de abrir o dock
+    await user.click(gatilhoConsole)
+    expect(aoFocar).toHaveBeenCalledTimes(1)
+    expect(document.querySelector('[data-regiao="console"]')).toBeNull()
+
+    act(() => {
+      limparInline()
+    })
   })
 })

@@ -12,19 +12,31 @@ import {
   useToast,
   type Etapa,
 } from '@ds'
-import { AlertCircle, Info, Keyboard, MessageSquareWarning, MoreHorizontal, Settings } from 'lucide-react'
+import {
+  AlertCircle,
+  Info,
+  Keyboard,
+  MessageSquareWarning,
+  MoreHorizontal,
+  Settings,
+  Terminal,
+} from 'lucide-react'
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
+  type RefObject,
 } from 'react'
 import { flushSync } from 'react-dom'
 import { useAtalhos, usePaleta, type Atalho } from '~/comandos/atalhos'
+import { ConsoleAoVivo } from '~/componentes/ConsoleAoVivo'
 import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
+import { focarConsoleInline, useConsole, useConsoleInlineMontado } from '~/core/console'
 import { mensagemDeErro } from '~/core/erros'
 import {
   filaPadraoExportada,
@@ -206,6 +218,52 @@ function tituloDaRota(rota: Rota): string {
   }
 }
 
+/** Botão isolado para o rodapé não re-renderizar o Shell inteiro a cada linha de log. */
+function GatilhoConsoleBarra({
+  botaoRef,
+  aberto,
+  inlineMontado,
+  controlsId,
+  aoAcionar,
+}: {
+  botaoRef: RefObject<HTMLButtonElement | null>
+  aberto: boolean
+  inlineMontado: boolean
+  controlsId: string
+  aoAcionar: () => void
+}) {
+  const { linhas } = useConsole()
+  const temAtividade = linhas.length > 0
+  const temErro = temAtividade && linhas[linhas.length - 1]?.level === 'error'
+  return (
+    <button
+      ref={botaoRef}
+      type="button"
+      onClick={aoAcionar}
+      aria-expanded={inlineMontado ? undefined : aberto}
+      aria-controls={!inlineMontado && aberto ? controlsId : undefined}
+      aria-label={
+        inlineMontado
+          ? 'Console ao vivo na tela atual'
+          : aberto
+            ? 'Console ao vivo: recolher'
+            : 'Console ao vivo: abrir'
+      }
+      className={cn(
+        'foco inline-flex min-h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-controle border-0 bg-transparent px-1.5 py-0.5 text-pequeno transition-colors hover:bg-area hover:text-t1',
+        aberto && !inlineMontado ? 'bg-area text-t1' : 'text-t2',
+      )}
+    >
+      <Terminal
+        className={cn('size-[13px] shrink-0 stroke-[1.75]', temErro && 'text-erro')}
+        aria-hidden
+      />
+      <span>Console</span>
+      {temAtividade && <span aria-hidden className="size-1.5 rounded-full bg-t2" />}
+    </button>
+  )
+}
+
 export type ShellProps = {
   children: ReactNode
   rota?: Rota
@@ -331,7 +389,15 @@ export function Shell({
   toastRef.current = toast
   const mainRef = useRef<HTMLElement>(null)
   const refGatilhoFila = useRef<HTMLElement | null>(null)
+  const refGatilhoConsole = useRef<HTMLButtonElement | null>(null)
+  const refRetornoFocoConsole = useRef<HTMLElement | null>(null)
+  const refDockConsole = useRef<HTMLDivElement | null>(null)
+  const dockConsoleId = useId()
   const [filaAberta, setFilaAberta] = useState(false)
+  const [consoleAberto, setConsoleAberto] = useState(false)
+  const [filtroJobConsole, setFiltroJobConsole] = useState<string | null>(null)
+  const inlineMontado = useConsoleInlineMontado()
+  const dockConsoleVisivel = !modoMinimo && !inlineMontado && consoleAberto
   const [ajudaAtalhosAberta, setAjudaAtalhosAberta] = useState(false)
   const [recentesDisponiveis, setRecentesDisponiveis] = useState<ProjetoRecente[]>([])
   const [dialogoErroSalvarAberto, setDialogoErroSalvarAberto] = useState(false)
@@ -426,6 +492,83 @@ export function Shell({
     atualizarRefGatilhoFila()
     setFilaAberta(true)
   }, [aoAbrirFila, atualizarRefGatilhoFila])
+
+  const focarInlineOuFallback = useCallback(() => {
+    focarConsoleInline()
+    const blocoInline = mainRef.current?.querySelector<HTMLElement>('[data-console-ao-vivo]')
+    if (!blocoInline) return
+    const btnExpandir = blocoInline.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')
+    if (btnExpandir) {
+      btnExpandir.click()
+    }
+    if (!blocoInline.contains(document.activeElement)) {
+      focarRegiao(blocoInline)
+    }
+  }, [])
+
+  const fecharConsoleDevolvendoFoco = useCallback(() => {
+    setConsoleAberto(false)
+    const retorno = refRetornoFocoConsole.current
+    const alvo = retorno && retorno.isConnected ? retorno : refGatilhoConsole.current
+    alvo?.focus()
+  }, [])
+
+  const abrirConsole = useCallback(
+    (opcoes?: { filtroJob?: string | null; origem?: 'gatilho' | 'paleta' | 'fila' }) => {
+      if (inlineMontado) {
+        if (opcoes?.origem === 'paleta') {
+          requestAnimationFrame(focarInlineOuFallback)
+        } else {
+          focarInlineOuFallback()
+        }
+        return
+      }
+      if (opcoes?.origem === 'fila') {
+        const ativo = document.activeElement
+        refRetornoFocoConsole.current =
+          ativo instanceof HTMLElement && !ativo.closest('[role="dialog"]')
+            ? ativo
+            : refGatilhoConsole.current
+      } else {
+        refRetornoFocoConsole.current = refGatilhoConsole.current
+      }
+      if (opcoes && 'filtroJob' in opcoes) {
+        setFiltroJobConsole(opcoes.filtroJob ?? null)
+      }
+      setConsoleAberto(true)
+    },
+    [focarInlineOuFallback, inlineMontado],
+  )
+
+  const alternarConsole = useCallback(
+    (origem: 'gatilho' | 'paleta') => {
+      if (inlineMontado) {
+        if (origem === 'paleta') {
+          requestAnimationFrame(focarInlineOuFallback)
+        } else {
+          focarInlineOuFallback()
+        }
+        return
+      }
+      if (consoleAberto) {
+        if (origem === 'paleta') {
+          fecharConsoleDevolvendoFoco()
+        } else {
+          setConsoleAberto(false)
+        }
+        return
+      }
+      abrirConsole({ filtroJob: null, origem })
+    },
+    [abrirConsole, consoleAberto, fecharConsoleDevolvendoFoco, focarInlineOuFallback, inlineMontado],
+  )
+
+  const abrirConsoleDoJob = useCallback(
+    (jobId: string) => {
+      abrirConsole({ filtroJob: jobId, origem: 'fila' })
+    },
+    [abrirConsole],
+  )
 
   useEffect(() => {
     return storeFila.registrarNotificacao((n) => {
@@ -537,8 +680,9 @@ export function Shell({
     const contexto = raiz.querySelector<HTMLElement>('[data-regiao="contexto"]')
     const conteudo = mainRef.current ?? raiz.querySelector<HTMLElement>('[data-regiao="conteudo"]')
     const filaRegiao = raiz.querySelector<HTMLElement>('[data-regiao="fila"]')
+    const consoleRegiao = raiz.querySelector<HTMLElement>('[data-regiao="console"]')
     const rodape = raiz.querySelector<HTMLElement>('[data-regiao="rodape"]')
-    const regioes = [topo, contexto, conteudo, filaRegiao, rodape].filter(
+    const regioes = [topo, contexto, conteudo, filaRegiao, consoleRegiao, rodape].filter(
       (el): el is HTMLElement => el !== null,
     )
     if (regioes.length === 0) return
@@ -555,6 +699,44 @@ export function Shell({
         : (idxAtual + direcao + regioes.length) % regioes.length
     focarRegiao(regioes[proximoIdx])
   }, [])
+
+  useEffect(() => {
+    if (!dockConsoleVisivel) return
+    let cancelado = false
+    const focar = () => {
+      if (cancelado) return
+      const dock = refDockConsole.current
+      if (!dock) return
+      if (!dock.contains(document.activeElement)) {
+        focarRegiao(dock)
+      }
+    }
+    focar()
+    const raf = requestAnimationFrame(focar)
+    return () => {
+      cancelado = true
+      cancelAnimationFrame(raf)
+    }
+  }, [dockConsoleVisivel])
+
+  useEffect(() => {
+    if (!dockConsoleVisivel) return
+    const aoEscConsole = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      const temDialogoModal = Array.from(
+        document.querySelectorAll('[role="dialog"], [role="alertdialog"]'),
+      ).some((el) => !el.closest('[aria-label="Notifications"], [data-nao-modal]'))
+      if (temDialogoModal) return
+      if (document.querySelector('[aria-haspopup][aria-expanded="true"], [role="listbox"]')) return
+      const dock = refDockConsole.current
+      if (!dock || !dock.contains(document.activeElement)) return
+      e.preventDefault()
+      e.stopPropagation()
+      fecharConsoleDevolvendoFoco()
+    }
+    window.addEventListener('keydown', aoEscConsole, { capture: true })
+    return () => window.removeEventListener('keydown', aoEscConsole, { capture: true })
+  }, [dockConsoleVisivel, fecharConsoleDevolvendoFoco])
 
   useEffect(() => {
     const aoTeclar = (e: KeyboardEvent) => {
@@ -600,6 +782,12 @@ export function Shell({
         grupo: 'Navegação',
         tecla: 'Mod+J',
         executar: abrirFilaPadrao,
+      },
+      {
+        id: 'console.alternar',
+        titulo: 'Alternar console ao vivo',
+        grupo: 'Navegação',
+        executar: () => alternarConsole('paleta'),
       },
       {
         id: 'navegar.inicio',
@@ -675,7 +863,7 @@ export function Shell({
     }
 
     return lista
-  }, [abrirFilaPadrao, ciclarRegiao, projetoAberto])
+  }, [abrirFilaPadrao, alternarConsole, ciclarRegiao, projetoAberto])
 
   useAtalhos(atalhosShell)
 
@@ -869,6 +1057,13 @@ export function Shell({
               ),
               direita: (
                 <>
+                  <GatilhoConsoleBarra
+                    botaoRef={refGatilhoConsole}
+                    aberto={consoleAberto}
+                    inlineMontado={inlineMontado}
+                    controlsId={dockConsoleId}
+                    aoAcionar={() => alternarConsole('gatilho')}
+                  />
                   <DicaAtalho tecla="F6">Região</DicaAtalho>
                   <DicaAtalho tecla="?">Atalhos</DicaAtalho>
                   <DicaAtalho tecla="Ctrl K">Comandos</DicaAtalho>
@@ -899,9 +1094,31 @@ export function Shell({
             estadoFila={estadoFilaGlobal}
             store={storeFila}
             fila={filaStore}
+            aoVerConsole={abrirConsoleDoJob}
           />
         )}
       </div>
+      {dockConsoleVisivel && (
+        <div
+          ref={refDockConsole}
+          id={dockConsoleId}
+          data-regiao="console"
+          tabIndex={-1}
+          className="foco-interno shrink-0"
+        >
+          <ConsoleAoVivo
+            recolhivel
+            aberto
+            aoMudarAberto={(prox) => {
+              if (!prox) fecharConsoleDevolvendoFoco()
+            }}
+            filtroJob={filtroJobConsole}
+            aoMudarFiltroJob={setFiltroJobConsole}
+            redimensionavel
+            alturaInicial={180}
+          />
+        </div>
+      )}
       <FechamentoJanela jobs={jobs} />
       <ConfirmDialog
         aberto={salvamento.estado === 'erro' && dialogoErroSalvarAberto}

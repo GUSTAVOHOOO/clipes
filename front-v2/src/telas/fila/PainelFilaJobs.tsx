@@ -27,6 +27,7 @@ import {
   Pause,
   Play,
   RefreshCw,
+  Terminal,
   X,
 } from 'lucide-react'
 import {
@@ -78,6 +79,7 @@ export type PainelFilaJobsProps = {
   store?: StoreFilaGlobal
   fila?: Fila
   aoNavegar?: (hash: string) => void
+  aoVerConsole?: (jobId: string) => void
 }
 
 function traduzirEstagioAoVivo(etapa: string): string {
@@ -263,6 +265,7 @@ export function PainelFilaJobs({
   store,
   fila: filaProp,
   aoNavegar,
+  aoVerConsole,
 }: PainelFilaJobsProps) {
   const projetoPath = projetoAberto?.path ?? (projetoAberto ? projetoAberto.id ?? projetoAberto.name : null)
   const estadoHook = useFilaGlobal(estadoFilaProp ? null : projetoPath, { store, fila: filaProp })
@@ -381,8 +384,15 @@ export function PainelFilaJobs({
       ).some((el) => !el.closest('[aria-label="Notifications"], [data-nao-modal]'))
       if (temModal) return
       // A dica de um botão (tooltip) já trata o Esc e marca defaultPrevented; isso não
-      // pode impedir de fechar a Fila. Só cede quando há modal/popover/menu aberto.
+      // pode impedir de fechar a Fila. Só cede quando há modal/popover/menu aberto
+      // ou quando o foco está no dock do console ao vivo.
       if (document.querySelector('[aria-haspopup][aria-expanded="true"]')) {
+        return
+      }
+      if (
+        document.activeElement instanceof Node &&
+        document.querySelector('[data-regiao="console"]')?.contains(document.activeElement)
+      ) {
         return
       }
       e.preventDefault()
@@ -1039,6 +1049,17 @@ export function PainelFilaJobs({
                                   Refazer com outro Perfil
                                 </Botao>
                               )}
+
+                            {aoVerConsole && (
+                              <Botao
+                                tamanho="p"
+                                variante="fantasma"
+                                icone={<Terminal aria-hidden />}
+                                onClick={() => aoVerConsole(String(job.id))}
+                              >
+                                Ver console
+                              </Botao>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1247,6 +1268,16 @@ export function PainelFilaJobs({
                                 Abrir pasta
                               </Botao>
                             )}
+                            {aoVerConsole && (
+                              <Botao
+                                tamanho="p"
+                                variante="fantasma"
+                                icone={<Terminal aria-hidden />}
+                                onClick={() => aoVerConsole(`export-batch-${lote.id}`)}
+                              >
+                                Ver console
+                              </Botao>
+                            )}
                           </div>
                           {lote.state === 'running' && (
                             <Botao
@@ -1305,16 +1336,28 @@ export function PainelFilaJobs({
 
                       <Progresso valor={op.percentual} rotulo={op.etapa} />
 
-                      {op.estado === 'rodando' && (
-                        <div className="flex justify-end">
-                          <Botao
-                            tamanho="p"
-                            variante="suave"
-                            carregando={ocupadoKey === `global:${op.id}`}
-                            onClick={() => void cancelarGlobal(op)}
-                          >
-                            Cancelar
-                          </Botao>
+                      {(op.estado === 'rodando' || aoVerConsole) && (
+                        <div className="flex flex-wrap justify-end gap-1.5">
+                          {aoVerConsole && (
+                            <Botao
+                              tamanho="p"
+                              variante="fantasma"
+                              icone={<Terminal aria-hidden />}
+                              onClick={() => aoVerConsole(op.id)}
+                            >
+                              Ver console
+                            </Botao>
+                          )}
+                          {op.estado === 'rodando' && (
+                            <Botao
+                              tamanho="p"
+                              variante="suave"
+                              carregando={ocupadoKey === `global:${op.id}`}
+                              onClick={() => void cancelarGlobal(op)}
+                            >
+                              Cancelar
+                            </Botao>
+                          )}
                         </div>
                       )}
                     </div>

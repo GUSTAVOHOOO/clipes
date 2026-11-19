@@ -2571,11 +2571,23 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       return { last_directory: exportLastDirectoryMock } as T;
     }
     if ((name.startsWith('export.') && name !== 'export.captions') || (name === 'jobs.cancel' && (args as {id: number}).id >= 5900)) {
-      const result = exportMock(name, args, (source, pos) => mockCorrected.has(`${source}:${pos}`), { project: getActiveProjectMock(), emitProgress: emitirProgressoMock });
+      const activeProj = getActiveProjectMock();
+      const result = exportMock(name, args, (source, pos) => mockCorrected.has(`${source}:${pos}`), { project: activeProj, emitProgress: emitirProgressoMock });
       if (name === 'export.batch.start') {
         const dir = (args as { output_dir?: unknown }).output_dir;
         if (typeof dir === 'string' && dir.trim() && (dir.startsWith('/') || /^[A-Za-z]:[\\/]/.test(dir))) {
           exportLastDirectoryMock = dir.trim();
+        }
+        const lote = result as { id?: number } | undefined;
+        if (lote?.id != null) {
+          emitirConsoleMock({
+            job: `export-batch-${lote.id}`,
+            project: activeProj?.id ?? null,
+            origin: 'ffmpeg',
+            level: 'info',
+            simple: 'Iniciando exportação em lote…',
+            technical: `ffmpeg: batch=export-batch-${lote.id} encoder=h264_nvenc`,
+          });
         }
       } else if (name === 'export.start') {
         const out = (args as { output?: unknown }).output;
@@ -2587,6 +2599,24 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
               exportLastDirectoryMock = dir;
             }
           }
+        }
+        const exp = result as { job?: number } | undefined;
+        if (exp?.job != null) {
+          const jobStr = String(exp.job);
+          const fallbackAtivo =
+            readEstadoParam() === 'fallback' || hasSearchFlag('export-fallback');
+          emitirConsoleMock({
+            job: jobStr,
+            project: activeProj?.id ?? null,
+            origin: 'ffmpeg',
+            level: fallbackAtivo ? 'warn' : 'info',
+            simple: fallbackAtivo
+              ? 'Encoder de GPU indisponível; exportando Corte via CPU…'
+              : 'Exportando Corte com aceleração de vídeo…',
+            technical: fallbackAtivo
+              ? `ffmpeg: fallback h264_nvenc -> libx264 job=${jobStr}`
+              : `ffmpeg: frame=420 fps=72.4 speed=2.4x encoder=h264_nvenc job=${jobStr}`,
+          });
         }
       }
       return result as T;
@@ -3460,6 +3490,22 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       if (url.endsWith('/login-test')) throw { code: 'login_required', message: 'test' };
       if (url.endsWith('/js-test') && !denoMock.installed) throw { code: 'js_runtime_missing', message: 'test' };
       const job = a.job?.trim() || `url-${Date.now()}`;
+      const projetoUrl = getActiveProjectMock()?.id ?? null;
+      const hostUrl = (() => {
+        try {
+          return new URL(url).hostname;
+        } catch {
+          return 'origem';
+        }
+      })();
+      emitirConsoleMock({
+        job,
+        project: projetoUrl,
+        origin: 'yt-dlp',
+        level: 'info',
+        simple: 'Verificando mídia da URL informada…',
+        technical: `yt-dlp: pré-checagem e seleção de formato (${hostUrl})`,
+      });
       await runCancellableSteps(
         job,
         [
@@ -3467,7 +3513,16 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
           { stage: 'download', percentage: 50, message: 'Baixando Fonte' },
           { stage: 'download', percentage: 100, message: 'Download concluído', delayMs: 5 },
         ],
-        () => {},
+        () => {
+          emitirConsoleMock({
+            job,
+            project: projetoUrl,
+            origin: 'yt-dlp',
+            level: 'info',
+            simple: 'Download da URL concluído.',
+            technical: 'yt-dlp: 100% · stream mesclado com sucesso',
+          });
+        },
         activeUrlJobs,
         null,
       );
@@ -4584,6 +4639,27 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
           message: isHardwareProbeFallbackMode() ? 'A verificação da GPU falhou; continuando na CPU.' : 'Verificando placa de vídeo',
           error: null,
         });
+        emitirConsoleMock({
+          job: '99',
+          project: active.id,
+          origin: 'worker',
+          level: isHardwareProbeFallbackMode() ? 'warn' : 'info',
+          simple: isHardwareProbeFallbackMode()
+            ? 'GPU indisponível; alternando Transcrição para CPU.'
+            : 'Verificando aceleração de hardware e carregando modelo…',
+          technical: isHardwareProbeFallbackMode()
+            ? 'worker: fallback cuda -> cpu (int8)'
+            : `worker: model_loaded=${model} device=cuda compute_type=float16`,
+        });
+      } else {
+        emitirConsoleMock({
+          job: '99',
+          project: active.id,
+          origin: 'job',
+          level: 'info',
+          simple: 'Preparando envio de áudio para o Motor de transcrição remoto…',
+          technical: `groq: model=${model} block=1`,
+        });
       }
       emitirProgressoMock({
         job: '99',
@@ -4592,6 +4668,14 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
         percentage: 40,
         message: 'Transcrevendo bloco 1',
         error: null,
+      });
+      emitirConsoleMock({
+        job: '99',
+        project: active.id,
+        origin: engine === 'local' ? 'worker' : 'job',
+        level: 'info',
+        simple: 'Transcrevendo bloco 1 de 2 · 40%',
+        technical: `transcription: job=99 engine=${engine} model=${model} block=1/2`,
       });
       return {
         transcript_id: source_id,
