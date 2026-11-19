@@ -86,6 +86,10 @@ test('validateLinuxReport exige PalcoEditor v2 com playOk, loopback, 100 seeks, 
   const withoutPlay = structuredClone(baseReport);
   withoutPlay.steps.uiCutPreview.playOk = false;
   assert.equal(validateLinuxReport(withoutPlay), false);
+
+  const withCspViolation = structuredClone(baseReport);
+  withCspViolation.steps.cspViolations = [{ effectiveDirective: 'media-src', blockedURI: 'http://127.0.0.1:9999' }];
+  assert.equal(validateLinuxReport(withCspViolation), false);
 });
 
 test('linux-validation.mjs não usa clipes-preview-open nem seletores V1 e usa Palco de prévia do Editor v2', () => {

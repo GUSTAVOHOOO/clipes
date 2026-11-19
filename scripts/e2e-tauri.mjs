@@ -236,7 +236,7 @@ async function startFakeProviderServer() {
 
 let targetCounter = 0;
 
-function createUi(browser) {
+function createUi(browser, hooks = {}) {
   async function tagElement(spec, timeout = 15_000) {
     const tag = `t-${++targetCounter}`;
     await browser.waitUntil(
@@ -486,11 +486,13 @@ function createUi(browser) {
 
   // Recarrega a WebView (o núcleo mantém o Projeto aberto) para reler o estado do disco.
   async function reloadApp(hash, readyText = 'Fontes') {
+    await hooks.beforeReload?.();
     await browser.execute(h => {
       window.location.hash = h;
       window.location.reload();
     }, hash);
     await browser.pause(500);
+    await hooks.afterReload?.();
     await waitForHash(hash.split('?')[0]);
     await waitForText(readyText, 'main', 20_000);
   }
@@ -703,6 +705,8 @@ function createUi(browser) {
     queueConfirm,
     readE2EState,
     shot,
+    installMonitors: hooks.afterReload ?? (async () => {}),
+    collectMonitors: hooks.beforeReload ?? (async () => {}),
   };
 }
 
@@ -761,19 +765,67 @@ async function withTauriSession(config, callback) {
     } catch {
       // gerenciador de janelas sem redimensionamento livre
     }
-    await browser.execute(() => {
-      window.__e2eErrors = [];
-      window.addEventListener('error', event => window.__e2eErrors.push(String(event.message)));
-      window.addEventListener('unhandledrejection', event =>
-        window.__e2eErrors.push(String(event.reason?.message ?? event.reason)),
-      );
-    });
+    const sessionErrors = [];
+    const sessionCspViolations = [];
 
-    const ui = createUi(browser);
+    async function installPageMonitors() {
+      await browser.execute(() => {
+        if (window.__e2eMonitorsInstalled) return;
+        window.__e2eMonitorsInstalled = true;
+        window.__e2eErrors = window.__e2eErrors ?? [];
+        window.__e2eCspViolations = window.__e2eCspViolations ?? [];
+        window.addEventListener('error', event => window.__e2eErrors.push(String(event.message)));
+        window.addEventListener('unhandledrejection', event =>
+          window.__e2eErrors.push(String(event.reason?.message ?? event.reason)),
+        );
+        document.addEventListener(
+          'securitypolicyviolation',
+          event => {
+            window.__e2eCspViolations.push({
+              effectiveDirective: event.effectiveDirective,
+              violatedDirective: event.violatedDirective,
+              blockedURI: event.blockedURI,
+              sourceFile: event.sourceFile,
+              lineNumber: event.lineNumber,
+              disposition: event.disposition,
+            });
+          },
+          true,
+        );
+      });
+    }
+
+    async function collectPageMonitors() {
+      try {
+        const drained = await browser.execute(() => {
+          const errors = Array.isArray(window.__e2eErrors) ? window.__e2eErrors.splice(0) : [];
+          const csp = Array.isArray(window.__e2eCspViolations)
+            ? window.__e2eCspViolations.splice(0)
+            : [];
+          return { errors, csp };
+        });
+        sessionErrors.push(...(drained?.errors ?? []));
+        sessionCspViolations.push(...(drained?.csp ?? []));
+      } catch {
+        // WebView já encerrada (ex.: window.close() no fim da Sessão 3)
+      }
+    }
+
+    await installPageMonitors();
+
+    const ui = createUi(browser, {
+      beforeReload: collectPageMonitors,
+      afterReload: installPageMonitors,
+    });
     await callback(ui);
 
-    const pageErrors = await browser.execute(() => window.__e2eErrors ?? []);
-    assert.deepEqual(pageErrors, [], `Erros inesperados na WebView: ${JSON.stringify(pageErrors)}`);
+    await collectPageMonitors();
+    assert.deepEqual(sessionErrors, [], `Erros inesperados na WebView: ${JSON.stringify(sessionErrors)}`);
+    assert.deepEqual(
+      sessionCspViolations,
+      [],
+      `Violações de CSP na WebView: ${JSON.stringify(sessionCspViolations)}`,
+    );
   } catch (error) {
     if (browser) {
       try {
@@ -839,11 +891,13 @@ async function runSession1(ui, ctx) {
   await ui.waitForText('Projetos', 'main');
 
   logStep('Sessão 1: Casca (Paleta Ctrl+K, Sobre, atualização mockada, Fila Ctrl+J, F6)…');
+  await ui.collectMonitors();
   await ui.browser.execute(() => {
     sessionStorage.setItem('clipes.e2e.updaterMode', 'available');
     location.reload();
   });
   await ui.waitForText('Projetos', 'main');
+  await ui.installMonitors();
   await ui.browser.keys(['Control', 'k']);
   await ui.waitForDialog('Paleta de comandos', 'dialog');
   await ui.browser.keys('Sobre');
@@ -1584,6 +1638,7 @@ async function runSession3(ui, ctx) {
   );
 
   logStep('Sessão 3: fechamento coordenado (#291) sem jobs ativos…');
+  await ui.collectMonitors();
   await ui.browser.execute(() => window.close());
 }
 

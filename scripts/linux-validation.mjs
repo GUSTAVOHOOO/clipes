@@ -64,11 +64,16 @@ export function validateLinuxReport(report) {
     steps.mediaFetchDiag?.rawSecurityDiag?.traversal?.status === 404 &&
     steps.mediaFetchDiag?.rawSecurityDiag?.listing?.status === 404;
 
+  const cspOk =
+    steps.cspViolations === undefined ||
+    (Array.isArray(steps.cspViolations) && steps.cspViolations.length === 0);
+
   return (
     Boolean(steps.appLaunch?.ok) &&
     Boolean(steps.proxyGeneration?.ok) &&
     previewOk &&
     loopbackSecurityOk &&
+    cspOk &&
     Boolean(steps.exportWithCaptions?.ok) &&
     Boolean(steps.x264Fallback?.ok)
   );
@@ -298,6 +303,40 @@ async function main() {
     }
     assert.ok(internalsReady, 'WebView/Tauri internals do front-v2 não ficou pronto.');
 
+    const cspViolations = [];
+    const installCspMonitor = () =>
+      wd.exec(() => {
+        if (window.__linuxValCspInstalled) return;
+        window.__linuxValCspInstalled = true;
+        window.__linuxValCspViolations = window.__linuxValCspViolations ?? [];
+        document.addEventListener(
+          'securitypolicyviolation',
+          event => {
+            window.__linuxValCspViolations.push({
+              effectiveDirective: event.effectiveDirective,
+              violatedDirective: event.violatedDirective,
+              blockedURI: event.blockedURI,
+              sourceFile: event.sourceFile,
+              lineNumber: event.lineNumber,
+            });
+          },
+          true,
+        );
+      });
+    const collectCspMonitor = async () => {
+      try {
+        const items = await wd.exec(() => {
+          const list = window.__linuxValCspViolations ?? [];
+          window.__linuxValCspViolations = [];
+          return list;
+        });
+        if (Array.isArray(items)) cspViolations.push(...items);
+      } catch {
+        // ignora se a página já estiver em transição
+      }
+    };
+    await installCspMonitor();
+
     const appInfo = await wd.execAsync(async () => {
       const invoke = (name, args = {}) => window.__TAURI_INTERNALS__.invoke('core_dispatch', { name, arguments: args });
       const version = await invoke('app.version');
@@ -415,6 +454,7 @@ async function main() {
       window.location.hash = '#/inicio';
     });
     await delay(100);
+    await collectCspMonitor();
     await wd.exec(() => {
       location.reload();
     });
@@ -442,6 +482,7 @@ async function main() {
         throw new Error(`Shell v2 não carregou o Projeto aberto após reload: ${JSON.stringify(diag)}`);
       }
     }
+    await installCspMonitor();
     await wd.exec(targetHash => {
       window.location.hash = targetHash;
     }, [editorHash]);
@@ -888,6 +929,8 @@ async function main() {
       },
     };
 
+    await collectCspMonitor();
+    report.steps.cspViolations = cspViolations;
     report.passed = validateLinuxReport(report);
   } catch (error) {
     report.error = error instanceof Error ? { message: error.message, stack: error.stack } : String(error);
