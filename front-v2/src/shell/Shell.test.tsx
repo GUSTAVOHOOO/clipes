@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -710,5 +710,33 @@ describe('Shell', () => {
     expect(await within(footer).findByText(/Corte da final/)).toBeInTheDocument()
     expect(within(footer).getByText(/40%/)).toBeInTheDocument()
     expect(within(footer).getByText(/4[23] s/)).toBeInTheDocument()
+  })
+
+  it('UI-106: não empilha toasts de conclusão silenciosa de Timeline/Preview de fundo', async () => {
+    mockIsTauri.mockReturnValue(false)
+    window.location.hash = '#/projeto/demo/corte/102/editar'
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'projects.current') return { id: 'demo', name: 'Demo', path: '/projetos/Demo.clipes' }
+      if (cmd === 'projects.local_only.get') return { open: true, enabled: false }
+      if (cmd === 'projects.recent') return []
+      if (cmd === 'jobs.list' || cmd === 'batches.list' || cmd === 'export.batch.list') return []
+      if (cmd === 'jobs.budget.get') return { budgets: [] }
+      return null
+    })
+
+    const fila = criarFila(() => 'demo')
+    render(envolver(<Shell fila={fila}><div>Conteúdo</div></Shell>))
+
+    act(() => {
+      fila.aplicar({ job: '7', project: 'demo', stage: 'proxy', percentage: 40, message: 'Preparando preview', error: null })
+      fila.aplicar({ job: '7', project: 'demo', stage: 'complete', percentage: 100, message: 'Preview concluído.', error: null })
+      fila.aplicar({ job: '8', project: 'demo', stage: 'timeline', percentage: 40, message: 'Gerando miniaturas e onda', error: null })
+      fila.aplicar({ job: '8', project: 'demo', stage: 'complete', percentage: 100, message: 'Timeline pronta', error: null })
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Preview concluído\./i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/Timeline pronta/i)).not.toBeInTheDocument()
+    })
   })
 })

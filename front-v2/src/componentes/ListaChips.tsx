@@ -1,6 +1,6 @@
 import { Campo, Entrada, cn } from '@ds'
 import { AlertCircle, X } from 'lucide-react'
-import { useState, type KeyboardEvent } from 'react'
+import { useId, useState, type KeyboardEvent } from 'react'
 
 export interface ListaChipsProps {
   itens: string[]
@@ -49,6 +49,7 @@ export function ListaChips({
   const [rascunho, setRascunho] = useState('')
   const [erroLocal, setErroLocal] = useState<string | null>(null)
   const [anuncio, setAnuncio] = useState('')
+  const erroId = useId()
 
   const erroAtivo = erro ?? erroLocal ?? undefined
 
@@ -173,7 +174,9 @@ export function ListaChips({
               value={rascunho}
               disabled={desabilitado}
               placeholder={placeholder}
-              aria-describedby={ariaDescribedby}
+              aria-describedby={
+                [ariaDescribedby, erroAtivo ? erroId : undefined].filter(Boolean).join(' ') || undefined
+              }
               aria-invalid={erroAtivo ? true : undefined}
               onChange={(e) => aoMudarTexto(e.target.value)}
               onKeyDown={aoTeclar}
@@ -186,7 +189,7 @@ export function ListaChips({
       </Campo>
 
       {erroAtivo && (
-        <p role="alert" className="m-0 flex items-start gap-1.5 text-pequeno text-erro">
+        <p id={erroId} role="alert" className="m-0 flex items-start gap-1.5 text-pequeno text-erro">
           <AlertCircle className="mt-px size-[13px] shrink-0 stroke-[1.75]" aria-hidden />
           {erroAtivo}
         </p>

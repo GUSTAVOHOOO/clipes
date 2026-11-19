@@ -343,7 +343,7 @@ describe('<PassoNarracao>', () => {
       ),
     )
 
-    expect(screen.getByText(/Narração travada: ainda há 1 bloco\(s\) pendente\(s\) no Roteiro\./i)).toBeInTheDocument()
+    expect(screen.getByText(/Narração travada: ainda há 1 bloco pendente no Roteiro\./i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Gerar voz de todos os blocos/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Gravar no microfone/i })).not.toBeInTheDocument()
 
@@ -803,10 +803,10 @@ describe('<PassoNarracao>', () => {
       ),
     )
 
-    // Botão Remover áudio desabilitado + Dica UI-12 sem #\d+
+    // Botão Remover áudio indisponível (aria-disabled) + Dica UI-12 sem #\d+
     const btnRemover = screen.getByRole('button', { name: /Remover áudio/i })
-    expect(btnRemover).toBeDisabled()
-    await user.hover(btnRemover.parentElement as HTMLElement)
+    expect(btnRemover).toHaveAttribute('aria-disabled', 'true')
+    await user.hover(btnRemover)
     expect(
       await screen.findByText(/Voltar a Sem áudio ainda não está disponível; substitua por TTS, gravação ou importação\./i),
     ).toBeInTheDocument()
@@ -1085,5 +1085,113 @@ describe('<PassoNarracao>', () => {
     expect(await screen.findByText(/Alinhando blocos/i)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /^Cancelar$/i }))
     expect(chamarMock).toHaveBeenCalledWith('jobs.cancel', { id: 791 })
+  })
+
+  it('UI-102 / UI-103 / UI-105 / UI-106: sem span[tabindex=0], h2 no Passo 3 liberado, rótulo de voz do catálogo, sem dupla seta, plural natural e player com duração', async () => {
+    const user = userEvent.setup()
+    const store = criarStoreMock({
+      pocketTts: { installed: false, version: null, pinned: '3.3.0', outdated: false },
+      catalogoTts: {
+        ...CATALOGO_PRONTO,
+        componentInstalled: false,
+        models: [{ ...CATALOGO_PRONTO.models[0], installed: false, termsAccepted: false }],
+      },
+      narracao: {
+        ...NARRACAO_SEM_AUDIO,
+        blocks: [
+          {
+            ...NARRACAO_SEM_AUDIO.blocks[0],
+            audio: {
+              id: 101,
+              versionId: 1,
+              voiceId: '13063',
+              modelId: 'portuguese_24l',
+              engineId: 'pocket-tts',
+              relPath: 'narrations/c201/b101-v1.wav',
+              durationUs: 12_000_000,
+              sampleRate: 24000,
+              channels: 1,
+              bytes: 256000,
+              stale: false,
+              trimmed: true,
+              cleanup: null,
+            },
+            alignment: {
+              status: 'needs_review',
+              choice: null,
+              activeTrack: null,
+              substitutions: 1,
+              insertions: 2,
+              deletions: 0,
+              maxConsecutiveInsertions: 2,
+              errorCode: null,
+              modelId: 'whisper-turbo',
+              spokenText: 'Texto falado',
+              wordCount: 8,
+            },
+          },
+          {
+            ...NARRACAO_SEM_AUDIO.blocks[1],
+            audio: {
+              id: 102,
+              versionId: 1,
+              voiceId: '13063',
+              modelId: 'portuguese_24l',
+              engineId: 'pocket-tts',
+              relPath: 'narrations/c201/b102-v1.wav',
+              durationUs: 5_000_000,
+              sampleRate: 24000,
+              channels: 1,
+              bytes: 128000,
+              stale: true,
+              trimmed: true,
+              cleanup: null,
+            },
+            alignment: null,
+          },
+        ],
+        totalDurationUs: 17_000_000,
+      },
+    })
+
+    const { container } = render(
+      envolver(
+        <PassoNarracao
+          candidateId={201}
+          store={store}
+          aoVoltarBlocoPendente={vi.fn()}
+          aoIrParaEmpacotar={vi.fn()}
+          aoIrParaEditar={vi.fn()}
+        />,
+      ),
+    )
+
+    // UI-102: sem <span tabIndex={0}> em Remover áudio
+    expect(container.querySelectorAll('span[tabindex="0"]')).toHaveLength(0)
+
+    // UI-103: h2 presente no Passo 3 liberado e sem salto ao abrir InstaladorJustInTime (h3)
+    await user.click(screen.getByRole('button', { name: /Preparar voz local/i }))
+    const headings = Array.from(container.querySelectorAll('h1, h2, h3, h4')).map((h) =>
+      Number(h.tagName[1]),
+    )
+    expect(headings).toContain(2)
+    for (let i = 1; i < headings.length; i += 1) {
+      expect(headings[i] - headings[i - 1]).toBeLessThanOrEqual(1)
+    }
+
+    // UI-105: rótulo humano da voz (nunca "TTS · 13063" cru), sem "→" no botão com ArrowRight, pluralização natural
+    expect(screen.queryByText('TTS · 13063')).not.toBeInTheDocument()
+    expect(screen.getAllByText(/Narrador PT-BR 13063 \(masculina\)/i).length).toBeGreaterThan(0)
+
+    const btnAvancar = screen.getByRole('button', { name: /Avançar para Empacotar/i })
+    expect(btnAvancar.textContent).not.toContain('→')
+
+    expect(container.textContent).not.toMatch(/bloco\(s\)|acréscimo\(s\)|troca\(s\)|desatualizado\(s\)/i)
+    expect(container.textContent).toMatch(/2 acréscimos,\s*1 troca/i)
+    expect(screen.getByText(/1 desatualizado/i)).toBeInTheDocument()
+
+    // UI-106: player compacto com tokens do DS exibindo duração real do bloco (12 s) ao lado de <audio>
+    expect(container.querySelectorAll('audio').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: /Reproduzir áudio do Bloco 1/i })).toBeInTheDocument()
   })
 })

@@ -43,11 +43,14 @@ for (const vp of VIEWPORTS) {
       await page.getByRole('button', { name: /Abrir Projeto Demo/i }).click()
       await expect(page).toHaveURL(/#\/projeto\/demo\/fontes$/)
 
-      // 1. ?estado=vazio: capa vazia e CTA "Sugerir Empacotamento"
+      // 1. ?estado=vazio: capa vazia, sem Fonte offline, 1 .bg-sinal e CTA "Sugerir Empacotamento"
       await irPara(page, '#/projeto/demo/corte/201/empacotar?run=2&estado=vazio')
       await expect(page.getByText('Nenhum momento de capa escolhido ainda.')).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Sugerir Empacotamento' })).toBeVisible()
+      await expect(page.getByText('Fonte offline')).toHaveCount(0)
+      await expect(page.locator('button.bg-sinal')).toHaveCount(1)
+      await expect(page.getByRole('button', { name: 'Sugerir Empacotamento' })).toHaveClass(/bg-sinal/)
       await expect(page.getByRole('button', { name: 'Preencher manualmente' })).toBeDisabled()
+      await expect(page.locator('span[tabindex="0"]')).toHaveCount(0)
       await expect(page.getByText('Preencher manualmente ainda não está disponível.')).toBeAttached()
       await semScrollHorizontal(page)
 
@@ -187,6 +190,31 @@ for (const vp of VIEWPORTS) {
       })
       expect(pequenos).toEqual([])
       await semScrollHorizontal(page)
+
+      // UI-100 / UI-103: F6 inclui contexto e fila aberta, e headings sem saltos
+      const saltoHeading = await page.evaluate(() => {
+        const levels = Array.from(document.querySelectorAll('h1, h2, h3, h4')).map((h) => Number(h.tagName[1]))
+        for (let i = 1; i < levels.length; i += 1) {
+          if (levels[i] - levels[i - 1] > 1) return `h${levels[i - 1]}->h${levels[i]}`
+        }
+        return null
+      })
+      expect(saltoHeading).toBeNull()
+
+      await page.keyboard.press('Control+j')
+      const filaAside = page.getByRole('complementary', { name: 'Fila de Jobs' })
+      await expect(filaAside).toBeVisible()
+      const regioesF6: Array<string | null> = []
+      await page.locator('[data-regiao="topo"] button').first().focus()
+      for (let i = 0; i < 6; i += 1) {
+        await page.keyboard.press('F6')
+        regioesF6.push(
+          await page.evaluate(() => document.activeElement?.closest('[data-regiao]')?.getAttribute('data-regiao') ?? null),
+        )
+      }
+      expect(regioesF6).toContain('contexto')
+      expect(regioesF6).toContain('fila')
+      await filaAside.getByRole('button', { name: /Fechar Fila/i }).click()
 
       expect(erros).toEqual([])
     })

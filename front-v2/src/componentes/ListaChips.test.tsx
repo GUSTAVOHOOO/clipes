@@ -103,4 +103,40 @@ describe('<ListaChips>', () => {
     await user.type(entrada, 'curto{Enter}')
     expect(aoAlterar).toHaveBeenCalledWith(['#curto'])
   })
+
+  it('UI-102: erro local e prop erro ficam conectados ao input via aria-describedby', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(
+      <ListaChips
+        itens={['a']}
+        aoAlterar={vi.fn()}
+        maxItens={1}
+        rotulo="Tags"
+        erro={null}
+      />,
+    )
+
+    const entrada = screen.getByLabelText('Tags')
+    await user.type(entrada, 'segunda{Enter}')
+
+    const alertaLocal = screen.getByRole('alert')
+    const describedLocal = entrada.getAttribute('aria-describedby')
+    expect(describedLocal).toBeTruthy()
+    expect(alertaLocal.id).toBeTruthy()
+    expect(describedLocal!.split(/\s+/)).toContain(alertaLocal.id)
+
+    rerender(
+      <ListaChips
+        itens={['a']}
+        aoAlterar={vi.fn()}
+        maxItens={5}
+        rotulo="Tags"
+        erro="Erro externo de validação."
+      />,
+    )
+    const alertaProp = screen.getByRole('alert')
+    const describedProp = entrada.getAttribute('aria-describedby')
+    expect(describedProp).toBeTruthy()
+    expect(describedProp!.split(/\s+/)).toContain(alertaProp.id)
+  })
 })

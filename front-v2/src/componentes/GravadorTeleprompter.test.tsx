@@ -1,3 +1,4 @@
+import { ProvedorDicas } from '@ds'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -209,5 +210,41 @@ describe('<GravadorTeleprompter>', () => {
 
     await user.click(screen.getByRole('button', { name: /Descartar rascunho/i }))
     expect(aoDescartarRascunho).toHaveBeenCalledWith(10)
+  })
+
+  it('UI-100: Esc fecha o gravador mesmo após Tab focar BotaoIcone com <Dica> (A-)', async () => {
+    mockMatchMedia(false)
+    const aoFechar = vi.fn()
+    const user = userEvent.setup()
+
+    render(
+      <ProvedorDicas>
+        <GravadorTeleprompter
+          aberto
+          bloco={{ id: 10, position: 1, title: 'Abertura', narration: 'Texto do bloco.' }}
+          totalBlocos={2}
+          aoSalvarAudio={vi.fn()}
+          aoDescartarRascunho={vi.fn()}
+          aoFechar={aoFechar}
+        />
+      </ProvedorDicas>,
+    )
+
+    const btnDiminuir = screen.getByRole('button', { name: /Diminuir fonte/i })
+    await user.tab()
+    btnDiminuir.focus()
+    expect(btnDiminuir).toHaveFocus()
+
+    // Simula <Dica> aberta consumindo Escape na fase de bolha do elemento focado
+    const tooltipListener = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') {
+        ev.stopPropagation()
+      }
+    }
+    btnDiminuir.addEventListener('keydown', tooltipListener)
+
+    await user.keyboard('{Escape}')
+    expect(aoFechar).toHaveBeenCalledTimes(1)
+    btnDiminuir.removeEventListener('keydown', tooltipListener)
   })
 })

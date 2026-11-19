@@ -26,6 +26,7 @@ import type {
 import { DialogoExportarCorte, type CorteParaExportar } from '~/telas/corte/DialogoExportarCorte'
 
 export const EVENTO_CANDIDATO_KIND_ALTERADO = 'clipes:candidato-kind-alterado'
+export const EVENTO_CORTE_PRIMARIO_OCULTO = 'clipes:corte-primario-oculto'
 
 export type SubAbaCorte = 'editar' | 'transformar' | 'empacotar'
 
@@ -160,6 +161,7 @@ export function ContextoCorteConectado({
   const [convertendo, setConvertendo] = useState(false)
   const [erroConversao, setErroConversao] = useState<ErroCore | null>(null)
   const [focarTransformarPosConversao, setFocarTransformarPosConversao] = useState(false)
+  const [primarioOcultoExterno, setPrimarioOcultoExterno] = useState(false)
 
   const toast = useToast()
   const toastRef = useRef(toast)
@@ -176,7 +178,17 @@ export function ContextoCorteConectado({
     setConvertendo(false)
     setErroConversao(null)
     setFocarTransformarPosConversao(false)
-  }, [corteId])
+    setPrimarioOcultoExterno(false)
+  }, [corteId, subAbaAtiva])
+
+  useEffect(() => {
+    const aoAlterarPrimario = (e: Event) => {
+      const det = (e as CustomEvent<{ ocultar?: boolean }>).detail
+      setPrimarioOcultoExterno(Boolean(det?.ocultar))
+    }
+    window.addEventListener(EVENTO_CORTE_PRIMARIO_OCULTO, aoAlterarPrimario)
+    return () => window.removeEventListener(EVENTO_CORTE_PRIMARIO_OCULTO, aoAlterarPrimario)
+  }, [])
 
   useEffect(() => {
     let cancelado = false
@@ -218,7 +230,11 @@ export function ContextoCorteConectado({
           ])
           if (cancelado) return
 
-          let sourceId = fonteProp?.id ?? fontes[0]?.id ?? 1
+          let sourceId =
+            fonteProp?.id ??
+            fontes.find((f) => f.available && f.status === 'available')?.id ??
+            fontes[0]?.id ??
+            1
           for (const f of fontes) {
             const runs = await listarRunsDaFonte(f.id)
             if (runs.some((r) => r.id === runNumerico)) {
@@ -570,7 +586,15 @@ export function ContextoCorteConectado({
         </nav>
 
         <Botao
-          variante={forcado === 'vazio' ? 'secundario' : 'primario'}
+          variante={
+            forcado === 'vazio' ||
+            subAbaAtiva === 'transformar' ||
+            exportacaoAberta ||
+            confirmarConversaoAberto ||
+            primarioOcultoExterno
+              ? 'secundario'
+              : 'primario'
+          }
           atalho={ehMac ? '⌘E' : 'Ctrl+E'}
           disabled={forcado === 'vazio' || estado.carregando || !corteParaExportar}
           onClick={abrirExportacao}

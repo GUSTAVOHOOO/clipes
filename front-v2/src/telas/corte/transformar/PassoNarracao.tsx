@@ -1,6 +1,7 @@
 import {
   BannerErroCore,
   Botao,
+  BotaoIcone,
   ConfirmDialog,
   Dialogo,
   Dica,
@@ -23,6 +24,8 @@ import {
   Download,
   Lock,
   Mic,
+  Pause,
+  Play,
   RefreshCw,
   Scissors,
   Sparkles,
@@ -43,6 +46,7 @@ import { useFila } from '~/core/progresso'
 import type {
   AlinhamentoBloco,
   BlocoNarracao,
+  CatalogoTtsDoc,
   useTransformarCorte,
 } from '~/stores/transformarCorte'
 import { mediaUrl } from '../../../../../src/lib/media'
@@ -52,6 +56,7 @@ export type StoreTransformarNarracao = ReturnType<typeof useTransformarCorte>
 export interface PassoNarracaoProps {
   candidateId: number
   store: StoreTransformarNarracao
+  modalPaiAberto?: boolean
   aoVoltarBlocoPendente: (blockId?: number) => void
   aoIrParaEmpacotar: () => void
   aoIrParaEditar: () => void
@@ -77,11 +82,105 @@ const CODIGOS_IMPORTACAO = new Set([
   'import_failed',
 ])
 
-function infoOrigemAudio(audio: BlocoNarracao['audio']): { tom: TomStatus; rotulo: string } {
+function infoOrigemAudio(
+  audio: BlocoNarracao['audio'],
+  vozes: CatalogoTtsDoc['voices'] = [],
+): { tom: TomStatus; rotulo: string } {
   if (!audio) return { tom: 'pendente', rotulo: 'Sem áudio' }
   if (audio.engineId === 'recorded') return { tom: 'sucesso', rotulo: 'Gravado' }
   if (audio.engineId === 'imported') return { tom: 'sucesso', rotulo: 'Importado' }
-  return { tom: 'sucesso', rotulo: `TTS · ${audio.voiceId}` }
+  const voz = vozes.find((v) => v.id === audio.voiceId)
+  return { tom: 'sucesso', rotulo: voz ? `TTS · ${voz.label}` : 'TTS · Voz sintética' }
+}
+
+function formatarMinSeg(segundos: number): string {
+  const seguro = Number.isFinite(segundos) && segundos > 0 ? Math.floor(segundos) : 0
+  const m = Math.floor(seguro / 60)
+  const s = seguro % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
+function PlayerAudioBloco({
+  src,
+  duracaoUs,
+  posicaoBloco,
+}: {
+  src: string
+  duracaoUs: number
+  posicaoBloco: number
+}) {
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const [reproduzindo, setReproduzindo] = useState(false)
+  const [tempoAtualSeg, setTempoAtualSeg] = useState(0)
+  const [duracaoAudioSeg, setDuracaoAudioSeg] = useState<number | null>(null)
+
+  useEffect(() => {
+    setReproduzindo(false)
+    setTempoAtualSeg(0)
+    setDuracaoAudioSeg(null)
+  }, [src])
+
+  const duracaoFallbackSeg = Math.max(0, duracaoUs / 1_000_000)
+  const duracaoTotalSeg =
+    duracaoAudioSeg !== null && Number.isFinite(duracaoAudioSeg) && duracaoAudioSeg > 0
+      ? duracaoAudioSeg
+      : duracaoFallbackSeg
+  const progressoPct =
+    duracaoTotalSeg > 0 ? Math.min(100, Math.max(0, (tempoAtualSeg / duracaoTotalSeg) * 100)) : 0
+
+  const alternar = () => {
+    const el = audioRef.current
+    if (!el) return
+    if (el.paused) {
+      void el.play().then(
+        () => setReproduzindo(true),
+        () => setReproduzindo(false),
+      )
+    } else {
+      el.pause()
+      setReproduzindo(false)
+    }
+  }
+
+  return (
+    <div className="flex min-w-[200px] flex-1 items-center gap-2 rounded-controle bg-area px-2 py-1">
+      <audio
+        ref={audioRef}
+        src={src}
+        preload="metadata"
+        onLoadedMetadata={(e) => {
+          const d = e.currentTarget.duration
+          if (Number.isFinite(d) && d > 0) setDuracaoAudioSeg(d)
+        }}
+        onTimeUpdate={(e) => setTempoAtualSeg(e.currentTarget.currentTime)}
+        onEnded={() => {
+          setReproduzindo(false)
+          setTempoAtualSeg(0)
+        }}
+        className="hidden"
+      />
+      <BotaoIcone
+        rotulo={
+          reproduzindo
+            ? `Pausar áudio do Bloco ${posicaoBloco}`
+            : `Reproduzir áudio do Bloco ${posicaoBloco}`
+        }
+        tamanho="p"
+        onClick={alternar}
+      >
+        {reproduzindo ? <Pause /> : <Play />}
+      </BotaoIcone>
+      <div className="h-1 min-w-12 flex-1 overflow-hidden rounded-full bg-elevado">
+        <div
+          className="h-full rounded-full bg-t2 transition-[width] duration-(--dur-rapida) ease-saida"
+          style={{ width: `${progressoPct}%` }}
+        />
+      </div>
+      <span className="num text-pequeno text-t2">
+        {formatarMinSeg(tempoAtualSeg)} / {formatarMinSeg(duracaoTotalSeg)}
+      </span>
+    </div>
+  )
 }
 
 function infoAlinhamento(alinhamento: AlinhamentoBloco | null): { tom: TomStatus; rotulo: string } {
@@ -124,6 +223,7 @@ function criarMensagemErroTraduzida(erro: ErroCore) {
 export function PassoNarracao({
   candidateId,
   store,
+  modalPaiAberto = false,
   aoVoltarBlocoPendente,
   aoIrParaEmpacotar,
   aoIrParaEditar,
@@ -491,12 +591,13 @@ export function PassoNarracao({
     const qtdPendentes =
       roteiro?.current?.pending ?? blocosRoteiro.filter((b) => b.status !== 'aprovado').length
 
+    const qtdPendentesReais = Math.max(1, qtdPendentes)
     const tituloTrava =
       narracao?.gateReason === 'no_script'
         ? 'Gere e aprove o Roteiro antes de narrar.'
         : narracao?.gateReason === 'generating'
           ? 'Geração do Roteiro em andamento — aguarde e aprove os blocos antes de narrar.'
-          : `Narração travada: ainda há ${Math.max(1, qtdPendentes)} bloco(s) pendente(s) no Roteiro.`
+          : `Narração travada: ainda há ${qtdPendentesReais} ${qtdPendentesReais === 1 ? 'bloco pendente' : 'blocos pendentes'} no Roteiro.`
 
     return (
       <section aria-label="Narração travada" className="mx-auto flex w-full max-w-[68ch] flex-col gap-3">
@@ -513,7 +614,7 @@ export function PassoNarracao({
           </div>
           <div className="flex justify-end">
             <Botao
-              variante="primario"
+              variante={modalPaiAberto ? 'secundario' : 'primario'}
               onClick={() => aoVoltarBlocoPendente(primeiroPendente?.id)}
             >
               Voltar ao próximo bloco pendente
@@ -536,6 +637,14 @@ export function PassoNarracao({
   const narracaoParcial =
     algumComAudio &&
     (blocosSemAudio > 0 || blocosRevisao > 0 || blocosSemVad > 0 || blocosDesatualizados > 0)
+  const modalAberto = Boolean(
+    modalPaiAberto ||
+      instaladorTtsAberto ||
+      blocoGravador !== null ||
+      blocoParaImportar !== null ||
+      confirmacao !== null,
+  )
+  const qtdGravadosOuImportados = blocos.filter((b) => ehAudioGravadoOuImportado(b.audio)).length
 
   const opcoesVozes = vozesDisponiveis.map((v) => ({
     valor: v.id,
@@ -592,6 +701,9 @@ export function PassoNarracao({
       <div className="flex flex-col gap-3 rounded-area bg-area p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-3 text-pequeno text-t2">
+            <h2 className="m-0 text-titulo font-forte tracking-[-0.01em] text-t1">
+              3. Narração
+            </h2>
             <span>
               Idioma: <strong className="font-medio text-t1">{idiomaTts === 'en' ? 'EN' : 'PT-BR'}</strong>
             </span>
@@ -613,12 +725,12 @@ export function PassoNarracao({
               Ajustar na timeline (Editar)
             </Botao>
             <Botao
-              variante={instaladorTtsAberto ? 'secundario' : 'primario'}
+              variante={modalAberto ? 'secundario' : 'primario'}
               tamanho="p"
               icone={<ArrowRight />}
               onClick={aoIrParaEmpacotar}
             >
-              Avançar para Empacotar →
+              Avançar para Empacotar
             </Botao>
           </div>
         </div>
@@ -766,7 +878,9 @@ export function PassoNarracao({
           titulo="Narração parcial:"
           descricao={[
             blocosSemAudio > 0 ? `${blocosSemAudio} sem áudio` : null,
-            blocosDesatualizados > 0 ? `${blocosDesatualizados} desatualizado(s)` : null,
+            blocosDesatualizados > 0
+              ? `${blocosDesatualizados} ${blocosDesatualizados === 1 ? 'desatualizado' : 'desatualizados'}`
+              : null,
             blocosSemVad > 0 ? `${blocosSemVad} sem aparo de silêncios` : null,
             blocosRevisao > 0 ? `${blocosRevisao} aguardando revisão de alinhamento` : null,
           ]
@@ -782,7 +896,7 @@ export function PassoNarracao({
       {/* Cartões por bloco */}
       <div className="flex flex-col gap-3">
         {blocos.map((bloco) => {
-          const origem = infoOrigemAudio(bloco.audio)
+          const origem = infoOrigemAudio(bloco.audio, catalogoTts?.voices)
           const alinhamento = infoAlinhamento(bloco.alignment)
           const ocupadoBloco = blocosOcupados.has(bloco.blockId)
           const preparandoLimpeza = preparandoLimpezaIds.has(bloco.blockId)
@@ -866,11 +980,14 @@ export function PassoNarracao({
                 {bloco.audio && (
                   /* Pendência #306: aguarda narration.delete_block no núcleo */
                   <Dica texto="Voltar a Sem áudio ainda não está disponível; substitua por TTS, gravação ou importação.">
-                    <span tabIndex={0} className="inline-flex">
-                      <Botao variante="fantasma" tamanho="p" icone={<Trash2 />} disabled>
-                        Remover áudio
-                      </Botao>
-                    </span>
+                    <Botao
+                      variante="fantasma"
+                      tamanho="p"
+                      icone={<Trash2 />}
+                      aria-disabled="true"
+                    >
+                      Remover áudio
+                    </Botao>
                   </Dica>
                 )}
               </div>
@@ -925,7 +1042,11 @@ export function PassoNarracao({
 
                   <div className="flex flex-wrap items-center gap-2">
                     <Volume2 className="size-[14px] shrink-0 stroke-[1.75] text-t3" aria-hidden />
-                    <audio controls src={fonteAudioUrl} className="h-8 min-w-[200px] flex-1" />
+                    <PlayerAudioBloco
+                      src={fonteAudioUrl}
+                      duracaoUs={bloco.audio.durationUs}
+                      posicaoBloco={bloco.position}
+                    />
 
                     {bloco.audio.cleanup?.applicable && (
                       <Segmentado<ModoComparacaoLimpeza>
@@ -961,9 +1082,11 @@ export function PassoNarracao({
                 <div className="flex flex-col gap-2.5 rounded-controle bg-elevado p-3">
                   <p className="m-0 text-pequeno font-medio text-t1">
                     O áudio falado diferiu do Roteiro (
-                    <span className="num">{bloco.alignment.insertions}</span> acréscimo(s),{' '}
-                    <span className="num">{bloco.alignment.substitutions}</span> troca(s)). Escolha
-                    qual texto vai para as legendas:
+                    <span className="num">{bloco.alignment.insertions}</span>{' '}
+                    {bloco.alignment.insertions === 1 ? 'acréscimo' : 'acréscimos'},{' '}
+                    <span className="num">{bloco.alignment.substitutions}</span>{' '}
+                    {bloco.alignment.substitutions === 1 ? 'troca' : 'trocas'}). Escolha qual texto
+                    vai para as legendas:
                   </p>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <div className="rounded-controle bg-chao p-2.5">
@@ -1082,7 +1205,9 @@ export function PassoNarracao({
         descricao={
           confirmacao?.tipo === 'importar'
             ? 'Este bloco já possui áudio. Importar este arquivo substituirá o áudio atual do bloco.'
-            : 'Há bloco(s) com áudio gravado ou importado. Gerar voz com TTS substituirá esse áudio.'
+            : qtdGravadosOuImportados === 1
+              ? 'Há 1 bloco com áudio gravado ou importado. Gerar voz com TTS substituirá esse áudio.'
+              : `Há ${qtdGravadosOuImportados} blocos com áudio gravado ou importado. Gerar voz com TTS substituirá esse áudio.`
         }
         rotuloConfirmar={confirmacao?.tipo === 'importar' ? 'Substituir áudio' : 'Substituir por TTS'}
         rotuloCancelar="Cancelar"

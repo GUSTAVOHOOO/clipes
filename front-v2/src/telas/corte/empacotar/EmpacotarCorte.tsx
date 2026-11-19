@@ -27,6 +27,7 @@ import type {
   RevisaoExecucaoSelecao,
 } from '~/stores/selecaoProjeto'
 import type { MetaCorteResolvida } from '~/telas/corte/EditarCorte'
+import { EVENTO_CORTE_PRIMARIO_OCULTO } from '~/telas/corte/ContextoCorteConectado'
 import { DialogoExportarCorte, type CorteParaExportar } from '~/telas/corte/DialogoExportarCorte'
 import { ErroEmpacotar } from './ErroEmpacotar'
 import { FichaEmpacotamento } from './FichaEmpacotamento'
@@ -140,7 +141,8 @@ async function resolverCorte(
     const item = revisao.items.find((it) => it.candidate === candidateId)
     if (!item) return { tipo: 'ausente' }
     if (item.status !== 'approved') return { tipo: 'nao_aprovado' }
-    let sourceId = fontes[0]?.id ?? 1
+    let sourceId =
+      fontes.find((f) => f.available && f.status === 'available')?.id ?? fontes[0]?.id ?? 1
     for (const f of fontes) {
       const runs = await listarRunsDaFonte(f.id)
       if (runs.some((r) => r.id === runNum)) {
@@ -211,6 +213,8 @@ export function EmpacotarCorte({
   const [erroResolucao, setErroResolucao] = useState<ErroCore | null>(null)
   const [corteResolvido, setCorteResolvido] = useState<CorteResolvido | null>(null)
   const [exportacaoAberta, setExportacaoAberta] = useState(false)
+  const [modalCapaAberto, setModalCapaAberto] = useState(false)
+  const [modalFichaAberto, setModalFichaAberto] = useState(false)
   const redirecionouRef = useRef<string | null>(null)
   const colunaCapaRef = useRef<HTMLElement>(null)
   const colunaFichaRef = useRef<HTMLElement>(null)
@@ -306,7 +310,8 @@ export function EmpacotarCorte({
   )
   const fonteDisponivel =
     forcado !== 'offline' &&
-    (fonteAtual ? Boolean(fonteAtual.available && fonteAtual.status === 'available') : true)
+    (forcado === 'vazio' ||
+      (fonteAtual ? Boolean(fonteAtual.available && fonteAtual.status === 'available') : true))
 
   const candidateIdAtivo =
     forcado === 'carregando' || forcado === 'erro' ? null : (corteResolvido?.candidateId ?? null)
@@ -391,12 +396,14 @@ export function EmpacotarCorte({
   )
   useAtalhos(atalhosTela)
 
-  // Ciclo F6 / Shift+F6: Topo → Coluna Capa → Coluna Ficha → Barra de Status
+  // Ciclo F6 / Shift+F6: Topo → Contexto → Coluna Capa → Coluna Ficha → Fila (se aberta) → Barra de Status
   useEffect(() => {
     const obterRegioes = (): HTMLElement[] => {
       const topo = document.querySelector<HTMLElement>('[data-regiao="topo"]')
+      const contexto = document.querySelector<HTMLElement>('[data-regiao="contexto"]')
+      const filaRegiao = document.querySelector<HTMLElement>('[data-regiao="fila"]')
       const rodape = document.querySelector<HTMLElement>('[data-regiao="rodape"]')
-      return [topo, colunaCapaRef.current, colunaFichaRef.current, rodape].filter(
+      return [topo, contexto, colunaCapaRef.current, colunaFichaRef.current, filaRegiao, rodape].filter(
         (el): el is HTMLElement => el !== null,
       )
     }
@@ -412,13 +419,11 @@ export function EmpacotarCorte({
       if (e.key !== 'F6' || e.ctrlKey || e.metaKey || e.altKey) return
       const temDialogo = Array.from(
         document.querySelectorAll('[role="dialog"], [role="alertdialog"]'),
-      ).some((el) => !el.closest('[aria-label="Notifications"]'))
+      ).some((el) => !el.closest('[aria-label="Notifications"], [data-nao-modal]'))
       if (temDialogo) return
       const regioes = obterRegioes()
       if (regioes.length === 0) return
-      const idxAtual = e.defaultPrevented
-        ? regiaoFocoRef.current.prev
-        : indiceDoElemento(document.activeElement, regioes)
+      const idxAtual = indiceDoElemento(document.activeElement, regioes)
       e.preventDefault()
       e.stopPropagation()
       e.stopImmediatePropagation()
@@ -458,6 +463,23 @@ export function EmpacotarCorte({
         candidateId: corteResolvido.candidateId,
       }
     : null
+
+  const empacotamentoVazio = forcado === 'vazio' || storeParaTela.empacotamento?.current === null
+  const ocultarPrimarioContexto =
+    empacotamentoVazio || exportacaoAberta || modalCapaAberto || modalFichaAberto
+
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent(EVENTO_CORTE_PRIMARIO_OCULTO, {
+        detail: { ocultar: ocultarPrimarioContexto },
+      }),
+    )
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent(EVENTO_CORTE_PRIMARIO_OCULTO, { detail: { ocultar: false } }),
+      )
+    }
+  }, [ocultarPrimarioContexto])
 
   const erroTela =
     forcado === 'erro'
@@ -521,9 +543,11 @@ export function EmpacotarCorte({
   const candidateId = corteResolvido?.candidateId ?? 0
   const startUs = corteResolvido?.startUs
   const endUs = corteResolvido?.endUs
+  const duracaoCorteUs =
+    startUs !== undefined && endUs !== undefined && endUs > startUs ? endUs - startUs : null
 
   return (
-    <div ref={containerRef} className="flex min-h-0 flex-1 overflow-hidden">
+    <div ref={containerRef} data-f6-proprio="" className="flex min-h-0 flex-1 overflow-hidden">
       <aside
         ref={colunaCapaRef}
         data-regiao="empacotar-capa"
@@ -546,6 +570,7 @@ export function EmpacotarCorte({
               endUs,
             }}
             aoRelocalizarFonte={irParaFonte}
+            aoMudarModalAberto={setModalCapaAberto}
           />
         </AreaRolagem>
       </aside>
@@ -563,6 +588,9 @@ export function EmpacotarCorte({
             corteId={corteId}
             fonteId={corteResolvido?.sourceId ?? null}
             fonteDisponivel={fonteDisponivel}
+            duracaoCorteUs={duracaoCorteUs}
+            modalPaiAberto={exportacaoAberta || modalCapaAberto}
+            aoMudarModalAberto={setModalFichaAberto}
             store={storeParaTela}
             aoAbrirExportacao={abrirExportacao}
             aoIrParaFonte={irParaFonte}

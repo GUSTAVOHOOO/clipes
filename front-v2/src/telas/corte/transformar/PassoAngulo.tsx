@@ -49,6 +49,7 @@ export interface PassoAnguloProps {
   candidateId: number
   store: StoreTransformarPasso
   fila?: Fila
+  modalPaiAberto?: boolean
   aoClicarChipFrase?: (fraseId: number) => void
   aoMudarRefEmFoco?: (alvo: AlvoRefsEmFoco | null) => void
   aoAvancarPasso?: () => void
@@ -123,6 +124,7 @@ export function PassoAngulo({
   candidateId,
   store,
   fila,
+  modalPaiAberto = false,
   aoClicarChipFrase,
   aoMudarRefEmFoco,
   aoAvancarPasso,
@@ -406,6 +408,11 @@ export function PassoAngulo({
   const escolhido = angulos?.selected ?? null
   const generationAtual = angulos?.generation ?? (angulos?.generations?.length ? angulos.generations.length : null)
   const vazioInicial = !escolhido && sugestoes.length === 0 && !gerandoAngulos && !manualAberto
+  const modalAberto = Boolean(modalPaiAberto || confirmacaoGerar !== null || trocaPendente !== null)
+  const sugestoesRestantes = sugestoes
+    .map((ang, idx) => ({ ang, idx }))
+    .filter(({ ang }) => !mesmoAngulo(escolhido, ang))
+  const temEscolhidoNasSugestoes = Boolean(escolhido && sugestoesRestantes.length < sugestoes.length)
 
   const destinoConfirmacao = confirmacaoGerar
     ? store.resolverDestino(confirmacaoGerar.profile)
@@ -426,7 +433,7 @@ export function PassoAngulo({
         <div className="flex shrink-0 items-center gap-2">
           {!vazioInicial && (
             <Botao
-              variante={escolhido ? 'secundario' : 'primario'}
+              variante={escolhido || modalAberto ? 'secundario' : 'primario'}
               carregando={estimando || gerandoAngulos}
               disabled={gerandoAngulos}
               onClick={() => void aoClicarSugerir()}
@@ -435,7 +442,7 @@ export function PassoAngulo({
             </Botao>
           )}
           {escolhido && aoAvancarPasso && (
-            <Botao variante="primario" onClick={aoAvancarPasso}>
+            <Botao variante={modalAberto ? 'secundario' : 'primario'} onClick={aoAvancarPasso}>
               Avançar para Roteiro <ChevronRight aria-hidden />
             </Botao>
           )}
@@ -525,75 +532,78 @@ export function PassoAngulo({
       )}
 
       {vazioInicial && (
-        <EstadoTela
-          tipo="vazio"
-          titulo="Nenhum ângulo sugerido ainda"
-          descricao="Peça sugestões ao Provedor ou escreva o seu próprio ângulo."
-          acaoPrimaria={{
-            rotulo: 'Sugerir ângulos',
-            aoAcionar: () => void aoClicarSugerir(),
-          }}
-          acaoSecundaria={{
-            rotulo: 'Escrever meu próprio ângulo',
-            aoAcionar: abertoManual,
-          }}
-        />
+        <div className="flex flex-col items-center gap-3">
+          <EstadoTela
+            tipo="vazio"
+            titulo="Nenhum ângulo sugerido ainda"
+            descricao="Peça sugestões ao Provedor ou escreva o seu próprio ângulo."
+          />
+          <div className="flex flex-wrap justify-center gap-2">
+            <Botao
+              variante={modalAberto ? 'secundario' : 'primario'}
+              carregando={estimando || gerandoAngulos}
+              disabled={gerandoAngulos}
+              onClick={() => void aoClicarSugerir()}
+            >
+              Sugerir ângulos
+            </Botao>
+            <Botao variante="fantasma" onClick={abertoManual}>
+              Escrever meu próprio ângulo
+            </Botao>
+          </div>
+        </div>
       )}
 
-      {sugestoes.length > 0 && (
+      {sugestoesRestantes.length > 0 && (
         <section aria-label="Sugestões do Provedor" className="flex flex-col gap-2">
           <h3 className="m-0 text-pequeno font-medio text-t2">
-            Sugestões do Provedor ({sugestoes.length})
+            {temEscolhidoNasSugestoes
+              ? `Outras sugestões do Provedor (${sugestoesRestantes.length})`
+              : `Sugestões do Provedor (${sugestoesRestantes.length})`}
           </h3>
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
-            {sugestoes.map((ang, idx) => {
-              const selecionado = mesmoAngulo(escolhido, ang)
-              return (
-                <li
-                  key={`${ang.name}-${idx}`}
-                  className={cn(
-                    'flex flex-col gap-2 rounded-area bg-area p-3',
-                    selecionado && 'marcado bg-elevado',
+            {sugestoesRestantes.map(({ ang, idx }) => (
+              <li
+                key={`${ang.name}-${idx}`}
+                className="flex flex-col gap-2 rounded-area bg-area p-3"
+              >
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <strong className="text-base font-forte text-t1">{ang.name}</strong>
+                  {ang.audience && (
+                    <span className="text-pequeno text-t3">Público: {ang.audience}</span>
                   )}
-                >
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <strong className="text-base font-forte text-t1">{ang.name}</strong>
-                    {ang.audience && (
-                      <span className="text-pequeno text-t3">Público: {ang.audience}</span>
-                    )}
+                </div>
+                <p className="m-0 text-base text-t2">{ang.promise}</p>
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {ang.sentence_ids?.map((id) => (
+                      <Botao
+                        key={id}
+                        tamanho="p"
+                        variante="suave"
+                        className="num"
+                        onClick={() => aoClicarChipFrase?.(id)}
+                      >
+                        #{id}
+                      </Botao>
+                    ))}
                   </div>
-                  <p className="m-0 text-base text-t2">{ang.promise}</p>
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {ang.sentence_ids?.map((id) => (
-                        <Botao
-                          key={id}
-                          tamanho="p"
-                          variante="suave"
-                          className="num"
-                          onClick={() => aoClicarChipFrase?.(id)}
-                        >
-                          #{id}
-                        </Botao>
-                      ))}
-                    </div>
-                    <Botao
-                      variante="secundario"
-                      tamanho="p"
-                      disabled={selecionado || salvandoEscolha}
-                      onClick={() =>
-                        void executarEscolha(
-                          { tipo: 'sugestao', generation: generationAtual, index: idx, angle: ang },
-                          false,
-                        )
-                      }
-                    >
-                      {selecionado ? 'Ângulo atual' : 'Escolher este ângulo'}
-                    </Botao>
-                  </div>
-                </li>
-              )
-            })}
+                  <Botao
+                    variante="secundario"
+                    tamanho="p"
+                    disabled={salvandoEscolha}
+                    onClick={() =>
+                      void executarEscolha(
+                        { tipo: 'sugestao', generation: generationAtual, index: idx, angle: ang },
+                        false,
+                      )
+                    }
+                  >
+                    Escolher este ângulo
+                  </Botao>
+                </div>
+              </li>
+            ))}
           </ul>
         </section>
       )}

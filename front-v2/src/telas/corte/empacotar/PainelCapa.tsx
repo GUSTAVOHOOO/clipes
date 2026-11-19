@@ -12,7 +12,7 @@ import {
   tc,
   useToast,
 } from '@ds'
-import { ChevronRight, Pause, Play } from 'lucide-react'
+import { ChevronRight, Film, Pause, Play } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useAtalhos, type Atalho } from '~/comandos/atalhos'
 import { SeletorCaminho } from '~/componentes/SeletorCaminho'
@@ -58,6 +58,7 @@ export interface PainelCapaProps {
   fonte: FonteEmpacotar
   aoRelocalizarFonte: () => void
   aoMudarInstantPreview?: (instantUs: number) => void
+  aoMudarModalAberto?: (aberto: boolean) => void
 }
 
 interface RespostaEstimativaCapa {
@@ -168,6 +169,7 @@ export function PainelCapa({
   fonte,
   aoRelocalizarFonte,
   aoMudarInstantPreview,
+  aoMudarModalAberto,
 }: PainelCapaProps) {
   const toast = useToast()
   const toastRef = useRef(toast)
@@ -199,6 +201,11 @@ export function PainelCapa({
   const [proxyLocal, setProxyLocal] = useState<ProxyComChave | null>(null)
   const sliderRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+
+  const algumModalAberto = confirmacao !== null || dialogoSalvarAberto
+  useEffect(() => {
+    aoMudarModalAberto?.(algumModalAberto)
+  }, [algumModalAberto, aoMudarModalAberto])
 
   const limitarAoCorte = useCallback(
     (us: number) => limitar(us, cut.startUs, Math.max(cut.startUs, cut.endUs)),
@@ -498,6 +505,7 @@ export function PainelCapa({
 
   return (
     <section aria-label="Capa e preview" className="flex min-w-0 flex-col gap-3 p-4">
+      <h2 className="m-0 text-base font-forte text-t1">Capa e preview</h2>
       {erro && (
         <ErroEmpacotar
           erro={erro}
@@ -549,19 +557,32 @@ export function PainelCapa({
       )}
 
       <div className="relative mx-auto w-full max-w-[420px]">
-        <PlayerProxy
-          sourceId={fonte.id}
-          fonteDisponivel={fonteDisponivel}
-          startUs={cut.startUs}
-          endUs={cut.endUs}
-          poster={urlProxy}
-          modo="capa"
-          tempoAtualUs={instanteUs}
-          reproduzindo={reproduzindo}
-          aoMudarTempoUs={mudarInstante}
-          aoMudarReproduzindo={setReproduzindo}
-          className="max-h-[42vh] w-full"
-        />
+        {fonteDisponivel && !urlProxy ? (
+          <div
+            role="img"
+            aria-label={proxyEmAndamento ? 'Preparando prévia do Corte' : 'Prévia do quadro do Corte'}
+            className="relative flex aspect-[9/16] max-h-[42vh] w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-area bg-preto p-4 text-center shadow-[0_0_0_1px_var(--contorno-controle)]"
+          >
+            <Film className="size-6 stroke-[1.5] text-t3" aria-hidden />
+            <span className="text-pequeno text-t2">
+              {proxyEmAndamento ? 'Preparando quadro…' : 'Prévia em preparação…'}
+            </span>
+          </div>
+        ) : (
+          <PlayerProxy
+            sourceId={fonte.id}
+            fonteDisponivel={fonteDisponivel}
+            startUs={cut.startUs}
+            endUs={cut.endUs}
+            poster={urlProxy}
+            modo="capa"
+            tempoAtualUs={instanteUs}
+            reproduzindo={reproduzindo}
+            aoMudarTempoUs={mudarInstante}
+            aoMudarReproduzindo={setReproduzindo}
+            className="max-h-[42vh] w-full"
+          />
+        )}
         {urlProxy && (
           <video
             ref={videoRef}
@@ -625,7 +646,9 @@ export function PainelCapa({
               <Status tom="info">
                 {atual.origin !== 'user' ? 'Sugerido pelo Provedor' : 'Escolhido por você'}
               </Status>
-              <span className="num text-pequeno text-t3">de {duracao(duracaoCorte)}</span>
+              <span className="num text-pequeno text-t3">
+                Duração do Corte: {duracao(duracaoCorte)}
+              </span>
             </div>
             {(() => {
               const motivo = (atual as { why?: string | null }).why

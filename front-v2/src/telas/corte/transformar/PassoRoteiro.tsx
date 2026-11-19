@@ -42,6 +42,7 @@ export interface PassoRoteiroProps {
   candidateId: number
   store: StoreTransformarPasso
   fila?: Fila
+  modalPaiAberto?: boolean
   aoMudarRefEmFoco?: (alvo: AlvoRefsEmFoco | null) => void
   aoClicarChipFrase?: (fraseId: number) => void
   aoAvancarNarracao?: () => void
@@ -92,6 +93,7 @@ export function PassoRoteiro({
   candidateId,
   store,
   fila,
+  modalPaiAberto = false,
   aoMudarRefEmFoco,
   aoClicarChipFrase,
   aoAvancarNarracao,
@@ -540,6 +542,7 @@ export function PassoRoteiro({
   const roteiroParcial = Boolean(current && (!current.complete || blocosProntos < current.blocks.length))
   const anguloAtivo = roteiro?.angle ?? angulos?.selected ?? null
   const perfisDisponiveis = store.perfis.length > 0 ? store.perfis : (perfisExtras ?? [])
+  const modalAberto = Boolean(modalPaiAberto || confirmacao !== null || blocoEscolhendoPerfil !== null)
 
   const destinoConfirmacao = confirmacao
     ? store.resolverDestino(
@@ -580,7 +583,7 @@ export function PassoRoteiro({
         <div className="flex flex-wrap items-center gap-2">
           {current && (
             <Botao
-              variante={roteiro?.narrationAllowed ? 'secundario' : 'primario'}
+              variante={!modalAberto && !roteiro?.narrationAllowed ? 'primario' : 'secundario'}
               carregando={estimando || gerandoRoteiro}
               disabled={gerandoRoteiro}
               onClick={() => void solicitarGeracaoRoteiro()}
@@ -590,7 +593,7 @@ export function PassoRoteiro({
           )}
           {current && aoAvancarNarracao && (
             <Botao
-              variante={roteiro?.narrationAllowed ? 'primario' : 'secundario'}
+              variante={!modalAberto && roteiro?.narrationAllowed ? 'primario' : 'secundario'}
               disabled={!roteiro?.narrationAllowed}
               onClick={aoAvancarNarracao}
             >
@@ -673,15 +676,19 @@ export function PassoRoteiro({
       )}
 
       {!current && !gerandoRoteiro && (
-        <EstadoTela
-          tipo="vazio"
-          titulo="Roteiro ainda não gerado"
-          descricao="Ângulo definido! Gere o Roteiro em blocos para revisar e aprovar cada trecho antes de narrar."
-          acaoPrimaria={{
-            rotulo: 'Sugerir Roteiro',
-            aoAcionar: () => void solicitarGeracaoRoteiro(),
-          }}
-        />
+        <div className="flex flex-col items-center gap-3">
+          <EstadoTela
+            tipo="vazio"
+            titulo="Roteiro ainda não gerado"
+            descricao="Ângulo definido! Gere o Roteiro em blocos para revisar e aprovar cada trecho antes de narrar."
+          />
+          <Botao
+            variante={modalAberto ? 'secundario' : 'primario'}
+            onClick={() => void solicitarGeracaoRoteiro()}
+          >
+            Sugerir Roteiro
+          </Botao>
+        </div>
       )}
 
       {current && (
