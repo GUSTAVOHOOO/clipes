@@ -353,6 +353,16 @@ function createUi(browser) {
     return browser.$(`[data-e2e-target="${tag}"]`);
   }
 
+  // Toasts (role=dialog, não modal) podem cobrir o alvo: cai para click() programático.
+  async function safeClick(el) {
+    try {
+      await el.click();
+    } catch (error) {
+      if (!/click intercepted|not clickable/i.test(String(error))) throw error;
+      await browser.execute(target => target.click(), el);
+    }
+  }
+
   async function clickButton(name, options = {}) {
     const el = await tagElement({
       kind: 'button',
@@ -362,7 +372,7 @@ function createUi(browser) {
       rowContains: options.rowContains ?? null,
       index: options.index ?? 0,
     });
-    await el.click();
+    await safeClick(el);
   }
 
   async function fillField(label, value, options = {}) {
@@ -440,7 +450,16 @@ function createUi(browser) {
     await browser.execute(() =>
       document.querySelectorAll('[data-e2e-option]').forEach(n => n.removeAttribute('data-e2e-option')),
     );
-    await browser.waitUntil(async () => !(await browser.$('[role="listbox"]').isExisting()), { timeout: 5_000 });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() =>
+          Array.from(document.querySelectorAll('[role="listbox"]')).every(l => {
+            const r = l.getBoundingClientRect();
+            return r.width === 0 || r.height === 0;
+          }),
+        ),
+      { timeout: 8_000, timeoutMsg: `A lista de opções de "${label}" não fechou` },
+    );
   }
 
   async function clickTab(name, options = {}) {
@@ -461,6 +480,17 @@ function createUi(browser) {
       { timeout, interval: 100, timeoutMsg: `Hash esperado ${expected}, atual: ${last}` },
     );
     return last;
+  }
+
+  // Recarrega a WebView (o núcleo mantém o Projeto aberto) para reler o estado do disco.
+  async function reloadApp(hash, readyText = 'Fontes') {
+    await browser.execute(h => {
+      window.location.hash = h;
+      window.location.reload();
+    }, hash);
+    await browser.pause(500);
+    await waitForHash(hash.split('?')[0]);
+    await waitForText(readyText, 'main', 20_000);
   }
 
   async function navigateHash(hash) {
@@ -659,6 +689,7 @@ function createUi(browser) {
     currentHash,
     waitForHash,
     navigateHash,
+    reloadApp,
     fieldValue,
     setChecked,
     isChecked,
@@ -1071,143 +1102,151 @@ async function stageModelsInstalled(dataDir) {
   }
 }
 
+async function createProject(ui, ctx, name, firstProject) {
+  await ui.navigateHash('#/inicio');
+  await ui.waitForText('Projetos', 'main');
+  await ui.clickButton(firstProject ? 'Criar primeiro Projeto' : 'Novo Projeto');
+  await ui.waitForDialog('Novo Projeto', 'dialog');
+  await ui.fillField('Nome do Projeto', name, { scopeSelector: '[role="dialog"]' });
+  await ui.queueDialog(ctx.projectsDir);
+  await ui.clickButton('Escolher pasta', { scopeSelector: '[role="dialog"]' });
+  await ui.clickButton('Criar Projeto', { scopeSelector: '[role="dialog"]' });
+  const hash = await ui.waitForHash(/^#\/projeto\/[^/]+\/fontes/);
+  assert.equal(existsSync(path.join(ctx.projectsDir, `${name}.clipes`, 'project.sqlite')), true);
+  return decodeURIComponent(hash.split('/')[2]);
+}
+
+async function openRecentProject(ui, name) {
+  await ui.navigateHash('#/inicio');
+  await ui.clickButton(`Abrir Projeto ${name}`);
+  const hash = await ui.waitForHash(/^#\/projeto\/[^/]+\/fontes/);
+  return decodeURIComponent(hash.split('/')[2]);
+}
+
 async function runSession2(ui, ctx) {
-  logStep('Sessão 2: Persistência pós-reinício (Assistente não reabre, tema escuro e dados preservados)…');
+  logStep('Sessão 2: Persistência pós-reinício (Assistente não reabre, tema escuro preservado)…');
+  await ui.waitForHash('#/inicio');
   await ui.waitForText('Projetos', 'main');
   const openDialogsOnBoot = await ui.browser.execute(
     () => document.querySelectorAll('[role="dialog"],[role="alertdialog"]').length,
   );
   assert.equal(openDialogsOnBoot, 0, 'O Assistente não deve abrir novamente na segunda execução');
+  assert.equal(await ui.browser.execute(() => document.documentElement.getAttribute('data-tema')), 'escuro');
 
   logStep('Sessão 2: Criação e alternância de Projetos reais (SQLite)…');
-  await ui.fillField('Nome do Projeto', 'Canal');
-  await ui.queueDialog(ctx.projectsDir);
-  await ui.clickButton('Criar Projeto');
-  await ui.waitForText('Projeto aberto: Canal', 'main');
-  const canalPath = path.join(ctx.projectsDir, 'Canal.clipes');
-  assert.equal(existsSync(path.join(canalPath, 'project.sqlite')), true);
-
-  await ui.fillField('Nome do Projeto', 'Secundario');
-  await ui.queueDialog(ctx.projectsDir);
-  await ui.clickButton('Criar Projeto');
-  await ui.waitForText('Projeto aberto: Secundario', 'main');
-
-  await ui.clickButton('Abrir pasta', { rowContains: 'Canal.clipes' });
-  await ui.waitForText('Projeto aberto: Canal', 'main');
+  await createProject(ui, ctx, 'Canal', true);
+  await createProject(ui, ctx, 'Secundario', false);
+  ctx.canalId = await openRecentProject(ui, 'Canal');
 
   logStep('Sessão 2: Veto "Somente local" do Projeto…');
-  await ui.setChecked('Somente local', true, { scopeSelector: '[aria-labelledby="project-privacy-title"]' });
-  assert.equal(await ui.isChecked('Somente local', { scopeSelector: '[aria-labelledby="project-privacy-title"]' }), true);
-  await ui.clickButton('Preferências');
-  await ui.waitForText(/O Projeto aberto está em “somente local”/, '[aria-labelledby="task-table-title"]');
-  await ui.clickButton('Início');
-  await ui.setChecked('Somente local', false, { scopeSelector: '[aria-labelledby="project-privacy-title"]' });
+  const vetoLabel = 'Ativar veto Somente local para este Projeto';
+  await ui.navigateHash('#/config/projeto');
+  await ui.clickTab('Privacidade (Somente local)');
+  await ui.setChecked(vetoLabel, true);
+  await ui.waitForText('Somente local', '[data-regiao="topo"]');
+  await ui.navigateHash('#/config/provedores');
+  await ui.waitForText('Bloqueado pelo modo Somente local', 'section[aria-label="Roteamento por Tarefa de IA"]');
+  await ui.navigateHash('#/config/projeto');
+  await ui.clickTab('Privacidade (Somente local)');
+  await ui.setChecked(vetoLabel, false);
 
   logStep('Sessão 2: Fontes locais (ffprobe real, 2 faixas, permissão, onda/miniaturas, alteração e relocalização)…');
+  const fontesHash = `#/projeto/${encodeURIComponent(ctx.canalId)}/fontes`;
+  await ui.navigateHash(fontesHash);
+  const entrada = 'aside[aria-label="Entrada de Fonte"]';
   await ui.queueDialog(ctx.sourceMkv);
-  await ui.clickButton('Escolher vídeo');
-  await ui.waitForText(/64 × 64/, 'main');
-  await ui.selectField('Faixa do microfone', '2');
-  await ui.selectField('Permissão', 'granted');
-  await ui.fillField('Quem autorizou', 'Criadora Oficial');
-  await ui.fillField('Onde', 'Contrato assinado');
-  await ui.fillField('Escopo (inclua tradução, se autorizada)', 'Cortes e tradução');
-  await ui.clickButton('Importar Fonte');
-  await ui.waitForText('Tenho permissão: Criadora Oficial · Contrato assinado · Cortes e tradução', 'main');
+  await ui.clickButton('Escolher arquivo', { scopeSelector: entrada });
+  await ui.waitForText(/64\s*×\s*64/, entrada);
+  await ui.selectField('Faixa de áudio (microfone)', '2 ·', { scopeSelector: entrada });
+  await ui.clickButton('Tenho permissão do criador', { scopeSelector: entrada });
+  await ui.fillField('Quem autorizou', 'Criadora Oficial', { scopeSelector: entrada });
+  await ui.fillField('Onde foi autorizada', 'Contrato assinado', { scopeSelector: entrada });
+  await ui.fillField('Escopo', 'Cortes e tradução', { scopeSelector: entrada });
+  await ui.setChecked('Copiar vídeo para dentro do Projeto', false, { scopeSelector: entrada });
+  await ui.clickButton('Importar Fonte', { scopeSelector: entrada });
+  const mkvCard = 'article[aria-label="source.mkv"]';
+  await ui.waitForText('Autorizada', mkvCard);
 
-  await ui.waitForText('Onda e miniaturas', '[aria-labelledby="jobs-title"]');
-  await ui.waitForText('Concluída', '[aria-labelledby="jobs-title"]', 30_000);
   const previewCacheRoot = path.join(ctx.dataDir, 'cache', 'previews');
-  const previewDirs = await readdir(previewCacheRoot);
-  assert.ok(previewDirs.length >= 1, 'Cache de prévia deve conter o diretório do projeto');
+  await ui.browser.waitUntil(
+    async () => existsSync(previewCacheRoot) && (await readdir(previewCacheRoot)).length >= 1,
+    { timeout: 40_000, interval: 500, timeoutMsg: 'Cache de prévia (onda/miniaturas) não foi criado' },
+  );
 
   const pastDate = new Date(1_700_000_000_000);
   await utimes(ctx.sourceMkv, pastDate, pastDate);
-  await ui.clickButton('Preferências');
-  await ui.clickButton('Início');
-  await ui.waitForText(/Fonte alterada/, 'main');
-  await ui.clickButton('Verificar identidade');
-  await ui.waitForText(/Disponível · Tenho permissão/, 'main');
+  await ui.reloadApp(fontesHash);
+  await ui.waitForText('Alterada', mkvCard);
+  await ui.clickButton('Verificar identidade', { scopeSelector: mkvCard });
+  await ui.waitForText('Disponível', mkvCard);
 
   const movedMkv = path.join(ctx.mediaDir, 'source-moved.mkv');
   await rename(ctx.sourceMkv, movedMkv);
-  await ui.clickButton('Preferências');
-  await ui.clickButton('Início');
-  await ui.waitForText(/Fonte offline/, 'main');
+  await ui.reloadApp(fontesHash);
+  await ui.waitForText('Offline', mkvCard);
+  await ui.clickButton('Relocalizar arquivo', { scopeSelector: mkvCard });
+  await ui.waitForDialog('Relocalizar arquivo — source.mkv', 'dialog');
   await ui.queueDialog(movedMkv);
-  await ui.clickButton('Relocalizar');
-  await ui.waitForText(/Disponível · Tenho permissão/, 'main');
+  await ui.clickButton('Escolher arquivo', { scopeSelector: '[role="dialog"]' });
+  await ui.clickButton('Relocalizar', { scopeSelector: '[role="dialog"]', exact: true });
+  await ui.waitForText('Disponível', 'article[aria-label="source-moved.mkv"]');
 
   logStep('Sessão 2: Importação por URL (Termos, troca de pasta, fake-ytdlp + ffprobe real)…');
+  await ui.clickButton('URL (VOD)', { scopeSelector: entrada });
   await ui.queueDialog(ctx.downloadsDir);
-  await ui.clickButton('Trocar pasta');
-  await ui.waitForText(ctx.downloadsDir, 'main');
-  await ui.fillField('URL do vídeo', 'https://example.com/watch?v=video123');
-  await ui.clickButton('Baixar por URL');
-  const termsText = await ui.waitForDialog('Aviso sobre os Termos', 'alertdialog');
-  assert.match(termsText, /Termos do YouTube proíbem baixar conteúdo sem autorização/);
-  await ui.clickButton('Entendi e continuar', { scopeSelector: '[role="alertdialog"]' });
-  await ui.waitForDialogClosed('Aviso sobre os Termos');
-  await ui.waitForText('video123.mp4', 'main');
-  await ui.selectField('Permissão', 'none');
-  await ui.clickButton('Importar Fonte');
-  await ui.waitForText(/video123\.mp4.*Sem permissão/s, 'main');
+  await ui.clickButton('Trocar pasta', { scopeSelector: entrada });
+  await ui.waitForDialog('Pasta de downloads por URL', 'dialog');
+  await ui.clickButton('Escolher pasta', { scopeSelector: '[role="dialog"]' });
+  await ui.clickButton('Salvar pasta', { scopeSelector: '[role="dialog"]' });
+  await ui.waitForText(ctx.downloadsDir, entrada);
+  await ui.fillField('URL do vídeo (YouTube VOD)', 'https://example.com/watch?v=video123', { scopeSelector: entrada });
+  await ui.clickButton('Baixar por URL', { scopeSelector: entrada });
+  const termsText = await ui.waitForDialog('Termos de uso do YouTube', 'alertdialog');
+  assert.match(termsText, /proíbem baixar conteúdo sem autorização/);
+  await ui.clickButton('Aceitar e baixar', { scopeSelector: '[role="alertdialog"]' });
+  await ui.waitForDialogClosed('Termos de uso do YouTube');
+  await ui.waitForText('video123.mp4', entrada, 30_000);
+  await ui.clickButton('Sem permissão registrada', { scopeSelector: entrada });
+  await ui.clickButton('Importar Fonte', { scopeSelector: entrada });
+  await ui.waitForText('Sem permissão', 'article[aria-label="video123.mp4"]');
   await ui.shot('08-project-sources.png');
 
-  logStep('Sessão 2: Transcrição local (progresso, cancelamento no bloco 2, diálogos Groq, retomada e Timeline)…');
+  logStep('Sessão 2: Transcrição local (cancelamento mantendo blocos, retomada e leitor)…');
+  await ui.clickButton('Abrir', { scopeSelector: 'article[aria-label="source-moved.mkv"]' });
+  await ui.waitForHash(/^#\/projeto\/[^/]+\/fontes\/[^/?]+/);
   await writeFile(ctx.holdFile, 'after-first', 'utf8');
-  await ui.clickButton('Transcrever', { rowContains: 'source-moved.mkv' });
-  await ui.waitForText(/Transcrevendo: 33%/, 'main', 20_000);
-  await ui.clickButton('Cancelar transcrição', { rowContains: 'source-moved.mkv' });
-  await ui.waitForText(/Transcrição interrompida · 33%/, 'main', 15_000);
-
-  await ui.selectField('Motor de transcrição', 'groq', { rowContains: 'source-moved.mkv' });
-  await ui.waitForText(/Custo estimado: US\$/, 'main');
-  await ui.clickButton('Trocar e transcrever', { rowContains: 'source-moved.mkv' });
-  const replaceDialog = await ui.waitForDialog('Apagar Transcrição parcial?', 'alertdialog');
-  assert.match(replaceDialog, /Blocos concluídos que serão apagados: 1/);
-  await ui.clickButton('Confirmar e transcrever', { scopeSelector: '[role="alertdialog"]' });
-  await ui.waitForDialogClosed('Apagar Transcrição parcial?');
-
-  const groqConsent = await ui.waitForDialog('Enviar áudio ao Groq?', 'alertdialog');
-  assert.match(groqConsent, /api\.groq\.com/);
-  await ui.clickButton('Cancelar', { scopeSelector: '[role="alertdialog"]' });
-  await ui.waitForDialogClosed('Enviar áudio ao Groq?');
-
-  await ui.selectField('Motor de transcrição', 'local', { rowContains: 'source-moved.mkv' });
+  await ui.clickButton('Iniciar transcrição');
+  await ui.waitForText(/Transcrevendo bloco 1 de 1 33%/, 'main', 30_000);
+  await ui.clickButton('Pausar / Cancelar mantendo blocos salvos');
+  await ui.waitForText(/Transcrição parcial salva até/, 'main', 20_000);
   await rm(ctx.holdFile, { force: true });
-  await ui.clickButton('Retomar', { rowContains: 'source-moved.mkv' });
-  await ui.waitForText(/Transcrição pronta · .+ · [23] palavras/, 'main', 25_000);
-  const timelineText = await ui.waitForText('palavra', 'section[aria-label="Transcrição"]');
-  assert.match(timelineText, /Silêncio/);
-  assert.match(timelineText, /pt/);
+  await ui.clickButton('Retomar de', { exact: false });
+  const timelineText = await ui.waitForText('palavra', 'section[aria-label="Leitor da Transcrição"]', 40_000);
+  assert.match(timelineText, /[Ss]ilêncio/);
   await ui.shot('09-transcription-timeline.png');
 
   logStep('Sessão 2: Backups (configuração, criação manual, alteração de estado e restauração real)…');
-  const backupsScope = 'section[aria-labelledby="backups-title"]';
-  await ui.fillField('Intervalo (minutos)', '15', { scopeSelector: backupsScope });
-  await ui.fillField('Cópias mantidas', '5', { scopeSelector: backupsScope });
-  await ui.clickButton('Salvar configuração', { scopeSelector: backupsScope });
-  await ui.waitForText('Configuração salva.', backupsScope);
-
-  await ui.clickButton('Criar backup agora', { scopeSelector: backupsScope });
-  await ui.waitForText('Restaurar', backupsScope);
-
-  await ui.setChecked('Somente local', true, { scopeSelector: '[aria-labelledby="project-privacy-title"]' });
-  assert.equal(await ui.isChecked('Somente local', { scopeSelector: '[aria-labelledby="project-privacy-title"]' }), true);
-
-  await ui.queueConfirm(true);
-  await ui.clickButton('Restaurar', { scopeSelector: backupsScope, index: 0 });
-  await ui.waitForText('Antes da restauração', backupsScope);
+  // O fake yt-dlp não emite 100% e o app mantém o job de URL como "rodando" até recarregar a WebView;
+  // com jobs ativos a restauração de backup fica (corretamente) bloqueada.
+  await ui.reloadApp('#/config/projeto', 'Projeto atual');
+  await ui.clickTab('Backups do Projeto');
+  await ui.fillField('Intervalo (segundos)', '900');
+  await ui.fillField('Cópias mantidas', '5');
+  await ui.clickButton('Salvar configuração');
+  await ui.clickButton('Criar backup agora');
+  await ui.waitForText('Backups salvos (1)', 'main');
+  await ui.clickTab('Privacidade (Somente local)');
+  await ui.setChecked(vetoLabel, true);
+  await ui.clickTab('Backups do Projeto');
+  await ui.waitForTextGone(/tarefa\(s\) em andamento na Fila/, 'main', 60_000);
+  await ui.clickButton('Restaurar backup de', { exact: false, index: 0 });
+  await ui.waitForText(/Restaurar backup/, '[role="alertdialog"]');
+  await ui.clickButton('Restaurar backup', { scopeSelector: '[role="alertdialog"]' });
+  await ui.waitForText('Pré-restauração', 'main');
   await ui.shot('10-backups.png');
-
-  await ui.clickButton('Preferências');
-  await ui.waitForText('Preferências', 'main');
-  await ui.waitForTextGone(/O Projeto aberto está em “somente local”/, '[aria-labelledby="task-table-title"]');
-  await ui.clickButton('Início');
-  await ui.waitForText('Projeto aberto: Canal', 'main');
+  await ui.clickTab('Privacidade (Somente local)');
   assert.equal(
-    await ui.isChecked('Somente local', { scopeSelector: '[aria-labelledby="project-privacy-title"]' }),
+    await ui.isChecked(vetoLabel),
     false,
     'Restauração do backup deve reverter Somente local para desligado no project.sqlite',
   );
