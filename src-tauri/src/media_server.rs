@@ -18,7 +18,13 @@ pub(crate) fn is_allowed_origin(origin: &str) -> bool {
         origin,
         "tauri://localhost" | "http://tauri.localhost" | "https://tauri.localhost"
     ) || (cfg!(debug_assertions)
-        && matches!(origin, "http://localhost:1420" | "http://127.0.0.1:1420"))
+        && matches!(
+            origin,
+            "http://localhost:1420"
+                | "http://127.0.0.1:1420"
+                | "http://localhost:1430"
+                | "http://127.0.0.1:1430"
+        ))
 }
 
 fn generate_session_token() -> std::io::Result<String> {
@@ -499,6 +505,23 @@ mod tests {
             headers,
             body,
         }
+    }
+
+    #[test]
+    fn allows_dev_origins_v1_and_v2_in_debug_and_blocks_external_origins() {
+        assert!(is_allowed_origin("tauri://localhost"));
+        assert!(is_allowed_origin("http://tauri.localhost"));
+        assert!(is_allowed_origin("https://tauri.localhost"));
+
+        let expected_dev = cfg!(debug_assertions);
+        assert_eq!(is_allowed_origin("http://localhost:1430"), expected_dev);
+        assert_eq!(is_allowed_origin("http://127.0.0.1:1430"), expected_dev);
+        assert_eq!(is_allowed_origin("http://localhost:1420"), expected_dev);
+        assert_eq!(is_allowed_origin("http://127.0.0.1:1420"), expected_dev);
+
+        assert!(!is_allowed_origin("https://evil.example"));
+        assert!(!is_allowed_origin("http://127.0.0.1:9999"));
+        assert!(!is_allowed_origin("null"));
     }
 
     #[test]

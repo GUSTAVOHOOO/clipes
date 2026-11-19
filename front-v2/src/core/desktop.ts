@@ -23,7 +23,7 @@ function obterEstadoE2E() {
   return window.__CLIPES_E2E__
 }
 
-function garantirEstadoE2E() {
+export function garantirEstadoE2E() {
   if (typeof window === 'undefined') return undefined
   if (!window.__CLIPES_E2E__) {
     let updaterMode: 'off' | 'available' | 'real' = 'off'
