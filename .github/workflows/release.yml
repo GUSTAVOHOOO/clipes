@@ -17,6 +17,8 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'catalog/**'
+      - 'scripts/smoke-package.mjs'
+      - 'scripts/setup-webdriver.mjs'
       - '.github/workflows/release.yml'
   push:
     tags:
@@ -60,6 +62,9 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - run: bun install --frozen-lockfile
+      - name: Instalar dependências do design-system-v2 (usado pelo front-v2)
+        run: bun install --frozen-lockfile
+        working-directory: design-system-v2
       - name: Instalar dependências do front-v2 (embutido pelo tauri build)
         run: bun install --frozen-lockfile
         working-directory: front-v2
@@ -94,6 +99,44 @@ jobs:
           echo "ok: $(. /etc/os-release; echo $PRETTY_NAME)"
           SH
           for img in ubuntu:22.04 ubuntu:24.04; do docker run --rm -v "$PWD/smoke:/smoke:ro" "$img" bash /smoke/run.sh; done
+      - name: Cachear tauri-driver (smoke PR)
+        id: cache-tauri-driver-smoke
+        if: github.event_name == 'pull_request'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/tauri-driver
+          key: tauri-driver-${{ runner.os }}-2
+      - name: Instalar tauri-driver (smoke PR)
+        if: github.event_name == 'pull_request' && steps.cache-tauri-driver-smoke.outputs.cache-hit != 'true'
+        run: cargo install tauri-driver --locked
+      - name: Configurar WebDriver (Windows smoke PR)
+        if: github.event_name == 'pull_request' && runner.os == 'Windows'
+        run: bun run e2e:setup
+      - name: Configurar política WebView2 remote debugging (Windows smoke PR)
+        if: github.event_name == 'pull_request' && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $policyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments'
+          New-Item -Path $policyPath -Force | Out-Null
+          New-ItemProperty -Path $policyPath -Name 'clipes.exe' -Value '--remote-debugging-port=0' -PropertyType String -Force | Out-Null
+      - name: Smoke do instalador NSIS (Windows PR)
+        if: github.event_name == 'pull_request' && runner.os == 'Windows'
+        run: node scripts/smoke-package.mjs --platform windows-nsis
+      - name: Instalar WebDriver e Xvfb (Linux smoke PR)
+        if: github.event_name == 'pull_request' && runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          if apt-cache show webkitgtk-webdriver >/dev/null 2>&1; then
+            DRIVER_PKG=webkitgtk-webdriver
+          else
+            DRIVER_PKG=webkit2gtk-driver
+          fi
+          sudo apt-get install -y "$DRIVER_PKG" xvfb
+      - name: Smoke do AppImage e do .deb com WebDriver (Linux PR)
+        if: github.event_name == 'pull_request' && runner.os == 'Linux'
+        run: |
+          xvfb-run -a -s "-screen 0 1366x768x24" node scripts/smoke-package.mjs --platform linux-appimage
+          xvfb-run -a -s "-screen 0 1366x768x24" node scripts/smoke-package.mjs --platform linux-deb --install
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}

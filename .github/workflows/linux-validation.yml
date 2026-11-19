@@ -4,9 +4,15 @@ on:
     paths:
       - '.github/workflows/linux-validation.yml'
       - 'scripts/linux-validation.mjs'
+      - 'scripts/linux-validation.test.mjs'
       - 'src-tauri/tauri.conf.json'
-      - 'src/features/projects/CutPreview.tsx'
+      - 'front-v2/src/telas/corte/PalcoEditor.tsx'
+      - 'front-v2/src/telas/corte/EditarCorte.tsx'
   workflow_dispatch:
+
+concurrency:
+  group: linux-validation-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   validate-linux:
@@ -52,6 +58,9 @@ jobs:
         if: steps.cache-tauri-driver.outputs.cache-hit != 'true'
         run: cargo install tauri-driver --locked
       - run: bun install --frozen-lockfile
+      - name: Instalar dependências do design-system-v2 (usado pelo front-v2)
+        run: bun install --frozen-lockfile
+        working-directory: design-system-v2
       - name: Instalar dependências do front-v2 (embutido pelo tauri build)
         run: bun install --frozen-lockfile
         working-directory: front-v2
@@ -100,7 +109,10 @@ jobs:
                 const r = await fetch(`http://127.0.0.1:${port}/session/${sid}/execute/sync`, {
                   method: "POST",
                   headers: { "content-type": "application/json" },
-                  body: JSON.stringify({ script: "return Boolean(window.__TAURI_INTERNALS__?.invoke && document.querySelector(\"header\"))", args: [] }),
+                  body: JSON.stringify({
+                    script: "if (!window.__appImageErrors) { window.__appImageErrors = []; window.addEventListener(\"error\", e => window.__appImageErrors.push(String(e.message))); window.addEventListener(\"unhandledrejection\", e => window.__appImageErrors.push(String(e.reason?.message ?? e.reason))); } const h = document.querySelector(\"header\"); return Boolean(window.__TAURI_INTERNALS__?.invoke && h && (h.textContent || \"\").includes(\"Clipes\"));",
+                    args: [],
+                  }),
                 });
                 const j = await r.json();
                 if (j.value) break;
@@ -110,12 +122,16 @@ jobs:
                 method: "POST",
                 headers: { "content-type": "application/json" },
                 body: JSON.stringify({
-                  script: "const v = document.createElement(\"video\"); return { canPlayH264Full: v.canPlayType(\"video/mp4; codecs=\\\"avc1.42E01E, mp4a.40.2\\\"\"), canPlayH264Video: v.canPlayType(\"video/mp4; codecs=\\\"avc1.42E01E\\\"\"), platform: navigator.platform };",
+                  script: "const v = document.createElement(\"video\"); const h = document.querySelector(\"header\"); return { headerText: (h?.textContent || \"\").replace(/\\s+/g, \" \").trim(), hasV2Topo: Boolean(document.querySelector(\"header[data-regiao=\\\"topo\\\"]\")), href: window.location.href, errors: [...(window.__appImageErrors ?? [])], canPlayH264Full: v.canPlayType(\"video/mp4; codecs=\\\"avc1.42E01E, mp4a.40.2\\\"\"), canPlayH264Video: v.canPlayType(\"video/mp4; codecs=\\\"avc1.42E01E\\\"\"), platform: navigator.platform };",
                   args: [],
                 }),
               });
               const pJson = await pRes.json();
-              const out = { appimage: process.env.APPIMAGE_NAME || "AppImage", ...pJson.value };
+              const val = pJson.value ?? {};
+              if (!val.headerText?.includes("Clipes")) throw new Error(`DOM v2 sem texto Clipes no <header>: ${JSON.stringify(val)}`);
+              if (/^https?:\/\/(localhost|127\.0\.0\.1):(1420|1430)\b/i.test(val.href || "")) throw new Error(`AppImage apontando para dev server: ${val.href}`);
+              if (Array.isArray(val.errors) && val.errors.length > 0) throw new Error(`Erros JS no AppImage: ${JSON.stringify(val.errors)}`);
+              const out = { appimage: process.env.APPIMAGE_NAME || "AppImage", ...val };
               writeFileSync("linux-validation-artifacts/appimage-check.json", JSON.stringify(out, null, 2));
               console.log("AppImage clean Ubuntu check:", JSON.stringify(out));
             } finally {

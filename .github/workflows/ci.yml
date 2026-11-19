@@ -45,8 +45,8 @@ jobs:
           # catalog/: o núcleo embute catalog/models.json (include_str!) e o valida em teste.
           echo "rust=$(match "$ci|^(core|src-tauri|benchmarks/transcricao|catalog)/|^(Cargo\.toml|Cargo\.lock|deny\.toml)$")" >> "$GITHUB_OUTPUT"
           echo "front_v1=$(match "$ci|^(src|design-system|scripts)/|^(package\.json|bun\.lock|index\.html|vite\.config\.ts|tsconfig\.json)$")" >> "$GITHUB_OUTPUT"
-          echo "front_v2=$(match "$ci|^(front-v2|design-system-v2)/|^src/lib/")" >> "$GITHUB_OUTPUT"
-          echo "tauri=$(match "$ci|^(core|src-tauri|src|scripts|catalog)/|^(Cargo\.toml|Cargo\.lock|package\.json|bun\.lock|vite\.config\.ts)$")" >> "$GITHUB_OUTPUT"
+          echo "front_v2=$(match "$ci|^(front-v2|design-system-v2)/|^src/lib/|^src/features/(editor|captions|updates)/")" >> "$GITHUB_OUTPUT"
+          echo "tauri=$(match "$ci|^(core|src-tauri|src|front-v2|design-system-v2|scripts|catalog)/|^(Cargo\.toml|Cargo\.lock|package\.json|bun\.lock|vite\.config\.ts)$")" >> "$GITHUB_OUTPUT"
           echo "worker=$(match "$ci|^worker/")" >> "$GITHUB_OUTPUT"
 
   # Núcleo Rust + métricas do benchmark.
@@ -130,6 +130,13 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: '1.3.12'
+      - name: Install and check design-system-v2
+        working-directory: design-system-v2
+        run: |
+          bun install --frozen-lockfile
+          bun run typecheck
+          bun run build
+          bun run contraste
       - run: bun install --frozen-lockfile
       - name: Install browser (Linux)
         if: runner.os == 'Linux'
@@ -179,6 +186,9 @@ jobs:
           }
       - run: cargo install tauri-driver --locked
       - run: bun install --frozen-lockfile
+      - name: Instalar dependências do design-system-v2 (usado pelo front-v2)
+        run: bun install --frozen-lockfile
+        working-directory: design-system-v2
       - name: Instalar dependências do front-v2 (embutido pelo tauri build)
         run: bun install --frozen-lockfile
         working-directory: front-v2
@@ -233,12 +243,18 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun install --frozen-lockfile
         working-directory: design-system
+      - run: bun install --frozen-lockfile
+        working-directory: design-system-v2
+      - run: bun install --frozen-lockfile
+        working-directory: front-v2
       - name: Check JS production licenses
         shell: bash
         run: |
-          node --test scripts/license-policy.test.mjs
+          node --test scripts/license-policy.test.mjs scripts/linux-validation.test.mjs scripts/smoke-package.test.mjs
           bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start . --excludePackages 'clipes@1.0.0' --json | node scripts/check-licenses.mjs
           bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start design-system --excludePackages '@clipes/design-system@0.1.0' --json | node scripts/check-licenses.mjs
+          bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start front-v2 --excludePackages '@clipes/front-v2@0.1.0' --json | node scripts/check-licenses.mjs
+          bunx license-checker-rseidelsohn@4.4.2 --production --unknown --start design-system-v2 --excludePackages '@clipes/design-system-v2@0.1.0' --json | node scripts/check-licenses.mjs
 
   # Check único para olhar (ou exigir na proteção de branch): verde se nada
   # falhou nem foi cancelado; jobs pulados pelo filtro de caminho contam como ok.
