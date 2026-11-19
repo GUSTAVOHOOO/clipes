@@ -44,6 +44,7 @@ import {
 } from '~/stores/filaGlobal'
 import { nomeHumanoKind } from '~/telas/fila/DialogosFila'
 import { PainelFilaJobs } from '~/telas/fila/PainelFilaJobs'
+import { PrototipoLateral, PrototipoRodape, PrototipoSwitcher } from '~/prototipo-console/Prototipo' // PROTOTYPE
 
 export type ProjetoAtual = {
   id?: string | null
@@ -901,7 +902,10 @@ export function Shell({
             fila={filaStore}
           />
         )}
+        <PrototipoLateral />
       </div>
+      <PrototipoRodape />
+      <PrototipoSwitcher />
       <FechamentoJanela jobs={jobs} />
       <ConfirmDialog
         aberto={salvamento.estado === 'erro' && dialogoErroSalvarAberto}
