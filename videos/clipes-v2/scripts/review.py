@@ -114,16 +114,36 @@ if os.path.exists('cues.json'):
         def near_peak(sig, t, w=0.12):
             c = int(round(t * FPS)); lo = max(0, c - int(w * FPS)); hi = max(lo + 1, min(len(sig), c + int(w * FPS)))
             return (lo + int(np.argmax(sig[lo:hi])) + 1) / FPS - t
+        # Clipes: o filme tem movimento contínuo (vídeo `life` a 15 fps, câmera sempre andando), então a energia
+        # global fica alta em toda janela e o "início" caía na borda dela (−67/−100 ms em quase todo cue). Mede-se
+        # o EXCESSO sobre a linha de base local (percentil 20 em ±0,5 s); sem excesso isolável, o cue é 'n/m'.
         def near_onset(sig, t, w=0.12):
             c = int(round(t * FPS)); lo = max(0, c - int(w * FPS)); hi = max(lo + 1, min(len(sig), c + int(w * FPS)))
-            seg = sig[lo:hi]; return (lo + int(np.argmax(seg >= 0.5 * seg.max())) + 1) / FPS - t
-        cues = json.load(open('cues.json'))['cues']
+            base = float(np.percentile(sig[max(0, c - int(0.5 * FPS)):min(len(sig), c + int(0.5 * FPS))], 20))
+            ex = sig[lo:hi] - base
+            if ex.max() < max(0.25, 0.35 * base): return None
+            return (lo + int(np.argmax(ex >= 0.5 * ex.max())) + 1) / FPS - t
+        # média de 1/15 s: tira a alternância do vídeo `life` (15 fps) sem borrar um início de movimento
+        k15 = max(1, int(round(FPS / 15))); esm = np.convolve(energy, np.ones(k15) / k15, 'same')
+        # Clipes: região do elemento (timeline.json sfx[].roi16, frações do quadro 16:9) para hits pequenos de UI/tipo
+        ROI16 = {x['what']: x['roi16'] for x in json.load(open('timeline.json', encoding='utf-8'))['sfx'] if x.get('roi16')}
+        FMT_P = P
+        cues = json.load(open('cues.json', encoding='utf-8'))['cues']
         rows = []
         for c in cues:
             if c['t'] >= DUR - 0.05: continue
-            va, au = near_onset(energy, c['t']), near_peak(aflux, c['t'])
-            rows.append({'t': c['t'], 'type': c['type'], 'what': c['what'], 'visual_minus_audio_ms': round((va - au) * 1000)})
-        absd = [abs(r['visual_minus_audio_ms']) for r in rows if r['type'] not in ('whoosh', 'riser', 'tick')]
+            roi = ROI16.get(c['what']) if FMT_P == '16x9' else None
+            if roi:
+                H_, W_ = g.shape[1], g.shape[2]
+                sub = g[:, int(roi[1] * H_):int(roi[3] * H_), int(roi[0] * W_):int(roi[2] * W_)]
+                er = np.abs(np.diff(sub, axis=0)).mean(axis=(1, 2)); er = np.convolve(er, np.ones(k15) / k15, 'same')
+                va = near_onset(er, c['t'])
+            else:
+                va = near_onset(esm, c['t'])
+            au = near_peak(aflux, c['t'])
+            rows.append({'t': c['t'], 'type': c['type'], 'what': c['what'], 'visual_minus_audio_ms': None if va is None else round((va - au) * 1000)})
+        absd = [abs(r['visual_minus_audio_ms']) for r in rows if r['type'] not in ('whoosh', 'riser', 'tick') and r['visual_minus_audio_ms'] is not None]
+        M['sync_unmeasurable'] = [round(r['t'], 2) for r in rows if r['visual_minus_audio_ms'] is None]
         M['sync'] = {'cues': rows, 'hits_within_45ms': f'{sum(v <= 45 for v in absd)}/{len(absd)}', 'hits_mean_abs_ms': round(float(np.mean(absd)), 1) if absd else None,
                      'note': 'positive = picture late. whoosh/riser build INTO the cue by design; ticks are texture. Visual hits should read ON the audio (|x| <= 45 ms).'}
 lo = subprocess.run(['ffmpeg', '-hide_banner', '-nostats', '-i', V[P], '-af', 'ebur128=peak=true', '-f', 'null', '-'], capture_output=True, text=True).stderr

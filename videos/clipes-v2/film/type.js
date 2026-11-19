@@ -27,7 +27,7 @@
    */
   function rise(t, L, inAt, outAt = null, o = {}) {
     const stagger = o.stagger ?? 0.08, preset = o.preset || 'heavy', exit = o.exit ?? 0.28;
-    const below = L.size * 1.45, above = -L.size * 1.45;
+    const below = L.size * 1.9, above = -L.size * 1.9;   // 1.9: acentos (~, ´, ç) não espiam pela máscara (rodada 1)
     L.words.forEach((w, i) => {
       const bin = Array.isArray(inAt) ? inAt[i] : C.beatOf(inAt) + i * stagger;
       let y = below * (1 - C.spHit(t, bin, preset));

@@ -47,7 +47,7 @@
         "kind": "drop"
       },
       {
-        "at": "url",
+        "at": "lic",
         "kind": "outro"
       }
     ],
@@ -66,10 +66,10 @@
     "s3": 12,
     "s3_local": 13,
     "s3_rack": 16,
-    "s3_l1": 16.5,
-    "s3_l2": 17,
-    "s3_l3": 17.5,
-    "s3_l4": 18,
+    "s3_l1": 17,
+    "s3_l2": 17.5,
+    "s3_l3": 18,
+    "s3_l4": 18.5,
     "s4": 20,
     "s4_n1": 21,
     "s4_n2": 21.5,
@@ -96,18 +96,17 @@
   },
   "sfx": [
     {
-      "at": "hook",
-      "type": "pop",
-      "kit": "pop",
-      "gain": 0.8,
-      "what": "manchete já legível no quadro 0; 'Corte.' assenta"
-    },
-    {
       "at": "hook_sub",
       "type": "pop",
       "kit": "land.light",
       "gain": 0.5,
-      "what": "linha 'Com legenda. Pronto para postar.'"
+      "what": "linha 'Com legenda. Pronto para postar.'",
+      "roi16": [
+        0.06,
+        0.53,
+        0.38,
+        0.66
+      ]
     },
     {
       "at": 4.5,
@@ -128,7 +127,13 @@
       "type": "pop",
       "kit": "land",
       "gain": 0.6,
-      "what": "cabeçalho real da Fonte assenta"
+      "what": "cabeçalho real da Fonte assenta",
+      "roi16": [
+        0.4,
+        0.69,
+        0.97,
+        0.83
+      ]
     },
     {
       "at": "s3",
@@ -142,35 +147,65 @@
       "type": "pop",
       "kit": "pop",
       "gain": 0.6,
-      "what": "'Transcrição local,'"
+      "what": "'Transcrição local,'",
+      "roi16": [
+        0.06,
+        0.29,
+        0.4,
+        0.53
+      ]
     },
     {
       "at": "s3_l1",
       "type": "pop",
       "kit": "text",
       "gain": 0.45,
-      "what": "fala 1 transcrita"
+      "what": "fala 1 transcrita",
+      "roi16": [
+        0.41,
+        0.06,
+        0.97,
+        0.94
+      ]
     },
     {
       "at": "s3_l2",
       "type": "pop",
       "kit": "text",
       "gain": 0.45,
-      "what": "fala 2"
+      "what": "fala 2",
+      "roi16": [
+        0.41,
+        0.06,
+        0.97,
+        0.94
+      ]
     },
     {
       "at": "s3_l3",
       "type": "pop",
       "kit": "text",
       "gain": 0.45,
-      "what": "fala 3"
+      "what": "fala 3",
+      "roi16": [
+        0.41,
+        0.06,
+        0.97,
+        0.94
+      ]
     },
     {
       "at": "s3_l4",
       "type": "pop",
       "kit": "text",
       "gain": 0.45,
-      "what": "fala 4"
+      "what": "fala 4",
+      "roi16": [
+        0.41,
+        0.06,
+        0.97,
+        0.94
+      ]
     },
     {
       "at": "s4",
@@ -184,35 +219,65 @@
       "type": "pop",
       "kit": "pop",
       "gain": 0.55,
-      "what": "Nota 8,8"
+      "what": "Nota 8,8",
+      "roi16": [
+        0.23,
+        0.2,
+        0.32,
+        0.43
+      ]
     },
     {
       "at": "s4_n2",
       "type": "pop",
       "kit": "pop",
       "gain": 0.5,
-      "what": "Nota 7,5"
+      "what": "Nota 7,5",
+      "roi16": [
+        0.23,
+        0.2,
+        0.32,
+        0.43
+      ]
     },
     {
       "at": "s4_n3",
       "type": "pop",
       "kit": "pop",
       "gain": 0.45,
-      "what": "Nota 4,0"
+      "what": "Nota 4,0",
+      "roi16": [
+        0.23,
+        0.2,
+        0.32,
+        0.43
+      ]
     },
     {
       "at": "s4_click",
       "type": "click",
       "kit": "click",
       "gain": 0.8,
-      "what": "cursor aperta Aprovar"
+      "what": "cursor aperta Aprovar",
+      "roi16": [
+        0.26,
+        0.72,
+        0.4,
+        0.84
+      ]
     },
     {
       "at": "s4_ok",
       "type": "pop",
       "kit": "click.confirm",
       "gain": 0.6,
-      "what": "'Você aprova.' + estado Aprovado"
+      "what": "'Você aprova.' + estado Aprovado",
+      "roi16": [
+        0.6,
+        0.39,
+        0.96,
+        0.53
+      ]
     },
     {
       "at": "s5",
@@ -226,21 +291,39 @@
       "type": "pop",
       "kit": "text",
       "gain": 0.5,
-      "what": "legenda: 'O chat'"
+      "what": "legenda: 'O chat'",
+      "roi16": [
+        0.55,
+        0.55,
+        0.83,
+        0.65
+      ]
     },
     {
       "at": "s5_w2",
       "type": "pop",
       "kit": "text",
       "gain": 0.5,
-      "what": "legenda: 'simplesmente'"
+      "what": "legenda: 'simplesmente'",
+      "roi16": [
+        0.55,
+        0.55,
+        0.83,
+        0.65
+      ]
     },
     {
       "at": "s5_w3",
       "type": "pop",
       "kit": "bell",
       "gain": 0.6,
-      "what": "legenda: 'explodiu'"
+      "what": "legenda: 'explodiu'",
+      "roi16": [
+        0.55,
+        0.55,
+        0.83,
+        0.65
+      ]
     },
     {
       "at": "s5_rack",
@@ -254,7 +337,13 @@
       "type": "click",
       "kit": "click",
       "gain": 0.75,
-      "what": "clique em Legenda: painel real abre"
+      "what": "clique em Legenda: painel real abre",
+      "roi16": [
+        0.7,
+        0.08,
+        0.97,
+        0.75
+      ]
     },
     {
       "at": "s6",
@@ -268,14 +357,26 @@
       "type": "pop",
       "kit": "land.light",
       "gain": 0.45,
-      "what": "'MP4 1080×1920 · −14 LUFS'"
+      "what": "'MP4 1080×1920 · −14 LUFS'",
+      "roi16": [
+        0.06,
+        0.53,
+        0.4,
+        0.67
+      ]
     },
     {
       "at": "s6_click",
       "type": "click",
       "kit": "click",
       "gain": 0.8,
-      "what": "cursor aperta Exportar 4 aprovados em lote"
+      "what": "cursor aperta Exportar 4 aprovados em lote",
+      "roi16": [
+        0.58,
+        0.68,
+        0.87,
+        0.84
+      ]
     },
     {
       "at": "logo",
@@ -296,28 +397,52 @@
       "type": "pop",
       "kit": "pop",
       "gain": 0.55,
-      "what": "'Interface nova. Mesmo núcleo.'"
+      "what": "'Interface nova. Mesmo núcleo.'",
+      "roi16": [
+        0.06,
+        0.37,
+        0.6,
+        0.47
+      ]
     },
     {
       "at": "cta",
       "type": "pop",
       "kit": "bell",
       "gain": 0.65,
-      "what": "CTA 'Baixe grátis para Windows e Linux.'"
+      "what": "CTA 'Baixe grátis para Windows e Linux.'",
+      "roi16": [
+        0.06,
+        0.46,
+        0.6,
+        0.71
+      ]
     },
     {
       "at": "url",
       "type": "pop",
       "kit": "pop",
       "gain": 0.55,
-      "what": "github.com/GUSTAVOHOOO/clipes · Releases"
+      "what": "github.com/GUSTAVOHOOO/clipes · Releases",
+      "roi16": [
+        0.06,
+        0.71,
+        0.5,
+        0.79
+      ]
     },
     {
       "at": "lic",
       "type": "pop",
       "kit": "land.light",
       "gain": 0.4,
-      "what": "'Open source · Apache-2.0'"
+      "what": "'Open source · Apache-2.0'",
+      "roi16": [
+        0.06,
+        0.79,
+        0.62,
+        0.85
+      ]
     }
   ],
   "mix": {

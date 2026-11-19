@@ -45,7 +45,7 @@ def measure(path):
     return get('I:'), get('Peak:')
 I0, _ = measure('audio/mix_raw.wav'); gain = -14 - I0
 for _ in range(3):
-    ff(['-i', 'audio/mix_raw.wav', '-af', f'volume={gain:.2f}dB,aresample=192000,alimiter=limit=0.841:attack=1:release=40:level=false,aresample=48000', '-ar', '48000', '-c:a', 'pcm_s24le', 'audio/mix.wav'])
+    ff(['-i', 'audio/mix_raw.wav', '-af', f'volume={gain:.2f}dB,aresample=192000,alimiter=limit=0.794:attack=1:release=40:level=false,aresample=48000', '-ar', '48000', '-c:a', 'pcm_s24le', 'audio/mix.wav'])
     I, TP = measure('audio/mix.wav')
     if abs(I + 14) <= 0.15: break
     gain += -14 - I
