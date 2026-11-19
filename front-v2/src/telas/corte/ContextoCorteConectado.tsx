@@ -1,4 +1,13 @@
-import { BannerErroCore, Botao, BotaoIcone, Dica, Esqueleto, SeloTipoVideo, cn } from '@ds'
+import {
+  BannerErroCore,
+  Botao,
+  BotaoIcone,
+  ConfirmDialog,
+  Esqueleto,
+  SeloTipoVideo,
+  cn,
+  useToast,
+} from '@ds'
 import { ArrowLeft, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAtalhos, type Atalho } from '~/comandos/atalhos'
@@ -15,6 +24,8 @@ import type {
   RevisaoExecucaoSelecao,
 } from '~/stores/selecaoProjeto'
 import { DialogoExportarCorte, type CorteParaExportar } from '~/telas/corte/DialogoExportarCorte'
+
+export const EVENTO_CANDIDATO_KIND_ALTERADO = 'clipes:candidato-kind-alterado'
 
 export type SubAbaCorte = 'editar' | 'transformar' | 'empacotar'
 
@@ -145,9 +156,27 @@ export function ContextoCorteConectado({
   const [exportacaoAberta, setExportacaoAberta] = useState(false)
   const [navegando, setNavegando] = useState(false)
   const navegandoRef = useRef(false)
+  const [confirmarConversaoAberto, setConfirmarConversaoAberto] = useState(false)
+  const [convertendo, setConvertendo] = useState(false)
+  const [erroConversao, setErroConversao] = useState<ErroCore | null>(null)
+  const [focarTransformarPosConversao, setFocarTransformarPosConversao] = useState(false)
+
+  const toast = useToast()
+  const toastRef = useRef(toast)
+  toastRef.current = toast
+  const transformarTabRef = useRef<HTMLAnchorElement>(null)
+  const corteIdAtualRef = useRef(corteId)
+  corteIdAtualRef.current = corteId
 
   const aoAntesDeNavegarRef = useRef(aoAntesDeNavegar)
   aoAntesDeNavegarRef.current = aoAntesDeNavegar
+
+  useEffect(() => {
+    setConfirmarConversaoAberto(false)
+    setConvertendo(false)
+    setErroConversao(null)
+    setFocarTransformarPosConversao(false)
+  }, [corteId])
 
   useEffect(() => {
     let cancelado = false
@@ -312,6 +341,40 @@ export function ContextoCorteConectado({
     setExportacaoAberta(true)
   }, [aoAbrirExportacao])
 
+  const confirmarConversao = useCallback(async () => {
+    if (candidateId === null || convertendo) return
+    const alvoCandidateId = candidateId
+    const alvoCorteId = corteId
+    setErroConversao(null)
+    setConvertendo(true)
+    try {
+      await chamar('selection.candidate.set_kind', {
+        candidate: alvoCandidateId,
+        videoKind: 'transformed',
+      })
+      if (corteIdAtualRef.current !== alvoCorteId) return
+      setEstado((prev) => ({
+        ...prev,
+        aprovados: prev.aprovados.map((item) =>
+          item.candidateId === alvoCandidateId ? { ...item, videoKind: 'transformed' } : item,
+        ),
+      }))
+      setFocarTransformarPosConversao(true)
+      setConfirmarConversaoAberto(false)
+      window.dispatchEvent(
+        new CustomEvent(EVENTO_CANDIDATO_KIND_ALTERADO, {
+          detail: { candidateId: alvoCandidateId, videoKind: 'transformed' as const },
+        }),
+      )
+      toastRef.current.add({ title: 'Corte convertido em Vídeo transformado.' })
+    } catch (err) {
+      if (corteIdAtualRef.current !== alvoCorteId) return
+      setErroConversao(paraErroCore(err))
+    } finally {
+      setConvertendo(false)
+    }
+  }, [candidateId, convertendo, corteId])
+
   const atalhosContexto = useMemo<Atalho[]>(
     () => [
       {
@@ -456,14 +519,19 @@ export function ContextoCorteConectado({
               </h1>
               {!avulso && <SeloTipoVideo tipo={videoKind} className="ml-1 shrink-0" />}
               {videoKind === 'direct' && candidateId !== null && (
-                /* Pendência no núcleo (#292): conversão individual para Vídeo transformado. */
-                <Dica texto="A conversão individual para Vídeo transformado ainda não está disponível nesta versão.">
-                  <span className="inline-flex shrink-0 rounded-controle">
-                    <Botao tamanho="p" variante="fantasma" icone={<Sparkles />} disabled>
-                      Converter em Vídeo transformado
-                    </Botao>
-                  </span>
-                </Dica>
+                <Botao
+                  tamanho="p"
+                  variante="fantasma"
+                  icone={<Sparkles />}
+                  carregando={convertendo}
+                  onClick={() => {
+                    setErroConversao(null)
+                    setFocarTransformarPosConversao(false)
+                    setConfirmarConversaoAberto(true)
+                  }}
+                >
+                  Converter em Vídeo transformado
+                </Botao>
               )}
             </>
           )}
@@ -481,6 +549,7 @@ export function ContextoCorteConectado({
             return (
               <a
                 key={aba.valor}
+                ref={aba.valor === 'transformar' ? transformarTabRef : undefined}
                 href={href}
                 aria-current={ativa ? 'page' : undefined}
                 onClick={(e) => {
@@ -530,6 +599,36 @@ export function ContextoCorteConectado({
           }}
           fila={fila}
         />
+      )}
+
+      {candidateId !== null && (
+        <ConfirmDialog
+          aberto={confirmarConversaoAberto}
+          aoMudarAberto={(proximo) => {
+            if (convertendo) return
+            setConfirmarConversaoAberto(proximo)
+            if (!proximo) setErroConversao(null)
+          }}
+          titulo="Converter em Vídeo transformado?"
+          descricao="Este Corte passará a ser um Vídeo transformado, liberando a aba Transformar para Ângulo, Roteiro e Narração. Essa conversão não pode ser desfeita."
+          rotuloCancelar="Cancelar"
+          rotuloConfirmar="Confirmar conversão"
+          ocupado={convertendo}
+          focoInicial="cancelar"
+          focoFinal={focarTransformarPosConversao ? transformarTabRef : undefined}
+          aoConfirmar={confirmarConversao}
+        >
+          {erroConversao && (
+            <BannerErroCore
+              erro={{
+                code: erroConversao.code,
+                message: erroConversao.detalhe || erroConversao.message,
+              }}
+              traduzir={(code) => mensagemDeErro(new ErroCore(code, erroConversao.detalhe))}
+              aoDispensar={() => setErroConversao(null)}
+            />
+          )}
+        </ConfirmDialog>
       )}
     </>
   )

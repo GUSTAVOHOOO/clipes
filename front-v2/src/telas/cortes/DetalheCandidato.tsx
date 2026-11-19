@@ -3,7 +3,7 @@ import {
   BannerErroCore,
   Botao,
   ChecklistGuardaCorpos,
-  Dica,
+  ConfirmDialog,
   EixosNota,
   EstadoTela,
   Kbd,
@@ -15,6 +15,7 @@ import {
   cn,
   duracao,
   tcLongo,
+  useToast,
   type EixoNota,
   type ItemGuarda,
   type TomStatus,
@@ -27,7 +28,11 @@ import { mensagemDeErro } from '~/core/erros'
 import { useFila } from '~/core/progresso'
 import { usePreferencias } from '~/preferencias/preferencias'
 import type { FonteProjeto } from '~/stores/fontesProjeto'
-import type { PerfilProvedorLista, ResumoRunSelecao } from '~/stores/selecaoProjeto'
+import type {
+  ItemRevisaoSelecao,
+  PerfilProvedorLista,
+  ResumoRunSelecao,
+} from '~/stores/selecaoProjeto'
 import type { CandidatoLista, ChatPicoCandidato } from '~/telas/cortes/ListaCandidatos'
 import { mediaUrl } from '../../../../src/lib/media'
 
@@ -39,10 +44,19 @@ export interface EixoDetalheCandidato {
 export interface CandidatoDetalhe extends CandidatoLista {
   startId: number
   endId: number
+  videoKind?: 'direct' | 'transformed'
   axes?: Record<string, EixoDetalheCandidato>
   weights?: Array<{ key: string; weight: number }>
   reasons?: string[]
   scores?: Record<string, number>
+}
+
+export interface RespostaSetKindCandidato {
+  run: number
+  candidate: number
+  videoKind: 'direct' | 'transformed'
+  item?: ItemRevisaoSelecao | null
+  canUndo?: boolean
 }
 
 export interface DetalheCandidatoProps {
@@ -60,6 +74,7 @@ export interface DetalheCandidatoProps {
   aoDecidir: (candidatoId: number, decisao: 'approved' | 'rejected') => Promise<void> | void
   aoAjustar: (candidatoId: number, borda: 'start' | 'end', delta: -1 | 1) => Promise<void> | void
   aoAbrirEditor: (candidatoId: number) => void
+  aoConverterParaTransformado?: (candidatoId: number, resposta: RespostaSetKindCandidato) => void
   aoRelocalizarFonte?: (fonteId: number) => void
   className?: string
 }
@@ -250,13 +265,17 @@ export function DetalheCandidato({
   aoDecidir,
   aoAjustar,
   aoAbrirEditor,
+  aoConverterParaTransformado,
   aoRelocalizarFonte,
   className,
 }: DetalheCandidatoProps) {
   const jobsFila = useFila()
   const [preferencias] = usePreferencias()
   const idMotivoAbrir = useId()
-  const idDicaDireto = useId()
+  const toast = useToast()
+  const toastRef = useRef(toast)
+  toastRef.current = toast
+  const btnAprovarRef = useRef<HTMLButtonElement>(null)
 
   const teclaExibida = useCallback(
     (idAtalho: string, padrao: string, teclaUnica = true) => {
@@ -305,6 +324,30 @@ export function DetalheCandidato({
   const [guardrailsTentativa, setGuardrailsTentativa] = useState(0)
   const [ackEmCurso, setAckEmCurso] = useState(false)
   const [perfis, setPerfis] = useState<PerfilProvedorLista[]>([])
+  const [convertidosLocalmente, setConvertidosLocalmente] = useState<Set<number>>(() => new Set())
+  const [confirmarConversaoAberto, setConfirmarConversaoAberto] = useState(false)
+  const [convertendo, setConvertendo] = useState(false)
+  const [erroConversao, setErroConversao] = useState<ErroCore | null>(null)
+  const [focarAposConversao, setFocarAposConversao] = useState(false)
+
+  const candidatoIdAtualRef = useRef<number | null>(candidato?.id ?? null)
+  candidatoIdAtualRef.current = candidato?.id ?? null
+
+  useEffect(() => {
+    setConvertidosLocalmente(new Set())
+  }, [projetoId, run.id])
+
+  useEffect(() => {
+    setConfirmarConversaoAberto(false)
+    setConvertendo(false)
+    setErroConversao(null)
+    setFocarAposConversao(false)
+  }, [candidato?.id])
+
+  const tipoVideo: 'direct' | 'transformed' =
+    candidato && convertidosLocalmente.has(candidato.id)
+      ? 'transformed'
+      : (candidato?.videoKind ?? run.videoKind)
 
   const ultimoCandidatoSolicitadoRef = useRef<number | null>(null)
   const jobsFilaRef = useRef(jobsFila)
@@ -527,7 +570,7 @@ export function DetalheCandidato({
     let cancelado = false
     setGuardrailsPronto(false)
     setErroGuardrails(null)
-    setAngulosPronto(run.videoKind !== 'transformed')
+    setAngulosPronto(tipoVideo !== 'transformed')
     setErroAngulos(null)
 
     void chamar<GuardrailsSingleResposta>('guardrails.check', {
@@ -550,7 +593,7 @@ export function DetalheCandidato({
         }
       })
 
-    if (run.videoKind === 'transformed') {
+    if (tipoVideo === 'transformed') {
       void chamar<AnglesGetResposta>('angles.get', { candidate: candidato.id })
         .then((res) => {
           if (!cancelado) {
@@ -579,7 +622,7 @@ export function DetalheCandidato({
     candidato?.startUs,
     candidato?.endUs,
     fonte?.id,
-    run.videoKind,
+    tipoVideo,
     guardrailsTentativa,
   ])
 
@@ -618,6 +661,34 @@ export function DetalheCandidato({
       setAckEmCurso(false)
     }
   }, [ackEmCurso])
+
+  const confirmarConversao = useCallback(async () => {
+    if (!candidato || convertendo) return
+    const alvoId = candidato.id
+    setErroConversao(null)
+    setConvertendo(true)
+    try {
+      const res = await chamar<RespostaSetKindCandidato>('selection.candidate.set_kind', {
+        candidate: alvoId,
+        videoKind: 'transformed',
+      })
+      if (candidatoIdAtualRef.current !== alvoId) return
+      setConvertidosLocalmente((prev) => {
+        const next = new Set(prev)
+        next.add(alvoId)
+        return next
+      })
+      setFocarAposConversao(true)
+      setConfirmarConversaoAberto(false)
+      aoConverterParaTransformado?.(alvoId, res)
+      toastRef.current.add({ title: 'Corte convertido em Vídeo transformado.' })
+    } catch (err) {
+      if (candidatoIdAtualRef.current !== alvoId) return
+      setErroConversao(paraErroCore(err))
+    } finally {
+      setConvertendo(false)
+    }
+  }, [aoConverterParaTransformado, candidato, convertendo])
 
   const eixos = useMemo(
     () => (candidato ? montarEixos(candidato, run) : []),
@@ -679,7 +750,7 @@ export function DetalheCandidato({
       }
     }
 
-    if (run.videoKind === 'transformed') {
+    if (tipoVideo === 'transformed') {
       if (angulos?.selected?.name) {
         itens.push({
           id: 'angulo',
@@ -697,7 +768,7 @@ export function DetalheCandidato({
     }
 
     return itens
-  }, [angulos, candidato, fonte, guardrails, projetoId, run.videoKind])
+  }, [angulos, candidato, fonte, guardrails, projetoId, tipoVideo])
 
   if (!candidato) {
     return (
@@ -882,7 +953,7 @@ export function DetalheCandidato({
             <span aria-hidden>·</span>
             <span className="num">{duracao(duracaoCorteUs)}</span>
             <span aria-hidden>·</span>
-            <SeloTipoVideo tipo={run.videoKind} />
+            <SeloTipoVideo tipo={tipoVideo} />
             <span aria-hidden>·</span>
             <span>
               Gerado por {formatarPerfilCandidato(candidato.profile, perfis)} · revisão {candidato.revision}
@@ -890,26 +961,22 @@ export function DetalheCandidato({
                 <> · Janelas {candidato.windows.map((w) => w + 1).join(', ')}</>
               )}
             </span>
-            {run.videoKind === 'direct' && (
-              <Dica texto="A conversão individual para Vídeo transformado ainda não está disponível nesta versão.">
-                <Botao
-                  tamanho="p"
-                  variante="fantasma"
-                  icone={<Sparkles />}
-                  aria-disabled="true"
-                  aria-describedby={idDicaDireto}
-                  className="pointer-events-auto! cursor-not-allowed hover:bg-transparent hover:text-t2"
-                >
-                  Converter em Vídeo transformado
-                </Botao>
-              </Dica>
+            {tipoVideo === 'direct' && (
+              <Botao
+                tamanho="p"
+                variante="fantasma"
+                icone={<Sparkles />}
+                carregando={convertendo}
+                onClick={() => {
+                  setErroConversao(null)
+                  setFocarAposConversao(false)
+                  setConfirmarConversaoAberto(true)
+                }}
+              >
+                Converter em Vídeo transformado
+              </Botao>
             )}
           </div>
-          {run.videoKind === 'direct' && (
-            <span id={idDicaDireto} className="sr-only">
-              A conversão individual para Vídeo transformado ainda não está disponível nesta versão.
-            </span>
-          )}
 
           <h2 className="text-titulo font-forte tracking-[-0.01em] text-t1">
             {candidato.title.trim() || 'Sem título'}
@@ -1030,6 +1097,7 @@ export function DetalheCandidato({
       {/* Barra de decisão e passagem — Regra da Luz Única: sempre 1 botão primário */}
       <div className="flex flex-wrap items-center gap-2">
         <Botao
+          ref={btnAprovarRef}
           variante={aprovado ? 'secundario' : 'primario'}
           icone={<Check />}
           atalho={atalhoAprovar}
@@ -1082,16 +1150,16 @@ export function DetalheCandidato({
             />
           ) : (
             <ChecklistGuardaCorpos
-              key={`guard-${candidato.id}-${run.videoKind}`}
+              key={`guard-${candidato.id}-${tipoVideo}`}
               escopo="single"
               itens={itensGuarda}
               abertoPorPadrao={
                 itensGuarda.some((i) => i.estado !== 'ok') ||
-                (run.videoKind === 'direct' && Boolean(guardrails?.needsDirectNotice)) ||
-                run.videoKind === 'transformed'
+                (tipoVideo === 'direct' && Boolean(guardrails?.needsDirectNotice)) ||
+                tipoVideo === 'transformed'
               }
               aoConfirmarDireto={
-                run.videoKind === 'direct' && guardrails?.needsDirectNotice
+                tipoVideo === 'direct' && guardrails?.needsDirectNotice
                   ? confirmarDireto
                   : undefined
               }
@@ -1100,6 +1168,34 @@ export function DetalheCandidato({
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        aberto={confirmarConversaoAberto}
+        aoMudarAberto={(proximo) => {
+          if (convertendo) return
+          setConfirmarConversaoAberto(proximo)
+          if (!proximo) setErroConversao(null)
+        }}
+        titulo="Converter em Vídeo transformado?"
+        descricao="Este Corte passará a ser um Vídeo transformado, liberando a aba Transformar no Editor para Ângulo, Roteiro e Narração. Essa conversão não pode ser desfeita."
+        rotuloCancelar="Cancelar"
+        rotuloConfirmar="Confirmar conversão"
+        ocupado={convertendo}
+        focoInicial="cancelar"
+        focoFinal={focarAposConversao ? btnAprovarRef : undefined}
+        aoConfirmar={confirmarConversao}
+      >
+        {erroConversao && (
+          <BannerErroCore
+            erro={{
+              code: erroConversao.code,
+              message: erroConversao.detalhe || erroConversao.message,
+            }}
+            traduzir={(code) => mensagemDeErro(new ErroCore(code, erroConversao.detalhe))}
+            aoDispensar={() => setErroConversao(null)}
+          />
+        )}
+      </ConfirmDialog>
     </section>
   )
 }

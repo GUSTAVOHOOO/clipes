@@ -1131,4 +1131,55 @@ describe('Bancada de Revisão de Cortes (#/projeto/:id/cortes/revisao/:runId)', 
     expect(listaRegiao).toHaveAttribute('tabindex', '-1')
     expect(detalheRegiao).toHaveAttribute('tabindex', '-1')
   })
+
+  it('converte apenas o candidato selecionado para Vídeo transformado em Revisao e preserva o tipo ao alternar candidatos', async () => {
+    const user = userEvent.setup()
+    mockRevisaoBase({
+      'selection.candidate.set_kind': (args: unknown) => {
+        const a = args as { candidate: number; videoKind: string }
+        const itens = criarItensRevisaoPadrao(2)
+        const alvo = itens.find((i) => i.candidate === a.candidate)!
+        return {
+          run: 1,
+          candidate: a.candidate,
+          videoKind: 'transformed',
+          canUndo: true,
+          item: { ...alvo, videoKind: 'transformed' },
+        }
+      },
+    })
+
+    render(
+      envolver(
+        <Revisao
+          projetoId="demo"
+          projetoPath="/projetos/Demo.clipes"
+          runParam="1"
+          storeFontes={storeFontes}
+          fila={filaTeste}
+        />,
+      ),
+    )
+
+    const detalhe = await screen.findByRole('region', { name: /Detalhe do Corte/i })
+    expect(within(detalhe).getByText('Corte direto')).toBeInTheDocument()
+
+    await user.click(within(detalhe).getByRole('button', { name: 'Converter em Vídeo transformado' }))
+    await screen.findByRole('alertdialog')
+    await user.click(screen.getByRole('button', { name: 'Confirmar conversão' }))
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(within(detalhe).getByText('Vídeo transformado')).toBeInTheDocument()
+    // Selo da Execução #1 continua Corte direto
+    const nav = screen.getByRole('navigation', { name: /Controles da revisão/i })
+    expect(within(nav).getByText('Corte direto')).toBeInTheDocument()
+
+    // Outro candidato continua Corte direto; voltar para o 1º mantém Vídeo transformado
+    const listbox = screen.getByRole('listbox', { name: /Candidatos a Corte/i })
+    await user.click(within(listbox).getByText('Sem título'))
+    expect(within(detalhe).getByText('Corte direto')).toBeInTheDocument()
+
+    await user.click(within(listbox).getByText('A virada do jogo'))
+    expect(within(detalhe).getByText('Vídeo transformado')).toBeInTheDocument()
+  })
 })

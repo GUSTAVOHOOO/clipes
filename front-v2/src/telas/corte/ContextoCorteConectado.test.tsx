@@ -201,8 +201,7 @@ describe('ContextoCorteConectado', () => {
     })
   })
 
-  it('oculta Transformar em Corte direto e exibe "Converter em Vídeo transformado" desabilitado com <Dica> sem expor ticket (UI-12)', async () => {
-    const user = userEvent.setup()
+  it('oculta Transformar em Corte direto e exibe "Converter em Vídeo transformado" habilitado, sem texto de indisponível (UI-12)', async () => {
     window.location.hash = '#/projeto/demo/corte/102/editar'
 
     render(
@@ -220,14 +219,145 @@ describe('ContextoCorteConectado', () => {
     expect(screen.getByRole('link', { name: 'Empacotar' })).toBeInTheDocument()
 
     const btnConverter = screen.getByRole('button', { name: 'Converter em Vídeo transformado' })
-    expect(btnConverter).toBeDisabled()
+    expect(btnConverter).toBeEnabled()
+    expect(document.body.textContent ?? '').not.toMatch(/ainda não está disponível/i)
+  })
 
-    await user.hover(btnConverter.parentElement!)
-    const dicaTexto = await screen.findByText(
-      'A conversão individual para Vídeo transformado ainda não está disponível nesta versão.',
+  it('converte Corte direto em Vídeo transformado via ConfirmDialog, com estados de carregando, atualização do selo/aba Transformar e foco', async () => {
+    const user = userEvent.setup()
+    window.location.hash = '#/projeto/demo/corte/102/editar?run=1'
+
+    let resolverConversao: ((valor: unknown) => void) | null = null
+    const chamarBase = chamarMock.getMockImplementation()!
+    chamarMock.mockImplementation(async (comando: string, args: Record<string, unknown> = {}) => {
+      if (comando === 'selection.candidate.set_kind') {
+        return new Promise((resolve) => {
+          resolverConversao = resolve
+        })
+      }
+      return chamarBase(comando, args)
+    })
+
+    render(
+      <Wrapper>
+        <ContextoCorteConectado projetoId="demo" corteId="102" subAbaAtiva="editar" runId="1" />
+      </Wrapper>,
     )
-    expect(dicaTexto).toBeInTheDocument()
-    expect(dicaTexto.textContent ?? '').not.toMatch(/#\d+/)
+
+    const btnConverter = await screen.findByRole('button', { name: 'Converter em Vídeo transformado' })
+    await user.click(btnConverter)
+
+    // Abre ConfirmDialog com foco inicial em Cancelar; cancelar mantém Corte direto e devolve foco ao botão
+    await screen.findByRole('alertdialog')
+    const btnCancelar = screen.getByRole('button', { name: 'Cancelar' })
+    await waitFor(() => expect(btnCancelar).toHaveFocus())
+    await user.click(btnCancelar)
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    })
+    await waitFor(() => expect(btnConverter).toHaveFocus())
+    expect(screen.getByText('Corte direto')).toBeInTheDocument()
+
+    // Reabre e confirma
+    await user.click(btnConverter)
+    await screen.findByRole('alertdialog')
+    const btnConfirmar = screen.getByRole('button', { name: 'Confirmar conversão' })
+    await user.click(btnConfirmar)
+
+    expect(chamarMock).toHaveBeenCalledWith('selection.candidate.set_kind', {
+      candidate: 102,
+      videoKind: 'transformed',
+    })
+    await waitFor(() => {
+      expect(btnConfirmar).toHaveAttribute('aria-busy', 'true')
+      expect(btnConfirmar).toBeDisabled()
+    })
+
+    await act(async () => {
+      resolverConversao?.({
+        run: 1,
+        candidate: 102,
+        videoKind: 'transformed',
+        canUndo: false,
+        item: {
+          candidate: 102,
+          status: 'approved',
+          adjusted: false,
+          videoKind: 'transformed',
+          startId: 40,
+          endId: 41,
+          startUs: 390e6,
+          endUs: 410e6,
+          startText: 'Frase 40',
+          endText: 'Frase 41',
+        },
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    })
+    expect(screen.getByText('Vídeo transformado')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Converter em Vídeo transformado' })).not.toBeInTheDocument()
+    const linkTransformar = screen.getByRole('link', { name: 'Transformar' })
+    expect(linkTransformar).toBeInTheDocument()
+    await waitFor(() => expect(linkTransformar).toHaveFocus())
+  })
+
+  it('exibe BannerErroCore traduzido via mensagemDeErro quando selection.candidate.set_kind falha e permite tentar de novo', async () => {
+    const user = userEvent.setup()
+    window.location.hash = '#/projeto/demo/corte/102/editar?run=1'
+
+    const chamarBase = chamarMock.getMockImplementation()!
+    let falhar = true
+    chamarMock.mockImplementation(async (comando: string, args: Record<string, unknown> = {}) => {
+      if (comando === 'selection.candidate.set_kind') {
+        if (falhar) {
+          throw { code: 'project_write', message: 'disk full' }
+        }
+        return {
+          run: 1,
+          candidate: 102,
+          videoKind: 'transformed',
+          canUndo: false,
+          item: {
+            candidate: 102,
+            status: 'approved',
+            adjusted: false,
+            videoKind: 'transformed',
+            startId: 40,
+            endId: 41,
+            startUs: 390e6,
+            endUs: 410e6,
+            startText: 'Frase 40',
+            endText: 'Frase 41',
+          },
+        }
+      }
+      return chamarBase(comando, args)
+    })
+
+    render(
+      <Wrapper>
+        <ContextoCorteConectado projetoId="demo" corteId="102" subAbaAtiva="editar" runId="1" />
+      </Wrapper>,
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Converter em Vídeo transformado' }))
+    await user.click(await screen.findByRole('button', { name: 'Confirmar conversão' }))
+
+    const alerta = await screen.findByRole('alert')
+    expect(alerta).toHaveTextContent(/Não foi possível gravar as edições no disco/i)
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+    expect(screen.getByText('Corte direto')).toBeInTheDocument()
+
+    falhar = false
+    await user.click(screen.getByRole('button', { name: 'Confirmar conversão' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    })
+    expect(screen.getByText('Vídeo transformado')).toBeInTheDocument()
   })
 
   it('exibe "Corte #avulso-..." sem Transformar/Empacotar e desabilita navegação anterior/próximo', async () => {
@@ -350,7 +480,7 @@ describe('ContextoCorteConectado', () => {
     )
 
     const btnConverter = await screen.findByRole('button', { name: 'Converter em Vídeo transformado' })
-    expect(btnConverter).toBeDisabled()
+    expect(btnConverter).toBeEnabled()
     expect(btnConverter.closest('span[tabindex="0"]')).toBeNull()
 
     chamarMock.mockImplementation(async (cmd: string) => {

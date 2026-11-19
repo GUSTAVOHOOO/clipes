@@ -33,6 +33,7 @@ import {
 import {
   DetalheCandidato,
   type CandidatoDetalhe,
+  type RespostaSetKindCandidato,
 } from '~/telas/cortes/DetalheCandidato'
 import {
   filtrarEOrdenarCandidatos,
@@ -258,14 +259,23 @@ export function Revisao({
 
     return execucaoDoRun.candidates.map((c) => {
       const item = mapaItens.get(c.id)
+      const itemComKind = item as
+        | (ItemRevisaoSelecao & { videoKind?: 'direct' | 'transformed' })
+        | undefined
       const cComExtras = c as typeof c & {
+        videoKind?: 'direct' | 'transformed'
         axes?: CandidatoDetalhe['axes']
         weights?: CandidatoDetalhe['weights']
         chat?: CandidatoDetalhe['chat']
         adjust?: CandidatoDetalhe['adjust']
       }
+      const videoKind: 'direct' | 'transformed' =
+        itemComKind?.videoKind ??
+        cComExtras.videoKind ??
+        (execucaoDoRun.run.videoKind === 'transformed' ? 'transformed' : 'direct')
       return {
         ...c,
+        videoKind,
         axes: cComExtras.axes,
         weights: cComExtras.weights,
         chat: cComExtras.chat,
@@ -524,6 +534,28 @@ export function Revisao({
       window.location.hash = `#/projeto/${encProjeto}/fontes/${fonteId}`
     },
     [encProjeto],
+  )
+
+  const aoConverterParaTransformado = useCallback(
+    (candidatoId: number, resposta: RespostaSetKindCandidato) => {
+      setRevisaoLocal((atual) => {
+        if (!atual) return atual
+        if (resposta.item) {
+          return aplicarItemNaRevisao(
+            atual,
+            resposta.item,
+            resposta.canUndo ?? atual.canUndo,
+          )
+        }
+        return {
+          ...atual,
+          items: atual.items.map((it) =>
+            it.candidate === candidatoId ? { ...it, videoKind: 'transformed' } : it,
+          ),
+        }
+      })
+    },
+    [],
   )
 
   // Registra F6 / Shift+F6 com 5 regiões (Topo -> Sub-cabeçalho -> Lista -> Detalhe -> Rodapé)
@@ -1120,6 +1152,7 @@ export function Revisao({
             aoDecidir={aoDecidir}
             aoAjustar={aoAjustar}
             aoAbrirEditor={aoAbrirEditor}
+            aoConverterParaTransformado={aoConverterParaTransformado}
             aoRelocalizarFonte={aoRelocalizarFonte}
             className="min-h-0 flex-1"
           />

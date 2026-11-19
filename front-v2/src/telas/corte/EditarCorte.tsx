@@ -32,6 +32,7 @@ import {
 } from '~/core/progresso'
 import { usePreferencias } from '~/preferencias/preferencias'
 import { useEstadoForcado } from '~/shell/EstadoForcado'
+import { EVENTO_CANDIDATO_KIND_ALTERADO } from '~/telas/corte/ContextoCorteConectado'
 import {
   nextRate,
   parsearCorteId,
@@ -564,6 +565,23 @@ export function EditarCorte({
   }, [editor.proxy.job, editor.proxy.key, editor.proxy.state, jobProxyNaFila?.estado])
 
   // Atualiza meta e status de salvamento para o Shell / ContextoCorteConectado
+  useEffect(() => {
+    const aoAlterarKind = (e: Event) => {
+      const detail = (
+        e as CustomEvent<{ candidateId?: number; videoKind?: 'direct' | 'transformed' }>
+      ).detail
+      if (!detail || typeof detail.candidateId !== 'number' || !detail.videoKind) return
+      setCorteResolvido((prev) => {
+        if (!prev || prev.candidateId !== detail.candidateId || prev.videoKind === detail.videoKind) {
+          return prev
+        }
+        return { ...prev, videoKind: detail.videoKind! }
+      })
+    }
+    window.addEventListener(EVENTO_CANDIDATO_KIND_ALTERADO, aoAlterarKind)
+    return () => window.removeEventListener(EVENTO_CANDIDATO_KIND_ALTERADO, aoAlterarKind)
+  }, [])
+
   useEffect(() => {
     aoAtualizarMeta?.({
       clipId: doc?.clipId,
