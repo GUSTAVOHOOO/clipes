@@ -291,14 +291,20 @@ test.describe('Tela Exportação — Mesa de Prontidão e Histórico de Lotes (#
         const b = Array.from(document.querySelectorAll('button.bg-sinal')).find((el) =>
           /Exportar .* em lote/i.test(el.textContent ?? ''),
         )
+        const checklist = Array.from(document.querySelectorAll('span')).find((el) =>
+          /Checklist informativo/i.test(el.textContent ?? ''),
+        )
         return {
           toast: t?.getBoundingClientRect().toJSON() ?? null,
           botao: b?.getBoundingClientRect().toJSON() ?? null,
+          checklist: checklist?.getBoundingClientRect().toJSON() ?? null,
         }
       })
       expect(rectsMesa.toast).not.toBeNull()
       expect(rectsMesa.botao).not.toBeNull()
+      expect(rectsMesa.checklist).not.toBeNull()
       expect(semSobreposicao(rectsMesa.toast!, rectsMesa.botao!)).toBe(true)
+      expect(semSobreposicao(rectsMesa.toast!, rectsMesa.checklist!)).toBe(true)
 
       // Com Fila aberta: toast desloca para a esquerda e não cobre a Fila nem o botão primário
       await page.keyboard.press('Control+j')

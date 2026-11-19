@@ -1,0 +1,16 @@
+@media (min-width: 1024px) {
+  :root[data-mesa-prontidao='true'] {
+    --toast-bottom: 2.75rem;
+    --toast-right: 407px;
+  }
+
+  :root[data-mesa-prontidao='true']:has([data-regiao='fila']) {
+    --toast-bottom: 7rem;
+  }
+}
+
+@media (min-width: 1440px) {
+  :root[data-mesa-prontidao='true'] {
+    --toast-right: 442px;
+  }
+}

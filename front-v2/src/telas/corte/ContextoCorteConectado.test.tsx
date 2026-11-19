@@ -501,4 +501,48 @@ describe('ContextoCorteConectado', () => {
       expect(h1.textContent).not.toMatch(/#201/)
     })
   })
+
+  it('UI-110: em Empacotar, desabilita e rebaixa "Exportar Corte" (sem .bg-sinal nem kbd primário) nos estados erro, carregando e offline', async () => {
+    configurarMocksPadrao()
+    for (const estado of ['erro', 'carregando', 'offline'] as const) {
+      window.location.hash = `#/projeto/demo/corte/202/empacotar?run=2&estado=${estado}`
+      const { unmount } = render(
+        <Wrapper>
+          <ContextoCorteConectado projetoId="demo" corteId="202" subAbaAtiva="empacotar" runId="2" />
+        </Wrapper>,
+      )
+
+      const btnExportar = await screen.findByRole('button', { name: /Exportar Corte/i })
+      await waitFor(() => {
+        expect(btnExportar).toBeDisabled()
+      })
+      expect(btnExportar.className.split(/\s+/)).not.toContain('bg-sinal')
+      const kbd = btnExportar.querySelector('kbd')
+      expect(kbd).not.toBeNull()
+      expect(kbd?.className).not.toContain('text-no-sinal')
+      unmount()
+    }
+
+    // Fonte offline real (available: false) em Empacotar também desabilita e rebaixa Exportar Corte
+    window.location.hash = '#/projeto/demo/corte/202/empacotar?run=2'
+    const chamarBase = chamarMock.getMockImplementation()!
+    chamarMock.mockImplementation(async (cmd: string, args: Record<string, unknown> = {}) => {
+      if (cmd === 'sources.list') {
+        return [{ ...FONTES_MOCK[0], available: false, status: 'offline' }]
+      }
+      return chamarBase(cmd, args)
+    })
+
+    render(
+      <Wrapper>
+        <ContextoCorteConectado projetoId="demo" corteId="202" subAbaAtiva="empacotar" runId="2" />
+      </Wrapper>,
+    )
+
+    await waitFor(() => {
+      const btnExportar = screen.getByRole('button', { name: /Exportar Corte/i })
+      expect(btnExportar).toBeDisabled()
+      expect(btnExportar.className.split(/\s+/)).not.toContain('bg-sinal')
+    })
+  })
 })

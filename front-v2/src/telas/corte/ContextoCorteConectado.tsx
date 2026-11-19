@@ -162,6 +162,7 @@ export function ContextoCorteConectado({
   const [erroConversao, setErroConversao] = useState<ErroCore | null>(null)
   const [focarTransformarPosConversao, setFocarTransformarPosConversao] = useState(false)
   const [primarioOcultoExterno, setPrimarioOcultoExterno] = useState(false)
+  const [desabilitarExterno, setDesabilitarExterno] = useState(false)
 
   const toast = useToast()
   const toastRef = useRef(toast)
@@ -179,12 +180,14 @@ export function ContextoCorteConectado({
     setErroConversao(null)
     setFocarTransformarPosConversao(false)
     setPrimarioOcultoExterno(false)
+    setDesabilitarExterno(false)
   }, [corteId, subAbaAtiva])
 
   useEffect(() => {
     const aoAlterarPrimario = (e: Event) => {
-      const det = (e as CustomEvent<{ ocultar?: boolean }>).detail
+      const det = (e as CustomEvent<{ ocultar?: boolean; desabilitar?: boolean }>).detail
       setPrimarioOcultoExterno(Boolean(det?.ocultar))
+      setDesabilitarExterno(Boolean(det?.desabilitar))
     }
     window.addEventListener(EVENTO_CORTE_PRIMARIO_OCULTO, aoAlterarPrimario)
     return () => window.removeEventListener(EVENTO_CORTE_PRIMARIO_OCULTO, aoAlterarPrimario)
@@ -350,6 +353,7 @@ export function ContextoCorteConectado({
   }, [executarNavegacao, projetoId, runNumerico, temRunId])
 
   const abrirExportacao = useCallback(() => {
+    if (exportarDesabilitadoRef.current) return
     if (aoAbrirExportacao) {
       aoAbrirExportacao()
       return
@@ -458,6 +462,28 @@ export function ContextoCorteConectado({
     if (!corteParaExportar) return null
     return estado.fontes.find((f) => f.id === corteParaExportar.sourceId) ?? null
   }, [corteParaExportar, estado.fontes, fonteProp])
+
+  const fonteIndisponivel =
+    forcado === 'offline' ||
+    Boolean(fonteAtual && (!fonteAtual.available || fonteAtual.status !== 'available'))
+  const empacotarBloqueado =
+    subAbaAtiva === 'empacotar' &&
+    (forcado === 'vazio' ||
+      forcado === 'erro' ||
+      forcado === 'carregando' ||
+      forcado === 'offline' ||
+      Boolean(estado.erro) ||
+      estado.carregando ||
+      fonteIndisponivel ||
+      !corteParaExportar)
+  const exportarDesabilitado =
+    forcado === 'vazio' ||
+    estado.carregando ||
+    !corteParaExportar ||
+    desabilitarExterno ||
+    empacotarBloqueado
+  const exportarDesabilitadoRef = useRef(exportarDesabilitado)
+  exportarDesabilitadoRef.current = exportarDesabilitado
 
   const subAbasVisiveis: Array<{ valor: SubAbaCorte; rotulo: string }> = useMemo(() => {
     const lista: Array<{ valor: SubAbaCorte; rotulo: string }> = [{ valor: 'editar', rotulo: 'Editar' }]
@@ -587,16 +613,16 @@ export function ContextoCorteConectado({
 
         <Botao
           variante={
-            forcado === 'vazio' ||
             subAbaAtiva === 'transformar' ||
             exportacaoAberta ||
             confirmarConversaoAberto ||
-            primarioOcultoExterno
+            primarioOcultoExterno ||
+            exportarDesabilitado
               ? 'secundario'
               : 'primario'
           }
           atalho={ehMac ? '⌘E' : 'Ctrl+E'}
-          disabled={forcado === 'vazio' || estado.carregando || !corteParaExportar}
+          disabled={exportarDesabilitado}
           onClick={abrirExportacao}
         >
           Exportar Corte

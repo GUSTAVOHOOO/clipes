@@ -21,6 +21,7 @@ import { useAtalhos, type Atalho } from '~/comandos/atalhos'
 import { ContadorLimite, contarBytesUtf8 } from '~/componentes/ContadorLimite'
 import { ListaChips } from '~/componentes/ListaChips'
 import { chamar, paraErroCore, type ErroCore } from '~/core/cliente'
+import { orcamentoParaResumo } from '~/stores/selecaoProjeto'
 import {
   validarCapitulosTempoReal,
   type EmpacotamentoDoc,
@@ -851,15 +852,7 @@ export function FichaEmpacotamento({
             saiDaMaquina={destinoConfirmacao.saiDaMaquina}
             host={destinoConfirmacao.host}
             estimativa={converterEstimativa(confirmacao.estimate)}
-            orcamento={
-              store.orcamento
-                ? {
-                    restanteMicroUsd: store.orcamento.remainingMicroUsd ?? null,
-                    callsRestantes: store.orcamento.callsRemaining ?? null,
-                    pausado: Boolean(store.orcamento.paused),
-                  }
-                : null
-            }
+            orcamento={orcamentoParaResumo(store.orcamento)}
             bloqueadoSomenteLocal={destinoConfirmacao.bloqueadoSomenteLocal}
           />
         )}

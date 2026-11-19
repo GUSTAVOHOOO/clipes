@@ -18,6 +18,7 @@ import { ListaChips } from '~/componentes/ListaChips'
 import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useFila, type Fila } from '~/core/progresso'
+import { orcamentoParaResumo } from '~/stores/selecaoProjeto'
 import type { AnguloItem, AngulosDoc, useTransformarCorte } from '~/stores/transformarCorte'
 
 export type StoreTransformarPasso = Pick<
@@ -730,15 +731,7 @@ export function PassoAngulo({
             saiDaMaquina={destinoConfirmacao.saiDaMaquina}
             host={destinoConfirmacao.host}
             estimativa={converterEstimativa(confirmacaoGerar.estimate)}
-            orcamento={
-              store.orcamento
-                ? {
-                    restanteMicroUsd: store.orcamento.remainingMicroUsd ?? null,
-                    callsRestantes: store.orcamento.callsRemaining ?? null,
-                    pausado: Boolean(store.orcamento.paused),
-                  }
-                : null
-            }
+            orcamento={orcamentoParaResumo(store.orcamento)}
             bloqueadoSomenteLocal={destinoConfirmacao.bloqueadoSomenteLocal}
           />
         )}

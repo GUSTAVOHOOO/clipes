@@ -252,4 +252,19 @@ describe('Sobre (#/sobre)', () => {
     expect(busca).toHaveValue('')
     expect(screen.getByLabelText(/Atribuições de terceiros/i)).toBeInTheDocument()
   })
+
+  it('UI-122: formata a data da atualização disponível em PT-BR em vez do ISO bruto', async () => {
+    vi.stubEnv('VITE_UPDATER_MOCK', 'available')
+    const user = userEvent.setup()
+    const store = criarStoreAtualizador()
+
+    renderSobre({ store })
+    await screen.findByText('0.1.0')
+
+    await user.click(screen.getByRole('button', { name: 'Verificar atualizações' }))
+    expect(await screen.findByText(/Nova versão disponível/i)).toBeInTheDocument()
+
+    expect(screen.queryByText('2026-11-13T00:00:00Z')).not.toBeInTheDocument()
+    expect(screen.getByText('13/11/2026')).toBeInTheDocument()
+  })
 })

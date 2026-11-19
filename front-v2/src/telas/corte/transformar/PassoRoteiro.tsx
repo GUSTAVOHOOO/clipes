@@ -26,7 +26,7 @@ import { ListaChips } from '~/componentes/ListaChips'
 import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useFila, type Fila } from '~/core/progresso'
-import type { PerfilProvedorLista } from '~/stores/selecaoProjeto'
+import { orcamentoParaResumo, type PerfilProvedorLista } from '~/stores/selecaoProjeto'
 import type { BlocoRoteiro, RoteiroDoc } from '~/stores/transformarCorte'
 import {
   OPCOES_IDIOMA,
@@ -932,15 +932,7 @@ export function PassoRoteiro({
             saiDaMaquina={destinoConfirmacao.saiDaMaquina}
             host={destinoConfirmacao.host}
             estimativa={converterEstimativa(confirmacao.estimativa.estimate)}
-            orcamento={
-              store.orcamento
-                ? {
-                    restanteMicroUsd: store.orcamento.remainingMicroUsd ?? null,
-                    callsRestantes: store.orcamento.callsRemaining ?? null,
-                    pausado: Boolean(store.orcamento.paused),
-                  }
-                : null
-            }
+            orcamento={orcamentoParaResumo(store.orcamento)}
             bloqueadoSomenteLocal={destinoConfirmacao.bloqueadoSomenteLocal}
           />
         )}

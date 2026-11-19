@@ -27,6 +27,7 @@ import { mensagemDeErro } from '~/core/erros'
 import { useFila, type Job } from '~/core/progresso'
 import type { FonteProjeto } from '~/stores/fontesProjeto'
 import {
+  orcamentoParaResumo,
   resolverDestinoSelecao,
   type PerfilProvedorLista,
   type RespostaTarefasAssistente,
@@ -1117,7 +1118,7 @@ export function ConfiguradorSelecao({
                 )}
                 orcamento={
                   orcamentoSelecao
-                    ? {
+                    ? orcamentoParaResumo({
                         restanteMicroUsd:
                           orcamentoSelecao.maxCostMicroUsd != null
                             ? Math.max(
@@ -1130,7 +1131,7 @@ export function ConfiguradorSelecao({
                             ? Math.max(0, orcamentoSelecao.maxCalls - orcamentoSelecao.usage.calls)
                             : null,
                         pausado: Boolean(orcamentoSelecao.paused),
-                      }
+                      })
                     : null
                 }
                 bloqueadoSomenteLocal={destino.bloqueadoSomenteLocal}
@@ -1180,7 +1181,7 @@ export function ConfiguradorSelecao({
             )}
             orcamento={
               orcamentoSelecao
-                ? {
+                ? orcamentoParaResumo({
                     restanteMicroUsd:
                       orcamentoSelecao.maxCostMicroUsd != null
                         ? Math.max(
@@ -1193,7 +1194,7 @@ export function ConfiguradorSelecao({
                         ? Math.max(0, orcamentoSelecao.maxCalls - orcamentoSelecao.usage.calls)
                         : null,
                     pausado: Boolean(orcamentoSelecao.paused),
-                  }
+                  })
                 : null
             }
             bloqueadoSomenteLocal={destino.bloqueadoSomenteLocal}

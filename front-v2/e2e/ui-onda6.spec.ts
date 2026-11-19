@@ -479,7 +479,7 @@ test.describe('Avaliação UI independente — Onda 6 (Exportação, Fila, Relat
     await page.getByRole('option', { name: 'offline.mp4' }).click()
     await expect(page.getByRole('article')).toHaveCount(1)
     await expect(page.getByText(/Fonte offline/i).first()).toBeVisible()
-    const avisoOfflineZonaB = await page.getByText(/Fonte offline ou alterada e falharão/i).isVisible()
+    const avisoOfflineZonaB = await page.getByText(/Fonte offline ou alterada e falhar(?:á|ão)/i).isVisible()
     await page.getByRole('combobox', { name: /Filtrar por Fonte/i }).click()
     await page.getByRole('option', { name: 'Todas as Fontes' }).click()
     await expect(page.getByRole('article').first()).toBeVisible()
