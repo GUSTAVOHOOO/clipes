@@ -41,16 +41,16 @@ const MAX_STEM_CHARS: usize = 60;
 
 pub(crate) struct PlannedCut {
     pub(crate) source_id: i64,
-    source_path: String,
+    pub(crate) source_path: String,
     pub(crate) run_id: i64,
     pub(crate) candidate_id: i64,
     pub(crate) clip_id: Option<i64>,
-    start_id: i64,
-    end_id: i64,
-    start_us: i64,
+    pub(crate) start_id: i64,
+    pub(crate) end_id: i64,
+    pub(crate) start_us: i64,
     pub(crate) duration_us: i64,
-    title: String,
-    initial_error: Option<CoreError>,
+    pub(crate) title: String,
+    pub(crate) initial_error: Option<CoreError>,
 }
 
 enum PreparedItem {
