@@ -22,6 +22,7 @@ import {
   type AcoesExternasEditarCorte,
   type MetaCorteResolvida,
 } from '~/telas/corte/EditarCorte'
+import { EmpacotarCorte, type AcoesExternasEmpacotar } from '~/telas/corte/empacotar/EmpacotarCorte'
 import { TransformarCorte } from '~/telas/corte/transformar/TransformarCorte'
 import { Revisao } from '~/telas/cortes/Revisao'
 import { Selecao } from '~/telas/cortes/Selecao'
@@ -247,6 +248,7 @@ function AppRoteado({
   })
   const [statusSalvamentoEditor, setStatusSalvamentoEditor] = useState<ReactNode>(null)
   const acoesEditarRef = useRef<AcoesExternasEditarCorte | null>(null)
+  const acoesEmpacotarRef = useRef<AcoesExternasEmpacotar | null>(null)
 
   const estavel = rotaEstavelRef.current
   const tentandoSairSemLiberacao =
@@ -458,6 +460,42 @@ function AppRoteado({
           runId={rotaExibida.run}
           aoAtualizarMeta={setMetaCorte}
           aoMudarStatusSalvamento={setStatusSalvamentoEditor}
+        />
+      </Shell>
+    )
+  }
+
+  if (rotaExibida.tela === 'corte' && rotaExibida.aba === 'empacotar') {
+    return (
+      <Shell
+        rota={rotaExibida}
+        projeto={projeto}
+        somenteLocal={somenteLocal}
+        semPaddingConteudo
+        statusSalvamento={statusSalvamentoEditor}
+        meio={
+          <ContextoCorteConectado
+            projetoId={rotaExibida.projeto}
+            corteId={rotaExibida.corte}
+            subAbaAtiva="empacotar"
+            runId={rotaExibida.run}
+            fonte={metaCorte.fonte}
+            clipId={metaCorte.clipId}
+            aoAbrirExportacao={() => acoesEmpacotarRef.current?.abrirExportacao()}
+            aoFonteRelocalizada={(atualizada) =>
+              setMetaCorte((prev) => ({ ...prev, fonte: atualizada }))
+            }
+          />
+        }
+      >
+        <EmpacotarCorte
+          projetoId={rotaExibida.projeto}
+          projetoPath={projeto?.path ?? null}
+          corteId={rotaExibida.corte}
+          runId={rotaExibida.run}
+          aoAtualizarMeta={setMetaCorte}
+          aoMudarStatusSalvamento={setStatusSalvamentoEditor}
+          acoesExternasRef={acoesEmpacotarRef}
         />
       </Shell>
     )
