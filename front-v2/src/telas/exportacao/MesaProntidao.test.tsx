@@ -313,11 +313,15 @@ describe('MesaProntidao', () => {
     await user.click(btnCarregarMais)
     expect(carregarMais).toHaveBeenCalledTimes(1)
 
-    // Dica #298 presente na ação desabilitada de atualização agregada
+    // Dica da ação indisponível de atualização agregada (#298) sem expor número de ticket nem comando interno (UI-12)
     const btnReadiness = screen.getByRole('button', { name: /Atualizar prontidão em lote/i })
     expect(btnReadiness).toBeDisabled()
     await user.hover(btnReadiness.parentElement!)
-    expect(await screen.findByText(/#298/)).toBeInTheDocument()
+    const dicaReadiness = await screen.findByText(
+      /atualização em lote em uma única consulta ainda não está disponível nesta versão/i,
+    )
+    expect(dicaReadiness).toBeInTheDocument()
+    expect(dicaReadiness.textContent).not.toMatch(/#\d+|export\.readiness/)
 
     // Busca por título filtrando para 0 itens e "Limpar filtros"
     const busca = screen.getByRole('searchbox', { name: /Buscar título do Corte/i })
@@ -347,17 +351,25 @@ describe('MesaProntidao', () => {
     await user.click(within(card301).getByRole('button', { name: 'Relocalizar Fonte' }))
     expect(window.location.hash).toBe('#/projeto/demo/fontes/2')
 
-    // Dica #292 no botão desabilitado "Converter em Vídeo transformado" do card direto 102
+    // Dica da ação indisponível "Converter em Vídeo transformado" (#292) sem expor número de ticket (UI-12)
     const btnConverter = within(card102).getByRole('button', { name: /Converter em Vídeo transformado/i })
     expect(btnConverter).toBeDisabled()
     await user.hover(btnConverter.parentElement!)
-    expect(await screen.findByText(/#292/)).toBeInTheDocument()
+    const dicaConverter = await screen.findByText(
+      /conversão individual para Vídeo transformado ainda não está disponível nesta versão/i,
+    )
+    expect(dicaConverter).toBeInTheDocument()
+    expect(dicaConverter.textContent).not.toMatch(/#\d+/)
 
-    // Dica #303 no botão desabilitado "Salvar pasta padrão"
+    // Dica da ação indisponível "Salvar pasta padrão" (#303) sem expor ticket nem comando interno (UI-12)
     const btnSalvarPasta = screen.getByRole('button', { name: /Salvar pasta padrão/i })
     expect(btnSalvarPasta).toBeDisabled()
     await user.hover(btnSalvarPasta.parentElement!)
-    expect(await screen.findByText(/#303/)).toBeInTheDocument()
+    const dicaPasta = await screen.findByText(
+      /salvar a pasta padrão sem exportar ainda não está disponível nesta versão/i,
+    )
+    expect(dicaPasta).toBeInTheDocument()
+    expect(dicaPasta.textContent).not.toMatch(/#\d+|export\.settings/)
 
     // "Exportar só este" no card 102 abre <DialogoExportarCorte>
     await user.click(within(card102).getByRole('button', { name: 'Exportar só este' }))

@@ -438,7 +438,7 @@ function CartaoProntidao({
 
         {corte.videoKind === 'direct' && (
           /* Pendência no núcleo (#292): conversão individual para Vídeo transformado. */
-          <Dica texto="Conversão individual para Vídeo transformado aguarda comando no núcleo (#292).">
+          <Dica texto="A conversão individual para Vídeo transformado ainda não está disponível nesta versão.">
             <span tabIndex={0} className="inline-flex shrink-0 rounded-controle">
               <Botao tamanho="p" variante="fantasma" icone={<Sparkles />} disabled>
                 Converter em Vídeo transformado
@@ -812,7 +812,7 @@ export function MesaProntidao({
         </div>
 
         {/* Pendência no núcleo (#298): comando agregado export.readiness */}
-        <Dica texto="Consulta agregada em uma chamada aguarda export.readiness no núcleo (#298); carregamento paginado ativo.">
+        <Dica texto="A atualização em lote em uma única consulta ainda não está disponível nesta versão; o carregamento paginado segue ativo.">
           <span tabIndex={0} className="ml-auto inline-flex shrink-0 rounded-controle">
             <Botao tamanho="p" variante="fantasma" icone={<RefreshCw />} disabled>
               Atualizar prontidão em lote
@@ -946,7 +946,7 @@ export function MesaProntidao({
 
                 {/* Pendência no núcleo (#303): export.settings.set */}
                 <div className="flex justify-end">
-                  <Dica texto="Persistir pasta padrão sem exportar aguarda export.settings.set no núcleo (#303).">
+                  <Dica texto="Salvar a pasta padrão sem exportar ainda não está disponível nesta versão.">
                     <span tabIndex={0} className="inline-flex shrink-0 rounded-controle">
                       <Botao tamanho="p" variante="fantasma" disabled>
                         Salvar pasta padrão
