@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react'
 import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import {
+  limparErroSalvamentoEditor,
   useFila,
   useSalvamentoEditor,
   type EstadoSalvamentoEditor,
@@ -457,7 +458,8 @@ function mesclarFrases(existentes: TimelineSentence[], novas: TimelineSentence[]
  * atualizações otimistas reversíveis, `editor.flush`, mapa `jobId → clipId` (#297),
  * recarga automática de `editor.sentences` e invalidação de `export.captions`.
  */
-export function criarStoreEditorCorte(): StoreEditorCorte {
+export function criarStoreEditorCorte(opcoes?: { fila?: Fila }): StoreEditorCorte {
+  const filaAssociada = opcoes?.fila
   let estado = estadoInicial(null, null)
   const ouvintes = new Set<() => void>()
   let sessaoToken = 0
@@ -1193,6 +1195,7 @@ export function criarStoreEditorCorte(): StoreEditorCorte {
     atualizarEstado({ salvando: true, erroSalvamento: null })
     try {
       await chamar('editor.flush', {})
+      limparErroSalvamentoEditor(filaAssociada)
       if (token !== sessaoToken) return { ok: true }
       atualizarEstado({ dirty: false, salvando: false, erroSalvamento: null })
       return { ok: true }
@@ -1415,7 +1418,7 @@ function obterStore(fila?: Fila): StoreEditorCorte {
   if (!fila) return storePadrao
   let s = storesPorInstancia.get(fila)
   if (!s) {
-    s = criarStoreEditorCorte()
+    s = criarStoreEditorCorte({ fila })
     storesPorInstancia.set(fila, s)
   }
   return s

@@ -3,6 +3,14 @@ import { Redo2, Save, Undo2 } from 'lucide-react'
 import { useEffect } from 'react'
 import { useSessaoEditorCorte, type SessaoEditorCorte } from '~/telas/corte/PalcoEditor'
 
+const ROTULOS_LAYOUT: Record<string, string> = {
+  face: 'Rosto (9:16)',
+  fit: 'Fit / Centro',
+  gameplay_webcam: 'Jogo + Webcam',
+  two_people: 'Duas pessoas',
+  fullscreen_roi: 'Tela cheia (ROI)',
+}
+
 export type PopoverHistoricoProps = {
   projetoPath?: string | null
   corteId?: string | null
@@ -46,7 +54,9 @@ export function PopoverHistorico({
               onClick={() => void storeAtivo.desfazerEditor()}
               className="flex-1 justify-center"
             >
-              Desfazer (<span className="num">{undoCount}</span>)
+              <span>
+                Desfazer (<span className="num">{undoCount}</span>)
+              </span>
             </Botao>
           </Dica>
           <Dica texto="Refazer edição no Corte atual" atalho="Ctrl+Shift+Z">
@@ -58,7 +68,9 @@ export function PopoverHistorico({
               onClick={() => void storeAtivo.refazerEditor()}
               className="flex-1 justify-center"
             >
-              Refazer (<span className="num">{redoCount}</span>)
+              <span>
+                Refazer (<span className="num">{redoCount}</span>)
+              </span>
             </Botao>
           </Dica>
         </div>
@@ -115,12 +127,12 @@ export function PopoverHistorico({
                     Rev. {snap.revision} · {tc(snap.range.startUs)} – {tc(snap.range.endUs)}
                   </div>
                   <div className="num text-micro text-t3">
-                    Layout: {snap.crop.layout ?? 'fit'} · Silêncios:{' '}
+                    Layout: {ROTULOS_LAYOUT[snap.crop.layout ?? 'fit'] ?? snap.crop.layout ?? 'Fit / Centro'} · Silêncios:{' '}
                     {snap.silences?.intervals?.length ?? 0}
                   </div>
                 </div>
                 <Dica texto="Restaurar um ponto salvo ainda não está disponível.">
-                  <span tabIndex={0} className="inline-flex">
+                  <span className="inline-flex">
                     <Botao tamanho="p" disabled>
                       Restaurar
                     </Botao>

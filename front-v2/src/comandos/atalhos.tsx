@@ -18,6 +18,7 @@ export type Atalho = {
   grupo: string
   tecla?: string
   teclaUnica?: boolean
+  teclaModoAlt?: string
   executar(): void
 }
 
@@ -27,6 +28,7 @@ export type DefinicaoAtalho = {
   titulo: string
   tecla: string
   teclaUnica?: boolean
+  teclaModoAlt?: string
   observacao?: string
 }
 
@@ -84,8 +86,8 @@ export const MAPA_ATALHOS_OFICIAL: readonly DefinicaoAtalho[] = [
   { id: 'revisao.bordaFim', escopo: 'Revisão de Cortes', titulo: 'Avançar borda final em 1 Frase', tecla: 'O', teclaUnica: true },
   { id: 'revisao.abrirEditor', escopo: 'Revisão de Cortes', titulo: 'Abrir Corte selecionado no Editor', tecla: 'Enter' },
   { id: 'revisao.desfazer', escopo: 'Revisão de Cortes', titulo: 'Desfazer última decisão/ajuste', tecla: 'Mod+Z' },
-  { id: 'editor.entrada', escopo: 'Editor do Corte', titulo: 'Mover borda Entrada para a agulha', tecla: 'I', teclaUnica: true },
-  { id: 'editor.saida', escopo: 'Editor do Corte', titulo: 'Mover borda Saída para a agulha', tecla: 'O', teclaUnica: true },
+  { id: 'editor.entrada', escopo: 'Editor do Corte', titulo: 'Mover borda Entrada para a agulha', tecla: 'I', teclaUnica: true, teclaModoAlt: 'Shift+Alt+I' },
+  { id: 'editor.saida', escopo: 'Editor do Corte', titulo: 'Mover borda Saída para a agulha', tecla: 'O', teclaUnica: true, teclaModoAlt: 'Shift+Alt+O' },
   { id: 'editor.zoomMais', escopo: 'Editor do Corte', titulo: 'Aumentar zoom da timeline', tecla: '+', teclaUnica: true },
   { id: 'editor.zoomMenos', escopo: 'Editor do Corte', titulo: 'Diminuir zoom da timeline', tecla: '-', teclaUnica: true },
   { id: 'editor.desfazer', escopo: 'Editor do Corte', titulo: 'Desfazer edição do Corte', tecla: 'Mod+Z' },
@@ -125,11 +127,17 @@ export function ehTeclaUnica(atalho: Pick<Atalho, 'teclaUnica'>, teclaEfetiva: s
   return !combo.mod && !combo.ctrl && !combo.alt && combo.tecla.length === 1
 }
 
-function aplicarModo(tecla: string, modo: ModoTeclasUnicas, teclaUnicaProp?: boolean): string | undefined {
+function aplicarModo(
+  tecla: string,
+  modo: ModoTeclasUnicas,
+  teclaUnicaProp?: boolean,
+  teclaModoAlt?: string,
+): string | undefined {
   if (!tecla) return undefined
   if (!ehTeclaUnica({ teclaUnica: teclaUnicaProp }, tecla)) return tecla
   if (modo === 'desligadas') return undefined
   if (modo === 'alt') {
+    if (teclaModoAlt) return teclaModoAlt
     const combo = lerCombo(tecla)
     if (combo.alt) return tecla
     return combo.tecla === ' ' ? 'Alt+Espaço' : `Alt+${tecla}`
@@ -142,9 +150,10 @@ export function resolverTeclaExibida(
   tecla: string | undefined,
   modo: ModoTeclasUnicas,
   teclaUnicaProp?: boolean,
+  teclaModoAlt?: string,
 ): string | undefined {
   if (!tecla) return undefined
-  return aplicarModo(tecla, modo, teclaUnicaProp)
+  return aplicarModo(tecla, modo, teclaUnicaProp, teclaModoAlt)
 }
 
 function combina(e: KeyboardEvent, tecla: string): boolean {
@@ -347,13 +356,19 @@ export function criarRegistro() {
       opcoes.modoTeclasUnicas ?? (opcoes.teclasUnicas === false ? 'desligadas' : 'ativas')
 
     for (const atalho of lista()) {
-      const teclaBase =
+      const remapeado =
         opcoes.remapeados && Object.hasOwn(opcoes.remapeados, atalho.id)
-          ? opcoes.remapeados[atalho.id]
-          : atalho.tecla
+      const teclaBase = remapeado
+        ? opcoes.remapeados![atalho.id]
+        : atalho.tecla
       if (!teclaBase) continue
 
-      const teclaEfetiva = aplicarModo(teclaBase, modo, atalho.teclaUnica)
+      const teclaEfetiva = aplicarModo(
+        teclaBase,
+        modo,
+        atalho.teclaUnica,
+        remapeado ? undefined : atalho.teclaModoAlt,
+      )
       if (!teclaEfetiva) continue
 
       const combo = lerCombo(teclaEfetiva)
@@ -410,7 +425,7 @@ export function useAtalhos(atalhos: Atalho[]): void {
   ref.current = atalhos
 
   const assinatura = atalhos
-    .map((a) => `${a.id}:${a.titulo}:${a.grupo}:${a.tecla ?? ''}:${a.teclaUnica ?? ''}`)
+    .map((a) => `${a.id}:${a.titulo}:${a.grupo}:${a.tecla ?? ''}:${a.teclaUnica ?? ''}:${a.teclaModoAlt ?? ''}`)
     .join('|')
 
   useEffect(() => {
@@ -420,6 +435,7 @@ export function useAtalhos(atalhos: Atalho[]): void {
       grupo: a.grupo,
       tecla: a.tecla,
       teclaUnica: a.teclaUnica,
+      teclaModoAlt: a.teclaModoAlt,
       executar: () => ref.current[idx]?.executar(),
     }))
     return ctx.registro.registrar(proxies)
@@ -482,10 +498,16 @@ export function ProvedorAtalhos({ children }: { children: ReactNode }) {
     return atalhosRegistrados
       .filter((a) => a.id !== 'paleta.abrir')
       .map((a) => {
-        const teclaBase = Object.hasOwn(preferencias.atalhos, a.id)
+        const remapeado = Object.hasOwn(preferencias.atalhos, a.id)
+        const teclaBase = remapeado
           ? preferencias.atalhos[a.id]
           : a.tecla
-        const teclaEfetiva = resolverTeclaExibida(teclaBase, preferencias.modoTeclasUnicas, a.teclaUnica)
+        const teclaEfetiva = resolverTeclaExibida(
+          teclaBase,
+          preferencias.modoTeclasUnicas,
+          a.teclaUnica,
+          remapeado ? undefined : a.teclaModoAlt,
+        )
         return {
           id: a.id,
           rotulo: a.titulo,

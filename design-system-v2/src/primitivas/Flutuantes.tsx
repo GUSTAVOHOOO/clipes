@@ -20,6 +20,24 @@ export const itemBase =
   'data-highlighted:bg-hover data-highlighted:text-t1 data-disabled:pointer-events-none data-disabled:opacity-40 ' +
   '[&_svg]:size-[15px] [&_svg]:stroke-[1.75]'
 
+const SELETOR_FOCAVEL =
+  'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+
+export function primeiroFocavel(
+  raiz: HTMLElement | null,
+  ignorar?: HTMLElement | null,
+): HTMLElement | null {
+  if (!raiz) return null
+  for (const el of raiz.querySelectorAll<HTMLElement>(SELETOR_FOCAVEL)) {
+    if (ignorar && (el === ignorar || ignorar.contains(el))) continue
+    if (el.closest('[hidden], [aria-hidden="true"]')) continue
+    const estilo = window.getComputedStyle(el)
+    if (estilo.display === 'none' || estilo.visibility === 'hidden') continue
+    return el
+  }
+  return null
+}
+
 /* ---------- Dica ---------- */
 
 export function ProvedorDicas({ children }: { children: ReactNode }) {
@@ -70,16 +88,35 @@ type PopoverProps = {
 }
 
 export function Popover({ gatilho, children, titulo, lado = 'bottom', alinhar = 'start', aberto, aoMudarAberto, modal = false, className }: PopoverProps) {
+  const refPopup = useRef<HTMLDivElement>(null)
+  const refFechar = useRef<HTMLButtonElement>(null)
+  const refGatilho = useRef<HTMLButtonElement>(null)
   return (
-    <P.Root open={aberto} onOpenChange={(v) => aoMudarAberto?.(v)} modal={modal}>
-      <P.Trigger render={gatilho} />
+    <P.Root
+      open={aberto}
+      onOpenChange={(v, details) => {
+        aoMudarAberto?.(v)
+        if (!v && (details?.reason === 'escape-key' || details?.reason === 'close-press')) {
+          const g = refGatilho.current
+          if (g) queueMicrotask(() => g.focus())
+        }
+      }}
+      modal={modal}
+    >
+      <P.Trigger ref={refGatilho} render={gatilho} />
       <P.Portal>
         <P.Positioner side={lado} align={alinhar} sideOffset={8} collisionPadding={12} style={{ zIndex: 'var(--z-popover)' }}>
-          <P.Popup className={cn(camadaBase, 'w-[268px] p-3', className)}>
+          <P.Popup
+            ref={refPopup}
+            data-nao-modal={modal ? undefined : ''}
+            initialFocus={() => primeiroFocavel(refPopup.current, refFechar.current) ?? refFechar.current ?? true}
+            finalFocus={() => refGatilho.current ?? true}
+            className={cn(camadaBase, 'w-[268px] p-3', className)}
+          >
             {titulo && (
               <div className="mb-2.5 flex items-center justify-between">
                 <P.Title className="text-base font-forte">{titulo}</P.Title>
-                <P.Close render={<Botao tamanho="p" className="w-6 px-0" aria-label="Fechar (Esc)" />}>
+                <P.Close render={<Botao ref={refFechar} tamanho="p" className="w-6 px-0" aria-label="Fechar (Esc)" />}>
                   <X />
                 </P.Close>
               </div>
@@ -177,17 +214,25 @@ type DialogoProps = {
 }
 
 export function Dialogo({ aberto, aoMudarAberto, titulo, descricao, children, rodape, largura = 440 }: DialogoProps) {
+  const refPopup = useRef<HTMLDivElement>(null)
+  const refFechar = useRef<HTMLButtonElement>(null)
   return (
     <D.Root open={aberto} onOpenChange={(v) => aoMudarAberto(v)}>
       <D.Portal>
         <D.Backdrop className={veu} style={{ zIndex: 'var(--z-dialogo)' }} />
-        <D.Popup className={janela} style={{ zIndex: 'var(--z-dialogo)', ['--largura' as string]: `${largura}px` }}>
+        <D.Popup
+          ref={refPopup}
+          initialFocus={() => primeiroFocavel(refPopup.current, refFechar.current) ?? refFechar.current ?? true}
+          finalFocus
+          className={janela}
+          style={{ zIndex: 'var(--z-dialogo)', ['--largura' as string]: `${largura}px` }}
+        >
           <div className="flex items-start gap-3">
             <div className="min-w-0 flex-1">
               <D.Title className="text-titulo font-forte tracking-[-0.01em]">{titulo}</D.Title>
               {descricao && <D.Description className="mt-1 text-t2">{descricao}</D.Description>}
             </div>
-            <D.Close render={<Botao tamanho="p" className="-mt-0.5 -mr-1 w-6 px-0" aria-label="Fechar (Esc)" />}>
+            <D.Close render={<Botao ref={refFechar} tamanho="p" className="-mt-0.5 -mr-1 w-6 px-0" aria-label="Fechar (Esc)" />}>
               <X />
             </D.Close>
           </div>

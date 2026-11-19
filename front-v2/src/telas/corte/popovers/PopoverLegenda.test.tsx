@@ -278,13 +278,16 @@ describe('<PopoverLegenda>', () => {
     // remap_status > 0
     expect(screen.getByText(/2 destaque/i)).toBeInTheDocument()
 
-    // 4 faixas disponíveis em transformed
+    // 4 faixas disponíveis em transformed (layout 2x2 sem corte horizontal)
+    const grupoFaixa = screen.getByRole('radiogroup', { name: 'Faixa da legenda' })
+    expect(grupoFaixa.className).toContain('grid-cols-2')
     for (const rotulo of ['Automático', 'Original', 'Traduzida', 'Narração']) {
       expect(screen.getByRole('radio', { name: rotulo })).toBeInTheDocument()
     }
 
-    // 3 presets preservando overrides
-    expect(screen.getByText(/Trocar preset preserva seus destaques por palavra/i)).toBeInTheDocument()
+    // 3 estilos preservando overrides (sem usar "preset" do GLOSSARY)
+    expect(document.body.textContent ?? '').not.toMatch(/\bpreset\b/i)
+    expect(screen.getByText(/Trocar o estilo preserva seus destaques por palavra/i)).toBeInTheDocument()
     await user.click(screen.getByRole('radio', { name: 'Cinema' }))
     expect(chamarMock).toHaveBeenCalledWith(
       'captions.style.preset',

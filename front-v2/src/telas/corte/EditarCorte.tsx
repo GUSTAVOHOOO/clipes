@@ -792,6 +792,7 @@ export function EditarCorte({
         id: 'editor.popover.alternar',
         titulo: 'Abrir/fechar último popover da barra de ações',
         grupo: 'Editor',
+        tecla: 'Mod+]',
         executar: () =>
           setPopoverAberto((atual) => (atual ? null : ultimoPopoverRef.current || 'enquadrar')),
       },
@@ -801,7 +802,9 @@ export function EditarCorte({
         grupo: 'Corte',
         tecla: 'Mod+S',
         executar: () => {
-          void storeRef.current.salvarAgora()
+          void storeRef.current.salvarAgora().then((res) => {
+            if (res.ok) limparErroSalvamentoEditor(fila)
+          })
         },
       },
       {
@@ -879,6 +882,7 @@ export function EditarCorte({
         grupo: 'Editor do Corte',
         tecla: 'I',
         teclaUnica: true,
+        teclaModoAlt: 'Shift+Alt+I',
         executar: () => marcarBordaNaAgulha('start', false),
       },
       {
@@ -887,6 +891,7 @@ export function EditarCorte({
         grupo: 'Editor do Corte',
         tecla: 'O',
         teclaUnica: true,
+        teclaModoAlt: 'Shift+Alt+O',
         executar: () => marcarBordaNaAgulha('end', false),
       },
       {
@@ -913,6 +918,7 @@ export function EditarCorte({
   }, [
     clicarZoomTimeline,
     corteResolvido?.videoKind,
+    fila,
     focarBuscaPainelEsquerdo,
     marcarBordaNaAgulha,
     reproduzindo,
@@ -927,10 +933,10 @@ export function EditarCorte({
       if (emCampoDeTexto(e.target)) return
       const temModal = Array.from(
         document.querySelectorAll('[role="dialog"], [role="alertdialog"]'),
-      ).some((el) => !el.closest('[aria-label="Notifications"]'))
+      ).some((el) => !el.closest('[aria-label="Notifications"], [data-nao-modal]'))
       if (temModal) return
 
-      if (e.altKey && !e.ctrlKey && !e.metaKey) {
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
         const k = e.key.toLowerCase()
         if (k === 'i') {
           e.preventDefault()
@@ -978,6 +984,7 @@ export function EditarCorte({
   // Ciclo F6 / Shift+F6 entre as regiões visíveis da janela
   useEffect(() => {
     const obterRegioes = (): HTMLElement[] => {
+      if (!containerRef.current) return []
       const topo = document.querySelector<HTMLElement>('[data-regiao="topo"]')
       const painel = painelEsquerdoAbertoRef.current
         ? containerRef.current?.querySelector<HTMLElement>(
@@ -994,16 +1001,23 @@ export function EditarCorte({
         timelineWrapRef.current?.querySelector<HTMLElement>(
           'section[aria-label="Timeline compacta do Corte"]',
         ) ?? timelineWrapRef.current
+      const filaRegiao = document.querySelector<HTMLElement>('[data-regiao="fila"]')
       const rodape = document.querySelector<HTMLElement>('[data-regiao="rodape"]')
 
-      return [topo, painel, palco, popover, timeline, rodape].filter(
+      return [topo, painel, palco, popover, timeline, filaRegiao, rodape].filter(
         (el): el is HTMLElement => el !== null,
       )
     }
 
     const indiceDoElemento = (el: EventTarget | null, regioes: HTMLElement[]): number => {
       if (!(el instanceof Node)) return -1
-      return regioes.findIndex((r) => r === el || r.contains(el))
+      const direto = regioes.findIndex((r) => r === el || r.contains(el))
+      if (direto >= 0) return direto
+      const contexto = document.querySelector<HTMLElement>('[data-regiao="contexto"]')
+      if (contexto && (contexto === el || contexto.contains(el))) {
+        return 0
+      }
+      return -1
     }
 
     const aoFocusIn = (e: FocusEvent) => {
@@ -1016,15 +1030,13 @@ export function EditarCorte({
       if (e.key !== 'F6' || e.ctrlKey || e.metaKey || e.altKey) return
       const temDialogoModal = Array.from(
         document.querySelectorAll('[role="dialog"], [role="alertdialog"]'),
-      ).some((el) => !el.closest('[aria-label="Notifications"]'))
+      ).some((el) => !el.closest('[aria-label="Notifications"], [data-nao-modal]'))
       if (temDialogoModal) return
 
       const regioes = obterRegioes()
       if (regioes.length === 0) return
 
-      const idxAtual = e.defaultPrevented
-        ? regiaoFocoRef.current.prev
-        : indiceDoElemento(document.activeElement, regioes)
+      const idxAtual = indiceDoElemento(document.activeElement, regioes)
 
       e.preventDefault()
       e.stopPropagation()
@@ -1234,7 +1246,7 @@ export function EditarCorte({
   }
 
   return (
-    <div ref={containerRef} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div ref={containerRef} data-f6-proprio="" className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {!fonteDisponivel && (
         <div
           role="alert"

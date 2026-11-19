@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type R
 import { cn } from '@/lib/cn'
 import { tc } from '@/lib/formato'
 import { Botao, BotaoIcone } from '@/primitivas/Botao'
-import { camadaBase } from '@/primitivas/Flutuantes'
+import { camadaBase, primeiroFocavel } from '@/primitivas/Flutuantes'
 
 /* ---------- PlayerProxy ---------- */
 
@@ -197,18 +197,23 @@ type BarraAcoesProps = {
   aoMudarAberta: (id: string | null) => void
   /** elemento ao lado do qual o popover abre (o quadro 9:16) */
   ancora?: RefObject<HTMLElement | null>
+  /** limite de colisão para conter o popover entre cabeçalho e barra inferior */
+  limiteColisao?: HTMLElement | null | RefObject<HTMLElement | null>
   rotulo?: string
   className?: string
 }
 
 /** 5 ações sob o vídeo. Uma de cada vez abre um popover flutuante ao lado do quadro; Ctrl+] reabre a última. */
-export function BarraAcoes({ acoes, aberta, aoMudarAberta, ancora, rotulo = 'Ferramentas do Corte', className }: BarraAcoesProps) {
+export function BarraAcoes({ acoes, aberta, aoMudarAberta, ancora, limiteColisao, rotulo = 'Ferramentas do Corte', className }: BarraAcoesProps) {
   const ultima = useRef<string | null>(aberta ?? acoes[0]?.id ?? null)
+  const refsGatilho = useRef<Record<string, HTMLButtonElement | null>>({})
+  const refsConteudo = useRef<Record<string, HTMLDivElement | null>>({})
   useEffect(() => {
     if (aberta) ultima.current = aberta
   }, [aberta])
   useEffect(() => {
     const h = (e: globalThis.KeyboardEvent) => {
+      if (e.defaultPrevented || e.altKey || e.shiftKey) return
       if ((e.ctrlKey || e.metaKey) && e.key === ']') {
         e.preventDefault()
         aoMudarAberta(aberta ? null : ultima.current)
@@ -218,28 +223,73 @@ export function BarraAcoes({ acoes, aberta, aoMudarAberta, ancora, rotulo = 'Fer
     return () => removeEventListener('keydown', h)
   }, [aberta, aoMudarAberta])
 
+  const boundary =
+    limiteColisao && 'current' in limiteColisao
+      ? (limiteColisao.current ?? undefined)
+      : (limiteColisao ?? undefined)
+
   return (
     <div role="toolbar" aria-label={rotulo} onKeyDown={rovingSetas} className={cn('flex h-(--altura-barra) items-center gap-0.5 rounded-area bg-area px-1.5', className)}>
       {acoes.map((a, i) => (
-        <P.Root key={a.id} open={aberta === a.id} onOpenChange={(v) => aoMudarAberta(v ? a.id : aberta === a.id ? null : aberta)} modal={false}>
+        <P.Root
+          key={a.id}
+          open={aberta === a.id}
+          onOpenChange={(v, details) => {
+            aoMudarAberta(v ? a.id : aberta === a.id ? null : aberta)
+            if (!v && (details?.reason === 'escape-key' || details?.reason === 'close-press')) {
+              const g = refsGatilho.current[a.id]
+              if (g) queueMicrotask(() => g.focus())
+            }
+          }}
+          modal={false}
+        >
           <P.Trigger
             tabIndex={i === 0 ? 0 : -1}
             render={
-              <Botao className={cn(aberta === a.id && 'marcado bg-hover text-t1')} icone={a.icone}>
+              <Botao
+                ref={(el) => {
+                  refsGatilho.current[a.id] = el
+                }}
+                className={cn(aberta === a.id && 'marcado bg-hover text-t1')}
+                icone={a.icone}
+              >
                 {a.rotulo}
               </Botao>
             }
           />
           <P.Portal>
-            <P.Positioner anchor={ancora} side="right" align="center" sideOffset={16} collisionPadding={12} style={{ zIndex: 'var(--z-popover)' }}>
-              <P.Popup className={cn(camadaBase, 'max-h-[min(520px,var(--available-height))] w-[268px] overflow-y-auto p-3')}>
-                <div className="mb-2.5 flex items-center justify-between">
+            <P.Positioner
+              anchor={ancora}
+              side="right"
+              align="center"
+              sideOffset={16}
+              collisionBoundary={boundary}
+              collisionPadding={12}
+              style={{ zIndex: 'var(--z-popover)' }}
+            >
+              <P.Popup
+                data-nao-modal=""
+                initialFocus={() => primeiroFocavel(refsConteudo.current[a.id] ?? null) ?? true}
+                finalFocus={() => refsGatilho.current[a.id] ?? true}
+                className={cn(
+                  camadaBase,
+                  'flex max-h-[min(520px,var(--available-height))] w-[308px] max-w-[calc(100vw-24px)] flex-col overflow-hidden p-0',
+                )}
+              >
+                <div className="flex shrink-0 items-center justify-between px-3 pt-3 pb-2">
                   <P.Title className="text-base font-forte">{a.titulo ?? a.rotulo}</P.Title>
                   <P.Close render={<Botao tamanho="p" className="w-6 px-0" aria-label="Fechar (Esc)" />}>
                     <X />
                   </P.Close>
                 </div>
-                {a.conteudo}
+                <div
+                  ref={(el) => {
+                    refsConteudo.current[a.id] = el
+                  }}
+                  className="min-h-0 flex-1 overflow-y-auto px-3 pt-0.5 pb-3"
+                >
+                  {a.conteudo}
+                </div>
               </P.Popup>
             </P.Positioner>
           </P.Portal>

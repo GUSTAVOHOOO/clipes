@@ -321,12 +321,14 @@ function PainelEsquerdoInterno({
   const buscaInputRef = useRef<HTMLInputElement | null>(null)
   const inputEdicaoRef = useRef<HTMLInputElement | null>(null)
   const devolverFocoPosRef = useRef<number | null>(null)
+  const ultimoClipRoladoRef = useRef<string | null>(null)
 
   useEffect(() => {
     setCorrigidasLocais(new Map())
     setFrasesSincronizadas(null)
     setEditandoPos(null)
     setPalavraMenu(null)
+    ultimoClipRoladoRef.current = null
   }, [estado.corteId, doc?.clipId])
 
   useEffect(() => {
@@ -698,6 +700,36 @@ function PainelEsquerdoInterno({
     return blocos
   }, [doc, frasesComPalavras, silencios])
 
+  // UI-69: ao abrir um Corte na aba Transcrição, rola automaticamente para a 1ª frase dentro do Corte
+  useEffect(() => {
+    if (!aberto || aba !== 'transcricao' || !doc) return
+    const chaveSessao = `${estado.corteId ?? ''}|${doc.clipId}`
+    if (ultimoClipRoladoRef.current === chaveSessao) return
+    if (!itensTranscricao.some((b) => b.tipo === 'frase' && !b.fora)) return
+
+    const container = containerTranscricaoRef.current
+    if (!container) return
+    const viewport = container.querySelector<HTMLElement>('[aria-label="Frases do Corte"]')
+    const primeiraAtiva = container.querySelector<HTMLElement>(
+      'article[aria-label^="Frase "]:not([data-fora="true"])',
+    )
+    if (!viewport || !primeiraAtiva) return
+
+    ultimoClipRoladoRef.current = chaveSessao
+    const vpRect = viewport.getBoundingClientRect()
+    const alvoRect = primeiraAtiva.getBoundingClientRect()
+    const offsetRelativo =
+      primeiraAtiva.offsetTop > 0
+        ? primeiraAtiva.offsetTop - 12
+        : Math.max(0, viewport.scrollTop + (alvoRect.top - vpRect.top) - 12)
+    const destino = Math.max(0, offsetRelativo)
+    if (typeof viewport.scrollTo === 'function') {
+      viewport.scrollTo({ top: destino })
+    } else {
+      viewport.scrollTop = destino
+    }
+  }, [aba, aberto, doc, estado.corteId, itensTranscricao])
+
   // Itens do Índice do Corte (alternativa textual completa à timeline)
   const itensIndice = useMemo<ItemIndice[]>(() => {
     if (!doc) return []
@@ -931,9 +963,11 @@ function PainelEsquerdoInterno({
 
   return (
     <aside
+      data-regiao="painel-esquerdo"
+      tabIndex={-1}
       aria-label="Transcrição e Índice do Corte"
       className={cn(
-        'flex min-h-0 shrink-0 flex-col border-r border-linha bg-area',
+        'foco-interno flex min-h-0 shrink-0 flex-col border-r border-linha bg-area',
         larguraClasse,
         className,
       )}
@@ -1342,6 +1376,7 @@ function PainelEsquerdoInterno({
                             <Botao
                               tamanho="p"
                               variante="suave"
+                              className="min-w-6"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 aoMudarTempoUs?.(it.timeUs)
@@ -1539,6 +1574,7 @@ function PainelEsquerdoInterno({
                             <Botao
                               tamanho="p"
                               variante="suave"
+                              className="min-w-6"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 aoMudarTempoUs?.(it.timeUs)

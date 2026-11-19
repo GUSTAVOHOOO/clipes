@@ -471,6 +471,8 @@ describe('Shell', () => {
       return el as HTMLElement
     })
     expect(alertaFooter).toHaveTextContent(/Falha ao salvar/i)
+    const btnTentarRodape = within(alertaFooter).getByRole('button', { name: 'Tentar novamente' })
+    expect(btnTentarRodape.className).toContain('min-h-6')
 
     const dialog = await screen.findByRole('alertdialog')
     expect(dialog).toHaveTextContent(/gravar as edições no disco/i)

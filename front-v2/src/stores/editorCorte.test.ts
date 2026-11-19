@@ -442,4 +442,46 @@ describe('store editorCorte', () => {
     expect(limpo.dirty).toBe(false)
     expect(limpo.translationJobToClip).toEqual({})
   })
+
+  it('UI-61: salvarAgora / executarFlush limpa erro global de salvamento na Fila quando conclui sem erro (mesmo sem dirty)', async () => {
+    const { criarFila, estadoSalvamentoEditor } = await import('~/core/progresso')
+    const fila = criarFila(() => '/projetos/Demo.clipes')
+
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'editor.open') return criarDocEditor()
+      if (cmd === 'editor.sentences') return []
+      if (cmd === 'export.captions') return criarLegendasBase()
+      if (cmd === 'audio.list') return []
+      if (cmd === 'translation.get') return { clipId: 11, sourceId: 4, activeTrack: 'original', hasTranslation: false, sentences: [] }
+      if (cmd === 'captions.remap_status') return { discarded: 0 }
+      if (cmd === 'proxy.request') return { state: 'ready', key: 'p1', job: null, progress: 100, error: null }
+      if (cmd === 'editor.flush') return null
+      return null
+    })
+
+    const store = criarStoreEditorCorte({ fila })
+    store.definirProjeto('/projetos/Demo.clipes')
+    await store.abrir({
+      corteId: '102',
+      sourceId: 4,
+      startId: 10,
+      endId: 14,
+      candidateId: 102,
+      fonteDisponivel: true,
+    })
+
+    fila.aplicar({
+      job: 'editor',
+      project: null,
+      stage: 'editor_save_failed',
+      percentage: 0,
+      message: 'Falha ao salvar',
+      error: { code: 'project_write', message: 'disco cheio' },
+    })
+    expect(estadoSalvamentoEditor(fila).estado).toBe('erro')
+
+    const res = await store.salvarAgora()
+    expect(res.ok).toBe(true)
+    expect(estadoSalvamentoEditor(fila).estado).not.toBe('erro')
+  })
 })

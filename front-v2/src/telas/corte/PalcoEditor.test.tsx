@@ -623,4 +623,54 @@ describe('<PalcoEditor>', () => {
     fireEvent.keyDown(window, { key: ']', ctrlKey: true })
     expect(aoMudarPopover).toHaveBeenCalledWith(null)
   })
+
+  it('UI-64 / UI-65: <Transporte> adapta tooltips ao modo WCAG 2.1.4 e <BarraAcoes> mantém cabeçalho fixo fora da rolagem', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem(
+      'clipes.preferencias.v1',
+      JSON.stringify({ modoTeclasUnicas: 'alt', teclasUnicas: true }),
+    )
+    const store = await prepararSessao()
+    const snap = store.obterSnapshot()
+
+    const { unmount } = render(
+      envolver(
+        <PalcoEditor
+          projetoPath="/projetos/demo.clipes"
+          corteId="10"
+          estadoEditor={{
+            ...snap,
+            documentoAtivo: snap.previaLocal ?? snap.oficial,
+            store,
+            abrir: store.abrir,
+            salvarAgora: store.salvarAgora,
+            garantirSalvoParaSaida: store.garantirSalvoParaSaida,
+          }}
+          tempoUs={10_000_000}
+          reproduzindo={false}
+          acoesBarra={ACOES_EXEMPLO}
+          popoverAberto="enquadrar"
+          aoMudarPopoverAberto={() => {}}
+          aoMudarTempoUs={() => {}}
+          aoMudarReproduzindo={() => {}}
+          aoRelocalizarFonte={() => {}}
+        />,
+      ),
+    )
+
+    // UI-65: cabeçalho do popover fica fora do container com overflow-y-auto
+    const fecharBtn = screen.getByRole('button', { name: 'Fechar (Esc)' })
+    const headerPopover = fecharBtn.parentElement!
+    expect(headerPopover.parentElement?.className).not.toContain('overflow-y-auto')
+
+    // UI-64: tooltips no Transporte adaptam ao modo 'alt'
+    await user.hover(screen.getByRole('button', { name: 'Reproduzir' }))
+    expect(await screen.findByText('Alt+Espaço')).toBeInTheDocument()
+
+    await user.hover(screen.getByRole('button', { name: 'Definir Entrada' }))
+    expect(await screen.findByText('Shift+Alt+I')).toBeInTheDocument()
+
+    unmount()
+    localStorage.clear()
+  })
 })

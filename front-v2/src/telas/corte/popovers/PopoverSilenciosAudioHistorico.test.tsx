@@ -396,8 +396,11 @@ describe('<PopoverAudio>', () => {
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(chamarMock).toHaveBeenCalledWith('editor.audio.sfx.remove', { clip_id: 1, id: 9, preview: false })
 
-    // Importar cc_by sem atribuição bloqueia e foca campo
-    await user.click(screen.getByRole('button', { name: /Importar áudio/i }))
+    // Importar cc_by sem atribuição bloqueia e foca campo (botão Importar em linha própria para não cortar)
+    const filtroBib = screen.getByRole('radiogroup', { name: 'Filtro da biblioteca' })
+    const btnImportar = screen.getByRole('button', { name: /Importar áudio/i })
+    expect(filtroBib.parentElement?.className).toContain('flex-col')
+    await user.click(btnImportar)
     await user.type(screen.getByLabelText('Arquivo de áudio'), 'C:\\musica.mp3')
     await user.click(screen.getByRole('combobox', { name: 'Origem / Licença' }))
     await user.click(await screen.findByRole('option', { name: /CC-BY/i }))
@@ -458,8 +461,15 @@ describe('<PopoverHistorico>', () => {
       expect(chamarMock).toHaveBeenCalledWith('editor.snapshots', { clip_id: 1 })
     })
     expect(await screen.findByText(/somente leitura/i)).toBeInTheDocument()
+    expect(screen.getByText(/Layout: Rosto \(9:16\)/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Layout: face\b/i)).toBeNull()
+
+    const btnDesfazer = screen.getByRole('button', { name: /Desfazer/i })
+    expect(btnDesfazer.children[1]?.textContent).toBe('Desfazer (4)')
+
     const btnRestaurar = screen.getByRole('button', { name: 'Restaurar' })
     expect(btnRestaurar).toBeDisabled()
+    expect(btnRestaurar.closest('span[tabindex="0"]')).toBeNull()
 
     await user.hover(btnRestaurar.parentElement!)
     const dica = await screen.findByText('Restaurar um ponto salvo ainda não está disponível.')

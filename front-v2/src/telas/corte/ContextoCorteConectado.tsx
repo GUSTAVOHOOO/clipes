@@ -5,6 +5,7 @@ import { useAtalhos, type Atalho } from '~/comandos/atalhos'
 import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import type { Fila } from '~/core/progresso'
+import { useEstadoForcado } from '~/shell/EstadoForcado'
 import { parsearCorteId } from '~/stores/editorCorte'
 import type { FonteProjeto } from '~/stores/fontesProjeto'
 import type {
@@ -254,11 +255,13 @@ export function ContextoCorteConectado({
 
   const candidateId = identidade?.kind === 'candidate' ? identidade.candidateId : null
   const videoKind: 'direct' | 'transformed' = atualAprovado?.videoKind ?? 'direct'
-  const titulo = avulso ? 'Corte avulso' : (atualAprovado?.titulo ?? `Corte #${corteId}`)
-  const posicao =
-    avulso || atualIndex < 0
-      ? `Corte #${corteId}`
-      : `Corte ${atualIndex + 1}/${estado.aprovados.length}`
+  const titulo = avulso ? 'Corte avulso' : (atualAprovado?.titulo ?? `Corte ${corteId}`)
+  const posicao = avulso
+    ? `Corte #${corteId}`
+    : atualIndex >= 0
+      ? `Corte ${atualIndex + 1}/${estado.aprovados.length}`
+      : null
+  const forcado = useEstadoForcado()
 
   const executarNavegacao = useCallback(async (hashDestino: string) => {
     if (navegandoRef.current) return
@@ -393,7 +396,11 @@ export function ContextoCorteConectado({
 
   return (
     <>
-      <div className="flex h-(--altura-subtopo) shrink-0 items-center gap-3 border-b border-linha px-4">
+      <div
+        data-regiao="contexto"
+        tabIndex={-1}
+        className="foco-interno flex h-(--altura-subtopo) shrink-0 items-center gap-3 border-b border-linha px-4"
+      >
         <Botao
           icone={<ArrowLeft />}
           aria-label="Voltar para Cortes"
@@ -437,17 +444,21 @@ export function ContextoCorteConectado({
           ) : (
             <>
               <h1 className="flex min-w-0 items-center gap-2 text-base font-normal whitespace-nowrap">
-                <span className="num text-t3">{posicao}</span>
-                <span aria-hidden className="text-t3">
-                  ·
-                </span>
+                {posicao && (
+                  <>
+                    <span className="num text-t3">{posicao}</span>
+                    <span aria-hidden className="text-t3">
+                      ·
+                    </span>
+                  </>
+                )}
                 <strong className="truncate font-medio text-t1">{titulo}</strong>
               </h1>
               {!avulso && <SeloTipoVideo tipo={videoKind} className="ml-1 shrink-0" />}
               {videoKind === 'direct' && candidateId !== null && (
                 /* Pendência no núcleo (#292): conversão individual para Vídeo transformado. */
                 <Dica texto="A conversão individual para Vídeo transformado ainda não está disponível nesta versão.">
-                  <span tabIndex={0} className="inline-flex shrink-0 rounded-controle">
+                  <span className="inline-flex shrink-0 rounded-controle">
                     <Botao tamanho="p" variante="fantasma" icone={<Sparkles />} disabled>
                       Converter em Vídeo transformado
                     </Botao>
@@ -490,9 +501,9 @@ export function ContextoCorteConectado({
         </nav>
 
         <Botao
-          variante="primario"
+          variante={forcado === 'vazio' ? 'secundario' : 'primario'}
           atalho={ehMac ? '⌘E' : 'Ctrl+E'}
-          disabled={estado.carregando || !corteParaExportar}
+          disabled={forcado === 'vazio' || estado.carregando || !corteParaExportar}
           onClick={abrirExportacao}
         >
           Exportar Corte

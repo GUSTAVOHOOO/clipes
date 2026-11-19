@@ -315,4 +315,28 @@ describe('ProvedorAtalhos e useAtalhos', () => {
     expect(remapeados['revisao.aprovar']).toBe('R')
     expect(remapeados['revisao.rejeitar']).toBe('')
   })
+
+  it('UI-64: teclaModoAlt evita conflito com Alt+I/Alt+O livre no modo "alt"', () => {
+    const reg = criarRegistro()
+    const entrada = vi.fn()
+    reg.registrar([
+      {
+        id: 'editor.entrada',
+        titulo: 'Mover borda Entrada para a agulha',
+        grupo: 'Editor do Corte',
+        tecla: 'I',
+        teclaUnica: true,
+        teclaModoAlt: 'Shift+Alt+I',
+        executar: entrada,
+      },
+    ])
+
+    expect(resolverTeclaExibida('I', 'alt', true, 'Shift+Alt+I')).toBe('Shift+Alt+I')
+    expect(reg.tratar(eventoTecla('i', { altKey: true }), { modoTeclasUnicas: 'alt' })).toBe(false)
+    expect(entrada).not.toHaveBeenCalled()
+    expect(
+      reg.tratar(eventoTecla('i', { altKey: true, shiftKey: true }), { modoTeclasUnicas: 'alt' }),
+    ).toBe(true)
+    expect(entrada).toHaveBeenCalledTimes(1)
+  })
 })

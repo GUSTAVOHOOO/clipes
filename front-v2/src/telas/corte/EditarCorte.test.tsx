@@ -862,4 +862,109 @@ describe('Tela EditarCorte (#/projeto/:id/corte/:corteId/editar)', () => {
       expect(window.location.hash).toBe('#/projeto/demo/fontes')
     })
   })
+
+  it('UI-60 / UI-64 / UI-66: Shell montado antes do EditarCorte não bloqueia F6 das 6 regiões (com popover aberto), Alt+I livre funciona no modo alt, Ctrl+] aparece na Paleta e ?estado=vazio mantém 1 bg-sinal', async () => {
+    const user = userEvent.setup()
+    configurarMocksBase()
+    window.location.hash = '#/inicio'
+
+    const { unmount } = render(<App />)
+
+    // Aguarda Shell montar no #/inicio antes de navegar para o Editor
+    await screen.findByRole('heading', { name: 'Projetos' })
+    act(() => {
+      window.location.hash = '#/projeto/demo/corte/201/editar'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+
+    const btnEnquadrar = await screen.findByRole('button', { name: 'Enquadrar' })
+
+    // UI-60: abre popover Enquadrar e cicla todas as 6 regiões via F6
+    await user.click(btnEnquadrar)
+    expect(await screen.findByText('Rosto (9:16)')).toBeInTheDocument()
+
+    const topo = document.querySelector<HTMLElement>('[data-regiao="topo"]')!
+    const painel = screen.getByRole('complementary', { name: 'Transcrição e Índice do Corte' })
+    const palco = screen.getByRole('region', { name: 'Palco de prévia' })
+    const popover = document.querySelector<HTMLElement>('[data-regiao="popover-editor"]')!
+    const timeline = screen.getByRole('region', { name: 'Timeline compacta do Corte' })
+    const rodape = document.querySelector<HTMLElement>('[data-regiao="rodape"]')!
+
+    const gatilhoTopo = topo.querySelector('button, a') as HTMLElement
+    gatilhoTopo.focus()
+
+    fireEvent.keyDown(gatilhoTopo, { key: 'F6', bubbles: true, cancelable: true })
+    expect(painel.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(document.activeElement!, { key: 'F6', bubbles: true, cancelable: true })
+    expect(palco.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(document.activeElement!, { key: 'F6', bubbles: true, cancelable: true })
+    expect(popover.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(document.activeElement!, { key: 'F6', bubbles: true, cancelable: true })
+    expect(timeline.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(document.activeElement!, { key: 'F6', bubbles: true, cancelable: true })
+    expect(rodape.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(document.activeElement!, { key: 'F6', bubbles: true, cancelable: true })
+    expect(topo.contains(document.activeElement)).toBe(true)
+
+    // UI-64: Ctrl+] aparece na Paleta
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    const inputPaleta = await screen.findByRole('combobox')
+    await user.type(inputPaleta, 'popover')
+    const itemPopover = await screen.findByText('Abrir/fechar último popover da barra de ações')
+    expect(itemPopover.closest('[cmdk-item]')?.textContent).toMatch(/Ctrl\+\]|⌘\]/)
+    await user.keyboard('{Escape}')
+
+    // UI-64: modo WCAG 2.1.4 'alt' -> Alt+I livre chama free: true, Shift+Alt+I chama free: false
+    unmount()
+    localStorage.setItem(
+      'clipes.preferencias.v1',
+      JSON.stringify({ modoTeclasUnicas: 'alt', teclasUnicas: true }),
+    )
+    configurarMocksBase()
+    window.location.hash = '#/projeto/demo/corte/201/editar'
+    const r2 = render(<App />)
+    await screen.findByRole('button', { name: 'Enquadrar' })
+
+    chamarMock.mockClear()
+    document.body.focus()
+    fireEvent.keyDown(document.body, { key: 'i', altKey: true, bubbles: true, cancelable: true })
+    await waitFor(() => {
+      expect(chamarMock).toHaveBeenCalledWith(
+        'editor.adjust',
+        expect.objectContaining({ edge: 'start', free: true }),
+      )
+    })
+
+    chamarMock.mockClear()
+    fireEvent.keyDown(document.body, {
+      key: 'i',
+      altKey: true,
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    })
+    await waitFor(() => {
+      expect(chamarMock).toHaveBeenCalledWith(
+        'editor.adjust',
+        expect.objectContaining({ edge: 'start', free: false }),
+      )
+    })
+
+    // UI-66: ?estado=vazio mantém apenas 1 botão bg-sinal
+    act(() => {
+      window.location.hash = '#/projeto/demo/corte/201/editar?estado=vazio'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await screen.findByText(/Este Corte não está disponível para edição/i)
+    const botoesSinal = Array.from(document.querySelectorAll('button.bg-sinal'))
+    expect(botoesSinal).toHaveLength(1)
+
+    r2.unmount()
+    localStorage.clear()
+  })
 })
