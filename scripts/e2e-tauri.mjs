@@ -1483,26 +1483,45 @@ async function runSession3(ui, ctx) {
   const probeOtherDrive =
     process.platform === 'win32' ? 'D:\\ClipesProbe\\corte-probe.mp4' : '/mnt/clipes-probe/corte-probe.mp4';
   const probeDeniedExe = path.join(ctx.tempRoot, 'probe-open-path.exe');
-  const probeResults = await ui.browser.execute(async (allowedPath, otherDrivePath, deniedExePath) => {
+  // WebdriverIO execute(async) usa POST /execute/async, que trava no msedgedriver via tauri-driver;
+  // dispare as chamadas por execute síncrono e aguarde com waitUntil.
+  await ui.browser.execute((allowedPath, otherDrivePath, deniedExePath) => {
+    const state = { done: false, allowed: null, otherDrive: null, deniedExe: null, error: null };
+    window.__openPathProbe = state;
     const invoke = window.__TAURI_INTERNALS__?.invoke;
     if (typeof invoke !== 'function') {
-      return { error: 'window.__TAURI_INTERNALS__.invoke indisponível' };
+      state.error = 'window.__TAURI_INTERNALS__.invoke indisponível';
+      state.done = true;
+      return;
     }
-    const call = async target => {
-      try {
-        await invoke('plugin:opener|open_path', { path: target });
-        return { ok: true, error: null };
-      } catch (err) {
-        return { ok: false, error: String(err?.message ?? err) };
-      }
-    };
-    return {
-      allowed: await call(allowedPath),
-      otherDrive: await call(otherDrivePath),
-      deniedExe: await call(deniedExePath),
-    };
+    const call = (key, target) =>
+      invoke('plugin:opener|open_path', { path: target })
+        .then(() => {
+          state[key] = { ok: true, error: null };
+        })
+        .catch(err => {
+          state[key] = { ok: false, error: String(err?.message ?? err) };
+        });
+    Promise.all([
+      call('allowed', allowedPath),
+      call('otherDrive', otherDrivePath),
+      call('deniedExe', deniedExePath),
+    ]).then(
+      () => {
+        state.done = true;
+      },
+      err => {
+        state.error = String(err?.message ?? err);
+        state.done = true;
+      },
+    );
   }, probeAllowed, probeOtherDrive, probeDeniedExe);
-  assert.equal(probeResults.error, undefined);
+  await ui.browser.waitUntil(
+    () => ui.browser.execute(() => Boolean(window.__openPathProbe?.done)),
+    { timeout: 15_000, interval: 100, timeoutMsg: 'Sonda opener:allow-open-path não respondeu' },
+  );
+  const probeResults = await ui.browser.execute(() => window.__openPathProbe);
+  assert.equal(probeResults.error, null);
   assert.equal(probeResults.allowed.ok, false);
   assert.doesNotMatch(
     probeResults.allowed.error ?? '',
