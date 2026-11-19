@@ -52,6 +52,9 @@ jobs:
         if: steps.cache-tauri-driver.outputs.cache-hit != 'true'
         run: cargo install tauri-driver --locked
       - run: bun install --frozen-lockfile
+      - name: Instalar dependências do front-v2 (embutido pelo tauri build)
+        run: bun install --frozen-lockfile
+        working-directory: front-v2
       - name: Compilar pacotes .deb e AppImage
         env:
           VITE_UPDATER_MOCK: available

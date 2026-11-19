@@ -179,6 +179,9 @@ jobs:
           }
       - run: cargo install tauri-driver --locked
       - run: bun install --frozen-lockfile
+      - name: Instalar dependências do front-v2 (embutido pelo tauri build)
+        run: bun install --frozen-lockfile
+        working-directory: front-v2
       - run: bun run e2e:setup
       - name: Configure WebView2 remote debugging policy (Windows)
         if: runner.os == 'Windows'
