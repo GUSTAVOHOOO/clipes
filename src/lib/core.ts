@@ -2217,6 +2217,258 @@ function selectionMockDispatch(name: string, args: object): unknown {
 export async function coreDispatch<T>(name: string, args: object): Promise<T> {
   if (import.meta.env.VITE_CORE_MOCK === '1' && !isTauri()) {
     if (name === 'jobs.cancel' && cancelReframeJobMock((args as { id: number }).id)) return null as T;
+    if (name === 'export.readiness') {
+      const active = getActiveProjectMock();
+      if (!active) throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
+      const a = args as { source_id?: unknown; sourceId?: unknown; limit?: unknown; offset?: unknown };
+      const parseOptionalId = (val: unknown, label: string): number | null => {
+        if (val === undefined || val === null) return null;
+        if (typeof val !== 'number' || !Number.isInteger(val) || val <= 0) {
+          throw { code: 'invalid_input', message: `Parâmetro ${label} inválido.` };
+        }
+        return val;
+      };
+      const snakeSid = parseOptionalId(a.source_id, 'source_id');
+      const camelSid = parseOptionalId(a.sourceId, 'sourceId');
+      if (snakeSid !== null && camelSid !== null && snakeSid !== camelSid) {
+        throw { code: 'invalid_input', message: 'source_id e sourceId informados com valores diferentes.' };
+      }
+      const scopeSource = snakeSid ?? camelSid;
+      if (scopeSource !== null && !sourceItems.some((s) => s.id === scopeSource)) {
+        throw { code: 'source_missing', message: 'Fonte não encontrada.' };
+      }
+      const parseNonNegInt = (val: unknown, label: string): number | null => {
+        if (val === undefined || val === null) return null;
+        if (typeof val !== 'number' || !Number.isInteger(val) || val < 0) {
+          throw { code: 'invalid_input', message: `Parâmetro ${label} inválido.` };
+        }
+        return val;
+      };
+      const offset = parseNonNegInt(a.offset, 'offset') ?? 0;
+      const limit = parseNonNegInt(a.limit, 'limit');
+
+      if (readEstadoParam() === 'vazio') {
+        return { total: 0, offset, limit, hasMore: false, items: [] } as T;
+      }
+
+      ensureSelectionDemoInitialized();
+      const offlineForcado = !hasSearchFlag('source-test') && readEstadoParam() === 'offline';
+      const ack = channelProfileMock.directMonetizationAck;
+
+      type PlannedMockCut = {
+        candidateId: number;
+        runId: number;
+        sourceId: number;
+        videoKind: 'direct' | 'transformed';
+        candidateTitle: string;
+        scoreTotal: number;
+        adjusted: boolean;
+        startId: number;
+        endId: number;
+        startUs: number;
+        endUs: number;
+        durationUs: number;
+      };
+
+      const planned: PlannedMockCut[] = [];
+      if (hasSearchFlag('source-test')) {
+        const src = sourceItems.find((s) => (scopeSource !== null ? s.id === scopeSource : s.id === 1)) ?? sourceItems[0];
+        if (src && (scopeSource === null || src.id === scopeSource)) {
+          for (const [id, r] of reviewMock.items.entries()) {
+            if (r.status !== 'approved') continue;
+            const kind = effectiveCandidateKind(id);
+            const startUs = (r.start - 1) * 10_000_000;
+            const endUs = r.end * 10_000_000;
+            planned.push({
+              candidateId: id,
+              runId: 1,
+              sourceId: src.id,
+              videoKind: kind,
+              candidateTitle: `Corte ${id}`,
+              scoreTotal: 8.0,
+              adjusted: r.start !== r.origin[0] || r.end !== r.origin[1],
+              startId: r.start,
+              endId: r.end,
+              startUs,
+              endUs,
+              durationUs: Math.max(1, endUs - startUs),
+            });
+          }
+        }
+      } else {
+        const orderedRuns = [...selectionRuns.values()].sort((x, y) => x.id - y.id);
+        for (const run of orderedRuns) {
+          if (scopeSource !== null && run.sourceId !== scopeSource) continue;
+          const activeList = run.candidatesByRevision.get(run.activeRevision) ?? [];
+          for (const cand of activeList) {
+            const revItem = buildReviewItemForRun(cand, run);
+            if (revItem.status !== 'approved') continue;
+            const kind = (cand.videoKind ?? run.videoKind) === 'transformed' ? 'transformed' : 'direct';
+            planned.push({
+              candidateId: cand.id,
+              runId: run.id,
+              sourceId: run.sourceId,
+              videoKind: kind,
+              candidateTitle: cand.title,
+              scoreTotal: cand.total,
+              adjusted: revItem.adjusted,
+              startId: revItem.startId,
+              endId: revItem.endId,
+              startUs: revItem.startUs,
+              endUs: revItem.endUs,
+              durationUs: Math.max(1, revItem.endUs - revItem.startUs),
+            });
+          }
+        }
+      }
+
+      const total = planned.length;
+      const slice = limit === null ? planned.slice(offset) : planned.slice(offset, offset + limit);
+      const items = slice.map((cut) => {
+        const src = sourceItems.find((s) => s.id === cut.sourceId) ?? sourceItems[0];
+        const status = offlineForcado ? 'offline' : (src?.status ?? 'available');
+        const available = status === 'available';
+        const srcName = src?.path.split(/[\\/]/).pop() || src?.path || `fonte-${cut.sourceId}`;
+        const permObj = (src?.permission ?? { status: 'none' }) as { status: string; who?: string; where?: string; scope?: string };
+        const granted = permObj.status === 'granted';
+
+        const isTransformed = cut.videoKind === 'transformed';
+        const scriptDoc = isTransformed
+          ? (peekScriptMock(cut.candidateId) as {
+              current?: { blocks?: unknown[]; pending?: number } | null;
+              narrationAllowed?: boolean;
+              busy?: boolean;
+            })
+          : null;
+        const totalBlocks = scriptDoc?.current?.blocks?.length ?? 0;
+        const pendingBlocks = scriptDoc?.current?.pending ?? 0;
+        const scriptJson = isTransformed
+          ? {
+              applicable: true,
+              exists: Boolean(scriptDoc?.current),
+              approved: Boolean(scriptDoc?.narrationAllowed),
+              pendingBlocks,
+              totalBlocks,
+              busy: Boolean(scriptDoc?.busy),
+            }
+          : { applicable: false };
+
+        const narrEntries = isTransformed ? (narrationGenerated.get(cut.candidateId) ?? []) : [];
+        const ttsEntries = narrEntries.filter((x) => x.engineId !== 'imported' && x.engineId !== 'recorded');
+        const readyBlocks = narrEntries.length;
+        const narrationJson = isTransformed
+          ? {
+              applicable: true,
+              hasTts: ttsEntries.length > 0,
+              generatedBlocks: ttsEntries.length,
+              readyBlocks,
+              ready: totalBlocks > 0 && readyBlocks >= totalBlocks,
+              totalBlocks,
+              voices: [...new Set(ttsEntries.map((x) => x.voiceId))],
+              freezeTailUs: 0,
+              longFreezeTail: false,
+              busy: false,
+            }
+          : { applicable: false };
+
+        const pkgRaw = packagingMockDispatch('packaging.get', { candidate: cut.candidateId }, {
+          videoKind: cut.videoKind,
+          scriptAllowed: Boolean(scriptDoc?.narrationAllowed),
+          blocks: [],
+          source: cut.sourceId,
+          permission: hasSearchFlag('source-test') ? undefined : permObj,
+          originUrl: src?.origin_url ?? null,
+          detectedLanguage: src?.language === 'en' ? 'en' : src?.language === 'und' ? null : 'pt-BR',
+          languageRequired: src?.language === 'und',
+        }) as { current?: unknown; credit?: unknown; chapters?: unknown; job?: unknown };
+
+        const thumbRaw = thumbnailMockDispatch('thumbnail.get', { candidate: cut.candidateId }, {
+          getCandidateInfo: () => ({
+            source: cut.sourceId,
+            cut: { startUs: cut.startUs, endUs: cut.endUs },
+            sourceStatus: status,
+          }),
+          isFfmpegInstalled: () => ffmpegMock.installed,
+          isSourceTest: () => hasSearchFlag('source-test'),
+        }) as { current?: unknown; job?: unknown };
+
+        const over60s = cut.durationUs > 60_000_000;
+        const permGuardrail = {
+          status: granted ? 'granted' : 'none',
+          grantedCount: granted ? 1 : 0,
+          missingCount: granted ? 0 : 1,
+          totalCount: 1,
+          who: granted ? (permObj.who ?? null) : null,
+          where: granted ? (permObj.where ?? null) : null,
+          scope: granted ? (permObj.scope ?? null) : null,
+        };
+        const guardrailsJson = {
+          scope: 'single',
+          directMonetizationAck: ack,
+          needsDirectNotice: !ack && cut.videoKind === 'direct',
+          videoKind: cut.videoKind,
+          hasDirect: cut.videoKind === 'direct',
+          hasTransformed: isTransformed,
+          totalCuts: 1,
+          durationUs: cut.durationUs,
+          over60s,
+          over60sCount: over60s ? 1 : 0,
+          shortClaimLimitUs: 60_000_000,
+          permission: permGuardrail,
+          script: scriptJson,
+          narration: narrationJson,
+          audio: { hasAudio: false, assetCount: 0, unverifiedCount: 0 },
+        };
+
+        return {
+          candidateId: cut.candidateId,
+          runId: cut.runId,
+          sourceId: cut.sourceId,
+          clipId: null,
+          videoKind: cut.videoKind,
+          candidateTitle: cut.candidateTitle,
+          scoreTotal: cut.scoreTotal,
+          adjusted: cut.adjusted,
+          startId: cut.startId,
+          endId: cut.endId,
+          startUs: cut.startUs,
+          endUs: cut.endUs,
+          durationUs: cut.durationUs,
+          source: {
+            id: cut.sourceId,
+            name: srcName,
+            path: src?.path ?? '',
+            status,
+            available,
+            online: available,
+            permission: permObj,
+          },
+          packaging: {
+            ready: Boolean(pkgRaw?.current),
+            current: pkgRaw?.current ?? null,
+            credit: pkgRaw?.credit ?? { text: null, warning: granted ? null : 'no_permission' },
+            chapters: pkgRaw?.chapters ?? { applicable: isTransformed, status: isTransformed ? 'script_not_approved' : 'not_transformed', canGenerate: false },
+            job: pkgRaw?.job ?? null,
+          },
+          thumbnail: {
+            ready: Boolean(thumbRaw?.current),
+            current: thumbRaw?.current ?? null,
+            job: thumbRaw?.job ?? null,
+          },
+          script: scriptJson,
+          narration: narrationJson,
+          guardrails: guardrailsJson,
+        };
+      });
+
+      return {
+        total,
+        offset,
+        limit,
+        hasMore: offset + items.length < total,
+        items,
+      } as T;
+    }
     if ((name.startsWith('export.') && name !== 'export.captions') || (name === 'jobs.cancel' && (args as {id: number}).id >= 5900)) return exportMock(name, args, (source, pos) => mockCorrected.has(`${source}:${pos}`), { project: getActiveProjectMock(), emitProgress: emitirProgressoMock }) as T;
     if (name === 'transcription.groq.info') {
       return {
