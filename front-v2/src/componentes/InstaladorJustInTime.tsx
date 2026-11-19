@@ -21,6 +21,7 @@ export type InstaladorJustInTimeProps = {
   recurso: RecursoJustInTime
   idioma?: 'pt' | 'en'
   modo?: 'inline' | 'modal'
+  varianteAcao?: 'primario' | 'secundario'
   aberto?: boolean
   aoFechar?: () => void
   aoConcluir: () => void
@@ -190,6 +191,7 @@ export function InstaladorJustInTime({
   recurso,
   idioma = 'pt',
   modo = 'inline',
+  varianteAcao = 'primario',
   aberto = true,
   aoFechar,
   aoConcluir,
@@ -584,7 +586,7 @@ export function InstaladorJustInTime({
 
   const botaoBaixar = (
     <Botao
-      variante="primario"
+      variante={varianteAcao}
       icone={<Download />}
       disabled={desabilitarBaixar}
       onClick={() => void instalar(false)}
@@ -595,7 +597,7 @@ export function InstaladorJustInTime({
 
   const acaoBaixar = bloqueadoPorPlataforma ? (
     <Dica texto={DICA_INDISPONIVEL_PLATAFORMA}>
-      <span tabIndex={0} className="inline-flex">
+      <span className="inline-flex">
         {botaoBaixar}
       </span>
     </Dica>

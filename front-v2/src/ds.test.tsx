@@ -1,8 +1,11 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { describe, expect, it } from 'vitest'
 import {
+  BarraAcoes,
   caixaCampo,
+  Dialogo,
   EixosNota,
   Entrada,
   faixaUsd,
@@ -10,6 +13,7 @@ import {
   ProvedorDicas,
   ProvedorToast,
   ResumoCustoPrivacidade,
+  Segmentado,
   Select,
   Slider,
   Transporte,
@@ -176,5 +180,73 @@ describe('Design System v2 — Toast aviso e formatadores USD (UI-27a, UI-28)', 
     for (const btn of toolbar.querySelectorAll('button')) {
       expect(btn).toBeDisabled()
     }
+  })
+
+  it('UI-62: <Dialogo> e <BarraAcoes> não iniciam foco em "Fechar (Esc)" e Esc no popover devolve foco ao gatilho', async () => {
+    const user = userEvent.setup()
+
+    function Cena() {
+      const [dlgAberto, setDlgAberto] = useState(false)
+      const [popAberto, setPopAberto] = useState<string | null>(null)
+      return (
+        <ProvedorDicas>
+          <button type="button" onClick={() => setDlgAberto(true)}>
+            Abrir diálogo
+          </button>
+          <Dialogo
+            aberto={dlgAberto}
+            aoMudarAberto={setDlgAberto}
+            titulo="Exportar"
+            rodape={<button type="button">Iniciar</button>}
+          >
+            <input aria-label="Destino" defaultValue="/a.mp4" />
+          </Dialogo>
+          <BarraAcoes
+            aberta={popAberto}
+            aoMudarAberta={setPopAberto}
+            acoes={[
+              {
+                id: 'enquadrar',
+                rotulo: 'Enquadrar',
+                icone: <span aria-hidden>E</span>,
+                conteudo: <button type="button">Rosto</button>,
+              },
+            ]}
+          />
+        </ProvedorDicas>
+      )
+    }
+
+    render(<Cena />)
+
+    await user.click(screen.getByRole('button', { name: 'Abrir diálogo' }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Destino' })).toHaveFocus())
+    expect(screen.getByRole('button', { name: 'Fechar (Esc)' })).not.toHaveFocus()
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+    const gatilho = screen.getByRole('button', { name: 'Enquadrar' })
+    await user.click(gatilho)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Rosto' })).toHaveFocus())
+    expect(screen.getByRole('button', { name: 'Fechar (Esc)' })).not.toHaveFocus()
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(gatilho).toHaveFocus())
+  })
+
+  it('UI-67: <Segmentado> impede quebra de linha com whitespace-nowrap e min-h-6.5', () => {
+    render(
+      <Segmentado
+        rotulo="Modo do palco"
+        valor="previa_9_16"
+        aoMudar={() => undefined}
+        opcoes={[
+          { valor: 'previa_9_16', rotulo: 'Prévia 9:16' },
+          { valor: 'fonte_16_9', rotulo: 'Enquadrar na Fonte 16:9' },
+        ]}
+      />,
+    )
+    const btn = screen.getByRole('radio', { name: 'Enquadrar na Fonte 16:9' })
+    expect(btn.className).toContain('whitespace-nowrap')
+    expect(btn.className).toContain('min-h-6.5')
   })
 })

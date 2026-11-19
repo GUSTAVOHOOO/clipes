@@ -50,9 +50,11 @@ import {
   splicedToSourceUs,
 } from '../../../../src/features/editor/timelineMath'
 import { mediaUrl } from '../../../../src/lib/media'
+import { formatarTecla, resolverTeclaExibida } from '~/comandos/atalhos'
 import { chamar, ErroCore } from '~/core/cliente'
 import { mensagemDeErro } from '~/core/erros'
 import { useFila } from '~/core/progresso'
+import { usePreferencias } from '~/preferencias/preferencias'
 import { useEditorCorte } from '~/stores/editorCorte'
 
 export type SessaoEditorCorte = ReturnType<typeof useEditorCorte>
@@ -204,6 +206,23 @@ export function PalcoEditor({
   const editor = useSessaoEditorCorte(projetoPath, corteId, estadoEditor)
   const doc = editor.documentoAtivo
   const jobs = useFila()
+  const [preferencias] = usePreferencias()
+  const [areaQuadroEl, setAreaQuadroEl] = useState<HTMLDivElement | null>(null)
+
+  const teclaTransporte = useCallback(
+    (idAtalho: string, padrao: string, teclaModoAlt?: string) => {
+      const remapeado = Object.hasOwn(preferencias.atalhos, idAtalho)
+      const base = remapeado ? preferencias.atalhos[idAtalho] : padrao
+      const efetiva = resolverTeclaExibida(
+        base,
+        preferencias.modoTeclasUnicas,
+        true,
+        remapeado ? undefined : teclaModoAlt,
+      )
+      return efetiva ? formatarTecla(efetiva) : null
+    },
+    [preferencias.atalhos, preferencias.modoTeclasUnicas],
+  )
 
   const [modo, setModo] = useState<'previa_9_16' | 'fonte_16_9'>('previa_9_16')
   const [painelInterno, setPainelInterno] = useState<PainelCropAtivo>('top')
@@ -665,9 +684,10 @@ export function PalcoEditor({
   return (
     <section
       ref={aoSolicitarFocoRef}
+      data-regiao="palco"
       tabIndex={-1}
       aria-label="Palco de prévia"
-      className={cn('flex min-h-0 min-w-0 flex-1 flex-col items-center justify-between gap-2 outline-none', className)}
+      className={cn('foco-interno flex min-h-0 min-w-0 flex-1 flex-col items-center justify-between gap-2 outline-none', className)}
     >
       {/* Topo do palco: alternador Prévia 9:16 | Enquadrar na Fonte 16:9 (+ Topo/Base em layouts duplos) */}
       <div className="flex shrink-0 flex-wrap items-center justify-center gap-2">
@@ -694,7 +714,10 @@ export function PalcoEditor({
       </div>
 
       {/* Área do quadro */}
-      <div className="relative flex min-h-0 w-full flex-1 items-center justify-center">
+      <div
+        ref={setAreaQuadroEl}
+        className="relative flex min-h-0 w-full flex-1 items-center justify-center"
+      >
         {modo === 'previa_9_16' ? (
           <div
             ref={refQuadro}
@@ -922,6 +945,9 @@ export function PalcoEditor({
           duracaoUs={duracaoEfetivaUs}
           reproduzindo={reproduzindo}
           mudo={mudo}
+          atalhoReproduzir={teclaTransporte('transporte.reproduzir', 'Espaço')}
+          atalhoEntrada={teclaTransporte('editor.entrada', 'I', 'Shift+Alt+I')}
+          atalhoSaida={teclaTransporte('editor.saida', 'O', 'Shift+Alt+O')}
           aoAlternar={() => definirReproduzindo(!reproduzindo)}
           aoInicio={irParaInicio}
           aoFim={irParaFim}
@@ -934,6 +960,7 @@ export function PalcoEditor({
           aberta={popoverAberto}
           aoMudarAberta={aoMudarPopoverAberto}
           ancora={refQuadro}
+          limiteColisao={areaQuadroEl}
         />
       </div>
     </section>

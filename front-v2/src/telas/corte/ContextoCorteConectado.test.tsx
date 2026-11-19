@@ -340,4 +340,35 @@ describe('ContextoCorteConectado', () => {
       expect(screen.getByRole('dialog')).toBeInTheDocument()
     })
   })
+
+  it('UI-63 / UI-68: não usa span[tabindex=0] em botão desabilitado e não duplica "Corte #201 · Corte #201" sem candidato resolvido', async () => {
+    configurarMocksPadrao()
+    const { rerender } = render(
+      <Wrapper>
+        <ContextoCorteConectado projetoId="demo" corteId="102" subAbaAtiva="editar" runId="1" />
+      </Wrapper>,
+    )
+
+    const btnConverter = await screen.findByRole('button', { name: 'Converter em Vídeo transformado' })
+    expect(btnConverter).toBeDisabled()
+    expect(btnConverter.closest('span[tabindex="0"]')).toBeNull()
+
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'sources.list') return FONTES_MOCK
+      if (cmd === 'selection.list') return []
+      return null
+    })
+
+    rerender(
+      <Wrapper>
+        <ContextoCorteConectado projetoId="demo" corteId="201" subAbaAtiva="editar" />
+      </Wrapper>,
+    )
+
+    const h1 = await screen.findByRole('heading', { level: 1 })
+    await waitFor(() => {
+      expect(h1.textContent).not.toMatch(/Corte #201.*Corte #201/)
+      expect(h1.textContent).not.toMatch(/#201/)
+    })
+  })
 })

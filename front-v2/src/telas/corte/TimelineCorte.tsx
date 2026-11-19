@@ -353,6 +353,7 @@ function TimelineInterna({
 
   return (
     <section
+      data-regiao="timeline"
       aria-label="Timeline compacta do Corte"
       className={cn(
         'flex shrink-0 flex-col border-t border-linha bg-chao px-4 pt-1.5 pb-2 select-none',

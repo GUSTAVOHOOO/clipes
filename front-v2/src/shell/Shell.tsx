@@ -484,10 +484,11 @@ export function Shell({
   const ciclarRegiao = useCallback((direcao: 1 | -1) => {
     const raiz = mainRef.current?.closest('[data-tela]') ?? document
     const topo = raiz.querySelector<HTMLElement>('[data-regiao="topo"]')
+    const contexto = raiz.querySelector<HTMLElement>('[data-regiao="contexto"]')
     const conteudo = mainRef.current ?? raiz.querySelector<HTMLElement>('[data-regiao="conteudo"]')
     const filaRegiao = raiz.querySelector<HTMLElement>('[data-regiao="fila"]')
     const rodape = raiz.querySelector<HTMLElement>('[data-regiao="rodape"]')
-    const regioes = [topo, conteudo, filaRegiao, rodape].filter(
+    const regioes = [topo, contexto, conteudo, filaRegiao, rodape].filter(
       (el): el is HTMLElement => el !== null,
     )
     if (regioes.length === 0) return
@@ -510,10 +511,11 @@ export function Shell({
       if (e.defaultPrevented || paletaAberta) return
       const temDialogoModal = Array.from(
         document.querySelectorAll('[role="dialog"], [role="alertdialog"]'),
-      ).some((el) => !el.closest('[aria-label="Notifications"]'))
+      ).some((el) => !el.closest('[aria-label="Notifications"], [data-nao-modal]'))
       if (temDialogoModal) return
 
       if (e.key === 'F6' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (mainRef.current?.querySelector('[data-f6-proprio]')) return
         e.preventDefault()
         e.stopPropagation()
         ciclarRegiao(e.shiftKey ? -1 : 1)
@@ -537,7 +539,10 @@ export function Shell({
         grupo: 'Navegação',
         tecla: 'F6',
         teclaUnica: false,
-        executar: () => ciclarRegiao(1),
+        executar: () => {
+          if (mainRef.current?.querySelector('[data-f6-proprio]')) return
+          ciclarRegiao(1)
+        },
       },
       {
         id: 'fila.alternar',
@@ -647,7 +652,7 @@ export function Shell({
         <button
           type="button"
           onClick={() => setDialogoErroSalvarAberto(true)}
-          className="foco cursor-pointer rounded-controle border-0 bg-transparent px-1 py-0.5 text-pequeno text-erro underline hover:bg-hover"
+          className="foco inline-flex min-h-6 cursor-pointer items-center rounded-controle border-0 bg-transparent px-1.5 py-0.5 text-pequeno text-erro underline hover:bg-hover"
         >
           Tentar novamente
         </button>

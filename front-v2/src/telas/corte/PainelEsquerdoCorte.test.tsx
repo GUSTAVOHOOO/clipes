@@ -785,4 +785,33 @@ describe('PainelEsquerdoCorte', () => {
       expect(chamarMock).toHaveBeenCalledWith('transcription.redo', {})
     })
   })
+
+  it('UI-63 / UI-69: botão Ir tem min-w-6 (>= 24 px) e Transcrição abre rolada na 1ª frase ativa do Corte', async () => {
+    const user = userEvent.setup()
+    const scrollSpy = vi.spyOn(HTMLElement.prototype, 'scrollTo')
+    const store = await abrirStoreComFixture()
+
+    render(
+      envolver(
+        <PainelEsquerdoCorte
+          aberto={true}
+          aoAlternarAberto={vi.fn()}
+          projetoId="demo"
+          store={store}
+        />,
+      ),
+    )
+
+    const viewport = screen.getByLabelText('Frases do Corte')
+    await waitFor(() => {
+      expect(scrollSpy).toHaveBeenCalled()
+    })
+    const chamadaViewport = scrollSpy.mock.instances.some((inst) => inst === viewport)
+    expect(chamadaViewport).toBe(true)
+    scrollSpy.mockRestore()
+
+    await user.click(screen.getByRole('tab', { name: 'Índice do Corte' }))
+    const btnIr = screen.getAllByRole('button', { name: 'Ir' })[0]
+    expect(btnIr.className).toContain('min-w-6')
+  })
 })

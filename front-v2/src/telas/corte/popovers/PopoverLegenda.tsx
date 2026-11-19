@@ -320,13 +320,14 @@ export function PopoverLegenda({
           valor={faixaEscolhida}
           aoMudar={(v) => void selecionarFaixa(v)}
           opcoes={opcoesFaixa}
+          className={opcoesFaixa.length > 3 ? 'grid grid-cols-2' : undefined}
         />
       </GrupoAjuste>
 
       {estilo && (
-        <GrupoAjuste rotulo="Preset de estilo">
+        <GrupoAjuste rotulo="Estilo da legenda">
           <Segmentado<'vertical' | 'cinema' | 'simple'>
-            rotulo="Preset de legenda"
+            rotulo="Estilo de legenda"
             valor={estilo.preset}
             aoMudar={(v) => void aplicarPreset(v)}
             opcoes={[
@@ -336,7 +337,7 @@ export function PopoverLegenda({
             ]}
           />
           <p className="text-pequeno text-t3">
-            Trocar preset preserva seus destaques por palavra.
+            Trocar o estilo preserva seus destaques por palavra.
           </p>
         </GrupoAjuste>
       )}

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -301,6 +301,8 @@ describe('<PopoverEnquadrar>', () => {
       const regiao = screen.getByRole('region', { name: 'Instalação necessária' })
       expect(regiao).toBeInTheDocument()
       expect(regiao).toHaveTextContent(/YuNet/i)
+      const btnBaixar = within(regiao).getByRole('button', { name: /Baixar e continuar/i })
+      expect(btnBaixar.className.split(/\s+/)).not.toContain('bg-sinal')
     })
     unmount()
 

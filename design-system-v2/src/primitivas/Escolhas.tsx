@@ -118,7 +118,7 @@ export function Segmentado<V extends string>({ valor, aoMudar, opcoes, rotulo, c
         const sel = o.valor === valor
         return (
           <button key={o.valor} type="button" role="radio" aria-checked={sel} tabIndex={sel ? 0 : -1} disabled={o.desabilitada} onClick={() => aoMudar(o.valor)}
-            className={cn('h-6.5 flex-1 cursor-pointer rounded-mini border-0 px-2 text-pequeno transition-colors duration-(--dur-rapida) ease-saida disabled:opacity-40',
+            className={cn('min-h-6.5 flex-1 cursor-pointer rounded-mini border-0 px-2.5 text-pequeno whitespace-nowrap transition-colors duration-(--dur-rapida) ease-saida disabled:opacity-40',
               sel ? 'bg-elevado font-medio text-t1 shadow-[inset_0_0_0_1px_var(--contorno-controle)]' : 'bg-transparent text-t3 hover:text-t2')}
           >
             {o.rotulo}

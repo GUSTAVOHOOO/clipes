@@ -392,7 +392,7 @@ export function PopoverAudio({
 
       {/* Biblioteca do Projeto */}
       <GrupoAjuste rotulo="Biblioteca do Projeto">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-col gap-2">
           <Segmentado<AudioKind>
             rotulo="Filtro da biblioteca"
             valor={abaBiblioteca}
@@ -407,6 +407,7 @@ export function PopoverAudio({
             variante="secundario"
             icone={<Plus />}
             onClick={() => setFormImportarAberto((v) => !v)}
+            className="w-full justify-center"
           >
             Importar áudio (até 500 MiB)
           </Botao>

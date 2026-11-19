@@ -501,6 +501,7 @@ describe('<InstaladorJustInTime>', () => {
     const r3 = render(envolver(<InstaladorJustInTime recurso="url_import" aoConcluir={vi.fn()} />))
     const btnMac = await screen.findByRole('button', { name: /Baixar e continuar/i })
     expect(btnMac).toBeDisabled()
+    expect(btnMac.closest('span[tabindex="0"]')).toBeNull()
     expect(
       screen.getByText(/Download automático indisponível nesta plataforma\./i),
     ).toBeInTheDocument()

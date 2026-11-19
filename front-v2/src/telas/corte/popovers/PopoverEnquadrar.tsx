@@ -298,6 +298,7 @@ export function PopoverEnquadrar({
             <InstaladorJustInTime
               recurso="yunet"
               modo="inline"
+              varianteAcao="secundario"
               aoConcluir={() => {
                 setYunetDisponivel(true)
               }}
