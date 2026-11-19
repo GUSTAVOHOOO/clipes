@@ -28,6 +28,8 @@ import { Exportacao } from '~/telas/exportacao/Exportacao'
 import { DetalheFonte } from '~/telas/fontes/DetalheFonte'
 import { Fontes } from '~/telas/fontes/Fontes'
 import { Inicio } from '~/telas/inicio/Inicio'
+import { Relatos } from '~/telas/relatos/Relatos'
+import { Sobre } from '~/telas/sobre/Sobre'
 
 const TITULOS_CONFIG: Record<SecaoConfig, string> = {
   provedores: 'Provedores e Tarefas de IA',
@@ -422,6 +424,22 @@ function AppRoteado({
           projetoPath={projeto?.path ?? null}
           sub={rotaExibida.sub}
         />
+      </Shell>
+    )
+  }
+
+  if (rotaExibida.tela === 'relatos') {
+    return (
+      <Shell rota={rotaExibida} projeto={projeto} somenteLocal={somenteLocal}>
+        <Relatos tipoInicial={rotaExibida.tipo} />
+      </Shell>
+    )
+  }
+
+  if (rotaExibida.tela === 'sobre') {
+    return (
+      <Shell rota={rotaExibida} projeto={projeto} somenteLocal={somenteLocal}>
+        <Sobre />
       </Shell>
     )
   }
