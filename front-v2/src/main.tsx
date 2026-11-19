@@ -10,7 +10,9 @@ import { initMediaTransport } from '../../src/lib/media'
  * Boot do app. No Tauri, aguarda o transporte de mídia (servidor loopback do
  * Linux WebKitGTK, #246) antes de montar; se falhar, monta mesmo assim.
  */
-export async function iniciarApp(raiz: HTMLElement | null = document.getElementById('raiz')): Promise<void> {
+export async function iniciarApp(
+  raiz: HTMLElement | null = typeof document !== 'undefined' ? document.getElementById('raiz') : null,
+): Promise<void> {
   if (!raiz) return
 
   if (import.meta.env.VITE_E2E === '1') {
@@ -24,6 +26,8 @@ export async function iniciarApp(raiz: HTMLElement | null = document.getElementB
       // Sem transporte loopback, a mídia segue pelo esquema clipes-media://.
     }
   }
+
+  if (typeof window === 'undefined' || typeof document === 'undefined') return
 
   createRoot(raiz).render(
     <StrictMode>
