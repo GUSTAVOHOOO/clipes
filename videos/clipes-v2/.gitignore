@@ -1,0 +1,10 @@
+# pesados ou gerados: ficam fora do git (o PR leva só o projeto leve)
+node_modules/
+renders/
+frames/
+review/
+assets/app/
+audio/*.wav
+audio/kit/
+audio/vo/
+*.mp4
