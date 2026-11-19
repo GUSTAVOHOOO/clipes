@@ -4,6 +4,7 @@ pub mod captions;
 pub mod encoder;
 mod font_cmap;
 pub mod pipeline;
+pub mod readiness;
 pub mod render;
 
 use crate::caption_style::{self, store::ClipId, Style, StyledWord, WordOverride};
