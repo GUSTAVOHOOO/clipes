@@ -24,6 +24,7 @@ import {
 } from '~/telas/corte/EditarCorte'
 import { Revisao } from '~/telas/cortes/Revisao'
 import { Selecao } from '~/telas/cortes/Selecao'
+import { Exportacao } from '~/telas/exportacao/Exportacao'
 import { DetalheFonte } from '~/telas/fontes/DetalheFonte'
 import { Fontes } from '~/telas/fontes/Fontes'
 import { Inicio } from '~/telas/inicio/Inicio'
@@ -408,6 +409,18 @@ function AppRoteado({
           aoAtualizarMeta={setMetaCorte}
           aoMudarStatusSalvamento={setStatusSalvamentoEditor}
           acoesExternasRef={acoesEditarRef}
+        />
+      </Shell>
+    )
+  }
+
+  if (rotaExibida.tela === 'exportacao') {
+    return (
+      <Shell rota={rotaExibida} projeto={projeto} somenteLocal={somenteLocal}>
+        <Exportacao
+          projetoId={rotaExibida.projeto}
+          projetoPath={projeto?.path ?? null}
+          sub={rotaExibida.sub}
         />
       </Shell>
     )

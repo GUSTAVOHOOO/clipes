@@ -136,6 +136,7 @@ function avaliarProntidaoCorte(
 function construirItensChecklist(
   guardrails: RespostaGuardrails | null,
   qtdOffline: number,
+  precisaAvisoDireto: boolean,
 ): { itens: ItemGuarda[]; temAvisos: boolean } {
   if (!guardrails) return { itens: [], temAvisos: false }
 
@@ -229,7 +230,7 @@ function construirItensChecklist(
     })
   }
 
-  if (guardrails.needsDirectNotice && !guardrails.directMonetizationAck) {
+  if (precisaAvisoDireto) {
     itens.push({
       id: 'aviso-direto',
       estado: 'pendente',
@@ -239,7 +240,7 @@ function construirItensChecklist(
   }
 
   const temAvisos =
-    Boolean(guardrails.needsDirectNotice && !guardrails.directMonetizationAck) ||
+    precisaAvisoDireto ||
     missingPerm > 0 ||
     (guardrails.script?.unapprovedCount ?? 0) > 0 ||
     audioSemLic > 0 ||
@@ -343,7 +344,7 @@ function CartaoProntidao({
               <span className="text-t2">
                 {corte.sourceStatus === 'offline' ? 'Fonte offline' : 'Fonte alterada'}
               </span>
-            ) : !p.semPermissao ? (
+            ) : corte.permission.status === 'granted' ? (
               <span>
                 Permissão registrada
                 {corte.permission.who ? ` (${corte.permission.who})` : ''}
@@ -640,9 +641,18 @@ export function MesaProntidao({
       ? (exportacao.guardrailsPorFonte[fonteFiltroNum] ?? exportacao.guardrailsProjeto)
       : exportacao.guardrailsProjeto
 
+  const temDiretoNoEscopo = useMemo(
+    () => aprovadosNoEscopo.some((c) => c.videoKind === 'direct'),
+    [aprovadosNoEscopo],
+  )
+
+  const precisaAvisoDireto =
+    Boolean(guardrailsEscopo?.needsDirectNotice && !guardrailsEscopo?.directMonetizationAck) ||
+    (guardrailsEscopo !== null && !guardrailsEscopo.directMonetizationAck && temDiretoNoEscopo)
+
   const { itens: itensChecklist, temAvisos: checklistTemAvisos } = useMemo(
-    () => construirItensChecklist(guardrailsEscopo, qtdOfflineNoEscopo),
-    [guardrailsEscopo, qtdOfflineNoEscopo],
+    () => construirItensChecklist(guardrailsEscopo, qtdOfflineNoEscopo, precisaAvisoDireto),
+    [guardrailsEscopo, precisaAvisoDireto, qtdOfflineNoEscopo],
   )
 
   const encoder = exportacao.encoder
@@ -689,12 +699,12 @@ export function MesaProntidao({
   const iniciarDisparoLote = useCallback(async () => {
     if (disparando) return
     setErroDisparo(null)
-    if (guardrailsEscopo?.needsDirectNotice && !guardrailsEscopo.directMonetizationAck) {
+    if (precisaAvisoDireto) {
       setDialogoDiretoAberto(true)
       return
     }
     await executarStartLote(false)
-  }, [disparando, executarStartLote, guardrailsEscopo])
+  }, [disparando, executarStartLote, precisaAvisoDireto])
 
   const confirmarAvisoDiretoEContinuar = useCallback(async () => {
     setDisparando(true)
@@ -833,7 +843,7 @@ export function MesaProntidao({
               </div>
             ) : (
               <div className="flex flex-col gap-3 pr-1 pb-2">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 min-[1440px]:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[repeat(auto-fill,minmax(315px,1fr))]">
                   {cortesaExibir.map((corte) => (
                     <CartaoProntidao
                       key={corte.candidateId}
@@ -1011,48 +1021,50 @@ export function MesaProntidao({
                   mostrarDivulgacaoIa={Boolean(guardrailsEscopo?.narration?.ttsCutCount)}
                 />
               </div>
-
-              {erroDisparo && (
-                <BannerErroCore
-                  erro={{
-                    code: erroDisparo.code,
-                    message: erroDisparo.detalhe || erroDisparo.message,
-                  }}
-                  traduzir={(code) =>
-                    mensagemDeErro(new ErroCore(code, erroDisparo.detalhe || erroDisparo.message))
-                  }
-                  acaoRecuperacao={acaoRecuperacaoDisparo}
-                  permitirRelato
-                />
-              )}
-
-              {/* Único botão primário (bg-sinal) da tela */}
-              <Botao
-                variante="primario"
-                tamanho="g"
-                carregando={disparando}
-                disabled={!podeExportarLote}
-                onClick={() => void iniciarDisparoLote()}
-                className="w-full justify-center"
-              >
-                {escopo === 'fonte'
-                  ? `Exportar ${aprovadosNoEscopo.length} da Fonte em lote`
-                  : `Exportar ${aprovadosNoEscopo.length} aprovados em lote`}
-              </Botao>
-
-              {aprovadosNoEscopo.length === 0 && (
-                <Botao
-                  tamanho="p"
-                  variante="fantasma"
-                  onClick={() => {
-                    window.location.hash = `#/projeto/${encProjeto}/cortes`
-                  }}
-                >
-                  Ir para Cortes
-                </Botao>
-              )}
             </div>
           </AreaRolagem>
+
+          <div className="mt-3 flex shrink-0 flex-col gap-2 border-t border-linha pt-3">
+            {erroDisparo && (
+              <BannerErroCore
+                erro={{
+                  code: erroDisparo.code,
+                  message: erroDisparo.detalhe || erroDisparo.message,
+                }}
+                traduzir={(code) =>
+                  mensagemDeErro(new ErroCore(code, erroDisparo.detalhe || erroDisparo.message))
+                }
+                acaoRecuperacao={acaoRecuperacaoDisparo}
+                permitirRelato
+              />
+            )}
+
+            {/* Único botão primário (bg-sinal) da tela */}
+            <Botao
+              variante="primario"
+              tamanho="g"
+              carregando={disparando}
+              disabled={!podeExportarLote}
+              onClick={() => void iniciarDisparoLote()}
+              className="w-full justify-center"
+            >
+              {escopo === 'fonte'
+                ? `Exportar ${aprovadosNoEscopo.length} da Fonte em lote`
+                : `Exportar ${aprovadosNoEscopo.length} aprovados em lote`}
+            </Botao>
+
+            {aprovadosNoEscopo.length === 0 && (
+              <Botao
+                tamanho="p"
+                variante="fantasma"
+                onClick={() => {
+                  window.location.hash = `#/projeto/${encProjeto}/cortes`
+                }}
+              >
+                Ir para Cortes
+              </Botao>
+            )}
+          </div>
         </aside>
       </div>
 
