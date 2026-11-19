@@ -5,9 +5,11 @@ on:
       - '.github/workflows/linux-validation.yml'
       - 'scripts/linux-validation.mjs'
       - 'scripts/linux-validation.test.mjs'
-      - 'src-tauri/tauri.conf.json'
-      - 'front-v2/src/telas/corte/PalcoEditor.tsx'
-      - 'front-v2/src/telas/corte/EditarCorte.tsx'
+      - 'src-tauri/**'
+      - 'front-v2/**'
+      - 'design-system-v2/**'
+      - '!front-v2/**/*.md'
+      - '!design-system-v2/**/*.md'
   workflow_dispatch:
 
 concurrency:

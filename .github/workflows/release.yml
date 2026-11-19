@@ -1,13 +1,17 @@
 name: Instaladores e release
 
 # Em PR o build de instaladores só roda quando o diff pode mudar o app
-# empacotado (Rust, front v1, dependências). Em tag roda sempre. PR de
-# front-v2, docs ou CI não gasta ~30 min de runner aqui.
+# empacotado (Rust, worker embutido, front-v2, design-system-v2, módulos
+# compartilhados de src/, dependências). Em tag roda sempre. PR só de docs
+# ou de outros workflows não gasta ~30 min de runner aqui.
 on:
   pull_request:
     paths:
       - 'core/**'
       - 'src-tauri/**'
+      - 'front-v2/**'
+      - 'design-system-v2/**'
+      - 'worker/**'
       - 'src/**'
       - 'index.html'
       - 'vite.config.ts'
