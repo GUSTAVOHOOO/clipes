@@ -156,24 +156,30 @@ test.describe('Tela Editar do Corte (#/projeto/:id/corte/:corteId/editar)', () =
     // 4. Enquadrar: selecionar Rosto (9:16) exibe Instalador YuNet JIT, modo Fonte 16:9 e ConfirmDialog em Limpar edições
     await page.getByRole('radio', { name: 'Rosto (9:16)' }).click()
     await expect(page.getByText(/YuNet/i).first()).toBeVisible()
+    // Fecha o popover antes de interagir com o Segmentado fora dele (evita race de outside-press do Base UI)
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('button', { name: 'Fechar (Esc)' })).toBeHidden()
+
     await page.getByRole('radio', { name: 'Enquadrar na Fonte 16:9' }).click()
     await expect(page.getByTestId('quadro-fonte-16-9')).toBeVisible()
     const cropRet = page.getByTestId('retangulo-crop-ativo')
     await cropRet.focus()
     await page.keyboard.press('ArrowRight')
     await page.getByRole('radio', { name: 'Prévia 9:16' }).click()
+    await expect(page.getByTestId('quadro-previa-9-16')).toBeVisible()
 
-    // Limpar edições manuais abre ConfirmDialog com foco em Cancelar
+    // Reabre Enquadrar e verifica ConfirmDialog em Limpar edições manuais com foco em Cancelar
+    await page.getByRole('button', { name: 'Enquadrar', exact: true }).click()
     const btnLimparEdits = page.getByRole('button', { name: /Limpar todas as edições manuais/i })
-    if (await btnLimparEdits.isVisible()) {
-      await btnLimparEdits.click()
-      const dlgLimpar = page.getByRole('alertdialog')
-      await expect(dlgLimpar).toBeVisible()
-      await expect(dlgLimpar.getByRole('button', { name: 'Cancelar' })).toBeFocused()
-      await dlgLimpar.getByRole('button', { name: 'Cancelar' }).click()
-      await expect(dlgLimpar).toBeHidden()
-    }
+    await expect(btnLimparEdits).toBeVisible()
+    await btnLimparEdits.click()
+    const dlgLimpar = page.getByRole('alertdialog')
+    await expect(dlgLimpar).toBeVisible()
+    await expect(dlgLimpar.getByRole('button', { name: 'Cancelar' })).toBeFocused()
+    await dlgLimpar.getByRole('button', { name: 'Cancelar' }).click()
+    await expect(dlgLimpar).toBeHidden()
     await page.keyboard.press('Escape')
+    await expect(page.getByRole('button', { name: 'Fechar (Esc)' })).toBeHidden()
 
     // 5. Timeline: +3 faixas (Narração visível em Vídeo transformado), Alt indicador e Ctrl+Z
     const timeline = page.getByRole('region', { name: 'Timeline compacta do Corte' })
