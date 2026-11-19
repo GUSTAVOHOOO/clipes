@@ -1402,30 +1402,8 @@ async function runSession3(ui, ctx) {
   await ui.clickButton('Abrir bancada de revisão', { exact: false });
   await ui.waitForHash(/\/cortes\/revisao\/1/);
   await ui.waitForText('Revisar cada trecho', 'main');
+  // #490: a conversão individual para Vídeo transformado já está ligada; aqui só conferimos que o Corte direto a oferece.
   await ui.waitForText('Converter em Vídeo transformado', 'main');
-  try {
-    await ui.browser.waitUntil(
-      () =>
-        ui.browser.execute(() => {
-          const b = Array.from(document.querySelectorAll('button')).find(x =>
-            (x.textContent || '').includes('Converter em Vídeo transformado'),
-          );
-          return b?.getAttribute('aria-disabled') === 'true';
-        }),
-      {
-        timeout: 15_000,
-        timeoutMsg: 'A conversão individual (#292) deve continuar desabilitada em Corte direto',
-      },
-    );
-  } catch (error) {
-    const html = await ui.browser.execute(() =>
-      Array.from(document.querySelectorAll('button'))
-        .filter(x => (x.textContent || '').includes('Converter'))
-        .map(x => ({ attrs: x.getAttributeNames().map(n => n + '=' + String(x.getAttribute(n)).slice(0, 40)).filter(s => !s.startsWith('class=')), text: x.textContent })),
-    );
-    console.log('[e2e] Botões Converter:', JSON.stringify(html));
-    throw error;
-  }
   await ui.clickButton('Avançar fim 1 Frase', { exact: false });
   await ui.waitForText('Duração atual: 30 s', 'main');
   await ui.clickButton('Recuar fim 1 Frase', { exact: false });

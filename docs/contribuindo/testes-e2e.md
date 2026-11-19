@@ -134,7 +134,7 @@ Os helpers de `createUi` falam com os componentes Base UI do front v2: o nome ac
 As tabelas de Transcrição e de seleção vêm de migrações Rust posteriores ao banco V1 e só existem depois que o app abre o Projeto. Por isso `seedV1Selection` roda logo após a abertura: 4 Frases de 7,5 s, uma execução de seleção V1 (`revision = 1`, `video_kind = 'direct'`, `state = 'completed'`) e 2 candidatos pendentes, e o app é recarregado.
 
 1. **Abrir o Projeto V1** (`s3-01-projeto-v1-fontes.png`): `Abrir pasta .clipes` em `#/inicio`, `project.pre-migration.sqlite` no disco e a Fonte `v1-source.mp4` em `#/projeto/:id/fontes`.
-2. **Revisar** (`s3-02-cortes-v1.png`, `s3-03-revisao-aprovada.png`): `Abrir bancada de revisão`, conversão individual (#292) desabilitada em Corte direto, `±1 Frase` na borda final, `Aprovar`.
+2. **Revisar** (`s3-02-cortes-v1.png`, `s3-03-revisao-aprovada.png`): `Abrir bancada de revisão`, botão de conversão individual (#292/#490) presente em Corte direto, `±1 Frase` na borda final, `Aprovar`.
 3. **Editar** (`s3-04-editor.png`): `Abrir no editor`, `Ctrl+S` e o estado `Salvo`.
 4. **Exportar** (`s3-05-exportado.png`): `Exportar Corte`, destino `corte-v1-exportado.mp4` por `queueDialog`, `Iniciar exportação` e MP4 conferido com `ffprobe` (`h264` 1080×1920, `aac` 48000 Hz). Depois `#/projeto/:id/exportacao` (`s3-06-exportacao.png`).
 5. **Fechamento (#291)**: `window.close()` sem jobs ativos.
