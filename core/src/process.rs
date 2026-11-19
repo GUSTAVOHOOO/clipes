@@ -2,6 +2,37 @@ use std::ffi::OsStr;
 use std::io;
 use std::process::{Child, Command};
 
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+
+#[cfg(windows)]
+trait CreationFlagsTarget {
+    fn set_creation_flags(&mut self, flags: u32);
+}
+
+#[cfg(windows)]
+impl CreationFlagsTarget for Command {
+    fn set_creation_flags(&mut self, flags: u32) {
+        use std::os::windows::process::CommandExt;
+        self.creation_flags(flags);
+    }
+}
+
+#[cfg(windows)]
+fn apply_no_window_flags(target: &mut impl CreationFlagsTarget, existing_flags: u32) {
+    target.set_creation_flags(existing_flags | CREATE_NO_WINDOW);
+}
+
+/// Ensures console child processes do not open a console window on Windows.
+/// No-op on non-Windows targets.
+pub fn sem_janela(command: &mut Command) -> &mut Command {
+    #[cfg(windows)]
+    {
+        apply_no_window_flags(command, 0);
+    }
+    command
+}
+
 /// Starts an executable directly, without passing arguments through a shell.
 pub fn spawn<I, S>(
     program: impl AsRef<OsStr>,
@@ -22,6 +53,7 @@ where
             .current_dir(directory)
             .stdin(std::process::Stdio::piped());
     }
+    sem_janela(&mut command);
     command.spawn()
 }
 
@@ -61,6 +93,7 @@ where
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
     configure(&mut command);
+    sem_janela(&mut command);
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
@@ -160,5 +193,47 @@ impl Drop for ProcessGroup {
         unsafe {
             windows_sys::Win32::Foundation::CloseHandle(self.job);
         }
+    }
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    #[derive(Default)]
+    struct FakeFlagsTarget {
+        flags: Option<u32>,
+    }
+
+    impl CreationFlagsTarget for FakeFlagsTarget {
+        fn set_creation_flags(&mut self, flags: u32) {
+            self.flags = Some(flags);
+        }
+    }
+
+    #[test]
+    fn apply_no_window_flags_sets_and_preserves_existing_flags() {
+        let mut target = FakeFlagsTarget::default();
+        apply_no_window_flags(&mut target, 0);
+        assert_eq!(target.flags, Some(CREATE_NO_WINDOW));
+
+        let existing = 0x0000_0200; // CREATE_NEW_PROCESS_GROUP
+        apply_no_window_flags(&mut target, existing);
+        assert_eq!(target.flags, Some(existing | CREATE_NO_WINDOW));
+    }
+
+    #[test]
+    fn spawn_and_spawn_managed_succeed_with_no_window_flag() {
+        let exe = std::env::current_exe().unwrap();
+
+        let output = spawn(&exe, ["--help"], None)
+            .unwrap()
+            .wait_with_output()
+            .unwrap();
+        assert!(output.status.success());
+
+        let (child, _group) = spawn_managed(&exe, ["--help"]).unwrap();
+        let managed_output = child.wait_with_output().unwrap();
+        assert!(managed_output.status.success());
     }
 }

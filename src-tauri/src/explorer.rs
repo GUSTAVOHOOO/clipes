@@ -143,15 +143,15 @@ fn explorer_executable() -> PathBuf {
 #[cfg(target_os = "windows")]
 pub(crate) fn open_in_windows_explorer(raw: &str) -> Result<(), CoreError> {
     let args = prepare_explorer_args(raw)?;
-    std::process::Command::new(explorer_executable())
-        .args(&args)
-        .spawn()
-        .map_err(|err| {
-            explorer_error(
-                "open_path_failed",
-                format!("Não foi possível abrir o Explorador de Arquivos: {err}"),
-            )
-        })?;
+    let mut command = std::process::Command::new(explorer_executable());
+    command.args(&args);
+    clipes_core::process::sem_janela(&mut command);
+    command.spawn().map_err(|err| {
+        explorer_error(
+            "open_path_failed",
+            format!("Não foi possível abrir o Explorador de Arquivos: {err}"),
+        )
+    })?;
     Ok(())
 }
 
