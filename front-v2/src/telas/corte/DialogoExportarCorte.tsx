@@ -12,7 +12,7 @@ import {
   useToast,
   type ItemGuarda,
 } from '@ds'
-import { FolderOpen } from 'lucide-react'
+import { AlertTriangle, FolderOpen } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { SeletorCaminho } from '~/componentes/SeletorCaminho'
 import { chamar, ErroCore, paraErroCore } from '~/core/cliente'
@@ -898,9 +898,12 @@ export function DialogoExportarCorte({
                   <span>{statusFinal.output}</span>
                 </p>
                 {fallbackAtivo && (
-                  <Status tom="aviso">
-                    {`A exportação usou a CPU (${statusFinal.encoder ?? 'libx264'}) porque o encoder de placa de vídeo falhou (${statusFinal.encoderFallback?.from ?? 'hardware'}).`}
-                  </Status>
+                  <p className="flex items-start gap-1 text-pequeno text-t3">
+                    <AlertTriangle className="mt-[2px] size-[13px] shrink-0 stroke-[1.75]" aria-hidden />
+                    <span className="min-w-0 break-words">
+                      {`A exportação usou a CPU (${statusFinal.encoder ?? 'libx264'}) porque o encoder de placa de vídeo falhou (${statusFinal.encoderFallback?.from ?? 'hardware'}).`}
+                    </span>
+                  </p>
                 )}
               </div>
             )}

@@ -155,13 +155,28 @@ test.describe('Tela Editar do Corte (#/projeto/:id/corte/:corteId/editar)', () =
     await page.evaluate(() => {
       window.location.hash = '#/projeto/demo/corte/102/editar?run=1&estado=fallback'
     })
-    await page.keyboard.press('Control+e')
-    const dlgFallback = page.getByRole('dialog', { name: /Exportar Corte/i })
-    await expect(dlgFallback).toBeVisible()
-    await dlgFallback.getByRole('button', { name: /Iniciar exportação/i }).click()
-    await expect(dlgFallback.getByText(/CPU|x264/i)).toBeVisible({ timeout: 10000 })
-    await dlgFallback.getByRole('button', { name: /Fechar/i }).first().click()
-    await expect(dlgFallback).toBeHidden()
+    // UI-71: o aviso de fallback quebra linha dentro do diálogo em 1366x768 e 1440x900
+    for (const vp of [
+      { width: 1366, height: 768 },
+      { width: 1440, height: 900 },
+    ]) {
+      await page.setViewportSize(vp)
+      await page.keyboard.press('Control+e')
+      const dlgFallback = page.getByRole('dialog', { name: /Exportar Corte/i })
+      await expect(dlgFallback).toBeVisible()
+      await dlgFallback.getByRole('button', { name: /Iniciar exportação/i }).click()
+      const avisoFallback = dlgFallback.getByText(/A exportação usou a CPU/i)
+      await expect(avisoFallback).toBeVisible({ timeout: 10000 })
+      const caixaDlg = (await dlgFallback.boundingBox())!
+      const caixaAviso = (await avisoFallback.boundingBox())!
+      const caixas = {
+        dlgRight: caixaDlg.x + caixaDlg.width,
+        avisoRight: caixaAviso.x + caixaAviso.width,
+      }
+      expect(caixas.avisoRight).toBeLessThanOrEqual(caixas.dlgRight)
+      await dlgFallback.getByRole('button', { name: /Fechar/i }).first().click()
+      await expect(dlgFallback).toBeHidden()
+    }
 
     // 3. Navega para Vídeo transformado (201, ?run=2) e verifica 3 sub-abas + 1440x900
     await page.setViewportSize({ width: 1440, height: 900 })
@@ -363,7 +378,7 @@ test.describe('Tela Editar do Corte (#/projeto/:id/corte/:corteId/editar)', () =
     await expect(page.locator('video')).toHaveCount(0)
     await expect(timeline.getByRole('button', { name: 'Recuar Entrada 1 Frase' })).toBeEnabled()
 
-    // UI-60: F6 cicla todas as 6 regiões do Editor (com popover aberto) sem Shell bloquear
+    // UI-60: F6 cicla todas as regiões do Editor (com popover aberto) sem Shell bloquear
     await page.evaluate(() => {
       window.location.hash = '#/projeto/demo/corte/201/editar?run=2'
     })
@@ -372,15 +387,19 @@ test.describe('Tela Editar do Corte (#/projeto/:id/corte/:corteId/editar)', () =
     await expect(page.getByText('Rosto (9:16)')).toBeVisible()
     await page.locator('[data-regiao="topo"] a, [data-regiao="topo"] button').first().focus()
     const regioesF6: Array<string | null> = []
-    for (let i = 0; i < 6; i++) {
+    const regiaoAtual = () =>
+      page.evaluate(
+        () => document.activeElement?.closest('[data-regiao]')?.getAttribute('data-regiao') ?? null,
+      )
+    for (let i = 0; i < 7; i++) {
+      const anterior = await regiaoAtual()
       await page.keyboard.press('F6')
-      const r = await page.evaluate(() => {
-        const ae = document.activeElement
-        return ae?.closest('[data-regiao]')?.getAttribute('data-regiao') ?? null
-      })
-      regioesF6.push(r)
+      await expect.poll(regiaoAtual).not.toBe(anterior)
+      regioesF6.push(await regiaoAtual())
     }
+    // UI-72: contexto é parada própria logo após o topo (ordem do Shell)
     expect(regioesF6).toEqual([
+      'contexto',
       'painel-esquerdo',
       'palco',
       'popover-editor',
