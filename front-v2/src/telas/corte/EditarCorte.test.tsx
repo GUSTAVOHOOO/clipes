@@ -980,4 +980,158 @@ describe('Tela EditarCorte (#/projeto/:id/corte/:corteId/editar)', () => {
     r2.unmount()
     localStorage.clear()
   })
+
+  it('sincroniza videoKind em EditarCorte e ContextoCorteConectado ao converter Corte direto para Vídeo transformado', async () => {
+    const user = userEvent.setup()
+    localStorage.clear()
+    chamarMock.mockImplementation(async (comando: string, args: Record<string, unknown> = {}) => {
+      if (comando === 'sources.list') {
+        return [
+          {
+            id: 4,
+            path: '/videos/Live_12_11_final.mp4',
+            status: 'available',
+            available: true,
+            verified: true,
+            audio_track: 1,
+            origin_url: null,
+            language: 'pt',
+            permission: { status: 'granted', who: 'Criador', where: 'Discord', scope: 'cortes' },
+          },
+        ]
+      }
+      if (comando === 'batches.list') return []
+      if (comando === 'transcription.status') {
+        return { language: 'pt', transcript: { id: 4, state: 'complete', words: 1200 }, job: null }
+      }
+      if (comando === 'transcription.sentences') {
+        return [
+          { id: 40, startUs: 390_000_000, endUs: 400_000_000, text: 'Frase quarenta.' },
+          { id: 41, startUs: 400_000_000, endUs: 410_000_000, text: 'Frase quarenta e um.' },
+        ]
+      }
+      if (comando === 'selection.list') {
+        return [{ id: 1, videoKind: 'direct', state: 'completed', revision: 1, revisions: [1] }]
+      }
+      if (comando === 'selection.get') {
+        return {
+          run: { id: 1, transcriptId: 4, videoKind: 'direct', revision: 1, revisions: [1] },
+          windows: [],
+          candidates: [
+            { id: 102, startId: 40, endId: 41, startUs: 390e6, endUs: 410e6, title: 'Corte direto' },
+          ],
+        }
+      }
+      if (comando === 'selection.review') {
+        return {
+          run: 1,
+          canUndo: false,
+          items: [
+            {
+              candidate: 102,
+              status: 'approved',
+              adjusted: false,
+              videoKind: 'direct',
+              startId: 40,
+              endId: 41,
+              startUs: 390e6,
+              endUs: 410e6,
+            },
+          ],
+        }
+      }
+      if (comando === 'selection.candidate.set_kind') {
+        return {
+          run: 1,
+          candidate: 102,
+          videoKind: 'transformed',
+          canUndo: false,
+          item: {
+            candidate: 102,
+            status: 'approved',
+            adjusted: false,
+            videoKind: 'transformed',
+            startId: 40,
+            endId: 41,
+            startUs: 390e6,
+            endUs: 410e6,
+          },
+        }
+      }
+      if (comando === 'editor.open') {
+        return {
+          clipId: 102,
+          sourceId: 4,
+          startId: 40,
+          endId: 41,
+          startUs: 390e6,
+          endUs: 410e6,
+          cuts: [],
+          montage: null,
+          proxy: { state: 'ready', key: '0004key', job: null, progress: 100 },
+          audioAssets: [],
+        }
+      }
+      if (comando === 'editor.state') return null
+      if (comando === 'captions.style.get') {
+        return { preset: 'vertical', fontSize: 42, position: 'bottom', maxWords: 3, revision: 1 }
+      }
+      if (comando === 'captions.words') return []
+      if (comando === 'translation.get') return { hasTranslation: false, targetLanguage: null }
+      if (comando === 'energy.status') return { measured: false, marks: { high: 0, peak: 0 } }
+      if (comando === 'chat.status') return { state: 'unavailable' }
+      return null
+    })
+
+    const aoAtualizarMeta = vi.fn()
+    const storeFontes = criarStoreFontesProjeto()
+    storeFontes.definirProjeto('/projetos/Demo.clipes')
+    const storeEditor = criarStoreEditorCorte()
+    storeEditor.definirProjeto('/projetos/Demo.clipes')
+
+    render(
+      envolver(
+        <Shell
+          projeto={{ id: 'demo', name: 'Demo', path: '/projetos/Demo.clipes' }}
+          rota={{ tela: 'corte', projeto: 'demo', corte: '102', aba: 'editar', run: '1' }}
+          semPaddingConteudo
+          meio={
+            <ContextoCorteConectado
+              projetoId="demo"
+              corteId="102"
+              subAbaAtiva="editar"
+              runId="1"
+              fila={filaTeste}
+            />
+          }
+          fila={filaTeste}
+        >
+          <EditarCorte
+            projetoId="demo"
+            projetoPath="/projetos/Demo.clipes"
+            corteId="102"
+            runId="1"
+            aoAtualizarMeta={aoAtualizarMeta}
+            storeFontes={storeFontes}
+            storeEditor={storeEditor}
+            fila={filaTeste}
+          />
+        </Shell>,
+      ),
+    )
+
+    const btnConverter = await screen.findByRole('button', { name: 'Converter em Vídeo transformado' })
+    await user.click(btnConverter)
+    await screen.findByRole('alertdialog')
+    await user.click(screen.getByRole('button', { name: 'Confirmar conversão' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Transformar' })).toBeInTheDocument()
+    })
+    await waitFor(() => {
+      expect(aoAtualizarMeta).toHaveBeenLastCalledWith(
+        expect.objectContaining({ videoKind: 'transformed' }),
+      )
+    })
+  })
 })

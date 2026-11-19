@@ -411,4 +411,78 @@ describe('mock TS de Seleção, Revisão, Proxy, Sinais, Guardrails e Ângulos',
     expect('generation' in chosen).toBe(true)
     expect('job' in chosen).toBe(true)
   })
+
+  it('selection.candidate.set_kind converte candidato direto para transformed, é idempotente e rejeita direct/inexistente/sem projeto', async () => {
+    const rev2 = await coreDispatch<{ candidates: CandidatoDetalhe[] }>('selection.get', {
+      run: 1,
+      revision: 2,
+    })
+    const candA = rev2.candidates[0]
+    const candB = rev2.candidates[1]
+
+    // direct não é suportado
+    await expect(
+      coreDispatch('selection.candidate.set_kind', { candidate: candA.id, videoKind: 'direct' }),
+    ).rejects.toMatchObject({ code: 'invalid_video_kind' })
+
+    // candidato inexistente
+    await expect(
+      coreDispatch('selection.candidate.set_kind', { candidate: 999_999, videoKind: 'transformed' }),
+    ).rejects.toMatchObject({ code: 'candidate_not_found' })
+
+    // antes da conversão, angles.get bloqueia com script_requires_transformed
+    await expect(coreDispatch('angles.get', { candidate: candA.id })).rejects.toMatchObject({
+      code: 'script_requires_transformed',
+    })
+
+    // converte candA e valida idempotência
+    const res1 = await coreDispatch<{
+      run: number
+      candidate: number
+      videoKind: string
+      item: ReviewItem & { videoKind?: string }
+    }>('selection.candidate.set_kind', { candidate: candA.id, videoKind: 'transformed' })
+    expect(res1.candidate).toBe(candA.id)
+    expect(res1.videoKind).toBe('transformed')
+    expect(res1.item.videoKind).toBe('transformed')
+
+    const res2 = await coreDispatch<{ candidate: number; videoKind: string }>('selection.candidate.set_kind', {
+      candidate: candA.id,
+      videoKind: 'transformed',
+    })
+    expect(res2.videoKind).toBe('transformed')
+
+    // selection.review e selection.get refletem transformed só em candA; angles.get e guardrails destravam só em candA
+    const review = await coreDispatch<{ items: Array<ReviewItem & { videoKind?: string }> }>('selection.review', {
+      run: 1,
+    })
+    expect(review.items.find((i) => i.candidate === candA.id)?.videoKind).toBe('transformed')
+    expect(review.items.find((i) => i.candidate === candB.id)?.videoKind).toBe('direct')
+
+    const getApos = await coreDispatch<{ candidates: Array<CandidatoDetalhe & { videoKind?: string }> }>(
+      'selection.get',
+      { run: 1, revision: 2 },
+    )
+    expect(getApos.candidates.find((c) => c.id === candA.id)?.videoKind).toBe('transformed')
+    expect(getApos.candidates.find((c) => c.id === candB.id)?.videoKind).toBe('direct')
+
+    await expect(coreDispatch('angles.get', { candidate: candA.id })).resolves.toBeTruthy()
+    await expect(coreDispatch('angles.get', { candidate: candB.id })).rejects.toMatchObject({
+      code: 'script_requires_transformed',
+    })
+
+    const gA = await coreDispatch<{ videoKind: string; script: { applicable: boolean } }>('guardrails.check', {
+      scope: 'single',
+      source_id: 4,
+      candidate_id: candA.id,
+    })
+    expect(gA.videoKind).toBe('transformed')
+    expect(gA.script.applicable).toBe(true)
+
+    // sem projeto aberto deve falhar com project_not_open
+    await coreDispatch('projects.close', {})
+    await expect(
+      coreDispatch('selection.candidate.set_kind', { candidate: candA.id, videoKind: 'transformed' }),
+    ).rejects.toMatchObject({ code: 'project_not_open' })
+  })
 })

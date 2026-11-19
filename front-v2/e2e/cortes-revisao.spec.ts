@@ -385,4 +385,46 @@ test.describe('Tela Bancada de Revisão de Cortes (#/projeto/:id/cortes/revisao/
 
     expect(erros).toEqual([])
   })
+
+  test('converte candidato individual para Vídeo transformado na Bancada e libera passo de Transformar ao aprovar', async ({
+    page,
+  }) => {
+    const erros: string[] = []
+    page.on('pageerror', (erro) => erros.push(erro.message))
+
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.goto('/#/inicio')
+    await page.getByRole('button', { name: /Abrir Projeto Demo/i }).click()
+    await expect(page).toHaveURL(/#\/projeto\/demo\/fontes$/)
+
+    await page.evaluate(() => {
+      window.location.hash = '#/projeto/demo/cortes/revisao/1'
+    })
+
+    const detalhe = page.getByRole('region', { name: /Detalhe do Corte/i })
+    await expect(detalhe.getByText('Corte direto')).toBeVisible()
+    const btnConverter = detalhe.getByRole('button', { name: 'Converter em Vídeo transformado' })
+    await expect(btnConverter).toBeEnabled()
+
+    await btnConverter.click()
+    const dlg = page.getByRole('alertdialog')
+    await expect(dlg).toBeVisible()
+    await expect(dlg.getByRole('button', { name: 'Cancelar' })).toBeFocused()
+    await dlg.getByRole('button', { name: 'Confirmar conversão' }).click()
+    await expect(dlg).toBeHidden()
+
+    await expect(detalhe.getByText('Vídeo transformado')).toBeVisible()
+    await expect(btnConverter).toHaveCount(0)
+    await expect(
+      page.getByRole('navigation', { name: /Controles da revisão/i }).getByText('Corte direto'),
+    ).toBeVisible()
+
+    // Aprova o candidato convertido e valida orientação de Transformar no checklist
+    await page.keyboard.press('a')
+    await expect(
+      detalhe.getByText(/Próximo passo no Editor: escolher Ângulo → aprovar Roteiro → gerar Narração/i),
+    ).toBeVisible()
+
+    expect(erros).toEqual([])
+  })
 })

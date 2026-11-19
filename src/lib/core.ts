@@ -1541,6 +1541,9 @@ function selectionReviewMock(name: string, args: object): unknown {
     };
   }
   if (name === 'selection.candidate.set_kind') {
+    if (!getActiveProjectMock()) {
+      throw { code: 'project_not_open', message: 'Nenhum Projeto está aberto.' };
+    }
     if (typeof a.candidate !== 'number' || !Number.isInteger(a.candidate)) {
       throw { code: 'candidate_not_found', message: 'Candidato não encontrado.' };
     }
@@ -1548,7 +1551,9 @@ function selectionReviewMock(name: string, args: object): unknown {
       throw { code: 'invalid_video_kind', message: 'Tipo de vídeo inválido: só é permitido converter para transformed (Vídeo transformado).' };
     }
     const foundKind = findRunAndCandidateById(a.candidate);
-    if (!foundKind) throw { code: 'candidate_not_found', message: 'Candidato não encontrado.' };
+    if (!foundKind || foundKind.revision !== foundKind.run.activeRevision) {
+      throw { code: 'candidate_not_found', message: 'Candidato não encontrado.' };
+    }
     foundKind.candidate.videoKind = 'transformed';
     const item = buildReviewItemForRun(foundKind.candidate, foundKind.run);
     return {

@@ -401,7 +401,7 @@ describe('DetalheCandidato (Coluna direita C.2)', () => {
     expect(alerta).toHaveTextContent(/abaixo da duração mínima/i)
   })
 
-  it('cumpre a Regra da Luz Única (único primário por estado) e carrega <ChecklistGuardaCorpos>, ack_direct_notice, angles.get e ação desabilitada sem expor ticket (UI-12)', async () => {
+  it('cumpre a Regra da Luz Única (único primário por estado) e carrega <ChecklistGuardaCorpos>, ack_direct_notice, angles.get e botão de conversão habilitado sem expor ticket (UI-12)', async () => {
     const user = userEvent.setup()
     filaTeste = criarFila(() => 'demo')
     chamarMock.mockImplementation(async (cmd: string) => {
@@ -462,13 +462,11 @@ describe('DetalheCandidato (Coluna direita C.2)', () => {
     expect(btnAbrirEditor).toHaveAccessibleDescription(/Aprove este candidato para editar ou exportar/i)
     expect(screen.queryByRole('region', { name: /Antes de exportar/i })).not.toBeInTheDocument()
 
-    // Botão de conversão individual em Corte direto fica desabilitado e Dica explica sem expor nº de ticket (UI-12)
+    // Botão de conversão individual em Corte direto fica habilitado e sem texto de indisponível (UI-12)
     const btnConverter = screen.getByRole('button', { name: /Converter em Vídeo transformado/i })
-    expect(btnConverter).toHaveAttribute('aria-disabled', 'true')
-    await user.hover(btnConverter)
-    expect(
-      await screen.findByText(/A conversão individual para Vídeo transformado ainda não está disponível nesta versão\./i),
-    ).toBeInTheDocument()
+    expect(btnConverter).toBeEnabled()
+    expect(btnConverter).not.toHaveAttribute('aria-disabled')
+    expect(document.body.textContent).not.toMatch(/ainda não está disponível/i)
     expect(document.body.textContent).not.toMatch(/#\d+/)
 
     // Aprovado (Corte direto): Abrir no editor vira o único primário; Aprovado vira secundário; ChecklistGuardaCorpos aparece
@@ -985,8 +983,8 @@ describe('DetalheCandidato (Coluna direita C.2)', () => {
     expect(container.querySelector('span[tabindex="0"]')).toBeNull()
 
     const btnConverter = screen.getByRole('button', { name: /Converter em Vídeo transformado/i })
-    expect(btnConverter).toHaveAttribute('aria-disabled', 'true')
-    expect(btnConverter).not.toBeDisabled()
+    expect(btnConverter).toBeEnabled()
+    expect(btnConverter).not.toHaveAttribute('aria-disabled')
 
     // Modo 'desligadas' oculta Kbd de teclas únicas mas preserva Enter
     unmount()
@@ -1155,7 +1153,7 @@ describe('DetalheCandidato (Coluna direita C.2)', () => {
     expect(await screen.findByText(/Gerado por Perfil configurado/i)).toBeInTheDocument()
   })
 
-  it('UI-56: desabilita <Transporte> sem preview pronto/fonte offline e aplica cursor-not-allowed em aria-disabled', async () => {
+  it('UI-56: desabilita <Transporte> sem preview pronto/fonte offline', async () => {
     filaTeste = criarFila(() => 'demo')
     chamarMock.mockResolvedValue({
       state: 'error',
@@ -1185,6 +1183,130 @@ describe('DetalheCandidato (Coluna direita C.2)', () => {
     }
 
     const btnConverter = screen.getByRole('button', { name: /Converter em Vídeo transformado/i })
-    expect(btnConverter.className).toContain('cursor-not-allowed')
+    expect(btnConverter).toBeEnabled()
+  })
+
+  it('converte candidato direto em Vídeo transformado via ConfirmDialog, atualiza selo/guardrails/angles e trata erro com mensagemDeErro', async () => {
+    const user = userEvent.setup()
+    filaTeste = criarFila(() => 'demo')
+    const aoConverterMock = vi.fn()
+    let convertido = false
+    let falhar = true
+    let resolverConversao: ((v: unknown) => void) | null = null
+
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'provider.profiles.list') return { profiles: [] }
+      if (cmd === 'proxy.request') {
+        return {
+          state: 'ready',
+          key: '0004abab',
+          job: null,
+          progress: 100,
+          error: null,
+          windowStartUs: 0,
+          windowEndUs: 260_000_000,
+        }
+      }
+      if (cmd === 'guardrails.check') {
+        return {
+          scope: 'single',
+          directMonetizationAck: false,
+          needsDirectNotice: !convertido,
+          over60s: false,
+          permission: { status: 'granted', who: 'Criador X', where: 'YouTube', scope: 'Cortes com crédito' },
+        }
+      }
+      if (cmd === 'angles.get') {
+        return { selected: null, generation: null, busy: false }
+      }
+      if (cmd === 'selection.candidate.set_kind') {
+        if (falhar) {
+          throw { code: 'invalid_video_kind', message: 'raw code error' }
+        }
+        convertido = true
+        return new Promise((resolve) => {
+          resolverConversao = resolve
+        })
+      }
+      return {}
+    })
+
+    render(
+      envolver(
+        <DetalheCandidato
+          projetoId="demo"
+          run={RUN_DIRETO}
+          fonte={FONTE_DISPONIVEL}
+          candidato={{ ...CANDIDATO_BASE, status: 'approved' }}
+          aoDecidir={vi.fn()}
+          aoAjustar={vi.fn()}
+          aoAbrirEditor={vi.fn()}
+          aoConverterParaTransformado={aoConverterMock}
+        />,
+      ),
+    )
+
+    expect(await screen.findByText('Corte direto')).toBeInTheDocument()
+    const btnConverter = screen.getByRole('button', { name: 'Converter em Vídeo transformado' })
+
+    // Abre diálogo, cancela -> mantém Corte direto e devolve foco ao gatilho
+    await user.click(btnConverter)
+    await screen.findByRole('alertdialog')
+    const btnCancelar = screen.getByRole('button', { name: 'Cancelar' })
+    await waitFor(() => expect(btnCancelar).toHaveFocus())
+    await user.click(btnCancelar)
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(btnConverter).toHaveFocus())
+
+    // Reabre, falha primeiro -> BannerErroCore traduzido mantém diálogo aberto
+    await user.click(btnConverter)
+    await screen.findByRole('alertdialog')
+    await user.click(screen.getByRole('button', { name: 'Confirmar conversão' }))
+
+    const alerta = await screen.findByRole('alert')
+    expect(alerta).toHaveTextContent(/Tipo de vídeo inválido: escolha Corte direto ou Vídeo transformado\./i)
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+
+    // Tenta de novo com sucesso -> carregando -> atualiza selo, remove botão, chama angles.get e move foco
+    falhar = false
+    const btnConfirmar = screen.getByRole('button', { name: 'Confirmar conversão' })
+    await user.click(btnConfirmar)
+    await waitFor(() => {
+      expect(btnConfirmar).toHaveAttribute('aria-busy', 'true')
+      expect(btnConfirmar).toBeDisabled()
+    })
+
+    await act(async () => {
+      resolverConversao?.({
+        run: 1,
+        candidate: 101,
+        videoKind: 'transformed',
+        canUndo: false,
+        item: {
+          candidate: 101,
+          status: 'approved',
+          adjusted: true,
+          videoKind: 'transformed',
+          startId: 10,
+          endId: 14,
+          startUs: 90_000_000,
+          endUs: 140_000_000,
+          startText: 'Primeira frase 10 do Corte.',
+          endText: 'Última frase 14 do Corte.',
+        },
+      })
+    })
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(screen.getByText('Vídeo transformado')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Converter em Vídeo transformado' })).not.toBeInTheDocument()
+    expect(aoConverterMock).toHaveBeenCalledTimes(1)
+    await waitFor(() => {
+      expect(chamarMock).toHaveBeenCalledWith('angles.get', { candidate: 101 })
+    })
+    expect(
+      await screen.findByText(/Próximo passo no Editor: escolher Ângulo/i),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: /Aprovado/i })).toHaveFocus())
   })
 })

@@ -55,7 +55,7 @@ test.describe('Tela Editar do Corte (#/projeto/:id/corte/:corteId/editar)', () =
     await expect(page.getByText('Corte direto')).toBeVisible()
     await expect(
       page.getByRole('button', { name: 'Converter em Vídeo transformado' }),
-    ).toBeDisabled()
+    ).toBeEnabled()
 
     // Regra da Luz Única: exatamente 1 botão primário (Exportar Corte) e sem painel direito fixo
     await expect(page.locator('button.bg-sinal')).toHaveCount(1)
@@ -424,6 +424,48 @@ test.describe('Tela Editar do Corte (#/projeto/:id/corte/:corteId/editar)', () =
     await expect(page.getByText('Este Corte não está disponível para edição')).toBeVisible()
     await expect(page.locator('button.bg-sinal')).toHaveCount(1)
     await expect(page.getByRole('heading', { level: 1 })).not.toHaveText(/Corte #201.*Corte #201/)
+
+    expect(erros).toEqual([])
+  })
+
+  test('converte Corte direto 102 em Vídeo transformado, revela aba Transformar e abre Transformar sem redirecionar', async ({
+    page,
+  }) => {
+    const erros: string[] = []
+    page.on('pageerror', (erro) => erros.push(erro.message))
+
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.goto('/#/inicio')
+    await page.getByRole('button', { name: /Abrir Projeto Demo/i }).click()
+    await expect(page).toHaveURL(/#\/projeto\/demo\/fontes$/)
+
+    await page.evaluate(() => {
+      window.location.hash = '#/projeto/demo/corte/102/editar?run=1'
+    })
+
+    const navAbas = page.getByRole('navigation', { name: 'Etapas do Corte' })
+    await expect(navAbas.getByRole('link', { name: 'Transformar' })).toHaveCount(0)
+    const btnConverter = page.getByRole('button', { name: 'Converter em Vídeo transformado' })
+    await expect(btnConverter).toBeEnabled()
+
+    await btnConverter.click()
+    const dlg = page.getByRole('alertdialog')
+    await expect(dlg).toBeVisible()
+    await expect(dlg.getByRole('button', { name: 'Cancelar' })).toBeFocused()
+    await dlg.getByRole('button', { name: 'Confirmar conversão' }).click()
+    await expect(dlg).toBeHidden()
+
+    await expect(page.locator('[data-regiao="contexto"]').getByText('Vídeo transformado')).toBeVisible()
+    await expect(btnConverter).toHaveCount(0)
+    const linkTransformar = navAbas.getByRole('link', { name: 'Transformar' })
+    await expect(linkTransformar).toBeVisible()
+    await expect(linkTransformar).toBeFocused()
+
+    await linkTransformar.click()
+    await expect(page).toHaveURL(/#\/projeto\/demo\/corte\/102\/transformar\?run=1$/)
+    await expect(
+      page.getByRole('heading', { level: 2, name: /1\. Escolha o ângulo da Transformação/i }),
+    ).toBeVisible()
 
     expect(erros).toEqual([])
   })
