@@ -91,6 +91,8 @@ describe('PainelFilaJobs', () => {
 
     expect(await screen.findByText('Nenhum Projeto aberto')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Ir para Início' })).toBeInTheDocument()
+    // Regra da Luz Única: a gaveta não acende um segundo botão primário (UI-84)
+    expect(screen.getByRole('button', { name: 'Ir para Início' })).not.toHaveClass('bg-sinal')
 
     // Empty com Projeto aberto e zero jobs/lotes
     chamarMock.mockImplementation(async (cmd: string) => {

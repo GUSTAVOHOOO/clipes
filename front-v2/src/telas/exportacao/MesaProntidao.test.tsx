@@ -580,6 +580,8 @@ describe('MesaProntidao', () => {
     // 1) ConfirmDialog do aviso de Corte direto (foco inicial em Cancelar)
     const dlgDireto = await screen.findByRole('alertdialog')
     expect(dlgDireto).toHaveTextContent(/Corte direto/i)
+    // Luz Única: atrás do modal o botão da tela deixa de acender (UI-84)
+    expect(btnExportar).not.toHaveClass('bg-sinal')
     await waitFor(() => {
       expect(within(dlgDireto).getByRole('button', { name: 'Cancelar' })).toHaveFocus()
     })

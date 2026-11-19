@@ -497,6 +497,8 @@ export function MesaProntidao({
 
   const [dialogoDiretoAberto, setDialogoDiretoAberto] = useState(false)
   const [conflitosSobrescrita, setConflitosSobrescrita] = useState<string[] | null>(null)
+  const algumDialogoAberto =
+    corteExportarIndividual !== null || dialogoDiretoAberto || conflitosSobrescrita !== null
   const [disparando, setDisparando] = useState(false)
   const [erroDisparo, setErroDisparo] = useState<ErroCore | null>(null)
 
@@ -1068,7 +1070,7 @@ export function MesaProntidao({
 
             {/* Único botão primário (bg-sinal) da tela */}
             <Botao
-              variante="primario"
+              variante={algumDialogoAberto ? 'secundario' : 'primario'}
               tamanho="g"
               carregando={disparando}
               disabled={!podeExportarLote}

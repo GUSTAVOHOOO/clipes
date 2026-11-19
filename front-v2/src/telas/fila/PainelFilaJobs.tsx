@@ -771,10 +771,11 @@ export function PainelFilaJobs({
                   tipo="vazio"
                   titulo="Nenhum Projeto aberto"
                   descricao="Nenhuma tarefa global em andamento. Abra um Projeto para acompanhar transcrições, seleções e exportações."
-                  acaoPrimaria={{
-                    rotulo: 'Ir para Início',
-                    aoAcionar: () => navegar('#/inicio'),
-                  }}
+                  acaoSecundaria={
+                    window.location.hash.startsWith('#/inicio')
+                      ? undefined
+                      : { rotulo: 'Ir para Início', aoAcionar: () => navegar('#/inicio') }
+                  }
                 />
               )}
 
@@ -794,7 +795,7 @@ export function PainelFilaJobs({
                   tipo="vazio"
                   titulo="Nenhuma tarefa registrada"
                   descricao="Nenhuma tarefa registrada neste Projeto ainda. Importe uma Fonte ou dispare uma seleção para acompanhar aqui."
-                  acaoPrimaria={{
+                  acaoSecundaria={{
                     rotulo: 'Ir para Fontes',
                     aoAcionar: () => navegar(`#/projeto/${encProjeto}/fontes`),
                   }}
