@@ -236,6 +236,43 @@ describe('Tela Início e Projetos (#/inicio)', () => {
     expect(window.location.hash).toBe('#/inicio?estado=vazio')
   })
 
+  it('Item 5: dados migrados da v1 (completed: true, needsSetup: false) com FFmpeg ausente reabrem o Assistente', async () => {
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'projects.recent') return []
+      if (cmd === 'projects.current') return null
+      if (cmd === 'assistant.status') return { needsSetup: false, completed: true, skipped: false }
+      if (cmd === 'components.ffmpeg.status') return { installed: false, incomplete: false }
+      if (cmd === 'components.worker.status') return { installed: false, gpu: true }
+      return null
+    })
+
+    render(envolver(<Inicio />))
+
+    await waitFor(() => {
+      expect(window.location.hash).toBe('#/assistente?passo=1')
+    })
+  })
+
+  it('Item 5: quando skipped: true ou só worker ausente, exibe aviso claro na Início com atalho para o Assistente sem loop de redirecionamento', async () => {
+    const user = userEvent.setup()
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'projects.recent') return []
+      if (cmd === 'projects.current') return null
+      if (cmd === 'assistant.status') return { needsSetup: false, completed: false, skipped: true }
+      if (cmd === 'components.ffmpeg.status') return { installed: false, incomplete: false }
+      if (cmd === 'components.worker.status') return { installed: false, gpu: true }
+      return null
+    })
+
+    render(envolver(<Inicio />))
+
+    expect(await screen.findByText(/Componentes essenciais ausentes/i)).toBeInTheDocument()
+    expect(window.location.hash).toBe('#/inicio')
+
+    await user.click(screen.getByRole('button', { name: /Abrir Assistente/i }))
+    expect(window.location.hash).toBe('#/assistente?passo=1')
+  })
+
   it('ações: criar Projeto chama projects.create e navega; abrir V1 chama projects.open e navega; fechar Projeto chama projects.close', async () => {
     const user = userEvent.setup()
     chamarMock.mockImplementation(async (cmd: string, args: Record<string, unknown>) => {
