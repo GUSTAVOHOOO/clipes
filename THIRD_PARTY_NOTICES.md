@@ -2,7 +2,7 @@
 
 Gerado por `node design-system/scripts/avisos.ts` a partir dos pacotes instalados e fixados em `design-system/bun.lock`. Os avisos abaixo cobrem as dependências de runtime desta interface e suas dependências transitivas.
 
-## YuNet — modelo de reenquadramento sob demanda (#60)
+## YuNet — modelo de reenquadramento sob demanda
 
 Código e pesos `face_detection_yunet_2023mar.onnx`, OpenCV Zoo, revisão
 `48b10fa505aeb51fbd127fc60a5c660040e823b7`, sob MIT.
@@ -59,7 +59,7 @@ Tears of Steel, © Blender Foundation, 2012. Filme original: [mango.blender.org]
 
 ## Clipe da sonda de hardware
 
-Os arquivos `worker/src/clipes_worker/data/probe-pt.wav` e `probe-en.wav` (9 s cada, WAV 16 kHz mono) são recortes usados pela sonda de hardware da Transcrição (#50):
+Os arquivos `worker/src/clipes_worker/data/probe-pt.wav` e `probe-en.wav` (9 s cada, WAV 16 kHz mono) são recortes usados pela sonda de hardware da Transcrição:
 
 - **Português:** trecho de *O Alienista*, de Machado de Assis (obra em domínio público), na leitura do LibriVox, publicada em domínio público ([item no Internet Archive](https://archive.org/details/o_alienista_0904_librivox), capítulo 1, de 30 s a 39 s do arquivo `oalienista_1_machadodeassis_64kb.mp3`; licença declarada no item: <http://creativecommons.org/licenses/publicdomain/>).
 - **Inglês:** trecho de [Richard Rogers - voice - en.ogg](https://commons.wikimedia.org/wiki/File:Richard_Rogers_-_voice_-_en.ogg), de Vera de Kok, no Wikimedia Commons, licença CC0 (de 1 s a 10 s).

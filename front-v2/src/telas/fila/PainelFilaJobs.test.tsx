@@ -540,6 +540,31 @@ describe('PainelFilaJobs', () => {
     })
   })
 
+  it('mostra perfil e lote em texto humano, sem codigos crus (UI-86)', async () => {
+    chamarMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'jobs.list') {
+        return [
+          {
+            id: 31, kind: 'ai:selection', safety: 'local', state: 'uncertain', attempts: 1,
+            checkpoint: null, progress: 0, project: 'demo', outcome: 'uncertain', cost: 'unknown',
+            batch: null, profile: 'codex', budgetPause: null,
+          },
+        ]
+      }
+      if (cmd === 'jobs.budget.get') return { budgets: [] }
+      return []
+    })
+    const fila = criarFila(() => 'demo')
+    const store = criarStoreFilaGlobal({ fila, debounceMs: 0 })
+    render(
+      envolver(
+        <PainelFilaJobs aberto aoFechar={vi.fn()} projetoAberto={PROJETO_DEMO} store={store} fila={fila} />,
+      ),
+    )
+    expect(await screen.findByText(/· Codex/)).toBeInTheDocument()
+    expect(screen.queryByText(/· codex/)).not.toBeInTheDocument()
+  })
+
   it('cobre filtros por aba, estado partial de lote de exportação e ETA determinístico observado desde 0%', async () => {
     const user = userEvent.setup()
     let agora = 0

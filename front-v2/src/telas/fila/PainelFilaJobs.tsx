@@ -60,6 +60,8 @@ import {
   DialogoRefazerJob,
   DialogoResultadoJob,
   DialogoTentarDeNovo,
+  rotuloLoteFontes,
+  rotuloPerfilVisivel,
   nomeHumanoKind,
   rotuloEscopoOrcamento,
   traduzirMotivoPausa,
@@ -865,10 +867,12 @@ export function PainelFilaJobs({
                               </strong>
                               <span className="num text-pequeno text-t3">#{job.id}</span>
                               {job.profile && (
-                                <span className="text-pequeno text-t3">· {job.profile}</span>
+                                <span className="text-pequeno text-t3">
+                                  · {rotuloPerfilVisivel(job.profile, job.profile)}
+                                </span>
                               )}
                               {job.batch && (
-                                <span className="text-pequeno text-t3">· {job.batch}</span>
+                                <span className="text-pequeno text-t3">· {rotuloLoteFontes(job.batch)}</span>
                               )}
                               {job.attempts > 1 && (
                                 <span className="num text-pequeno text-t3">

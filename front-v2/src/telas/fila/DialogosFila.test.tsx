@@ -472,3 +472,12 @@ describe('DialogosFila', () => {
     expect(chamarMock).not.toHaveBeenCalled()
   })
 })
+
+describe('rotulos humanos da Fila (UI-86)', () => {
+  it('traduz chave de lote, perfil de linha de comando e desfecho', async () => {
+    const { rotuloLoteFontes, rotuloPerfilVisivel } = await import('~/telas/fila/DialogosFila')
+    expect(rotuloLoteFontes('sources-3')).toBe('Lote de Fontes 3')
+    expect(rotuloPerfilVisivel('codex', 'codex')).toBe('Codex')
+    expect(rotuloPerfilVisivel('legacy', 'legacy')).toBe('Perfil configurado')
+  })
+})
