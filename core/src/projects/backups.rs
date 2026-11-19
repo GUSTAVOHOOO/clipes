@@ -302,6 +302,28 @@ fn close_session() -> CommandResult {
     }
     Ok(Value::Null)
 }
+
+/// Fecha a sessão e o worker apenas quando a sessão ativa aponta para `target`.
+pub(super) fn close_if_path(target: &Path) {
+    let target_canon = target.canonicalize().ok();
+    let is_target =
+        |s: &Session| s.path == target || target_canon.as_ref().is_some_and(|c| &s.path == c);
+    let matches = state()
+        .lock()
+        .ok()
+        .is_some_and(|g| g.as_ref().is_some_and(is_target));
+    if !matches {
+        return;
+    }
+    crate::jobs::stop_worker();
+    if let Ok(mut g) = state().lock() {
+        if g.as_ref().is_some_and(is_target) {
+            if let Some(s) = g.take() {
+                let _ = s.stop.send(());
+            }
+        }
+    }
+}
 fn config_get(_: Value, _: &mut EventSink<'_>) -> CommandResult {
     let mut g = state().lock().map_err(|_| busy())?;
     let s = session(&mut g)?;

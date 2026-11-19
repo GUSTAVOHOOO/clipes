@@ -87,6 +87,64 @@ describe('helpers desktop (desktop.ts)', () => {
     })
   })
 
+  it('abrirNoSistema no Windows usa open_path_windows e faz fallback para clipboard em erro', async () => {
+    mockIsTauri.mockReturnValue(true)
+    mockInvoke.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === 'core_dispatch' && (args as { name?: string })?.name === 'app.platform') {
+        return { os: 'windows' }
+      }
+      if (cmd === 'open_path_windows') {
+        const p = (args as { path?: string })?.path
+        if (p === 'C:\\Exports\\inexistente') {
+          throw { code: 'path_not_found', message: 'A pasta ou o arquivo informado não existe.' }
+        }
+        return undefined
+      }
+      return null
+    })
+
+    const okRes = await abrirNoSistema('C:\\Exports\\corte.mp4')
+    expect(okRes).toEqual({ ok: true, copiado: false })
+    expect(mockInvoke).toHaveBeenCalledWith('open_path_windows', { path: 'C:\\Exports\\corte.mp4' })
+    expect(mockInvoke).not.toHaveBeenCalledWith('plugin:opener|open_path', expect.anything())
+
+    const errRes = await abrirNoSistema('C:\\Exports\\inexistente')
+    expect(errRes).toEqual({ ok: false, copiado: true })
+    expect(mockInvoke).toHaveBeenCalledWith('plugin:clipboard-manager|write_text', {
+      text: 'C:\\Exports\\inexistente',
+    })
+  })
+
+  it('abrirNoSistema em Linux/macOS usa plugin:opener|open_path e faz fallback para clipboard em erro', async () => {
+    mockIsTauri.mockReturnValue(true)
+    for (const os of ['linux', 'macos'] as const) {
+      mockInvoke.mockReset()
+      mockInvoke.mockImplementation(async (cmd: string, args?: unknown) => {
+        if (cmd === 'core_dispatch' && (args as { name?: string })?.name === 'app.platform') {
+          return { os }
+        }
+        if (cmd === 'plugin:opener|open_path') {
+          if ((args as { path?: string })?.path === '/exports/bloqueado.exe') {
+            throw new Error('Not allowed to open path')
+          }
+          return undefined
+        }
+        return null
+      })
+
+      const okRes = await abrirNoSistema('/exports/lote')
+      expect(okRes).toEqual({ ok: true, copiado: false })
+      expect(mockInvoke).toHaveBeenCalledWith('plugin:opener|open_path', { path: '/exports/lote' })
+      expect(mockInvoke).not.toHaveBeenCalledWith('open_path_windows', expect.anything())
+
+      const errRes = await abrirNoSistema('/exports/bloqueado.exe')
+      expect(errRes).toEqual({ ok: false, copiado: true })
+      expect(mockInvoke).toHaveBeenCalledWith('plugin:clipboard-manager|write_text', {
+        text: '/exports/bloqueado.exe',
+      })
+    }
+  })
+
   it('fora do Tauri e fora do E2E usa navigator.clipboard / window.open com fallback seguro', async () => {
     const writeText = vi.fn(async () => {})
     Object.defineProperty(navigator, 'clipboard', {

@@ -1478,6 +1478,111 @@ async function runSession3(ui, ctx) {
   await ui.waitForText('Revisar cada trecho', 'main');
   await ui.shot('s3-06-exportacao.png');
 
+  logStep('Sessão 3: abertura da pasta exportada (#511) e bloqueio de executáveis…');
+  const probeExportDir = path.join(ctx.tempRoot, 'probe-export-dir');
+  await mkdir(probeExportDir, { recursive: true });
+  const probeMissingPath = path.join(ctx.tempRoot, 'probe-missing-dir');
+  const probeDeniedExe = path.join(ctx.tempRoot, 'probe-open-path.exe');
+  const isWin = process.platform === 'win32';
+  // WebdriverIO execute(async) trava no msedgedriver via tauri-driver: usamos execute síncrono + waitUntil.
+  await ui.browser.execute(
+    (allowedDir, missingPath, deniedExePath, win) => {
+      const state = {
+        done: false,
+        platform: null,
+        allowed: null,
+        missingWin: null,
+        deniedExe: null,
+        error: null,
+      };
+      window.__openPathProbe = state;
+      const invoke = window.__TAURI_INTERNALS__?.invoke;
+      if (typeof invoke !== 'function') {
+        state.error = 'window.__TAURI_INTERNALS__.invoke indisponível';
+        state.done = true;
+        return;
+      }
+      const timed = (key, fn) => {
+        const startedAt = Date.now();
+        return fn()
+          .then(value => {
+            state[key] = { ok: true, value: value ?? null, error: null, elapsedMs: Date.now() - startedAt };
+          })
+          .catch(err => {
+            const code = typeof err === 'object' && err !== null && 'code' in err ? String(err.code) : null;
+            const msg =
+              typeof err === 'object' && err !== null && 'message' in err
+                ? String(err.message)
+                : String(err ?? '');
+            state[key] = { ok: false, code, error: msg, elapsedMs: Date.now() - startedAt };
+          });
+      };
+
+      const calls = [
+        timed('platform', () => invoke('core_dispatch', { name: 'app.platform', arguments: {} })),
+        timed('allowed', () =>
+          win ? invoke('open_path_windows', { path: allowedDir }) : invoke('plugin:opener|open_path', { path: allowedDir }),
+        ),
+        timed('deniedExe', () => invoke('plugin:opener|open_path', { path: deniedExePath })),
+      ];
+      if (win) {
+        calls.push(timed('missingWin', () => invoke('open_path_windows', { path: missingPath })));
+      }
+      Promise.all(calls).then(
+        () => {
+          state.done = true;
+        },
+        err => {
+          state.error = String(err?.message ?? err);
+          state.done = true;
+        },
+      );
+    },
+    probeExportDir,
+    probeMissingPath,
+    probeDeniedExe,
+    isWin,
+  );
+  try {
+    await ui.browser.waitUntil(
+      () => ui.browser.execute(() => Boolean(window.__openPathProbe?.done)),
+      { timeout: 15_000, interval: 100 },
+    );
+  } catch (err) {
+    const partial = await ui.browser.execute(() => window.__openPathProbe);
+    throw new Error(`Sonda abertura/opener (#511) não respondeu: ${JSON.stringify(partial)} (${err?.message ?? err})`);
+  }
+  const probeResults = await ui.browser.execute(() => window.__openPathProbe);
+  assert.equal(probeResults.error, null);
+  assert.equal(probeResults.platform?.ok, true, `app.platform falhou: ${probeResults.platform?.error}`);
+  if (isWin) {
+    assert.equal(probeResults.platform.value?.os, 'windows');
+    assert.equal(
+      probeResults.allowed.ok,
+      true,
+      `open_path_windows falhou ao abrir pasta no Windows: ${probeResults.allowed.error}`,
+    );
+    assert.ok(
+      probeResults.allowed.elapsedMs < 5_000,
+      `open_path_windows demorou ${probeResults.allowed.elapsedMs} ms`,
+    );
+    assert.equal(probeResults.missingWin.ok, false);
+    assert.equal(probeResults.missingWin.code, 'path_not_found');
+  } else {
+    assert.notEqual(probeResults.platform.value?.os, 'windows');
+    assert.doesNotMatch(
+      probeResults.allowed?.error ?? '',
+      /not allowed/i,
+      `opener:allow-open-path foi negado por capability/escopo: ${probeResults.allowed?.error}`,
+    );
+  }
+  assert.equal(probeResults.deniedExe.ok, false);
+  assert.match(
+    probeResults.deniedExe.error ?? '',
+    /Not allowed to open path/i,
+    `extensão executável deveria ser bloqueada pelo deny do escopo: ${probeResults.deniedExe.error}`,
+  );
+
   logStep('Sessão 3: fechamento coordenado (#291) sem jobs ativos…');
   await ui.browser.execute(() => window.close());
 }

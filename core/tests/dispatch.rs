@@ -12,6 +12,12 @@ fn version_command_uses_shared_dispatch_and_emits_progress() {
 }
 
 #[test]
+fn platform_command_reports_host_os() {
+    let result = dispatch("app.platform", json!({}), &mut |_| {}).unwrap();
+    assert_eq!(result, json!({ "os": std::env::consts::OS }));
+}
+
+#[test]
 fn unknown_command_returns_a_typed_error() {
     let error = dispatch("missing", json!({}), &mut |_| {}).unwrap_err();
     assert_eq!(error.code, "unknown_command");

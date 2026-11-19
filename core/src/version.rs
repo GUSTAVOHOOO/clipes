@@ -14,4 +14,9 @@ fn version(_: Value, events: &mut EventSink<'_>) -> CommandResult {
     Ok(json!({ "version": env!("CARGO_PKG_VERSION") }))
 }
 
+fn platform(_: Value, _: &mut EventSink<'_>) -> CommandResult {
+    Ok(json!({ "os": std::env::consts::OS }))
+}
+
 inventory::submit! { CommandRegistration { name: "app.version", execute: version } }
+inventory::submit! { CommandRegistration { name: "app.platform", execute: platform } }

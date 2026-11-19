@@ -19,6 +19,30 @@
         { "url": "https://github.com/GUSTAVOHOOO/clipes/issues/new*" },
         { "url": "https://github.com/GUSTAVOHOOO/clipes/blob/master/SECURITY.md" }
       ]
+    },
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        { "path": "**" }
+      ],
+      "deny": [
+        { "path": "**/*.exe" },
+        { "path": "**/*.EXE" },
+        { "path": "**/*.bat" },
+        { "path": "**/*.BAT" },
+        { "path": "**/*.cmd" },
+        { "path": "**/*.CMD" },
+        { "path": "**/*.ps1" },
+        { "path": "**/*.PS1" },
+        { "path": "**/*.vbs" },
+        { "path": "**/*.VBS" },
+        { "path": "**/*.msi" },
+        { "path": "**/*.MSI" },
+        { "path": "**/*.scr" },
+        { "path": "**/*.SCR" },
+        { "path": "**/*.sh" },
+        { "path": "**/*.AppImage" }
+      ]
     }
   ]
 }

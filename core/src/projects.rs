@@ -179,7 +179,42 @@ fn open(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     })?;
     Ok(json!({"name": name, "path":path, "id":id}))
 }
+struct CreatedDirGuard<'a> {
+    path: &'a Path,
+    disarmed: bool,
+}
+
+impl<'a> CreatedDirGuard<'a> {
+    fn new(path: &'a Path) -> Self {
+        Self {
+            path,
+            disarmed: false,
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.disarmed = true;
+    }
+}
+
+impl Drop for CreatedDirGuard<'_> {
+    fn drop(&mut self) {
+        if !self.disarmed {
+            backups::close_if_path(self.path);
+            let _ = fs::remove_dir_all(self.path);
+        }
+    }
+}
+
 fn create(v: Value, events: &mut EventSink<'_>) -> CommandResult {
+    create_with(v, events, |_| Ok(()))
+}
+
+fn create_with(
+    v: Value,
+    events: &mut EventSink<'_>,
+    after_create_dir: impl FnOnce(&Path) -> Result<(), CoreError>,
+) -> CommandResult {
     let name = v["name"].as_str().unwrap_or("").trim();
     if name.is_empty() || name == "." || name == ".." || name.contains(['/', '\\', ':']) {
         return Err(error("invalid_project", "Nome de Projeto inválido"));
@@ -191,15 +226,20 @@ fn create(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     );
     let path = parent.join(format!("{name}.clipes"));
     fs::create_dir(&path).map_err(|e| error("project_create", e))?;
+    let mut guard = CreatedDirGuard::new(&path);
     let result = (|| {
+        after_create_dir(&path)?;
         let mut conn = Connection::open(path.join("project.sqlite"))
             .map_err(|e| error("project_create", e))?;
         migrate(&mut conn, &path)?;
         conn.execute("INSERT INTO project (name) VALUES (?1)", [name])
             .map_err(|e| error("project_create", e))?;
         drop(conn);
-        open(json!({"path":path}), events)
+        open(json!({"path": path}), events)
     })();
+    if result.is_ok() {
+        guard.disarm();
+    }
     result
 }
 fn recent(_: Value, _: &mut EventSink<'_>) -> CommandResult {
@@ -278,3 +318,35 @@ fn document(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     Ok(doc)
 }
 inventory::submit! { CommandRegistration { name:"documents.validate", execute:document } }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn create_with_removes_new_dir_when_failure_occurs_right_after_create_dir() {
+        let root = tempfile::Builder::new()
+            .prefix("clipes-512-unit-")
+            .tempdir()
+            .unwrap();
+        let _data_dir = crate::test_env::set_data_dir(&root.path().join("data"));
+        let target = root.path().join("FalhouDepoisDeCreateDir.clipes");
+
+        let mut sink = |_: crate::ProgressEvent| {};
+        let err = create_with(
+            json!({"parent": root.path(), "name": "FalhouDepoisDeCreateDir"}),
+            &mut sink,
+            |created| {
+                assert!(created.is_dir());
+                Err(error("simulated_failure", "falha simulada"))
+            },
+        )
+        .unwrap_err();
+
+        assert_eq!(err.code, "simulated_failure");
+        assert!(
+            !target.exists(),
+            "pasta criada em create_with deve ser removida em caso de erro"
+        );
+    }
+}
