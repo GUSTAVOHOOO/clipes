@@ -31,7 +31,7 @@
     L.words.forEach((w, i) => {
       const bin = Array.isArray(inAt) ? inAt[i] : C.beatOf(inAt) + i * stagger;
       let y = below * (1 - C.spHit(t, bin, preset));
-      if (outAt != null) y += above * C.sp(t, C.beatOf(outAt) + i * stagger * 0.5 - exit * 0.5, 'snappy');
+      if (outAt != null) y += above * C.sp(t, C.beatOf(outAt) + i * (o.exitStagger ?? stagger) * 0.5 - exit * 0.5, 'snappy');
       C.put(w, { y, hide: y >= below * 0.999 || y <= above * 0.999 });
     });
   }

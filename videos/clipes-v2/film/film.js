@@ -274,8 +274,8 @@
     run(t, b, S) {
       drawFoot(S.F, t);
       const [cx, cy, z] = camTrk(t, P(
-        [[28, 700, 380, 1.3], [29.3, 700, 470, 1.6], [34, 720, 400, 1.25], [36.1, 990, 400, 1.95]],
-        [[28, 300, 380, 1.8], [29.3, 943, 470, 2.6], [34, 540, 420, 1.0], [36.1, 1180, 390, 1.9]]));
+        [[28, 700, 380, 1.3], [29.3, 700, 470, 1.6], [32.4, 720, 400, 1.25], [36.1, 990, 400, 1.95]],
+        [[28, 300, 380, 1.8], [29.3, 943, 470, 2.6], [32.4, 540, 420, 1.0], [36.1, 1180, 390, 1.9]]));
       const f = frame(S.scr, P({ x: 60, y: 56, w: 1800, h: 700 }, VP), cx, cy, z * (1 + 0.025 * seg(t, 36, 40)), P(0, -2), 1);
       // a legenda real se revela palavra a palavra (mesma ordem do destaque do app)
       const edge = trk(t, [[28, R.leg[0] - 4], [beatOf('s5_w1') - 0.3 * LEADB, R.leg[1] + 2, 'snappy'], [beatOf('s5_w2') - 0.3 * LEADB, R.leg[2] + 2, 'snappy'], [beatOf('s5_w3') - 0.3 * LEADB, R.leg[3] + 8, 'snappy']]);
@@ -374,30 +374,30 @@
     run(t, b, S) {
       // a cobertura laranja do plano 6 recolhe para cima e revela o cartão
       // a cobertura recolhe para BAIXO: o logo (no alto) aparece primeiro e nunca é cruzado por ela
-      const c = ease.inOut(seg(t, 47.70, 47.98));   // wipe de ~0,14 s: o topo (logo) é descoberto já em f717 e nada fica laranja depois de f720
+      const c = seg(t, 47.66, 48.0);   // wipe de ~0,14 s: o topo (logo) é descoberto já em f717 e nada fica laranja depois de f720
       put(S.cover, { clip: `inset(${(100 * c).toFixed(3)}% 0 0 0)`, hide: c > 0.999 });
       drawFoot(S.F2, t);
       put(S.push, { s: 1 + 0.08 * seg(t, 48, 60) });   // linear: nunca para, nem no último quadro
       const LS = P(80, 76), lk = C.sp(t, 47.74, { response: 0.32, damping: 0.55 });   // cai de cima, pousa no beat 48 e assenta com overshoot visível
-      put(S.lock, { y: -LS * 0.8 * (1 - lk) });
+      put(S.lock, { y: -LS * 1.1 * (1 - lk) });   // começa acima da própria máscara: a borda da wipe nunca corta glifo
       const pl = spHit(t, 48.6, 'snappy');
       const pO = sp(t, beatOf(XOUT) - 0.14, 'snappy');   // saída do pílula junto com as linhas (emenda do loop)
       put(S.pill, { y: 80 * (1 - pl) - 80 * pO, hide: pl < 0.01 || pO > 0.995 });
       const sn = spHit(t, 'snip', 'snappy') - sp(t, beatOf('snip') + 0.35, 'default');
       S.bl.forEach((g, i) => put(g, { css: { transformOrigin: '12px 12px', transformBox: 'view-box', transform: `rotate(${((i ? -1 : 1) * 28 * sn).toFixed(3)}deg)` } }));
       // últimos 0,4 s: as linhas saem por máscara (de cima para baixo na ordem de leitura) e sobram marca + telas, perto do f0 (emenda do loop)
-      riseRows(t, S.tag, 'tag', XOUT);
-      riseRows(t, [S.cta[0]], beatOf('cta') - 0.6, XOUT + 0.1);   // a linha de ênfase (Windows e Linux.) é a que cai no cue
-      riseRows(t, [S.cta[1]], 'cta', XOUT + 0.1, { stagger: 0.03 });
-      riseRows(t, S.url, 'url', XOUT + 0.2, { stagger: 0.02 });
-      riseRows(t, S.lic, 'lic', XOUT + 0.3, { preset: 'snappy', stagger: 0.02, rowGap: 0.05 });
+      riseRows(t, S.tag, 'tag', XOUT, { exitStagger: 0 });
+      riseRows(t, [S.cta[0]], beatOf('cta') - 0.6, XOUT, { exitStagger: 0 });   // a linha de ênfase (Windows e Linux.) é a que cai no cue
+      riseRows(t, [S.cta[1]], 'cta', XOUT, { stagger: 0.03, exitStagger: 0 });
+      riseRows(t, S.url, 'url', XOUT, { stagger: 0.02, exitStagger: 0 });
+      riseRows(t, S.lic, 'lic', XOUT, { preset: 'snappy', stagger: 0.02, rowGap: 0.05, exitStagger: 0 });
       // parallax: as telas sobem/andam mais devagar que a tipografia e nunca param
       const e = sp(t, 48.3, CAMSP), d = seg(t, 48, 60);
       const stp = ['tag', 'cta', 'url', 'lic', 'snip'].reduce((a, m) => a + sp(t, beatOf(m) - 0.1, 'default'), 0);
       S.shots.forEach((s, i) => {
         const sc = P(0.4, 0.42);
-        const x = P(1210 + i * 70, 40 + i * (1440 * 0.42 + 36)) - P(0, 300) * d - P(0, 150) * stp;
-        const y = P(-120 + i * (900 * 0.4 + 36), 1090 + i * 30) - P(140, 0) * d - P(95, 0) * stp + 160 * (1 - e);
+        const x = P(1170 + i * 60, 40 + i * (1440 * 0.42 + 36)) - P(0, 300) * d - P(0, 150) * stp;
+        const y = P(-120 + i * (900 * 0.4 + 36), 1090 + i * 30) - P(80, 0) * d - P(14, 0) * stp + 160 * (1 - e);
         put(s, { x, y, s: sc, css: { transform: `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) perspective(2400px) rotateY(${P(-16, -10)}deg) rotateX(4deg) scale(${sc})`, filter: 'brightness(1.55) saturate(.25)' } });
       });
     },
