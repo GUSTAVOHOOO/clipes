@@ -89,6 +89,8 @@ fn verifiers_check_limits_hashtags_urls_and_language() {
     assert!(run(d).is_ok());
 }
 
+static SERIAL: Mutex<()> = Mutex::new(());
+
 fn call(name: &str, args: Value) -> Value {
     dispatch(name, args, &mut |_| {}).unwrap()
 }
@@ -193,6 +195,7 @@ fn generate(candidate: i64, extra: Value) -> Value {
 
 #[test]
 fn packaging_flow_credit_edits_regeneration_and_failures() {
+    let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let root = tempfile::tempdir().unwrap();
     std::env::set_var("CLIPES_DATA_DIR", root.path().join("data"));
     call(
@@ -417,4 +420,170 @@ fn packaging_flow_credit_edits_regeneration_and_failures() {
             .transcript
             .starts_with("#CORTE idioma=en\n"));
     }
+}
+
+#[test]
+fn packaging_edit_initializes_manual_without_prior_generation() {
+    let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let root = tempfile::tempdir().unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", root.path().join("data"));
+    call(
+        "projects.create",
+        json!({"parent": root.path(), "name": "CanalManual"}),
+    );
+    let source = seed();
+    call("transcription.segment", json!({"source_id": source}));
+
+    // Seed de um candidato aprovado sem configurar Provedor nem rodar packaging.generate.
+    let cand = with_writer(|c| {
+        let transcript: i64 =
+            c.query_row("SELECT id FROM transcripts WHERE source_id=?1", [source], |r| r.get(0))?;
+        c.execute(
+            "INSERT INTO selection_runs(transcript_id,task_version,prompt_sha256,profile,state,batch,min_us,max_us,weights,plan_state,windows_total,video_kind)
+             VALUES (?1,1,'h','legacy','completed','',20000000,180000000,'[]','full',1,'direct')",
+            [transcript],
+        )?;
+        let run = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO selection_candidates(run_id,rank,start_id,end_id,start_us,end_us,axes,total_centi,windows)
+             VALUES (?1,1,10,11,100000000,120000000,'{}',900,'[]')",
+            [run],
+        )?;
+        let cand = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO selection_decisions(run_id,cand_start_id,cand_end_id,decision,before_start_id,before_end_id,after_start_id,after_end_id)
+             VALUES (?1,10,11,'approved',10,11,10,11)",
+            [run],
+        )?;
+        Ok(cand)
+    })
+    .unwrap();
+
+    let initial = call("packaging.get", json!({"candidate": cand}));
+    assert!(initial["current"].is_null());
+    assert!(initial["job"].is_null());
+    let credit = initial["credit"]["text"].as_str().unwrap().to_owned();
+    assert_eq!(
+        credit,
+        "Crédito: vídeo original de Canal Exemplo.\nFonte: https://example.com/watch?v=abc"
+    );
+
+    // Contrato de refresh_chapters permanece inalterado quando não há ficha.
+    assert_eq!(
+        fail("packaging.refresh_chapters", json!({"candidate": cand})).code,
+        "nothing_to_edit"
+    );
+
+    // Limites do YouTube continuam validados mesmo antes da criação inicial; falha não persiste ficha.
+    let empty_title = fail(
+        "packaging.edit",
+        json!({"candidate": cand, "description": "Só descrição sem título"}),
+    );
+    assert_eq!(empty_title.code, "edit_invalid");
+    assert_eq!(
+        empty_title.usage.unwrap()["violations"][0]["code"],
+        "title_empty"
+    );
+    let too_long_title = fail(
+        "packaging.edit",
+        json!({"candidate": cand, "title": "x".repeat(101)}),
+    );
+    assert_eq!(too_long_title.code, "edit_invalid");
+    assert_eq!(
+        too_long_title.usage.unwrap()["violations"][0]["code"],
+        "title_too_long"
+    );
+    let big_desc = fail(
+        "packaging.edit",
+        json!({"candidate": cand, "title": "Ok", "description": "x".repeat(4990)}),
+    );
+    assert_eq!(
+        big_desc.code, "edit_invalid",
+        "credit counts toward 5000 bytes on manual creation"
+    );
+    assert!(
+        call("packaging.get", json!({"candidate": cand}))["current"].is_null(),
+        "failed edit must not initialize packaging"
+    );
+
+    // Edição manual inicializa a ficha vazia e persiste a edição sem packaging.generate prévio.
+    let created = call(
+        "packaging.edit",
+        json!({
+            "candidate": cand,
+            "title": "Título manual",
+            "description": "Descrição escrita à mão.",
+            "tags": ["manual", "corte"],
+            "hashtags": ["#manual"]
+        }),
+    );
+    assert_eq!(created["current"]["generation"], 1);
+    assert_eq!(created["current"]["language"], "pt-BR");
+    assert_eq!(created["current"]["edited"], true);
+    assert_eq!(created["current"]["title"], "Título manual");
+    assert_eq!(
+        created["current"]["description"],
+        "Descrição escrita à mão."
+    );
+    assert_eq!(created["current"]["tags"], json!(["manual", "corte"]));
+    assert_eq!(created["current"]["hashtags"], json!(["#manual"]));
+    assert_eq!(
+        created["current"]["fullDescription"],
+        format!("Descrição escrita à mão.\n\n{credit}")
+    );
+    assert!(created["job"].is_null());
+    assert_eq!(created["generations"].as_array().unwrap().len(), 1);
+    assert!(created["generations"][0]["jobId"].is_null());
+    assert_eq!(created["generations"][0]["generated"]["title"], "");
+    assert_eq!(
+        created["generations"][0]["edits"].as_array().unwrap().len(),
+        1
+    );
+    call(
+        "documents.validate",
+        json!({"type": "packaging", "document": created}),
+    );
+
+    // packaging.get preserva a edição e o crédito protegido da Fonte.
+    let fetched = call("packaging.get", json!({"candidate": cand}));
+    assert_eq!(fetched["current"]["title"], "Título manual");
+    assert_eq!(
+        fetched["current"]["fullDescription"],
+        format!("Descrição escrita à mão.\n\n{credit}")
+    );
+    assert!(!fetched["current"]["description"]
+        .as_str()
+        .unwrap()
+        .contains("Canal Exemplo"));
+
+    // Segunda edição preserva os demais campos e continua validando limites.
+    let updated = call(
+        "packaging.edit",
+        json!({"candidate": cand, "title": "Título manual v2"}),
+    );
+    assert_eq!(updated["current"]["title"], "Título manual v2");
+    assert_eq!(
+        updated["current"]["description"],
+        "Descrição escrita à mão."
+    );
+    assert_eq!(
+        updated["generations"][0]["edits"].as_array().unwrap().len(),
+        2
+    );
+    assert_eq!(
+        fail(
+            "packaging.edit",
+            json!({"candidate": cand, "hashtags": ["semhash"]})
+        )
+        .code,
+        "edit_invalid"
+    );
+
+    // export.readiness lê ficha manual com jobId null sem falhar.
+    let readiness = call("export.readiness", json!({}));
+    assert_eq!(
+        readiness["items"][0]["packaging"]["current"]["title"],
+        "Título manual v2"
+    );
+    assert!(readiness["items"][0]["packaging"]["job"].is_null());
 }

@@ -733,7 +733,7 @@ fn delete_source(v: Value, _: &mut EventSink<'_>) -> CommandResult {
              UNION
              SELECT job_id FROM angle_generations WHERE run_id IN (SELECT id FROM _del_src_runs)
              UNION
-             SELECT job_id FROM packaging_generations WHERE run_id IN (SELECT id FROM _del_src_runs)
+             SELECT job_id FROM packaging_generations WHERE run_id IN (SELECT id FROM _del_src_runs) AND job_id IS NOT NULL
              UNION
              SELECT job_id FROM script_generations WHERE run_id IN (SELECT id FROM _del_src_runs)
              UNION

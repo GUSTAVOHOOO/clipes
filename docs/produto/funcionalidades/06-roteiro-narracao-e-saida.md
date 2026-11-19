@@ -393,12 +393,12 @@ Por isso existem **Roteiro** e **Narração** no **Vídeo transformado**. Legend
 - **Código:** [packaging.rs:1070](../../../core/src/packaging.rs#L1070)
 
 ### `packaging.edit`
-- **O que faz:** Salva uma edição manual nos campos de Empacotamento (sem permitir editar o crédito da Fonte, que é anexado na exibição), validando os limites do YouTube.
-- **Entrada:** `{ candidate: number, title?: string, description?: string, tags?: string[], hashtags?: string[] }` (`candidate` obrigatório; demais opcionais).
+- **O que faz:** Salva uma edição manual nos campos de Empacotamento (sem permitir editar o crédito da Fonte, que é anexado na exibição), validando os limites do YouTube. Quando ainda não houve `packaging.generate` prévio (`current === null`), inicializa uma ficha manual vazia e persiste a edição sem exigir Provedor.
+- **Entrada:** `{ candidate: number, title?: string, description?: string, tags?: string[], hashtags?: string[], language?: "pt-BR" | "en" }` (`candidate` obrigatório; demais opcionais, com `language` usado na inicialização manual caso o idioma do Corte não seja detectável).
 - **Saída:** o mesmo documento completo de `packaging.get`.
-- **Erros:** erros de `packaging.get` mais `nothing_to_edit` (gere o Empacotamento antes), `invalid_edit` (tipos inválidos), `edit_invalid` (com `usage.violations`: `title_empty`, `title_too_long`, `description_too_long`, `forbidden_character`, `too_many_tags`, `invalid_tag`, `tag_too_long`, `tags_too_long`, `too_many_hashtags`, `invalid_hashtag`).
+- **Erros:** erros de `packaging.get` mais `invalid_edit` (tipos inválidos), `edit_invalid` (com `usage.violations`: `title_empty`, `title_too_long`, `description_too_long`, `forbidden_character`, `too_many_tags`, `invalid_tag`, `tag_too_long`, `tags_too_long`, `too_many_hashtags`, `invalid_hashtag`).
 - **Eventos e jobs:** nenhum (síncrono).
-- **Pré-condições:** ao menos uma geração concluída de Empacotamento para o Corte.
+- **Pré-condições:** Projeto aberto e candidato aprovado (com ou sem geração prévia de Empacotamento).
 - **Tela hoje:** [Packaging.tsx](../../../src/features/projects/Packaging.tsx)
 - **Mock TS:** sim, em [packagingMock.ts](../../../src/lib/packagingMock.ts).
 - **US (#26):** US-98, US-99, US-101.
