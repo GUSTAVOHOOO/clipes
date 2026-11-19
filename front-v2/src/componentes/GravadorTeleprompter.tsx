@@ -288,8 +288,8 @@ export function GravadorTeleprompter({
       }
     }
 
-    window.addEventListener('keydown', aoTeclar)
-    return () => window.removeEventListener('keydown', aoTeclar)
+    window.addEventListener('keydown', aoTeclar, { capture: true })
+    return () => window.removeEventListener('keydown', aoTeclar, { capture: true })
   }, [aberto, confirmarDescarteAberto, modo, passos.length, solicitarFechamento])
 
   const iniciarGravacao = async () => {
@@ -609,7 +609,11 @@ export function GravadorTeleprompter({
 
               {estado === 'sem_fala' && rascunhoUrl && (
                 <div className="flex flex-wrap items-center gap-2 rounded-area bg-area p-2.5 text-t1">
-                  <audio controls src={rascunhoUrl.url} className="h-8 flex-1" />
+                  <audio
+                    controls
+                    src={rascunhoUrl.url}
+                    className="h-8 flex-1 [color-scheme:dark] [[data-tema='claro']_&]:[color-scheme:light]"
+                  />
                   <Botao
                     variante="fantasma"
                     tamanho="p"

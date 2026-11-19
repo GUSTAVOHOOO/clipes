@@ -291,4 +291,21 @@ describe('<PainelCapa>', () => {
     await user.click(screen.getByText(/Histórico de sugestões/))
     expect(screen.getAllByRole('button', { name: 'Ver quadro' }).length).toBeGreaterThan(0)
   })
+
+  it('UI-104 / UI-105: proxy em andamento exibe "Preparando quadro…" em vez de Fonte ausente, e cartão da capa usa "Duração do Corte:"', () => {
+    renderizar(
+      criarStoreFake({
+        proxy: { job: 7, state: 'running', progress: 40, proxyPath: null } as ProxyDoc,
+        capa: criarCapa({
+          current: { instantUs: CORTE.startUs + 5_000_000, origin: 'ai' },
+        }) as CapaDoc,
+      }),
+    )
+
+    expect(screen.queryByText(/A Fonte não está no lugar de antes/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/Preparando quadro/i)).toBeInTheDocument()
+
+    expect(screen.queryByText(/^de 48 s$/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/Duração do Corte: 48 s/i)).toBeInTheDocument()
+  })
 })

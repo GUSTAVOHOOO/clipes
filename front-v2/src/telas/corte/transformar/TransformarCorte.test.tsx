@@ -888,7 +888,7 @@ describe('Tela TransformarCorte (#/projeto/:id/corte/:corteId/transformar)', () 
     const btnPasso3b = within(stepper2).getByRole('button', { name: /3\.?\s*Narração/i })
     expect(btnPasso3b).toHaveTextContent(/Travado · 1 bloco/i)
     await user.click(btnPasso3b)
-    expect(await screen.findByText(/Narração travada: ainda há 1 bloco\(s\) pendente\(s\)/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Narração travada: ainda há 1 bloco pendente/i)).toBeInTheDocument()
 
     // Botão "Voltar ao próximo bloco pendente" retorna para Passo 2 focando o bloco
     await user.click(screen.getByRole('button', { name: /Voltar ao próximo bloco pendente/i }))
@@ -1024,14 +1024,18 @@ describe('Tela TransformarCorte (#/projeto/:id/corte/:corteId/transformar)', () 
     const areaTransf = document.querySelector('[data-regiao="transformar-principal"]')!
     expect(within(areaTransf as HTMLElement).getByRole('button', { name: '#11' })).toBeInTheDocument()
 
-    // Ciclo F6: Topo -> Transcrição -> Área da Transformação -> Barra de Status -> Topo
+    // Ciclo F6: Topo -> Contexto -> Transcrição -> Área da Transformação -> Barra de Status -> Topo
     ;(document.activeElement as HTMLElement | null)?.blur?.()
     document.body.focus()
     const topo = document.querySelector('[data-regiao="topo"]')!
+    const contexto = document.querySelector('[data-regiao="contexto"]')!
     const rodape = document.querySelector('[data-regiao="rodape"]')!
 
     fireEvent.keyDown(window, { key: 'F6' })
     expect(topo.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(window, { key: 'F6' })
+    expect(contexto.contains(document.activeElement)).toBe(true)
 
     fireEvent.keyDown(window, { key: 'F6' })
     expect(painelEsq.contains(document.activeElement)).toBe(true)
@@ -1066,5 +1070,126 @@ describe('Tela TransformarCorte (#/projeto/:id/corte/:corteId/transformar)', () 
     const main = document.querySelector('main')!
     expect(main.className).toContain('overflow-hidden')
     expect(main.className).not.toContain('p-4')
+  })
+
+  it('UI-100: F6 inclui [data-regiao="contexto"], Transcrição recolhida e [data-regiao="fila"] quando aberta', async () => {
+    configurarMocks()
+    window.innerWidth = 1366
+    window.location.hash = '#/projeto/demo/corte/202/transformar'
+
+    render(
+      envolver(
+        <Shell
+          projeto={{ id: 'demo', name: 'Demo', path: '/projetos/Demo.clipes' }}
+          rota={{ tela: 'corte', projeto: 'demo', corte: '202', aba: 'transformar' }}
+          semPaddingConteudo
+          meio={
+            <ContextoCorteConectado
+              projetoId="demo"
+              corteId="202"
+              subAbaAtiva="transformar"
+              fila={filaTeste}
+            />
+          }
+          fila={filaTeste}
+        >
+          <TransformarCorte
+            projetoId="demo"
+            projetoPath="/projetos/Demo.clipes"
+            corteId="202"
+            storeFontes={storeFontes}
+            fila={filaTeste}
+          />
+        </Shell>,
+      ),
+    )
+
+    const painelRecolhido = await screen.findByRole('complementary', {
+      name: 'Transcrição do Corte recolhida',
+    })
+    fireEvent.keyDown(window, { key: 'j', ctrlKey: true })
+    const filaRegiao = await screen.findByRole('complementary', { name: 'Fila de Jobs' })
+
+    const topo = document.querySelector('[data-regiao="topo"]')!
+    const contexto = document.querySelector('[data-regiao="contexto"]')!
+    const principal = document.querySelector('[data-regiao="transformar-principal"]')!
+    const rodape = document.querySelector('[data-regiao="rodape"]')!
+
+    topo.querySelector<HTMLElement>('button')?.focus()
+    expect(topo.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(window, { key: 'F6' })
+    expect(contexto.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(window, { key: 'F6' })
+    expect(painelRecolhido.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(window, { key: 'F6' })
+    expect(principal.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(window, { key: 'F6' })
+    expect(filaRegiao.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(window, { key: 'F6' })
+    expect(rodape.contains(document.activeElement)).toBe(true)
+  })
+
+  it('UI-101: mantém exatamente 1 botão .bg-sinal em Transformar (Passo 1, 2, 3 e atrás de modais)', async () => {
+    const user = userEvent.setup()
+    configurarMocks()
+    window.innerWidth = 1366
+    window.location.hash = '#/projeto/demo/corte/202/transformar'
+
+    render(
+      envolver(
+        <Shell
+          projeto={{ id: 'demo', name: 'Demo', path: '/projetos/Demo.clipes' }}
+          rota={{ tela: 'corte', projeto: 'demo', corte: '202', aba: 'transformar' }}
+          semPaddingConteudo
+          meio={
+            <ContextoCorteConectado
+              projetoId="demo"
+              corteId="202"
+              subAbaAtiva="transformar"
+              fila={filaTeste}
+            />
+          }
+          fila={filaTeste}
+        >
+          <TransformarCorte
+            projetoId="demo"
+            projetoPath="/projetos/Demo.clipes"
+            corteId="202"
+            storeFontes={storeFontes}
+            fila={filaTeste}
+          />
+        </Shell>,
+      ),
+    )
+
+    expect(await screen.findByText(/Bloco 1 · Abertura/i)).toBeInTheDocument()
+    const contarSinal = () => Array.from(document.querySelectorAll('button.bg-sinal')).length
+
+    // Passo 3 liberado: só "Avançar para Empacotar" tem bg-sinal ("Exportar Corte" rebaixado)
+    expect(contarSinal()).toBe(1)
+
+    // Ao abrir GravadorTeleprompter, só "Gravar" dentro do diálogo tem bg-sinal
+    await user.click(screen.getAllByRole('button', { name: /Gravar no microfone/i })[0])
+    expect(await screen.findByRole('dialog', { name: /Gravar Narração/i })).toBeInTheDocument()
+    expect(contarSinal()).toBe(1)
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /Gravar Narração/i })).not.toBeInTheDocument(),
+    )
+
+    // Passo 1 e Passo 2: 1 bg-sinal em cada
+    const stepper = screen.getByRole('navigation', { name: 'Etapas da Transformação' })
+    await user.click(within(stepper).getByRole('button', { name: /1\.?\s*Ângulo/i }))
+    expect(await screen.findByRole('heading', { name: /1\. Escolha o ângulo/i })).toBeInTheDocument()
+    expect(contarSinal()).toBe(1)
+
+    await user.click(within(stepper).getByRole('button', { name: /2\.?\s*Roteiro/i }))
+    expect(await screen.findByRole('heading', { name: /2\. Roteiro em blocos/i })).toBeInTheDocument()
+    expect(contarSinal()).toBe(1)
   })
 })

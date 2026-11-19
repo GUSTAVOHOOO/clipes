@@ -16,7 +16,7 @@ import {
   useToast,
 } from '@ds'
 import { Lock } from 'lucide-react'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAtalhos, type Atalho } from '~/comandos/atalhos'
 import { ContadorLimite, contarBytesUtf8 } from '~/componentes/ContadorLimite'
 import { ListaChips } from '~/componentes/ListaChips'
@@ -43,6 +43,9 @@ export interface FichaEmpacotamentoProps {
   corteId: string
   fonteId: number | null
   fonteDisponivel: boolean
+  duracaoCorteUs?: number | null
+  modalPaiAberto?: boolean
+  aoMudarModalAberto?: (aberto: boolean) => void
   store: StoreEmpacotar
   aoAbrirExportacao: () => void
   aoIrParaFonte: () => void
@@ -126,6 +129,9 @@ export function FichaEmpacotamento({
   corteId,
   fonteId,
   fonteDisponivel,
+  duracaoCorteUs,
+  modalPaiAberto = false,
+  aoMudarModalAberto,
   store,
   aoAbrirExportacao,
   aoIrParaFonte,
@@ -159,6 +165,15 @@ export function FichaEmpacotamento({
   const [confirmacao, setConfirmacao] = useState<RespostaEstimativaPacote | null>(null)
   const [confirmandoAck, setConfirmandoAck] = useState(false)
   const idiomaRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    aoMudarModalAberto?.(confirmacao !== null)
+  }, [aoMudarModalAberto, confirmacao])
+
+  const capaComCorte = store.capa as { cut?: { startUs: number; endUs: number } } | null
+  const cutDurationUs =
+    duracaoCorteUs ??
+    (capaComCorte?.cut ? Math.max(0, capaComCorte.cut.endUs - capaComCorte.cut.startUs) : null)
 
   const idiomaEfetivo =
     idioma ?? normalizarIdioma(doc?.detectedLanguage) ?? normalizarIdioma(atual?.language)
@@ -195,7 +210,7 @@ export function FichaEmpacotamento({
       vistos.add(mensagem)
       lista.push({ chave, mensagem })
     }
-    for (const e of validarCapitulosTempoReal(textoDescricao, null)) {
+    for (const e of validarCapitulosTempoReal(textoDescricao, cutDurationUs)) {
       empurrar(e.codigo, e.mensagem)
     }
     const doServidor = (capitulos as { editWarnings?: Array<{ code: string; message: string }> })
@@ -204,7 +219,7 @@ export function FichaEmpacotamento({
       empurrar(w.code, w.message)
     }
     return lista
-  }, [capitulos, capitulosAplicaveis, textoDescricao])
+  }, [capitulos, capitulosAplicaveis, cutDurationUs, textoDescricao])
 
   const delimitadoresIncompletosOuAusentes =
     capitulosAplicaveis && textoDescricao.trim() !== '' && !delimitadoresPresentes
@@ -476,6 +491,7 @@ export function FichaEmpacotamento({
       data-corte={corteId}
       className="mx-auto flex w-full max-w-[68ch] min-w-0 flex-col gap-4 p-4"
     >
+      <h2 className="m-0 text-base font-forte text-t1">Ficha de Empacotamento</h2>
       {erro && (
         <ErroEmpacotar
           erro={erro}
@@ -549,7 +565,7 @@ export function FichaEmpacotamento({
               </div>
             )}
             <Botao
-              variante="secundario"
+              variante={!modalPaiAberto && confirmacao === null ? 'primario' : 'secundario'}
               carregando={estimando}
               disabled={gerandoPacote}
               onClick={() => void sugerir()}
@@ -557,11 +573,13 @@ export function FichaEmpacotamento({
               Sugerir Empacotamento
             </Botao>
             <Dica texto="Preencher manualmente ainda não está disponível.">
-              <span tabIndex={0} aria-describedby="desc-preencher-manual" className="inline-flex">
-                <Botao variante="fantasma" disabled>
-                  Preencher manualmente
-                </Botao>
-              </span>
+              <Botao
+                variante="fantasma"
+                aria-disabled="true"
+                aria-describedby="desc-preencher-manual"
+              >
+                Preencher manualmente
+              </Botao>
             </Dica>
             <span id="desc-preencher-manual" className="sr-only">
               Preencher manualmente ainda não está disponível.
@@ -570,7 +588,7 @@ export function FichaEmpacotamento({
         </div>
       ) : (
         <>
-          <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Botao
               variante="secundario"
               carregando={estimando}
@@ -579,26 +597,32 @@ export function FichaEmpacotamento({
             >
               Sugerir novamente
             </Botao>
-            <div ref={idiomaRef} className="w-40">
-              <Campo rotulo="Idioma" erro={erroIdioma ?? undefined}>
-                {(propsAria) => (
-                  <Select
-                    {...propsAria}
-                    valor={idiomaEfetivo}
-                    aoMudar={(v) => {
-                      setIdioma(v)
-                      setErroIdioma(null)
-                    }}
-                    opcoes={OPCOES_IDIOMA}
-                    placeholder="Escolha"
-                  />
-                )}
-              </Campo>
+            <div ref={idiomaRef} className="flex items-center gap-2">
+              <label htmlFor="empacotar-idioma" className="text-pequeno text-t2">
+                Idioma
+              </label>
+              <Select
+                id="empacotar-idioma"
+                valor={idiomaEfetivo}
+                aoMudar={(v) => {
+                  setIdioma(v)
+                  setErroIdioma(null)
+                }}
+                opcoes={OPCOES_IDIOMA}
+                placeholder="Escolha"
+                aria-invalid={erroIdioma ? true : undefined}
+                className="w-32 min-w-0"
+              />
             </div>
             <Status tom={store.sujo ? 'pendente' : 'sucesso'} className="ml-auto">
               {store.sujo ? 'Alterações não salvas' : 'Salvo'}
             </Status>
           </div>
+          {erroIdioma && (
+            <p role="alert" className="m-0 text-pequeno text-erro">
+              {erroIdioma}
+            </p>
+          )}
           <p className="text-pequeno text-t3">
             Sugestão gerada pelo Provedor — revise título, descrição e tags antes de publicar.
           </p>
@@ -722,7 +746,10 @@ export function FichaEmpacotamento({
                 <p className="text-t2">
                   Esta Fonte está sem Permissão registrada: nenhum crédito será incluído na descrição.
                 </p>
-                <a href={enlaceFonte} className="foco self-start text-t1 underline">
+                <a
+                  href={enlaceFonte}
+                  className="foco inline-flex min-h-6 items-center self-start text-t1 underline"
+                >
                   Registrar Permissão na Fonte
                 </a>
               </div>

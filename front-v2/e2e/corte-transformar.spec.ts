@@ -137,7 +137,7 @@ test.describe('Tela Transformar do Corte (#/projeto/:id/corte/:corteId/transform
     // Clica em Passo 3 travado para conferir trava ADR-0001 e volta ao bloco pendente
     await stepper.getByRole('button', { name: /3\.?\s*Narração/i }).click()
     await expect(
-      page.getByText(/Narração travada: ainda há 1 bloco\(s\) pendente\(s\)/i),
+      page.getByText(/Narração travada: ainda há 1 bloco pendente/i),
     ).toBeVisible()
     await page.getByRole('button', { name: 'Voltar ao próximo bloco pendente' }).click()
 
@@ -260,6 +260,34 @@ test.describe('Tela Transformar do Corte (#/projeto/:id/corte/:corteId/transform
     }))
     expect(check1440).toEqual({ alturaOk: true, larguraOk: true, h1Count: 1 })
     await page.screenshot({ path: 'test-results/corte-transformar-1440.png' })
+
+    // UI-100 / UI-101 / UI-102 / UI-103 / UI-105 / UI-106: Luz Única, sem span[tabindex="0"] wrapper, Esc no gravador após Tab e F6 com contexto/fila
+    await expect(page.locator('button.bg-sinal')).toHaveCount(1)
+    await expect(page.locator('span[tabindex="0"]:not([role])')).toHaveCount(0)
+    await expect(page.getByRole('heading', { level: 2, name: /3\. Narração/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Avançar para Empacotar/i })).not.toContainText('→')
+
+    await page.getByRole('button', { name: 'Gravar no microfone' }).first().click()
+    const dlgGravadorEsc = page.getByRole('dialog', { name: /Gravar Narração/i })
+    await expect(dlgGravadorEsc).toBeVisible()
+    await dlgGravadorEsc.getByRole('button', { name: /Diminuir fonte/i }).focus()
+    await page.keyboard.press('Escape')
+    await expect(dlgGravadorEsc).toBeHidden()
+
+    await page.keyboard.press('Control+j')
+    const filaAside = page.getByRole('complementary', { name: 'Fila de Jobs' })
+    await expect(filaAside).toBeVisible()
+    const regioesF6: Array<string | null> = []
+    await page.locator('[data-regiao="topo"] button').first().focus()
+    for (let i = 0; i < 6; i += 1) {
+      await page.keyboard.press('F6')
+      regioesF6.push(
+        await page.evaluate(() => document.activeElement?.closest('[data-regiao]')?.getAttribute('data-regiao') ?? null),
+      )
+    }
+    expect(regioesF6).toContain('contexto')
+    expect(regioesF6).toContain('fila')
+    await filaAside.getByRole('button', { name: /Fechar Fila/i }).click()
 
     expect(erros).toEqual([])
   })

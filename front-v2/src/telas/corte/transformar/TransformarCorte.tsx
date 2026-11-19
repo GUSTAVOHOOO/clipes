@@ -648,17 +648,23 @@ export function TransformarCorte({
 
   useAtalhos(atalhosTela)
 
-  // Ciclo F6 / Shift+F6: Topo -> Transcrição do Corte (se aberta) -> Stepper + Passo ativo -> Barra de Status
+  // Ciclo F6 / Shift+F6: Topo -> Contexto -> Transcrição do Corte -> Stepper + Passo ativo -> Fila (se aberta) -> Barra de Status
   useEffect(() => {
     const obterRegioes = (): HTMLElement[] => {
       const topo = document.querySelector<HTMLElement>('[data-regiao="topo"]')
-      const painel = painelAbertoRef.current
-        ? containerRef.current?.querySelector<HTMLElement>('aside[aria-label="Transcrição do Corte"]') ??
-          null
-        : null
+      const contexto = document.querySelector<HTMLElement>('[data-regiao="contexto"]')
+      const painel =
+        containerRef.current?.querySelector<HTMLElement>(
+          painelAbertoRef.current
+            ? 'aside[aria-label="Transcrição do Corte"]'
+            : 'aside[aria-label="Transcrição do Corte recolhida"]',
+        ) ?? null
       const principal = areaTransformarRef.current
+      const filaRegiao = document.querySelector<HTMLElement>('[data-regiao="fila"]')
       const rodape = document.querySelector<HTMLElement>('[data-regiao="rodape"]')
-      return [topo, painel, principal, rodape].filter((el): el is HTMLElement => el !== null)
+      return [topo, contexto, painel, principal, filaRegiao, rodape].filter(
+        (el): el is HTMLElement => el !== null,
+      )
     }
 
     const indiceDoElemento = (el: EventTarget | null, regioes: HTMLElement[]): number => {
@@ -676,15 +682,13 @@ export function TransformarCorte({
       if (e.key !== 'F6' || e.ctrlKey || e.metaKey || e.altKey) return
       const temDialogoModal = Array.from(
         document.querySelectorAll('[role="dialog"], [role="alertdialog"]'),
-      ).some((el) => !el.closest('[aria-label="Notifications"]'))
+      ).some((el) => !el.closest('[aria-label="Notifications"], [data-nao-modal]'))
       if (temDialogoModal) return
 
       const regioes = obterRegioes()
       if (regioes.length === 0) return
 
-      const idxAtual = e.defaultPrevented
-        ? regiaoFocoRef.current.prev
-        : indiceDoElemento(document.activeElement, regioes)
+      const idxAtual = indiceDoElemento(document.activeElement, regioes)
 
       e.preventDefault()
       e.stopPropagation()
@@ -892,7 +896,7 @@ export function TransformarCorte({
     forcado === 'parcial' && passoAtivo === 1
 
   return (
-    <div ref={containerRef} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div ref={containerRef} data-f6-proprio="" className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {!fonteDisponivel && (
         <div
           role="alert"
@@ -1076,6 +1080,7 @@ export function TransformarCorte({
                   candidateId={candidateIdParaPassos}
                   store={storeParaPassos}
                   fila={fila}
+                  modalPaiAberto={dialogoRelocalizarAberto}
                   aoClicarChipFrase={aoClicarChipFrase}
                   aoMudarRefEmFoco={aoMudarRefEmFocoEstavel}
                   aoAvancarPasso={() => setPassoAtivo(2)}
@@ -1087,6 +1092,7 @@ export function TransformarCorte({
                   candidateId={candidateIdParaPassos}
                   store={storeParaPassos}
                   fila={fila}
+                  modalPaiAberto={dialogoRelocalizarAberto}
                   aoClicarChipFrase={aoClicarChipFrase}
                   aoMudarRefEmFoco={aoMudarRefEmFocoEstavel}
                   aoAvancarNarracao={() => setPassoAtivo(3)}
@@ -1098,6 +1104,7 @@ export function TransformarCorte({
                 <PassoNarracao
                   candidateId={candidateIdParaPassos}
                   store={storeParaPassos}
+                  modalPaiAberto={dialogoRelocalizarAberto}
                   aoVoltarBlocoPendente={(blockId) => {
                     setBlocoFocadoInicial(blockId ?? null)
                     setPassoAtivo(2)

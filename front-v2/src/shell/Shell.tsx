@@ -429,6 +429,17 @@ export function Shell({
 
   useEffect(() => {
     return storeFila.registrarNotificacao((n) => {
+      if (
+        n.tipo === 'concluido' &&
+        (n.etapa === 'proxy' ||
+          n.etapa === 'timeline' ||
+          n.etapa === 'waveform' ||
+          n.corpo === 'Preview concluído.' ||
+          n.corpo === 'Preview pronto.' ||
+          n.corpo === 'Timeline pronta')
+      ) {
+        return
+      }
       toastRef.current.add({
         type: n.tipo === 'falha' ? 'erro' : n.tipo === 'orcamento' ? 'aviso' : undefined,
         title: n.titulo,

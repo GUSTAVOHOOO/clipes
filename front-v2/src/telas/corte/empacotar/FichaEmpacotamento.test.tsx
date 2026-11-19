@@ -173,7 +173,10 @@ describe('<FichaEmpacotamento>', () => {
     configurarMock({ pacote: docEmpacotamento({ current: null }) })
     renderizar()
     expect(await screen.findByRole('button', { name: 'Sugerir Empacotamento' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Preencher manualmente' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Preencher manualmente' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
     const dica = screen.getByText('Preencher manualmente ainda não está disponível.')
     expect(dica).toBeInTheDocument()
     expect(document.body.textContent).not.toMatch(/#\d{3}|packaging\.edit/)
@@ -337,5 +340,65 @@ describe('<FichaEmpacotamento>', () => {
     renderizar()
     await user.click(await screen.findByRole('button', { name: 'Copiar descrição completa' }))
     await waitFor(() => expect(copiarMock).toHaveBeenCalledWith(`Resumo do Corte.\n\n${CREDITO}`))
+  })
+
+  it('UI-102 / UI-103 / UI-105 / UI-106: sem span[tabindex=0], link >= 24 px, h2 antes de h3, chapter_past_end com cutDurationUs e barra superior alinhada', async () => {
+    // Estado vazio: sem <span tabIndex={0}> em "Preencher manualmente"
+    configurarMock({ pacote: docEmpacotamento({ current: null }) })
+    const { container, unmount } = render(
+      <ProvedorDicas>
+        <ProvedorToast>
+          <ProvedorAtalhos>
+            <Harness />
+          </ProvedorAtalhos>
+        </ProvedorToast>
+      </ProvedorDicas>,
+    )
+    expect(
+      await screen.findByRole('button', { name: 'Preencher manualmente' }),
+    ).toHaveAttribute('aria-disabled', 'true')
+    expect(container.querySelectorAll('span[tabindex="0"]')).toHaveLength(0)
+    unmount()
+
+    // Estado preenchido: h2 antes de h3, link >= 24 px, chapter_past_end com 00:24 em Corte de 20 s, barra alinhada
+    configurarMock({
+      pacote: docEmpacotamento({
+        credit: { text: null, warning: 'no_permission' },
+        current: {
+          description:
+            'Resumo.\n\n--- Capítulos ---\n00:00 Abertura\n00:10 Meio\n00:24 Fechamento\n--- Fim dos capítulos ---',
+        },
+        chapters: { applicable: true, status: 'ready', canGenerate: true, hasDelimiters: true, count: 3 },
+      }),
+      extra: (cmd) =>
+        cmd === 'thumbnail.get'
+          ? { current: null, history: [], job: null, cut: { startUs: 0, endUs: 20_000_000 } }
+          : undefined,
+    })
+    const { container: c2 } = render(
+      <ProvedorDicas>
+        <ProvedorToast>
+          <ProvedorAtalhos>
+            <Harness />
+          </ProvedorAtalhos>
+        </ProvedorToast>
+      </ProvedorDicas>,
+    )
+
+    await waitFor(() => expect(within(c2).getByRole('textbox', { name: 'Título' })).toBeInTheDocument())
+    expect(c2.querySelector('h2')).not.toBeNull()
+    const headings = Array.from(c2.querySelectorAll('h2, h3')).map((h) => Number(h.tagName[1]))
+    expect(headings[0]).toBe(2)
+
+    const linkPerm = within(c2).getByRole('link', { name: 'Registrar Permissão na Fonte' })
+    expect(linkPerm.className).toContain('min-h-6')
+
+    expect(
+      within(c2).getByText(/ultrapassa a duração do Corte/i),
+    ).toBeInTheDocument()
+
+    const btnSugerirNovamente = within(c2).getByRole('button', { name: 'Sugerir novamente' })
+    expect(btnSugerirNovamente.parentElement?.className).toContain('items-center')
+    expect(btnSugerirNovamente.parentElement?.className).not.toContain('items-end')
   })
 })

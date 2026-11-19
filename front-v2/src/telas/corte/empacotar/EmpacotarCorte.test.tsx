@@ -6,7 +6,9 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { ProvedorAtalhos } from '~/comandos/atalhos'
 import { ErroCore } from '~/core/cliente'
 import { criarFila, type Fila } from '~/core/progresso'
+import { Shell } from '~/shell/Shell'
 import { criarStoreFontesProjeto, type FonteProjeto } from '~/stores/fontesProjeto'
+import { ContextoCorteConectado } from '~/telas/corte/ContextoCorteConectado'
 import { EmpacotarCorte } from '~/telas/corte/empacotar/EmpacotarCorte'
 
 const chamarMock = vi.fn()
@@ -371,5 +373,123 @@ describe('Tela EmpacotarCorte (#/projeto/:id/corte/:corteId/empacotar)', () => {
     await waitFor(() => expect(ficha.contains(document.activeElement)).toBe(true))
     fireEvent.keyDown(window, { key: 'F6', shiftKey: true })
     await waitFor(() => expect(capa.contains(document.activeElement)).toBe(true))
+  })
+
+  it('UI-100 / UI-101 / UI-103: F6 inclui contexto e fila, exatamente 1 .bg-sinal e sem salto de heading', async () => {
+    configurarMocks()
+    window.location.hash = '#/projeto/demo/corte/201/empacotar?run=2'
+
+    render(
+      envolver(
+        <Shell
+          projeto={{ id: 'demo', name: 'Demo', path: '/projetos/Demo.clipes' }}
+          rota={{ tela: 'corte', projeto: 'demo', corte: '201', aba: 'empacotar', run: '2' }}
+          semPaddingConteudo
+          meio={
+            <ContextoCorteConectado
+              projetoId="demo"
+              corteId="201"
+              subAbaAtiva="empacotar"
+              runId="2"
+              fila={filaTeste}
+            />
+          }
+          fila={filaTeste}
+        >
+          <EmpacotarCorte
+            projetoId="demo"
+            projetoPath="/projetos/Demo.clipes"
+            corteId="201"
+            runId="2"
+            storeFontes={criarStoreFontesProjeto()}
+            fila={filaTeste}
+          />
+        </Shell>,
+      ),
+    )
+
+    expect(await screen.findByRole('textbox', { name: 'Título' })).toBeInTheDocument()
+
+    // UI-101: exatamente 1 botão bg-sinal ("Exportar Corte")
+    expect(document.querySelectorAll('button.bg-sinal')).toHaveLength(1)
+
+    // UI-103: h1 seguido de h2 antes de h3
+    const headings = Array.from(document.querySelectorAll('h1, h2, h3, h4')).map((h) =>
+      Number(h.tagName[1]),
+    )
+    expect(headings.filter((l) => l === 1)).toHaveLength(1)
+    for (let i = 1; i < headings.length; i += 1) {
+      expect(headings[i] - headings[i - 1]).toBeLessThanOrEqual(1)
+    }
+
+    // UI-100: F6 inclui contexto e fila aberta (Ctrl+J)
+    fireEvent.keyDown(window, { key: 'j', ctrlKey: true })
+    const filaRegiao = await screen.findByRole('complementary', { name: 'Fila de Jobs' })
+    const topo = document.querySelector('[data-regiao="topo"]')!
+    const contexto = document.querySelector('[data-regiao="contexto"]')!
+    const capa = document.querySelector('[data-regiao="empacotar-capa"]')!
+    const ficha = document.querySelector('[data-regiao="empacotar-ficha"]')!
+    const rodape = document.querySelector('[data-regiao="rodape"]')!
+
+    topo.querySelector<HTMLElement>('button')?.focus()
+    fireEvent.keyDown(window, { key: 'F6' })
+    expect(contexto.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(window, { key: 'F6' })
+    expect(capa.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(window, { key: 'F6' })
+    expect(ficha.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(window, { key: 'F6' })
+    expect(filaRegiao.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(window, { key: 'F6' })
+    expect(rodape.contains(document.activeElement)).toBe(true)
+  })
+
+  it('UI-101 / UI-104: ?estado=vazio mesmo com selection.list vazio e fontes[0] offline não exibe Fonte offline e tem 1 .bg-sinal', async () => {
+    configurarMocks({
+      extra: (cmd) => {
+        if (cmd === 'sources.list') return [FONTES[1], FONTES[0]]
+        if (cmd === 'selection.list') return []
+        return undefined
+      },
+    })
+    window.location.hash = '#/projeto/demo/corte/201/empacotar?run=2&estado=vazio'
+
+    render(
+      envolver(
+        <Shell
+          projeto={{ id: 'demo', name: 'Demo', path: '/projetos/Demo.clipes' }}
+          rota={{ tela: 'corte', projeto: 'demo', corte: '201', aba: 'empacotar', run: '2' }}
+          semPaddingConteudo
+          meio={
+            <ContextoCorteConectado
+              projetoId="demo"
+              corteId="201"
+              subAbaAtiva="empacotar"
+              runId="2"
+              fila={filaTeste}
+            />
+          }
+          fila={filaTeste}
+        >
+          <EmpacotarCorte
+            projetoId="demo"
+            projetoPath="/projetos/Demo.clipes"
+            corteId="201"
+            runId="2"
+            storeFontes={criarStoreFontesProjeto()}
+            fila={filaTeste}
+          />
+        </Shell>,
+      ),
+    )
+
+    const btnSugerir = await screen.findByRole('button', { name: 'Sugerir Empacotamento' })
+    expect(screen.queryByText('Fonte offline')).not.toBeInTheDocument()
+    expect(btnSugerir.className.split(/\s+/)).toContain('bg-sinal')
+    expect(document.querySelectorAll('button.bg-sinal')).toHaveLength(1)
   })
 })

@@ -331,4 +331,43 @@ describe('<PassoAngulo>', () => {
     expect(store.recarregarAngulos).toHaveBeenCalled()
     expect(store.recarregarRoteiro).toHaveBeenCalled()
   })
+
+  it('UI-105: não duplica o cartão do ângulo escolhido na lista de sugestões abaixo', () => {
+    const anguloEscolhido = {
+      name: 'Custo da escolha',
+      promise: 'Entenda por que decidir cedo muda o resultado.',
+      audience: 'Quem precisa decidir',
+      sentence_ids: [10, 11],
+    }
+    const store = criarStoreFake({
+      angulos: {
+        schemaVersion: 1,
+        revision: 1,
+        detectedLanguage: 'pt-BR',
+        languageRequired: false,
+        selected: anguloEscolhido,
+        angles: [
+          anguloEscolhido,
+          { name: 'Aprender com o erro', promise: 'Descubra como transformar uma falha.', sentence_ids: [12] },
+        ],
+        generations: [{ generation: 1 }],
+        job: null,
+      },
+    })
+
+    render(
+      envolver(
+        <PassoAngulo
+          candidateId={201}
+          store={store}
+          fila={criarFila(() => 'demo')}
+          aoClicarChipFrase={vi.fn()}
+          aoAvancarPasso={vi.fn()}
+        />,
+      ),
+    )
+
+    expect(screen.getAllByText('Custo da escolha')).toHaveLength(1)
+    expect(screen.getByText('Aprender com o erro')).toBeInTheDocument()
+  })
 })
