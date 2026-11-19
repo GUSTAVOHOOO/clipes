@@ -1,5 +1,4 @@
 import { expect, test, type Page } from '@playwright/test'
-import fs from 'node:fs'
 
 async function verificarSemRolagemExterna(page: Page) {
   const rolagem = await page.evaluate(() => ({
@@ -94,9 +93,15 @@ test.describe('Tela Relatos e Diagnóstico (#/relatos)', () => {
     const downloadPromise = page.waitForEvent('download')
     await page.getByRole('button', { name: /Exportar diagnóstico/i }).click()
     const download = await downloadPromise
-    const arquivo = await download.path()
-    expect(arquivo).toBeTruthy()
-    const conteudoExportado = fs.readFileSync(arquivo!, 'utf-8')
+    const stream = await download.createReadStream()
+    expect(stream).toBeTruthy()
+    const decoder = new TextDecoder()
+    let conteudoExportado = ''
+    for await (const chunk of stream!) {
+      conteudoExportado +=
+        typeof chunk === 'string' ? chunk : decoder.decode(chunk as Uint8Array, { stream: true })
+    }
+    conteudoExportado += decoder.decode()
     expect(conteudoExportado).toBe('Etapa da falha: exportacao\nLinha editada no E2E')
 
     // 7. URL > 8.000 bytes copia diagnóstico e anuncia em role="status"
