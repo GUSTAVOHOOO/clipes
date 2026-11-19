@@ -158,3 +158,70 @@ fn migration_backup_is_valid_and_unknown_migration_is_rejected() {
     );
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn projects_create_cleans_up_partial_dir_on_failure_and_keeps_preexisting() {
+    let _guard = PROJECT_TEST.lock().unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("clipes-512-")
+        .tempdir()
+        .unwrap();
+    let data_dir = root.path().join("data");
+    std::env::set_var("CLIPES_DATA_DIR", &data_dir);
+
+    let run = |name, args| dispatch(name, args, &mut |_| {});
+
+    // 1. Pasta que já existia antes da chamada nunca pode ser removida em caso de erro.
+    let existing = root.path().join("Existente.clipes");
+    fs::create_dir(&existing).unwrap();
+    let sentinel = existing.join("sentinel.txt");
+    fs::write(&sentinel, "preservar").unwrap();
+    let existing_err = run(
+        "projects.create",
+        json!({"parent": root.path(), "name": "Existente"}),
+    )
+    .unwrap_err();
+    assert_eq!(existing_err.code, "project_create");
+    assert!(existing.is_dir(), "pasta preexistente deve permanecer");
+    assert_eq!(fs::read_to_string(&sentinel).unwrap(), "preservar");
+
+    // 2. Cria Projeto válido e mantém um job ativo para forçar falha em `open` após `create_dir`.
+    run(
+        "projects.create",
+        json!({"parent": root.path(), "name": "Ativo"}),
+    )
+    .unwrap();
+    let job = clipes_core::projects::start_job().unwrap();
+    let partial_busy = root.path().join("ParcialBusy.clipes");
+    let busy_err = run(
+        "projects.create",
+        json!({"parent": root.path(), "name": "ParcialBusy"}),
+    )
+    .unwrap_err();
+    assert_eq!(busy_err.code, "project_busy");
+    assert!(
+        !partial_busy.exists(),
+        "pasta criada nesta chamada deveria ser removida após falha em open()"
+    );
+    drop(job);
+    run("projects.close", json!({})).unwrap();
+
+    // 3. Força falha após `open_session` (remember() falha porque CLIPES_DATA_DIR é um arquivo).
+    let bad_data = root.path().join("data-file");
+    fs::write(&bad_data, "nao-eh-diretorio").unwrap();
+    std::env::set_var("CLIPES_DATA_DIR", &bad_data);
+    let partial_lib = root.path().join("ParcialLib.clipes");
+    let lib_err = run(
+        "projects.create",
+        json!({"parent": root.path(), "name": "ParcialLib"}),
+    )
+    .unwrap_err();
+    assert_eq!(lib_err.code, "library");
+    assert!(
+        !partial_lib.exists(),
+        "pasta criada nesta chamada deveria ser removida mesmo se falhar após open_session"
+    );
+
+    let _ = run("projects.close", json!({}));
+    std::env::remove_var("CLIPES_DATA_DIR");
+}

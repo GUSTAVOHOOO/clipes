@@ -387,4 +387,20 @@ mod tests {
 
         assert_eq!(destroyed, 0);
     }
+
+    #[test]
+    fn default_capability_enables_opener_open_path_with_executable_denies() {
+        let raw = include_str!("../capabilities/default.json");
+        let cap: serde_json::Value = serde_json::from_str(raw).expect("valid capability json");
+        let perms = cap["permissions"].as_array().expect("permissions array");
+        let open_path = perms
+            .iter()
+            .find(|p| p["identifier"] == "opener:allow-open-path")
+            .expect("opener:allow-open-path capability must be configured");
+        let allows = open_path["allow"].as_array().expect("allow array");
+        assert!(allows.iter().any(|entry| entry["path"] == "**"));
+        let denies = open_path["deny"].as_array().expect("deny array");
+        assert!(denies.iter().any(|entry| entry["path"] == "**/*.exe"));
+        assert!(denies.iter().any(|entry| entry["path"] == "**/*.sh"));
+    }
 }

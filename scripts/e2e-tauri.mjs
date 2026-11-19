@@ -1478,6 +1478,50 @@ async function runSession3(ui, ctx) {
   await ui.waitForText('Revisar cada trecho', 'main');
   await ui.shot('s3-06-exportacao.png');
 
+  logStep('Sessão 3: capability opener:allow-open-path (#511) permite destino livre e nega executáveis…');
+  const probeAllowed = path.join(ctx.tempRoot, 'probe-open-path.mp4');
+  const probeOtherDrive =
+    process.platform === 'win32' ? 'D:\\ClipesProbe\\corte-probe.mp4' : '/mnt/clipes-probe/corte-probe.mp4';
+  const probeDeniedExe = path.join(ctx.tempRoot, 'probe-open-path.exe');
+  const probeResults = await ui.browser.execute(async (allowedPath, otherDrivePath, deniedExePath) => {
+    const invoke = window.__TAURI_INTERNALS__?.invoke;
+    if (typeof invoke !== 'function') {
+      return { error: 'window.__TAURI_INTERNALS__.invoke indisponível' };
+    }
+    const call = async target => {
+      try {
+        await invoke('plugin:opener|open_path', { path: target });
+        return { ok: true, error: null };
+      } catch (err) {
+        return { ok: false, error: String(err?.message ?? err) };
+      }
+    };
+    return {
+      allowed: await call(allowedPath),
+      otherDrive: await call(otherDrivePath),
+      deniedExe: await call(deniedExePath),
+    };
+  }, probeAllowed, probeOtherDrive, probeDeniedExe);
+  assert.equal(probeResults.error, undefined);
+  assert.equal(probeResults.allowed.ok, false);
+  assert.doesNotMatch(
+    probeResults.allowed.error ?? '',
+    /not allowed/i,
+    `opener:allow-open-path foi negado por capability/escopo: ${probeResults.allowed.error}`,
+  );
+  assert.equal(probeResults.otherDrive.ok, false);
+  assert.doesNotMatch(
+    probeResults.otherDrive.error ?? '',
+    /not allowed/i,
+    `opener:allow-open-path recusou caminho fora de $HOME: ${probeResults.otherDrive.error}`,
+  );
+  assert.equal(probeResults.deniedExe.ok, false);
+  assert.match(
+    probeResults.deniedExe.error ?? '',
+    /Not allowed to open path/i,
+    `extensão executável deveria ser bloqueada pelo deny do escopo: ${probeResults.deniedExe.error}`,
+  );
+
   logStep('Sessão 3: fechamento coordenado (#291) sem jobs ativos…');
   await ui.browser.execute(() => window.close());
 }
