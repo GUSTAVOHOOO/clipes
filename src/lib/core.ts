@@ -45,8 +45,60 @@ export type EventoProgressoMock = {
   error: { code: string; message: string } | null;
 };
 
+export type NivelConsoleMock = 'info' | 'warn' | 'error';
+
+export type EventoConsoleMock = {
+  seq: number;
+  timestampMs: number;
+  job: string;
+  project?: string | null;
+  origin: string;
+  level: NivelConsoleMock;
+  simple: string;
+  technical?: string | null;
+};
+
+const MAX_CONSOLE_HISTORY_MOCK = 500;
 const progressSubscribers = new Set<(evento: EventoProgressoMock) => void>();
+const consoleSubscribers = new Set<(evento: EventoConsoleMock) => void>();
+let consoleHistoryMock: EventoConsoleMock[] = [];
+let consoleSeqMock = 1;
 const activeMockJobs = new Map<string, Set<string>>();
+
+export function assinarConsoleMock(ouvinte: (evento: EventoConsoleMock) => void): () => void {
+  consoleSubscribers.add(ouvinte);
+  return () => {
+    consoleSubscribers.delete(ouvinte);
+  };
+}
+
+export function limparConsoleMock(): void {
+  consoleHistoryMock = [];
+  consoleSeqMock = 1;
+}
+
+export function emitirConsoleMock(
+  evento: Omit<EventoConsoleMock, 'seq' | 'timestampMs'> & { seq?: number; timestampMs?: number },
+): EventoConsoleMock {
+  const completo: EventoConsoleMock = {
+    seq: evento.seq ?? consoleSeqMock++,
+    timestampMs: evento.timestampMs ?? Date.now(),
+    job: evento.job,
+    ...(evento.project !== undefined ? { project: evento.project } : {}),
+    origin: evento.origin,
+    level: evento.level,
+    simple: evento.simple,
+    ...(evento.technical !== undefined ? { technical: evento.technical } : {}),
+  };
+  if (consoleHistoryMock.length >= MAX_CONSOLE_HISTORY_MOCK) {
+    consoleHistoryMock.shift();
+  }
+  consoleHistoryMock.push(completo);
+  for (const ouvinte of consoleSubscribers) {
+    ouvinte(completo);
+  }
+  return completo;
+}
 
 export function assinarProgressoMock(ouvinte: (evento: EventoProgressoMock) => void): () => void {
   progressSubscribers.add(ouvinte);
@@ -3616,6 +3668,15 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
     }
     if (name === 'app.version') return { version } as T;
     if (name === 'app.platform') return { os: 'linux' } as T;
+    if (name === 'console.history') {
+      const a = args as { project?: unknown; limit?: unknown };
+      const project = typeof a.project === 'string' && a.project.trim() ? a.project.trim() : null;
+      const limit = typeof a.limit === 'number' && Number.isFinite(a.limit) ? Math.min(500, Math.max(1, Math.floor(a.limit))) : 500;
+      const filtrados = project
+        ? consoleHistoryMock.filter((ev) => ev.project == null || ev.project === project)
+        : consoleHistoryMock;
+      return { items: filtrados.slice(-limit) } as T;
+    }
     if (name === 'components.cancel') {
       const id = (args as { id?: string }).id;
       if (id) activeComponentJobs.get(id)?.cancel();
