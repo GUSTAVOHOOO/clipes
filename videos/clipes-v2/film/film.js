@@ -336,6 +336,7 @@
   // ================================================================= 7 · Cartão final (48 → 60)
   const SCISSORS = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--sinal)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">'
     + '<g class="bl1"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M14.8 14.8 20 20"/></g><g class="bl2"><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/></g></svg>';
+  const XOUT = 58.9;   // beat em que o texto do cartão final começa a sair
   scene({
     name: 'final', from: 'logo', to: 'done', pre: 0.34, cut: true,   // entra quando a luz do botão completa: no máximo 1 quadro laranja chapado
     build(root, S) {
@@ -345,6 +346,10 @@
       S.shots = ['cortes', 'corte-editar', 'exportacao'].map((n, i) => {
         const d = el('div', { class: 'vp', style: `width:1440px;height:900px;border-radius:18px;transform-origin:0 0` }, S.strip);
         el('img', { class: 'shot', src: CAP + n + '.jpg' }, d);
+        if (n === 'corte-editar') {   // a Prévia da captura é preta: o mesmo vídeo de demonstração e a legenda real por cima, para a faixa ler como o app
+          S.F2 = foot(d, 68, 120, rectCss(R.prevEd, 'border-radius:6px'));
+          el('img', { class: 'abs', src: CAP + 'corte-editar.leg.png', style: rectCss(R.prevEd) }, d);
+        }
         return reg(d);
       });
       S.push = reg(el('div', { class: 'abs', style: `width:${W}px;height:${H}px;transform-origin:${PAD}px ${H / 2}px` }, root));
@@ -369,20 +374,23 @@
     run(t, b, S) {
       // a cobertura laranja do plano 6 recolhe para cima e revela o cartão
       // a cobertura recolhe para BAIXO: o logo (no alto) aparece primeiro e nunca é cruzado por ela
-      const c = ease.inOut(seg(t, 47.72, 48.08));   // wipe contínuo de ~0,22 s; nada laranja depois de 24,1 s
+      const c = ease.inOut(seg(t, 47.70, 47.98));   // wipe de ~0,14 s: o topo (logo) é descoberto já em f717 e nada fica laranja depois de f720
       put(S.cover, { clip: `inset(${(100 * c).toFixed(3)}% 0 0 0)`, hide: c > 0.999 });
+      drawFoot(S.F2, t);
       put(S.push, { s: 1 + 0.08 * seg(t, 48, 60) });   // linear: nunca para, nem no último quadro
-      const LS = P(80, 76), lk = C.sp(t, 47.66, { response: 0.32, damping: 0.55 });   // cai de cima, pousa no beat 48 e assenta com overshoot visível
+      const LS = P(80, 76), lk = C.sp(t, 47.74, { response: 0.32, damping: 0.55 });   // cai de cima, pousa no beat 48 e assenta com overshoot visível
       put(S.lock, { y: -LS * 0.8 * (1 - lk) });
       const pl = spHit(t, 48.6, 'snappy');
-      put(S.pill, { y: 80 * (1 - pl), hide: pl < 0.01 });
+      const pO = sp(t, beatOf(XOUT) - 0.14, 'snappy');   // saída do pílula junto com as linhas (emenda do loop)
+      put(S.pill, { y: 80 * (1 - pl) - 80 * pO, hide: pl < 0.01 || pO > 0.995 });
       const sn = spHit(t, 'snip', 'snappy') - sp(t, beatOf('snip') + 0.35, 'default');
       S.bl.forEach((g, i) => put(g, { css: { transformOrigin: '12px 12px', transformBox: 'view-box', transform: `rotate(${((i ? -1 : 1) * 28 * sn).toFixed(3)}deg)` } }));
-      riseRows(t, S.tag, 'tag');
-      riseRows(t, [S.cta[0]], beatOf('cta') - 0.6);   // a linha de ênfase (Windows e Linux.) é a que cai no cue
-      riseRows(t, [S.cta[1]], 'cta', null, { stagger: 0.03 });
-      riseRows(t, S.url, 'url', null, { stagger: 0.02 });
-      riseRows(t, S.lic, 'lic', null, { preset: 'snappy', stagger: 0.02, rowGap: 0.05 });
+      // últimos 0,4 s: as linhas saem por máscara (de cima para baixo na ordem de leitura) e sobram marca + telas, perto do f0 (emenda do loop)
+      riseRows(t, S.tag, 'tag', XOUT);
+      riseRows(t, [S.cta[0]], beatOf('cta') - 0.6, XOUT + 0.1);   // a linha de ênfase (Windows e Linux.) é a que cai no cue
+      riseRows(t, [S.cta[1]], 'cta', XOUT + 0.1, { stagger: 0.03 });
+      riseRows(t, S.url, 'url', XOUT + 0.2, { stagger: 0.02 });
+      riseRows(t, S.lic, 'lic', XOUT + 0.3, { preset: 'snappy', stagger: 0.02, rowGap: 0.05 });
       // parallax: as telas sobem/andam mais devagar que a tipografia e nunca param
       const e = sp(t, 48.3, CAMSP), d = seg(t, 48, 60);
       const stp = ['tag', 'cta', 'url', 'lic', 'snip'].reduce((a, m) => a + sp(t, beatOf(m) - 0.1, 'default'), 0);
