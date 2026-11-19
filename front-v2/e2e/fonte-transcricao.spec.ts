@@ -105,16 +105,30 @@ test.describe('Tela Detalhe da Fonte e Transcrição (#/projeto/:id/fontes/:font
     await expect(
       page.getByRole('button', { name: /^Refazer(?!\s+transcrição)/i }).locator('kbd'),
     ).toBeVisible()
-    const ultimoBotaoMontado = leitor.locator('button[data-word]').last()
-    const ultimaPosMontada = Number(await ultimoBotaoMontado.getAttribute('data-word'))
+    const ultimaPosMontada = Number(
+      await leitor.locator('button[data-word]').last().getAttribute('data-word'),
+    )
+    expect(ultimaPosMontada).toBeGreaterThan(0)
+    const ultimoBotaoMontado = leitor.locator(`button[data-word="${ultimaPosMontada}"]`)
     await ultimoBotaoMontado.focus()
+    await expect(ultimoBotaoMontado).toBeFocused()
     await page.keyboard.press('ArrowRight')
-    const focadoDepoisDir = leitor.locator('button[data-word]:focus')
+    let posDepoisDir = -1
+    await expect
+      .poll(async () => {
+        posDepoisDir = await leitor.evaluate((el) => {
+          const focado = el.querySelector<HTMLButtonElement>('button[data-word]:focus')
+          const raw = focado?.getAttribute('data-word')
+          return raw == null ? -1 : Number(raw)
+        })
+        return posDepoisDir
+      })
+      .toBeGreaterThan(ultimaPosMontada)
+    const focadoDepoisDir = leitor.locator(`button[data-word="${posDepoisDir}"]`)
     await expect(focadoDepoisDir).toBeVisible()
-    const posDepoisDir = Number(await focadoDepoisDir.getAttribute('data-word'))
-    expect(posDepoisDir).toBeGreaterThan(ultimaPosMontada)
+    await expect(focadoDepoisDir).toBeFocused()
     await page.keyboard.press('ArrowLeft')
-    await expect(leitor.locator(`button[data-word="${ultimaPosMontada}"]`)).toBeFocused()
+    await expect(ultimoBotaoMontado).toBeFocused()
 
     await page.keyboard.press('Control+f')
     const buscaLeitor = page.getByRole('searchbox', { name: 'Buscar na Transcrição' })
