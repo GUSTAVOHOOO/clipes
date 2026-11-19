@@ -134,9 +134,23 @@ export async function abrirUrlExterna(url: string): Promise<ResultadoAbertura> {
   return { ok: false, copiado }
 }
 
+async function obterSistemaOperacionalTauri(): Promise<string | null> {
+  try {
+    const res = await invoke<{ os?: unknown }>('core_dispatch', {
+      name: 'app.platform',
+      arguments: {},
+    })
+    return typeof res?.os === 'string' && res.os.length > 0 ? res.os : null
+  } catch {
+    return null
+  }
+}
+
 /**
- * Abre arquivo ou pasta no gerenciador do SO. Quando `opener` não permite ou fora do Tauri,
- * copia o caminho para a área de transferência sem lançar exceção.
+ * Abre arquivo ou pasta no gerenciador do SO. No Windows usa `open_path_windows`
+ * (contorna o travamento do `tauri-plugin-opener` em `ShellExecuteExW`); nos demais SOs
+ * usa `plugin:opener|open_path`. Em qualquer falha ou fora do Tauri, copia o caminho
+ * para a área de transferência sem lançar exceção.
  */
 export async function abrirNoSistema(caminho: string): Promise<ResultadoAbertura> {
   const e2e = obterEstadoE2E() ?? (import.meta.env.VITE_E2E === '1' ? garantirEstadoE2E() : undefined)
@@ -148,7 +162,12 @@ export async function abrirNoSistema(caminho: string): Promise<ResultadoAbertura
 
   if (isTauri()) {
     try {
-      await invoke('plugin:opener|open_path', { path: caminho })
+      const os = await obterSistemaOperacionalTauri()
+      if (os === 'windows') {
+        await invoke('open_path_windows', { path: caminho })
+      } else {
+        await invoke('plugin:opener|open_path', { path: caminho })
+      }
       return { ok: true, copiado: false }
     } catch {
       const copiado = await copiarTexto(caminho)

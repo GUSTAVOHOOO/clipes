@@ -3615,6 +3615,7 @@ export async function coreDispatch<T>(name: string, args: object): Promise<T> {
       return { verified: true } as T;
     }
     if (name === 'app.version') return { version } as T;
+    if (name === 'app.platform') return { os: 'linux' } as T;
     if (name === 'components.cancel') {
       const id = (args as { id?: string }).id;
       if (id) activeComponentJobs.get(id)?.cancel();

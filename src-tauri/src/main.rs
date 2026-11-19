@@ -1,3 +1,4 @@
+mod explorer;
 #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
 mod media_server;
 
@@ -254,7 +255,11 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .invoke_handler(tauri::generate_handler![core_dispatch, media_base_url])
+        .invoke_handler(tauri::generate_handler![
+            core_dispatch,
+            media_base_url,
+            explorer::open_path_windows
+        ])
         .run(tauri::generate_context!())
         .expect("failed to run Clipes");
 }
