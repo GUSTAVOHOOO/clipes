@@ -1,31 +1,7 @@
 # Review log
 
-Every check is made from the rendered MP4s (`python3 scripts/review.py <round>`) plus the per-beat contact sheets
-(`node scripts/render.mjs --sheet`). Nothing is judged from the page. Critic prompt: the skill's `reference/CRITIQUE.md`.
-
-Scores 1–10. Ship only when EVERY score is ≥ 8, after at least 3 rounds.
+Cada rodada é julgada pelos MP4 renderizados (`scripts/review.py <rodada>`) e pelas folhas de contato por batida (`scripts/render.mjs --sheet`), nunca pela página. Críticos: subagentes novos, que não escreveram o filme, com o prompt `reference/CRITIQUE.md` da skill motion-reel.
+Notas de 1 a 10. Só entrega com TODAS as notas ≥ 8, depois de pelo menos 3 rodadas.
+O som também é ouvido pelo earshot 0.4.1 (`timeline`, `critique`); as leituras ficam na seção "earshot" de cada rodada.
 
 ---
-
-## Round 1: <what was rendered, when>
-
-| Criterion | Score | Evidence (timestamps, frames, metrics) |
-|---|---|---|
-| Hook (first 2 s) | | |
-| Readability at phone size | | |
-| Motion quality | | |
-| Variety / pacing | | |
-| Brand accuracy | | |
-| Sound sync | | |
-| Composition (every format) | | |
-| Polish | | |
-
-**3 worst problems**
-1.
-2.
-3.
-
-**Fixes for round 2**
-1.
-2.
-3.

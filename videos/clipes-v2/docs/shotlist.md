@@ -1,6 +1,6 @@
 # Shotlist: Clipes v2.0.0 · 30 s · 120 BPM · 60 batidas · formatos 16:9 e 9:16
 
-STATUS: RASCUNHO, aguardando o OK do coordenador (em nome do mantenedor). Nada será construído antes de constar APROVADO.
+STATUS: APROVADO em 19/11/2026 pelo coordenador em nome do mantenedor (msg_53b578b86951). Condições: dados de demonstração só como dados; nada de telas inventadas; registro no brief.md.
 
 Batidas na grade medida (`beats.json`: 120,04 BPM, resíduo máx. 0 ms). 1 batida = 0,5 s; 1 compasso = 2 s. Cortes secos em linha de compasso (8, 12, 20, 28, 40, 48).
 Regras: gancho legível no quadro 0, algo novo a cada 2–4 s, cartão final parado no máximo 2 s e nunca estático.

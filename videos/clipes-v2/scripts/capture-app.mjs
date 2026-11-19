@@ -128,6 +128,21 @@ for (const p of PLANOS) {
     return { previas };
   }, FALAS);
   await page.waitForTimeout(150);
+  // retângulos medidos (px CSS) para a câmera e as máscaras do filme
+  Object.assign(info, await page.evaluate(() => {
+    const R = (e) => { const r = e.getBoundingClientRect(); return { x: +r.x.toFixed(1), y: +r.y.toFixed(1), w: +r.width.toFixed(1), h: +r.height.toFixed(1) }; };
+    const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight; };
+    const frases = [...document.querySelectorAll('[aria-label^="Frase "]')].filter(vis).map((e) => ({ id: e.getAttribute('aria-label'), ...R(e) }));
+    const botoes = {};
+    for (const b of document.querySelectorAll('button, a')) {
+      const t = (b.textContent || '').trim().replace(/\s+/g, ' ');
+      if (t && t.length < 50 && vis(b) && !(t in botoes)) botoes[t] = R(b);
+    }
+    const titulos = {};
+    for (const h of document.querySelectorAll('h1, h2, h3')) if (vis(h)) titulos[h.textContent.trim()] = R(h);
+    const legenda = [...document.querySelectorAll('[data-caption-word]')].filter(vis).map((e) => ({ t: e.textContent, ...R(e) }));
+    return { frases, botoes, titulos, legenda };
+  }));
   const arq = path.join(outDir, `${p.nome}.png`);
   await page.screenshot({ path: arq });
   rects[p.nome] = info;
