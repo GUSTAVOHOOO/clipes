@@ -6,6 +6,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "dev": "VITE_CORE_MOCK=1 vite --host 127.0.0.1 --port 1430 --strictPort",
+    "dev:tauri": "vite --host 127.0.0.1 --port 1430 --strictPort",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && vite build",

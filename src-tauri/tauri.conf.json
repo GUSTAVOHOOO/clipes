@@ -4,10 +4,10 @@
   "version": "1.0.0",
   "identifier": "io.github.gustavohooo.clipes",
   "build": {
-    "beforeDevCommand": "bun run dev",
-    "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "bun run build",
-    "frontendDist": "../dist"
+    "beforeDevCommand": "bun run --cwd front-v2 dev:tauri",
+    "devUrl": "http://127.0.0.1:1430",
+    "beforeBuildCommand": "bun run --cwd front-v2 build",
+    "frontendDist": "../front-v2/dist"
   },
   "app": { "windows": [{ "title": "Clipes", "width": 900, "height": 600 }] },
   "bundle": {

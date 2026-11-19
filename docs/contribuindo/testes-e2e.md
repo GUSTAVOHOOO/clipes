@@ -6,7 +6,7 @@ O repositório mantém duas suítes complementares de interface. Consulte o [glo
 
 | Aspecto | `bun run test:ui` ([`scripts/ui.mjs`](../../scripts/ui.mjs)) | `bun run test:e2e` ([`scripts/e2e-tauri.mjs`](../../scripts/e2e-tauri.mjs)) |
 | --- | --- | --- |
-| Alvo | Servidor Vite no navegador com `VITE_CORE_MOCK=1` e `VITE_UPDATER_MOCK=available` | Binário desktop nativo Tauri v2 (`target/debug/clipes` / `clipes.exe`) compilado com `VITE_E2E=1` |
+| Alvo | Servidor Vite no navegador com `VITE_CORE_MOCK=1` e `VITE_UPDATER_MOCK=available` | Binário desktop nativo Tauri v2 (`target/debug/clipes` / `clipes.exe`) com o front v2 embutido, compilado com `VITE_E2E=1` |
 | Motor / driver | Playwright + Chromium | `tauri-driver` + driver nativo da WebView + WebdriverIO (`remote()`, `browserName: 'wry'`) |
 | Núcleo (`clipes-core`) | Simulado em TypeScript na camada de UI | Real em Rust via IPC do Tauri (`core_dispatch`), SQLite (`project.sqlite`), fila de jobs e subprocessos |
 | Capturas de tela | `shots/` | `shots-e2e/` (ignorado no `.gitignore`) |
@@ -74,15 +74,15 @@ bun run test:e2e
 VITE_E2E=1 bun run tauri build --debug --no-bundle
 ```
 
-`VITE_CORE_MOCK` e `VITE_UPDATER_MOCK` são removidas do ambiente de compilação. O comando roda `tsc --noEmit && vite build`, embute `dist/` no executável `target/debug/clipes` (ou `clipes.exe`), evita empacotar instaladores (`--no-bundle`) e preserva `debug_assertions` ativo em Rust (`--debug`).
+`VITE_CORE_MOCK` e `VITE_UPDATER_MOCK` são removidas do ambiente de compilação. O comando roda `tsc --noEmit && vite build`, embute `front-v2/dist/` no executável `target/debug/clipes` (ou `clipes.exe`), evita empacotar instaladores (`--no-bundle`) e preserva `debug_assertions` ativo em Rust (`--debug`).
 
 Na conexão WebDriver, o script inicia `tauri-driver` em portas locais livres (`--port` e `--native-port`) e conecta via `remote()` do `webdriverio` com `browserName: 'wry'` e `'wdio:enforceWebDriverClassic': true` (necessário porque `tauri-driver` e `WebKitWebDriver` falam WebDriver clássico, não BiDi).
 
-### 2. Fronteira nativa da UI (`src/lib/desktop.ts`)
+### 2. Fronteira nativa da UI (`front-v2/src/core/desktop.ts`)
 
 No Tauri v2, `window.__TAURI_INTERNALS__.invoke` é definida como não gravável e não configurável, de modo que não deve ser sobrescrita na WebView. Além disso, diálogos nativos do sistema (`@tauri-apps/plugin-dialog`), abertura de links externos (`@tauri-apps/plugin-opener`), escrita na área de transferência (`@tauri-apps/plugin-clipboard-manager`), `window.confirm` nativo e a verificação automática do updater no boot (`@tauri-apps/plugin-updater`) bloqueariam a execução automatizada ou alterariam o estado da máquina hospedeira.
 
-[`src/lib/desktop.ts`](../../src/lib/desktop.ts) (tipado em [`src/vite-env.d.ts`](../../src/vite-env.d.ts)) centraliza seis funções de fronteira: `openDialog`, `saveDialog`, `openExternalUrl`, `copyText`, `confirmAction` e `getUpdaterBehavior` (`shouldMockUpdater`).
+[`front-v2/src/core/desktop.ts`](../../front-v2/src/core/desktop.ts) centraliza as funções de fronteira (`selecionarArquivoDialogo`/`salvarDialogo`, `abrirUrlExterna`, `abrirNoSistema`, `copiarTexto`, `notificarSistema`, `relaunchApp` e `getUpdaterBehavior`). `garantirEstadoE2E()` é chamado em `front-v2/src/main.tsx` quando `VITE_E2E=1`, antes de montar a árvore React.
 
 - Quando `import.meta.env.VITE_E2E === '1'`, o módulo inicializa `window.__CLIPES_E2E__` com `dialogQueue`, `dialogCalls`, `confirmQueue`, `confirmCalls`, `openedUrls`, `copiedText` e `updaterMode` (lido de `sessionStorage.getItem('clipes.e2e.updaterMode')`, padrão `'off'`). O teste enfileira caminhos **reais** dentro do diretório temporário (por exemplo, a pasta pai do Projeto, o vídeo `.mkv` ou o arquivo `diagnostico-clipes.txt`) e aciona os botões reais da UI; o caminho selecionado segue normalmente por `core_dispatch` até o `clipes-core` e o `project.sqlite`.
 - Em builds de produção (`VITE_E2E` ausente), `import.meta.env.VITE_E2E === '1'` avalia estaticamente para `false` e todo o código de `__CLIPES_E2E__` é removido por tree-shaking no bundle final.
@@ -105,25 +105,53 @@ A suíte não faz downloads externos nem chamadas pagas durante os testes:
 - **Servidor HTTP fake local e endereço remoto de teste**: `startFakeProviderServer()` abre um servidor `node:http` em `127.0.0.1:<porta>/v1` que lê o corpo inteiro da requisição antes de responder JSON compatível com OpenAI e armazena os cabeçalhos `Authorization` recebidos. Para testar consentimento remoto, exigência de HTTPS e bloqueios de **Somente local** sem tráfego externo, os testes usam o IP reservado de documentação `192.0.2.10` (`http://192.0.2.10/v1` e `https://192.0.2.10/v1`).
 - **Mídia sintética (`ffmpeg`)**: `prepareFixtures` gera `source.mkv` (3 s, `64x64`, vídeo `mpeg4` e duas faixas de áudio `pcm_s16le` em 440 Hz e 880 Hz) e `url-fixture.mp4` (2 s, `64x64`, vídeo `mpeg4` e áudio `aac`). A sessão define `CLIPES_TRANSCRIBE_BLOCK_SECONDS=2` para fatiar o áudio de 3 s em mais de um bloco.
 
-## Mapa das Sessões 1 e 2 e capturas
+## Mapa das Sessões 1, 2 e 3 e capturas
 
-A execução roda duas sessões consecutivas do aplicativo sobre o mesmo `CLIPES_DATA_DIR`, gravando dez capturas em `shots-e2e/`:
+O e2e roda no **front v2** (`front-v2/`, rotas por hash). A execução roda três sessões consecutivas do aplicativo sobre o mesmo `CLIPES_DATA_DIR`, gravando 16 capturas em `shots-e2e/`. `CLIPES_E2E_SESSIONS` (lista separada por vírgula, padrão `1,2,3`) escolhe as sessões, por exemplo `CLIPES_E2E_SESSIONS=3 bun run test:e2e`.
 
-### Sessão 1 — Primeira execução, Casca, Sobre, Componentes, Relatos e Preferências
+Os helpers de `createUi` falam com os componentes Base UI do front v2: o nome acessível ignora `kbd` e `svg`; `clickButton` também acha `tab`, `radio`, `menuitem`, `summary` e `a[href]` e cai para `click()` programático quando um toast cobre o botão (os toasts são `role="dialog"` com `aria-modal=false`); `selectField` aceita `<select>` nativo ou combobox (abre o gatilho e escolhe o `[role=option]` pelo texto); `setChecked`/`isChecked` leem `aria-checked` de `role=switch|checkbox`; `navigateHash`, `waitForHash` e `reloadApp(hash, textoPronto)` navegam pelas rotas `#/...`. A janela abre em 1366×768.
 
-1. **Assistente de primeira execução** (`01-assistant.png`): abre automaticamente com `CLIPES_DATA_DIR` vazio, detecta `Codex CLI`, `Claude Code CLI` e `OpenCode CLI` no `PATH`, exercita o cancelamento e a confirmação do aviso de envio do Codex CLI e conclui.
-2. **Casca, atualização e Sobre** (`02-palette.png`, `03-about.png`): ativa o fluxo simulado de atualização via `sessionStorage` (`clipes.e2e.updaterMode = 'available'`), instala e fecha o aviso; abre a Paleta de comandos (`Ctrl+K`) para ir a `Sobre` (versão `1.0.0` e `Apache-2.0`); abre e fecha as gavetas esquerda (`[`, conferindo foco preso com `Tab`) e direita (`]`) com `Escape`.
-3. **Componentes** (`04-components.png`): verifica licenças do manifesto (`GPL-3.0-or-later`, `Unlicense`) e estado do `yt-dlp`, cancela confirmação de download, abre/cancela atualização do `yt-dlp`, valida e registra o `ffmpeg` do sistema, salva novo limite de cache (`12` GB), instala o Worker de ML (`Protocolo 1`, `faster-whisper fake`) e confere habilitação e diálogo de download de modelos.
-4. **Relatos e diagnóstico** (`05-report.png`): alterna entre `Sugerir ideia` e `Relatar problema`, valida o aviso de possível segredo ao digitar `"chave"`, revisa o diagnóstico real (`Clipes: 1.0.0`, `FFmpeg do sistema`), exporta `diagnostico-clipes.txt` conferindo os bytes em disco e testa `Abrir no GitHub` abaixo de 8 KB (parâmetros `template=bug.yml` e `body`) e acima de 8 KB (9.000 caracteres copiados para a área de transferência interceptada e URL truncada).
-5. **Preferências** (`06-preferences-light.png`, `07-tasks-costs.png`): salva e remove chave Groq validando `vault.json`; alterna tema (`claro`) e idioma (`en`); testa consentimento remoto (`192.0.2.10`) com trap de foco e recusa de chave em HTTP sem TLS; estima custos em `Costs` (incluindo faixa acima de 272.000 tokens de entrada e sobrescrita/remoção de preço); valida conexão real com o servidor HTTP local (`Bearer sk-local-server-1234`); ativa e testa `OpenCode CLI` (sucesso e cota gratuita esgotada) e desativa; retorna a `pt-BR` e tema `escuro`, cria Perfis de Provedor (`Local rápido` com chave própria `…9999` ausente do HTML e `Nuvem remota`), configura rotas e veto **Somente local** por tarefa, remove perfil conferindo o alerta de perfil ausente e reabre/pula o Assistente.
+### Sessão 1 — Assistente, Paleta, Componentes, Relatos, Provedores e Aparência
+
+1. **Assistente** (`01-assistant.png`): abre em `#/assistente?passo=1` com `CLIPES_DATA_DIR` vazio, usa o FFmpeg do sistema e detecta o Codex CLI; o consentimento é um checkbox ("Concordo em enviar apenas texto…"), e o `ConfirmDialog` de consentimento do Codex só existe em Provedores.
+2. **Paleta e atualização** (`02-palette.png`, `03-about.png`): `Ctrl+K` abre a Paleta e vai a `Sobre` (versão lida de `src-tauri/tauri.conf.json`); o updater mockado (`clipes.e2e.updaterMode = 'available'`) vai de `Verificar atualizações` a `Baixar e instalar`; `Ctrl+J`/`Esc` na Fila e `F6` entre regiões.
+3. **Componentes** (`04-components.png`): diálogos de licença do FFmpeg e do yt-dlp, instalação do Worker de ML, download de modelo e limite de cache (10 → 12 GB, persistido ao navegar).
+4. **Relatos** (`05-report.png`): fluxo de 2 passos (ADR-0006: nenhuma ação de envio no passo 1), aviso de possível segredo, diagnóstico real com a versão do app, exportação `.txt` conferida em disco e `Abrir no GitHub` abaixo e acima de 8000 bytes.
+5. **Provedores e Aparência** (`06-preferences-light.png`, `07-tasks-costs.png`): chave Groq no cofre isolado, Perfis `Local rápido` (chave própria) e `Nuvem remota`, roteamento por Tarefa, **Somente local**, remoção de Perfil, tema claro/escuro, Alto Contraste, reabrir e pular o Assistente.
 
 ### Sessão 2 — Persistência pós-reinício, Projetos, Fontes, Transcrição e Backups
 
-1. **Persistência e Projetos**: reabre o binário no mesmo `CLIPES_DATA_DIR` confirmando que o Assistente não reabre; cria `Canal.clipes` (conferindo `project.sqlite` em disco) e `Secundario.clipes`, e alterna de volta para `Canal.clipes` pela lista de recentes.
-2. **Veto "Somente local" do Projeto**: ativa **Somente local** no Projeto, verifica o aviso na tabela `Tarefas` em `Preferências` e desativa.
-3. **Fontes locais e por URL** (`08-project-sources.png`): importa `source.mkv` selecionando a segunda faixa de áudio e **Permissão** concedida (`Criadora Oficial`, `Contrato assinado`, `Cortes e tradução`); aguarda o job `Onda e miniaturas` concluir e verifica `cache/previews/`; altera o `mtime` do arquivo para exercitar `Fonte alterada` → `Verificar identidade`; renomeia para `source-moved.mkv` para exercitar `Fonte offline` → `Relocalizar`; troca a pasta de download, aceita o `Aviso sobre os Termos` e importa `video123.mp4` sem permissão via `fake-ytdlp` + `ffprobe`.
-4. **Transcrição e Timeline** (`09-transcription-timeline.png`): com `worker.hold` em `after-first`, inicia a Transcrição local, aguarda `33%` e cancela (`Transcrição interrompida · 33%`); seleciona o Motor `Groq` para verificar estimativa de custo e os diálogos `Apagar Transcrição parcial?` e `Enviar áudio ao Groq?` (cancelando antes do envio); volta ao Motor `local`, remove `worker.hold`, retoma até `Transcrição pronta` e verifica palavras, `Silêncio` e idioma `pt` na timeline.
-5. **Backups** (`10-backups.png`): salva intervalo (`15` min) e cópias mantidas (`5`), cria backup manual, liga **Somente local** no Projeto e restaura o backup anterior confirmando a cópia `Antes da restauração` e a reversão de **Somente local** para desligado no `project.sqlite`.
+1. **Persistência e Projetos**: o Assistente não reabre e o tema escuro persiste; cria `Canal.clipes` e `Secundario.clipes` (conferindo `project.sqlite`) e abre um Projeto recente.
+2. **Veto Somente local**: o selo no topo e o bloqueio em Provedores aparecem e somem ao desligar.
+3. **Fontes** (`08-project-sources.png`): importa `source.mkv` (2 faixas de áudio, Permissão), confere o cache de prévia, exercita `Fonte alterada` e `Fonte offline` (`reloadApp`, verificar e relocalizar), importa por URL com `fake-ytdlp` (Termos, trocar pasta).
+4. **Transcrição** (`09-transcription-timeline.png`): Transcrição local com `worker.hold`, cancelar mantendo os blocos (`Transcrevendo bloco 1 de 1 33%`) e retomar.
+5. **Backups** (`10-backups.png`): configuração, backup manual e restauração que reverte **Somente local**.
+
+### Sessão 3 — Fluxo do mandato: Projeto V1 → revisar → editar → exportar
+
+`prepareV1ProjectFixture` monta `<tempRoot>/projects/ProjetoV1.clipes/project.sqlite` a partir de `core/tests/fixtures/project-pre-0104.sqlite` (esquema V1, com migrações pendentes), com `node:sqlite`, e gera `v1-source.mp4` (1280×720, 30 s, H.264 + AAC 48 kHz). A Fonte é gravada com o hash parcial e o `mtime` reais (a mesma conta de `core/src/sources.rs::partial`), senão o app a trataria como alterada, e com Permissão `granted`.
+
+As tabelas de Transcrição e de seleção vêm de migrações Rust posteriores ao banco V1 e só existem depois que o app abre o Projeto. Por isso `seedV1Selection` roda logo após a abertura: 4 Frases de 7,5 s, uma execução de seleção V1 (`revision = 1`, `video_kind = 'direct'`, `state = 'completed'`) e 2 candidatos pendentes, e o app é recarregado.
+
+1. **Abrir o Projeto V1** (`s3-01-projeto-v1-fontes.png`): `Abrir pasta .clipes` em `#/inicio`, `project.pre-migration.sqlite` no disco e a Fonte `v1-source.mp4` em `#/projeto/:id/fontes`.
+2. **Revisar** (`s3-02-cortes-v1.png`, `s3-03-revisao-aprovada.png`): `Abrir bancada de revisão`, botão de conversão individual (#292/#490) presente em Corte direto, `±1 Frase` na borda final, `Aprovar`.
+3. **Editar** (`s3-04-editor.png`): `Abrir no editor`, `Ctrl+S` e o estado `Salvo`.
+4. **Exportar** (`s3-05-exportado.png`): `Exportar Corte`, destino `corte-v1-exportado.mp4` por `queueDialog`, `Iniciar exportação` e MP4 conferido com `ffprobe` (`h264` 1080×1920, `aac` 48000 Hz). Depois `#/projeto/:id/exportacao` (`s3-06-exportacao.png`).
+5. **Fechamento (#291)**: `window.close()` sem jobs ativos.
+
+### O que ficou fora da migração e por quê
+
+Nada foi desligado: os itens abaixo são cobertura do e2e V1 que o front v2 ainda não oferece (ou que já é coberta por outra suíte) e seguem testados em `front-v2/e2e/*.spec.ts`, nos testes de componente e nos testes do core.
+
+- Gavetas `[` e `]`: não existem no front v2.
+- Sessão 1: teste de conexão HTTP remota com consentimento e exigência de TLS (`192.0.2.10`), CLI OpenCode (sucesso e `free-limit`), Custos (estimador e sobrescrita de preço; exigem Projeto aberto), idioma `en` (o front v2 só tem `pt`).
+- Sessão 2: troca de Motor para Groq com `Apagar Transcrição parcial?` e consentimento de áudio; correção de palavra com `F2` na Transcrição.
+- O Projeto V1 da Sessão 3 recebe o seed de Transcrição e seleção depois da migração (veja acima); não há fixture V1 completa com todas as tabelas.
+
+### Achados de ambiente
+
+- O `fake-ytdlp` emite só `42%` e nunca `100%`: o job "Baixando Fonte" fica `rodando` no store do front até recarregar a WebView, o que bloqueia `Restaurar backup` (guarda `jobsAtivos`). O e2e usa `reloadApp` antes dos backups. No produto real o yt-dlp emite 100%.
+- Quando um passo falha, o script salva `shots-e2e/falha-ultima.png` e imprime o `hash` atual e o texto visível.
 
 ## Flags e variáveis de ambiente suportadas
 
@@ -131,13 +159,14 @@ A execução roda duas sessões consecutivas do aplicativo sobre o mesmo `CLIPES
 | --- | --- | --- |
 | `--install-tauri-driver` | `scripts/setup-webdriver.mjs` | Instala `tauri-driver` via `cargo install tauri-driver --locked` quando ausente (ex.: `bun run e2e:setup -- --install-tauri-driver`). |
 | `--skip-build` ou `CLIPES_E2E_SKIP_BUILD=1` | `scripts/e2e-tauri.mjs` | Pula a recompilação se `target/debug/clipes(.exe)` e `target/debug/fake-worker(.exe)` já existirem (ex.: `bun run test:e2e -- --skip-build`). |
+| `CLIPES_E2E_SESSIONS` | `scripts/e2e-tauri.mjs` | Sessões a rodar, separadas por vírgula (padrão `1,2,3`; ex.: `CLIPES_E2E_SESSIONS=3`). As Sessões 2 e 3 dependem da 1 (Assistente concluído e FFmpeg do sistema registrado em Componentes); use `1,3` para rodar só o fluxo do mandato. |
 | `TAURI_DRIVER_BIN` | ambos | Caminho explícito para o executável `tauri-driver`. |
 | `MSEDGEDRIVER_BIN` | ambos (Windows) | Caminho explícito para `msedgedriver.exe`, pulando a leitura do registro do WebView2 e o download em `%TEMP%\clipes-webdriver`. |
 | `WEBKIT_WEBDRIVER_BIN` | ambos (Linux) | Caminho explícito para `WebKitWebDriver`. |
 
 ## Onde ficam as capturas e como depurar falhas
 
-- **Capturas (`shots-e2e/`)**: gravadas na raiz do repositório (`01-assistant.png` a `10-backups.png`) à medida que cada etapa avança. Ao investigar uma falha, inspecione a última imagem atualizada para ver o estado da janela antes do erro.
+- **Capturas (`shots-e2e/`)**: gravadas na raiz do repositório (`01-assistant.png` a `10-backups.png` e `s3-01-…` a `s3-06-…`) à medida que cada etapa avança; numa falha, `falha-ultima.png` guarda o estado da janela, e o console imprime o `hash` e o texto visível. Ao investigar uma falha, inspecione a última imagem atualizada para ver o estado da janela antes do erro.
 - **Mensagens de espera e texto visível**: cada etapa imprime `[e2e] ...` no console. Quando `waitForText` expira, o erro inclui o seletor avaliado e os primeiros 500 caracteres do texto visível naquele escopo (`Texto atual: ...`). Quando `tagElement` ou `waitForDialog` expira, a mensagem detalha o controle ou título esperado.
 - **Erros da WebView e logs do `tauri-driver`**: exceções não tratadas (`error` e `unhandledrejection`) são acumuladas em `window.__e2eErrors` e aferidas ao final de cada sessão. Se qualquer comando da sessão falhar, o script imprime as últimas 20 saídas de `stdout`/`stderr` do `tauri-driver` (`[e2e] Logs recentes do tauri-driver:`).
 - **Reexecução rápida durante ajustes no teste**: quando apenas `scripts/e2e-tauri.mjs` mudou (sem alterações em `src/`, `src-tauri/` ou `core/`), use `bun run test:e2e -- --skip-build` para evitar nova compilação do Tauri. Se mudar `src/` ou `core/`, rode sem `--skip-build` para atualizar o bundle embutido no binário.
