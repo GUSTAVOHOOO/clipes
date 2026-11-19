@@ -149,7 +149,7 @@ function ScrubberCapa({
           aria-valuenow={Math.round(valorUs / 1000)}
           aria-valuetext={`${tc(valorUs - minUs)} de ${tc(span)}`}
           onKeyDown={aoTeclar}
-          className="foco absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full bg-t1"
+          className="foco absolute top-1/2 flex size-6 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-transparent before:block before:size-3 before:rounded-full before:bg-t1 before:content-['']"
           style={{ left: `${fracao * 100}%` }}
         />
       </div>
@@ -623,13 +623,13 @@ export function PainelCapa({
             <div className="flex flex-wrap items-center gap-2">
               <span className="num text-t1">{tc(atual.instantUs - cut.startUs)}</span>
               <Status tom="info">
-                {atual.origin === 'ai' ? 'Sugerido pelo Provedor' : 'Escolhido por você'}
+                {atual.origin !== 'user' ? 'Sugerido pelo Provedor' : 'Escolhido por você'}
               </Status>
               <span className="num text-pequeno text-t3">de {duracao(duracaoCorte)}</span>
             </div>
             {(() => {
               const motivo = (atual as { why?: string | null }).why
-              return atual.origin === 'ai' && motivo ? (
+              return atual.origin !== 'user' && motivo ? (
                 <p className="text-pequeno text-t2">{motivo.slice(0, capa?.maxWhyChars ?? 200)}</p>
               ) : null
             })()}
@@ -661,7 +661,7 @@ export function PainelCapa({
           disabled={gerandoSugestao}
           onClick={() => void sugerir()}
         >
-          {atual?.origin === 'ai' || (capa?.suggestions?.length ?? 0) > 0
+          {(atual && atual.origin !== 'user') || (capa?.suggestions?.length ?? 0) > 0
             ? 'Sugerir de novo'
             : 'Sugerir momento da capa'}
         </Botao>
@@ -697,7 +697,7 @@ export function PainelCapa({
             <div key={`${item.origin}-${item.id ?? i}-${item.instantUs}`} className="flex items-center gap-2">
               <span className="num text-t1">{tc(item.instantUs - cut.startUs)}</span>
               <span className="text-t3">
-                {item.origin === 'ai' ? 'Sugerido pelo Provedor' : 'Escolhido por você'}
+                {item.origin !== 'user' ? 'Sugerido pelo Provedor' : 'Escolhido por você'}
               </span>
               {item.why && <span className="min-w-0 flex-1 truncate text-t3">{item.why}</span>}
               <Botao
