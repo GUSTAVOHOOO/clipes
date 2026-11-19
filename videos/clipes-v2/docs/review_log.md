@@ -447,3 +447,11 @@ O que entrou das três correções da rodada 11, conferido nos quadros (sheets, 
 3. Instrumento de sincronia. Dar `roi16`/`roi9` por elemento em `timeline.json` aos cues em −67 ms (4,5 / 8,5 / 15,0 / 15,5 / 21,0 / 24,0 s) e aos 8 não medíveis (6,5; 8,75; 9,0; 9,25; 12,5; 13,0; 16,0; 22,0), ou trocar o critério do `review.py` para o onset do SFX em `kit.lock.json`; adiantar a subida da eyebrow de 21,0 s em 1 quadro (começa a 20,967 s) para "MP4 1080×1920" ler a 21,033 s. Verificar: `metrics.sync.hits_within_45ms` ≥ 16/19, nenhum |x| > 67 ms, `sync_unmeasurable` vazio e o 4,5 s sem −67; stills 20,933–21,067 s com a eyebrow legível a 21,033 s; true peak do MP4 final ≤ −1,0 dBTP e I = −14 ± 0,5 LUFS.
 
 **Verdict:** ANOTHER ROUND (Movimento 7 e Composição 7; o resto em 8)
+
+---
+
+## Rodada 13: correções da crítica da rodada 12 (19/11/2026, antes da crítica)
+
+- Cabeçalho da Fonte: mola de resposta 0,28 s começando 0,3 batida antes do cue (4,35 s), vira várias frações de quadro até assentar em 4,5–4,6 s (stills 16:9 a 4,400 / 4,433 / 4,467 / 4,500 / 4,533 / 4,600 s: entra parcial por baixo, não mais um pop de 1 quadro).
+- Fim do cartão do 9:16: marca desce só 130 px (era 300) e a faixa de telas sobe mais (640): a 29,600 e 29,967 s a marca fica a ~22–29 % da altura e as telas ocupam a metade de baixo (stills 9:16).
+- Sem mudança: plano 4 (metade esquerda do Editor) e a primeira fala a 8,3 s ficaram como estavam.

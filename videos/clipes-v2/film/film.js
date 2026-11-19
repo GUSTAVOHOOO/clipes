@@ -181,7 +181,7 @@
       const ax = 107, ay = lerp(sy0, 60, u);
       put(S.F.cv, { css: { left: r.w / 2 - ax * c + 'px', top: r.h / 2 - ay * c + 'px', width: 214 * c + 'px', height: 120 * c + 'px' } });
       // cabeçalho real da Fonte sobe por baixo do vídeo
-      const v = sp(t, beatOf('s2_head') - 0.05, 'default');   // lê NO pop de 4,5 s (rodada 10: chegava 3 quadros depois)
+      const v = sp(t, beatOf('s2_head') - 0.3, { response: 0.28, damping: 1 });   // lê NO pop de 4,5 s (rodada 10: chegava 3 quadros depois)
       const rH = P({ x: 780, y: 760, w: 1080, h: 124 }, { x: 48, y: 1372, w: 984, h: 118 });
       frame(S.hdr, { ...rH, y: rH.y + 70 * (1 - v) }, P(330, 318), 70, P(1.62, 1.9) * (1 + 0.02 * seg(t, 9, 12)));
       put(S.hdr.vp, { o: v > 0.02 ? 1 : 0 });
@@ -394,7 +394,7 @@
       const fin = ease.inOut(seg(t, 58.5, 60));
       put(S.push, { s: 1 + 0.08 * seg(t, 48, 60) });   // linear: nunca para, nem no último quadro
       const LS = P(80, 76), lk = C.sp(t, 47.81, { response: 0.32, damping: 0.55 });   // cai de cima, pousa no beat 48 e assenta com overshoot visível
-      if (TALL) put(S.mask, { y: 300 * fin });   // 9:16: sem o texto, a marca desce para o miolo e a faixa sobe: nada de meio quadro vazio nos últimos 0,8 s
+      if (TALL) put(S.mask, { y: 130 * fin });   // 9:16: sem o texto, a marca desce para o miolo e a faixa sobe: nada de meio quadro vazio nos últimos 0,8 s
       put(S.lock, { y: -LS * 1.1 * (1 - lk) });   // começa acima da própria máscara: a borda da wipe nunca corta glifo
       const pl = spHit(t, 48.6, 'snappy');
       const px = snapPhase(t, 879);   // a pílula sai primeiro (quadro 879 da grade de 30 fps)
@@ -416,7 +416,7 @@
       S.shots.forEach((s, i) => {
         const sc = P(0.4, 0.62 + 0.2 * fin);
         const x = P(1170 + i * 60, 40 + i * (1440 * 0.62 + 36)) - P(0, 380) * d - P(0, 150) * stp;
-        const y = P(-120 + i * (900 * 0.4 + 36), 1215 + i * 30 - 560 * fin - 340 * (1 - ease.inOut(seg(t, 50, 55)))) - P(80, 0) * d - P(14, 0) * stp + 160 * (1 - e);
+        const y = P(-120 + i * (900 * 0.4 + 36), 1215 + i * 30 - 640 * fin - 340 * (1 - ease.inOut(seg(t, 50, 55)))) - P(80, 0) * d - P(14, 0) * stp + 160 * (1 - e);
         put(s, { x, y, s: sc, css: { transform: `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) perspective(2400px) rotateY(${P(-16, -10)}deg) rotateX(4deg) scale(${sc})`, filter: 'brightness(1.55) saturate(.25)' } });
       });
     },
