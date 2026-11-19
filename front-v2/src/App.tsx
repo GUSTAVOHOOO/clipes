@@ -22,6 +22,7 @@ import {
   type AcoesExternasEditarCorte,
   type MetaCorteResolvida,
 } from '~/telas/corte/EditarCorte'
+import { TransformarCorte } from '~/telas/corte/transformar/TransformarCorte'
 import { Revisao } from '~/telas/cortes/Revisao'
 import { Selecao } from '~/telas/cortes/Selecao'
 import { Exportacao } from '~/telas/exportacao/Exportacao'
@@ -423,6 +424,40 @@ function AppRoteado({
           projetoId={rotaExibida.projeto}
           projetoPath={projeto?.path ?? null}
           sub={rotaExibida.sub}
+        />
+      </Shell>
+    )
+  }
+
+  if (rotaExibida.tela === 'corte' && rotaExibida.aba === 'transformar') {
+    return (
+      <Shell
+        rota={rotaExibida}
+        projeto={projeto}
+        somenteLocal={somenteLocal}
+        semPaddingConteudo
+        statusSalvamento={statusSalvamentoEditor}
+        meio={
+          <ContextoCorteConectado
+            projetoId={rotaExibida.projeto}
+            corteId={rotaExibida.corte}
+            subAbaAtiva="transformar"
+            runId={rotaExibida.run}
+            fonte={metaCorte.fonte}
+            clipId={metaCorte.clipId}
+            aoFonteRelocalizada={(atualizada) =>
+              setMetaCorte((prev) => ({ ...prev, fonte: atualizada }))
+            }
+          />
+        }
+      >
+        <TransformarCorte
+          projetoId={rotaExibida.projeto}
+          projetoPath={projeto?.path ?? null}
+          corteId={rotaExibida.corte}
+          runId={rotaExibida.run}
+          aoAtualizarMeta={setMetaCorte}
+          aoMudarStatusSalvamento={setStatusSalvamentoEditor}
         />
       </Shell>
     )
