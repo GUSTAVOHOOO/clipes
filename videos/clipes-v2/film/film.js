@@ -101,7 +101,7 @@
   const SHIFT = { heavy: -0.2, snappy: -0.05, default: 0 };    // calibrado nas rodadas 1–2 (metrics.sync com roi16)
   function riseRows(t, rows, inAt, outAt = null, o = {}) {
     const pr = o.preset || 'heavy';
-    rows.forEach((L, i) => rise(t, L, beatOf(inAt) + SHIFT[pr] + (o.rowGap ?? (pr === 'snappy' ? 0.04 : 0.22)) * i, outAt, { preset: pr, ...o }));
+    rows.forEach((L, i) => rise(t, L, beatOf(inAt) + SHIFT[pr] + (o.dt || 0) + (o.rowGap ?? (pr === 'snappy' ? 0.04 : 0.22)) * i, outAt, { preset: pr, ...o }));
   }
 
   // ---------------------------------------------------------------- cursor (ponteiro de sistema simples, sem anel nem glow)
@@ -181,7 +181,7 @@
       const ax = 107, ay = lerp(sy0, 60, u);
       put(S.F.cv, { css: { left: r.w / 2 - ax * c + 'px', top: r.h / 2 - ay * c + 'px', width: 214 * c + 'px', height: 120 * c + 'px' } });
       // cabeçalho real da Fonte sobe por baixo do vídeo
-      const v = sp(t, beatOf('s2_head') + 0.05, 'default');
+      const v = sp(t, beatOf('s2_head') + 0.12, 'default');
       const rH = P({ x: 780, y: 760, w: 1080, h: 124 }, { x: 48, y: 1372, w: 984, h: 118 });
       frame(S.hdr, { ...rH, y: rH.y + 70 * (1 - v) }, P(330, 318), 70, P(1.62, 1.9) * (1 + 0.02 * seg(t, 9, 12)));
       put(S.hdr.vp, { o: v > 0.02 ? 1 : 0 });
@@ -209,8 +209,8 @@
         [[12, 236, 205, 2.4], [16, 790, 470, 2.0]]));
       const f = frame(S.scr, P({ ...VP, x: 60 }, VP), cx + 40 * seg(t, 16, 20), cy, z * (1 + 0.03 * seg(t, 12, 16)), P(lerp(14, 3, q), lerp(-14, -3, q)), lerp(6, 1.5, q));
       // falas transcritas: uma por meia batida (s3_l1..l4), depois o resto da coluna
-      const edge = trk(t, [[12, R.falas[0] + 40], [16.5 - 0.3 * LEADB, R.falas[1], 'snappy'], [17 - 0.3 * LEADB, R.falas[2], 'snappy'],
-        [17.5 - 0.3 * LEADB, R.falas[3], 'snappy'], [18 - 0.3 * LEADB, R.falas[4], 'snappy'], [18.6, 832, 'default']]);
+      const edge = trk(t, [[12, R.falas[0] + 40], [16.5 - 0.2 * LEADB, R.falas[1], 'snappy'], [17 - 0.2 * LEADB, R.falas[2], 'snappy'],
+        [17.5 - 0.2 * LEADB, R.falas[3], 'snappy'], [18 - 0.2 * LEADB, R.falas[4], 'snappy'], [18.6, 832, 'default']]);
       put(S.rows, { clip: `inset(236px 8px ${(900 - edge).toFixed(1)}px 470px)` });
       // rack focus: do Motor ("Local — US$ 0,00 · não sai da máquina") para as falas
       const fo = sp(t, 's3_rack', 'default');
@@ -286,17 +286,17 @@
         [[28, 1115, 400, 1.5], [29.3, 943, 500, 2.6], [32.4, 1000, 500, 1.5], [36.1, 1128, 520, 1.6]]));
       const f = frame(S.scr, rB, cx, cy, z * (1 + 0.01 * seg(t, 36, 40)), 0, 1);
       // a legenda real se revela palavra a palavra (mesma ordem do destaque do app)
-      const edge = trk(t, [[28, R.leg[0] - 4], [beatOf('s5_w1') - 0.3 * LEADB, R.leg[1] + 2, 'snappy'], [beatOf('s5_w2') - 0.3 * LEADB, R.leg[2] + 2, 'snappy'], [beatOf('s5_w3') - 0.3 * LEADB, R.leg[3] + 8, 'snappy']]);
+      const edge = trk(t, [[28, R.leg[0] - 4], [beatOf('s5_w1') - 0.2 * LEADB, R.leg[1] + 2, 'snappy'], [beatOf('s5_w2') - 0.2 * LEADB, R.leg[2] + 2, 'snappy'], [beatOf('s5_w3') - 0.2 * LEADB, R.leg[3] + 8, 'snappy']]);
       put(S.leg, { clip: `inset(0px ${(R.prevEd.x + R.prevEd.w - edge).toFixed(1)}px 0px 0px)` });
       // rack focus: tudo fora de foco menos a Frase 13 ("O chat simplesmente explodiu nessa hora.") e a Prévia
-      const fo = spHit(t, 's5_rack', 'default', 0.13) - sp(t, 35.6, 'default');
+      const fo = spHit(t, 's5_rack', 'default', 0.1) - sp(t, 35.6, 'default');
       put(S.scr.img, { filter: `blur(${(3.5 * fo).toFixed(2)}px)` });
       put(S.A.img, { filter: `blur(${(3.5 * fo).toFixed(2)}px)` });
       put(S.btn, { filter: `blur(${(3.5 * fo).toFixed(2)}px)` });
       put(S.fr13, { filter: `brightness(${(1 + 0.3 * fo).toFixed(3)})` });
       const press = moveCursor(t, S.cur, f, [[34.6, 1060, 560], [35.8, ...ctr(R.legendaBtn)]], 's5_leg', true);
-      if (b < 35.86) put(S.btn, { filter: `blur(${(3.5 * fo).toFixed(2)}px) brightness(${(1 - 0.2 * press).toFixed(3)})` });
-      put(S.pan, { o: b >= 35.86 ? 1 : 0 });
+      if (b < 35.95) put(S.btn, { filter: `blur(${(3.5 * fo).toFixed(2)}px) brightness(${(1 - 0.2 * press).toFixed(3)})` });
+      put(S.pan, { o: b >= 35.95 ? 1 : 0 });
       // whip de entrada e de saída
       const wIn = 1 - ease.expoOut(seg(t, 28, 28.45)), wOut = ease.expoIn(seg(t, 39.6, 40));
       put(S.root, { x: P(700, 420) * wIn - P(700, 420) * wOut, filter: wIn > 0.01 ? whipBlur(1 - 0.5 * wIn) : wOut > 0.01 ? whipBlur(0.5 * wOut) : 'none' });
@@ -338,7 +338,7 @@
       const wIn = 1 - ease.expoOut(seg(t, 40, 40.45));
       put(S.root, { x: P(700, 420) * wIn, filter: wIn > 0.01 ? whipBlur(1 - 0.5 * wIn) : 'none' });
       riseRows(t, S.h, P(41.9, 40.4), 46.6);
-      riseRows(t, S.e, 's6_sub', 46.6, { preset: 'snappy', stagger: 0.05 });
+      riseRows(t, S.e, 's6_sub', 46.6, { preset: 'snappy', stagger: 0.05, dt: 0.1 });
     },
   });
 
@@ -387,7 +387,7 @@
       put(S.cover, { clip: `inset(${(100 * c).toFixed(3)}% 0 0 0)`, hide: c > 0.999 });
       drawFoot(S.F2, t);
       put(S.push, { s: 1 + 0.08 * seg(t, 48, 60) });   // linear: nunca para, nem no último quadro
-      const LS = P(80, 76), lk = C.sp(t, 47.74, { response: 0.32, damping: 0.55 });   // cai de cima, pousa no beat 48 e assenta com overshoot visível
+      const LS = P(80, 76), lk = C.sp(t, 47.81, { response: 0.32, damping: 0.55 });   // cai de cima, pousa no beat 48 e assenta com overshoot visível
       put(S.lock, { y: -LS * 1.1 * (1 - lk) });   // começa acima da própria máscara: a borda da wipe nunca corta glifo
       const pl = spHit(t, 48.6, 'snappy');
       const pq = clamp((b - (XOUT - 0.12)) / 0.5), pO = pq * (0.55 + 0.45 * pq);   // a pílula sobe primeiro, na mesma curva das linhas
@@ -397,7 +397,7 @@
       // últimos 0,4 s: as linhas saem por máscara (de cima para baixo na ordem de leitura) e sobram marca + telas, perto do f0 (emenda do loop)
       riseRows(t, S.tag, 'tag', XOUT, { exitLin: 0.5 });
       riseRows(t, [S.cta[0]], beatOf('cta') - 0.6, XOUT, { exitLin: 0.5 });   // a linha de ênfase (Windows e Linux.) é a que cai no cue
-      riseRows(t, [S.cta[1]], 'cta', XOUT, { stagger: 0.03, exitLin: 0.5 });
+      riseRows(t, [S.cta[1]], 'cta', XOUT, { stagger: 0.03, exitLin: 0.5, dt: 0.1 });
       riseRows(t, S.url, 'url', XOUT, { stagger: 0.02, exitLin: 0.5 });
       riseRows(t, S.lic, 'lic', XOUT, { preset: 'snappy', stagger: 0.02, rowGap: 0.05, exitLin: 0.5 });
       // parallax: as telas sobem/andam mais devagar que a tipografia e nunca param
