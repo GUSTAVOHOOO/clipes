@@ -11,6 +11,7 @@
 
 use crate::{
     components::{hardware, models, worker::start_worker},
+    console::{emit_console, ConsoleDraft, ConsoleKind, ConsoleLevel},
     jobs::{self, preview},
     projects,
     worker::{WorkerClient, WorkerEvent},
@@ -123,25 +124,29 @@ pub struct LocalEngine {
     group_cap: Option<u32>,
     /// O modelo da Transcrição: nunca muda; a precisão e o dispositivo podem mudar entre blocos.
     model_id: String,
+    console_context: (String, Option<String>),
 }
 
 impl LocalEngine {
     /// Monta o Motor com um worker já iniciado e o modelo dado (`id`, `dir`, `device`,
     /// `compute_type`); usado pelo teste real manual, que não passa pela instalação.
-    pub fn with_worker(client: WorkerClient, model: Value, batch_size: u32) -> Self {
+    pub fn with_worker(mut client: WorkerClient, model: Value, batch_size: u32) -> Self {
+        client.set_console_context("transcription", None);
         LocalEngine {
             client,
             model_id: model["id"].as_str().unwrap_or_default().to_owned(),
             model,
             batch_size,
             group_cap: None,
+            console_context: ("transcription".to_string(), None),
         }
     }
 
     /// Inicia o Motor para o `model_id` já gravado na Transcrição.
     pub fn start_for(model_id: &str) -> Result<Self, CoreError> {
         let selection = models::selection_for(model_id)?;
-        let client = start_worker()?;
+        let mut client = start_worker()?;
+        client.set_console_context("transcription", None);
         Ok(LocalEngine {
             client,
             model: json!({
@@ -153,11 +158,28 @@ impl LocalEngine {
             batch_size: selection.config.batch_size(),
             group_cap: None,
             model_id: model_id.to_owned(),
+            console_context: ("transcription".to_string(), None),
         })
+    }
+
+    pub(crate) fn set_console_context(&mut self, job: impl Into<String>, project: Option<String>) {
+        let job = job.into();
+        self.client.set_console_context(job.clone(), project.clone());
+        self.console_context = (job, project);
     }
 }
 
 impl TranscriptionEngine for LocalEngine {
+    fn prepare(&mut self, job: i64, _transcript: i64, _resume_us: i64) {
+        let project_id = projects::with_reader(|c| {
+            c.query_row("SELECT id FROM queue_project_identity", [], |r| {
+                r.get::<_, String>(0)
+            })
+        })
+        .ok();
+        self.set_console_context(job.to_string(), project_id);
+    }
+
     fn block_config(&self) -> Option<(String, String)> {
         Some((
             self.model["device"].as_str()?.to_owned(),
@@ -180,6 +202,23 @@ impl TranscriptionEngine for LocalEngine {
             config = Some(selection.config);
         }
         group = group.min(self.group_cap.unwrap_or(u32::MAX));
+        let (job, project) = (&self.console_context.0, self.console_context.1.as_deref());
+        let device = self.model["device"].as_str().unwrap_or("cpu");
+        let compute_type = self.model["compute_type"].as_str().unwrap_or("auto");
+        let start_simple = format!("Transcrevendo bloco ({device}, {compute_type})");
+        let start_tech = format!(
+            "model={} device={device} compute_type={compute_type} batch_size={} group_size={group}",
+            self.model_id, self.batch_size
+        );
+        emit_console(ConsoleDraft {
+            job,
+            project,
+            origin: "worker",
+            level: ConsoleLevel::Info,
+            kind: ConsoleKind::Milestone,
+            simple: &start_simple,
+            technical: Some(&start_tech),
+        });
         loop {
             let mut params = json!({
                 "audio": request.audio,
@@ -206,10 +245,45 @@ impl TranscriptionEngine for LocalEngine {
                     if let Some(config) = &config {
                         hardware::record_batch_oom(config, group, next);
                     }
+                    let oom_simple =
+                        format!("Memória insuficiente; reduzindo lote VAD de {group} para {next}");
+                    let oom_tech =
+                        format!("code=out_of_memory group_from={group} group_to={next}");
+                    emit_console(ConsoleDraft {
+                        job,
+                        project,
+                        origin: "worker",
+                        level: ConsoleLevel::Warn,
+                        kind: ConsoleKind::Milestone,
+                        simple: &oom_simple,
+                        technical: Some(&oom_tech),
+                    });
                     self.group_cap = Some(next);
                     group = next;
                 }
-                other => return parse_block(&other?),
+                other => {
+                    let block = parse_block(&other?)?;
+                    let done_simple = format!(
+                        "Bloco transcrito ({:.1}s processados)",
+                        block.covered_us as f64 / 1_000_000.0
+                    );
+                    let done_tech = format!(
+                        "covered_ms={} words={} silences={}",
+                        block.covered_us / 1000,
+                        block.words.len(),
+                        block.silences.len()
+                    );
+                    emit_console(ConsoleDraft {
+                        job,
+                        project,
+                        origin: "worker",
+                        level: ConsoleLevel::Info,
+                        kind: ConsoleKind::Milestone,
+                        simple: &done_simple,
+                        technical: Some(&done_tech),
+                    });
+                    return Ok(block);
+                }
             }
         }
     }
@@ -388,8 +462,19 @@ pub(crate) fn run(
             stop,
             || is_cancelled(id),
             |stage, percentage, message| {
+                let job_id = id.to_string();
+                let tech = format!("stage={stage} progress={percentage}%");
+                emit_console(ConsoleDraft {
+                    job: &job_id,
+                    project: Some(&project_id),
+                    origin: "worker",
+                    level: ConsoleLevel::Info,
+                    kind: ConsoleKind::Continuous("probe"),
+                    simple: message,
+                    technical: Some(&tech),
+                });
                 crate::emit_background(crate::ProgressEvent {
-                    job: id.to_string(),
+                    job: job_id,
                     project: Some(project_id.clone()),
                     clip_id: None,
                     stage: stage.into(),
@@ -458,6 +543,12 @@ pub fn run_with(
             |r| r.get(0),
         )
     })?;
+    let project_id = projects::with_reader(|c| {
+        c.query_row("SELECT id FROM queue_project_identity", [], |r| {
+            r.get::<_, String>(0)
+        })
+    })
+    .ok();
     let wav = work.join(format!("job-{id}.wav"));
     let mut last_percentage = u8::MAX;
     loop {
@@ -474,6 +565,21 @@ pub fn run_with(
         }
         let len = block_us().min(BLOCK_US).min(duration_us - resume);
         let final_block = resume + len >= duration_us;
+        let job_str = id.to_string();
+        let extract_tech = format!(
+            "start_ms={} len_ms={} track={track}",
+            resume / 1000,
+            len / 1000
+        );
+        emit_console(ConsoleDraft {
+            job: &job_str,
+            project: project_id.as_deref(),
+            origin: "ffmpeg",
+            level: ConsoleLevel::Info,
+            kind: ConsoleKind::Milestone,
+            simple: "Extraindo faixa de áudio do bloco",
+            technical: Some(&extract_tech),
+        });
         extract(
             &ffmpeg,
             &Slice {
@@ -1087,3 +1193,106 @@ pub fn is_supported_language(code: &str) -> bool {
 
 mod remote;
 pub(crate) use remote::job_estimate;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn local_engine_emits_worker_and_block_console_events_without_leaking_transcript_or_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("fake_worker_transcribe.rs");
+        let exe = dir.path().join(if cfg!(windows) {
+            "fake_worker_transcribe.exe"
+        } else {
+            "fake_worker_transcribe"
+        });
+        fs::write(
+            &src,
+            r##"
+use std::io::{BufRead, Write};
+fn main() {
+    let stdin = std::io::stdin();
+    let mut stdout = std::io::stdout();
+    for line in stdin.lock().lines().map_while(Result::ok) {
+        if line.contains("\"hello\"") {
+            writeln!(stdout, r#"{{"v":1,"type":"handshake","protocol":1,"worker":"fake","python":"3.11","libs":{{"faster-whisper":"1.0"}}}}"#).unwrap();
+            stdout.flush().unwrap();
+        } else if line.contains("\"request\"") {
+            eprintln!("debug C:\\Users\\Alice\\audio_privado.wav sk-proj-secret123");
+            writeln!(stdout, r#"{{"v":1,"type":"event","event":"model_loaded","model":"faster-whisper:small:cpu:int8"}}"#).unwrap();
+            writeln!(stdout, r#"{{"v":1,"type":"progress","id":"r1","stage":"transcribing","percentage":50,"message":"Transcrevendo bloco"}}"#).unwrap();
+            writeln!(stdout, r#"{{"v":1,"type":"result","id":"r1","data":{{"covered_us":1000000,"words":[{{"text":"segredo confidencial da transcricao","start_us":0,"end_us":500000,"language":"pt"}}],"silences":[]}}}}"#).unwrap();
+            stdout.flush().unwrap();
+        } else if line.contains("\"shutdown\"") {
+            break;
+        }
+    }
+}
+"##,
+        )
+        .unwrap();
+        let rustc = PathBuf::from(env!("CARGO")).with_file_name(if cfg!(windows) {
+            "rustc.exe"
+        } else {
+            "rustc"
+        });
+        assert!(std::process::Command::new(rustc)
+            .arg(&src)
+            .arg("-o")
+            .arg(&exe)
+            .status()
+            .unwrap()
+            .success());
+
+        let capture = crate::console::TestConsoleCapture::new();
+        let client = WorkerClient::start(&exe, std::iter::empty::<&str>(), |_| {}).unwrap();
+        let mut engine = LocalEngine::with_worker(
+            client,
+            json!({"id": "small", "dir": dir.path(), "device": "cpu", "compute_type": "int8"}),
+            8,
+        );
+        engine.set_console_context("transcribe-unit-1", Some("proj-t1".into()));
+
+        let cancel = AtomicBool::new(false);
+        let secret_audio = dir.path().join("audio_privado.wav");
+        let block = engine
+            .transcribe_block(
+                &BlockRequest {
+                    audio: &secret_audio,
+                    final_block: true,
+                    language: Some("pt"),
+                },
+                &cancel,
+                &mut |_| {},
+            )
+            .unwrap();
+        assert_eq!(block.words.len(), 1);
+
+        let events = capture.events_for_job("transcribe-unit-1");
+        assert!(events.iter().any(|ev| {
+            ev.origin == "worker"
+                && ev.project.as_deref() == Some("proj-t1")
+                && ev.technical.as_deref()
+                    == Some("event=model_loaded model=faster-whisper:small:cpu:int8")
+        }));
+        assert!(events.iter().any(|ev| {
+            ev.origin == "worker"
+                && ev.simple == "Transcrevendo bloco · 50%"
+                && ev.technical.as_deref()
+                    == Some("stage=transcribing progress=50% message=Transcrevendo bloco")
+        }));
+        assert!(events.iter().any(|ev| {
+            ev.origin == "worker"
+                && ev.simple.contains("Bloco transcrito")
+                && ev.technical.as_deref() == Some("covered_ms=1000 words=1 silences=0")
+        }));
+        for ev in &events {
+            let joined = format!("{} {}", ev.simple, ev.technical.as_deref().unwrap_or(""));
+            assert!(!joined.contains("segredo confidencial"), "vazou texto: {joined}");
+            assert!(!joined.contains("audio_privado.wav"), "vazou caminho: {joined}");
+            assert!(!joined.contains("sk-proj-secret123"), "vazou segredo: {joined}");
+        }
+    }
+}

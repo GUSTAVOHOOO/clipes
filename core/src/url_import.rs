@@ -58,7 +58,10 @@ fn set(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 inventory::submit! { CommandRegistration { name: "sources.url.settings.get", execute: get } }
 inventory::submit! { CommandRegistration { name: "sources.url.settings.set", execute: set } }
 
-use crate::{projects, ProgressEvent};
+use crate::{
+    console::{emit_console, ConsoleDraft, ConsoleKind, ConsoleLevel},
+    projects, ProgressEvent,
+};
 use std::{
     collections::{HashMap, VecDeque},
     ffi::OsString,
@@ -131,36 +134,129 @@ fn download(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     let exe = crate::components::ytdlp_executable()?;
     // O deno é opcional: sem o Componente, o yt-dlp roda como antes (#203).
     let deno = crate::components::deno_executable();
-    precheck_age(&exe, deno.as_deref(), url, &flag)?;
-    let path = run_download(
+    let project_id = projects::with_reader(|c| {
+        c.query_row("SELECT id FROM queue_project_identity", [], |r| {
+            r.get::<_, String>(0)
+        })
+    })
+    .ok();
+    precheck_age_with_console(
+        &exe,
+        deno.as_deref(),
+        url,
+        job,
+        project_id.as_deref(),
+        &flag,
+    )?;
+    let path = run_download_with_console(
         &exe,
         deno.as_deref(),
         &settings.download_dir,
         url,
         job,
+        project_id.as_deref(),
         &flag,
         events,
     )?;
     Ok(json!({"path":path, "url":url}))
 }
-fn handle_line(line: &str, job: &str, events: &mut EventSink<'_>, filename: &mut Option<PathBuf>) {
+
+fn safe_url_host(url: &str) -> String {
+    reqwest::Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_string))
+        .unwrap_or_else(|| "origem externa".to_string())
+}
+
+fn clean_ytdlp_metric(raw: Option<&str>) -> Option<&str> {
+    raw.map(str::trim).filter(|s| {
+        !s.is_empty()
+            && !s.eq_ignore_ascii_case("na")
+            && !s.eq_ignore_ascii_case("n/a")
+            && !s.eq_ignore_ascii_case("unknown")
+            && !s.eq_ignore_ascii_case("unknown b/s")
+            && !s.contains("://")
+    })
+}
+
+fn emit_ytdlp_console(
+    job: &str,
+    project: Option<&str>,
+    level: ConsoleLevel,
+    kind: ConsoleKind<'_>,
+    simple: &str,
+    technical: Option<&str>,
+) {
+    emit_console(ConsoleDraft {
+        job,
+        project,
+        origin: "yt-dlp",
+        level,
+        kind,
+        simple,
+        technical,
+    });
+}
+
+fn handle_line(
+    line: &str,
+    job: &str,
+    project: Option<&str>,
+    events: &mut EventSink<'_>,
+    filename: &mut Option<PathBuf>,
+) {
     if let Some(p) = line.strip_prefix("clipes-progress:") {
-        if let Ok(pct) = p.trim().trim_end_matches('%').parse::<f64>() {
+        let mut parts = p.split('|');
+        let pct_str = parts.next().unwrap_or("").trim().trim_end_matches('%');
+        let speed = clean_ytdlp_metric(parts.next());
+        let eta = clean_ytdlp_metric(parts.next());
+        if let Ok(pct) = pct_str.parse::<f64>() {
             if pct.is_finite() {
+                let pct_u8 = pct.clamp(0.0, 100.0) as u8;
                 events(ProgressEvent {
                     project: None,
                     clip_id: None,
                     job: job.into(),
                     stage: "download".into(),
-                    percentage: pct.clamp(0.0, 100.0) as u8,
+                    percentage: pct_u8,
                     message: "Baixando Fonte".into(),
                     error: None,
                 });
+                let mut simple = format!("Baixando Fonte · {pct_u8}%");
+                if let Some(s) = speed {
+                    simple.push_str(&format!(" · {s}"));
+                }
+                if let Some(e) = eta {
+                    simple.push_str(&format!(" · ETA {e}"));
+                }
+                let mut tech = format!("percent={:.1}%", pct.clamp(0.0, 100.0));
+                if let Some(s) = speed {
+                    tech.push_str(&format!(" speed={s}"));
+                }
+                if let Some(e) = eta {
+                    tech.push_str(&format!(" eta={e}"));
+                }
+                emit_ytdlp_console(
+                    job,
+                    project,
+                    ConsoleLevel::Info,
+                    ConsoleKind::Continuous("progress"),
+                    &simple,
+                    Some(&tech),
+                );
             }
         }
     }
     if let Some(p) = line.strip_prefix("clipes-file:") {
         *filename = Some(PathBuf::from(p));
+        emit_ytdlp_console(
+            job,
+            project,
+            ConsoleLevel::Info,
+            ConsoleKind::Milestone,
+            "Download concluído; preparando arquivo",
+            Some("stage=after_move"),
+        );
     }
 }
 // Only fixed identifiers leave this module; stderr can contain arbitrary private data.
@@ -196,10 +292,31 @@ fn stderr_pattern(line: &[u8]) -> &'static str {
     }
 }
 
-fn read_stderr(mut input: impl Read) -> (Vec<&'static str>, u8) {
+fn pattern_console_info(pattern: &'static str) -> Option<(u8, &'static str)> {
+    match pattern {
+        "yt_dlp.sign_in_age" => Some((1 << 0, "Vídeo exige confirmação de idade")),
+        "yt_dlp.age_restricted" => Some((1 << 1, "Vídeo com restrição de idade")),
+        "yt_dlp.login_required" => Some((1 << 2, "Vídeo exige autenticação ou login")),
+        "yt_dlp.no_js_runtime" => Some((1 << 3, "Ambiente JavaScript (deno) não encontrado")),
+        "yt_dlp.sabr_unavailable" => Some((1 << 4, "Formatos SABR indisponíveis")),
+        "yt_dlp.http_403" => Some((1 << 5, "Acesso recusado pelo servidor (HTTP 403)")),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+fn read_stderr(input: impl Read) -> (Vec<&'static str>, u8) {
+    read_stderr_with_console(input, None)
+}
+
+fn read_stderr_with_console(
+    mut input: impl Read,
+    console: Option<(&str, Option<&str>)>,
+) -> (Vec<&'static str>, u8) {
     let mut lines = VecDeque::new();
     let mut line = Vec::with_capacity(300);
     let mut flags = 0u8;
+    let mut emitted_patterns = 0u8;
     let mut buffer = [0u8; 8192];
     let mut finish = |line: &mut Vec<u8>| {
         let pattern = stderr_pattern(line);
@@ -210,6 +327,22 @@ fn read_stderr(mut input: impl Read) -> (Vec<&'static str>, u8) {
             "yt_dlp.sabr_unavailable" => 8,
             _ => 0,
         };
+        if let Some((job, project)) = console {
+            if let Some((bit, simple)) = pattern_console_info(pattern) {
+                if emitted_patterns & bit == 0 {
+                    emitted_patterns |= bit;
+                    let tech = format!("pattern={pattern}");
+                    emit_ytdlp_console(
+                        job,
+                        project,
+                        ConsoleLevel::Warn,
+                        ConsoleKind::Continuous(pattern),
+                        simple,
+                        Some(&tech),
+                    );
+                }
+            }
+        }
         if lines.len() == 50 {
             lines.pop_front();
         }
@@ -370,14 +503,35 @@ fn probe(
         .filter(|s| s.success())
         .and_then(|_| parse_probe(&text)))
 }
-fn precheck_age(
+fn precheck_age_with_console(
     exe: &Path,
     deno: Option<&Path>,
     url: &str,
+    job: &str,
+    project: Option<&str>,
     flag: &AtomicBool,
 ) -> Result<(), CoreError> {
+    let host = safe_url_host(url);
+    let pre_simple = format!("Verificando disponibilidade da URL ({host})…");
+    let pre_tech = format!("stage=precheck host={host}");
+    emit_ytdlp_console(
+        job,
+        project,
+        ConsoleLevel::Info,
+        ConsoleKind::Milestone,
+        &pre_simple,
+        Some(&pre_tech),
+    );
     match probe(exe, deno, url, flag)? {
         Some(p) if is_age_restricted(&p) => {
+            emit_ytdlp_console(
+                job,
+                project,
+                ConsoleLevel::Warn,
+                ConsoleKind::Milestone,
+                "Vídeo com restrição de idade detectado",
+                Some("pattern=yt_dlp.age_limit_needs_auth"),
+            );
             let result = classified_error(1);
             crate::diagnostic::record_ytdlp(
                 &result.code,
@@ -387,16 +541,41 @@ fn precheck_age(
             );
             Err(result)
         }
-        _ => Ok(()),
+        _ => {
+            emit_ytdlp_console(
+                job,
+                project,
+                ConsoleLevel::Info,
+                ConsoleKind::Milestone,
+                "Pré-checagem da URL concluída",
+                Some("stage=precheck status=ok"),
+            );
+            Ok(())
+        }
     }
 }
 
+#[cfg(test)]
 fn run_download(
     exe: &Path,
     deno: Option<&Path>,
     destination: &Path,
     url: &str,
     job: &str,
+    flag: &AtomicBool,
+    events: &mut EventSink<'_>,
+) -> Result<PathBuf, CoreError> {
+    run_download_with_console(exe, deno, destination, url, job, None, flag, events)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_download_with_console(
+    exe: &Path,
+    deno: Option<&Path>,
+    destination: &Path,
+    url: &str,
+    job: &str,
+    project: Option<&str>,
     flag: &AtomicBool,
     events: &mut EventSink<'_>,
 ) -> Result<PathBuf, CoreError> {
@@ -413,6 +592,17 @@ fn run_download(
             fs::create_dir(&p).ok().map(|_| TempDir(p))
         })
         .ok_or_else(|| error("download_directory", "Pasta de downloads indisponível"))?;
+    let host = safe_url_host(url);
+    let start_simple = format!("Iniciando download com yt-dlp ({host})");
+    let start_tech = format!("stage=download host={host} deno={}", deno.is_some());
+    emit_ytdlp_console(
+        job,
+        project,
+        ConsoleLevel::Info,
+        ConsoleKind::Milestone,
+        &start_simple,
+        Some(&start_tech),
+    );
     let template = temp.0.join("%(id)s.%(ext)s");
     let mut args: Vec<OsString> = [
         "--ignore-config",
@@ -426,7 +616,7 @@ fn run_download(
         "--no-simulate",
         "--restrict-filenames",
         "--progress-template",
-        "download:clipes-progress:%(progress._percent_str)s",
+        "download:clipes-progress:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s",
         "--print",
         "after_move:clipes-file:%(filepath)s",
         "-o",
@@ -453,16 +643,28 @@ fn run_download(
             }
         }
     });
-    let error_reader = thread::spawn(move || read_stderr(stderr));
+    let stderr_job = job.to_string();
+    let stderr_project = project.map(ToString::to_string);
+    let error_reader = thread::spawn(move || {
+        read_stderr_with_console(stderr, Some((&stderr_job, stderr_project.as_deref())))
+    });
     let mut filename = None;
     let status = loop {
         while let Ok(line) = rx.try_recv() {
-            handle_line(&line, job, events, &mut filename);
+            handle_line(&line, job, project, events, &mut filename);
         }
         if flag.load(Ordering::Relaxed) {
             group.terminate();
             let _ = child.kill();
             let _ = child.wait();
+            emit_ytdlp_console(
+                job,
+                project,
+                ConsoleLevel::Warn,
+                ConsoleKind::Milestone,
+                "Download cancelado",
+                Some("code=cancelled"),
+            );
             break Err(error("cancelled", "Download cancelado"));
         }
         match child.try_wait() {
@@ -480,11 +682,21 @@ fn run_download(
     let _ = output_reader.join();
     let (patterns, flags) = error_reader.join().unwrap_or_default();
     for line in rx.try_iter() {
-        handle_line(&line, job, events, &mut filename);
+        handle_line(&line, job, project, events, &mut filename);
     }
     let status = status?;
     if !status.success() {
         let result = classified_error(flags);
+        let err_simple = format!("Falha no download ({})", result.code);
+        let err_tech = format!("code={}", result.code);
+        emit_ytdlp_console(
+            job,
+            project,
+            ConsoleLevel::Error,
+            ConsoleKind::Milestone,
+            &err_simple,
+            Some(&err_tech),
+        );
         crate::diagnostic::record_ytdlp(
             &result.code,
             &patterns,
@@ -494,6 +706,14 @@ fn run_download(
         return Err(result);
     }
     if flag.load(Ordering::Relaxed) {
+        emit_ytdlp_console(
+            job,
+            project,
+            ConsoleLevel::Warn,
+            ConsoleKind::Milestone,
+            "Download cancelado",
+            Some("code=cancelled"),
+        );
         return Err(error("cancelled", "Download cancelado"));
     }
     let file = filename.ok_or_else(failure)?;
@@ -805,5 +1025,113 @@ mod download_tests {
         assert_eq!(err.code, "js_runtime_missing");
         assert!(err.message.contains("Componente deno"));
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn console_emits_progress_template_and_closed_stderr_patterns_without_leaking_secrets() {
+        let capture = crate::console::TestConsoleCapture::new();
+        let mut filename = None;
+        handle_line(
+            "clipes-progress:42.5%|2.40MiB/s|00:15",
+            "url-unit-progress",
+            Some("proj-u1"),
+            &mut |_| {},
+            &mut filename,
+        );
+        let progress_events = capture.events_for_job("url-unit-progress");
+        assert_eq!(progress_events.len(), 1);
+        assert_eq!(progress_events[0].origin, "yt-dlp");
+        assert!(progress_events[0].simple.contains("42%"));
+        assert!(progress_events[0].simple.contains("2.40MiB/s"));
+        assert!(progress_events[0].simple.contains("ETA 00:15"));
+        assert_eq!(
+            progress_events[0].technical.as_deref(),
+            Some("percent=42.5% speed=2.40MiB/s eta=00:15")
+        );
+
+        let stderr = b"ERROR: HTTP Error 403: Forbidden https://googlevideo.com/v?sig=secret123 cookie=abc C:\\Users\\Alice\\priv.mp4\nunknown line sk-proj-secret123456\n";
+        let (patterns, _) = read_stderr_with_console(
+            &stderr[..],
+            Some(("url-unit-stderr", Some("proj-u1"))),
+        );
+        assert_eq!(patterns, vec!["yt_dlp.http_403", "yt_dlp.unrecognized"]);
+        let stderr_events = capture.events_for_job("url-unit-stderr");
+        assert_eq!(stderr_events.len(), 1);
+        assert_eq!(stderr_events[0].level, ConsoleLevel::Warn);
+        assert_eq!(
+            stderr_events[0].technical.as_deref(),
+            Some("pattern=yt_dlp.http_403")
+        );
+
+        let root = tempfile::tempdir().unwrap();
+        let fake = root
+            .path()
+            .join(if cfg!(windows) { "fake.exe" } else { "fake" });
+        let rustc = PathBuf::from(env!("CARGO")).with_file_name(if cfg!(windows) {
+            "rustc.exe"
+        } else {
+            "rustc"
+        });
+        assert!(Command::new(rustc)
+            .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fake_ytdlp.rs"))
+            .arg("-o")
+            .arg(&fake)
+            .status()
+            .unwrap()
+            .success());
+
+        let flag = AtomicBool::new(false);
+        let secret_url =
+            "https://example.com/v?token=sk-proj-secret123&sig=abc999&cookie=topsecret&mode=fail";
+        let out = root.path().join("out");
+        let _ = precheck_age_with_console(&fake, None, secret_url, "url-unit-fail", None, &flag);
+        let err = run_download_with_console(
+            &fake,
+            None,
+            &out,
+            secret_url,
+            "url-unit-fail",
+            None,
+            &flag,
+            &mut |_| {},
+        )
+        .unwrap_err();
+        assert_eq!(err.code, "download_failed");
+
+        let events = capture.events_for_job("url-unit-fail");
+        assert!(events.iter().any(|ev| {
+            ev.origin == "yt-dlp"
+                && ev.simple.contains("example.com")
+                && ev.technical.as_deref() == Some("stage=precheck host=example.com")
+        }));
+        assert!(events.iter().any(|ev| {
+            ev.technical.as_deref() == Some("pattern=yt_dlp.http_403")
+                && ev.level == ConsoleLevel::Warn
+        }));
+        assert!(events.iter().any(|ev| {
+            ev.technical.as_deref() == Some("code=download_failed")
+                && ev.level == ConsoleLevel::Error
+        }));
+        for ev in capture
+            .events_for_job("url-unit-stderr")
+            .into_iter()
+            .chain(events)
+        {
+            let joined = format!("{} {}", ev.simple, ev.technical.as_deref().unwrap_or(""));
+            for forbidden in [
+                "sk-proj-secret",
+                "abc999",
+                "topsecret",
+                "googlevideo",
+                "secret123",
+                "Alice",
+                "private.mp4",
+                "priv.mp4",
+                "cookie=",
+                "sig=",
+            ] {
+                assert!(!joined.contains(forbidden), "vazou '{forbidden}': {joined}");
+            }
+        }
     }
 }
