@@ -6,6 +6,23 @@ O formato segue o padrão [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 
 ## [Não lançado]
 
+## [2.0.1] - 2026-11-19
+
+Correções do Editor e do Windows e o novo **Console ao vivo**. Veja as notas completas em [docs/releases/v2.0.1.md](docs/releases/v2.0.1.md).
+
+### Adicionado
+
+- **Console ao vivo** ([#530](https://github.com/GUSTAVOHOOO/clipes/pull/530)): núcleo `console` com redator de segredos que oculta chaves, tokens, cookies, URLs assinadas e caminhos pessoais ([#533](https://github.com/GUSTAVOHOOO/clipes/pull/533)); componente `ConsoleAoVivo` ([#534](https://github.com/GUSTAVOHOOO/clipes/pull/534)); painel global recolhível na parte de baixo do app, aberto pela barra de status, pela Paleta (`Ctrl+K`) ou pelo ciclo `F6`, e ação **Ver console** na Fila de Jobs ([#538](https://github.com/GUSTAVOHOOO/clipes/pull/538)).
+- Andamento de exportação, prévia, importação por URL, transcrição, reenquadramento, Narração e proxy no Console, com encoder, progresso, velocidade e tempo restante ([#539](https://github.com/GUSTAVOHOOO/clipes/pull/539)).
+- Console inline em **Configurações › Componentes**, aberto sozinho durante download, instalação do worker Python e teste de hardware ([#537](https://github.com/GUSTAVOHOOO/clipes/pull/537)).
+- Marcos das Tarefas de IA no Console (Perfil, modelo, janela/bloco N de M, reparo automático, nova tentativa por limite de uso, pausa por orçamento, tokens, custo e duração), sem expor prompt, Transcrição, Roteiro ou respostas do Provedor ([#540](https://github.com/GUSTAVOHOOO/clipes/pull/540)).
+
+### Corrigido
+
+- Editor do Corte: a legenda ficava dessincronizada e o vídeo voltava sozinho em Cortes que começam depois do início da Fonte; o proxy agora é posicionado relativo à janela do Corte ([#532](https://github.com/GUSTAVOHOOO/clipes/pull/532)).
+- Windows: o app abria com uma janela de terminal atrás, e FFmpeg, yt-dlp, Python e CLIs de Provedores piscavam janelas pretas ([#536](https://github.com/GUSTAVOHOOO/clipes/pull/536)).
+- Bancada de Revisão: a prévia do Corte mostrava "Prévia indisponível"; agora toca o vídeo do proxy ([#531](https://github.com/GUSTAVOHOOO/clipes/pull/531)).
+
 ## [2.0.0] - 2026-11-19
 
 Nova interface v2 (`front-v2/` e `design-system-v2/`) construída do zero sobre o mesmo núcleo em Rust (`clipes-core`), o mesmo formato portátil de Projeto (`.clipes` com `project.sqlite`) e os mesmos Provedores da v1. Veja as notas completas em [docs/releases/v2.0.0.md](docs/releases/v2.0.0.md).
