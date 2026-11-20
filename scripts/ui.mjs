@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { testCaptions } from './captions-ui.mjs';
 import { createServer } from 'node:net';
 import { mkdir } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { testEditorBorders } from './editor-borders.mjs';
 import { testEditorSilencesPanel, testEditorSilencesPreview } from './editor-silences.mjs';
 import { testEditorCrop } from './editor-crop.mjs';
@@ -13,6 +14,10 @@ import { testTranslation, testTranslationBlocked } from './translation-ui.mjs';
 import { testTtsComponents, testTtsNarrationLocked, testTtsNarrationUnlocked, testNarrationDeviationAndTrack } from './tts-ui.mjs';
 import { testCatalogComponents } from './catalog-ui.mjs';
 import { testTeleprompterRecording } from './record-ui.mjs';
+
+// Versão do app lida do manifesto, para o teste não quebrar a cada release.
+const appVersion = JSON.parse(readFileSync(new URL('../src-tauri/tauri.conf.json', import.meta.url), 'utf8')).version;
+const appVersionRe = new RegExp(appVersion.replaceAll('.', '\\.'));
 import { testPackagingChapters } from './packaging-chapters-ui.mjs';
 import { testThumbnailPreview } from './thumbnail-preview-ui.mjs';
 const socket = createServer();
@@ -34,7 +39,7 @@ try {
   await page.goto(url);
   const updateDialog = page.getByRole('dialog', { name: 'Atualização disponível' });
   await updateDialog.waitFor();
-  assert.match(await updateDialog.innerText(), /2\.0\.0/);
+  assert.match(await updateDialog.innerText(), appVersionRe);
   assert.match(await updateDialog.innerText(), /Novidades de teste/);
   await updateDialog.getByRole('button', { name: 'Agora não' }).click();
   assert.equal(await updateDialog.count(), 0);
@@ -50,7 +55,7 @@ try {
   await page.screenshot({ path: 'shots/palette.png' });
   await page.getByRole('option', { name: /Sobre/ }).click();
   await page.getByRole('heading', { name: 'Sobre' }).waitFor();
-  assert.match(await page.locator('main').innerText(), /2\.0\.0/);
+  assert.match(await page.locator('main').innerText(), appVersionRe);
   assert.match(await page.locator('main').innerText(), /Apache-2\.0/);
   await page.screenshot({ path: 'shots/about.png' });
   await page.getByRole('button', { name: 'Componentes' }).click();

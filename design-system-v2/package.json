@@ -1,7 +1,7 @@
 {
   "name": "@clipes/design-system-v2",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.0.1",
   "type": "module",
   "license": "Apache-2.0",
   "description": "Design system do front v2 do Clipes: tokens, primitivas e componentes do catálogo, com galeria local.",
