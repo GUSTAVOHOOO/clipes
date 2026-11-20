@@ -1139,6 +1139,7 @@ mod tests {
         let root = tempfile::tempdir().expect("tempdir");
         let data_dir = root.path().join("data");
         let _guard = crate::test_env::set_data_dir(&data_dir);
+        let capture = crate::console::TestConsoleCapture::new();
 
         crate::dispatch(
             "projects.create",
@@ -1173,13 +1174,6 @@ mod tests {
         })
         .expect("seed sources");
 
-        let seq_before = crate::dispatch("console.history", json!({}), &mut |_| {})
-            .unwrap()["items"]
-            .as_array()
-            .and_then(|a| a.last())
-            .and_then(|e| e["seq"].as_u64())
-            .unwrap_or(0);
-
         let created = crate::dispatch(
             "batches.create",
             json!({"sourceIds": [s1, s2]}),
@@ -1206,17 +1200,7 @@ mod tests {
         crate::dispatch("batches.cancel", json!({"id": batch_id}), &mut |_| {})
             .expect("batches.cancel");
 
-        let items_ev: Vec<Value> = crate::dispatch("console.history", json!({}), &mut |_| {})
-            .unwrap()["items"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|e| {
-                e["seq"].as_u64().unwrap_or(0) > seq_before
-                    && e["job"] == format!("batch-{batch_id}")
-            })
-            .collect();
+        let items_ev = capture.events_for_job(&format!("batch-{batch_id}"));
 
         let joined = serde_json::to_string(&items_ev).unwrap();
         assert!(joined.contains("Lote de Fontes criado: 2 Fonte(s)"), "{joined}");

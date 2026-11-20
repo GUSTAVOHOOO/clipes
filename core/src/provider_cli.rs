@@ -560,6 +560,7 @@ mod tests {
         let root = tempfile::tempdir().expect("tempdir");
         let data_dir = root.path().join("data");
         let _guard = crate::test_env::set_data_dir(&data_dir);
+        let capture = crate::console::TestConsoleCapture::new();
 
         let rustc = PathBuf::from(env!("CARGO")).with_file_name(if cfg!(windows) {
             "rustc.exe"
@@ -590,13 +591,6 @@ mod tests {
         std::env::set_var("PATH", &new_path);
         let prev_fake_log = std::env::var_os("FAKE_LOG");
         std::env::set_var("FAKE_LOG", root.path().join("fake.log"));
-
-        let seq_before = crate::dispatch("console.history", json!({}), &mut |_| {})
-            .unwrap()["items"]
-            .as_array()
-            .and_then(|a| a.last())
-            .and_then(|e| e["seq"].as_u64())
-            .unwrap_or(0);
 
         let secret_instruction = "INSTRUCAO_SECRETA_CLI_111";
         let secret_transcript = "TRANSCRICAO_SECRETA_CLI_222";
@@ -636,18 +630,10 @@ mod tests {
             None => std::env::remove_var("PATH"),
         }
 
-        let items: Vec<Value> = crate::dispatch("console.history", json!({}), &mut |_| {})
-            .unwrap()["items"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|e| e["seq"].as_u64().unwrap_or(0) > seq_before)
-            .collect();
-
-        let codex_events: Vec<&Value> = items.iter().filter(|e| e["job"] == "cli:codex").collect();
+        let items = capture.events();
+        let codex_events: Vec<_> = items.iter().filter(|e| e.job == "cli:codex").collect();
         assert_eq!(codex_events.len(), 2, "expected start + done: {codex_events:?}");
-        assert!(codex_events.iter().all(|e| e["origin"] == "ai"));
+        assert!(codex_events.iter().all(|e| e.origin == "ai"));
 
         let joined = serde_json::to_string(&items).unwrap();
         assert!(joined.contains("Consultando Codex CLI"), "{joined}");

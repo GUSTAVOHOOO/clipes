@@ -201,6 +201,7 @@ fn selection_console_emits_window_progress_and_never_leaks_content() {
     let root = tempfile::tempdir().expect("tempdir");
     let data_dir = root.path().join("data");
     let _guard = crate::test_env::set_data_dir(&data_dir);
+    let capture = crate::console::TestConsoleCapture::new();
 
     crate::dispatch(
         "projects.create",
@@ -255,13 +256,6 @@ fn selection_console_emits_window_progress_and_never_leaks_content() {
     })
     .expect("seed transcript");
 
-    let seq_before = crate::dispatch("console.history", json!({}), &mut |_| {})
-        .unwrap()["items"]
-        .as_array()
-        .and_then(|a| a.last())
-        .and_then(|e| e["seq"].as_u64())
-        .unwrap_or(0);
-
     let started = crate::dispatch(
         "selection.start",
         json!({"source_id": source_id, "confirmed": true}),
@@ -312,21 +306,14 @@ fn selection_console_emits_window_progress_and_never_leaks_content() {
     crate::dispatch("selection.cancel", json!({"run": run2}), &mut |_| {})
         .expect("selection.cancel");
 
-    let items: Vec<Value> = crate::dispatch("console.history", json!({}), &mut |_| {})
-        .unwrap()["items"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default()
+    let items: Vec<_> = capture
+        .events()
         .into_iter()
-        .filter(|e| {
-            e["seq"].as_u64().unwrap_or(0) > seq_before
-                && (e["job"] == format!("selection-{run}")
-                    || e["job"] == format!("selection-{run2}"))
-        })
+        .filter(|e| e.job == format!("selection-{run}") || e.job == format!("selection-{run2}"))
         .collect();
 
     let joined = serde_json::to_string(&items).unwrap();
-    assert!(items.iter().all(|e| e["origin"] == "ai"), "{joined}");
+    assert!(items.iter().all(|e| e.origin == "ai"), "{joined}");
     assert!(joined.contains("Seleção de Cortes"), "{joined}");
     assert!(joined.contains("qwen-sel-local"), "{joined}");
     assert!(joined.contains("Janela(s)"), "{joined}");

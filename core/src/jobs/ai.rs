@@ -1726,33 +1726,12 @@ mod tests {
         }
     }
 
-    fn console_events_since(since_seq: u64, job: &str) -> Vec<Value> {
-        let res = crate::dispatch("console.history", json!({}), &mut |_| {})
-            .expect("console.history must succeed");
-        res["items"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|ev| ev["seq"].as_u64().unwrap_or(0) > since_seq && ev["job"] == job)
-            .collect()
-    }
-
-    fn latest_console_seq() -> u64 {
-        let res = crate::dispatch("console.history", json!({}), &mut |_| {})
-            .expect("console.history must succeed");
-        res["items"]
-            .as_array()
-            .and_then(|a| a.last())
-            .and_then(|ev| ev["seq"].as_u64())
-            .unwrap_or(0)
-    }
-
     #[test]
     fn console_emits_ai_metadata_repair_pause_and_never_leaks_content() {
         let root = tempfile::tempdir().expect("tempdir");
         let data_dir = root.path().join("data");
         let _guard = crate::test_env::set_data_dir(&data_dir);
+        let capture = crate::console::TestConsoleCapture::new();
 
         crate::dispatch(
             "projects.create",
@@ -1818,13 +1797,12 @@ mod tests {
         })
         .expect("seed selection window");
 
-        let seq0 = latest_console_seq();
         let stop = AtomicBool::new(false);
         execute(job1, &stop);
 
-        let evs1 = console_events_since(seq0, &job1.to_string());
+        let evs1 = capture.events_for_job(&job1.to_string());
         assert!(!evs1.is_empty(), "expected console events for job1");
-        assert!(evs1.iter().all(|e| e["origin"] == "ai"));
+        assert!(evs1.iter().all(|e| e.origin == "ai"));
 
         let joined1 = serde_json::to_string(&evs1).unwrap();
         assert!(joined1.contains("Seleção de Cortes"), "{joined1}");
@@ -1861,12 +1839,14 @@ mod tests {
         })
         .expect("mark job2 running");
 
-        let seq1 = latest_console_seq();
         execute(job2, &stop);
 
-        let evs2 = console_events_since(seq1, &job2.to_string());
+        let evs2 = capture.events_for_job(&job2.to_string());
         let joined2 = serde_json::to_string(&evs2).unwrap();
-        assert!(evs2.iter().any(|e| e["level"] == "warn"), "{joined2}");
+        assert!(
+            evs2.iter().any(|e| e.level == ConsoleLevel::Warn),
+            "{joined2}"
+        );
         assert!(joined2.contains("pausada"), "{joined2}");
         assert!(joined2.contains("limite de chamadas"), "{joined2}");
         assert!(joined2.contains("code=budget_calls"), "{joined2}");

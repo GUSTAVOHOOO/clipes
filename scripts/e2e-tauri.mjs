@@ -16,12 +16,9 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const SHOTS_DIR = path.join(REPO_ROOT, 'shots-e2e');
 const REMOTE_TEST_ENDPOINT = 'http://192.0.2.10/v1';
 
-// Asserções de `core-console` que dependem de instrumentações paralelas ainda não integradas ao master:
-// - WORKER_INSTALL_CONSOLE_READY: Ticket 3 (instalação do worker/`uv` em `core/src/components/worker.rs`)
-// - MEDIA_CONSOLE_READY: Ticket 4 (transcrição/exportação em `core/src/transcription.rs`, `worker.rs`, `export*.rs`)
-// Quando os respectivos tickets entrarem no master, basta trocar a flag correspondente para `true`.
-const WORKER_INSTALL_CONSOLE_READY = false; // pendente: Ticket 3
-const MEDIA_CONSOLE_READY = false; // pendente: Ticket 4
+// Todos os emissores (Ticket 3: worker/uv, Ticket 4: mídia/ffmpeg/worker, Ticket 5: IA) estão no master.
+const WORKER_INSTALL_CONSOLE_READY = true;
+const MEDIA_CONSOLE_READY = true;
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -1092,13 +1089,12 @@ async function runSession1(ui, ctx) {
   const workerConsole = await ui.readConsoleEvents();
   await ui.assertConsolePrivacy(ctx, workerConsole);
   if (WORKER_INSTALL_CONSOLE_READY) {
-    // Pendente (Ticket 3): instrumentação da instalação do worker/uv em core/src/components/worker.rs
     const installEvents = workerConsole.live.filter(
-      ev => ev.origin === 'uv' || ev.origin === 'component' || ev.job === 'worker',
+      ev => ev.job === 'worker' && (ev.origin === 'uv' || ev.origin === 'worker'),
     );
     assert.ok(
-      installEvents.length > 0,
-      `WebView não recebeu core-console ao instalar o worker: ${JSON.stringify(workerConsole)}`,
+      installEvents.some(ev => ev.origin === 'uv') && installEvents.some(ev => ev.origin === 'worker'),
+      `WebView não recebeu core-console completo (uv + worker) ao instalar o worker: ${JSON.stringify(workerConsole)}`,
     );
   }
 
@@ -1448,13 +1444,12 @@ async function runSession2(ui, ctx) {
   const transcribeConsole = await ui.readConsoleEvents();
   await ui.assertConsolePrivacy(ctx, transcribeConsole);
   if (MEDIA_CONSOLE_READY) {
-    // Pendente (Ticket 4): instrumentação da transcrição em core/src/transcription.rs e core/src/worker.rs
     const transcribeEvents = transcribeConsole.live.filter(
-      ev => ev.origin === 'worker' || /transcri/i.test(ev.simple ?? ''),
+      ev => ev.origin === 'worker' || ev.origin === 'ffmpeg',
     );
     assert.ok(
-      transcribeEvents.length > 0,
-      `WebView não recebeu core-console ao transcrever mídia sintética: ${JSON.stringify(transcribeConsole)}`,
+      transcribeEvents.some(ev => ev.origin === 'worker'),
+      `WebView não recebeu core-console (worker) ao transcrever mídia sintética: ${JSON.stringify(transcribeConsole)}`,
     );
   }
 
@@ -1723,13 +1718,10 @@ async function runSession3(ui, ctx) {
   const exportConsole = await ui.readConsoleEvents();
   await ui.assertConsolePrivacy(ctx, exportConsole);
   if (MEDIA_CONSOLE_READY) {
-    // Pendente (Ticket 4): instrumentação do FFmpeg em core/src/export/render.rs e core/src/export.rs
-    const exportEvents = exportConsole.live.filter(
-      ev => ev.origin === 'ffmpeg' || /export/i.test(ev.simple ?? ''),
-    );
+    const exportEvents = exportConsole.live.filter(ev => ev.origin === 'ffmpeg');
     assert.ok(
       exportEvents.length > 0,
-      `WebView não recebeu core-console ao exportar mídia sintética: ${JSON.stringify(exportConsole)}`,
+      `WebView não recebeu core-console (ffmpeg) ao exportar mídia sintética: ${JSON.stringify(exportConsole)}`,
     );
   }
 
