@@ -195,3 +195,135 @@ fn the_transformed_task_routes_as_the_selection_task() {
     assert!(is_job_kind(JOB_KIND) && is_job_kind(JOB_KIND_TRANSFORMED));
     assert!(!is_job_kind("ai:packaging"));
 }
+
+#[test]
+fn selection_console_emits_window_progress_and_never_leaks_content() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let data_dir = root.path().join("data");
+    let _guard = crate::test_env::set_data_dir(&data_dir);
+    let capture = crate::console::TestConsoleCapture::new();
+
+    crate::dispatch(
+        "projects.create",
+        json!({"parent": root.path(), "name": "SelConsole"}),
+        &mut |_| {},
+    )
+    .expect("projects.create");
+    crate::dispatch(
+        "provider.configure",
+        json!({
+            "endpoint": "http://127.0.0.1:9/v1",
+            "kind": "openai",
+            "model": "qwen-sel-local",
+            "context": 32768
+        }),
+        &mut |_| {},
+    )
+    .expect("provider.configure");
+
+    let secret_sentence = "TEXTO_SECRETO_FRASES_SELECAO_123";
+    let secret_title = "TITULO_SECRETO_CANDIDATO_456";
+    let secret_why = "JUSTIFICATIVA_SECRETA_789";
+
+    let source_id = projects::with_writer(|c| {
+        // Impede o worker da fila de tentar HTTP real durante este teste unitário.
+        c.execute(
+            "INSERT INTO ai_pauses(scope,key,reason) VALUES ('task','selection','user')",
+            [],
+        )?;
+        c.execute(
+            "INSERT INTO sources(path,size,duration_us,partial_hash,metadata,permission,audio_track) VALUES (?1,100,60000000,'h','{}','{}',0)",
+            [r"C:\Users\MariaSecreta\Videos\live_secreta.mp4"],
+        )?;
+        let src = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO transcripts(source_id,audio_track,engine,model,revision,compute_type,state,resume_us,duration_us) VALUES (?1,0,'local','small','r','int8','complete',60000000,60000000)",
+            [src],
+        )?;
+        let tr = c.last_insert_rowid();
+        for pos in 0..20 {
+            let text = if pos == 19 {
+                format!(" {secret_sentence}.")
+            } else {
+                " palavra".to_owned()
+            };
+            c.execute(
+                "INSERT INTO transcript_words(transcript_id,position,kind,text,start_us,end_us,language) VALUES (?1,?2,'word',?3,?4,?5,'pt')",
+                (tr, pos, text, pos * 1_500_000, (pos + 1) * 1_500_000),
+            )?;
+        }
+        Ok(src)
+    })
+    .expect("seed transcript");
+
+    let started = crate::dispatch(
+        "selection.start",
+        json!({"source_id": source_id, "confirmed": true}),
+        &mut |_| {},
+    )
+    .expect("selection.start");
+    let run = started["run"].as_i64().expect("run id");
+
+    // Simula conclusão da Janela 0 com candidato contendo título/justificativa secretos.
+    let cand_data = json!({
+        "schemaVersion": 1,
+        "candidates": [{
+            "startId": 1,
+            "endId": 1,
+            "title": secret_title,
+            "hook": {"score": 8, "why": secret_why},
+            "selfContained": {"score": 7, "why": secret_why},
+            "energy": {"score": 7, "why": secret_why},
+            "value": {"score": 8, "why": secret_why},
+            "closing": {"score": 7, "why": secret_why}
+        }]
+    });
+    projects::with_writer(|c| {
+        let job_id: i64 = c.query_row(
+            "SELECT job_id FROM selection_windows WHERE run_id=?1 AND idx=0",
+            [run],
+            |r| r.get(0),
+        )?;
+        let res = json!({"outcome": "ok", "data": cand_data}).to_string();
+        c.execute(
+            "UPDATE jobs SET state='completed', result=?2 WHERE id=?1",
+            (job_id, res),
+        )?;
+        Ok(())
+    })
+    .expect("complete window 0");
+
+    advance(run).expect("advance run");
+
+    let run2 = crate::dispatch(
+        "selection.start",
+        json!({"source_id": source_id, "confirmed": true}),
+        &mut |_| {},
+    )
+    .expect("selection.start 2")["run"]
+        .as_i64()
+        .expect("run2 id");
+    crate::dispatch("selection.cancel", json!({"run": run2}), &mut |_| {})
+        .expect("selection.cancel");
+
+    let items: Vec<_> = capture
+        .events()
+        .into_iter()
+        .filter(|e| e.job == format!("selection-{run}") || e.job == format!("selection-{run2}"))
+        .collect();
+
+    let joined = serde_json::to_string(&items).unwrap();
+    assert!(items.iter().all(|e| e.origin == "ai"), "{joined}");
+    assert!(joined.contains("Seleção de Cortes"), "{joined}");
+    assert!(joined.contains("qwen-sel-local"), "{joined}");
+    assert!(joined.contains("Janela(s)"), "{joined}");
+    assert!(joined.contains("Seleção de Cortes concluída"), "{joined}");
+    assert!(joined.contains("Seleção de Cortes cancelada"), "{joined}");
+    assert!(!joined.contains(secret_sentence), "leaked transcript!");
+    assert!(!joined.contains(secret_title), "leaked candidate title!");
+    assert!(!joined.contains(secret_why), "leaked justification!");
+    assert!(!joined.contains("MariaSecreta"), "leaked personal path!");
+    assert!(!joined.contains("live_secreta.mp4"), "leaked source name!");
+
+    let _ = crate::dispatch("projects.close", json!({}), &mut |_| {});
+}

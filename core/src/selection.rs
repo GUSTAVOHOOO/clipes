@@ -8,6 +8,7 @@
 use crate::{
     ai_task::{self, AiTask, Budget, TaskInput, Violation},
     chat::{self, ChatMarks},
+    console::{emit_console, ConsoleDraft, ConsoleKind, ConsoleLevel},
     energy::{self, EnergyLevel, EnergyMarks},
     jobs::{self, Safety},
     projects, selection_windows,
@@ -687,6 +688,32 @@ fn cmd_start(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         .map(|(i, t)| (i as i64, t))
         .collect();
     enqueue_windows(run, &pending, None, true, CONFIRMATION_MESSAGE)?;
+    let kind_pt = match s.kind {
+        VideoKind::Direct => "Corte direto",
+        VideoKind::Transformed => "Vídeo transformado",
+    };
+    let route_desc = match s.route.profile.model.as_deref() {
+        Some(model) if !model.is_empty() => format!("{} ({model})", s.route.profile.label),
+        _ => s.route.profile.label.clone(),
+    };
+    emit_selection_console(
+        run,
+        ConsoleLevel::Info,
+        &format!(
+            "Seleção de Cortes ({kind_pt}) iniciada: {} Janela(s) com {route_desc}",
+            s.plan.windows.len()
+        ),
+        &format!(
+            "selection_run={run} task={} windows={} plan={} context_tokens={} profile={} provider={} model={}",
+            definition.id,
+            s.plan.windows.len(),
+            state_label(s.plan.state),
+            s.plan.context.tokens,
+            s.route.profile.id,
+            s.route.profile.kind,
+            s.route.profile.model.as_deref().unwrap_or("-")
+        ),
+    );
     Ok(
         json!({"run": run, "batch": batch_for(run), "videoKind": s.kind.as_str(), "minUs": s.range.min_us, "maxUs": s.range.max_us, "windows": s.plan.windows.len(), "planState": state_label(s.plan.state), "weights": weights_json(s.kind)}),
     )
@@ -887,13 +914,31 @@ fn read_run(run: i64) -> Result<RunRow, CoreError> {
     .map_err(|_| error("run_not_found", "Execução de seleção não encontrada."))
 }
 
-fn emit(run: i64, step: &str, percentage: u8, message: &str, error: Option<CoreError>) {
-    let project = projects::with_reader(|c| {
+fn current_project_id() -> Option<String> {
+    projects::with_reader(|c| {
         c.query_row("SELECT id FROM queue_project_identity", [], |r| {
             r.get::<_, String>(0)
         })
     })
-    .ok();
+    .ok()
+}
+
+fn emit_selection_console(run: i64, level: ConsoleLevel, simple: &str, technical: &str) {
+    let job = format!("selection-{run}");
+    let project = current_project_id();
+    emit_console(ConsoleDraft {
+        job: &job,
+        project: project.as_deref(),
+        origin: "ai",
+        level,
+        kind: ConsoleKind::Milestone,
+        simple,
+        technical: Some(technical),
+    });
+}
+
+fn emit(run: i64, step: &str, percentage: u8, message: &str, error: Option<CoreError>) {
+    let project = current_project_id();
     crate::emit_background(crate::ProgressEvent {
         job: format!("selection-{run}"),
         project,
@@ -929,6 +974,14 @@ pub(crate) fn on_job_settled(job: i64) {
                 )?;
                 Ok(())
             });
+            emit_selection_console(
+                run,
+                ConsoleLevel::Warn,
+                "Seleção de Cortes pausada: limite diário do Provedor atingido; Janelas na fila canceladas",
+                &format!(
+                    "selection_run={run} paused reason=provider_daily_limit remaining_cancelled=true"
+                ),
+            );
         }
         let _ = advance(run);
     }
@@ -1058,7 +1111,28 @@ fn advance(run: i64) -> Result<(), CoreError> {
                 )?;
                 Ok(())
             })?;
-            let pct = ((completed + failed) * 100 / total.max(1) as i64) as u8;
+            let resolved = completed + failed;
+            let level = if failed > 0 {
+                ConsoleLevel::Warn
+            } else {
+                ConsoleLevel::Info
+            };
+            let simple = if failed > 0 {
+                format!(
+                    "Seleção de Cortes: Janela {resolved} de {total} ({completed} concluída(s), {failed} falha(s))"
+                )
+            } else {
+                format!("Seleção de Cortes: Janela {resolved} de {total} concluída")
+            };
+            emit_selection_console(
+                run,
+                level,
+                &simple,
+                &format!(
+                    "selection_run={run} resolved={resolved}/{total} completed={completed} failed={failed}"
+                ),
+            );
+            let pct = (resolved * 100 / total.max(1) as i64) as u8;
             emit(run, "window", pct, "Janela da seleção resolvida", None);
         }
         return Ok(());
@@ -1185,6 +1259,36 @@ fn advance(run: i64) -> Result<(), CoreError> {
         Ok(changed == 1)
     })?;
     if closed {
+        if failed == 0 {
+            emit_selection_console(
+                run,
+                ConsoleLevel::Info,
+                &format!(
+                    "Seleção de Cortes concluída: {} candidato(s) mantido(s) em {total} Janela(s)",
+                    kept.len()
+                ),
+                &format!(
+                    "selection_run={run} state=completed windows={total} proposed={} kept={} merged={} adjusted={}",
+                    tally.proposed,
+                    kept.len(),
+                    tally.merged,
+                    tally.adjusted
+                ),
+            );
+        } else {
+            emit_selection_console(
+                run,
+                ConsoleLevel::Warn,
+                &format!(
+                    "Seleção de Cortes parcial: {completed} de {total} Janela(s) concluída(s), {failed} falha(s), {} candidato(s) mantido(s)",
+                    kept.len()
+                ),
+                &format!(
+                    "selection_run={run} state=partial completed={completed} failed={failed} windows={total} kept={}",
+                    kept.len()
+                ),
+            );
+        }
         let error = (failed > 0).then(|| {
             error(
                 "selection_windows_failed",
@@ -1352,13 +1456,28 @@ fn parse_run_id(v: &Value) -> Result<i64, CoreError> {
 
 fn resume_run(run: i64, v: &Value) -> CommandResult {
     let inputs = redo_inputs(run, v)?;
-    enqueue_windows(
+    let route = enqueue_windows(
         run,
         &inputs,
         None,
         v["confirmed"] == true,
         CONFIRMATION_MESSAGE,
     )?;
+    emit_selection_console(
+        run,
+        ConsoleLevel::Info,
+        &format!(
+            "Retomando Seleção de Cortes: {} Janela(s) reenfileirada(s) com {}",
+            inputs.len(),
+            route.profile.label
+        ),
+        &format!(
+            "selection_run={run} action=resume windows={} profile={} model={}",
+            inputs.len(),
+            route.profile.id,
+            route.profile.model.as_deref().unwrap_or("-")
+        ),
+    );
     Ok(json!({"run": run, "windows": inputs.iter().map(|i| i.0).collect::<Vec<_>>()}))
 }
 
@@ -1471,6 +1590,24 @@ fn redo_with_profile(run: i64, profile: &str, v: &Value) -> CommandResult {
         v["confirmed"] == true,
         REDO_CONFIRMATION_MESSAGE,
     )?;
+    let route_desc = match route.profile.model.as_deref() {
+        Some(model) if !model.is_empty() => format!("{} ({model})", route.profile.label),
+        _ => route.profile.label.clone(),
+    };
+    emit_selection_console(
+        run,
+        ConsoleLevel::Info,
+        &format!(
+            "Refazendo {} Janela(s) da Seleção de Cortes com Perfil {route_desc}",
+            inputs.len()
+        ),
+        &format!(
+            "selection_run={run} action=redo windows={} profile={} model={}",
+            inputs.len(),
+            route.profile.id,
+            route.profile.model.as_deref().unwrap_or("-")
+        ),
+    );
     Ok(json!({
         "run": run,
         "windows": inputs.iter().map(|i| i.0).collect::<Vec<_>>(),
@@ -1491,6 +1628,12 @@ fn cmd_cancel(v: Value, _: &mut EventSink<'_>) -> CommandResult {
         )?;
         Ok(())
     })?;
+    emit_selection_console(
+        run,
+        ConsoleLevel::Warn,
+        "Seleção de Cortes cancelada",
+        &format!("selection_run={run} state=cancelled"),
+    );
     advance(run)?;
     Ok(Value::Null)
 }
