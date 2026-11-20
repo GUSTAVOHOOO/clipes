@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Clipes v2.0.0</title>
+<style>
+  /* A única família da marca: Inter Variable (@fontsource-variable/inter 5.3.0, OFL-1.1), a mesma do front-v2. */
+  @font-face { font-family: 'Display'; src: url(../assets/fonts/inter-latin-wght-normal.woff2) format('woff2'); font-weight: 100 900; }
+  @font-face { font-family: 'UI'; src: url(../assets/fonts/inter-latin-wght-normal.woff2) format('woff2'); font-weight: 100 900; }
+  :root {
+    /* tokens medidos em design-system-v2/src/tokens/tokens.css (tema escuro) */
+    --chao: #0f1012; --area: #141518; --elevado: #1a1b1f; --linha: #24252a;
+    --t1: #ececee; --t2: #a1a1a8; --t3: #8a8a92;
+    --sinal: #ff5a1f; --sinal-texto: #ff6a33; --no-sinal: #160700; --preto: #000;
+    --accent: var(--t1); --bg: var(--area); --ink: var(--t1);
+  }
+  html, body { margin: 0; background: #000; overflow: hidden; }
+  #stage { position: relative; overflow: hidden; background: var(--bg); transform-origin: 0 0;
+           font-family: 'UI', system-ui, sans-serif; color: var(--ink);
+           -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision; font-feature-settings: 'cv11', 'ss01'; }
+  .scene { position: absolute; inset: 0; overflow: hidden; }
+  .abs { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  .display { font-family: 'Display', system-ui, sans-serif; font-weight: 600; letter-spacing: -0.025em; line-height: 1.05; white-space: nowrap; color: var(--t1); }
+  .eyebrow { font-family: 'UI', system-ui, sans-serif; font-weight: 500; letter-spacing: -0.005em; line-height: 1.25; white-space: nowrap; color: var(--t2); }
+  .line { position: absolute; overflow: hidden; padding: 0.08em 0.04em 0.2em; margin: -0.08em -0.04em 0; white-space: nowrap; }
+  .word { display: inline-block; }
+  /* a "janela" para o app: a captura real anda dentro dela (câmera) */
+  .vp { position: absolute; overflow: hidden; border-radius: 14px; background: var(--chao);
+        box-shadow: 0 60px 140px -20px rgba(0,0,0,.95), 0 18px 40px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.04); }
+  .shot { width: 1440px; height: 900px; display: block; }
+  .foot { position: absolute; image-rendering: pixelated; }
+  .cursor { width: 36px; height: 36px; transform-origin: 4px 3px; }
+  .pill { position: absolute; display: inline-flex; align-items: center; gap: 12px; height: 56px; padding: 0 22px; border-radius: 999px;
+          background: var(--elevado); color: var(--t2); font-weight: 500; font-size: 30px; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script src="lib/motion.js"></script>
+<script src="data.js"></script>
+<script src="core.js"></script>
+<script src="type.js"></script>
+<script src="film.js"></script>
+</body>
+</html>
