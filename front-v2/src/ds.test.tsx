@@ -145,6 +145,40 @@ describe('Design System v2 — Toast aviso e formatadores USD (UI-27a, UI-28)', 
     expect(screen.queryByText('×1.5')).not.toBeInTheDocument()
   })
 
+  it('PlayerProxy com videoSrc toca o proxy: posiciona pela janela, devolve o tempo relativo e para no fim do Corte', () => {
+    const tempos: number[] = []
+    let tocando = true
+    const { container } = render(
+      <PlayerProxy
+        sourceId={4}
+        fonteDisponivel
+        startUs={130_000_000}
+        endUs={140_000_000}
+        videoSrc="/__clipes-media__/proxy/abc"
+        janelaInicioUs={100_000_000}
+        modo="previa_9_16"
+        tempoAtualUs={2_000_000}
+        reproduzindo={false}
+        aoMudarTempoUs={(us) => tempos.push(us)}
+        aoMudarReproduzindo={(t) => {
+          tocando = t
+        }}
+      />,
+    )
+    const video = container.querySelector('video') as HTMLVideoElement
+    expect(video).toHaveAttribute('src', '/__clipes-media__/proxy/abc')
+    expect(container.querySelector('img')).toBeNull()
+    // 130 s (Corte) + 2 s (relativo) - 100 s (janela) = 32 s no vídeo do proxy
+    expect(video.currentTime).toBe(32)
+    video.currentTime = 35
+    fireEvent.timeUpdate(video)
+    expect(tempos.at(-1)).toBe(5_000_000)
+    video.currentTime = 41
+    fireEvent.timeUpdate(video)
+    expect(tocando).toBe(false)
+    expect(tempos.at(-1)).toBe(10_000_000)
+  })
+
   it('UI-56: <PlayerProxy> recebe contorno via --contorno-controle e <Transporte desabilitado> desabilita botões', () => {
     const { container } = render(
       <ProvedorDicas>

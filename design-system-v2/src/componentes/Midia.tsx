@@ -19,6 +19,12 @@ export interface PlayerProxyProps {
   endUs: number
   /** URL do proxy ou do quadro (no app: mediaUrl("proxy/…")) */
   poster?: string
+  /**
+   * Vídeo do proxy (mediaUrl("proxy/…")). Com ele o quadro toca de verdade: `tempoAtualUs` é relativo a
+   * `startUs` e `janelaInicioUs` é o início da janela do proxy na Fonte. Sem ele, `poster` é uma imagem.
+   */
+  videoSrc?: string
+  janelaInicioUs?: number
   modo: 'previa_9_16' | 'fonte_16_9' | 'capa'
   enquadramento?: 'preencher' | 'ajustar' | 'duplo'
   legenda?: Legenda | null
@@ -34,22 +40,83 @@ export interface PlayerProxyProps {
 }
 
 /** O vídeo é o conteúdo: quadro preto, cantos de 6 px, legenda com a cor do vídeo (não do app). */
-export function PlayerProxy({ fonteDisponivel, poster, modo, enquadramento = 'preencher', legenda, refQuadro, aoPedirRelocalizacao, className }: PlayerProxyProps) {
+export function PlayerProxy({ fonteDisponivel, poster, videoSrc, janelaInicioUs = 0, startUs, endUs, tempoAtualUs, reproduzindo, aoMudarTempoUs, aoMudarReproduzindo, modo, enquadramento = 'preencher', legenda, refQuadro, aoPedirRelocalizacao, className }: PlayerProxyProps) {
   const proporcao = modo === 'fonte_16_9' ? 'aspect-video' : 'aspect-[9/16]'
   const [imagemFalhou, setImagemFalhou] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const fonteDaMidia = videoSrc ?? poster
 
   useEffect(() => {
     setImagemFalhou(false)
-  }, [poster])
+  }, [fonteDaMidia])
+
+  // Posição no vídeo do proxy (segundos) para um instante relativo ao início do Corte.
+  const paraSegundos = (relativoUs: number) => Math.max(0, (startUs + relativoUs - janelaInicioUs) / 1_000_000)
+
+  // Segue o instante pedido (scrubber, J/L, trocas de Corte) sem brigar com a reprodução em curso.
+  useEffect(() => {
+    const v = videoRef.current
+    if (!v || !videoSrc) return
+    const alvo = paraSegundos(tempoAtualUs)
+    if (Math.abs(v.currentTime - alvo) > 0.35) {
+      try {
+        v.currentTime = alvo
+      } catch {
+        // jsdom não implementa a atribuição em todos os estados
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tempoAtualUs, videoSrc, janelaInicioUs, startUs])
+
+  useEffect(() => {
+    const v = videoRef.current
+    if (!v || !videoSrc) return
+    if (reproduzindo) {
+      const p = v.play?.()
+      if (p && typeof p.catch === 'function') p.catch(() => aoMudarReproduzindo(false))
+    } else {
+      v.pause?.()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reproduzindo, videoSrc])
+
+  const aoAtualizarTempo = () => {
+    const v = videoRef.current
+    if (!v) return
+    const relativo = Math.round(v.currentTime * 1_000_000 + janelaInicioUs - startUs)
+    if (relativo >= endUs - startUs) {
+      v.pause()
+      aoMudarReproduzindo(false)
+      aoMudarTempoUs(endUs - startUs)
+      return
+    }
+    aoMudarTempoUs(Math.max(0, relativo))
+  }
 
   return (
     <div ref={refQuadro} className={cn('relative overflow-hidden rounded-area bg-preto shadow-[0_0_0_1px_var(--contorno-controle)]', proporcao, className)}>
-      {fonteDisponivel && poster ? (
+      {fonteDisponivel && fonteDaMidia ? (
         imagemFalhou ? (
           <div role="img" aria-label="Quadro do Corte" className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center">
             <Film className="size-6 stroke-[1.5] text-t3" aria-hidden />
             <span className="text-pequeno text-t3">Prévia indisponível</span>
           </div>
+        ) : videoSrc ? (
+          <video
+            ref={videoRef}
+            src={videoSrc}
+            aria-label="Quadro do Corte"
+            playsInline
+            preload="auto"
+            onLoadedMetadata={() => {
+              const v = videoRef.current
+              if (v) v.currentTime = paraSegundos(tempoAtualUs)
+            }}
+            onTimeUpdate={aoAtualizarTempo}
+            onEnded={() => aoMudarReproduzindo(false)}
+            onError={() => setImagemFalhou(true)}
+            className={cn('block h-full w-full bg-preto', enquadramento === 'ajustar' ? 'object-contain' : 'object-cover')}
+          />
         ) : (
           <img
             src={poster}

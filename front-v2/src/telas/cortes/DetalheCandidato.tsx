@@ -842,7 +842,8 @@ export function DetalheCandidato({
               fonteDisponivel
               startUs={candidato.startUs}
               endUs={candidato.endUs}
-              poster={mediaUrl(`proxy/${proxyState.key}`)}
+              videoSrc={mediaUrl(`proxy/${proxyState.key}`)}
+              janelaInicioUs={proxyState.windowStartUs ?? Math.max(0, candidato.startUs - 120_000_000)}
               modo="previa_9_16"
               tempoAtualUs={tempoAtualUs}
               reproduzindo={reproduzindo}
