@@ -6,8 +6,10 @@ import type { ReactNode } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { ProvedorAtalhos } from '~/comandos/atalhos'
 import { ErroCore } from '~/core/cliente'
+import { consoleInlineMontado } from '~/core/console'
 import type { Fila } from '~/core/progresso'
 import { criarFila } from '~/core/progresso'
+import { Shell } from '~/shell/Shell'
 import { ConfigComponentes } from '~/telas/config/ConfigComponentes'
 
 const chamarMock = vi.fn()
@@ -681,5 +683,58 @@ describe('ConfigComponentes (#/config/componentes)', () => {
     const dica = await screen.findByText(/Download automático indisponível nesta plataforma/i)
     expect(dica).toBeInTheDocument()
     expect(screen.queryByText(/#[0-9]{3}/)).not.toBeInTheDocument()
+  })
+
+  it('inicia Console recolhido e expande automaticamente ao disparar teste de hardware', async () => {
+    const user = userEvent.setup()
+    mockComponentesPadrao()
+    render(envolver(<ConfigComponentes projetoAberto={null} />))
+
+    const toggle = await screen.findByRole('button', {
+      name: /Console de instalação e verificação/i,
+    })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('log')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Testar hardware' }))
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-expanded', 'true'))
+    expect(screen.getByRole('log')).toBeInTheDocument()
+
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('registra console inline ao montar: oculta dock global do Shell, expande/foca via gatilho e limpa ao desmontar', async () => {
+    const user = userEvent.setup()
+    mockComponentesPadrao((cmd) => {
+      if (cmd === 'projects.current') return null
+      if (cmd === 'projects.local_only.get') return { open: false, enabled: false }
+      return undefined
+    })
+
+    const { unmount } = render(
+      envolver(
+        <Shell>
+          <ConfigComponentes projetoAberto={null} />
+        </Shell>,
+      ),
+    )
+
+    const toggleInline = await screen.findByRole('button', {
+      name: /Console de instalação e verificação/i,
+    })
+    expect(consoleInlineMontado()).toBe(true)
+    expect(toggleInline).toHaveAttribute('aria-expanded', 'false')
+
+    const footer = document.querySelector('footer')!
+    const gatilhoDock = await within(footer).findByRole('button', { name: /Console/i })
+    await user.click(gatilhoDock)
+
+    expect(document.querySelector('[data-regiao="console"]')).toBeNull()
+    expect(toggleInline).toHaveAttribute('aria-expanded', 'true')
+    expect(toggleInline).toHaveFocus()
+
+    unmount()
+    expect(consoleInlineMontado()).toBe(false)
   })
 })

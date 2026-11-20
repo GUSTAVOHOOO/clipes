@@ -430,3 +430,25 @@ fn estimate_measures_a_sample_from_the_source_and_reuses_the_rate() {
     let status = run("transcription.status", json!({"source_id": source})).unwrap();
     assert!(status["transcript"].is_null());
 }
+
+#[test]
+fn hardware_probe_emits_console_events_with_attempts_and_conclusion() {
+    let _env = Env::new(Some("NVIDIA GeForce RTX 3050, 560.0, 4096, 3800"), true);
+    let probe = run("transcription.hardware.probe", json!({})).unwrap();
+    assert_eq!(probe["verified"], true);
+
+    let hist = run("console.history", json!({})).unwrap();
+    let items: Vec<_> = hist["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["job"] == "hardware-probe" && e["origin"] == "worker")
+        .collect();
+    assert!(items.len() >= 3, "expected probe console events, got {items:?}");
+    assert!(items
+        .iter()
+        .any(|e| e["simple"].as_str().unwrap_or("").contains("Iniciando sonda de hardware")));
+    assert!(items
+        .iter()
+        .any(|e| e["simple"].as_str().unwrap_or("").contains("Hardware verificado")));
+}

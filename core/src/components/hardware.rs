@@ -518,9 +518,40 @@ pub(crate) fn run_probe_task(
                 std::thread::sleep(Duration::from_millis(25));
             }
         });
-        let outcome = client.run("probe", params, &local, &mut |event| {
-            if let WorkerEvent::Progress { percentage, .. } = event {
+        let outcome = client.run("probe", params, &local, &mut |event| match event {
+            WorkerEvent::Progress {
+                percentage,
+                message,
+                ..
+            } => {
+                if !message.trim().is_empty() {
+                    crate::console::emit_console(crate::console::ConsoleDraft {
+                        job: PROBE_JOB,
+                        project: None,
+                        origin: "worker",
+                        level: crate::console::ConsoleLevel::Info,
+                        kind: crate::console::ConsoleKind::Continuous("probe-msg"),
+                        simple: &message,
+                        technical: Some(&message),
+                    });
+                }
                 on_progress(percentage);
+            }
+            WorkerEvent::Model { event, model } => {
+                let simple = if event == "model_loaded" {
+                    format!("Modelo {model} carregado para teste.")
+                } else {
+                    format!("Modelo {model} liberado da memória.")
+                };
+                crate::console::emit_console(crate::console::ConsoleDraft {
+                    job: PROBE_JOB,
+                    project: None,
+                    origin: "worker",
+                    level: crate::console::ConsoleLevel::Info,
+                    kind: crate::console::ConsoleKind::Milestone,
+                    simple: &simple,
+                    technical: Some(&format!("{event} model={model}")),
+                });
             }
         });
         finished.store(true, Ordering::SeqCst);
@@ -813,6 +844,15 @@ fn run_chain(
     cancel: &AtomicBool,
     events: &mut EventSink<'_>,
 ) -> Result<ProbeRecord, CoreError> {
+    crate::console::emit_console(crate::console::ConsoleDraft {
+        job: PROBE_JOB,
+        project: None,
+        origin: "worker",
+        level: crate::console::ConsoleLevel::Info,
+        kind: crate::console::ConsoleKind::Milestone,
+        simple: "Iniciando sonda de hardware para transcrição…",
+        technical: Some("probe start mode=info"),
+    });
     step(events, 0, "Verificando o CTranslate2");
     let mut info_failure: Option<&'static str> = None;
     let info = match run_probe_task(json!({"mode": "info"}), cancel, &mut |_| {}) {
@@ -863,6 +903,15 @@ fn run_chain(
             if !cuda_types.iter().any(|t| t == precision) {
                 continue;
             }
+            crate::console::emit_console(crate::console::ConsoleDraft {
+                job: PROBE_JOB,
+                project: None,
+                origin: "worker",
+                level: crate::console::ConsoleLevel::Info,
+                kind: crate::console::ConsoleKind::Milestone,
+                simple: &format!("Testando {precision} na placa de vídeo (GPU)…"),
+                technical: Some(&format!("probe attempt device=cuda compute={precision} batch=1")),
+            });
             step(
                 events,
                 (10 + index as u8 * 80 / total).min(90),
@@ -880,6 +929,18 @@ fn run_chain(
             let mut tested = Vec::new();
             let mut max_safe = None;
             for size in BATCH_LADDER {
+                crate::console::emit_console(crate::console::ConsoleDraft {
+                    job: PROBE_JOB,
+                    project: None,
+                    origin: "worker",
+                    level: crate::console::ConsoleLevel::Info,
+                    kind: crate::console::ConsoleKind::Milestone,
+                    simple: &format!("Medindo lote seguro na GPU ({size})…"),
+                    technical: Some(&format!(
+                        "probe attempt device=cuda compute={} batch={size}",
+                        config.compute_type
+                    )),
+                });
                 step(events, 70, &format!("Medindo o lote seguro ({size})"));
                 let attempt =
                     clip_attempt(&turbo, settings, "cuda", &config.compute_type, size, cancel)?;
@@ -918,6 +979,22 @@ fn run_chain(
             cpu_fallback_config(settings, detect_ram());
         model = fallback_model;
         if has_installed && info_failure.is_none() {
+            crate::console::emit_console(crate::console::ConsoleDraft {
+                job: PROBE_JOB,
+                project: None,
+                origin: "worker",
+                level: if fallback_reason.is_some() {
+                    crate::console::ConsoleLevel::Warn
+                } else {
+                    crate::console::ConsoleLevel::Info
+                },
+                kind: crate::console::ConsoleKind::Milestone,
+                simple: "Testando transcrição no processador (CPU)…",
+                technical: Some(&format!(
+                    "probe attempt device=cpu compute=int8 fallback_reason={}",
+                    fallback_reason.unwrap_or("none")
+                )),
+            });
             step(events, 80, "Testando a CPU");
             let spec = fallback_cfg
                 .spec(settings)
@@ -957,9 +1034,33 @@ fn run_chain(
     });
     store.probes.push(record.clone());
     write_store(settings, &mut store)?;
-    if fallback_reason.is_some() {
+    if let Some(reason) = sanitize_fallback_reason(fallback_reason) {
         crate::diagnostic::record(crate::diagnostic::DiagnosticEvent::GpuProbeFallback);
+        crate::console::emit_console(crate::console::ConsoleDraft {
+            job: PROBE_JOB,
+            project: None,
+            origin: "worker",
+            level: crate::console::ConsoleLevel::Warn,
+            kind: crate::console::ConsoleKind::Milestone,
+            simple: fallback_message(reason),
+            technical: Some(&format!("probe_fallback reason={reason}")),
+        });
     }
+    crate::console::emit_console(crate::console::ConsoleDraft {
+        job: PROBE_JOB,
+        project: None,
+        origin: "worker",
+        level: crate::console::ConsoleLevel::Info,
+        kind: crate::console::ConsoleKind::Milestone,
+        simple: &format!(
+            "Hardware verificado: {} em {} ({}).",
+            record.chosen.model, record.chosen.device, record.chosen.compute_type
+        ),
+        technical: Some(&format!(
+            "probe done model={} device={} compute={} verified={}",
+            record.chosen.model, record.chosen.device, record.chosen.compute_type, record.verified
+        )),
+    });
     step(events, 100, "Sonda concluída");
     Ok(record)
 }

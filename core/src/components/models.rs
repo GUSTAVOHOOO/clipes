@@ -403,24 +403,50 @@ fn download_model(
         .map_err(|_| error("download", "Não foi possível gravar o modelo."))?;
 
     let total = spec.total_size().max(1);
+    crate::console::emit_console(crate::console::ConsoleDraft {
+        job: &spec.id,
+        project: None,
+        origin: "component",
+        level: crate::console::ConsoleLevel::Info,
+        kind: crate::console::ConsoleKind::Milestone,
+        simple: &format!(
+            "Baixando modelo {} ({})…",
+            spec.label,
+            super::format_bytes_pt(total)
+        ),
+        technical: Some(&format!(
+            "download model={} repo={} bytes=0/{total}",
+            spec.id, spec.repo
+        )),
+    });
     let mut done = 0u64;
     for file in &spec.files {
         let base = done;
-        fetch_with(
+        let url = spec.file_url(&file.name);
+        let host = super::url_host(&url);
+        super::fetch_with_bytes(
             &client,
-            &spec.file_url(&file.name),
+            &url,
             &file.sha256,
             file.size,
             &stage.join(&file.name),
             cancel,
-            |percentage| {
+            |offset, _file_total| {
+                let total_done = base + offset.min(file.size);
+                super::emit_download_console_progress(
+                    &spec.id,
+                    "component",
+                    &spec.id,
+                    &host,
+                    total_done,
+                    total,
+                );
                 events(ProgressEvent {
                     project: None,
                     clip_id: None,
                     job: spec.id.clone(),
                     stage: "download".into(),
-                    percentage: ((base + file.size * u64::from(percentage) / 100) * 100 / total)
-                        .min(99) as u8,
+                    percentage: (total_done * 100 / total).min(99) as u8,
                     message: "Baixando modelo".into(),
                     error: None,
                 })
@@ -428,6 +454,15 @@ fn download_model(
         )?;
         done += file.size;
     }
+    crate::console::emit_console(crate::console::ConsoleDraft {
+        job: &spec.id,
+        project: None,
+        origin: "component",
+        level: crate::console::ConsoleLevel::Info,
+        kind: crate::console::ConsoleKind::Milestone,
+        simple: &format!("Conferindo arquivos e instalando modelo {}…", spec.id),
+        technical: Some(&format!("sha256 ok model={} installing", spec.id)),
+    });
     let _ = fs::remove_file(&stage_marker);
 
     let dir = spec.dir(settings);
@@ -465,6 +500,15 @@ fn download_model(
         let _ = fs::remove_dir_all(&backup);
     }
 
+    crate::console::emit_console(crate::console::ConsoleDraft {
+        job: &spec.id,
+        project: None,
+        origin: "component",
+        level: crate::console::ConsoleLevel::Info,
+        kind: crate::console::ConsoleKind::Milestone,
+        simple: &format!("Modelo {} pronto para uso.", spec.id),
+        technical: Some(&format!("model_registered id={}", spec.id)),
+    });
     events(ProgressEvent {
         project: None,
         clip_id: None,

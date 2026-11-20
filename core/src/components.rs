@@ -416,21 +416,59 @@ fn settings_set(v: Value, _: &mut EventSink<'_>) -> CommandResult {
 }
 fn ffmpeg_system(v: Value, _: &mut EventSink<'_>) -> CommandResult {
     let path = v.get("path").and_then(Value::as_str).unwrap_or("ffmpeg");
+    crate::console::emit_console(crate::console::ConsoleDraft {
+        job: "ffmpeg",
+        project: None,
+        origin: "ffmpeg",
+        level: crate::console::ConsoleLevel::Info,
+        kind: crate::console::ConsoleKind::Milestone,
+        simple: "Validando FFmpeg e FFprobe do sistema…",
+        technical: Some(&format!("ffmpeg -version path={path}")),
+    });
     let output = crate::process::spawn(path, ["-version"], None)
         .and_then(|child| child.wait_with_output())
-        .map_err(|e| error("invalid_ffmpeg", e))?;
+        .map_err(|e| {
+            crate::console::emit_console(crate::console::ConsoleDraft {
+                job: "ffmpeg",
+                project: None,
+                origin: "ffmpeg",
+                level: crate::console::ConsoleLevel::Error,
+                kind: crate::console::ConsoleKind::Milestone,
+                simple: "Não foi possível executar o FFmpeg informado.",
+                technical: None,
+            });
+            error("invalid_ffmpeg", e)
+        })?;
     let version = String::from_utf8_lossy(&output.stdout)
         .lines()
         .next()
         .unwrap_or("")
         .to_owned();
     if !output.status.success() || !version.starts_with("ffmpeg version ") {
+        crate::console::emit_console(crate::console::ConsoleDraft {
+            job: "ffmpeg",
+            project: None,
+            origin: "ffmpeg",
+            level: crate::console::ConsoleLevel::Error,
+            kind: crate::console::ConsoleKind::Milestone,
+            simple: "Executável informado não respondeu como FFmpeg válido.",
+            technical: None,
+        });
         return Err(error("invalid_ffmpeg", "FFmpeg inválido"));
     }
     ffprobe_executable(Some(Path::new(path)))?;
     let mut s = load_settings()?;
     s.ffmpeg_path = Some(path.into());
     save_settings(&s)?;
+    crate::console::emit_console(crate::console::ConsoleDraft {
+        job: "ffmpeg",
+        project: None,
+        origin: "ffmpeg",
+        level: crate::console::ConsoleLevel::Info,
+        kind: crate::console::ConsoleKind::Milestone,
+        simple: "FFmpeg do sistema validado e pronto para uso.",
+        technical: Some(&version),
+    });
     Ok(json!({"version": version, "path": path}))
 }
 
@@ -472,6 +510,51 @@ fn download(v: Value, events: &mut EventSink<'_>) -> CommandResult {
     jobs().lock().unwrap().remove(id);
     result
 }
+pub(crate) fn url_host(url: &str) -> String {
+    reqwest::Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_owned))
+        .unwrap_or_else(|| "remoto".into())
+}
+
+pub(crate) fn format_bytes_pt(bytes: u64) -> String {
+    const KB: f64 = 1024.0;
+    const MB: f64 = 1024.0 * 1024.0;
+    const GB: f64 = 1024.0 * 1024.0 * 1024.0;
+    let b = bytes as f64;
+    if b >= GB {
+        format!("{:.2} GB", b / GB).replace('.', ",")
+    } else if b >= MB {
+        format!("{:.1} MB", b / MB).replace('.', ",")
+    } else if b >= KB {
+        format!("{:.0} KB", b / KB)
+    } else {
+        format!("{bytes} B")
+    }
+}
+
+pub(crate) fn emit_download_console_progress(
+    job: &str,
+    origin: &str,
+    label: &str,
+    host: &str,
+    offset: u64,
+    total: u64,
+) {
+    let pct = ((offset.saturating_mul(100) / total.max(1)).min(99)) as u8;
+    crate::console::emit_console(crate::console::ConsoleDraft {
+        job,
+        project: None,
+        origin,
+        level: crate::console::ConsoleLevel::Info,
+        kind: crate::console::ConsoleKind::Continuous("download"),
+        simple: &format!("Baixando {label} · {pct}%"),
+        technical: Some(&format!(
+            "download host={host} bytes={offset}/{total} pct={pct}%"
+        )),
+    });
+}
+
 fn download_item(
     item: &Component,
     flag: &AtomicBool,
@@ -482,13 +565,32 @@ fn download_item(
     let dir = settings.data_dir.join("components");
     fs::create_dir_all(&dir).map_err(|e| error("download", e))?;
     let part = dir.join(format!("{}-{}.part", item.id, item.version));
-    fetch(
+    let host = url_host(item.url);
+    crate::console::emit_console(crate::console::ConsoleDraft {
+        job: id,
+        project: None,
+        origin: "component",
+        level: crate::console::ConsoleLevel::Info,
+        kind: crate::console::ConsoleKind::Milestone,
+        simple: &format!("Baixando {} ({})…", item.id, format_bytes_pt(item.size)),
+        technical: Some(&format!(
+            "download id={} version={} host={} bytes=0/{}",
+            item.id, item.version, host, item.size
+        )),
+    });
+    let client = reqwest::blocking::Client::builder()
+        .build()
+        .map_err(|e| error("download", e))?;
+    if let Err(err) = fetch_with_bytes(
+        &client,
         item.url,
         item.sha256,
         item.size,
         &part,
         flag,
-        |percentage| {
+        |offset, total| {
+            let percentage = ((offset.saturating_mul(100) / total.max(1)).min(99)) as u8;
+            emit_download_console_progress(id, "component", item.id, &host, offset, total);
             events(ProgressEvent {
                 project: None,
                 clip_id: None,
@@ -499,7 +601,34 @@ fn download_item(
                 error: None,
             })
         },
-    )?;
+    ) {
+        crate::console::emit_console(crate::console::ConsoleDraft {
+            job: id,
+            project: None,
+            origin: "component",
+            level: if err.code == "cancelled" {
+                crate::console::ConsoleLevel::Warn
+            } else {
+                crate::console::ConsoleLevel::Error
+            },
+            kind: crate::console::ConsoleKind::Milestone,
+            simple: &err.message,
+            technical: Some(&format!("download_failed id={} code={}", item.id, err.code)),
+        });
+        return Err(err);
+    }
+    crate::console::emit_console(crate::console::ConsoleDraft {
+        job: id,
+        project: None,
+        origin: "component",
+        level: crate::console::ConsoleLevel::Info,
+        kind: crate::console::ConsoleKind::Milestone,
+        simple: &format!(
+            "Conferindo integridade (SHA-256) e instalando {}…",
+            item.id
+        ),
+        technical: Some(&format!("sha256 ok id={} extracting", item.id)),
+    });
     let exe = dir.join(if cfg!(windows) {
         format!("{}.exe", item.id)
     } else {
@@ -512,6 +641,15 @@ fn download_item(
         save_settings(&settings)?;
     }
     fs::remove_file(part).map_err(|e| error("install", e))?;
+    crate::console::emit_console(crate::console::ConsoleDraft {
+        job: id,
+        project: None,
+        origin: "component",
+        level: crate::console::ConsoleLevel::Info,
+        kind: crate::console::ConsoleKind::Milestone,
+        simple: &format!("{} instalado e pronto para uso.", item.id),
+        technical: Some(&format!("installed id={} path={}", item.id, exe.display())),
+    });
     events(ProgressEvent {
         project: None,
         clip_id: None,
@@ -523,6 +661,7 @@ fn download_item(
     });
     Ok(json!({"path": exe}))
 }
+#[cfg(test)]
 fn fetch(
     url: &str,
     sha: &str,
@@ -536,6 +675,7 @@ fn fetch(
         .map_err(|e| error("download", e))?;
     fetch_with(&client, url, sha, size, path, cancelled, progress)
 }
+#[cfg(test)]
 pub(crate) fn fetch_with(
     client: &reqwest::blocking::Client,
     url: &str,
@@ -544,6 +684,19 @@ pub(crate) fn fetch_with(
     path: &Path,
     cancelled: &AtomicBool,
     mut progress: impl FnMut(u8),
+) -> Result<(), CoreError> {
+    fetch_with_bytes(client, url, sha, size, path, cancelled, |offset, total| {
+        progress(((offset.saturating_mul(100) / total.max(1)).min(99)) as u8);
+    })
+}
+pub(crate) fn fetch_with_bytes(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    sha: &str,
+    size: u64,
+    path: &Path,
+    cancelled: &AtomicBool,
+    mut on_bytes: impl FnMut(u64, u64),
 ) -> Result<(), CoreError> {
     let mut offset = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
     if offset > size {
@@ -605,7 +758,7 @@ pub(crate) fn fetch_with(
         file.write_all(&buffer[..n])
             .map_err(|e| error("download", e))?;
         offset += n as u64;
-        progress(((offset.saturating_mul(100) / size.max(1)).min(99)) as u8);
+        on_bytes(offset, size);
     }
     drop(file);
     let mut file = File::open(path).map_err(|e| error("download", e))?;
@@ -1429,5 +1582,74 @@ mod pocket_tts_tests {
         assert!(report.contains("pocket-tts: 3.3.0"));
         assert!(!report.contains(root.to_str().unwrap()));
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn download_item_emits_sanitized_console_events_without_tokens_or_personal_paths() {
+        use std::io::{BufRead, BufReader};
+        use std::net::TcpListener;
+
+        let dir = tempfile::tempdir().unwrap();
+        let _guard = crate::test_env::set_data_dir(dir.path());
+
+        let payload = b"fake-yt-dlp-binary-payload".to_vec();
+        let mut hasher = Sha256::new();
+        hasher.update(&payload);
+        let sha = format!("{:x}", hasher.finalize());
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let body = payload.clone();
+        let server = std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                stream.set_nonblocking(false).unwrap();
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let mut line = String::new();
+                while reader.read_line(&mut line).unwrap_or(0) > 0 {
+                    if line == "\r\n" || line == "\n" {
+                        break;
+                    }
+                    line.clear();
+                }
+                let header = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = stream.write_all(header.as_bytes());
+                let _ = stream.write_all(&body);
+                let _ = stream.flush();
+            }
+        });
+
+        let url = format!("http://{addr}/yt-dlp?token=supersecret123&sig=abc999");
+        let item = Component {
+            id: "yt-dlp",
+            version: "2026.11.01",
+            license: "Unlicense",
+            source_url: "https://example.com",
+            build_source_url: None,
+            url: Box::leak(url.into_boxed_str()),
+            sha256: Box::leak(sha.into_boxed_str()),
+            size: payload.len() as u64,
+        };
+
+        let flag = AtomicBool::new(false);
+        let res = download_item(&item, &flag, "yt-dlp-console-test", &mut |_| {});
+        let _ = server.join();
+        assert!(res.is_ok(), "download_item failed: {res:?}");
+
+        let hist = crate::dispatch("console.history", json!({}), &mut |_| {}).unwrap();
+        let events: Vec<_> = hist["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|e| e["job"] == "yt-dlp-console-test")
+            .collect();
+        assert!(events.len() >= 3);
+        assert!(events.iter().all(|e| e["origin"] == "component"));
+        let joined = serde_json::to_string(&events).unwrap();
+        assert!(!joined.contains("supersecret123"));
+        assert!(!joined.contains("abc999"));
+        assert!(!joined.contains("?token="));
     }
 }

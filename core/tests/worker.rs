@@ -534,3 +534,44 @@ fn resyncs_embedded_worker_scripts_when_project_dir_already_exists() {
     assert_eq!(status["outdated"], true);
     assert_eq!(fs::read(&tasks).unwrap(), expected_tasks);
 }
+
+#[test]
+fn uv_install_emits_translated_and_sanitized_console_events() {
+    let data = Data::new();
+    data.fake_uv();
+    std::env::set_var(
+        "CLIPES_FAKE_UV_STDOUT",
+        "\x1b[32mResolved 42 packages in 1.8s\x1b[0m|Installed 42 packages from C:\\Users\\Alice\\cache?token=uvsecret99",
+    );
+    std::env::set_var(
+        "CLIPES_FAKE_UV_STDERR",
+        "warning: Retrying download Authorization: Bearer secret_bearer_999",
+    );
+    let res = install(&mut Vec::new());
+    std::env::remove_var("CLIPES_FAKE_UV_STDOUT");
+    std::env::remove_var("CLIPES_FAKE_UV_STDERR");
+    res.unwrap();
+
+    let hist = dispatch("console.history", json!({}), &mut |_| {}).unwrap();
+    let items: Vec<_> = hist["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["job"] == "worker")
+        .collect();
+    assert!(items
+        .iter()
+        .any(|e| e["origin"] == "uv" && e["simple"] == "Dependências do Worker resolvidas."));
+    assert!(items
+        .iter()
+        .any(|e| e["origin"] == "uv" && e["level"] == "warn"));
+    assert!(items
+        .iter()
+        .any(|e| e["origin"] == "worker" && e["simple"] == "Worker pronto: respondeu à verificação com sucesso."));
+
+    let serialized = serde_json::to_string(&items).unwrap();
+    assert!(!serialized.contains("uvsecret99"));
+    assert!(!serialized.contains("secret_bearer_999"));
+    assert!(!serialized.contains("Alice"));
+    assert!(!serialized.contains('\x1b'));
+}
