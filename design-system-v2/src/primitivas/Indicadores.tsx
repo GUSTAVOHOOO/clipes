@@ -105,8 +105,10 @@ export function Separador({ vertical, className }: { vertical?: boolean; classNa
 /** Rolagem com barra fina do sistema; o conteúdo recebe foco por teclado quando rolável. */
 export function AreaRolagem({ children, className, rotulo }: { children: ReactNode; className?: string; rotulo?: string }) {
   return (
-    <SA.Root className={cn('relative min-h-0', className)}>
-      <SA.Viewport aria-label={rotulo} className="foco-interno h-full overscroll-contain rounded-controle">
+    // Coluna flex: o Viewport encolhe até o limite da raiz tanto com altura fixa quanto
+    // só com `max-h-*` (com `h-full` ele crescia com o conteúdo e nunca rolava).
+    <SA.Root className={cn('relative flex min-h-0 flex-col', className)}>
+      <SA.Viewport aria-label={rotulo} className="foco-interno min-h-0 flex-1 overscroll-contain rounded-controle">
         <SA.Content>{children}</SA.Content>
       </SA.Viewport>
       <SA.Scrollbar className="flex w-2 justify-center p-0.5 opacity-0 transition-opacity duration-(--dur-base) data-hovering:opacity-100 data-scrolling:opacity-100">
