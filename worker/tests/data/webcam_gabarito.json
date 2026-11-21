@@ -1,0 +1,364 @@
+{
+ "versao": 1,
+ "descricao": "Gabarito do banco de testes de webcam: trecho de ~3 min do meio de cada live. Retângulos em px da Fonte (1920x1080) e normalizados.",
+ "videos": [
+  {
+   "id": "6PEwOEwpZOI",
+   "url": "https://www.youtube.com/watch?v=6PEwOEwpZOI",
+   "trecho": {
+    "inicio_s": 3690,
+    "duracao_s": 180,
+    "duracao_video_s": 7921
+   },
+   "arquivo": "6PEwOEwpZOI.mp4",
+   "resolucao": [
+    1920,
+    1080
+   ],
+   "tipo": "retangular",
+   "retangulo_px": [
+    1513,
+    104,
+    391,
+    212
+   ],
+   "retangulo_norm": [
+    0.78802,
+    0.0963,
+    0.20365,
+    0.1963
+   ],
+   "observacoes": "Caso nº 0 (live do Leon). Câmera retangular sem moldura no canto superior direito; texto do jogo vaza por trás da borda direita."
+  },
+  {
+   "id": "cxuF5siTUQw",
+   "url": "https://www.youtube.com/watch?v=cxuF5siTUQw",
+   "trecho": {
+    "inicio_s": 13166,
+    "duracao_s": 180,
+    "duracao_video_s": 26513
+   },
+   "arquivo": "cxuF5siTUQw.mp4",
+   "resolucao": [
+    1920,
+    1080
+   ],
+   "tipo": "arredondada",
+   "retangulo_px": [
+    17,
+    10,
+    350,
+    342
+   ],
+   "retangulo_norm": [
+    0.00885,
+    0.00926,
+    0.18229,
+    0.31667
+   ],
+   "observacoes": "Cantos com raio grande (~35 px), quase quadrada, canto superior esquerdo; fundo do jogo desfocado nas laterais."
+  },
+  {
+   "id": "kVy8zSfuRc0",
+   "url": "https://www.youtube.com/watch?v=kVy8zSfuRc0",
+   "trecho": {
+    "inicio_s": 5265,
+    "duracao_s": 180,
+    "duracao_video_s": 10711
+   },
+   "arquivo": "kVy8zSfuRc0.mp4",
+   "resolucao": [
+    1920,
+    1080
+   ],
+   "tipo": "retangular",
+   "retangulo_px": [
+    1513,
+    464,
+    400,
+    269
+   ],
+   "retangulo_norm": [
+    0.78802,
+    0.42963,
+    0.20833,
+    0.24907
+   ],
+   "observacoes": "Retangular sem moldura no canto inferior direito; jogo com menus e telas escuras."
+  },
+  {
+   "id": "AmhtyV-LRaA",
+   "url": "https://www.youtube.com/watch?v=AmhtyV-LRaA",
+   "trecho": {
+    "inicio_s": 11009,
+    "duracao_s": 180,
+    "duracao_video_s": 22198
+   },
+   "arquivo": "AmhtyV-LRaA.mp4",
+   "resolucao": [
+    1920,
+    1080
+   ],
+   "tipo": "moldura",
+   "retangulo_px": [
+    1502,
+    103,
+    414,
+    235
+   ],
+   "retangulo_norm": [
+    0.78229,
+    0.09537,
+    0.21563,
+    0.21759
+   ],
+   "observacoes": "Moldura azul de ~3 px no canto superior direito; borda de contraste alto."
+  },
+  {
+   "id": "OIeLbmyraRQ",
+   "url": "https://www.youtube.com/watch?v=OIeLbmyraRQ",
+   "trecho": {
+    "inicio_s": 10940,
+    "duracao_s": 180,
+    "duracao_video_s": 22061
+   },
+   "arquivo": "OIeLbmyraRQ.mp4",
+   "resolucao": [
+    1920,
+    1080
+   ],
+   "tipo": "retangular",
+   "retangulo_px": [
+    0,
+    461,
+    388,
+    241
+   ],
+   "retangulo_norm": [
+    0.0,
+    0.42685,
+    0.20208,
+    0.22315
+   ],
+   "observacoes": "Colada na borda esquerda do quadro; duas pessoas na câmera; contadores de texto acima e abaixo (não fazem parte da câmera); jogo muito escuro."
+  },
+  {
+   "id": "BG_y4qpQA-g",
+   "url": "https://www.youtube.com/watch?v=BG_y4qpQA-g",
+   "trecho": {
+    "inicio_s": 1428,
+    "duracao_s": 180,
+    "duracao_video_s": 3036
+   },
+   "arquivo": "BG_y4qpQA-g.mp4",
+   "resolucao": [
+    1920,
+    1080
+   ],
+   "tipo": "sombra",
+   "retangulo_px": [
+    1538,
+    10,
+    358,
+    276
+   ],
+   "retangulo_norm": [
+    0.80104,
+    0.00926,
+    0.18646,
+    0.25556
+   ],
+   "observacoes": "Retangular com sombra projetada (6 px) à direita/baixo; topo sobre a faixa preta (letterbox) do jogo, câmera azul-escura."
+  },
+  {
+   "id": "MX8wnu3xXeM",
+   "url": "https://www.youtube.com/watch?v=MX8wnu3xXeM",
+   "trecho": {
+    "inicio_s": 1797,
+    "duracao_s": 180,
+    "duracao_video_s": 3775
+   },
+   "arquivo": "MX8wnu3xXeM.mp4",
+   "resolucao": [
+    1920,
+    1080
+   ],
+   "tipo": "retangular",
+   "retangulo_px": [
+    0,
+    265,
+    397,
+    223
+   ],
+   "retangulo_norm": [
+    0.0,
+    0.24537,
+    0.20677,
+    0.20648
+   ],
+   "observacoes": "Colada na borda esquerda; contador Twitch/YouTube logo abaixo (fora da câmera); chat do jogo à direita; cenas muito escuras."
+  },
+  {
+   "id": "Zgl_mhEIYLU",
+   "url": "https://www.youtube.com/watch?v=Zgl_mhEIYLU",
+   "trecho": {
+    "inicio_s": 386,
+    "duracao_s": 180,
+    "duracao_video_s": 952
+   },
+   "arquivo": "Zgl_mhEIYLU.mp4",
+   "resolucao": [
+    1920,
+    1080
+   ],
+   "tipo": "arredondada",
+   "retangulo_px": [
+    42,
+    52,
+    442,
+    328
+   ],
+   "retangulo_norm": [
+    0.02187,
+    0.04815,
+    0.23021,
+    0.3037
+   ],
+   "observacoes": "Cantos arredondados pequenos (~7 px), canto superior esquerdo, sem borda; no início do trecho a câmera estava ~14 px deslocada (animação de entrada), depois fixa. Fundo claro/escuro do jogo muda muito."
+  },
+  {
+   "id": "dy-oCN2NxfA",
+   "url": "https://www.youtube.com/watch?v=dy-oCN2NxfA",
+   "trecho": {
+    "inicio_s": 820,
+    "duracao_s": 180,
+    "duracao_video_s": 42102
+   },
+   "arquivo": "dy-oCN2NxfA.mp4",
+   "resolucao": [
+    1920,
+    1080
+   ],
+   "tipo": "recorte",
+   "retangulo_px": [
+    0,
+    115,
+    420,
+    430
+   ],
+   "retangulo_norm": [
+    0.0,
+    0.10648,
+    0.21875,
+    0.39815
+   ],
+   "observacoes": "Recorte sem fundo (chroma key) colado à esquerda, sem borda alguma; legenda 'GTA 6 giveaway' logo abaixo (fora do retângulo); faixas pretas (letterbox) em parte do trecho. IoU mínimo relaxado: a forma não é retangular.",
+   "iou_minimo": 0.45,
+   "quadro_frac": 0.45
+  },
+  {
+   "id": "ymCHX_Dcc-U",
+   "url": "https://www.youtube.com/watch?v=ymCHX_Dcc-U",
+   "trecho": {
+    "inicio_s": 820,
+    "duracao_s": 180,
+    "duracao_video_s": 1821
+   },
+   "arquivo": "ymCHX_Dcc-U.mp4",
+   "resolucao": [
+    1920,
+    1080
+   ],
+   "tipo": "recorte",
+   "retangulo_px": [
+    0,
+    550,
+    640,
+    530
+   ],
+   "retangulo_norm": [
+    0.0,
+    0.50926,
+    0.33333,
+    0.49074
+   ],
+   "observacoes": "Recorte sem fundo no canto inferior esquerdo; some em alguns momentos, ora uma pessoa ora duas (largura varia de ~530 a ~750 px): o retângulo é uma média. IoU mínimo relaxado.",
+   "iou_minimo": 0.45,
+   "quadro_frac": 0.15
+  },
+  {
+   "id": "eEERhKQZWmY",
+   "url": "https://www.youtube.com/watch?v=eEERhKQZWmY",
+   "trecho": {
+    "inicio_s": 6740,
+    "duracao_s": 180,
+    "duracao_video_s": 13661
+   },
+   "arquivo": "eEERhKQZWmY.mp4",
+   "resolucao": [
+    1920,
+    1080
+   ],
+   "tipo": "retangular",
+   "retangulo_px": [
+    10,
+    242,
+    412,
+    395
+   ],
+   "retangulo_norm": [
+    0.00521,
+    0.22407,
+    0.21458,
+    0.36574
+   ],
+   "observacoes": "Retangular com borda clara fina, canto esquerdo (logo abaixo do chat da live, que muda sem parar e NÃO faz parte da câmera); câmera roxa/rosa de alto contraste."
+  },
+  {
+   "id": "semcam-kVy8",
+   "url": null,
+   "trecho": {
+    "inicio_s": 5265,
+    "duracao_s": 180,
+    "duracao_video_s": 10711
+   },
+   "arquivo": "semcam-kVy8.mp4",
+   "resolucao": [
+    1440,
+    1080
+   ],
+   "tipo": "sem_camera",
+   "retangulo_px": null,
+   "retangulo_norm": null,
+   "observacoes": "Caso SEM webcam: o mesmo trecho de kVy8zSfuRc0 recortado (ffmpeg crop=1440:1080:0:0) para tirar a câmera do canto direito. Esperado: webcamDetected=false."
+  },
+  {
+   "id": "g_ag6ZM5Ixo",
+   "url": "https://www.youtube.com/watch?v=g_ag6ZM5Ixo",
+   "trecho": {
+    "inicio_s": 14695,
+    "duracao_s": 180,
+    "duracao_video_s": 29570
+   },
+   "arquivo": "g_ag6ZM5Ixo.mp4",
+   "resolucao": [
+    1920,
+    1080
+   ],
+   "tipo": "retrato",
+   "retangulo_px": [
+    11,
+    11,
+    297,
+    361
+   ],
+   "retangulo_norm": [
+    0.00573,
+    0.01019,
+    0.15469,
+    0.33426
+   ],
+   "observacoes": "Câmera vertical (retrato, ~4:5) com sombra no canto superior esquerdo; jogo em menus estáticos roxos (bordas do jogo também persistentes)."
+  }
+ ]
+}
