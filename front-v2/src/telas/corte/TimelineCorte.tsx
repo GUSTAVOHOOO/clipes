@@ -187,11 +187,14 @@ function TimelineInterna({
   }, [totalWindowUs, windowEndUs, windowStartUs])
 
   // Faixa visível na janela com zoom para virtualização leve (timelineMath.ts)
+  // A pista é desenhada em % de `viewportLargura * max(1, zoom)`, não na escala fixa
+  // PX_PER_SEC do timelineMath; converte a área rolada para essa escala base antes de
+  // virtualizar, senão só os primeiros ~viewport/48 s de Frases e miniaturas aparecem.
   const totalBasePx = Math.max(1, usToPx(windowEndUs, windowStartUs))
-  const faixaVisivelBase = useMemo(
-    () => visiblePx(scrollLeft / zoom, viewportLargura / zoom, totalBasePx),
-    [scrollLeft, totalBasePx, viewportLargura, zoom],
-  )
+  const faixaVisivelBase = useMemo(() => {
+    const basePorPx = totalBasePx / Math.max(1, viewportLargura * Math.max(1, zoom))
+    return visiblePx(scrollLeft * basePorPx, viewportLargura * basePorPx, totalBasePx)
+  }, [scrollLeft, totalBasePx, viewportLargura, zoom])
 
   const frasesVisiveis = useMemo(
     () => visibleSentences(estado.frases, windowStartUs, faixaVisivelBase),

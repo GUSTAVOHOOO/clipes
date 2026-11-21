@@ -222,7 +222,9 @@ export function PopoverEnquadrar({
     if (!reframe) return null
     return jobs.find((j) => j.id === String(reframe.job)) ?? null
   }, [jobs, reframe])
-  const percentualReframe = jobReframeFila?.percentual ?? reframe?.progress ?? 0
+  // Na reanálise o job é reaproveitado e a Fila guarda o 100% da análise anterior.
+  const percentualReframe =
+    (jobReframeFila?.estado === 'rodando' ? jobReframeFila.percentual : reframe?.progress) ?? 0
   const confiancaReframe = extrairConfiancaReframe(reframe?.timeline?.metrics)
 
   return (
