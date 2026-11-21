@@ -164,16 +164,23 @@ def quadro_com_retangulos(arquivo, entrada, resultado):
     return quadro
 
 
-def mosaico(quadros, caminho, colunas=3, largura=640):
+def mosaico(quadros, caminho, colunas=3, largura=640, altura=360):
+    """Grade de miniaturas de tamanho fixo (letterbox preto para quadros que não são 16:9)."""
     import cv2
     import numpy as np
     if not quadros:
         return
-    miniaturas = [cv2.resize(q, (largura, round(largura * q.shape[0] / q.shape[1]))) for q in quadros]
+    miniaturas = []
+    for q in quadros:
+        escala = min(largura / q.shape[1], altura / q.shape[0])
+        pequeno = cv2.resize(q, (round(q.shape[1] * escala), round(q.shape[0] * escala)))
+        tile = np.zeros((altura, largura, 3), np.uint8)
+        tile[:pequeno.shape[0], :pequeno.shape[1]] = pequeno
+        miniaturas.append(tile)
     while len(miniaturas) % colunas:
         miniaturas.append(np.zeros_like(miniaturas[0]))
     linhas = [np.hstack(miniaturas[i:i + colunas]) for i in range(0, len(miniaturas), colunas)]
-    cv2.imwrite(str(caminho), np.vstack(linhas))
+    cv2.imwrite(str(caminho), np.vstack(linhas), [cv2.IMWRITE_JPEG_QUALITY, 85])
 
 
 def rodar(args):
@@ -230,6 +237,8 @@ def comparar(args):
 
 def main():
     global SAIDA
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")  # console do Windows (cp1252) não imprime acentos/setas
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--rotulo", default="depois")
     p.add_argument("--src", help="PYTHONPATH alternativo (ex.: checkout do commit antigo)")
