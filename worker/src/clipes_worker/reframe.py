@@ -8,13 +8,15 @@ from pathlib import Path
 
 from .protocol import WorkerError
 from .reframe_camera import Detection, iou, timeline, two_people_timelines
-from .reframe_webcam import DEFAULT_GAMEPLAY_SPLIT, gameplay_webcam_timelines, temporal_edge_map
+from .reframe_webcam import DEFAULT_GAMEPLAY_SPLIT, analisar_gameplay_webcam, escolher_amostras
 from .tasks import Task
 
 SUPPORTED_LAYOUTS = ("face", "gameplay_webcam", "two_people")
 
 PROXY_HEIGHT = 480
 ANALYSIS_FPS = 5
+WEBCAM_SAMPLES = 32  # quadros em cinza usados nas bordas persistentes da webcam
+WEBCAM_POOL = 64     # candidatos espalhados no Corte; prefere-se quadros com rosto (câmera visível)
 SCENE_THRESHOLD = 10.0
 SCENE_MIN_GAP_FRAMES = 2  # 400 ms: evita dois disparos consecutivos na mesma transição.
 YUNET_SIZE = 640
@@ -170,9 +172,9 @@ def analyze(detector, params, ctx):
                 detections = detector.detect(frame)
                 if layout == "gameplay_webcam":
                     frame_dets.append(detections)
-                    if len(gray_samples) < 24 and (count % max(1, round(duration * ANALYSIS_FPS / 24)) == 0):
-                        gray = cv2.cvtColor(cv2.resize(frame, (320, 180)), cv2.COLOR_BGR2GRAY)
-                        gray_samples.append(gray)
+                    if len(gray_samples) < WEBCAM_POOL and (count % max(1, round(duration * ANALYSIS_FPS / WEBCAM_POOL)) == 0):
+                        # Resolução do proxy inteira: as bordas finas da overlay somem em 320x180.
+                        gray_samples.append((cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), bool(detections)))
                 yield stamp, detections, count in cuts
                 count += 1
                 ctx.progress("reframe_faces", min(99, 25 + round(74 * count / max(1, duration * ANALYSIS_FPS))),
@@ -183,10 +185,9 @@ def analyze(detector, params, ctx):
             if layout == "gameplay_webcam":
                 for _ in frames():
                     pass
-                edge_map = temporal_edge_map(gray_samples)
                 ratio = DEFAULT_GAMEPLAY_SPLIT if split_ratio is None else split_ratio
-                top_segs, bot_segs, wc_detected, wc_conf = gameplay_webcam_timelines(
-                    frame_dets, edge_map, start, end, aspect, ratio
+                top_segs, bot_segs, webcam = analisar_gameplay_webcam(
+                    frame_dets, escolher_amostras(gray_samples, WEBCAM_SAMPLES), start, end, aspect, ratio
                 )
                 result = {
                     "schemaVersion": 1,
@@ -195,7 +196,8 @@ def analyze(detector, params, ctx):
                     "segments": top_segs,
                     "secondarySegments": bot_segs,
                 }
-                extra_metrics = {"webcamDetected": wc_detected, "webcamConfidence": wc_conf}
+                extra_metrics = {"webcamDetected": webcam.detected, "webcamConfidence": webcam.confidence,
+                                 "webcamShape": webcam.shape, "webcamLarge": webcam.large}
             elif layout == "two_people":
                 ratio = 0.50 if split_ratio is None else split_ratio
                 top_segs, bot_segs = two_people_timelines(frames(), start, end, aspect, ratio)
