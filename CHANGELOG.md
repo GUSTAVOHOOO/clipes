@@ -6,6 +6,23 @@ O formato segue o padrão [Keep a Changelog](https://keepachangelog.com/pt-BR/1.
 
 ## [Não lançado]
 
+## [2.0.2] - 2026-11-22
+
+Detecção da câmera do streamer reescrita e correções do Editor. Veja as notas completas em [docs/releases/v2.0.2.md](docs/releases/v2.0.2.md).
+
+### Melhorado
+
+- **Jogo + Webcam** ([#543](https://github.com/GUSTAVOHOOO/clipes/pull/543)): a câmera do streamer é encontrada pelas bordas que ficam paradas enquanto o jogo se mexe, com busca do retângulo inteiro em volta do rosto e alternativas para câmera redonda e streamer recortado. O painel de cima mostra a câmera inteira, sem faixa de jogo. Num banco de 13 lives reais, os acertos foram de 1 para 12.
+
+### Corrigido
+
+- Editor do Corte: "Analisar enquadramento automático" falhava com `reframe_not_chosen` ([#543](https://github.com/GUSTAVOHOOO/clipes/pull/543)).
+- Editor do Corte: a reanálise do enquadramento ficava parada em 100% ([#543](https://github.com/GUSTAVOHOOO/clipes/pull/543)).
+- Editor do Corte: a tela ficava preta depois de aceitar o enquadramento ([#543](https://github.com/GUSTAVOHOOO/clipes/pull/543)).
+- Editor do Corte: a linha do tempo aparecia espremida no canto esquerdo ([#543](https://github.com/GUSTAVOHOOO/clipes/pull/543)).
+- Folha de atalhos de teclado: a lista vazava para fora da janela em vez de rolar ([#543](https://github.com/GUSTAVOHOOO/clipes/pull/543)).
+- Segurança: dependência `url` atualizada para 2.5.9 (RUSTSEC-2026-0592) ([#543](https://github.com/GUSTAVOHOOO/clipes/pull/543)).
+
 ## [2.0.1] - 2026-11-19
 
 Correções do Editor e do Windows e o novo **Console ao vivo**. Veja as notas completas em [docs/releases/v2.0.1.md](docs/releases/v2.0.1.md).
