@@ -41,6 +41,12 @@ struct Metrics {
     webcam_detected: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     webcam_confidence: Option<f64>,
+    /// "retangulo" | "circulo" | "recorte" | "nenhuma" (só no layout Jogo + Webcam).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    webcam_shape: Option<String>,
+    /// Câmera grande demais para o painel: o layout Rosto serve melhor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    webcam_large: Option<bool>,
 }
 
 fn validate_segments(

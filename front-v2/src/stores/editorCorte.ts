@@ -424,6 +424,33 @@ function mesclarDocEditor(base: EditorDocumento | null, proximo: EditorDocumento
   }
 }
 
+// O core omite `edits` vazio (serde skip_serializing_if = Vec::is_empty) no painel
+// principal e nos painéis top/bottom; as telas assumem a lista sempre presente.
+function normalizarPainelCrop<T extends { edits?: CropKeyframe[] }>(painel: T): T {
+  return Array.isArray(painel.edits) ? painel : { ...painel, edits: [] }
+}
+
+function normalizarCropDocumento(doc: EditorDocumento): EditorDocumento {
+  const crop = doc.crop as ClipCrop | undefined
+  if (!crop) return doc
+  const duplo = (d: ClipCrop['gameplayWebcam']) =>
+    d ? { top: normalizarPainelCrop(d.top), bottom: normalizarPainelCrop(d.bottom) } : d
+  const precisa =
+    !Array.isArray(crop.edits) ||
+    [crop.gameplayWebcam, crop.twoPeople].some(
+      (d) => d && (!Array.isArray(d.top?.edits) || !Array.isArray(d.bottom?.edits)),
+    )
+  if (!precisa) return doc
+  return {
+    ...doc,
+    crop: {
+      ...normalizarPainelCrop(crop),
+      gameplayWebcam: duplo(crop.gameplayWebcam),
+      twoPeople: duplo(crop.twoPeople),
+    },
+  }
+}
+
 function mesclarCropNoDocumento(base: EditorDocumento, resp: RespostaCropPlana): EditorDocumento {
   return {
     ...base,
@@ -472,6 +499,8 @@ export function criarStoreEditorCorte(opcoes?: { fila?: Fila }): StoreEditorCort
   }
 
   const atualizarEstado = (parcial: Partial<EstadoEditorCorte>) => {
+    if (parcial.oficial) parcial = { ...parcial, oficial: normalizarCropDocumento(parcial.oficial) }
+    if (parcial.previaLocal) parcial = { ...parcial, previaLocal: normalizarCropDocumento(parcial.previaLocal) }
     estado = { ...estado, ...parcial }
     notificar()
   }
@@ -973,6 +1002,7 @@ export function criarStoreEditorCorte(opcoes?: { fila?: Fila }): StoreEditorCort
     const token = sessaoToken
     const res = await chamar<ReframeJobEstado>('reframe.start', {
       source: doc.request.source_id,
+      requested: true,
       startUs: doc.startUs,
       endUs: doc.endUs,
       layout,
@@ -981,7 +1011,33 @@ export function criarStoreEditorCorte(opcoes?: { fila?: Fila }): StoreEditorCort
     })
     if (token !== sessaoToken) return null
     atualizarEstado({ reframe: res })
+    // O core reaproveita o mesmo job ao reanalisar (outro layout ou force), e a Fila
+    // nunca regride o percentual de um job: a conclusão da nova análise chega com a
+    // mesma assinatura "concluido:100" e é ignorada por sincronizarJobs. Consulta o
+    // status direto até um estado terminal.
+    if (res && (res.state === 'queued' || res.state === 'running')) {
+      assinaturaJobs.delete(String(res.job))
+      void acompanharReframe(res.id, token)
+    }
     return res
+  }
+
+  const acompanharReframe = async (reframeId: number, token: number) => {
+    while (token === sessaoToken && estado.reframe?.id === reframeId) {
+      await new Promise((r) => setTimeout(r, 1000))
+      if (token !== sessaoToken || estado.reframe?.id !== reframeId) return
+      const atual = estado.reframe
+      if (atual.state !== 'queued' && atual.state !== 'running') return
+      let res: ReframeJobEstado | null
+      try {
+        res = await chamar<ReframeJobEstado>('reframe.status', { id: reframeId })
+      } catch {
+        continue
+      }
+      if (token !== sessaoToken || estado.reframe?.id !== reframeId || !res) return
+      atualizarEstado({ reframe: res })
+      if (res.state !== 'queued' && res.state !== 'running') return
+    }
   }
 
   const consultarReframe: StoreEditorCorte['consultarReframe'] = async (reframeId) => {

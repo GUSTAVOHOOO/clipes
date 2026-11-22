@@ -131,6 +131,8 @@ def test_real_ffmpeg_on_synthetic_video_with_fake_detections(tmp_path):
     assert wc_data["secondarySegments"]
     assert wc_data["metrics"]["webcamDetected"] is True
     assert wc_data["metrics"]["webcamConfidence"] <= 0.65
+    assert wc_data["metrics"]["webcamShape"] in ("retangulo", "circulo", "recorte")
+    assert isinstance(wc_data["metrics"]["webcamLarge"], bool)
 
     tp_data = analyze(Detector(), {
         "source": str(source), "ffmpeg": ffmpeg, "start_us": 200_000, "end_us": 1_800_000,

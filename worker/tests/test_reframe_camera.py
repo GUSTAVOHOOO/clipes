@@ -8,7 +8,7 @@ from clipes_worker.reframe_camera import (
     Camera, Detection, Tracker, timeline, two_people_timelines,
 )
 from clipes_worker.reframe_webcam import (
-    WEBCAM_MAX_CONFIDENCE, gameplay_webcam_timelines, temporal_edge_map,
+    WEBCAM_MAX_CONFIDENCE, gameplay_webcam_timelines,
 )
 
 
@@ -104,7 +104,7 @@ def test_two_people_timelines_frames_two_independent_panels():
     assert top_k["width"] / top_k["height"] * (16 / 9) == pytest.approx(1080 / 960, rel=1e-3)
 
 
-def test_gameplay_webcam_detects_persistent_corner_face_with_low_confidence():
+def test_gameplay_webcam_detects_persistent_corner_face():
     import numpy as np
     gray_frames = []
     dets = []
@@ -124,8 +124,7 @@ def test_gameplay_webcam_detects_persistent_corner_face_with_low_confidence():
             frame_faces.append(Detection(0.65, 0.45, 0.08, 0.08, 0.85))
         dets.append(frame_faces)
 
-    edge_map = temporal_edge_map(gray_frames)
-    top, bot, detected, conf = gameplay_webcam_timelines(dets, edge_map, 0, 2_000_000, 16 / 9, 0.30)
+    top, bot, detected, conf = gameplay_webcam_timelines(dets, gray_frames, 0, 2_000_000, 16 / 9, 0.30)
     assert detected is True
     assert 0.15 <= conf <= WEBCAM_MAX_CONFIDENCE
     tk = top[0]["keyframes"][0]
